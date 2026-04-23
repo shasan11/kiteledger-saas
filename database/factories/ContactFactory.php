@@ -1,0 +1,35 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\Branch;
+use App\Models\ContactGroup;
+use App\Models\CreditTerm;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class ContactFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'branch_id' => Branch::factory(),
+            'contact_group_id' => ContactGroup::factory(),
+            'contact_type' => fake()->randomElement(["customer","supplier","lead"]),
+            'name' => fake()->name(),
+            'code' => fake()->regexify('[A-Za-z0-9]{50}'),
+            'address' => fake()->text(),
+            'pan' => fake()->regexify('[A-Za-z0-9]{80}'),
+            'phone' => fake()->phoneNumber(),
+            'accept_purchase' => fake()->boolean(),
+            'email' => fake()->safeEmail(),
+            'credit_term_id' => CreditTerm::factory(),
+            'credit_limit' => fake()->randomFloat(2, 0, 99999999999999.99),
+            'active' => fake()->boolean(),
+            'user_add_id' => User::factory(),
+        ];
+    }
+}
