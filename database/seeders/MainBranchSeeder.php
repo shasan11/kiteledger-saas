@@ -15,10 +15,10 @@ class MainBranchSeeder extends Seeder
     public function run(): void
     {
         $user = User::query()->updateOrCreate(
-            ['email' => 'main.branch@kiteledger.local'],
+            ['email' => 'shasandhakal1105@gmail.com'],
             [
                 'name' => 'Main Branch User',
-                'password' => Hash::make('password'),
+                'password' => Hash::make('Balkot11@'),
                 'email_verified_at' => now(),
             ]
         );
