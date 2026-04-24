@@ -755,7 +755,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
                 <Layout
                     style={{
-                        padding: 18,
+                        
                         background: '#f5f7fb',
                     }}
                 >
@@ -763,9 +763,9 @@ export default function AuthenticatedLayout({ header, children }) {
                         <div
                             style={{
                                 marginBottom: 14,
-                                padding: '14px 18px',
+                                padding: '9px 18px',
                                 background: colorBgContainer,
-                                borderRadius: borderRadiusLG,
+                               
                                 border: `1px solid ${colorBorderSecondary}`,
                             }}
                         >
@@ -776,10 +776,9 @@ export default function AuthenticatedLayout({ header, children }) {
                     <Content
                         style={{
                             minHeight: 'calc(100vh - 100px)',
-                            background: colorBgContainer,
-                            borderRadius: borderRadiusLG,
-                            border: `1px solid ${colorBorderSecondary}`,
-                            padding: 20,
+                             
+                            
+                             
                         }}
                     >
                         {children}

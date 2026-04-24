@@ -127,7 +127,7 @@ export default function AppSidebar({
 
     return (
         <Sider
-            width={252}
+            width={210}
             collapsedWidth={76}
             collapsed={collapsed}
             trigger={null}
