@@ -9,15 +9,20 @@ import {
     ContactsOutlined,
     CreditCardOutlined,
     DashboardOutlined,
+    DeploymentUnitOutlined,
+    FileExcelOutlined,
     FileTextOutlined,
     HomeOutlined,
     InboxOutlined,
     ProfileOutlined,
+    ProductOutlined,
+    SafetyCertificateOutlined,
     SettingOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
     SwapOutlined,
     TeamOutlined,
+    ToolOutlined,
     UserOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
@@ -104,6 +109,24 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () =>
                             visit('crm.contacts.index', '/crm/contacts'),
                     },
+                    {
+                        key: 'deals',
+                        label: 'Deals',
+                        onClick: () =>
+                            visit('crm.deals.index', '/crm/deals'),
+                    },
+                    {
+                        key: 'projects',
+                        label: 'Projects',
+                        onClick: () =>
+                            visit('crm.projects.index', '/crm/projects'),
+                    },
+                    {
+                        key: 'activities',
+                        label: 'Activities',
+                        onClick: () =>
+                            visit('crm.activities.index', '/crm/activities'),
+                    },
                 ],
             },
             {
@@ -121,7 +144,10 @@ export default function AuthenticatedLayout({ header, children }) {
                         key: 'pi-bills',
                         label: 'Bills',
                         onClick: () =>
-                            visit('payment-in.bills.index', '/payment-in/bills'),
+                            visit(
+                                'payment-in.bills.index',
+                                '/payment-in/bills',
+                            ),
                     },
                     {
                         key: 'pi-invoices',
@@ -296,7 +322,89 @@ export default function AuthenticatedLayout({ header, children }) {
                 key: 'inventory',
                 icon: <InboxOutlined />,
                 label: 'Inventory',
-                onClick: () => visit('inventory.index', '/inventory'),
+                children: [
+                    {
+                        key: 'inventory-product-categories',
+                        label: 'Product Category',
+                        onClick: () =>
+                            visit(
+                                'inventory.product-categories.index',
+                                '/inventory/product-categories',
+                            ),
+                    },
+                    {
+                        key: 'inventory-products',
+                        label: 'Products',
+                        onClick: () =>
+                            visit(
+                                'inventory.products.index',
+                                '/inventory/products',
+                            ),
+                    },
+                    {
+                        key: 'inventory-variant-attributes',
+                        label: 'Variant Attributes',
+                        onClick: () =>
+                            visit(
+                                'inventory.variant-attributes.index',
+                                '/inventory/variant-attributes',
+                            ),
+                    },
+                    {
+                        key: 'inventory-unit-of-measurement',
+                        label: 'Unit of Measurement',
+                        onClick: () =>
+                            visit(
+                                'inventory.unit-of-measurements.index',
+                                '/inventory/unit-of-measurements',
+                            ),
+                    },
+                    {
+                        key: 'inventory-warehouse-transfer',
+                        label: 'Warehouse Transfer',
+                        onClick: () =>
+                            visit(
+                                'inventory.warehouse-transfers.index',
+                                '/inventory/warehouse-transfers',
+                            ),
+                    },
+                    {
+                        key: 'inventory-adjustment',
+                        label: 'Inventory Adjustment',
+                        onClick: () =>
+                            visit(
+                                'inventory.adjustments.index',
+                                '/inventory/adjustments',
+                            ),
+                    },
+                    {
+                        key: 'inventory-bill-of-materials',
+                        label: 'Bill of Materials',
+                        onClick: () =>
+                            visit(
+                                'inventory.bill-of-materials.index',
+                                '/inventory/bill-of-materials',
+                            ),
+                    },
+                    {
+                        key: 'inventory-production-order',
+                        label: 'Production Order',
+                        onClick: () =>
+                            visit(
+                                'inventory.production-orders.index',
+                                '/inventory/production-orders',
+                            ),
+                    },
+                    {
+                        key: 'inventory-production-journal',
+                        label: 'Production Journal',
+                        onClick: () =>
+                            visit(
+                                'inventory.production-journals.index',
+                                '/inventory/production-journals',
+                            ),
+                    },
+                ],
             },
             {
                 key: 'warehouse',
@@ -308,7 +416,47 @@ export default function AuthenticatedLayout({ header, children }) {
                 key: 'hrm',
                 icon: <TeamOutlined />,
                 label: 'HRM',
-                onClick: () => visit('hrm.index', '/hrm'),
+                children: [
+                    {
+                        key: 'hrm-employees',
+                        label: 'Employees',
+                        onClick: () =>
+                            visit('hrm.employees.index', '/hrm/employees'),
+                    },
+                    {
+                        key: 'hrm-departments',
+                        label: 'Departments',
+                        onClick: () =>
+                            visit('hrm.departments.index', '/hrm/departments'),
+                    },
+                    {
+                        key: 'hrm-designations',
+                        label: 'Designations',
+                        onClick: () =>
+                            visit(
+                                'hrm.designations.index',
+                                '/hrm/designations',
+                            ),
+                    },
+                    {
+                        key: 'hrm-attendance',
+                        label: 'Attendance',
+                        onClick: () =>
+                            visit('hrm.attendance.index', '/hrm/attendance'),
+                    },
+                    {
+                        key: 'hrm-leaves',
+                        label: 'Leaves',
+                        onClick: () =>
+                            visit('hrm.leaves.index', '/hrm/leaves'),
+                    },
+                    {
+                        key: 'hrm-payroll',
+                        label: 'Payroll',
+                        onClick: () =>
+                            visit('hrm.payroll.index', '/hrm/payroll'),
+                    },
+                ],
             },
             {
                 key: 'reports',
@@ -320,14 +468,110 @@ export default function AuthenticatedLayout({ header, children }) {
                 key: 'online-store',
                 icon: <ShopOutlined />,
                 label: 'Online Store',
-                onClick: () => visit('online-store.index', '/online-store'),
+                children: [
+                    {
+                        key: 'online-store-dashboard',
+                        label: 'Store Dashboard',
+                        onClick: () =>
+                            visit(
+                                'online-store.index',
+                                '/online-store',
+                            ),
+                    },
+                    {
+                        key: 'online-store-products',
+                        label: 'Store Products',
+                        onClick: () =>
+                            visit(
+                                'online-store.products.index',
+                                '/online-store/products',
+                            ),
+                    },
+                    {
+                        key: 'online-store-orders',
+                        label: 'Store Orders',
+                        onClick: () =>
+                            visit(
+                                'online-store.orders.index',
+                                '/online-store/orders',
+                            ),
+                    },
+                    {
+                        key: 'online-store-customers',
+                        label: 'Store Customers',
+                        onClick: () =>
+                            visit(
+                                'online-store.customers.index',
+                                '/online-store/customers',
+                            ),
+                    },
+                    {
+                        key: 'online-store-coupons',
+                        label: 'Coupons',
+                        onClick: () =>
+                            visit(
+                                'online-store.coupons.index',
+                                '/online-store/coupons',
+                            ),
+                    },
+                ],
             },
             {
                 key: 'configurations',
                 icon: <SettingOutlined />,
                 label: 'Configurations',
-                onClick: () =>
-                    visit('configurations.index', '/configurations'),
+                children: [
+                    {
+                        key: 'config-application',
+                        icon: <ToolOutlined />,
+                        label: 'Application',
+                        onClick: () =>
+                            visit(
+                                'configurations.application.index',
+                                '/configurations/application',
+                            ),
+                    },
+                    {
+                        key: 'config-users-permission',
+                        icon: <SafetyCertificateOutlined />,
+                        label: 'Users and Permission',
+                        onClick: () =>
+                            visit(
+                                'configurations.users-permission.index',
+                                '/configurations/users-permission',
+                            ),
+                    },
+                    {
+                        key: 'config-import-export',
+                        icon: <FileExcelOutlined />,
+                        label: 'Import/Export',
+                        onClick: () =>
+                            visit(
+                                'configurations.import-export.index',
+                                '/configurations/import-export',
+                            ),
+                    },
+                    {
+                        key: 'config-organization',
+                        icon: <DeploymentUnitOutlined />,
+                        label: 'Organization',
+                        onClick: () =>
+                            visit(
+                                'configurations.organization.index',
+                                '/configurations/organization',
+                            ),
+                    },
+                    {
+                        key: 'config-subscription',
+                        icon: <CreditCardOutlined />,
+                        label: 'Subscription',
+                        onClick: () =>
+                            visit(
+                                'configurations.subscription.index',
+                                '/configurations/subscription',
+                            ),
+                    },
+                ],
             },
         ],
         [page.url],
@@ -336,8 +580,13 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
         if (isActive('/pos')) return ['pos'];
+
         if (isActive('/crm/contact-groups')) return ['contact-groups'];
         if (isActive('/crm/contacts')) return ['contacts'];
+        if (isActive('/crm/deals')) return ['deals'];
+        if (isActive('/crm/campaigns')) return ['campaigns'];
+        if (isActive('/crm/activities')) return ['activities'];
+
         if (isActive('/workflow')) return ['workflow'];
 
         if (isActive('/payment-in/bills')) return ['pi-bills'];
@@ -361,12 +610,38 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
         if (isActive('/accounting/loan-accounts')) return ['loan-accounts'];
 
-        if (isActive('/inventory')) return ['inventory'];
+        if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
+        if (isActive('/inventory/products')) return ['inventory-products'];
+        if (isActive('/inventory/variant-attributes')) return ['inventory-variant-attributes'];
+        if (isActive('/inventory/unit-of-measurements')) return ['inventory-unit-of-measurement'];
+        if (isActive('/inventory/warehouse-transfers')) return ['inventory-warehouse-transfer'];
+        if (isActive('/inventory/adjustments')) return ['inventory-adjustment'];
+        if (isActive('/inventory/bill-of-materials')) return ['inventory-bill-of-materials'];
+        if (isActive('/inventory/production-orders')) return ['inventory-production-order'];
+        if (isActive('/inventory/production-journals')) return ['inventory-production-journal'];
+
         if (isActive('/warehouse')) return ['warehouse'];
-        if (isActive('/hrm')) return ['hrm'];
+
+        if (isActive('/hrm/employees')) return ['hrm-employees'];
+        if (isActive('/hrm/departments')) return ['hrm-departments'];
+        if (isActive('/hrm/designations')) return ['hrm-designations'];
+        if (isActive('/hrm/attendance')) return ['hrm-attendance'];
+        if (isActive('/hrm/leaves')) return ['hrm-leaves'];
+        if (isActive('/hrm/payroll')) return ['hrm-payroll'];
+
         if (isActive('/reports')) return ['reports'];
-        if (isActive('/online-store')) return ['online-store'];
-        if (isActive('/configurations')) return ['configurations'];
+
+        if (isActive('/online-store/products')) return ['online-store-products'];
+        if (isActive('/online-store/orders')) return ['online-store-orders'];
+        if (isActive('/online-store/customers')) return ['online-store-customers'];
+        if (isActive('/online-store/coupons')) return ['online-store-coupons'];
+        if (isActive('/online-store')) return ['online-store-dashboard'];
+
+        if (isActive('/configurations/application')) return ['config-application'];
+        if (isActive('/configurations/users-permission')) return ['config-users-permission'];
+        if (isActive('/configurations/import-export')) return ['config-import-export'];
+        if (isActive('/configurations/organization')) return ['config-organization'];
+        if (isActive('/configurations/subscription')) return ['config-subscription'];
 
         return ['home'];
     }, [page.url]);
