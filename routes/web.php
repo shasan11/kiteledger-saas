@@ -18,6 +18,21 @@ Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    require __DIR__.'/menu/pos.php';
+    require __DIR__.'/menu/crm.php';
+    require __DIR__.'/menu/workflow.php';
+    require __DIR__.'/menu/payment-in.php';
+    require __DIR__.'/menu/payment-out.php';
+    require __DIR__.'/menu/accounting.php';
+    require __DIR__.'/menu/inventory.php';
+    require __DIR__.'/menu/warehouse.php';
+    require __DIR__.'/menu/hrm.php';
+    require __DIR__.'/menu/reports.php';
+    require __DIR__.'/menu/online-store.php';
+    require __DIR__.'/menu/configurations.php';
+});
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

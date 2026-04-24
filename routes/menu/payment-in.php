@@ -1,0 +1,9 @@
+<?php
+
+Route::prefix('payment-in')->name('payment-in.')->group(function () {
+    Route::get('/bills', fn () => Inertia::render('App/PaymentIn/Bills/Index'))->name('bills.index');
+    Route::get('/invoices', fn () => Inertia::render('App/PaymentIn/Invoices/Index'))->name('invoices.index');
+    Route::get('/payments', fn () => Inertia::render('App/PaymentIn/Payments/Index'))->name('payments.index');
+    Route::get('/credit-notes', fn () => Inertia::render('App/PaymentIn/CreditNotes/Index'))->name('credit-notes.index');
+    Route::get('/customers', fn () => Inertia::render('App/PaymentIn/Customers/Index'))->name('customers.index');
+});
