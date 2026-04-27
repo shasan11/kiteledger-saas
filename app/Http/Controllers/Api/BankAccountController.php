@@ -18,7 +18,7 @@ class BankAccountController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(BankAccount::class)
-            ->allowedIncludes(['branch', 'currency', 'account'])
+            ->allowedIncludes(...['branch', 'currency', 'account'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {

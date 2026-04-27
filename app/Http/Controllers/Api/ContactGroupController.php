@@ -18,7 +18,7 @@ class ContactGroupController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(ContactGroup::class)
-            ->allowedIncludes(['branch', 'parent', 'contacts'])
+            ->allowedIncludes(...['branch', 'parent', 'contacts'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
