@@ -7,11 +7,6 @@ use Inertia\Response;
 
 class AccountingController extends Controller
 {
-    public function chartOfAccounts(): Response
-    {
-        return Inertia::render('App/Accounting/ChartOfAccounts/Index');
-    }
-
     public function bankAccounts(): Response
     {
         return Inertia::render('App/Accounting/BankAccounts/Index');
@@ -20,11 +15,6 @@ class AccountingController extends Controller
     public function cashTransfers(): Response
     {
         return Inertia::render('App/Accounting/CashTransfers/Index');
-    }
-
-    public function journalVouchers(): Response
-    {
-        return Inertia::render('App/Accounting/JournalVouchers/Index');
     }
 
     public function quickBills(): Response

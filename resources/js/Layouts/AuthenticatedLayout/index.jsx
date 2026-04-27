@@ -281,6 +281,15 @@ export default function AuthenticatedLayout({ header, children }) {
                             ),
                     },
                     {
+                        key: 'journal-voucher-lines',
+                        label: 'Journal Voucher Lines',
+                        onClick: () =>
+                            visit(
+                                'accounting.journal-voucher-lines.index',
+                                '/accounting/journal-voucher-lines',
+                            ),
+                    },
+                    {
                         key: 'quick-bill',
                         label: 'Quick Bill',
                         onClick: () =>
@@ -605,6 +614,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/bank-accounts')) return ['bank-accounts'];
         if (isActive('/accounting/cash-transfers')) return ['cash-transfer'];
         if (isActive('/accounting/journal-vouchers')) return ['journal-voucher'];
+        if (isActive('/accounting/journal-voucher-lines')) return ['journal-voucher-lines'];
         if (isActive('/accounting/quick-bills')) return ['quick-bill'];
         if (isActive('/accounting/quick-receipts')) return ['quick-receipt'];
         if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
