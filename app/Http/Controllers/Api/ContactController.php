@@ -17,9 +17,9 @@ class ContactController extends Controller
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
-        $records = QueryBuilder::for(Contact::class)
-            ->allowedIncludes(...['branch', 'contactGroup', 'creditTerm'])
-            ->allowedFilters([
+        $records = QueryBuilder::for(Contact::query())
+            ->allowedIncludes('branch', 'contactGroup', 'creditTerm')
+            ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('name', 'like', "%{$value}%")
@@ -35,8 +35,8 @@ class ContactController extends Controller
                 AllowedFilter::exact('contact_type'),
                 AllowedFilter::exact('accept_purchase'),
                 AllowedFilter::exact('credit_term_id'),
-            ])
-            ->allowedSorts([
+            )
+            ->allowedSorts(
                 'id',
                 'name',
                 'code',
@@ -44,7 +44,7 @@ class ContactController extends Controller
                 'credit_limit',
                 'created_at',
                 'updated_at',
-            ])
+            )
             ->defaultSort('-created_at')
             ->paginate($perPage)
             ->appends($request->query());
@@ -58,12 +58,16 @@ class ContactController extends Controller
 
         $record = Contact::create($data);
 
-        return new ContactResource($record->fresh());
+        return new ContactResource(
+            $record->fresh(['branch', 'contactGroup', 'creditTerm'])
+        );
     }
 
     public function show(Contact $contact)
     {
-        return new ContactResource($contact);
+        return new ContactResource(
+            $contact->load(['branch', 'contactGroup', 'creditTerm'])
+        );
     }
 
     public function update(Request $request, Contact $contact)
@@ -72,7 +76,9 @@ class ContactController extends Controller
 
         $contact->update($data);
 
-        return new ContactResource($contact->fresh());
+        return new ContactResource(
+            $contact->fresh(['branch', 'contactGroup', 'creditTerm'])
+        );
     }
 
     public function destroy(Contact $contact)
@@ -90,6 +96,7 @@ class ContactController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'records.*.contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
             'records.*.contact_type' => ['required', 'in:customer,supplier,lead'],
@@ -107,7 +114,13 @@ class ContactController extends Controller
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => Contact::create($record));
+            return collect($data['records'])->map(function (array $record) {
+                return Contact::create($record)->fresh([
+                    'branch',
+                    'contactGroup',
+                    'creditTerm',
+                ]);
+            });
         });
 
         return ContactResource::collection($records);
@@ -117,6 +130,7 @@ class ContactController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.id' => ['required', 'uuid', 'exists:contacts,id'],
             'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'records.*.contact_group_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
@@ -142,7 +156,11 @@ class ContactController extends Controller
 
                 $model->update($record);
 
-                return $model->fresh();
+                return $model->fresh([
+                    'branch',
+                    'contactGroup',
+                    'creditTerm',
+                ]);
             });
         });
 
@@ -157,7 +175,9 @@ class ContactController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            Contact::query()->whereIn('id', $data['ids'])->delete();
+            Contact::query()
+                ->whereIn('id', $data['ids'])
+                ->delete();
         });
 
         return response()->json([

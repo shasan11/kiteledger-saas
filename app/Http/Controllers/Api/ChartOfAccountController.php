@@ -17,9 +17,9 @@ class ChartOfAccountController extends Controller
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
-        $records = QueryBuilder::for(ChartOfAccount::class)
-            ->allowedIncludes(...['branch', 'account', 'currency'])
-            ->allowedFilters([
+        $records = QueryBuilder::for(ChartOfAccount::query())
+            ->allowedIncludes('branch', 'account', 'currency')
+            ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('name', 'like', "%{$value}%")
@@ -32,14 +32,14 @@ class ChartOfAccountController extends Controller
                 AllowedFilter::exact('account_id'),
                 AllowedFilter::exact('currency_id'),
                 AllowedFilter::exact('is_system_generated'),
-            ])
-            ->allowedSorts([
+            )
+            ->allowedSorts(
                 'id',
                 'code',
                 'name',
                 'created_at',
                 'updated_at',
-            ])
+            )
             ->defaultSort('-created_at')
             ->paginate($perPage)
             ->appends($request->query());
@@ -53,12 +53,16 @@ class ChartOfAccountController extends Controller
 
         $record = ChartOfAccount::create($data);
 
-        return new ChartOfAccountResource($record->fresh());
+        return new ChartOfAccountResource(
+            $record->fresh(['branch', 'account', 'currency'])
+        );
     }
 
     public function show(ChartOfAccount $chartOfAccount)
     {
-        return new ChartOfAccountResource($chartOfAccount);
+        return new ChartOfAccountResource(
+            $chartOfAccount->load(['branch', 'account', 'currency'])
+        );
     }
 
     public function update(Request $request, ChartOfAccount $chartOfAccount)
@@ -67,12 +71,16 @@ class ChartOfAccountController extends Controller
 
         $chartOfAccount->update($data);
 
-        return new ChartOfAccountResource($chartOfAccount->fresh());
+        return new ChartOfAccountResource(
+            $chartOfAccount->fresh(['branch', 'account', 'currency'])
+        );
     }
 
     public function destroy(ChartOfAccount $chartOfAccount)
     {
-        $chartOfAccount->delete();
+        DB::transaction(function () use ($chartOfAccount) {
+            $chartOfAccount->delete();
+        });
 
         return response()->json([
             'message' => 'Deleted successfully.',
@@ -83,6 +91,7 @@ class ChartOfAccountController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'records.*.account_id' => ['required', 'uuid', 'exists:accounts,id'],
             'records.*.code' => ['required', 'string', 'max:30', 'unique:chart_of_accounts,code'],
@@ -95,7 +104,13 @@ class ChartOfAccountController extends Controller
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => ChartOfAccount::create($record));
+            return collect($data['records'])->map(function (array $record) {
+                return ChartOfAccount::create($record)->fresh([
+                    'branch',
+                    'account',
+                    'currency',
+                ]);
+            });
         });
 
         return ChartOfAccountResource::collection($records);
@@ -105,6 +120,7 @@ class ChartOfAccountController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
             'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'records.*.account_id' => ['sometimes', 'required', 'uuid', 'exists:accounts,id'],
@@ -123,7 +139,12 @@ class ChartOfAccountController extends Controller
 
                 if (array_key_exists('code', $record)) {
                     validator($record, [
-                        'code' => ['required', 'string', 'max:30', 'unique:chart_of_accounts,code,'.$model->id],
+                        'code' => [
+                            'required',
+                            'string',
+                            'max:30',
+                            'unique:chart_of_accounts,code,' . $model->id,
+                        ],
                     ])->validate();
                 }
 
@@ -131,7 +152,11 @@ class ChartOfAccountController extends Controller
 
                 $model->update($record);
 
-                return $model->fresh();
+                return $model->fresh([
+                    'branch',
+                    'account',
+                    'currency',
+                ]);
             });
         });
 
@@ -146,7 +171,9 @@ class ChartOfAccountController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            ChartOfAccount::query()->whereIn('id', $data['ids'])->delete();
+            ChartOfAccount::query()
+                ->whereIn('id', $data['ids'])
+                ->delete();
         });
 
         return response()->json([
@@ -161,7 +188,12 @@ class ChartOfAccountController extends Controller
         $codeRules = [$required, 'string', 'max:30', 'unique:chart_of_accounts,code'];
 
         if ($ignoreId) {
-            $codeRules = [$required, 'string', 'max:30', 'unique:chart_of_accounts,code,'.$ignoreId];
+            $codeRules = [
+                $required,
+                'string',
+                'max:30',
+                'unique:chart_of_accounts,code,' . $ignoreId,
+            ];
         }
 
         return $request->validate([

@@ -17,9 +17,9 @@ class ChequeRegisterController extends Controller
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
-        $records = QueryBuilder::for(ChequeRegister::class)
-            ->allowedIncludes(...['branch', 'bankAccount', 'account'])
-            ->allowedFilters([
+        $records = QueryBuilder::for(ChequeRegister::query())
+            ->allowedIncludes('branch', 'bankAccount', 'account')
+            ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('cheque_no', 'like', "%{$value}%")
@@ -41,8 +41,8 @@ class ChequeRegisterController extends Controller
                 AllowedFilter::callback('date_to', function (Builder $query, mixed $value) {
                     $query->whereDate('cheque_date', '<=', $value);
                 }),
-            ])
-            ->allowedSorts([
+            )
+            ->allowedSorts(
                 'id',
                 'cheque_no',
                 'cheque_date',
@@ -54,7 +54,7 @@ class ChequeRegisterController extends Controller
                 'status',
                 'created_at',
                 'updated_at',
-            ])
+            )
             ->defaultSort('-created_at')
             ->paginate($perPage)
             ->appends($request->query());
@@ -68,12 +68,16 @@ class ChequeRegisterController extends Controller
 
         $record = ChequeRegister::create($data);
 
-        return new ChequeRegisterResource($record->fresh());
+        return new ChequeRegisterResource(
+            $record->fresh(['branch', 'bankAccount', 'account'])
+        );
     }
 
     public function show(ChequeRegister $chequeRegister)
     {
-        return new ChequeRegisterResource($chequeRegister);
+        return new ChequeRegisterResource(
+            $chequeRegister->load(['branch', 'bankAccount', 'account'])
+        );
     }
 
     public function update(Request $request, ChequeRegister $chequeRegister)
@@ -82,7 +86,9 @@ class ChequeRegisterController extends Controller
 
         $chequeRegister->update($data);
 
-        return new ChequeRegisterResource($chequeRegister->fresh());
+        return new ChequeRegisterResource(
+            $chequeRegister->fresh(['branch', 'bankAccount', 'account'])
+        );
     }
 
     public function destroy(ChequeRegister $chequeRegister)
@@ -100,6 +106,7 @@ class ChequeRegisterController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'records.*.cheque_no' => ['required', 'string', 'max:80'],
             'records.*.cheque_date' => ['required', 'date'],
@@ -123,7 +130,13 @@ class ChequeRegisterController extends Controller
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => ChequeRegister::create($record));
+            return collect($data['records'])->map(function (array $record) {
+                return ChequeRegister::create($record)->fresh([
+                    'branch',
+                    'bankAccount',
+                    'account',
+                ]);
+            });
         });
 
         return ChequeRegisterResource::collection($records);
@@ -133,6 +146,7 @@ class ChequeRegisterController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.id' => ['required', 'uuid', 'exists:cheque_registers,id'],
             'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'records.*.cheque_no' => ['sometimes', 'required', 'string', 'max:80'],
@@ -164,7 +178,11 @@ class ChequeRegisterController extends Controller
 
                 $model->update($record);
 
-                return $model->fresh();
+                return $model->fresh([
+                    'branch',
+                    'bankAccount',
+                    'account',
+                ]);
             });
         });
 
@@ -179,7 +197,9 @@ class ChequeRegisterController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            ChequeRegister::query()->whereIn('id', $data['ids'])->delete();
+            ChequeRegister::query()
+                ->whereIn('id', $data['ids'])
+                ->delete();
         });
 
         return response()->json([

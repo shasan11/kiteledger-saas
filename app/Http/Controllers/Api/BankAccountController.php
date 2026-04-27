@@ -17,9 +17,9 @@ class BankAccountController extends Controller
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
-        $records = QueryBuilder::for(BankAccount::class)
-            ->allowedIncludes(...['branch', 'currency', 'account'])
-            ->allowedFilters([
+        $records = QueryBuilder::for(BankAccount::query())
+            ->allowedIncludes('branch', 'currency', 'account')
+            ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('display_name', 'like', "%{$value}%")
@@ -34,8 +34,8 @@ class BankAccountController extends Controller
                 AllowedFilter::exact('branch_id'),
                 AllowedFilter::exact('currency_id'),
                 AllowedFilter::exact('account_id'),
-            ])
-            ->allowedSorts([
+            )
+            ->allowedSorts(
                 'id',
                 'display_name',
                 'code',
@@ -43,7 +43,7 @@ class BankAccountController extends Controller
                 'opening_balance',
                 'created_at',
                 'updated_at',
-            ])
+            )
             ->defaultSort('-created_at')
             ->paginate($perPage)
             ->appends($request->query());
@@ -57,12 +57,16 @@ class BankAccountController extends Controller
 
         $record = BankAccount::create($data);
 
-        return new BankAccountResource($record->fresh());
+        return new BankAccountResource(
+            $record->fresh(['branch', 'currency', 'account'])
+        );
     }
 
     public function show(BankAccount $bankAccount)
     {
-        return new BankAccountResource($bankAccount);
+        return new BankAccountResource(
+            $bankAccount->load(['branch', 'currency', 'account'])
+        );
     }
 
     public function update(Request $request, BankAccount $bankAccount)
@@ -71,7 +75,9 @@ class BankAccountController extends Controller
 
         $bankAccount->update($data);
 
-        return new BankAccountResource($bankAccount->fresh());
+        return new BankAccountResource(
+            $bankAccount->fresh(['branch', 'currency', 'account'])
+        );
     }
 
     public function destroy(BankAccount $bankAccount)
@@ -87,11 +93,13 @@ class BankAccountController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'records.*.type' => ['required', 'in:bank,cash'],
             'records.*.display_name' => ['required', 'string', 'max:150'],
             'records.*.code' => ['required', 'string', 'max:30'],
             'records.*.currency_id' => ['required', 'uuid', 'exists:currencies,id'],
+
             'records.*.description' => ['nullable', 'string'],
             'records.*.bank_name' => ['nullable', 'string', 'max:150'],
             'records.*.account_name' => ['nullable', 'string', 'max:150'],
@@ -105,7 +113,13 @@ class BankAccountController extends Controller
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => BankAccount::create($record));
+            return collect($data['records'])->map(function (array $record) {
+                return BankAccount::create($record)->fresh([
+                    'branch',
+                    'currency',
+                    'account',
+                ]);
+            });
         });
 
         return BankAccountResource::collection($records);
@@ -115,12 +129,14 @@ class BankAccountController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.id' => ['required', 'uuid', 'exists:bank_accounts,id'],
             'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'records.*.type' => ['sometimes', 'required', 'in:bank,cash'],
             'records.*.display_name' => ['sometimes', 'required', 'string', 'max:150'],
             'records.*.code' => ['sometimes', 'required', 'string', 'max:30'],
             'records.*.currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
+
             'records.*.description' => ['sometimes', 'nullable', 'string'],
             'records.*.bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
             'records.*.account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
@@ -141,7 +157,11 @@ class BankAccountController extends Controller
 
                 $model->update($record);
 
-                return $model->fresh();
+                return $model->fresh([
+                    'branch',
+                    'currency',
+                    'account',
+                ]);
             });
         });
 
@@ -156,7 +176,9 @@ class BankAccountController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            BankAccount::query()->whereIn('id', $data['ids'])->delete();
+            BankAccount::query()
+                ->whereIn('id', $data['ids'])
+                ->delete();
         });
 
         return response()->json([
@@ -174,6 +196,7 @@ class BankAccountController extends Controller
             'display_name' => [$required, 'string', 'max:150'],
             'code' => [$required, 'string', 'max:30'],
             'currency_id' => [$required, 'uuid', 'exists:currencies,id'],
+
             'description' => ['sometimes', 'nullable', 'string'],
             'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
             'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],

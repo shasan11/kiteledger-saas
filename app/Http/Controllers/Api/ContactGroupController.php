@@ -17,9 +17,9 @@ class ContactGroupController extends Controller
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
-        $records = QueryBuilder::for(ContactGroup::class)
-            ->allowedIncludes(...['branch', 'parent', 'contacts'])
-            ->allowedFilters([
+        $records = QueryBuilder::for(ContactGroup::query())
+            ->allowedIncludes('branch', 'parent', 'contacts')
+            ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('name', 'like', "%{$value}%")
@@ -29,13 +29,13 @@ class ContactGroupController extends Controller
                 AllowedFilter::exact('active'),
                 AllowedFilter::exact('branch_id'),
                 AllowedFilter::exact('parent_id'),
-            ])
-            ->allowedSorts([
+            )
+            ->allowedSorts(
                 'id',
                 'name',
                 'created_at',
                 'updated_at',
-            ])
+            )
             ->defaultSort('-created_at')
             ->paginate($perPage)
             ->appends($request->query());
@@ -49,12 +49,16 @@ class ContactGroupController extends Controller
 
         $record = ContactGroup::create($data);
 
-        return new ContactGroupResource($record->fresh());
+        return new ContactGroupResource(
+            $record->fresh(['branch', 'parent', 'contacts'])
+        );
     }
 
     public function show(ContactGroup $contactGroup)
     {
-        return new ContactGroupResource($contactGroup);
+        return new ContactGroupResource(
+            $contactGroup->load(['branch', 'parent', 'contacts'])
+        );
     }
 
     public function update(Request $request, ContactGroup $contactGroup)
@@ -63,7 +67,9 @@ class ContactGroupController extends Controller
 
         $contactGroup->update($data);
 
-        return new ContactGroupResource($contactGroup->fresh());
+        return new ContactGroupResource(
+            $contactGroup->fresh(['branch', 'parent', 'contacts'])
+        );
     }
 
     public function destroy(ContactGroup $contactGroup)
@@ -81,6 +87,7 @@ class ContactGroupController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'records.*.name' => ['required', 'string', 'max:120'],
             'records.*.parent_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
@@ -90,7 +97,13 @@ class ContactGroupController extends Controller
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => ContactGroup::create($record));
+            return collect($data['records'])->map(function (array $record) {
+                return ContactGroup::create($record)->fresh([
+                    'branch',
+                    'parent',
+                    'contacts',
+                ]);
+            });
         });
 
         return ContactGroupResource::collection($records);
@@ -100,6 +113,7 @@ class ContactGroupController extends Controller
     {
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
+
             'records.*.id' => ['required', 'uuid', 'exists:contact_groups,id'],
             'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'records.*.name' => ['sometimes', 'required', 'string', 'max:120'],
@@ -121,7 +135,11 @@ class ContactGroupController extends Controller
 
                 $model->update($record);
 
-                return $model->fresh();
+                return $model->fresh([
+                    'branch',
+                    'parent',
+                    'contacts',
+                ]);
             });
         });
 
@@ -136,7 +154,9 @@ class ContactGroupController extends Controller
         ]);
 
         DB::transaction(function () use ($data) {
-            ContactGroup::query()->whereIn('id', $data['ids'])->delete();
+            ContactGroup::query()
+                ->whereIn('id', $data['ids'])
+                ->delete();
         });
 
         return response()->json([
