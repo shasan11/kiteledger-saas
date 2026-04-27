@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('online-store')->name('online-store.')->group(function () {
     Route::get('/', fn () => Inertia::render('App/OnlineStore/Index'))->name('index');

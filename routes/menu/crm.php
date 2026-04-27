@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('crm')->name('crm.')->group(function () {
     Route::get('/contact-groups', fn () => Inertia::render('App/Crm/ContactGroups/Index'))->name('contact-groups.index');

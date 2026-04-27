@@ -86,7 +86,7 @@ export default function AuthenticatedLayout({ header, children }) {
             {
                 key: 'pos',
                 icon: <ShoppingCartOutlined />,
-                label: 'POS',
+                label: 'Point of Sales',
                 onClick: () => visit('pos.index', '/pos'),
             },
             {
