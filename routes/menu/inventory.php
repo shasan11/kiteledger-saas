@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/product-categories', fn () => Inertia::render('App/Inventory/ProductCategories/Index'))->name('product-categories.index');

@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('configurations')->name('configurations.')->group(function () {
     Route::get('/application', fn () => Inertia::render('App/Configurations/Application/Index'))->name('application.index');

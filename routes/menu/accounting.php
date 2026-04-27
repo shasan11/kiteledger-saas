@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountingController;
+use Inertia\Inertia;
 
 Route::prefix('accounting')->name('accounting.')->group(function () {
     Route::get('/chart-of-accounts', [AccountingController::class, 'chartOfAccounts'])->name('chart-of-accounts.index');

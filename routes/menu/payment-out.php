@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('payment-out')->name('payment-out.')->group(function () {
     Route::get('/purchase-bills', fn () => Inertia::render('App/PaymentOut/PurchaseBills/Index'))->name('purchase-bills.index');

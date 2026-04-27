@@ -1,4 +1,5 @@
 <?php
+use Inertia\Inertia;
 
 Route::prefix('hrm')->name('hrm.')->group(function () {
     Route::get('/employees', fn () => Inertia::render('App/Hrm/Employees/Index'))->name('employees.index');
