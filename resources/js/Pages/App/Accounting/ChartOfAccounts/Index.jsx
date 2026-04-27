@@ -2,32 +2,13 @@ import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
 import ReusableCrud from '@/Components/ResuableCrud';
-export default function Index({ accounts = [] }) {
+
+export default function Index({ branches = [], accounts = [], currencies = [] }) {
     const columns = useMemo(
         () => [
-            {
-                title: 'Account Name',
-                dataIndex: 'name',
-                key: 'name',
-            },
-            {
-                title: 'Under',
-                dataIndex: 'parent',
-                key: 'parent',
-                render: (_, record) => record?.parent?.name || '-',
-            },
-            {
-                title: 'Code',
-                dataIndex: 'code',
-                key: 'code',
-                render: (value) => value || '-',
-            },
-            {
-                title: 'Description',
-                dataIndex: 'description',
-                key: 'description',
-                render: (value) => value || '-',
-            },
+            { title: 'Code', dataIndex: 'code', key: 'code', render: (value) => value || '-' },
+            { title: 'Account Name', dataIndex: 'name', key: 'name' },
+            { title: 'Description', dataIndex: 'description', key: 'description', render: (value) => value || '-' },
         ],
         []
     );
@@ -35,52 +16,39 @@ export default function Index({ accounts = [] }) {
     const fields = useMemo(
         () => [
             {
-                name: 'name',
-                label: 'Account Name',
-                type: 'text',
-                placeholder: 'Enter account name',
+                name: 'branch_id',
+                label: 'Branch',
+                type: 'select',
+                placeholder: 'Select branch',
                 required: true,
-                rules: [
-                    {
-                        required: true,
-                        message: 'Account name is required',
-                    },
-                ],
+                options: branches.map((branch) => ({ label: branch.name, value: branch.id })),
             },
             {
-                name: 'parent_id',
-                label: 'Under',
+                name: 'account_id',
+                label: 'Account Group',
                 type: 'select',
-                placeholder: 'Select under account',
+                placeholder: 'Select account group',
                 required: true,
                 options: accounts.map((account) => ({
-                    label: account.name,
+                    label: account.code ? `${account.code} - ${account.name}` : account.name,
                     value: account.id,
                 })),
-                rules: [
-                    {
-                        required: true,
-                        message: 'Under account is required',
-                    },
-                ],
             },
             {
-                name: 'code',
-                label: 'Code',
-                type: 'text',
-                placeholder: 'Enter account code',
-                required: false,
+                name: 'currency_id',
+                label: 'Currency',
+                type: 'select',
+                placeholder: 'Select currency',
+                options: currencies.map((currency) => ({
+                    label: currency.code ? `${currency.code} - ${currency.name}` : currency.name,
+                    value: currency.id,
+                })),
             },
-            {
-                name: 'description',
-                label: 'Description',
-                type: 'textarea',
-                placeholder: 'Enter description',
-                required: false,
-                rows: 3,
-            },
+            { name: 'code', label: 'Code', type: 'text', placeholder: 'Enter account code', required: true },
+            { name: 'name', label: 'Account Name', type: 'text', placeholder: 'Enter account name', required: true },
+            { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Enter description', rows: 3 },
         ],
-        [accounts]
+        [branches, accounts, currencies]
     );
 
     return (
@@ -95,28 +63,20 @@ export default function Index({ accounts = [] }) {
 
             <ReusableCrud
                 title="Chart of Accounts"
-                data={accounts}
+                apiUrl="/api/chart-of-accounts/"
                 columns={columns}
                 fields={fields}
-                createRoute={route('chart-of-accounts.store')}
-                updateRoute={(record) =>
-                    route('chart-of-accounts.update', record.id)
-                }
-                deleteRoute={(record) =>
-                    route('chart-of-accounts.destroy', record.id)
-                }
-                initialValues={{
-                    name: '',
-                    parent_id: null,
+                crudInitialValues={{
+                    branch_id: branches[0]?.id || null,
+                    account_id: null,
+                    currency_id: null,
                     code: '',
+                    name: '',
                     description: '',
                 }}
-                editValues={(record) => ({
-                    name: record?.name || '',
-                    parent_id: record?.parent_id || record?.parent?.id || null,
-                    code: record?.code || '',
-                    description: record?.description || '',
-                })}
+                searchParam="filter[q]"
+                pageSizeParam="per_page"
+                sortMode="sort"
             />
         </AuthenticatedLayout>
     );
