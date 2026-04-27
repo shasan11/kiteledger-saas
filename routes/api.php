@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\CashTransferController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
+use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\ContactGroupController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
 use Illuminate\Support\Facades\Route;
@@ -73,5 +75,24 @@ Route::delete('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkDe
 Route::apiResource('cheque-registers', ChequeRegisterController::class)
     ->parameters([
         'cheque-registers' => 'chequeRegister',
+    ]);
+
+
+Route::post('contact-groups/bulk', [ContactGroupController::class, 'bulkStore']);
+Route::patch('contact-groups/bulk', [ContactGroupController::class, 'bulkUpdate']);
+Route::delete('contact-groups/bulk', [ContactGroupController::class, 'bulkDestroy']);
+
+Route::apiResource('contact-groups', ContactGroupController::class)
+    ->parameters([
+        'contact-groups' => 'contactGroup',
+    ]);
+
+Route::post('contacts/bulk', [ContactController::class, 'bulkStore']);
+Route::patch('contacts/bulk', [ContactController::class, 'bulkUpdate']);
+Route::delete('contacts/bulk', [ContactController::class, 'bulkDestroy']);
+
+Route::apiResource('contacts', ContactController::class)
+    ->parameters([
+        'contacts' => 'contact',
     ]);
 
