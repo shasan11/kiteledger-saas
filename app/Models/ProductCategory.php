@@ -20,6 +20,7 @@ class ProductCategory extends Model
     protected $fillable = [
         'branch_id',
         'name',
+        'code',
         'parent_id',
         'description',
         'active',
@@ -54,9 +55,14 @@ class ProductCategory extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function children(): HasMany
+    {
+        return $this->hasMany(ProductCategory::class, 'parent_id');
+    }
+
     public function childrens(): HasMany
     {
-        return $this->hasMany(ProductCategory::class);
+        return $this->children();
     }
 
     public function products(): HasMany

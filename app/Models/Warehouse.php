@@ -19,9 +19,12 @@ class Warehouse extends Model
      */
     protected $fillable = [
         'branch_id',
-        'code',
         'name',
+        'code',
+        'phone',
+        'email',
         'address',
+        'description',
         'active',
         'user_add_id',
     ];
@@ -47,6 +50,11 @@ class Warehouse extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
     }
 
     public function warehouseTransfers(): HasMany
