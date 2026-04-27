@@ -74,6 +74,11 @@ class JournalVoucher extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(JournalVoucherLine::class);
+    }
+
     public function journalVoucherLines(): HasMany
     {
         return $this->hasMany(JournalVoucherLine::class);
