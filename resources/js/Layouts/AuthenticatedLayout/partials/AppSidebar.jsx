@@ -4,13 +4,34 @@ import {
     SearchOutlined,
 } from '@ant-design/icons';
 import { Button, Empty, Input, Layout, Menu, theme } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import {
+    Children,
+    isValidElement,
+    useEffect,
+    useMemo,
+    useState,
+} from 'react';
 
 const { Sider } = Layout;
 
 function getTextFromLabel(label) {
     if (typeof label === 'string') return label;
     if (typeof label === 'number') return String(label);
+
+    if (Array.isArray(label)) {
+        return label.map(getTextFromLabel).join(' ');
+    }
+
+    if (isValidElement(label)) {
+        return getTextFromLabel(label.props?.children);
+    }
+
+    if (label?.props?.children) {
+        return Children.toArray(label.props.children)
+            .map(getTextFromLabel)
+            .join(' ');
+    }
+
     return '';
 }
 
@@ -45,9 +66,7 @@ function filterMenuItems(items = [], searchText = '') {
 
             const isMatched = labelText.includes(value);
 
-            if (isMatched) {
-                return item;
-            }
+            if (isMatched) return item;
 
             if (matchedChildren.length > 0) {
                 return {
@@ -78,7 +97,7 @@ export default function AppSidebar({
     collapsed,
     setCollapsed,
     selectedKeys,
-    menuItems,
+    menuItems = [],
     colorBgContainer,
     colorBorderSecondary,
 }) {
@@ -86,7 +105,7 @@ export default function AppSidebar({
 
     const [searchText, setSearchText] = useState('');
 
-    const sidebarBg = colorBgContainer || token.colorBgContainer;
+    const sidebarBg = colorBgContainer || '#ffffff';
     const sidebarBorder = colorBorderSecondary || token.colorBorderSecondary;
 
     const filteredMenuItems = useMemo(
@@ -127,7 +146,7 @@ export default function AppSidebar({
 
     return (
         <Sider
-            width={210}
+            width={232}
             collapsedWidth={76}
             collapsed={collapsed}
             trigger={null}
@@ -137,22 +156,22 @@ export default function AppSidebar({
                 '--sidebar-border': sidebarBorder,
                 '--sidebar-text': token.colorText,
                 '--sidebar-text-muted': token.colorTextSecondary,
-                '--sidebar-hover-bg': token.colorFillTertiary,
+                '--sidebar-text-light': token.colorTextTertiary,
+                '--sidebar-hover-bg': '#f5f7fb',
                 '--sidebar-active-bg': token.colorPrimaryBg,
                 '--sidebar-active-color': token.colorPrimary,
+                '--sidebar-input-bg': '#f8fafc',
+                '--sidebar-input-border': '#e5e7eb',
                 '--sidebar-radius': `${token.borderRadiusLG}px`,
                 '--sidebar-radius-sm': `${token.borderRadius}px`,
-                '--sidebar-shadow': token.boxShadowTertiary,
-                '--sidebar-input-bg': token.colorBgContainer,
-                '--sidebar-input-border': token.colorBorder,
-                '--sidebar-danger-bg': token.colorErrorBg,
+                '--sidebar-shadow': '6px 0 24px rgba(15, 23, 42, 0.045)',
                 background: sidebarBg,
                 borderRight: `1px solid ${sidebarBorder}`,
                 height: 'calc(100vh - 64px)',
                 position: 'sticky',
                 top: 64,
                 overflow: 'hidden',
-                boxShadow: token.boxShadowTertiary,
+                boxShadow: 'var(--sidebar-shadow)',
                 zIndex: 90,
             }}
         >
@@ -164,18 +183,19 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar-header {
-                        height: 60px;
+                        height: 64px;
                         display: flex;
                         align-items: center;
                         gap: 10px;
-                        padding: 0 12px;
+                        padding: 12px;
                         border-bottom: 1px solid var(--sidebar-border);
+                        background: var(--sidebar-bg);
                         flex-shrink: 0;
                     }
 
                     .app-sidebar-header-collapsed {
                         justify-content: center;
-                        padding: 0;
+                        padding: 12px 8px;
                     }
 
                     .app-sidebar-search {
@@ -184,15 +204,30 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar-search .ant-input-affix-wrapper {
-                        height: 36px;
-                        border-radius: var(--sidebar-radius-sm);
+                        height: 38px;
+                        border-radius: 12px;
                         background: var(--sidebar-input-bg);
                         border-color: var(--sidebar-input-border);
+                        box-shadow: none;
+                        transition: all 0.2s ease;
+                    }
+
+                    .app-sidebar-search .ant-input-affix-wrapper:hover,
+                    .app-sidebar-search .ant-input-affix-wrapper-focused {
+                        background: #ffffff;
+                        border-color: var(--sidebar-active-color);
+                        box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.08);
                     }
 
                     .app-sidebar-search .ant-input {
                         font-size: 13px;
+                        font-weight: 500;
                         background: transparent;
+                        color: var(--sidebar-text);
+                    }
+
+                    .app-sidebar-search .ant-input::placeholder {
+                        color: var(--sidebar-text-light);
                     }
 
                     .app-sidebar-search .ant-input-prefix {
@@ -201,23 +236,28 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar-toggle {
-                        width: 34px !important;
-                        height: 34px !important;
-                        border-radius: var(--sidebar-radius-sm) !important;
+                        width: 36px !important;
+                        height: 36px !important;
+                        border-radius: 12px !important;
                         color: var(--sidebar-text-muted) !important;
+                        background: #f8fafc !important;
+                        border: 1px solid var(--sidebar-input-border) !important;
                         flex-shrink: 0;
+                        transition: all 0.2s ease;
                     }
 
                     .app-sidebar-toggle:hover {
-                        background: var(--sidebar-hover-bg) !important;
-                        color: var(--sidebar-text) !important;
+                        background: var(--sidebar-active-bg) !important;
+                        border-color: var(--sidebar-active-bg) !important;
+                        color: var(--sidebar-active-color) !important;
                     }
 
                     .app-sidebar-scroll {
                         flex: 1;
                         overflow-y: auto;
                         overflow-x: hidden;
-                        padding: 10px 8px 14px;
+                        padding: 12px 10px 16px;
+                        background: var(--sidebar-bg);
                     }
 
                     .app-sidebar-scroll::-webkit-scrollbar {
@@ -234,7 +274,7 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar-scroll:hover::-webkit-scrollbar-thumb {
-                        background: var(--sidebar-border);
+                        background: #cbd5e1;
                     }
 
                     .app-sidebar .ant-menu {
@@ -245,12 +285,16 @@ export default function AppSidebar({
 
                     .app-sidebar .ant-menu-item,
                     .app-sidebar .ant-menu-submenu-title {
-                        height: 38px !important;
-                        line-height: 38px !important;
+                        position: relative;
+                        height: 40px !important;
+                        line-height: 40px !important;
                         margin: 3px 0 !important;
                         width: 100% !important;
-                        border-radius: var(--sidebar-radius-sm) !important;
+                        border-radius: 12px !important;
                         color: var(--sidebar-text-muted);
+                        font-weight: 600;
+                        letter-spacing: -0.01em;
+                        transition: all 0.18s ease;
                     }
 
                     .app-sidebar .ant-menu-item:hover,
@@ -265,6 +309,18 @@ export default function AppSidebar({
                         font-weight: 700;
                     }
 
+                    .app-sidebar .ant-menu-item-selected::before {
+                        content: "";
+                        position: absolute;
+                        left: 8px;
+                        top: 50%;
+                        width: 3px;
+                        height: 18px;
+                        border-radius: 999px;
+                        background: var(--sidebar-active-color);
+                        transform: translateY(-50%);
+                    }
+
                     .app-sidebar .ant-menu-item-selected::after {
                         display: none !important;
                     }
@@ -277,6 +333,7 @@ export default function AppSidebar({
                     .app-sidebar .ant-menu-item .anticon,
                     .app-sidebar .ant-menu-submenu-title .anticon {
                         font-size: 16px !important;
+                        color: inherit;
                     }
 
                     .app-sidebar .ant-menu-sub {
@@ -289,11 +346,32 @@ export default function AppSidebar({
                         margin: 2px 0 !important;
                         padding-left: 42px !important;
                         font-size: 12.5px;
-                        border-radius: var(--sidebar-radius-sm) !important;
+                        font-weight: 600;
+                        border-radius: 10px !important;
+                        color: var(--sidebar-text-muted);
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-item:hover {
+                        background: #f8fafc !important;
                     }
 
                     .app-sidebar .ant-menu-sub .ant-menu-item-selected {
                         background: var(--sidebar-active-bg) !important;
+                        color: var(--sidebar-active-color) !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-item-selected::before {
+                        left: 20px;
+                        height: 14px;
+                    }
+
+                    .app-sidebar .ant-menu-submenu-arrow {
+                        color: var(--sidebar-text-light) !important;
+                    }
+
+                    .app-sidebar .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow,
+                    .app-sidebar .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-submenu-arrow {
+                        color: var(--sidebar-active-color) !important;
                     }
 
                     .app-sidebar .ant-menu-inline-collapsed {
@@ -305,21 +383,30 @@ export default function AppSidebar({
                         padding-inline: calc(50% - 8px) !important;
                     }
 
+                    .app-sidebar .ant-menu-inline-collapsed .ant-menu-item-selected::before {
+                        left: 6px;
+                    }
+
                     .app-sidebar .ant-menu-title-content {
                         overflow: hidden;
                         text-overflow: ellipsis;
                     }
 
                     .app-sidebar-empty {
-                        height: 180px;
+                        height: 220px;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                     }
 
+                    .app-sidebar-empty .ant-empty {
+                        margin: 0;
+                    }
+
                     .app-sidebar-empty .ant-empty-description {
                         color: var(--sidebar-text-muted);
                         font-size: 12px;
+                        font-weight: 500;
                     }
                 `}
             </style>
