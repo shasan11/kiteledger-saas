@@ -82,6 +82,12 @@ class CashTransfer extends Model
         return $this->belongsTo(User::class);
     }
 
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(CashTransferLine::class);
+    }
+
     public function cashTransferLines(): HasMany
     {
         return $this->hasMany(CashTransferLine::class);
