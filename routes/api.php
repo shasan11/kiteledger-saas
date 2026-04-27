@@ -9,6 +9,10 @@ use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ContactGroupController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
+use App\Http\Controllers\Api\ProductCategoryController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ProductUnitController;
+use App\Http\Controllers\Api\WarehouseController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('bank-accounts/bulk', [BankAccountController::class, 'bulkStore']);
@@ -96,3 +100,39 @@ Route::apiResource('contacts', ContactController::class)
         'contacts' => 'contact',
     ]);
 
+
+Route::post('product-categories/bulk', [ProductCategoryController::class, 'bulkStore']);
+Route::patch('product-categories/bulk', [ProductCategoryController::class, 'bulkUpdate']);
+Route::delete('product-categories/bulk', [ProductCategoryController::class, 'bulkDestroy']);
+
+Route::apiResource('product-categories', ProductCategoryController::class)
+    ->parameters([
+        'product-categories' => 'productCategory',
+    ]);
+
+Route::post('product-units/bulk', [ProductUnitController::class, 'bulkStore']);
+Route::patch('product-units/bulk', [ProductUnitController::class, 'bulkUpdate']);
+Route::delete('product-units/bulk', [ProductUnitController::class, 'bulkDestroy']);
+
+Route::apiResource('product-units', ProductUnitController::class)
+    ->parameters([
+        'product-units' => 'productUnit',
+    ]);
+
+Route::post('products/bulk', [ProductController::class, 'bulkStore']);
+Route::patch('products/bulk', [ProductController::class, 'bulkUpdate']);
+Route::delete('products/bulk', [ProductController::class, 'bulkDestroy']);
+
+Route::apiResource('products', ProductController::class)
+    ->parameters([
+        'products' => 'product',
+    ]);
+
+Route::post('warehouses/bulk', [WarehouseController::class, 'bulkStore']);
+Route::patch('warehouses/bulk', [WarehouseController::class, 'bulkUpdate']);
+Route::delete('warehouses/bulk', [WarehouseController::class, 'bulkDestroy']);
+
+Route::apiResource('warehouses', WarehouseController::class)
+    ->parameters([
+        'warehouses' => 'warehouse',
+    ]);
