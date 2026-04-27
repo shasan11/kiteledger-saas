@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\BankAccountController;
 use App\Http\Controllers\Api\CashTransferController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
+use App\Http\Controllers\Api\ChequeRegisterController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
 use Illuminate\Support\Facades\Route;
@@ -62,5 +63,15 @@ Route::delete('journal-voucher-lines/bulk', [JournalVoucherLineController::class
 Route::apiResource('journal-voucher-lines', JournalVoucherLineController::class)
     ->parameters([
         'journal-voucher-lines' => 'journalVoucherLine',
+    ]);
+
+
+Route::post('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkStore']);
+Route::patch('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkUpdate']);
+Route::delete('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkDestroy']);
+
+Route::apiResource('cheque-registers', ChequeRegisterController::class)
+    ->parameters([
+        'cheque-registers' => 'chequeRegister',
     ]);
 
