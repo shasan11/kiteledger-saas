@@ -280,24 +280,24 @@ export default function AuthenticatedLayout({ header, children }) {
                                 '/accounting/journal-vouchers',
                             ),
                     },
-                    {
-                        key: 'quick-bill',
-                        label: 'Quick Bill',
-                        onClick: () =>
-                            visit(
-                                'accounting.quick-bills.index',
-                                '/accounting/quick-bills',
-                            ),
-                    },
-                    {
-                        key: 'quick-receipt',
-                        label: 'Quick Receipt',
-                        onClick: () =>
-                            visit(
-                                'accounting.quick-receipts.index',
-                                '/accounting/quick-receipts',
-                            ),
-                    },
+                    // {
+                    //     key: 'quick-bill',
+                    //     label: 'Quick Bill',
+                    //     onClick: () =>
+                    //         visit(
+                    //             'accounting.quick-bills.index',
+                    //             '/accounting/quick-bills',
+                    //         ),
+                    // },
+                    // {
+                    //     key: 'quick-receipt',
+                    //     label: 'Quick Receipt',
+                    //     onClick: () =>
+                    //         visit(
+                    //             'accounting.quick-receipts.index',
+                    //             '/accounting/quick-receipts',
+                    //         ),
+                    // },
                     {
                         key: 'fixed-asset',
                         label: 'Fixed Asset',

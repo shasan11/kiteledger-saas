@@ -1,117 +1,154 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head } from '@inertiajs/react';
-import { Button, Card, Checkbox, Col, Form, Input, Row, Space, Typography } from 'antd';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
+import React, { useMemo } from "react";
+import * as Yup from "yup";
+import ReusableCrud from "@/Components/ResuableCrud";
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { Head } from "@inertiajs/react";
+const API_BASE_URL = import.meta.env.VITE_APP_BACKEND_URL;
 
-const validationSchema = Yup.object({
-    name: Yup.string().max(120, 'Max 120 characters').required('Group name is required'),
-    parent_id: Yup.string().nullable(),
-    description: Yup.string().nullable(),
+export default function ContactGroupCrud() {
+  const apiUrl = `${API_BASE_URL}/api/contacts/contact-groups/`;
+
+  const initialValues = useMemo(
+    () => ({
+      name: "",
+      parent: null,
+      description: "",
+      active: true,
+    }),
+    []
+  );
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string()
+      .trim()
+      .required("Name is required")
+      .max(255, "Name cannot be more than 255 characters"),
+
+    parent: Yup.mixed().nullable(),
+
+    description: Yup.string()
+      .nullable()
+      .max(1000, "Description cannot be more than 1000 characters"),
+
     active: Yup.boolean(),
-});
+  });
 
-export default function Index() {
-    const formik = useFormik({
-        initialValues: {
-            name: '',
-            parent_id: '',
-            description: '',
-            active: true,
+  const fields = useMemo(
+    () => [
+      {
+        name: "name",
+        label: "Group Name",
+        type: "text",
+        placeholder: "Enter contact group name",
+        required: true,
+        col: 12,
+      },
+      {
+        name: "parent",
+        label: "Parent Group",
+        type: "fkSelect",
+        placeholder: "Select parent group",
+        fkUrl: "/api/contacts/contact-groups/",
+        fkValueKey: "id",
+        fkLabelKey: "name",
+        allowClear: true,
+        col: 12,
+      },
+      {
+        name: "description",
+        label: "Description",
+        type: "textarea",
+        placeholder: "Enter description",
+        rows: 3,
+        col: 24,
+      },
+      {
+        name: "active",
+        label: "Active",
+        type: "switch",
+        col: 24,
+      },
+    ],
+    []
+  );
+
+  const columns = useMemo(
+    () => [
+      {
+        title: "Name",
+        dataIndex: "name",
+        key: "name",
+        backendSort: true,
+        backendFilter: {
+          type: "text",
+          param: "name",
+          placeholder: "Search name",
         },
-        validationSchema,
-        onSubmit: (values) => {
-            // Ready for API integration: POST /api/contact-groups
-            // eslint-disable-next-line no-console
-            console.log('Contact Group Payload', values);
+        render: (value) => value || "-",
+      },
+      {
+        title: "Parent Group",
+        dataIndex: "parent_detail",
+        key: "parent",
+        render: (_, record) => {
+          return (
+            record?.parent_detail?.name ||
+            record?.parent_name ||
+            record?.parent?.name ||
+            "-"
+          );
         },
-    });
+      },
+      {
+        title: "Description",
+        dataIndex: "description",
+        key: "description",
+        ellipsis: true,
+        render: (value) => value || "-",
+      },
+      {
+        title: "Status",
+        dataIndex: "active",
+        key: "active",
+        width: 120,
+        render: (value) => (value ? "Active" : "Inactive"),
+      },
+    ],
+    []
+  );
 
-    const getError = (field) =>
-        formik.touched[field] && formik.errors[field] ? formik.errors[field] : null;
-
-    return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Contact Group
-                </h2>
-            }
-        >
-            <Head title="Contact Group" />
-
-            <Card className="!rounded-lg">
-                <Typography.Title level={4}>Create Contact Group</Typography.Title>
-                <Form layout="vertical" onFinish={formik.handleSubmit}>
-                    <Row gutter={16}>
-                        <Col xs={24} md={12}>
-                            <Form.Item
-                                label="Group Name"
-                                validateStatus={getError('name') ? 'error' : ''}
-                                help={getError('name')}
-                            >
-                                <Input
-                                    name="name"
-                                    value={formik.values.name}
-                                    onChange={formik.handleChange}
-                                    onBlur={formik.handleBlur}
-                                    placeholder="Retail Customers"
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} md={12}>
-                            <Form.Item
-                                label="Parent Group ID"
-                                validateStatus={getError('parent_id') ? 'error' : ''}
-                                help={getError('parent_id')}
-                            >
-                                <Input
-                                    name="parent_id"
-                                    value={formik.values.parent_id}
-                                    onChange={formik.handleChange}
-                                    onBlur={formik.handleBlur}
-                                    placeholder="Optional UUID"
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Form.Item
-                        label="Description"
-                        validateStatus={getError('description') ? 'error' : ''}
-                        help={getError('description')}
-                    >
-                        <Input.TextArea
-                            name="description"
-                            value={formik.values.description}
-                            onChange={formik.handleChange}
-                            onBlur={formik.handleBlur}
-                            rows={4}
-                            placeholder="Description for this group"
-                        />
-                    </Form.Item>
-
-                    <Form.Item>
-                        <Checkbox
-                            checked={formik.values.active}
-                            onChange={(event) =>
-                                formik.setFieldValue('active', event.target.checked)
-                            }
-                        >
-                            Active
-                        </Checkbox>
-                    </Form.Item>
-
-                    <Space>
-                        <Button type="primary" htmlType="submit">
-                            Save Contact Group
-                        </Button>
-                        <Button htmlType="button" onClick={formik.handleReset}>
-                            Reset
-                        </Button>
-                    </Space>
-                </Form>
-            </Card>
-        </AuthenticatedLayout>
-    );
+  return (
+    <AuthenticatedLayout header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Contact Groups</h2>}>
+    <Head title="Contact Groups" />
+    <ReusableCrud
+      title="Contact Groups"
+      apiUrl={apiUrl}
+      fields={fields}
+      columns={columns}
+      validationSchema={validationSchema}
+      crudInitialValues={initialValues}
+      form_ui="drawer"
+      drawerWidth={720}
+      modalWidth={720}
+      showSearch={true}
+      canAdd={true}
+      canEdit={true}
+      canDelete={true}
+      canView={true}
+      hasActions={true}
+      hasActionColumns={true}
+      showRowActionMenu={true}
+      enableServerPagination={true}
+      enableInactiveDrawer={true}
+      searchParam="search"
+      pageParam="page"
+      pageSizeParam="page_size"
+      activeParam="active"
+      sortMode="ordering"
+      orderingParam="ordering"
+      defaultSortField="name"
+      defaultSortOrder="ascend"
+    />
+    </AuthenticatedLayout>
+  );
 }
