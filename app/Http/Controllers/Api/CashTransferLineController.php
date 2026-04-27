@@ -18,7 +18,7 @@ class CashTransferLineController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(CashTransferLine::class)
-            ->allowedIncludes(['cashTransfer', 'toBankAccount'])
+            ->allowedIncludes(...['cashTransfer', 'toBankAccount'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where('description', 'like', "%{$value}%");
