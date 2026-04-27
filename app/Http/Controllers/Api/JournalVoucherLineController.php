@@ -18,7 +18,7 @@ class JournalVoucherLineController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(JournalVoucherLine::class)
-            ->allowedIncludes(['journalVoucher', 'chartOfAccount'])
+            ->allowedIncludes(...['journalVoucher', 'chartOfAccount'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where('description', 'like', "%{$value}%");

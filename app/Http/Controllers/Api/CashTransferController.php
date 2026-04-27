@@ -20,7 +20,7 @@ class CashTransferController extends Controller
 
         $records = QueryBuilder::for(CashTransfer::class)
             ->with('items')
-            ->allowedIncludes(['items', 'fromBankAccount', 'currency', 'branch'])
+            ->allowedIncludes(...['items', 'fromBankAccount', 'currency', 'branch'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {

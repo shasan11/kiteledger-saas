@@ -18,7 +18,7 @@ class ChartOfAccountController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(ChartOfAccount::class)
-            ->allowedIncludes(['branch', 'account', 'currency'])
+            ->allowedIncludes(...['branch', 'account', 'currency'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {

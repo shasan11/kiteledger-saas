@@ -20,7 +20,7 @@ class JournalVoucherController extends Controller
 
         $records = QueryBuilder::for(JournalVoucher::class)
             ->with('items')
-            ->allowedIncludes(['items', 'branch', 'currency'])
+            ->allowedIncludes(...['items', 'branch', 'currency'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {

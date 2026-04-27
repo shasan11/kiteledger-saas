@@ -18,7 +18,7 @@ class ChequeRegisterController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(ChequeRegister::class)
-            ->allowedIncludes(['branch', 'bankAccount', 'account'])
+            ->allowedIncludes(...['branch', 'bankAccount', 'account'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
