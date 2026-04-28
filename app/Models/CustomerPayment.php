@@ -22,9 +22,8 @@ class CustomerPayment extends Model
         'payment_no',
         'payment_date',
         'contact_id',
-        'bank_account_id',
+        'account_id',
         'currency_id',
-        'exchange_rate',
         'amount',
         'payment_method',
         'bank_charges_account_id',
@@ -35,13 +34,17 @@ class CustomerPayment extends Model
         'reference',
         'notes',
         'status',
-        'user_add_id',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -53,16 +56,19 @@ class CustomerPayment extends Model
     {
         return [
             'payment_date' => 'date',
-            'exchange_rate' => 'decimal:6',
             'amount' => 'decimal:2',
             'bank_charges' => 'decimal:2',
             'tds_charges' => 'decimal:2',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
     }
 
@@ -76,9 +82,9 @@ class CustomerPayment extends Model
         return $this->belongsTo(Contact::class);
     }
 
-    public function bankAccount(): BelongsTo
+    public function account(): BelongsTo
     {
-        return $this->belongsTo(BankAccount::class);
+        return $this->belongsTo(Account::class);
     }
 
     public function currency(): BelongsTo
@@ -96,12 +102,17 @@ class CustomerPayment extends Model
         return $this->belongsTo(ChartOfAccount::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }

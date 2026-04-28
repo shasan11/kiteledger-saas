@@ -19,6 +19,7 @@ class GeneralSettingFactory extends Factory
             'value' => fake()->text(),
             'group' => fake()->regexify('[A-Za-z0-9]{80}'),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

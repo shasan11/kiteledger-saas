@@ -20,6 +20,7 @@ class ContactGroupFactory extends Factory
             'parent_id' => ContactGroup::factory(),
             'description' => fake()->text(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

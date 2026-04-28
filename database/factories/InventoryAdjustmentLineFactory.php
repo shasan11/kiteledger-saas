@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Models\InventoryAdjustment;
 use App\Models\ProductVariant;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class InventoryAdjustmentLineFactory extends Factory
@@ -22,11 +21,6 @@ class InventoryAdjustmentLineFactory extends Factory
             'unit_cost' => fake()->randomFloat(2, 0, 99999999999999.99),
             'remarks' => fake()->regexify('[A-Za-z0-9]{200}'),
             'active' => fake()->boolean(),
-            'approved' => fake()->boolean(),
-            'voided' => fake()->boolean(),
-            'voided_reason' => fake()->text(),
-            'voided_date' => fake()->date(),
-            'voided_by_id' => User::factory(),
         ];
     }
 }

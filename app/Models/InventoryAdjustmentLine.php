@@ -24,11 +24,6 @@ class InventoryAdjustmentLine extends Model
         'unit_cost',
         'remarks',
         'active',
-        'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
-        'voided_by_id',
     ];
 
     /**
@@ -42,10 +37,6 @@ class InventoryAdjustmentLine extends Model
             'qty' => 'decimal:4',
             'unit_cost' => 'decimal:2',
             'active' => 'boolean',
-            'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
-            'voided_by_id' => 'integer',
         ];
     }
 
@@ -57,10 +48,5 @@ class InventoryAdjustmentLine extends Model
     public function productVariant(): BelongsTo
     {
         return $this->belongsTo(ProductVariant::class);
-    }
-
-    public function voidedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
     }
 }

@@ -22,6 +22,7 @@ class VariantLine extends Model
         'value',
         'sort_order',
         'active',
+        'is_system_generated',
     ];
 
     /**
@@ -34,6 +35,7 @@ class VariantLine extends Model
         return [
             'sort_order' => 'integer',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
         ];
     }
 

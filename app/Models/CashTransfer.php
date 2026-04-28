@@ -21,20 +21,23 @@ class CashTransfer extends Model
         'branch_id',
         'transfer_no',
         'transfer_date',
-        'from_bank_account_id',
+        'from_account_id',
         'reference',
         'currency_id',
         'total_amount',
         'notes',
         'status',
-        'user_add_id',
         'active',
         'approved',
-        'exchange_rate',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -47,19 +50,17 @@ class CashTransfer extends Model
         return [
             'transfer_date' => 'date',
             'total_amount' => 'decimal:2',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'exchange_rate' => 'decimal:6',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
-    }
-
-    public function fromBankAccount(): BelongsTo
-    {
-        return $this->belongsTo(BankAccount::class);
     }
 
     public function branch(): BelongsTo
@@ -67,12 +68,17 @@ class CashTransfer extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function fromAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
+    }
+
     public function currency(): BelongsTo
     {
         return $this->belongsTo(Currency::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
@@ -82,10 +88,9 @@ class CashTransfer extends Model
         return $this->belongsTo(User::class);
     }
 
-
-    public function items(): HasMany
+    public function userAdd(): BelongsTo
     {
-        return $this->hasMany(CashTransferLine::class);
+        return $this->belongsTo(User::class);
     }
 
     public function cashTransferLines(): HasMany

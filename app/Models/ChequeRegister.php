@@ -25,17 +25,21 @@ class ChequeRegister extends Model
         'payee_name',
         'cleared_date',
         'direction',
-        'bank_account_id',
         'account_id',
+        'related_account_id',
         'amount',
         'status',
         'notes',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
         'user_add_id',
     ];
 
@@ -54,9 +58,13 @@ class ChequeRegister extends Model
             'amount' => 'decimal:2',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
             'user_add_id' => 'integer',
         ];
     }
@@ -66,14 +74,19 @@ class ChequeRegister extends Model
         return $this->belongsTo(Branch::class);
     }
 
-    public function bankAccount(): BelongsTo
-    {
-        return $this->belongsTo(BankAccount::class);
-    }
-
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function relatedAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function voidedBy(): BelongsTo

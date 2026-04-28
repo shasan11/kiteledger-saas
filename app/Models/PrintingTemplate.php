@@ -24,6 +24,7 @@ class PrintingTemplate extends Model
         'template_css',
         'is_default',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -37,6 +38,7 @@ class PrintingTemplate extends Model
         return [
             'is_default' => 'boolean',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

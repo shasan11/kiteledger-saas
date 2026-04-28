@@ -22,6 +22,7 @@ class AlertTypeFactory extends Factory
             'sync_time' => fake()->time(),
             'recipient' => fake()->text(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

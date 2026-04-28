@@ -3,234 +3,420 @@
 namespace Database\Seeders;
 
 use App\Models\Account;
-use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\CashTransfer;
+use App\Models\CashTransferLine;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\JournalVoucher;
+use App\Models\JournalVoucherLine;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class AccountingSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        $userId = User::query()->value('id');
+        DB::transaction(function () {
+            $userId = User::query()->value('id');
+            $now = now();
 
-        $branch = Branch::query()->firstOrCreate(
-            ['code' => 'MAIN'],
-            [
-                'name' => 'Main Branch',
-                'is_head_office' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $branch = Branch::query()->firstOrCreate(
+                ['code' => 'MAIN'],
+                [
+                    'name' => 'Main Branch',
+                    'is_head_office' => true,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $currency = Currency::query()->firstOrCreate(
-            ['code' => 'USD'],
-            [
-                'name' => 'US Dollar',
-                'symbol' => '$',
-                'decimal_places' => 2,
-                'is_base' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $currency = Currency::query()->firstOrCreate(
+                ['code' => 'USD'],
+                [
+                    'name' => 'US Dollar',
+                    'symbol' => '$',
+                    'decimal_places' => 2,
+                    'is_base' => true,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $assetParent = Account::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '1000'],
-            [
-                'name' => 'Assets',
-                'nature' => 'asset',
-                'is_system_generated' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            /*
+            |--------------------------------------------------------------------------
+            | Account Groups
+            |--------------------------------------------------------------------------
+            */
 
-        $cashAccount = Account::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '1100'],
-            [
-                'name' => 'Cash on Hand',
-                'nature' => 'asset',
-                'parent_id' => $assetParent->id,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $assetAccount = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => '1000'],
+                [
+                    'name' => 'Assets',
+                    'nature' => 'coa',
+                    'parent_id' => null,
+                    'currency_id' => $currency->id,
+                    'description' => 'Asset control group',
+                    'opening_balance' => 0,
+                    'dr_amount' => 0,
+                    'cr_amount' => 0,
+                    'balance' => 0,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $bankControlAccount = Account::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '1200'],
-            [
-                'name' => 'Bank Accounts Control',
-                'nature' => 'asset',
-                'parent_id' => $assetParent->id,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $cashControlAccount = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => '1100'],
+                [
+                    'name' => 'Cash Accounts',
+                    'nature' => 'coa',
+                    'parent_id' => $assetAccount->id,
+                    'currency_id' => $currency->id,
+                    'description' => 'Cash control group',
+                    'opening_balance' => 0,
+                    'dr_amount' => 0,
+                    'cr_amount' => 0,
+                    'balance' => 0,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $expenseParent = Account::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '5000'],
-            [
-                'name' => 'Expenses',
-                'nature' => 'expense',
-                'is_system_generated' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $bankControlAccount = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => '1200'],
+                [
+                    'name' => 'Bank Accounts',
+                    'nature' => 'coa',
+                    'parent_id' => $assetAccount->id,
+                    'currency_id' => $currency->id,
+                    'description' => 'Bank control group',
+                    'opening_balance' => 0,
+                    'dr_amount' => 0,
+                    'cr_amount' => 0,
+                    'balance' => 0,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $adminExpenseAccount = Account::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '5100'],
-            [
-                'name' => 'Administrative Expense',
-                'nature' => 'expense',
-                'parent_id' => $expenseParent->id,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $expenseAccount = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => '5000'],
+                [
+                    'name' => 'Expenses',
+                    'nature' => 'coa',
+                    'parent_id' => null,
+                    'currency_id' => $currency->id,
+                    'description' => 'Expense control group',
+                    'opening_balance' => 0,
+                    'dr_amount' => 0,
+                    'cr_amount' => 0,
+                    'balance' => 0,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $mainBank = BankAccount::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => 'BA-001'],
-            [
-                'type' => 'bank',
-                'display_name' => 'Main Operating Bank',
-                'currency_id' => $currency->id,
-                'bank_name' => 'Kite Ledger Bank',
-                'account_name' => 'Main Operations',
-                'account_number' => '001122334455',
-                'account_type' => 'checking',
-                'swift_code' => 'KITEUS00',
-                'account_id' => $bankControlAccount->id,
-                'opening_balance' => 100000,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            /*
+            |--------------------------------------------------------------------------
+            | Real Cash / Bank Accounts
+            |--------------------------------------------------------------------------
+            */
 
-        $pettyCash = BankAccount::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => 'CA-001'],
-            [
-                'type' => 'cash',
-                'display_name' => 'Petty Cash',
-                'currency_id' => $currency->id,
-                'description' => 'Office petty cash drawer',
-                'account_id' => $cashAccount->id,
-                'opening_balance' => 1000,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $mainBank = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => 'BA-001'],
+                [
+                    'name' => 'Main Operating Bank',
+                    'nature' => 'bank',
+                    'parent_id' => $bankControlAccount->id,
+                    'currency_id' => $currency->id,
+                    'description' => 'Main company operating bank account',
+                    'bank_name' => 'Kite Ledger Bank',
+                    'account_name' => 'Main Operations',
+                    'account_number' => '001122334455',
+                    'account_type' => 'checking',
+                    'swift_code' => 'KITEUS00',
+                    'opening_balance' => 100000,
+                    'dr_amount' => 100000,
+                    'cr_amount' => 0,
+                    'balance' => 100000,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $bankCOA = ChartOfAccount::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '1200'],
-            [
-                'account_id' => $bankControlAccount->id,
-                'name' => 'Bank Accounts Control',
-                'description' => 'Control account for bank balances',
-                'currency_id' => $currency->id,
-                'is_system_generated' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $pettyCash = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => 'CA-001'],
+                [
+                    'name' => 'Petty Cash',
+                    'nature' => 'cash',
+                    'parent_id' => $cashControlAccount->id,
+                    'currency_id' => $currency->id,
+                    'description' => 'Office petty cash account',
+                    'bank_name' => null,
+                    'account_name' => null,
+                    'account_number' => null,
+                    'account_type' => null,
+                    'swift_code' => null,
+                    'opening_balance' => 1000,
+                    'dr_amount' => 1000,
+                    'cr_amount' => 0,
+                    'balance' => 1000,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $cashCOA = ChartOfAccount::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '1100'],
-            [
-                'account_id' => $cashAccount->id,
-                'name' => 'Cash on Hand',
-                'description' => 'Cash account for day-to-day transactions',
-                'currency_id' => $currency->id,
-                'is_system_generated' => true,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            $adminExpenseAccount = Account::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'code' => '5100'],
+                [
+                    'name' => 'Administrative Expense',
+                    'nature' => 'coa',
+                    'parent_id' => $expenseAccount->id,
+                    'currency_id' => $currency->id,
+                    'description' => 'General office and administrative expenses',
+                    'opening_balance' => 0,
+                    'dr_amount' => 0,
+                    'cr_amount' => 0,
+                    'balance' => 0,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $expenseCOA = ChartOfAccount::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'code' => '5100'],
-            [
-                'account_id' => $adminExpenseAccount->id,
-                'name' => 'Administrative Expense',
-                'description' => 'General office and admin expenses',
-                'currency_id' => $currency->id,
-                'active' => true,
-                'user_add_id' => $userId,
-            ]
-        );
+            /*
+            |--------------------------------------------------------------------------
+            | Chart Of Accounts
+            |--------------------------------------------------------------------------
+            */
 
-        $cashTransfer = CashTransfer::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'transfer_no' => 'CT-0001'],
-            [
-                'transfer_date' => now()->toDateString(),
-                'from_bank_account_id' => $mainBank->id,
-                'reference' => 'Seed opening transfer',
-                'currency_id' => $currency->id,
-                'total_amount' => 500,
-                'notes' => 'Transfer from bank to petty cash',
-                'status' => 'posted',
-                'user_add_id' => $userId,
-                'active' => true,
-                'approved' => true,
-                'exchange_rate' => 1,
-                'voided' => false,
-            ]
-        );
+            $assetCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => '1000'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $assetAccount->id,
+                    'name' => 'Assets',
+                    'parent_id' => null,
+                    'description' => 'Asset control ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $cashTransfer->items()->updateOrCreate(
-            ['to_bank_account_id' => $pettyCash->id],
-            [
-                'exchange_rate_to_default' => 1,
-                'amount' => 500,
-                'description' => 'Fund petty cash',
-            ]
-        );
+            $cashControlCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => '1100'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $cashControlAccount->id,
+                    'name' => 'Cash Accounts',
+                    'parent_id' => $assetCOA->id,
+                    'description' => 'Cash control ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $cashTransfer->update([
-            'total_amount' => $cashTransfer->items()->sum('amount'),
-        ]);
+            $bankControlCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => '1200'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $bankControlAccount->id,
+                    'name' => 'Bank Accounts',
+                    'parent_id' => $assetCOA->id,
+                    'description' => 'Bank control ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $journalVoucher = JournalVoucher::query()->updateOrCreate(
-            ['branch_id' => $branch->id, 'voucher_no' => 'JV-0001'],
-            [
-                'voucher_date' => now()->toDateString(),
-                'currency_id' => $currency->id,
-                'exchange_rate' => 1,
-                'reference' => 'Seed opening JV',
-                'narration' => 'Record admin expense paid by cash',
-                'status' => 'posted',
-                'user_add_id' => $userId,
-                'active' => true,
-                'approved' => true,
-                'voided' => false,
-            ]
-        );
+            $mainBankCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => 'BA-001'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $mainBank->id,
+                    'name' => 'Main Operating Bank',
+                    'parent_id' => $bankControlCOA->id,
+                    'description' => 'Main operating bank ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $journalVoucher->items()->updateOrCreate(
-            ['chart_of_account_id' => $expenseCOA->id, 'description' => 'Admin expense posting'],
-            [
-                'debit' => 150,
-                'credit' => 0,
-            ]
-        );
+            $pettyCashCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => 'CA-001'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $pettyCash->id,
+                    'name' => 'Petty Cash',
+                    'parent_id' => $cashControlCOA->id,
+                    'description' => 'Petty cash ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $journalVoucher->items()->updateOrCreate(
-            ['chart_of_account_id' => $cashCOA->id, 'description' => 'Cash reduction for expense'],
-            [
-                'debit' => 0,
-                'credit' => 150,
-            ]
-        );
+            $expenseCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => '5000'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $expenseAccount->id,
+                    'name' => 'Expenses',
+                    'parent_id' => null,
+                    'description' => 'Expense control ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
 
-        $this->command?->info('Accounting seed data inserted/updated successfully.');
+            $adminExpenseCOA = ChartOfAccount::query()->updateOrCreate(
+                ['code' => '5100'],
+                [
+                    'branch_id' => $branch->id,
+                    'account_id' => $adminExpenseAccount->id,
+                    'name' => 'Administrative Expense',
+                    'parent_id' => $expenseCOA->id,
+                    'description' => 'Administrative expense ledger',
+                    'currency_id' => $currency->id,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Cash Transfer
+            |--------------------------------------------------------------------------
+            */
+
+            $cashTransfer = CashTransfer::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'transfer_no' => 'CT-0001'],
+                [
+                    'transfer_date' => $now->toDateString(),
+                    'from_account_id' => $mainBank->id,
+                    'reference' => 'Seed opening transfer',
+                    'currency_id' => $currency->id,
+                    'total_amount' => 500,
+                    'notes' => 'Transfer from main bank to petty cash',
+                    'status' => 'posted',
+                    'active' => true,
+                    'approved' => true,
+                    'approved_at' => $now,
+                    'approved_by_id' => $userId,
+                    'void' => false,
+                    'voided_by_id' => null,
+                    'voided_reason' => null,
+                    'voided_at' => null,
+                    'exchange_rate' => 1,
+                    'total' => 500,
+                    'user_add_id' => $userId,
+                ]
+            );
+
+            CashTransferLine::query()->updateOrCreate(
+                [
+                    'cash_transfer_id' => $cashTransfer->id,
+                    'to_account_id' => $pettyCash->id,
+                ],
+                [
+                    'exchange_rate_to_default' => 1,
+                    'amount' => 500,
+                    'description' => 'Fund petty cash',
+                ]
+            );
+
+            $cashTransferTotal = CashTransferLine::query()
+                ->where('cash_transfer_id', $cashTransfer->id)
+                ->sum('amount');
+
+            $cashTransfer->update([
+                'total_amount' => $cashTransferTotal,
+                'total' => $cashTransferTotal,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Journal Voucher
+            |--------------------------------------------------------------------------
+            */
+
+            $journalVoucher = JournalVoucher::query()->updateOrCreate(
+                ['branch_id' => $branch->id, 'voucher_no' => 'JV-0001'],
+                [
+                    'voucher_date' => $now->toDateString(),
+                    'currency_id' => $currency->id,
+                    'reference' => 'Seed opening JV',
+                    'narration' => 'Record administrative expense paid by petty cash',
+                    'status' => 'posted',
+                    'active' => true,
+                    'approved' => true,
+                    'approved_at' => $now,
+                    'approved_by_id' => $userId,
+                    'void' => false,
+                    'voided_by_id' => null,
+                    'voided_reason' => null,
+                    'voided_at' => null,
+                    'exchange_rate' => 1,
+                    'total' => 150,
+                    'user_add_id' => $userId,
+                ]
+            );
+
+            JournalVoucherLine::query()->updateOrCreate(
+                [
+                    'journal_voucher_id' => $journalVoucher->id,
+                    'chart_of_account_id' => $adminExpenseCOA->id,
+                    'description' => 'Administrative expense posting',
+                ],
+                [
+                    'debit' => 150,
+                    'credit' => 0,
+                ]
+            );
+
+            JournalVoucherLine::query()->updateOrCreate(
+                [
+                    'journal_voucher_id' => $journalVoucher->id,
+                    'chart_of_account_id' => $pettyCashCOA->id,
+                    'description' => 'Petty cash reduction for expense',
+                ],
+                [
+                    'debit' => 0,
+                    'credit' => 150,
+                ]
+            );
+
+            $journalTotal = JournalVoucherLine::query()
+                ->where('journal_voucher_id', $journalVoucher->id)
+                ->sum('debit');
+
+            $journalVoucher->update([
+                'total' => $journalTotal,
+            ]);
+
+            $this->command?->info('Accounting seed data inserted/updated successfully.');
+        });
     }
 }

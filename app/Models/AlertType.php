@@ -25,6 +25,7 @@ class AlertType extends Model
         'sync_time',
         'recipient',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -37,6 +38,7 @@ class AlertType extends Model
     {
         return [
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

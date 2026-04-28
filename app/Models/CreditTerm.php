@@ -23,6 +23,7 @@ class CreditTerm extends Model
         'days',
         'description',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -36,6 +37,7 @@ class CreditTerm extends Model
         return [
             'days' => 'integer',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -53,5 +55,15 @@ class CreditTerm extends Model
     public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);
+    }
+
+    public function quotations(): HasMany
+    {
+        return $this->hasMany(Quotation::class);
+    }
+
+    public function purchaseOrders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
     }
 }

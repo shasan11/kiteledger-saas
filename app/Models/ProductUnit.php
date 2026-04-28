@@ -20,10 +20,10 @@ class ProductUnit extends Model
     protected $fillable = [
         'branch_id',
         'name',
-        'code',
-        'symbol',
-        'description',
+        'short_name',
+        'precision',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -35,7 +35,9 @@ class ProductUnit extends Model
     protected function casts(): array
     {
         return [
+            'precision' => 'integer',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

@@ -20,18 +20,15 @@ class Product extends Model
     protected $fillable = [
         'branch_id',
         'product_category_id',
-        'product_unit_id',
-        'warehouse_id',
         'name',
         'code',
         'barcode',
-        'sku',
         'description',
-        'purchase_price',
-        'sales_price',
-        'opening_stock',
-        'reorder_level',
+        'product_unit_id',
+        'tax_class_id',
+        'track_inventory',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -43,11 +40,9 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'purchase_price' => 'decimal:2',
-            'sales_price' => 'decimal:2',
-            'opening_stock' => 'decimal:2',
-            'reorder_level' => 'decimal:2',
+            'track_inventory' => 'boolean',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -65,11 +60,6 @@ class Product extends Model
     public function productUnit(): BelongsTo
     {
         return $this->belongsTo(ProductUnit::class);
-    }
-
-    public function warehouse(): BelongsTo
-    {
-        return $this->belongsTo(Warehouse::class);
     }
 
     public function taxClass(): BelongsTo

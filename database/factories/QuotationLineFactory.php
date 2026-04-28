@@ -24,6 +24,7 @@ class QuotationLineFactory extends Factory
             'discount_percent' => fake()->randomFloat(4, 0, 9999.9999),
             'tax_rate_id' => TaxRate::factory(),
             'tax_amount' => fake()->randomFloat(2, 0, 99999999999999.99),
+            'line_total' => fake()->randomFloat(2, 0, 99999999999999.99),
         ];
     }
 }

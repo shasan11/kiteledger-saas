@@ -24,6 +24,7 @@ class ProductVariantFactory extends Factory
             'purchase_price' => fake()->randomFloat(2, 0, 99999999999999.99),
             'selling_price' => fake()->randomFloat(2, 0, 99999999999999.99),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

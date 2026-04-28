@@ -17,6 +17,7 @@ class VariantLineFactory extends Factory
             'value' => fake()->regexify('[A-Za-z0-9]{80}'),
             'sort_order' => fake()->randomNumber(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
         ];
     }
 }

@@ -19,8 +19,8 @@ class PurchaseBillLine extends Model
     protected $fillable = [
         'purchase_bill_id',
         'product_variant_id',
-        'description',
         'custom_product_name',
+        'description',
         'qty',
         'unit_price',
         'discount_percent',

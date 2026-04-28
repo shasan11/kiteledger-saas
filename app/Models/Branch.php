@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Branch extends Model
 {
@@ -33,6 +34,7 @@ class Branch extends Model
         'logo',
         'favicon',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -53,8 +55,194 @@ class Branch extends Model
             'abbreviated_tax_enabled' => 'boolean',
             'track_location' => 'boolean',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
+    }
+
+    public function contactGroups(): HasMany
+    {
+        return $this->hasMany(ContactGroup::class);
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Contact::class);
+    }
+
+    public function accounts(): HasMany
+    {
+        return $this->hasMany(Account::class);
+    }
+
+    public function chartOfAccounts(): HasMany
+    {
+        return $this->hasMany(ChartOfAccount::class);
+    }
+
+    public function taxClasses(): HasMany
+    {
+        return $this->hasMany(TaxClass::class);
+    }
+
+    public function taxRates(): HasMany
+    {
+        return $this->hasMany(TaxRate::class);
+    }
+
+    public function creditTerms(): HasMany
+    {
+        return $this->hasMany(CreditTerm::class);
+    }
+
+    public function productCategories(): HasMany
+    {
+        return $this->hasMany(ProductCategory::class);
+    }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(Variant::class);
+    }
+
+    public function productUnits(): HasMany
+    {
+        return $this->hasMany(ProductUnit::class);
+    }
+
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    public function productVariants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
+    public function warehouses(): HasMany
+    {
+        return $this->hasMany(Warehouse::class);
+    }
+
+    public function cashTransfers(): HasMany
+    {
+        return $this->hasMany(CashTransfer::class);
+    }
+
+    public function chequeRegisters(): HasMany
+    {
+        return $this->hasMany(ChequeRegister::class);
+    }
+
+    public function journalVouchers(): HasMany
+    {
+        return $this->hasMany(JournalVoucher::class);
+    }
+
+    public function warehouseTransfers(): HasMany
+    {
+        return $this->hasMany(WarehouseTransfer::class);
+    }
+
+    public function inventoryAdjustments(): HasMany
+    {
+        return $this->hasMany(InventoryAdjustment::class);
+    }
+
+    public function quotations(): HasMany
+    {
+        return $this->hasMany(Quotation::class);
+    }
+
+    public function salesOrders(): HasMany
+    {
+        return $this->hasMany(SalesOrder::class);
+    }
+
+    public function proformaInvoices(): HasMany
+    {
+        return $this->hasMany(ProformaInvoice::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function customerPayments(): HasMany
+    {
+        return $this->hasMany(CustomerPayment::class);
+    }
+
+    public function salesReturns(): HasMany
+    {
+        return $this->hasMany(SalesReturn::class);
+    }
+
+    public function purchaseOrders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
+    }
+
+    public function supplierPayments(): HasMany
+    {
+        return $this->hasMany(SupplierPayment::class);
+    }
+
+    public function alertTypes(): HasMany
+    {
+        return $this->hasMany(AlertType::class);
+    }
+
+    public function reportingTags(): HasMany
+    {
+        return $this->hasMany(ReportingTag::class);
+    }
+
+    public function documentNumberings(): HasMany
+    {
+        return $this->hasMany(DocumentNumbering::class);
+    }
+
+    public function printingTemplates(): HasMany
+    {
+        return $this->hasMany(PrintingTemplate::class);
+    }
+
+    public function customTemplates(): HasMany
+    {
+        return $this->hasMany(CustomTemplate::class);
+    }
+
+    public function applicationSettings(): HasMany
+    {
+        return $this->hasMany(ApplicationSetting::class);
+    }
+
+    public function generalSettings(): HasMany
+    {
+        return $this->hasMany(GeneralSetting::class);
+    }
+
+    public function masterDatas(): HasMany
+    {
+        return $this->hasMany(MasterData::class);
     }
 
     public function userAdd(): BelongsTo

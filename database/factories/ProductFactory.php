@@ -27,6 +27,7 @@ class ProductFactory extends Factory
             'tax_class_id' => TaxClass::factory(),
             'track_inventory' => fake()->boolean(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

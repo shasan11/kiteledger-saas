@@ -17,6 +17,7 @@ class VariantFactory extends Factory
             'branch_id' => Branch::factory(),
             'name' => fake()->name(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

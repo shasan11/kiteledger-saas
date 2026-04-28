@@ -19,6 +19,7 @@ class CreditTermFactory extends Factory
             'days' => fake()->randomNumber(),
             'description' => fake()->text(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

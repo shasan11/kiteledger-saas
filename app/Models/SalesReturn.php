@@ -24,17 +24,20 @@ class SalesReturn extends Model
         'contact_id',
         'warehouse_id',
         'currency_id',
-        'exchange_rate',
         'reference',
         'notes',
         'status',
-        'user_add_id',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -46,13 +49,16 @@ class SalesReturn extends Model
     {
         return [
             'sales_return_date' => 'date',
-            'exchange_rate' => 'decimal:6',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
     }
 
@@ -76,12 +82,17 @@ class SalesReturn extends Model
         return $this->belongsTo(Currency::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }

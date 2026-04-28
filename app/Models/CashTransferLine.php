@@ -18,7 +18,7 @@ class CashTransferLine extends Model
      */
     protected $fillable = [
         'cash_transfer_id',
-        'to_bank_account_id',
+        'to_account_id',
         'exchange_rate_to_default',
         'amount',
         'description',
@@ -37,13 +37,13 @@ class CashTransferLine extends Model
         ];
     }
 
-    public function toBankAccount(): BelongsTo
-    {
-        return $this->belongsTo(BankAccount::class);
-    }
-
     public function cashTransfer(): BelongsTo
     {
         return $this->belongsTo(CashTransfer::class);
+    }
+
+    public function toAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
     }
 }

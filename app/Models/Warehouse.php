@@ -19,13 +19,11 @@ class Warehouse extends Model
      */
     protected $fillable = [
         'branch_id',
-        'name',
         'code',
-        'phone',
-        'email',
+        'name',
         'address',
-        'description',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -38,6 +36,7 @@ class Warehouse extends Model
     {
         return [
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -52,12 +51,12 @@ class Warehouse extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function products(): HasMany
+    public function fromTransfers(): HasMany
     {
-        return $this->hasMany(Product::class);
+        return $this->hasMany(WarehouseTransfer::class);
     }
 
-    public function warehouseTransfers(): HasMany
+    public function toTransfers(): HasMany
     {
         return $this->hasMany(WarehouseTransfer::class);
     }
@@ -100,5 +99,10 @@ class Warehouse extends Model
     public function purchaseBills(): HasMany
     {
         return $this->hasMany(PurchaseBill::class);
+    }
+
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
     }
 }

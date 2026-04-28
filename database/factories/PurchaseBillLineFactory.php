@@ -17,8 +17,8 @@ class PurchaseBillLineFactory extends Factory
         return [
             'purchase_bill_id' => PurchaseBill::factory(),
             'product_variant_id' => ProductVariant::factory(),
-            'description' => fake()->text(),
             'custom_product_name' => fake()->regexify('[A-Za-z0-9]{180}'),
+            'description' => fake()->text(),
             'qty' => fake()->randomFloat(4, 0, 999999999999.9999),
             'unit_price' => fake()->randomFloat(2, 0, 99999999999999.99),
             'discount_percent' => fake()->randomFloat(4, 0, 9999.9999),

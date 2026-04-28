@@ -26,6 +26,7 @@ class ProductVariant extends Model
         'purchase_price',
         'selling_price',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -40,6 +41,7 @@ class ProductVariant extends Model
             'purchase_price' => 'decimal:2',
             'selling_price' => 'decimal:2',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

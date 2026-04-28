@@ -21,6 +21,7 @@ class TaxRateFactory extends Factory
             'rate_percent' => fake()->randomFloat(4, 0, 9999.9999),
             'inclusive' => fake()->boolean(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

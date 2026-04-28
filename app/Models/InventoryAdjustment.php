@@ -25,13 +25,17 @@ class InventoryAdjustment extends Model
         'reason',
         'notes',
         'status',
-        'user_add_id',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -43,12 +47,16 @@ class InventoryAdjustment extends Model
     {
         return [
             'adjustment_date' => 'date',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
     }
 
@@ -62,12 +70,17 @@ class InventoryAdjustment extends Model
         return $this->belongsTo(Warehouse::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }

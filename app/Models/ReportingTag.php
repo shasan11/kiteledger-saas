@@ -21,6 +21,7 @@ class ReportingTag extends Model
         'name',
         'color',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -33,6 +34,7 @@ class ReportingTag extends Model
     {
         return [
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

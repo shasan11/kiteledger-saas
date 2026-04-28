@@ -23,6 +23,7 @@ class DocumentNumbering extends Model
         'next_number',
         'padding',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -37,6 +38,7 @@ class DocumentNumbering extends Model
             'next_number' => 'integer',
             'padding' => 'integer',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

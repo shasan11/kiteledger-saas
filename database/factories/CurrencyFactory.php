@@ -19,6 +19,7 @@ class CurrencyFactory extends Factory
             'decimal_places' => fake()->randomDigitNotNull(),
             'is_base' => fake()->boolean(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

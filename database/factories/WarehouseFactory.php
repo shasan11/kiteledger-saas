@@ -19,6 +19,7 @@ class WarehouseFactory extends Factory
             'name' => fake()->name(),
             'address' => fake()->text(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

@@ -19,6 +19,7 @@ class CustomTemplateFactory extends Factory
             'purpose' => fake()->regexify('[A-Za-z0-9]{80}'),
             'content' => fake()->paragraphs(3, true),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

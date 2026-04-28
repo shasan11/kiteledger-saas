@@ -22,10 +22,11 @@ class ChartOfAccount extends Model
         'account_id',
         'code',
         'name',
+        'parent_id',
         'description',
         'currency_id',
-        'is_system_generated',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -37,8 +38,8 @@ class ChartOfAccount extends Model
     protected function casts(): array
     {
         return [
-            'is_system_generated' => 'boolean',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -53,6 +54,11 @@ class ChartOfAccount extends Model
         return $this->belongsTo(Account::class);
     }
 
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class);
+    }
+
     public function currency(): BelongsTo
     {
         return $this->belongsTo(Currency::class);
@@ -61,6 +67,11 @@ class ChartOfAccount extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function childrens(): HasMany
+    {
+        return $this->hasMany(ChartOfAccount::class);
     }
 
     public function journalVoucherLines(): HasMany
@@ -72,4 +83,15 @@ class ChartOfAccount extends Model
     {
         return $this->hasMany(ExpenseLine::class);
     }
+
+    public function bankChargePayments(): HasMany
+    {
+        return $this->hasMany(CustomerPayment::class);
+    }
+
+    public function tdsPayments(): HasMany
+    {
+        return $this->hasMany(CustomerPayment::class);
+    }
+ 
 }

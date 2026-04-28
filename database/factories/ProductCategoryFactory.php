@@ -20,6 +20,7 @@ class ProductCategoryFactory extends Factory
             'parent_id' => ProductCategory::factory(),
             'description' => fake()->text(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

@@ -21,6 +21,7 @@ class PrintingTemplateFactory extends Factory
             'template_css' => fake()->text(),
             'is_default' => fake()->boolean(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

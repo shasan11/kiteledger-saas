@@ -22,6 +22,7 @@ class CustomTemplate extends Model
         'purpose',
         'content',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -34,6 +35,7 @@ class CustomTemplate extends Model
     {
         return [
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }

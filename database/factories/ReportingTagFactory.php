@@ -18,6 +18,7 @@ class ReportingTagFactory extends Factory
             'name' => fake()->name(),
             'color' => fake()->regexify('[A-Za-z0-9]{20}'),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

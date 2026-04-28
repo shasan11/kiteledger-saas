@@ -26,6 +26,7 @@ class QuotationLine extends Model
         'discount_percent',
         'tax_rate_id',
         'tax_amount',
+        'line_total',
     ];
 
     /**
@@ -40,6 +41,7 @@ class QuotationLine extends Model
             'unit_price' => 'decimal:2',
             'discount_percent' => 'decimal:4',
             'tax_amount' => 'decimal:2',
+            'line_total' => 'decimal:2',
         ];
     }
 

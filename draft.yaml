@@ -1,4 +1,3 @@
-
 models:
   Branch:
     id: uuid primary
@@ -18,10 +17,12 @@ models:
     logo: string:255 nullable
     favicon: string:255 nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: ContactGroup, Contact, Account, ChartOfAccount, TaxClass, TaxRate, CreditTerm, ProductCategory, Variant, ProductUnit, Product, ProductVariant, Warehouse, CashTransfer, ChequeRegister, JournalVoucher, WarehouseTransfer, InventoryAdjustment, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData
 
-
-  Currency: #stampedownedactive
+  Currency:
     id: uuid primary
     code: string:10 unique
     name: string:80
@@ -29,53 +30,70 @@ models:
     decimal_places: unsignedTinyInteger default:2
     is_base: boolean default:false
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: Account, ChartOfAccount, CashTransfer, JournalVoucher, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
 
-  ContactGroup: #stampedownedactive
+  ContactGroup:
     id: uuid primary
     branch_id: uuid foreign:branches.id
     name: string:120
     parent_id: uuid foreign:contact_groups.id nullable
     description: text nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, ContactGroup:parent
       hasMany: Contact, ContactGroup:children
 
-  Contact: #stampedownedactive
+  Contact:
     id: uuid primary
     branch_id: uuid foreign:branches.id
     contact_group_id: uuid foreign:contact_groups.id nullable
+    account_id: uuid foreign:accounts.id nullable
     contact_type: enum:customer,supplier,lead default:customer
     name: string:180
     code: string:50 nullable
     address: text nullable
     pan: string:80 nullable
     phone: string:40 nullable
-    accept_purchase: boolean default:false
     email: string:120 nullable
+    accept_purchase: boolean default:false
     credit_term_id: uuid foreign:credit_terms.id nullable
     credit_limit: decimal:16,2 default:0
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, ContactGroup, CreditTerm
-      hasMany: Quotation, Invoice, SalesOrder, ProformaInvoice, CustomerPayment, SalesReturn
+      belongsTo: Branch, ContactGroup, Account, CreditTerm
+      hasMany: Quotation, Invoice, SalesOrder, ProformaInvoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
 
-  Account: #branchscoopedactive
+  Account:
     id: uuid primary
     branch_id: uuid foreign:branches.id
     name: string:120
     code: string:30 nullable
-    nature: enum:asset,liability,equity,income,expense default:asset
+    nature: enum:actor,coa,bank,cash,employee default:coa
     parent_id: uuid foreign:accounts.id nullable
-    is_system_generated: boolean default:false
+    currency_id: uuid foreign:currencies.id nullable
+    description: text nullable
+    bank_name: string:150 nullable
+    account_name: string:150 nullable
+    account_number: string:80 nullable
+    account_type: string:50 nullable
+    swift_code: string:50 nullable
+    opening_balance: decimal:16,2 default:0
+    dr_amount: decimal:16,2 default:0
+    cr_amount: decimal:16,2 default:0
+    balance: decimal:16,2 default:0
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Account:parent
-      hasMany: Account:children, ChartOfAccount
+      belongsTo: Branch, Account:parent, Currency
+      hasMany: Account:children, Contact, ChartOfAccount, CashTransfer:from_transfers, CashTransferLine:to_transfer_lines, ChequeRegister:cheque_accounts, ChequeRegister:related_cheque_accounts, CustomerPayment, SupplierPayment
 
   ChartOfAccount:
     id: uuid primary
@@ -83,68 +101,51 @@ models:
     account_id: uuid foreign:accounts.id
     code: string:30 unique
     name: string:150
+    parent_id: uuid foreign:chart_of_accounts.id nullable
     description: text nullable
     currency_id: uuid foreign:currencies.id nullable
+    active: boolean default:true
     is_system_generated: boolean default:false
-    active: boolean default:true
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Account, Currency
-      hasMany: JournalVoucherLine, ExpenseLine
-
-  BankAccount:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id
-    type: enum:bank,cash default:bank
-    display_name: string:150
-    code: string:30
-    currency_id: uuid foreign:currencies.id
-    description: text nullable
-    bank_name: string:150 nullable
-    account_name: string:150 nullable
-    account_number: string:80 nullable
-    account_type: string:50 nullable
-    swift_code: string:50 nullable
-    account_id: uuid foreign:accounts.id nullable
-    opening_balance: decimal:16,2 default:0
-    active: boolean default:true
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch, Currency, Account
-      hasMany: CashTransfer, ChequeRegister, CustomerPayment, SupplierPayment
+      belongsTo: Branch, Account, ChartOfAccount:parent, Currency
+      hasMany: ChartOfAccount:children, JournalVoucherLine, ExpenseLine, CustomerPayment:bank_charge_payments, CustomerPayment:tds_payments, SupplierPayment:bank_charge_payments, SupplierPayment:tds_payments
 
   CashTransfer:
     id: uuid primary
     branch_id: uuid foreign:branches.id
     transfer_no: string:40 unique nullable
     transfer_date: date
-    from_bank_account_id: uuid foreign:bank_accounts.id
+    from_account_id: uuid foreign:accounts.id
     reference: string:120 nullable
     currency_id: uuid foreign:currencies.id
     total_amount: decimal:16,2 default:0
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    exchange_rate: decimal:16,6 default:1
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: BankAccount:from_bank_account, Branch, Currency
+      belongsTo: Branch, Account:from_account, Currency
       hasMany: CashTransferLine
 
   CashTransferLine:
     id: uuid primary
     cash_transfer_id: uuid foreign:cash_transfers.id
-    to_bank_account_id: uuid foreign:bank_accounts.id
+    to_account_id: uuid foreign:accounts.id
     exchange_rate_to_default: decimal:16,6 default:1
     amount: decimal:16,2 default:0
     description: string:200 nullable
     relationships:
-      belongsTo: BankAccount:to_bank_account, CashTransfer
+      belongsTo: CashTransfer, Account:to_account
 
   ChequeRegister:
     id: uuid primary
@@ -152,24 +153,28 @@ models:
     cheque_no: string:80
     cheque_date: date
     issued_date: date
-    received_date: date
+    received_date: date nullable
     payee_name: string:150 nullable
     cleared_date: date nullable
     direction: enum:issued,received default:issued
-    bank_account_id: uuid foreign:bank_accounts.id
-    account_id: uuid foreign:accounts.id nullable
+    account_id: uuid foreign:accounts.id
+    related_account_id: uuid foreign:accounts.id nullable
     amount: decimal:16,2 default:0
     status: enum:pending,cleared,bounced,cancelled default:pending
     notes: text nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, BankAccount, Account
+      belongsTo: Branch, Account:account, Account:related_account
 
   JournalVoucher:
     id: uuid primary
@@ -177,17 +182,20 @@ models:
     voucher_no: string:40 unique
     voucher_date: date
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     narration: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Currency
       hasMany: JournalVoucherLine
@@ -223,9 +231,11 @@ models:
     rate_percent: decimal:8,4 default:0
     inclusive: boolean default:false
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, TaxClass
+      hasMany: QuotationLine, SalesOrderLine, ProformaInvoiceLine, InvoiceLine, SalesReturnLine, PurchaseOrderLine, PurchaseBillLine, ExpenseLine, DebitNoteLine
 
   CreditTerm:
     id: uuid primary
@@ -234,10 +244,11 @@ models:
     days: unsignedSmallInteger default:0
     description: text nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
-      hasMany: Contact
+      hasMany: Contact, Quotation, PurchaseOrder
 
   ProductCategory:
     id: uuid primary
@@ -246,6 +257,7 @@ models:
     parent_id: uuid foreign:product_categories.id nullable
     description: text nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, ProductCategory:parent
@@ -256,6 +268,7 @@ models:
     branch_id: uuid foreign:branches.id
     name: string:80
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -267,6 +280,7 @@ models:
     value: string:80
     sort_order: unsignedSmallInteger default:0
     active: boolean default:true
+    is_system_generated: boolean default:false
     relationships:
       belongsTo: Variant
       hasMany: ProductVariantItem
@@ -278,6 +292,7 @@ models:
     short_name: string:20 nullable
     precision: unsignedTinyInteger default:0
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -295,6 +310,7 @@ models:
     tax_class_id: uuid foreign:tax_classes.id nullable
     track_inventory: boolean default:true
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, ProductCategory, ProductUnit, TaxClass
@@ -310,6 +326,7 @@ models:
     purchase_price: decimal:16,2 default:0
     selling_price: decimal:16,2 default:0
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Product, ProductUnit
@@ -329,10 +346,11 @@ models:
     name: string:150
     address: text nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
-      hasMany: WarehouseTransfer, InventoryAdjustment, Quotation, Invoice, SalesOrder, ProformaInvoice, SalesReturn, PurchaseOrder, PurchaseBill
+      hasMany: WarehouseTransfer:from_transfers, WarehouseTransfer:to_transfers, InventoryAdjustment, Quotation, Invoice, SalesOrder, ProformaInvoice, SalesReturn, PurchaseOrder, PurchaseBill, DebitNote
 
   WarehouseTransfer:
     id: uuid primary
@@ -343,13 +361,17 @@ models:
     to_warehouse_id: uuid foreign:warehouses.id
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Warehouse:from_warehouse, Warehouse:to_warehouse
       hasMany: WarehouseTransferLine
@@ -372,13 +394,17 @@ models:
     reason: string:150 nullable
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Warehouse
       hasMany: InventoryAdjustmentLine
@@ -392,11 +418,6 @@ models:
     unit_cost: decimal:16,2 default:0
     remarks: string:200 nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
-    voided_by_id: id foreign:users.id nullable
     relationships:
       belongsTo: InventoryAdjustment, ProductVariant
 
@@ -409,16 +430,19 @@ models:
     expiry_date: date nullable
     credit_term_id: uuid foreign:credit_terms.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     notes: text nullable
     status: enum:draft,sent,accepted,rejected,expired,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, CreditTerm, Currency
       hasMany: QuotationLine
@@ -434,6 +458,7 @@ models:
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
     tax_amount: decimal:16,2 default:0
+    line_total: decimal:16,2 default:0
     relationships:
       belongsTo: Quotation, ProductVariant, TaxRate
 
@@ -445,7 +470,6 @@ models:
     contact_id: uuid foreign:contacts.id
     warehouse_id: uuid foreign:warehouses.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     notes: text nullable
     subtotal: decimal:16,2 default:0
@@ -453,13 +477,17 @@ models:
     tax_total: decimal:16,2 default:0
     grand_total: decimal:16,2 default:0
     status: enum:draft,confirmed,fulfilled,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Warehouse, Currency
       hasMany: SalesOrderLine
@@ -468,8 +496,8 @@ models:
     id: uuid primary
     sales_order_id: uuid foreign:sales_orders.id
     product_variant_id: uuid foreign:product_variants.id nullable
-    description: string:200 nullable
     custom_product_name: string:180 nullable
+    description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
@@ -487,16 +515,19 @@ models:
     proforma_date: date
     contact_id: uuid foreign:contacts.id
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     notes: text nullable
     status: enum:draft,issued,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Currency
       hasMany: ProformaInvoiceLine
@@ -525,7 +556,6 @@ models:
     contact_id: uuid foreign:contacts.id
     warehouse_id: uuid foreign:warehouses.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     notes: text nullable
     paid_total: decimal:16,2 default:0
@@ -534,13 +564,17 @@ models:
     export_date: date nullable
     export_document_number: string:80 nullable
     status: enum:draft,posted,part_paid,paid,void default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Warehouse, Currency
       hasMany: InvoiceLine, CustomerPaymentLine
@@ -566,9 +600,8 @@ models:
     payment_no: string:40 unique
     payment_date: date
     contact_id: uuid foreign:contacts.id
-    bank_account_id: uuid foreign:bank_accounts.id nullable
+    account_id: uuid foreign:accounts.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     amount: decimal:16,2 default:0
     payment_method: string:20 nullable
     bank_charges_account_id: uuid foreign:chart_of_accounts.id nullable
@@ -579,15 +612,19 @@ models:
     reference: string:120 nullable
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Contact, BankAccount, Currency, ChartOfAccount:bank_charges_account, ChartOfAccount:tds_charges_account
+      belongsTo: Branch, Contact, Account, Currency, ChartOfAccount:bank_charges_account, ChartOfAccount:tds_charges_account
       hasMany: CustomerPaymentLine
 
   CustomerPaymentLine:
@@ -606,17 +643,20 @@ models:
     contact_id: uuid foreign:contacts.id
     warehouse_id: uuid foreign:warehouses.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Warehouse, Currency
       hasMany: SalesReturnLine
@@ -643,16 +683,19 @@ models:
     contact_id: uuid foreign:contacts.id
     currency_id: uuid foreign:currencies.id nullable
     credit_term_id: uuid foreign:credit_terms.id nullable
-    exchange_rate: decimal:16,6 default:1
     notes: text nullable
     status: enum:draft,confirmed,received,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, CreditTerm, Currency
       hasMany: PurchaseOrderLine
@@ -681,7 +724,6 @@ models:
     contact_id: uuid foreign:contacts.id
     warehouse_id: uuid foreign:warehouses.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     notes: text nullable
     import_country: string:80 nullable
@@ -690,13 +732,17 @@ models:
     paid_total: decimal:16,2 default:0
     balance_due: decimal:16,2 default:0
     status: enum:draft,posted,part_paid,paid,void default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Warehouse, Currency
       hasMany: PurchaseBillLine, SupplierPaymentLine
@@ -705,8 +751,8 @@ models:
     id: uuid primary
     purchase_bill_id: uuid foreign:purchase_bills.id
     product_variant_id: uuid foreign:product_variants.id nullable
-    description: string:200 nullable
     custom_product_name: string:180 nullable
+    description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
@@ -722,23 +768,25 @@ models:
     expense_no: string:40 unique nullable
     reference: string:120 nullable
     expense_date: date
-    due_date: date
+    due_date: date nullable
     contact_id: uuid foreign:contacts.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     notes: text nullable
-    total: decimal:16,2 default:0
     status: enum:draft,posted,cancelled default:draft
     tds_charges_account_id: uuid foreign:chart_of_accounts.id nullable
     tds_type: string:20 nullable
     tds_charges: decimal:16,2 default:0
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Currency, ChartOfAccount:tds_charges_account
       hasMany: ExpenseLine
@@ -763,17 +811,20 @@ models:
     contact_id: uuid foreign:contacts.id
     warehouse_id: uuid foreign:warehouses.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     reference: string:120 nullable
     notes: text nullable
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Contact, Warehouse, Currency
       hasMany: DebitNoteLine
@@ -797,29 +848,31 @@ models:
     payment_no: string:40 unique
     payment_date: date
     contact_id: uuid foreign:contacts.id
-    bank_account_id: uuid foreign:bank_accounts.id nullable
+    account_id: uuid foreign:accounts.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    exchange_rate: decimal:16,6 default:1
     amount: decimal:16,2 default:0
     method: string:20 nullable
     reference: string:120 nullable
     notes: text nullable
-
     bank_charges_account_id: uuid foreign:chart_of_accounts.id nullable
     bank_charges: decimal:16,2 default:0
     tds_charges_account_id: uuid foreign:chart_of_accounts.id nullable
     tds_type: string:20 nullable
     tds_charges: decimal:16,2 default:0
     status: enum:draft,posted,cancelled default:draft
-    user_add_id: id foreign:users.id nullable
     active: boolean default:true
-    approved: boolean default:true
-    voided: boolean default:false
-    voided_reason: text nullable
-    voided_date: date nullable
+    approved: boolean default:false
+    approved_at: datetime nullable
+    approved_by_id: id foreign:users.id nullable
+    void: boolean default:false
     voided_by_id: id foreign:users.id nullable
+    voided_reason: text nullable
+    voided_at: datetime nullable
+    exchange_rate: decimal:18,6 default:1
+    total: decimal:18,6 default:0
+    user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Contact, BankAccount, Currency, ChartOfAccount:bank_charges_account, ChartOfAccount:tds_charges_account
+      belongsTo: Branch, Contact, Account, Currency, ChartOfAccount:bank_charges_account, ChartOfAccount:tds_charges_account
       hasMany: SupplierPaymentLine
 
   SupplierPaymentLine:
@@ -840,6 +893,7 @@ models:
     sync_time: time nullable
     recipient: text nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -850,6 +904,7 @@ models:
     name: string:80
     color: string:20 nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -862,6 +917,7 @@ models:
     next_number: unsignedBigInteger default:1
     padding: unsignedTinyInteger default:5
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -875,6 +931,7 @@ models:
     template_css: longtext nullable
     is_default: boolean default:false
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -886,6 +943,7 @@ models:
     purpose: string:80 nullable
     content: longtext nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -897,6 +955,7 @@ models:
     value: longtext nullable
     group: string:80 nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -908,6 +967,7 @@ models:
     value: longtext nullable
     group: string:80 nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
@@ -920,6 +980,9 @@ models:
     value: string:180
     meta: json nullable
     active: boolean default:true
+    is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch
+
+seeders: Branch, Currency, Account, ContactGroup, CreditTerm, Contact, ChartOfAccount, TaxClass, TaxRate, ProductCategory, Variant, VariantLine, ProductUnit, Product, ProductVariant, ProductVariantItem, Warehouse, CashTransfer, CashTransferLine, ChequeRegister, JournalVoucher, JournalVoucherLine, WarehouseTransfer, WarehouseTransferLine, InventoryAdjustment, InventoryAdjustmentLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine, ProformaInvoice, ProformaInvoiceLine, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentLine, SalesReturn, SalesReturnLine, PurchaseOrder, PurchaseOrderLine, PurchaseBill, PurchaseBillLine, Expense, ExpenseLine, DebitNote, DebitNoteLine, SupplierPayment, SupplierPaymentLine, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData

@@ -20,10 +20,10 @@ class ProductCategory extends Model
     protected $fillable = [
         'branch_id',
         'name',
-        'code',
         'parent_id',
         'description',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -36,6 +36,7 @@ class ProductCategory extends Model
     {
         return [
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -55,14 +56,9 @@ class ProductCategory extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function children(): HasMany
-    {
-        return $this->hasMany(ProductCategory::class, 'parent_id');
-    }
-
     public function childrens(): HasMany
     {
-        return $this->children();
+        return $this->hasMany(ProductCategory::class);
     }
 
     public function products(): HasMany

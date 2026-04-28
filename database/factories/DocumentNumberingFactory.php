@@ -20,6 +20,7 @@ class DocumentNumberingFactory extends Factory
             'next_number' => fake()->randomNumber(),
             'padding' => fake()->randomDigitNotNull(),
             'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
             'user_add_id' => User::factory(),
         ];
     }

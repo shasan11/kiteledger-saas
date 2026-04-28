@@ -20,17 +20,19 @@ class Contact extends Model
     protected $fillable = [
         'branch_id',
         'contact_group_id',
+        'account_id',
         'contact_type',
         'name',
         'code',
         'address',
         'pan',
         'phone',
-        'accept_purchase',
         'email',
+        'accept_purchase',
         'credit_term_id',
         'credit_limit',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
@@ -45,6 +47,7 @@ class Contact extends Model
             'accept_purchase' => 'boolean',
             'credit_limit' => 'decimal:2',
             'active' => 'boolean',
+            'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
     }
@@ -57,6 +60,11 @@ class Contact extends Model
     public function contactGroup(): BelongsTo
     {
         return $this->belongsTo(ContactGroup::class);
+    }
+
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
     }
 
     public function creditTerm(): BelongsTo
@@ -97,5 +105,30 @@ class Contact extends Model
     public function salesReturns(): HasMany
     {
         return $this->hasMany(SalesReturn::class);
+    }
+
+    public function purchaseOrders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
+    }
+
+    public function supplierPayments(): HasMany
+    {
+        return $this->hasMany(SupplierPayment::class);
     }
 }

@@ -22,17 +22,20 @@ class JournalVoucher extends Model
         'voucher_no',
         'voucher_date',
         'currency_id',
-        'exchange_rate',
         'reference',
         'narration',
         'status',
-        'user_add_id',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -44,13 +47,16 @@ class JournalVoucher extends Model
     {
         return [
             'voucher_date' => 'date',
-            'exchange_rate' => 'decimal:6',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
     }
 
@@ -64,7 +70,7 @@ class JournalVoucher extends Model
         return $this->belongsTo(Currency::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
@@ -74,9 +80,9 @@ class JournalVoucher extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function items(): HasMany
+    public function userAdd(): BelongsTo
     {
-        return $this->hasMany(JournalVoucherLine::class);
+        return $this->belongsTo(User::class);
     }
 
     public function journalVoucherLines(): HasMany

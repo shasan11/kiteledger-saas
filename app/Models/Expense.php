@@ -25,20 +25,22 @@ class Expense extends Model
         'due_date',
         'contact_id',
         'currency_id',
-        'exchange_rate',
         'notes',
-        'total',
         'status',
         'tds_charges_account_id',
         'tds_type',
         'tds_charges',
-        'user_add_id',
         'active',
         'approved',
-        'voided',
-        'voided_reason',
-        'voided_date',
+        'approved_at',
+        'approved_by_id',
+        'void',
         'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'exchange_rate',
+        'total',
+        'user_add_id',
     ];
 
     /**
@@ -51,15 +53,17 @@ class Expense extends Model
         return [
             'expense_date' => 'date',
             'due_date' => 'date',
-            'exchange_rate' => 'decimal:6',
-            'total' => 'decimal:2',
             'tds_charges' => 'decimal:2',
-            'user_add_id' => 'integer',
             'active' => 'boolean',
             'approved' => 'boolean',
-            'voided' => 'boolean',
-            'voided_date' => 'date',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
             'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
+            'exchange_rate' => 'decimal:6',
+            'total' => 'decimal:6',
+            'user_add_id' => 'integer',
         ];
     }
 
@@ -83,12 +87,17 @@ class Expense extends Model
         return $this->belongsTo(ChartOfAccount::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
     public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
