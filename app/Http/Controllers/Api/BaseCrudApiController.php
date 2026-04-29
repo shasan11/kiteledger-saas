@@ -19,36 +19,53 @@ abstract class BaseCrudApiController extends Controller
     protected string $modelClass;
 
     protected array $relations = [];
+
     protected array $relationDetails = [];
 
     protected array $searchable = [];
+
     protected array $filterable = [];
+
     protected array $booleanFilters = ['active'];
+
     protected array $dateRangeFilters = [];
 
-    protected array $sortable = ['id', 'created_at', 'updated_at'];
+    protected array $sortable = [
+        'id',
+        'created_at',
+        'updated_at',
+    ];
+
     protected string $defaultSort = '-created_at';
 
     protected int $defaultPageSize = 20;
+
     protected int $maxPageSize = 100;
 
     protected ?string $permissionPrefix = null;
+
     protected bool $usePolicyAuthorization = false;
 
     protected array $storeRules = [];
+
     protected array $updateRules = [];
 
     /*
     |--------------------------------------------------------------------------
-    | Branch scope
+    | Branch Scope
     |--------------------------------------------------------------------------
     */
+
     protected bool $branchScoped = true;
+
     protected string $branchColumn = 'branch_id';
+
     protected string $branchRequestKey = 'branch_id';
+
     protected string $branchHeaderKey = 'X-Branch-ID';
 
     protected bool $autoFillBranchOnCreate = true;
+
     protected bool $preventBranchChangeOnUpdate = true;
 
     protected ?string $branchBypassPermission = 'branches.view-all';
@@ -60,7 +77,7 @@ abstract class BaseCrudApiController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | Nested config example
+    | Nested Children Example
     |--------------------------------------------------------------------------
     |
     | protected array $nested = [
@@ -86,6 +103,7 @@ abstract class BaseCrudApiController extends Controller
     | ];
     |
     */
+
     protected array $nested = [];
 
     public function index(Request $request)
@@ -404,11 +422,15 @@ abstract class BaseCrudApiController extends Controller
             'ids.*' => ['required'],
         ]);
 
+        // FIX: Deduplicate IDs before comparing counts to avoid false
+        // "not found" errors when the caller sends duplicate ID values.
+        $ids = array_values(array_unique($data['ids']));
+
         $records = $this->newQuery()
-            ->whereIn($this->primaryKeyName(), $data['ids'])
+            ->whereIn($this->primaryKeyName(), $ids)
             ->get();
 
-        if ($records->count() !== count($data['ids'])) {
+        if ($records->count() !== count($ids)) {
             $this->throwValidation([
                 'ids' => ['One or more records were not found.'],
             ]);
@@ -604,8 +626,14 @@ abstract class BaseCrudApiController extends Controller
         }
 
         foreach ($this->dateRangeFilters as $column => $config) {
-            $fromKey = is_array($config) ? ($config['from'] ?? "{$column}_from") : "{$config}_from";
-            $toKey = is_array($config) ? ($config['to'] ?? "{$column}_to") : "{$config}_to";
+            $fromKey = is_array($config)
+                ? ($config['from'] ?? "{$column}_from")
+                : "{$config}_from";
+
+            $toKey = is_array($config)
+                ? ($config['to'] ?? "{$column}_to")
+                : "{$config}_to";
+
             $actualColumn = is_array($config) ? $column : $config;
 
             $from = $this->requestParam($request, $fromKey);

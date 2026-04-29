@@ -421,6 +421,7 @@ export default function AppSidebar({
                 {!collapsed && (
                     <Input
                         allowClear
+                        variant='filled'
                         className="app-sidebar-search"
                         placeholder="Search menu..."
                         prefix={<SearchOutlined />}
