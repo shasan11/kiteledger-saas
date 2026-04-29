@@ -612,11 +612,11 @@ export default function AuthenticatedLayout({ header, children }) {
 
         if (isActive('/accounting/chart-of-accounts')) return ['chart-of-accounts'];
         if (isActive('/accounting/bank-accounts')) return ['bank-accounts'];
-        if (isActive('/accounting/cash-transfers')) return ['cash-transfer'];
-        if (isActive('/accounting/journal-vouchers')) return ['journal-voucher'];
-        if (isActive('/accounting/quick-bills')) return ['quick-bill'];
-        if (isActive('/accounting/quick-receipts')) return ['quick-receipt'];
-        if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
+        if (isActive('/accounting/cash-transfers')) return ['cash-transfers'];
+        if (isActive('/accounting/journal-vouchers')) return ['journal-vouchers'];
+        if (isActive('/accounting/quick-bills')) return ['quick-bills'];
+        if (isActive('/accounting/quick-receipts')) return ['quick-receipts'];
+        if (isActive('/accounting/fixed-assets')) return ['fixed-assets'];
         if (isActive('/accounting/loan-accounts')) return ['loan-accounts'];
 
         if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
@@ -697,8 +697,8 @@ export default function AuthenticatedLayout({ header, children }) {
             label: 'Quick Receipt',
             onClick: () =>
                 visit(
-                    'accounting.quick-receipts.create',
-                    '/accounting/quick-receipts/create',
+                    'accounting.quick-receipts.index',
+                    '/accounting/quick-receipts',
                 ),
         },
         {
@@ -707,8 +707,8 @@ export default function AuthenticatedLayout({ header, children }) {
             label: 'Cash Transfer',
             onClick: () =>
                 visit(
-                    'accounting.cash-transfers.create',
-                    '/accounting/cash-transfers/create',
+                    'accounting.cash-transfers.index',
+                    '/accounting/cash-transfers',
                 ),
         },
         {
