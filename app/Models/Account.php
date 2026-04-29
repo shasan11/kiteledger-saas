@@ -121,4 +121,9 @@ class Account extends Model
     {
         return $this->hasMany(SupplierPayment::class);
     }
+
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(BankAccount::class);
+    }
 }

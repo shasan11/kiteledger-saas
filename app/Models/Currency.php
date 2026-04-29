@@ -49,6 +49,11 @@ class Currency extends Model
         return $this->hasMany(Account::class);
     }
 
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(BankAccount::class);
+    }
+
     public function chartOfAccounts(): HasMany
     {
         return $this->hasMany(ChartOfAccount::class);
