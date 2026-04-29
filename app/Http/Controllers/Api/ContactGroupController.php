@@ -57,7 +57,7 @@ class ContactGroupController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
+        // 'branch_id' => ['required', 'uuid', 'exists:branches,id'],
         'name' => ['required', 'string', 'max:120'],
         'parent_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
         'description' => ['nullable', 'string'],
@@ -68,7 +68,7 @@ class ContactGroupController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
+            // 'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'parent_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
             'description' => ['sometimes', 'nullable', 'string'],
