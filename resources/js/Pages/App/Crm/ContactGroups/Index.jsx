@@ -73,6 +73,7 @@ export default function ContactGroupCrud() {
         dataIndex: "name",
         key: "name",
         backendSort: true,
+        width: "100",
         backendFilter: {
           type: "text",
           param: "name",
@@ -83,6 +84,7 @@ export default function ContactGroupCrud() {
       {
         title: "Parent Group",
         dataIndex: "parent_detail",
+        width: "100",
         key: "parent",
         render: (_, record) => {
           return (
@@ -93,20 +95,8 @@ export default function ContactGroupCrud() {
           );
         },
       },
-      {
-        title: "Description",
-        dataIndex: "description",
-        key: "description",
-        ellipsis: true,
-        render: (value) => value || "-",
-      },
-      {
-        title: "Status",
-        dataIndex: "active",
-        key: "active",
-        width: 120,
-        render: (value) => (value ? "Active" : "Inactive"),
-      },
+       
+       
     ],
     []
   );
