@@ -10,6 +10,22 @@ class ChartOfAccountController extends BaseCrudApiController
 {
     protected string $modelClass = ChartOfAccount::class;
 
+    /*
+    |--------------------------------------------------------------------------
+    | TEMPORARY BYPASS
+    |--------------------------------------------------------------------------
+    |
+    | Permission and branch scope disabled for now.
+    | Fix proper roles/branches later.
+    |
+    */
+
+    protected ?string $permissionPrefix = null;
+
+    protected bool $usePolicyAuthorization = false;
+
+    protected bool $branchScoped = false;
+
     protected array $relations = [
         'branch',
         'account',
@@ -62,8 +78,6 @@ class ChartOfAccountController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
-
-    protected ?string $permissionPrefix = 'chart-of-accounts';
 
     protected array $storeRules = [
         'branch_id' => ['required', 'uuid', 'exists:branches,id'],
