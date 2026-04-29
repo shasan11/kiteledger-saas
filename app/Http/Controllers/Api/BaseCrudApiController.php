@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -50,12 +51,6 @@ abstract class BaseCrudApiController extends Controller
 
     protected array $updateRules = [];
 
-    /*
-    |--------------------------------------------------------------------------
-    | Branch Scope
-    |--------------------------------------------------------------------------
-    */
-
     protected bool $branchScoped = true;
 
     protected string $branchColumn = 'branch_id';
@@ -74,35 +69,6 @@ abstract class BaseCrudApiController extends Controller
         'super-admin',
         'admin',
     ];
-
-    /*
-    |--------------------------------------------------------------------------
-    | Nested Children Example
-    |--------------------------------------------------------------------------
-    |
-    | protected array $nested = [
-    |     'items' => [
-    |         'relation' => 'items',
-    |         'model' => CashTransferLine::class,
-    |         'foreign_key' => 'cash_transfer_id',
-    |         'delete_key' => 'deleted_item_ids',
-    |         'required' => true,
-    |         'min' => 1,
-    |         'replace_on_update' => false,
-    |         'parent_total_field' => 'total_amount',
-    |         'child_total_field' => 'amount',
-    |         'relations' => ['toBankAccount'],
-    |         'relation_details' => [
-    |             'toBankAccount' => 'to_bank_account_id',
-    |         ],
-    |         'rules' => [
-    |             'to_bank_account_id' => ['required', 'uuid', 'exists:bank_accounts,id'],
-    |             'amount' => ['required', 'numeric', 'min:0.01'],
-    |         ],
-    |     ],
-    | ];
-    |
-    */
 
     protected array $nested = [];
 
@@ -422,8 +388,6 @@ abstract class BaseCrudApiController extends Controller
             'ids.*' => ['required'],
         ]);
 
-        // FIX: Deduplicate IDs before comparing counts to avoid false
-        // "not found" errors when the caller sends duplicate ID values.
         $ids = array_values(array_unique($data['ids']));
 
         $records = $this->newQuery()
@@ -776,7 +740,7 @@ abstract class BaseCrudApiController extends Controller
 
             if ($defaultBranchId) {
                 $this->assertBranchIdAllowed($request, $defaultBranchId);
-                $data[$this->branchColumn] = $defaultBranchId;
+                $data[$this->branchColumn] = (string) $defaultBranchId;
             }
         }
 
@@ -791,11 +755,11 @@ abstract class BaseCrudApiController extends Controller
 
         $this->assertRecordBranchAccess($request, $record);
 
-        if (array_key_exists($this->branchColumn, $data)) {
+        if ($this->preventBranchChangeOnUpdate && array_key_exists($this->branchColumn, $data)) {
             unset($data[$this->branchColumn]);
         }
 
-        if (!empty($data[$this->branchColumn])) {
+        if (!$this->preventBranchChangeOnUpdate && !empty($data[$this->branchColumn])) {
             $this->assertBranchIdAllowed($request, $data[$this->branchColumn]);
         }
 
@@ -813,6 +777,10 @@ abstract class BaseCrudApiController extends Controller
         }
 
         $branchId = $record->{$this->branchColumn} ?? null;
+
+        if (!$branchId) {
+            return;
+        }
 
         $this->assertBranchIdAllowed($request, $branchId);
     }
@@ -858,73 +826,79 @@ abstract class BaseCrudApiController extends Controller
         $requested = $allowRequestedBranch ? $this->requestedBranchId($request) : null;
 
         if ($requested) {
-            return $requested;
+            return (string) $requested;
         }
 
         $user = $request->user();
 
-        if (!$user) {
-            return null;
+        if ($user) {
+            if (!empty($user->current_branch_id)) {
+                return (string) $user->current_branch_id;
+            }
+
+            if (!empty($user->branch_id)) {
+                return (string) $user->branch_id;
+            }
+
+            $branchIds = $this->accessibleBranchIds($request);
+
+            if (count($branchIds) === 1) {
+                return $branchIds[0];
+            }
         }
 
-        if (!empty($user->current_branch_id)) {
-            return (string) $user->current_branch_id;
-        }
-
-        if (!empty($user->branch_id)) {
-            return (string) $user->branch_id;
-        }
-
-        $branchIds = $this->accessibleBranchIds($request);
-
-        if (count($branchIds) === 1) {
-            return $branchIds[0];
-        }
-
-        return null;
+        return Branch::query()->where('code', 'MAIN')->value('id')
+            ?: Branch::query()->value('id');
     }
 
     protected function accessibleBranchIds(Request $request): array
     {
         $user = $request->user();
 
-        if (!$user) {
-            return [];
-        }
-
         $ids = [];
 
-        if (!empty($user->current_branch_id)) {
-            $ids[] = (string) $user->current_branch_id;
-        }
-
-        if (!empty($user->branch_id)) {
-            $ids[] = (string) $user->branch_id;
-        }
-
-        if (!empty($user->branch_ids) && is_array($user->branch_ids)) {
-            foreach ($user->branch_ids as $id) {
-                if ($id) {
-                    $ids[] = (string) $id;
-                }
+        if ($user) {
+            if (!empty($user->current_branch_id)) {
+                $ids[] = (string) $user->current_branch_id;
             }
-        }
 
-        try {
-            if (method_exists($user, 'branches')) {
-                $relationIds = $user->branches()->pluck('branches.id')->toArray();
+            if (!empty($user->branch_id)) {
+                $ids[] = (string) $user->branch_id;
+            }
 
-                foreach ($relationIds as $id) {
+            if (!empty($user->branch_ids) && is_array($user->branch_ids)) {
+                foreach ($user->branch_ids as $id) {
                     if ($id) {
                         $ids[] = (string) $id;
                     }
                 }
             }
-        } catch (\Throwable $e) {
-            //
+
+            try {
+                if (method_exists($user, 'branches')) {
+                    $relationIds = $user->branches()->pluck('branches.id')->toArray();
+
+                    foreach ($relationIds as $id) {
+                        if ($id) {
+                            $ids[] = (string) $id;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                //
+            }
         }
 
-        return array_values(array_unique(array_filter($ids)));
+        $ids = array_values(array_unique(array_filter($ids)));
+
+        if (!empty($ids)) {
+            return $ids;
+        }
+
+        $fallbackBranchId = Branch::query()->where('code', 'MAIN')->value('id')
+            ?: Branch::query()->value('id');
+
+        return $fallbackBranchId ? [(string) $fallbackBranchId] : [];
     }
 
     protected function userCanAccessAllBranches(Request $request): bool

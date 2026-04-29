@@ -132,6 +132,18 @@ const resolveUrl = (u) => {
   return isAbsoluteUrl(u) ? u : `${domain}${u}`;
 };
 
+const cleanUrl = (url = "") => String(url || "").replace(/\/+$/, "");
+
+const buildResourceUrl = (baseUrl, id = null) => {
+  const cleanBaseUrl = cleanUrl(resolveUrl(baseUrl));
+
+  if (id === null || id === undefined || id === "") {
+    return cleanBaseUrl;
+  }
+
+  return `${cleanBaseUrl}/${id}`;
+};
+
 const getUploadUrlFromValue = (value) => {
   if (!value) return "";
 
@@ -1805,10 +1817,17 @@ export default function ReusableCrud({
     [accessToken]
   );
 
-  const baseUrl = useMemo(
-    () => `${apiUrl}${filterUrl ? filterUrl : ""}`,
-    [apiUrl, filterUrl]
-  );
+  const baseUrl = useMemo(() => {
+    const cleanApiUrl = cleanUrl(apiUrl);
+
+    if (!filterUrl) return cleanApiUrl;
+
+    if (String(filterUrl).startsWith("?")) {
+      return `${cleanApiUrl}${filterUrl}`;
+    }
+
+    return `${cleanApiUrl}/${String(filterUrl).replace(/^\/+/, "")}`;
+  }, [apiUrl, filterUrl]);
 
   const flattenFields = useCallback((arr, out = []) => {
     (arr || []).forEach((f) => {
@@ -1924,7 +1943,7 @@ export default function ReusableCrud({
       if (!field?.fkUrl || id == null || id === "") return null;
 
       try {
-        const detailUrl = `${resolveUrl(field.fkUrl)}${id}/`;
+       const detailUrl = buildResourceUrl(field.fkUrl, id);
         const res = await axios.get(detailUrl, { headers: authHeaders });
         return toFkOption(res?.data, field);
       } catch (error) {
@@ -2442,7 +2461,7 @@ export default function ReusableCrud({
 
         if (openEditId != null) {
           try {
-            const r = await axios.get(`${apiUrl}${openEditId}/`, { headers: authHeaders });
+            const r = await axios.get(buildResourceUrl(apiUrl, openEditId), { headers: authHeaders });
             setEditingRecord(r.data);
             setVisible(true);
             return;
@@ -2472,7 +2491,7 @@ export default function ReusableCrud({
           setFormInitialValues(look_up_var);
         } else if (look_up_var) {
           try {
-            const { data: rec } = await axios.get(`${apiUrl}${look_up_var}/`, {
+            const { data: rec } = await axios.get(buildResourceUrl(apiUrl, look_up_var), {
               headers: authHeaders,
             });
             setFormInitialValues(rec);
@@ -2493,7 +2512,7 @@ export default function ReusableCrud({
     const normalizedRecord = normalizeFkValuesForSubmit(record);
 
     await axios.put(
-      `${apiUrl}${record.id}/`,
+      buildResourceUrl(apiUrl, record.id),
       { ...normalizedRecord, [updateField]: nextActive },
       { headers: authHeaders }
     );
@@ -2528,7 +2547,7 @@ export default function ReusableCrud({
   };
 
   const deletePermanent = async (record) => {
-    await axios.delete(`${apiUrl}${record.id}/`, { headers: authHeaders });
+    await axios.delete(buildResourceUrl(apiUrl, record.id), { headers: authHeaders });
 
     fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
 
@@ -3043,7 +3062,7 @@ export default function ReusableCrud({
             if (!action?.actions) return;
             const normalizedRecord = normalizeFkValuesForSubmit(record);
             await axios.put(
-              `${apiUrl}${record.id}/`,
+              buildResourceUrl(apiUrl, record.id),
               { ...normalizedRecord, ...action.actions },
               { headers: authHeaders }
             );
@@ -3248,8 +3267,8 @@ export default function ReusableCrud({
       }
       : null;
 
- const actionColumn = hasActionColumns
-  ? {
+  const actionColumn = hasActionColumns
+    ? {
       title: "Actions",
       fixed: "right",
       width: 90,
@@ -3268,7 +3287,7 @@ export default function ReusableCrud({
         </div>
       ),
     }
-  : null;
+    : null;
   const mainColumns = canRowActionsExist
     ? [...processedColumns, ...(viewColumn ? [viewColumn] : []), ...(actionColumn ? [actionColumn] : [])]
     : [...processedColumns, ...(viewColumn ? [viewColumn] : [])];
@@ -4577,43 +4596,47 @@ export default function ReusableCrud({
     );
   };
 
-  const submitRecord = async (values, isEditMode, editId) => {
-    const token = getAuthToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
+const submitRecord = async (values, isEditMode, editId) => {
+  const token = getAuthToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
 
-    const normalizedValues = normalizeFkValuesForSubmit(values);
-    const payload =
-      typeof transformPayload === "function" ? transformPayload(normalizedValues) : normalizedValues;
-    const containsFile = hasAnyFile(payload);
+  const normalizedValues = normalizeFkValuesForSubmit(values);
 
-    if (!containsFile) {
-      if (isEditMode) {
-        const res = await axios.put(`${apiUrl}${editId}/`, payload, {
+  const payload =
+    typeof transformPayload === "function"
+      ? transformPayload(normalizedValues)
+      : normalizedValues;
+
+  const containsFile = hasAnyFile(payload);
+
+  const url = isEditMode
+    ? buildResourceUrl(apiUrl, editId)
+    : buildResourceUrl(apiUrl);
+
+  if (!containsFile) {
+    const res = isEditMode
+      ? await axios.put(url, payload, {
+          headers: { ...headers, "Content-Type": "application/json" },
+        })
+      : await axios.post(url, payload, {
           headers: { ...headers, "Content-Type": "application/json" },
         });
-        return res.data;
-      }
 
-      const res = await axios.post(apiUrl, payload, {
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-      return res.data;
-    }
+    return res.data;
+  }
 
-    const fd = buildFormData(payload);
+  const fd = buildFormData(payload);
 
-    if (isEditMode) {
-      const res = await axios.put(`${apiUrl}${editId}/`, fd, {
+  const res = isEditMode
+    ? await axios.put(url, fd, {
+        headers: { ...headers, "Content-Type": "multipart/form-data" },
+      })
+    : await axios.post(url, fd, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
-      return res.data;
-    }
 
-    const res = await axios.post(apiUrl, fd, {
-      headers: { ...headers, "Content-Type": "multipart/form-data" },
-    });
-    return res.data;
-  };
+  return res.data;
+};
 
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
 

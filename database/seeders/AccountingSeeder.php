@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Account;
-use App\Models\Branch;
 use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
 use App\Models\ChartOfAccount;
@@ -22,16 +21,11 @@ class AccountingSeeder extends Seeder
             $userId = User::query()->value('id');
             $now = now();
 
-            $branch = Branch::query()->firstOrCreate(
-                ['code' => 'MAIN'],
-                [
-                    'name' => 'Main Branch',
-                    'is_head_office' => true,
-                    'active' => true,
-                    'is_system_generated' => true,
-                    'user_add_id' => $userId,
-                ]
-            );
+            /*
+            |--------------------------------------------------------------------------
+            | Base Currency
+            |--------------------------------------------------------------------------
+            */
 
             $currency = Currency::query()->firstOrCreate(
                 ['code' => 'USD'],
@@ -53,8 +47,9 @@ class AccountingSeeder extends Seeder
             */
 
             $assetAccount = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => '1000'],
+                ['code' => '1000'],
                 [
+                    'branch_id' => null,
                     'name' => 'Assets',
                     'nature' => 'coa',
                     'parent_id' => null,
@@ -71,8 +66,9 @@ class AccountingSeeder extends Seeder
             );
 
             $cashControlAccount = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => '1100'],
+                ['code' => '1100'],
                 [
+                    'branch_id' => null,
                     'name' => 'Cash Accounts',
                     'nature' => 'coa',
                     'parent_id' => $assetAccount->id,
@@ -89,8 +85,9 @@ class AccountingSeeder extends Seeder
             );
 
             $bankControlAccount = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => '1200'],
+                ['code' => '1200'],
                 [
+                    'branch_id' => null,
                     'name' => 'Bank Accounts',
                     'nature' => 'coa',
                     'parent_id' => $assetAccount->id,
@@ -107,8 +104,9 @@ class AccountingSeeder extends Seeder
             );
 
             $expenseAccount = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => '5000'],
+                ['code' => '5000'],
                 [
+                    'branch_id' => null,
                     'name' => 'Expenses',
                     'nature' => 'coa',
                     'parent_id' => null,
@@ -131,8 +129,9 @@ class AccountingSeeder extends Seeder
             */
 
             $mainBank = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => 'BA-001'],
+                ['code' => 'BA-001'],
                 [
+                    'branch_id' => null,
                     'name' => 'Main Operating Bank',
                     'nature' => 'bank',
                     'parent_id' => $bankControlAccount->id,
@@ -154,8 +153,9 @@ class AccountingSeeder extends Seeder
             );
 
             $pettyCash = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => 'CA-001'],
+                ['code' => 'CA-001'],
                 [
+                    'branch_id' => null,
                     'name' => 'Petty Cash',
                     'nature' => 'cash',
                     'parent_id' => $cashControlAccount->id,
@@ -177,8 +177,9 @@ class AccountingSeeder extends Seeder
             );
 
             $adminExpenseAccount = Account::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'code' => '5100'],
+                ['code' => '5100'],
                 [
+                    'branch_id' => null,
                     'name' => 'Administrative Expense',
                     'nature' => 'coa',
                     'parent_id' => $expenseAccount->id,
@@ -203,7 +204,7 @@ class AccountingSeeder extends Seeder
             $assetCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1000'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $assetAccount->id,
                     'name' => 'Assets',
                     'parent_id' => null,
@@ -218,7 +219,7 @@ class AccountingSeeder extends Seeder
             $cashControlCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1100'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $cashControlAccount->id,
                     'name' => 'Cash Accounts',
                     'parent_id' => $assetCOA->id,
@@ -233,7 +234,7 @@ class AccountingSeeder extends Seeder
             $bankControlCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1200'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $bankControlAccount->id,
                     'name' => 'Bank Accounts',
                     'parent_id' => $assetCOA->id,
@@ -248,7 +249,7 @@ class AccountingSeeder extends Seeder
             $mainBankCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => 'BA-001'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $mainBank->id,
                     'name' => 'Main Operating Bank',
                     'parent_id' => $bankControlCOA->id,
@@ -263,7 +264,7 @@ class AccountingSeeder extends Seeder
             $pettyCashCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => 'CA-001'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $pettyCash->id,
                     'name' => 'Petty Cash',
                     'parent_id' => $cashControlCOA->id,
@@ -278,7 +279,7 @@ class AccountingSeeder extends Seeder
             $expenseCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '5000'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $expenseAccount->id,
                     'name' => 'Expenses',
                     'parent_id' => null,
@@ -293,7 +294,7 @@ class AccountingSeeder extends Seeder
             $adminExpenseCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '5100'],
                 [
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'account_id' => $adminExpenseAccount->id,
                     'name' => 'Administrative Expense',
                     'parent_id' => $expenseCOA->id,
@@ -312,8 +313,9 @@ class AccountingSeeder extends Seeder
             */
 
             $cashTransfer = CashTransfer::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'transfer_no' => 'CT-0001'],
+                ['transfer_no' => 'CT-0001'],
                 [
+                    'branch_id' => null,
                     'transfer_date' => $now->toDateString(),
                     'from_account_id' => $mainBank->id,
                     'reference' => 'Seed opening transfer',
@@ -363,8 +365,9 @@ class AccountingSeeder extends Seeder
             */
 
             $journalVoucher = JournalVoucher::query()->updateOrCreate(
-                ['branch_id' => $branch->id, 'voucher_no' => 'JV-0001'],
+                ['voucher_no' => 'JV-0001'],
                 [
+                    'branch_id' => null,
                     'voucher_date' => $now->toDateString(),
                     'currency_id' => $currency->id,
                     'reference' => 'Seed opening JV',

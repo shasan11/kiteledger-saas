@@ -13,7 +13,14 @@ use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
 use App\Http\Controllers\Api\WarehouseController;
+use App\Http\Controllers\Api\AccountController;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Bank Accounts
+|--------------------------------------------------------------------------
+*/
 
 Route::post('bank-accounts/bulk', [BankAccountController::class, 'bulkStore']);
 Route::patch('bank-accounts/bulk', [BankAccountController::class, 'bulkUpdate']);
@@ -24,6 +31,12 @@ Route::apiResource('bank-accounts', BankAccountController::class)
         'bank-accounts' => 'bankAccount',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Cash Transfers
+|--------------------------------------------------------------------------
+*/
+
 Route::post('cash-transfers/bulk', [CashTransferController::class, 'bulkStore']);
 Route::patch('cash-transfers/bulk', [CashTransferController::class, 'bulkUpdate']);
 Route::delete('cash-transfers/bulk', [CashTransferController::class, 'bulkDestroy']);
@@ -33,6 +46,11 @@ Route::apiResource('cash-transfers', CashTransferController::class)
         'cash-transfers' => 'cashTransfer',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Cash Transfer Lines
+|--------------------------------------------------------------------------
+*/
 
 Route::post('cash-transfer-lines/bulk', [CashTransferLineController::class, 'bulkStore']);
 Route::patch('cash-transfer-lines/bulk', [CashTransferLineController::class, 'bulkUpdate']);
@@ -43,6 +61,11 @@ Route::apiResource('cash-transfer-lines', CashTransferLineController::class)
         'cash-transfer-lines' => 'cashTransferLine',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Chart Of Accounts
+|--------------------------------------------------------------------------
+*/
 
 Route::post('chart-of-accounts/bulk', [ChartOfAccountController::class, 'bulkStore']);
 Route::patch('chart-of-accounts/bulk', [ChartOfAccountController::class, 'bulkUpdate']);
@@ -53,6 +76,12 @@ Route::apiResource('chart-of-accounts', ChartOfAccountController::class)
         'chart-of-accounts' => 'chartOfAccount',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Journal Vouchers
+|--------------------------------------------------------------------------
+*/
+
 Route::post('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkStore']);
 Route::patch('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkUpdate']);
 Route::delete('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkDestroy']);
@@ -61,6 +90,12 @@ Route::apiResource('journal-vouchers', JournalVoucherController::class)
     ->parameters([
         'journal-vouchers' => 'journalVoucher',
     ]);
+
+/*
+|--------------------------------------------------------------------------
+| Journal Voucher Lines
+|--------------------------------------------------------------------------
+*/
 
 Route::post('journal-voucher-lines/bulk', [JournalVoucherLineController::class, 'bulkStore']);
 Route::patch('journal-voucher-lines/bulk', [JournalVoucherLineController::class, 'bulkUpdate']);
@@ -71,6 +106,11 @@ Route::apiResource('journal-voucher-lines', JournalVoucherLineController::class)
         'journal-voucher-lines' => 'journalVoucherLine',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Cheque Registers
+|--------------------------------------------------------------------------
+*/
 
 Route::post('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkStore']);
 Route::patch('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkUpdate']);
@@ -82,6 +122,21 @@ Route::apiResource('cheque-registers', ChequeRegisterController::class)
     ]);
 
 
+Route::post('accounts/bulk', [AccountController::class, 'bulkStore']);
+Route::patch('accounts/bulk', [AccountController::class, 'bulkUpdate']);
+Route::delete('accounts/bulk', [AccountController::class, 'bulkDestroy']);
+
+Route::apiResource('accounts', AccountController::class)
+    ->parameters([
+        'accounts' => 'account',
+    ]);
+
+/*
+|--------------------------------------------------------------------------
+| Contact Groups
+|--------------------------------------------------------------------------
+*/
+
 Route::post('contact-groups/bulk', [ContactGroupController::class, 'bulkStore']);
 Route::patch('contact-groups/bulk', [ContactGroupController::class, 'bulkUpdate']);
 Route::delete('contact-groups/bulk', [ContactGroupController::class, 'bulkDestroy']);
@@ -90,6 +145,12 @@ Route::apiResource('contact-groups', ContactGroupController::class)
     ->parameters([
         'contact-groups' => 'contactGroup',
     ]);
+
+/*
+|--------------------------------------------------------------------------
+| Contacts
+|--------------------------------------------------------------------------
+*/
 
 Route::post('contacts/bulk', [ContactController::class, 'bulkStore']);
 Route::patch('contacts/bulk', [ContactController::class, 'bulkUpdate']);
@@ -100,6 +161,11 @@ Route::apiResource('contacts', ContactController::class)
         'contacts' => 'contact',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Product Categories
+|--------------------------------------------------------------------------
+*/
 
 Route::post('product-categories/bulk', [ProductCategoryController::class, 'bulkStore']);
 Route::patch('product-categories/bulk', [ProductCategoryController::class, 'bulkUpdate']);
@@ -110,6 +176,12 @@ Route::apiResource('product-categories', ProductCategoryController::class)
         'product-categories' => 'productCategory',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Product Units
+|--------------------------------------------------------------------------
+*/
+
 Route::post('product-units/bulk', [ProductUnitController::class, 'bulkStore']);
 Route::patch('product-units/bulk', [ProductUnitController::class, 'bulkUpdate']);
 Route::delete('product-units/bulk', [ProductUnitController::class, 'bulkDestroy']);
@@ -119,6 +191,12 @@ Route::apiResource('product-units', ProductUnitController::class)
         'product-units' => 'productUnit',
     ]);
 
+/*
+|--------------------------------------------------------------------------
+| Products
+|--------------------------------------------------------------------------
+*/
+
 Route::post('products/bulk', [ProductController::class, 'bulkStore']);
 Route::patch('products/bulk', [ProductController::class, 'bulkUpdate']);
 Route::delete('products/bulk', [ProductController::class, 'bulkDestroy']);
@@ -127,6 +205,12 @@ Route::apiResource('products', ProductController::class)
     ->parameters([
         'products' => 'product',
     ]);
+
+/*
+|--------------------------------------------------------------------------
+| Warehouses
+|--------------------------------------------------------------------------
+*/
 
 Route::post('warehouses/bulk', [WarehouseController::class, 'bulkStore']);
 Route::patch('warehouses/bulk', [WarehouseController::class, 'bulkUpdate']);

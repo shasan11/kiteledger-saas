@@ -73,7 +73,7 @@ export default function ContactGroupCrud() {
         dataIndex: "name",
         key: "name",
         backendSort: true,
-        width: "100",
+        width: 150,
         backendFilter: {
           type: "text",
           param: "name",
@@ -84,7 +84,7 @@ export default function ContactGroupCrud() {
       {
         title: "Parent Group",
         dataIndex: "parent_detail",
-        width: "100",
+        width: "30px",
         key: "parent",
         render: (_, record) => {
           return (

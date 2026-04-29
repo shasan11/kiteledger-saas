@@ -12,6 +12,7 @@ import ReusableCrud from '@/Components/ResuableCrud';
 
 const CONTACT_API = '/api/contacts';
 const CONTACT_GROUP_API = '/api/contact-groups';
+const CREDIT_TERM_API = '/api/credit-terms';
 
 const CONTACT_TYPES = [
     {
@@ -34,15 +35,6 @@ const CONTACT_TYPES = [
     },
 ];
 
-const CREDIT_TERMS = [
-    { value: 'cash', label: 'Cash' },
-    { value: '7_days', label: '7 Days' },
-    { value: '15_days', label: '15 Days' },
-    { value: '30_days', label: '30 Days' },
-    { value: '45_days', label: '45 Days' },
-    { value: '60_days', label: '60 Days' },
-];
-
 function getInitials(name = '') {
     const parts = String(name || '')
         .trim()
@@ -57,6 +49,16 @@ function getInitials(name = '') {
 
 function getContactTypeLabel(value) {
     return CONTACT_TYPES.find((item) => item.value === value)?.label || value || '-';
+}
+
+function normalizeFk(value) {
+    if (!value) return null;
+
+    if (typeof value === 'object') {
+        return value.id || value.value || null;
+    }
+
+    return value;
 }
 
 function ContactTypeSelector({ value, onChange, disabled }) {
@@ -116,59 +118,67 @@ function ContactTypeSelector({ value, onChange, disabled }) {
 export default function Index() {
     const crudInitialValues = useMemo(
         () => ({
-            type: 'customer',
+            contact_type: 'customer',
             name: '',
             address: '',
             code: '',
             pan: '',
-            phone_number: '',
-            group: null,
-            group_detail: null,
+            phone: '',
+            contact_group_id: null,
+            contact_group_id_detail: null,
             accept_purchase: false,
             email: '',
-            credit_terms: null,
-            credit_limit: null,
-            organisation: '',
+            credit_term_id: null,
+            credit_term_id_detail: null,
+            credit_limit: 0,
             active: true,
         }),
         []
     );
 
     const validationSchema = Yup.object().shape({
-        type: Yup.string()
+        contact_type: Yup.string()
             .oneOf(['customer', 'supplier', 'lead'])
             .required('Contact type is required'),
 
         name: Yup.string()
             .trim()
             .required('Name is required')
-            .max(255, 'Name cannot be more than 255 characters'),
+            .max(180, 'Name cannot be more than 180 characters'),
 
-        address: Yup.string().nullable().max(500, 'Address is too long'),
+        address: Yup.string()
+            .nullable()
+            .max(500, 'Address is too long'),
 
-        code: Yup.string().nullable().max(100, 'Code is too long'),
+        code: Yup.string()
+            .nullable()
+            .max(50, 'Code is too long'),
 
-        pan: Yup.string().nullable().max(100, 'PAN is too long'),
+        pan: Yup.string()
+            .nullable()
+            .max(80, 'PAN is too long'),
 
-        phone_number: Yup.string().nullable().max(50, 'Phone number is too long'),
+        phone: Yup.string()
+            .nullable()
+            .max(40, 'Phone number is too long'),
 
-        group: Yup.mixed().nullable(),
+        contact_group_id: Yup.mixed()
+            .nullable(),
 
         accept_purchase: Yup.boolean(),
 
         email: Yup.string()
             .nullable()
             .email('Enter a valid email address')
-            .max(255, 'Email is too long'),
+            .max(120, 'Email is too long'),
 
-        credit_terms: Yup.string().nullable(),
+        credit_term_id: Yup.mixed()
+            .nullable(),
 
         credit_limit: Yup.number()
             .nullable()
             .typeError('Credit limit must be a number')
             .min(0, 'Credit limit cannot be negative'),
-
-        organisation: Yup.string().nullable().max(255, 'Organisation is too long'),
 
         active: Yup.boolean(),
     });
@@ -176,17 +186,17 @@ export default function Index() {
     const fields = useMemo(
         () => [
             {
-                name: 'type',
+                name: 'contact_type',
                 label: 'Type of Contact',
                 type: 'custom',
                 required: true,
                 col: 24,
                 render: ({ value, setFieldValue, readOnly }) => (
                     <ContactTypeSelector
-                        value={value}
+                        value={value || 'customer'}
                         disabled={readOnly}
                         onChange={(nextValue) => {
-                            setFieldValue('type', nextValue);
+                            setFieldValue('contact_type', nextValue);
 
                             if (nextValue !== 'supplier') {
                                 setFieldValue('accept_purchase', false);
@@ -226,14 +236,14 @@ export default function Index() {
                 col: 8,
             },
             {
-                name: 'phone_number',
+                name: 'phone',
                 label: 'Phone Number',
                 type: 'text',
                 placeholder: 'Phone Number',
                 col: 8,
             },
             {
-                name: 'group',
+                name: 'contact_group_id',
                 label: 'Group',
                 type: 'fkSelect',
                 placeholder: 'Group Name',
@@ -262,11 +272,14 @@ export default function Index() {
                         col: 8,
                     },
                     {
-                        name: 'credit_terms',
-                        label: 'Credit Terms',
-                        type: 'select',
-                        placeholder: 'Credit Terms',
-                        options: CREDIT_TERMS,
+                        name: 'credit_term_id',
+                        label: 'Credit Term',
+                        type: 'fkSelect',
+                        placeholder: 'Credit Term',
+                        fkUrl: CREDIT_TERM_API,
+                        fkValueKey: 'id',
+                        fkLabelKey: 'name',
+                        allowClear: true,
                         col: 8,
                     },
                     {
@@ -275,13 +288,6 @@ export default function Index() {
                         type: 'number',
                         placeholder: 'Credit Limit',
                         min: 0,
-                        col: 8,
-                    },
-                    {
-                        name: 'organisation',
-                        label: 'Organisation',
-                        type: 'text',
-                        placeholder: 'Organisation',
                         col: 8,
                     },
                     {
@@ -332,31 +338,33 @@ export default function Index() {
             },
             {
                 title: 'GROUP',
-                dataIndex: 'group_detail',
-                key: 'group',
+                dataIndex: 'contact_group_id_detail',
+                key: 'contact_group_id',
                 backendFilter: {
                     type: 'autocomplete',
-                    param: 'group',
+                    param: 'contact_group_id',
                     fkUrl: CONTACT_GROUP_API,
                     fkValueKey: 'id',
                     fkLabelKey: 'name',
                     placeholder: 'Filter group',
                 },
                 render: (_, record) =>
+                    record?.contact_group_id_detail?.name ||
+                    record?.contact_group?.name ||
+                    record?.contactGroup?.name ||
                     record?.group_detail?.name ||
                     record?.group_name ||
-                    record?.group?.name ||
                     '-',
             },
             {
                 title: 'TYPE',
-                dataIndex: 'type',
-                key: 'type',
+                dataIndex: 'contact_type',
+                key: 'contact_type',
                 width: 150,
                 backendSort: true,
                 backendFilter: {
                     type: 'select',
-                    param: 'type',
+                    param: 'contact_type',
                     options: CONTACT_TYPES.map((item) => ({
                         value: item.value,
                         label: item.label,
@@ -380,11 +388,11 @@ export default function Index() {
             },
             {
                 title: 'PHONE NUMBER',
-                dataIndex: 'phone_number',
-                key: 'phone_number',
+                dataIndex: 'phone',
+                key: 'phone',
                 backendFilter: {
                     type: 'text',
-                    param: 'phone_number',
+                    param: 'phone',
                     placeholder: 'Search phone',
                 },
                 render: (value) => value || '-',
@@ -401,15 +409,30 @@ export default function Index() {
                 render: (value) => value || '-',
             },
             {
-                title: 'ORGANISATION',
-                dataIndex: 'organisation',
-                key: 'organisation',
+                title: 'CREDIT LIMIT',
+                dataIndex: 'credit_limit',
+                key: 'credit_limit',
+                backendSort: true,
+                render: (value) => value ?? '0',
+            },
+            {
+                title: 'ACTIVE',
+                dataIndex: 'active',
+                key: 'active',
+                width: 110,
                 backendFilter: {
-                    type: 'text',
-                    param: 'organisation',
-                    placeholder: 'Search organisation',
+                    type: 'select',
+                    param: 'active',
+                    options: [
+                        { value: '1', label: 'Active' },
+                        { value: '0', label: 'Inactive' },
+                    ],
                 },
-                render: (value) => value || '-',
+                render: (value) => (
+                    <Tag color={value ? 'green' : 'red'}>
+                        {value ? 'Active' : 'Inactive'}
+                    </Tag>
+                ),
             },
         ],
         []
@@ -454,11 +477,27 @@ export default function Index() {
                     orderingParam="ordering"
                     defaultSortField="name"
                     defaultSortOrder="ascend"
-                    transformPayload={(values) => ({
-                        ...values,
-                        accept_purchase:
-                            values.type === 'supplier' ? !!values.accept_purchase : false,
-                    })}
+                    transformPayload={(values) => {
+                        const contactType = values.contact_type || 'customer';
+
+                        return {
+                            contact_type: contactType,
+                            name: values.name || '',
+                            address: values.address || null,
+                            code: values.code || null,
+                            pan: values.pan || null,
+                            phone: values.phone || null,
+                            email: values.email || null,
+                            contact_group_id: normalizeFk(values.contact_group_id),
+                            credit_term_id: normalizeFk(values.credit_term_id),
+                            credit_limit: values.credit_limit ?? 0,
+                            accept_purchase:
+                                contactType === 'supplier'
+                                    ? !!values.accept_purchase
+                                    : false,
+                            active: values.active ?? true,
+                        };
+                    }}
                 />
             </div>
         </AuthenticatedLayout>

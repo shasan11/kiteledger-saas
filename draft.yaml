@@ -20,7 +20,7 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      hasMany: ContactGroup, Contact, Account, ChartOfAccount, TaxClass, TaxRate, CreditTerm, ProductCategory, Variant, ProductUnit, Product, ProductVariant, Warehouse, CashTransfer, ChequeRegister, JournalVoucher, WarehouseTransfer, InventoryAdjustment, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData
+      hasMany: ContactGroup, Contact, Account, BankAccount, ChartOfAccount, TaxClass, TaxRate, CreditTerm, ProductCategory, Variant, ProductUnit, Product, ProductVariant, Warehouse, CashTransfer, ChequeRegister, JournalVoucher, WarehouseTransfer, InventoryAdjustment, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData
 
   Currency:
     id: uuid primary
@@ -33,11 +33,11 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      hasMany: Account, ChartOfAccount, CashTransfer, JournalVoucher, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
+      hasMany: Account, BankAccount, ChartOfAccount, CashTransfer, JournalVoucher, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
 
   ContactGroup:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     parent_id: uuid foreign:contact_groups.id nullable
     description: text nullable
@@ -50,7 +50,7 @@ models:
 
   Contact:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     contact_group_id: uuid foreign:contact_groups.id nullable
     account_id: uuid foreign:accounts.id nullable
     contact_type: enum:customer,supplier,lead default:customer
@@ -72,7 +72,7 @@ models:
 
   Account:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     code: string:30 nullable
     nature: enum:actor,coa,bank,cash,employee default:coa
@@ -93,11 +93,32 @@ models:
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Account:parent, Currency
-      hasMany: Account:children, Contact, ChartOfAccount, CashTransfer:from_transfers, CashTransferLine:to_transfer_lines, ChequeRegister:cheque_accounts, ChequeRegister:related_cheque_accounts, CustomerPayment, SupplierPayment
+      hasMany: Account:children, Contact, BankAccount, ChartOfAccount, CashTransfer:from_transfers, CashTransferLine:to_transfer_lines, ChequeRegister:cheque_accounts, ChequeRegister:related_cheque_accounts, CustomerPayment, SupplierPayment
+
+  BankAccount:
+    id: uuid primary
+    branch_id: uuid foreign:branches.id nullable
+    type: enum:bank,cash
+    display_name: string:150
+    code: string:30
+    currency_id: uuid foreign:currencies.id
+    description: text nullable
+    bank_name: string:150 nullable
+    account_name: string:150 nullable
+    account_number: string:80 nullable
+    account_type: string:50 nullable
+    swift_code: string:50 nullable
+    account_id: uuid foreign:accounts.id nullable
+    opening_balance: decimal:16,2 default:0
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Branch, Currency, Account
 
   ChartOfAccount:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     account_id: uuid foreign:accounts.id
     code: string:30 unique
     name: string:150
@@ -113,7 +134,7 @@ models:
 
   CashTransfer:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     transfer_no: string:40 unique nullable
     transfer_date: date
     from_account_id: uuid foreign:accounts.id
@@ -149,7 +170,7 @@ models:
 
   ChequeRegister:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     cheque_no: string:80
     cheque_date: date
     issued_date: date
@@ -178,7 +199,7 @@ models:
 
   JournalVoucher:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     voucher_no: string:40 unique
     voucher_date: date
     currency_id: uuid foreign:currencies.id nullable
@@ -212,7 +233,7 @@ models:
 
   TaxClass:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     code: string:30 unique
     description: text nullable
@@ -225,7 +246,7 @@ models:
 
   TaxRate:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     tax_class_id: uuid foreign:tax_classes.id
     name: string:120
     rate_percent: decimal:8,4 default:0
@@ -239,7 +260,7 @@ models:
 
   CreditTerm:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     days: unsignedSmallInteger default:0
     description: text nullable
@@ -252,7 +273,7 @@ models:
 
   ProductCategory:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     parent_id: uuid foreign:product_categories.id nullable
     description: text nullable
@@ -265,7 +286,7 @@ models:
 
   Variant:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:80
     active: boolean default:true
     is_system_generated: boolean default:false
@@ -287,7 +308,7 @@ models:
 
   ProductUnit:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:50
     short_name: string:20 nullable
     precision: unsignedTinyInteger default:0
@@ -300,7 +321,7 @@ models:
 
   Product:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     product_category_id: uuid foreign:product_categories.id nullable
     name: string:180
     code: string:60 nullable
@@ -318,7 +339,7 @@ models:
 
   ProductVariant:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     product_id: uuid foreign:products.id
     name: string:180 nullable
     sku: string:80 nullable
@@ -341,7 +362,7 @@ models:
 
   Warehouse:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     code: string:30 nullable
     name: string:150
     address: text nullable
@@ -354,7 +375,7 @@ models:
 
   WarehouseTransfer:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     transfer_no: string:40 unique
     transfer_date: date
     from_warehouse_id: uuid foreign:warehouses.id
@@ -387,7 +408,7 @@ models:
 
   InventoryAdjustment:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     adjustment_no: string:40 unique
     adjustment_date: date
     warehouse_id: uuid foreign:warehouses.id
@@ -423,7 +444,7 @@ models:
 
   Quotation:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     contact_id: uuid foreign:contacts.id
     quotation_no: string:40 unique nullable
     quotation_date: date
@@ -464,7 +485,7 @@ models:
 
   SalesOrder:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     sales_order_no: string:40 unique
     sales_order_date: date
     contact_id: uuid foreign:contacts.id
@@ -509,7 +530,7 @@ models:
 
   ProformaInvoice:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     proforma_no: string:40 unique
     reference: string:120 nullable
     proforma_date: date
@@ -549,7 +570,7 @@ models:
 
   Invoice:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     invoice_no: string:40 unique
     invoice_date: date
     due_date: date nullable
@@ -596,7 +617,7 @@ models:
 
   CustomerPayment:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     payment_no: string:40 unique
     payment_date: date
     contact_id: uuid foreign:contacts.id
@@ -637,7 +658,7 @@ models:
 
   SalesReturn:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     sales_return_no: string:40 unique
     sales_return_date: date
     contact_id: uuid foreign:contacts.id
@@ -677,7 +698,7 @@ models:
 
   PurchaseOrder:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     purchase_order_no: string:40 unique nullable
     purchase_order_date: date
     contact_id: uuid foreign:contacts.id
@@ -717,7 +738,7 @@ models:
 
   PurchaseBill:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     bill_no: string:40 unique
     bill_date: date
     due_date: date nullable
@@ -764,7 +785,7 @@ models:
 
   Expense:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     expense_no: string:40 unique nullable
     reference: string:120 nullable
     expense_date: date
@@ -805,7 +826,7 @@ models:
 
   DebitNote:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     debit_note_no: string:40 unique
     debit_note_date: date
     contact_id: uuid foreign:contacts.id
@@ -844,7 +865,7 @@ models:
 
   SupplierPayment:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     payment_no: string:40 unique
     payment_date: date
     contact_id: uuid foreign:contacts.id
@@ -885,7 +906,7 @@ models:
 
   AlertType:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:150
     medium: enum:email,sms,whatsapp,in_app default:in_app
     alert_type: string:80 nullable
@@ -900,7 +921,7 @@ models:
 
   ReportingTag:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:80
     color: string:20 nullable
     active: boolean default:true
@@ -911,7 +932,7 @@ models:
 
   DocumentNumbering:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     document_type: enum:quotation,sales_order,proforma,invoice,sales_return,purchase_order,purchase_bill,debit_note,customer_payment,supplier_payment,cash_transfer,journal_voucher,expense,warehouse_transfer,inventory_adjustment
     prefix: string:20 nullable
     next_number: unsignedBigInteger default:1
@@ -924,7 +945,7 @@ models:
 
   PrintingTemplate:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     document_type: string:80
     template_html: longtext nullable
@@ -938,7 +959,7 @@ models:
 
   CustomTemplate:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     name: string:120
     purpose: string:80 nullable
     content: longtext nullable
@@ -950,7 +971,7 @@ models:
 
   ApplicationSetting:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     key: string:120
     value: longtext nullable
     group: string:80 nullable
@@ -962,7 +983,7 @@ models:
 
   GeneralSetting:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     key: string:120
     value: longtext nullable
     group: string:80 nullable
@@ -974,7 +995,7 @@ models:
 
   MasterData:
     id: uuid primary
-    branch_id: uuid foreign:branches.id
+    branch_id: uuid foreign:branches.id nullable
     group: string:80
     key: string:120
     value: string:180
@@ -985,4 +1006,4 @@ models:
     relationships:
       belongsTo: Branch
 
-seeders: Branch, Currency, Account, ContactGroup, CreditTerm, Contact, ChartOfAccount, TaxClass, TaxRate, ProductCategory, Variant, VariantLine, ProductUnit, Product, ProductVariant, ProductVariantItem, Warehouse, CashTransfer, CashTransferLine, ChequeRegister, JournalVoucher, JournalVoucherLine, WarehouseTransfer, WarehouseTransferLine, InventoryAdjustment, InventoryAdjustmentLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine, ProformaInvoice, ProformaInvoiceLine, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentLine, SalesReturn, SalesReturnLine, PurchaseOrder, PurchaseOrderLine, PurchaseBill, PurchaseBillLine, Expense, ExpenseLine, DebitNote, DebitNoteLine, SupplierPayment, SupplierPaymentLine, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData
+seeders: Branch, Currency, Account, BankAccount, ContactGroup, CreditTerm, Contact, ChartOfAccount, TaxClass, TaxRate, ProductCategory, Variant, VariantLine, ProductUnit, Product, ProductVariant, ProductVariantItem, Warehouse, CashTransfer, CashTransferLine, ChequeRegister, JournalVoucher, JournalVoucherLine, WarehouseTransfer, WarehouseTransferLine, InventoryAdjustment, InventoryAdjustmentLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine, ProformaInvoice, ProformaInvoiceLine, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentLine, SalesReturn, SalesReturnLine, PurchaseOrder, PurchaseOrderLine, PurchaseBill, PurchaseBillLine, Expense, ExpenseLine, DebitNote, DebitNoteLine, SupplierPayment, SupplierPaymentLine, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData

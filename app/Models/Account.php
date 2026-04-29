@@ -87,6 +87,11 @@ class Account extends Model
         return $this->hasMany(Contact::class);
     }
 
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(BankAccount::class);
+    }
+
     public function chartOfAccounts(): HasMany
     {
         return $this->hasMany(ChartOfAccount::class);
@@ -120,10 +125,5 @@ class Account extends Model
     public function supplierPayments(): HasMany
     {
         return $this->hasMany(SupplierPayment::class);
-    }
-
-    public function bankAccounts(): HasMany
-    {
-        return $this->hasMany(BankAccount::class);
     }
 }
