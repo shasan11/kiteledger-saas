@@ -42,8 +42,8 @@ const radius = {
   xs: 3,
   sm: 3,
   md: 3,
-  lg: 5,
-  xl:5,
+  lg: 3,
+  xl:3,
   pill: 999,
 };
 
@@ -150,7 +150,7 @@ export const themeMain = {
     },
 
     Button: {
-      borderRadius: 10,
+      borderRadius: 5,
       fontWeight: 600,
 
       defaultBg: "#ffffff",
@@ -174,7 +174,7 @@ export const themeMain = {
     },
 
     Card: {
-      borderRadiusLG: 16,
+      borderRadiusLG: 5,
       borderColor: "#e5eaf1",
       headerBg: "transparent",
       bodyPadding: 20,
