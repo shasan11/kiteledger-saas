@@ -2,215 +2,110 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Resources\BankAccountResource;
 use App\Models\BankAccount;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Spatie\QueryBuilder\AllowedFilter;
-use Spatie\QueryBuilder\QueryBuilder;
 
-class BankAccountController extends Controller
+class BankAccountController extends BaseCrudApiController
 {
-    public function index(Request $request)
-    {
-        $perPage = min($request->integer('per_page', 15), 100);
+    protected string $modelClass = BankAccount::class;
 
-        $records = QueryBuilder::for(BankAccount::query())
-            ->allowedIncludes(
-                'branch',
-                'currency',
-                'account'
-            )
-            ->allowedFilters(
-                AllowedFilter::callback('q', function (Builder $query, mixed $value) {
-                    $query->where(function (Builder $query) use ($value) {
-                        $query->where('display_name', 'like', "%{$value}%")
-                            ->orWhere('code', 'like', "%{$value}%")
-                            ->orWhere('description', 'like', "%{$value}%")
-                            ->orWhere('bank_name', 'like', "%{$value}%")
-                            ->orWhere('account_name', 'like', "%{$value}%")
-                            ->orWhere('account_number', 'like', "%{$value}%")
-                            ->orWhere('account_type', 'like', "%{$value}%")
-                            ->orWhere('swift_code', 'like', "%{$value}%");
-                    });
-                }),
-                AllowedFilter::exact('active'),
-                AllowedFilter::exact('type'),
-                AllowedFilter::exact('branch_id'),
-                AllowedFilter::exact('currency_id'),
-                AllowedFilter::exact('account_id')
-            )
-            ->allowedSorts(
-                'id',
-                'display_name',
-                'code',
-                'type',
-                'opening_balance',
-                'created_at',
-                'updated_at'
-            )
-            ->defaultSort('-created_at')
-            ->paginate($perPage)
-            ->appends($request->query());
+    protected ?string $permissionPrefix = null;
 
-        return BankAccountResource::collection($records);
-    }
+    protected bool $usePolicyAuthorization = false;
 
-    public function store(Request $request)
-    {
-        $data = $this->validateBankAccount($request);
+    protected bool $branchScoped = false;
 
-        $record = BankAccount::query()->create($data);
+    protected array $relations = [
+        'branch',
+        'currency',
+        'account',
+    ];
 
-        return new BankAccountResource(
-            $record->fresh(['branch', 'currency', 'account'])
-        );
-    }
+    protected array $relationDetails = [
+        'branch' => 'branch_id',
+        'currency' => 'currency_id',
+        'account' => 'account_id',
+    ];
 
-    public function show(BankAccount $bankAccount)
-    {
-        return new BankAccountResource(
-            $bankAccount->load(['branch', 'currency', 'account'])
-        );
-    }
+    protected array $searchable = [
+        'display_name',
+        'code',
+        'description',
+        'bank_name',
+        'account_name',
+        'account_number',
+        'account_type',
+        'swift_code',
 
-    public function update(Request $request, BankAccount $bankAccount)
-    {
-        $data = $this->validateBankAccount($request, true);
+        'branch.name',
+        'branch.code',
 
-        $bankAccount->update($data);
+        'currency.name',
+        'currency.code',
 
-        return new BankAccountResource(
-            $bankAccount->fresh(['branch', 'currency', 'account'])
-        );
-    }
+        'account.name',
+        'account.code',
+    ];
 
-    public function destroy(BankAccount $bankAccount)
-    {
-        $bankAccount->delete();
+    protected array $filterable = [
+        'type',
+        'branch_id',
+        'currency_id',
+        'account_id',
+    ];
 
-        return response()->json([
-            'message' => 'Deleted successfully.',
-        ]);
-    }
+    protected array $booleanFilters = [
+        'active',
+    ];
 
-    public function bulkStore(Request $request)
-    {
-        $data = $request->validate([
-            'records' => ['required', 'array', 'min:1'],
+    protected array $sortable = [
+        'id',
+        'display_name',
+        'code',
+        'type',
+        'opening_balance',
+        'created_at',
+        'updated_at',
+    ];
 
-            'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
-            'records.*.type' => ['required', 'in:bank,cash'],
-            'records.*.display_name' => ['required', 'string', 'max:150'],
-            'records.*.code' => ['required', 'string', 'max:30'],
-            'records.*.currency_id' => ['required', 'uuid', 'exists:currencies,id'],
+    protected string $defaultSort = '-created_at';
 
-            'records.*.description' => ['nullable', 'string'],
-            'records.*.bank_name' => ['nullable', 'string', 'max:150'],
-            'records.*.account_name' => ['nullable', 'string', 'max:150'],
-            'records.*.account_number' => ['nullable', 'string', 'max:80'],
-            'records.*.account_type' => ['nullable', 'string', 'max:50'],
-            'records.*.swift_code' => ['nullable', 'string', 'max:50'],
-            'records.*.account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
-            'records.*.opening_balance' => ['nullable', 'numeric'],
-            'records.*.active' => ['nullable', 'boolean'],
-            'records.*.is_system_generated' => ['nullable', 'boolean'],
-            'records.*.user_add_id' => ['nullable', 'integer', 'exists:users,id'],
-        ]);
+    protected array $storeRules = [
+        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
+        'type' => ['required', 'in:bank,cash'],
+        'display_name' => ['required', 'string', 'max:150'],
+        'code' => ['required', 'string', 'max:30'],
+        'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
-        $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(function (array $record) {
-                return BankAccount::query()
-                    ->create($record)
-                    ->fresh(['branch', 'currency', 'account']);
-            });
-        });
+        'description' => ['nullable', 'string'],
+        'bank_name' => ['nullable', 'string', 'max:150'],
+        'account_name' => ['nullable', 'string', 'max:150'],
+        'account_number' => ['nullable', 'string', 'max:80'],
+        'account_type' => ['nullable', 'string', 'max:50'],
+        'swift_code' => ['nullable', 'string', 'max:50'],
+        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+        'opening_balance' => ['nullable', 'numeric'],
+        'active' => ['nullable', 'boolean'],
+        'is_system_generated' => ['nullable', 'boolean'],
+        'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
+    ];
 
-        return BankAccountResource::collection($records);
-    }
+    protected array $updateRules = [
+        'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
+        'type' => ['sometimes', 'required', 'in:bank,cash'],
+        'display_name' => ['sometimes', 'required', 'string', 'max:150'],
+        'code' => ['sometimes', 'required', 'string', 'max:30'],
+        'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
-    public function bulkUpdate(Request $request)
-    {
-        $data = $request->validate([
-            'records' => ['required', 'array', 'min:1'],
-
-            'records.*.id' => ['required', 'uuid', 'exists:bank_accounts,id'],
-            'records.*.branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
-            'records.*.type' => ['sometimes', 'required', 'in:bank,cash'],
-            'records.*.display_name' => ['sometimes', 'required', 'string', 'max:150'],
-            'records.*.code' => ['sometimes', 'required', 'string', 'max:30'],
-            'records.*.currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
-
-            'records.*.description' => ['sometimes', 'nullable', 'string'],
-            'records.*.bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'records.*.account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'records.*.account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
-            'records.*.account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'records.*.swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'records.*.account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
-            'records.*.opening_balance' => ['sometimes', 'nullable', 'numeric'],
-            'records.*.active' => ['sometimes', 'nullable', 'boolean'],
-            'records.*.is_system_generated' => ['sometimes', 'nullable', 'boolean'],
-            'records.*.user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
-
-        $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(function (array $record) {
-                $model = BankAccount::query()->findOrFail($record['id']);
-
-                unset($record['id']);
-
-                $model->update($record);
-
-                return $model->fresh(['branch', 'currency', 'account']);
-            });
-        });
-
-        return BankAccountResource::collection($records);
-    }
-
-    public function bulkDestroy(Request $request)
-    {
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['required', 'uuid', 'exists:bank_accounts,id'],
-        ]);
-
-        DB::transaction(function () use ($data) {
-            BankAccount::query()
-                ->whereIn('id', $data['ids'])
-                ->delete();
-        });
-
-        return response()->json([
-            'message' => 'Deleted successfully.',
-        ]);
-    }
-
-    private function validateBankAccount(Request $request, bool $partial = false): array
-    {
-        $required = $partial ? 'sometimes' : 'required';
-
-        return $request->validate([
-            'branch_id' => [$required, 'uuid', 'exists:branches,id'],
-            'type' => [$required, 'in:bank,cash'],
-            'display_name' => [$required, 'string', 'max:150'],
-            'code' => [$required, 'string', 'max:30'],
-            'currency_id' => [$required, 'uuid', 'exists:currencies,id'],
-
-            'description' => ['sometimes', 'nullable', 'string'],
-            'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
-            'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
-            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
-            'active' => ['sometimes', 'nullable', 'boolean'],
-            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
-            'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
-    }
+        'description' => ['sometimes', 'nullable', 'string'],
+        'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
+        'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
+        'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
+        'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
+        'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
+        'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+        'opening_balance' => ['sometimes', 'nullable', 'numeric'],
+        'active' => ['sometimes', 'nullable', 'boolean'],
+        'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
+        'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+    ];
 }
