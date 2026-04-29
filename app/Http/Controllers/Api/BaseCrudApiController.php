@@ -762,20 +762,22 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
-        if (array_key_exists($this->branchColumn, $data)) {
-            unset($data[$this->branchColumn]);
+        $providedBranchId = $data[$this->branchColumn] ?? null;
+
+        if (!empty($providedBranchId)) {
+            $this->assertBranchIdAllowed($request, $providedBranchId);
+            $data[$this->branchColumn] = (string) $providedBranchId;
+
+            return $data;
         }
 
         if ($this->autoFillBranchOnCreate) {
-            $defaultBranchId = $this->defaultWriteBranchId($request, false);
+            $defaultBranchId = $this->defaultWriteBranchId($request, true);
 
             if ($defaultBranchId) {
+                $this->assertBranchIdAllowed($request, $defaultBranchId);
                 $data[$this->branchColumn] = $defaultBranchId;
             }
-        }
-
-        if (!empty($data[$this->branchColumn])) {
-            $this->assertBranchIdAllowed($request, $data[$this->branchColumn]);
         }
 
         return $data;
