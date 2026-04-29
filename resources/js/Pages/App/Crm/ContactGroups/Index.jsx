@@ -3,15 +3,14 @@ import * as Yup from "yup";
 import ReusableCrud from "@/Components/ResuableCrud";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { Head } from "@inertiajs/react";
-const API_BASE_URL = import.meta.env.VITE_APP_BACKEND_URL;
 
 export default function ContactGroupCrud() {
-  const apiUrl = `${API_BASE_URL}/api/contacts/contact-groups/`;
+  const apiUrl = "/api/contact-groups";
 
   const initialValues = useMemo(
     () => ({
       name: "",
-      parent: null,
+      parent_id: null,
       description: "",
       active: true,
     }),
@@ -24,7 +23,7 @@ export default function ContactGroupCrud() {
       .required("Name is required")
       .max(255, "Name cannot be more than 255 characters"),
 
-    parent: Yup.mixed().nullable(),
+    parent_id: Yup.mixed().nullable(),
 
     description: Yup.string()
       .nullable()
@@ -44,11 +43,11 @@ export default function ContactGroupCrud() {
         col: 24,
       },
       {
-        name: "parent",
+        name: "parent_id",
         label: "Parent Group",
         type: "fkSelect",
         placeholder: "Select parent group",
-        fkUrl: "/api/contacts/contact-groups/",
+        fkUrl: "/api/contact-groups",
         fkValueKey: "id",
         fkLabelKey: "name",
         allowClear: true,
