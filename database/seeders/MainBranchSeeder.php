@@ -15,18 +15,18 @@ class MainBranchSeeder extends Seeder
     public function run(): void
     {
         $user = User::query()->updateOrCreate(
-            ['email' => 'shasandhakal1105@gmail.com'],
+            ['email' => env('SEED_MAIN_USER_EMAIL', 'admin@kiteledger.local')],
             [
-                'name' => 'Main Branch User',
-                'password' => Hash::make('Balkot11@'),
+                'name' => env('SEED_MAIN_USER_NAME', 'Main Branch User'),
+                'password' => Hash::make(env('SEED_MAIN_USER_PASSWORD', 'password')),
                 'email_verified_at' => now(),
             ]
         );
 
-        Branch::query()->updateOrCreate(
-            ['code' => 'MAIN'],
+        $branch = Branch::query()->updateOrCreate(
+            ['code' => env('SEED_MAIN_BRANCH_CODE', 'MAIN')],
             [
-                'name' => 'Main Branch',
+                'name' => env('SEED_MAIN_BRANCH_NAME', 'Main Branch'),
                 'email' => $user->email,
                 'is_head_office' => true,
                 'is_transaction_enabled' => true,
@@ -40,5 +40,9 @@ class MainBranchSeeder extends Seeder
                 'user_add_id' => $user->id,
             ]
         );
+
+        if ($user->branch_id !== $branch->id) {
+            $user->forceFill(['branch_id' => $branch->id])->save();
+        }
     }
 }

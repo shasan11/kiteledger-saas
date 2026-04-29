@@ -70,9 +70,19 @@ class Branch extends Model
         return $this->hasMany(Contact::class);
     }
 
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
+
     public function accounts(): HasMany
     {
         return $this->hasMany(Account::class);
+    }
+
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(BankAccount::class);
     }
 
     public function chartOfAccounts(): HasMany
