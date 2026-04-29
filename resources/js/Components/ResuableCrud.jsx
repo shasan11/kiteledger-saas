@@ -4618,7 +4618,7 @@ export default function ReusableCrud({
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
 
   if (isFormOnlyMode) {
-    const submitLabel = ui_type === "edit form" ? "Update" : "Add";
+    const submitLabel = ui_type === "edit form" ? "Save" : "Save";
 
     return (
       <div className="pt-0">
@@ -4778,7 +4778,7 @@ export default function ReusableCrud({
             touched={touched}
             handleSubmit={handleSubmit}
             onFormValuesChange={onFormValuesChange}
-            submitLabel={submitLabelOverride || (editingRecord ? "Update" : "Add")}
+            submitLabel={submitLabelOverride || (editingRecord ? "Save" : "Save")}
             renderFormFields={renderFormFields}
             hideSubmitButton={hideSubmitButton || form_ui === "drawer"}
             submitErrors={submitErrors}

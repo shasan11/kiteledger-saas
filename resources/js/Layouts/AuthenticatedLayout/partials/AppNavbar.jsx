@@ -94,7 +94,8 @@ export default function AppNavbar({
                     </Link>
 
                     {!isMobile && (
-                        <Select
+                        <Select 
+                            
                             size="middle"
                             value={branch}
                             onChange={setBranch}

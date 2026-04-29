@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
-import { Button, InputNumber, Select, Switch, Tag, Typography } from 'antd';
+import { Button, InputNumber, Select, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ResuableCrud';
@@ -27,7 +27,7 @@ const emptyItem = {
     product_name: '',
     description: '',
     quantity: 1,
-    unit_code: 'PC',
+    unit_code: 'PCS',
     rate: 0,
     discount: 0,
     discount_type: 'percent',
@@ -36,20 +36,18 @@ const emptyItem = {
     notes: '',
 };
 
-const emptyAdditionalCost = {
-    cost_term_id: null,
-    cost_term_id_detail: null,
-    cost_term_name: '',
-    product_id: null,
-    product_id_detail: null,
-    product_name: '',
-    method: 'value',
-    amount_npr: 0,
-};
+const creditTermsOptions = [
+    { value: 'due_on_receipt', label: 'Due on Receipt' },
+    { value: 'net_7', label: 'Net 7' },
+    { value: 'net_15', label: 'Net 15' },
+    { value: 'net_30', label: 'Net 30' },
+    { value: 'net_45', label: 'Net 45' },
+    { value: 'net_60', label: 'Net 60' },
+];
 
 const unitOptions = [
-    { value: 'PC', label: 'PC' },
     { value: 'PCS', label: 'PCS' },
+    { value: 'PC', label: 'PC' },
     { value: 'BX', label: 'BX' },
     { value: 'KG', label: 'KG' },
     { value: 'LTR', label: 'LTR' },
@@ -63,19 +61,9 @@ const discountTypeOptions = [
 
 const taxOptions = [
     { value: 'no_vat', label: 'No Vat' },
-    { value: 'vat_13', label: 'VAT 13%' },
+    { value: 'vat_13', label: '13% VAT' },
     { value: 'zero_rated', label: 'Zero Rated' },
     { value: 'exempt', label: 'Exempt' },
-];
-
-const costMethodOptions = [
-    { value: 'value', label: 'Value' },
-    { value: 'percent', label: '%' },
-];
-
-const tdsTypeOptions = [
-    { value: 'percent', label: '%' },
-    { value: 'amount', label: 'Amount' },
 ];
 
 const calculateLine = (row = {}) => {
@@ -89,25 +77,29 @@ const calculateLine = (row = {}) => {
             ? discountValue
             : (gross * discountValue) / 100;
 
-    const taxableBeforeVat = Math.max(gross - discount, 0);
-    const vat = row.tax_code === 'vat_13' ? taxableBeforeVat * 0.13 : 0;
-    const nonTaxable = row.tax_code === 'no_vat' || row.tax_code === 'exempt'
-        ? taxableBeforeVat
-        : 0;
-    const taxable = row.tax_code === 'vat_13' ? taxableBeforeVat : 0;
+    const net = Math.max(gross - discount, 0);
+    const vat = row.tax_code === 'vat_13' ? net * 0.13 : 0;
+
+    const taxable = row.tax_code === 'vat_13' ? net : 0;
+    const nonTaxable =
+        row.tax_code === 'no_vat' || row.tax_code === 'exempt'
+            ? net
+            : 0;
 
     return {
         gross,
         discount,
+        net,
         taxable,
         nonTaxable,
         vat,
-        amount: taxableBeforeVat + vat,
+        amount: net + vat,
     };
 };
 
 const calculateTotals = (values = {}) => {
     const items = values.items || [];
+
     const itemTotals = items.reduce(
         (acc, row) => {
             const line = calculateLine(row);
@@ -131,50 +123,28 @@ const calculateTotals = (values = {}) => {
         },
     );
 
-    const billDiscountValue = toNumber(values.bill_discount);
-    const billDiscount =
-        values.bill_discount_type === 'amount'
-            ? billDiscountValue
-            : (itemTotals.itemTotal * billDiscountValue) / 100;
-
-    const additionalCostTotal = (values.additional_costs || []).reduce((sum, row) => {
-        if (row.method === 'percent') {
-            return sum + (itemTotals.itemTotal * toNumber(row.amount_npr)) / 100;
-        }
-
-        return sum + toNumber(row.amount_npr);
-    }, 0);
-
-    const tdsAmount = values.tds_applicable ? toNumber(values.tds_amount) : 0;
-
-    const grandTotal = Math.max(
-        itemTotals.itemTotal - billDiscount + additionalCostTotal - tdsAmount,
-        0,
-    );
+    const quoteDiscountValue = toNumber(values.quote_discount);
+    const quoteDiscount =
+        values.quote_discount_type === 'amount'
+            ? quoteDiscountValue
+            : (itemTotals.itemTotal * quoteDiscountValue) / 100;
 
     return {
         ...itemTotals,
-        billDiscount,
-        additionalCostTotal,
-        tdsAmount,
-        grandTotal,
+        quoteDiscount,
+        grandTotal: Math.max(itemTotals.itemTotal - quoteDiscount, 0),
     };
 };
 
 const initialValues = {
-    supplier_id: null,
-    supplier_id_detail: null,
-    supplier_name: '',
+    customer_id: null,
+    customer_id_detail: null,
+    customer_name: '',
 
-    reference_no: '',
-    bill_number: '',
-    bill_date: dayjs().format('YYYY-MM-DD'),
-    due_date: dayjs().format('YYYY-MM-DD'),
-    supplier_invoice_reference_no: '',
-
-    warehouse_id: null,
-    warehouse_id_detail: null,
-    warehouse_name: '',
+    code: 'DRAFT',
+    date: dayjs().format('YYYY-MM-DD'),
+    expiry_date: dayjs().add(7, 'day').format('YYYY-MM-DD'),
+    credit_terms: null,
 
     currency_id: null,
     currency_id_detail: null,
@@ -182,32 +152,27 @@ const initialValues = {
     currency_code: '',
     exchange_rate_to_npr: 1,
 
-    is_import: false,
-
     items: [{ ...emptyItem }],
 
     notes: '',
-    bill_discount: 0,
-    bill_discount_type: 'percent',
+    terms_and_conditions:
+        '1. This quotation is valid until the expiry date mentioned above.\n' +
+        '2. Prices are subject to applicable taxes.\n' +
+        '3. Delivery timeline depends on stock availability.\n' +
+        '4. Payment shall be made as per agreed credit terms.\n' +
+        '5. Any change in scope or quantity may affect pricing.',
 
-    additional_cost_product_wise: false,
-    additional_costs: [{ ...emptyAdditionalCost }],
-
-    tds_applicable: true,
-    tds_account_id: null,
-    tds_account_id_detail: null,
-    tds_type: null,
-    tds_amount: 0,
+    quote_discount: 0,
+    quote_discount_type: 'percent',
 
     approved: false,
     status: 'draft',
 };
 
 const validationSchema = Yup.object().shape({
-    supplier_id: Yup.string().nullable().required('Supplier is required'),
-    bill_date: Yup.string().required('Bill date is required'),
-    due_date: Yup.string().required('Due date is required'),
-    warehouse_id: Yup.string().nullable().required('Warehouse is required'),
+    customer_id: Yup.string().nullable().required('Customer is required'),
+    date: Yup.string().required('Date is required'),
+    expiry_date: Yup.string().required('Expiry date is required'),
     exchange_rate_to_npr: Yup.number()
         .typeError('Exchange rate is required')
         .min(0.0001, 'Exchange rate must be greater than 0')
@@ -228,49 +193,27 @@ const validationSchema = Yup.object().shape({
             }),
         )
         .min(1, 'At least one product is required'),
-
-    tds_account_id: Yup.string()
-        .nullable()
-        .when('tds_applicable', {
-            is: true,
-            then: (schema) => schema.required('TDS account is required'),
-            otherwise: (schema) => schema.nullable(),
-        }),
-    tds_type: Yup.string()
-        .nullable()
-        .when('tds_applicable', {
-            is: true,
-            then: (schema) => schema.required('TDS type is required'),
-            otherwise: (schema) => schema.nullable(),
-        }),
-    tds_amount: Yup.number()
-        .typeError('TDS amount is required')
-        .when('tds_applicable', {
-            is: true,
-            then: (schema) => schema.min(0, 'TDS amount cannot be negative').required('TDS amount is required'),
-            otherwise: (schema) => schema.nullable(),
-        }),
 });
 
 export default function Index() {
     const fields = useMemo(
         () => [
             {
-                name: 'supplier_id',
-                label: 'Supplier Name',
+                name: 'customer_id',
+                label: 'Customer Name',
                 type: 'fkSelect',
                 required: true,
                 col: 16,
-                placeholder: 'Supplier Name',
+                placeholder: 'Select Customer',
                 fkUrl: '/api/contacts/',
                 fkSearchParam: 'search',
                 fkPageSize: 20,
                 fkValueKey: 'id',
                 fkLabelKey: 'display_name',
-                labelField: 'supplier_name',
+                labelField: 'customer_name',
                 fkExtraParams: {
                     active: true,
-                    type: 'supplier',
+                    type: 'customer',
                 },
                 fkLabel: (row) =>
                     row?.display_name ||
@@ -281,66 +224,40 @@ export default function Index() {
                     '',
             },
             {
-                name: 'reference_no',
-                label: 'Reference No',
-                col: 8,
-                placeholder: 'Reference',
-            },
-
-            {
-                name: 'bill_number',
-                label: 'Bill Number',
+                name: 'code',
+                label: 'Code',
                 col: 8,
                 readOnly: true,
-                placeholder: 'Bill Number',
-            },
-            {
-                name: 'bill_date',
-                label: 'Bill Date',
-                type: 'datePicker',
-                required: true,
-                col: 8,
-                format: 'DD-MM-YYYY',
-                placeholder: 'Bill Date',
-            },
-            {
-                name: 'due_date',
-                label: 'Due Date',
-                type: 'datePicker',
-                required: true,
-                col: 8,
-                format: 'DD-MM-YYYY',
-                placeholder: 'Due Date',
+                placeholder: 'Code',
             },
 
             {
-                name: 'supplier_invoice_reference_no',
-                label: 'Supplier Invoice Reference No',
-                col: 8,
-                placeholder: 'Reference',
-            },
-            {
-                name: 'warehouse_id',
-                label: 'Warehouse',
-                type: 'fkSelect',
+                name: 'date',
+                label: 'Date',
+                type: 'datePicker',
                 required: true,
                 col: 8,
-                placeholder: 'Select Warehouse',
-                fkUrl: '/api/warehouses/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'warehouse_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) =>
-                    row?.name ||
-                    row?.display_name ||
-                    row?.code ||
-                    '',
+                format: 'DD-MM-YYYY',
+                placeholder: 'Date',
             },
+            {
+                name: 'expiry_date',
+                label: 'Expiry Date',
+                type: 'datePicker',
+                required: true,
+                col: 8,
+                format: 'DD-MM-YYYY',
+                placeholder: 'Expiry Date',
+            },
+            {
+                name: 'credit_terms',
+                label: 'Credit Terms',
+                type: 'select',
+                col: 8,
+                placeholder: 'Credit Terms',
+                options: creditTermsOptions,
+            },
+
             {
                 name: 'currency_id',
                 label: 'Currency',
@@ -359,7 +276,6 @@ export default function Index() {
                     row?.code ||
                     '',
             },
-
             {
                 name: 'exchange_rate_to_npr',
                 label: 'Exchange Rate To NPR',
@@ -370,13 +286,7 @@ export default function Index() {
                 placeholder: '1',
             },
             {
-                name: 'is_import',
-                label: 'Is Import',
-                type: 'switch',
-                col: 8,
-            },
-            {
-                name: '_space_after_import',
+                name: '_empty_currency_space',
                 type: 'custom',
                 col: 8,
                 render: () => null,
@@ -429,7 +339,7 @@ export default function Index() {
                         name: 'unit_code',
                         label: '',
                         type: 'select',
-                        width: '85px',
+                        width: '90px',
                         options: unitOptions,
                     },
                     {
@@ -446,7 +356,7 @@ export default function Index() {
                         name: 'discount',
                         label: 'Discount',
                         type: 'number',
-                        width: '105px',
+                        width: '110px',
                         min: 0,
                         placeholder: '0',
                     },
@@ -505,7 +415,6 @@ export default function Index() {
                 col: 12,
                 rows: 4,
                 placeholder: 'Notes',
-                helpText: 'This will appear on print',
             },
             {
                 name: '_summary',
@@ -520,7 +429,7 @@ export default function Index() {
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         gap: 12,
-                        padding: '8px 0',
+                        padding: '9px 0',
                     };
 
                     return (
@@ -541,16 +450,16 @@ export default function Index() {
                                 <Text>Discount</Text>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                     <InputNumber
-                                        value={values.bill_discount}
+                                        value={values.quote_discount}
                                         min={0}
                                         style={{ width: 140 }}
-                                        onChange={(val) => setFieldValue('bill_discount', val || 0)}
+                                        onChange={(val) => setFieldValue('quote_discount', val || 0)}
                                     />
                                     <Select
-                                        value={values.bill_discount_type}
+                                        value={values.quote_discount_type}
                                         options={discountTypeOptions}
                                         style={{ width: 95 }}
-                                        onChange={(val) => setFieldValue('bill_discount_type', val)}
+                                        onChange={(val) => setFieldValue('quote_discount_type', val)}
                                     />
                                 </div>
                             </div>
@@ -568,16 +477,6 @@ export default function Index() {
                             <div style={rowStyle}>
                                 <Text>VAT</Text>
                                 <Text strong>{money(totals.vat)}</Text>
-                            </div>
-
-                            <div style={rowStyle}>
-                                <Text>Additional Cost</Text>
-                                <Text strong>{money(totals.additionalCostTotal)}</Text>
-                            </div>
-
-                            <div style={rowStyle}>
-                                <Text>TDS</Text>
-                                <Text strong>{money(totals.tdsAmount)}</Text>
                             </div>
 
                             <div
@@ -599,167 +498,12 @@ export default function Index() {
             },
 
             {
-                name: '_additional_cost_title',
-                label: '',
-                type: 'custom',
-                col: 18,
-                render: () => (
-                    <div style={{ fontSize: 15, fontWeight: 600, marginTop: 12 }}>
-                        Additional Cost
-                    </div>
-                ),
-            },
-            {
-                name: 'additional_cost_product_wise',
-                label: '',
-                type: 'custom',
-                col: 6,
-                render: ({ values, setFieldValue }) => (
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'flex-end',
-                            alignItems: 'center',
-                            gap: 8,
-                            marginTop: 12,
-                        }}
-                    >
-                        <Switch
-                            size="small"
-                            checked={!!values.additional_cost_product_wise}
-                            onChange={(checked) => setFieldValue('additional_cost_product_wise', checked)}
-                        />
-                        <Text>Add product-wise</Text>
-                    </div>
-                ),
-            },
-            {
-                name: 'additional_costs',
-                label: '',
-                type: 'objectArray',
+                name: 'terms_and_conditions',
+                label: 'Terms and Conditions',
+                type: 'textarea',
                 col: 24,
-                headerBg: '#424b59',
-                headerColor: '#ffffff',
-                addButtonLabel: 'Select Products',
-                defaultItem: { ...emptyAdditionalCost },
-                columns: [
-                    {
-                        key: 'cost_term_id',
-                        name: 'cost_term_id',
-                        label: 'Cost Terms',
-                        type: 'fkSelect',
-                        width: '2fr',
-                        placeholder: 'Select Cost Term',
-                        fkUrl: '/api/cost-terms/',
-                        fkSearchParam: 'search',
-                        fkPageSize: 20,
-                        fkValueKey: 'id',
-                        fkLabelKey: 'name',
-                        labelField: 'cost_term_name',
-                        fkLabel: (row) => row?.name || row?.display_name || row?.code || '',
-                    },
-                    {
-                        key: 'product_id',
-                        name: 'product_id',
-                        label: 'Product',
-                        type: 'fkSelect',
-                        width: '3fr',
-                        placeholder: 'All Product / Select Product',
-                        fkUrl: '/api/products/',
-                        fkSearchParam: 'search',
-                        fkPageSize: 20,
-                        fkValueKey: 'id',
-                        fkLabelKey: 'name',
-                        labelField: 'product_name',
-                        fkLabel: (row) =>
-                            row?.name ||
-                            row?.display_name ||
-                            row?.code ||
-                            '',
-                    },
-                    {
-                        key: 'method',
-                        name: 'method',
-                        label: 'Method',
-                        type: 'select',
-                        width: '160px',
-                        options: costMethodOptions,
-                    },
-                    {
-                        key: 'amount_npr',
-                        name: 'amount_npr',
-                        label: 'Amount (NPR)',
-                        type: 'number',
-                        width: '180px',
-                        min: 0,
-                        placeholder: 'Amount',
-                    },
-                ],
-            },
-
-            {
-                name: '_tds_toggle',
-                label: '',
-                type: 'custom',
-                col: 24,
-                render: ({ values, setFieldValue }) => (
-                    <div
-                        style={{
-                            borderTop: '1px solid #e5e7eb',
-                            paddingTop: 14,
-                            marginTop: 10,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 10,
-                        }}
-                    >
-                        <Switch
-                            checked={!!values.tds_applicable}
-                            onChange={(checked) => setFieldValue('tds_applicable', checked)}
-                        />
-                        <Text strong>TDS is applicable to this product</Text>
-                    </div>
-                ),
-            },
-            {
-                name: 'tds_account_id',
-                label: 'TDS Account',
-                type: 'fkSelect',
-                required: true,
-                col: 8,
-                placeholder: 'Select Account',
-                fkUrl: '/api/accounts/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'tds_account_name',
-                condition: (values) => !!values.tds_applicable,
-                fkLabel: (row) =>
-                    row?.name ||
-                    row?.display_name ||
-                    row?.code ||
-                    '',
-            },
-            {
-                name: 'tds_type',
-                label: 'TDS Type',
-                type: 'select',
-                required: true,
-                col: 8,
-                placeholder: 'TDS Type',
-                options: tdsTypeOptions,
-                condition: (values) => !!values.tds_applicable,
-            },
-            {
-                name: 'tds_amount',
-                label: 'TDS Amount',
-                type: 'number',
-                required: true,
-                col: 8,
-                min: 0,
-                placeholder: 'TDS Amount',
-                condition: (values) => !!values.tds_applicable,
+                rows: 6,
+                placeholder: 'Enter quotation terms and conditions',
             },
         ],
         [],
@@ -768,35 +512,35 @@ export default function Index() {
     const columns = useMemo(
         () => [
             {
-                title: 'Bill No',
-                dataIndex: 'bill_number',
-                key: 'bill_number',
+                title: 'Code',
+                dataIndex: 'code',
+                key: 'code',
                 width: 150,
                 backendSort: true,
-                sortField: 'bill_number',
-                render: (value) => <Text strong>{value || '-'}</Text>,
+                sortField: 'code',
+                render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
             },
             {
-                title: 'Supplier',
-                dataIndex: 'supplier_name',
-                key: 'supplier_name',
+                title: 'Customer',
+                dataIndex: 'customer_name',
+                key: 'customer_name',
                 width: 240,
                 backendSort: true,
-                sortField: 'supplier_name',
+                sortField: 'customer_name',
                 render: (_, record) =>
-                    record?.supplier_name ||
-                    record?.supplier?.display_name ||
-                    record?.supplier?.company_name ||
-                    record?.supplier?.name ||
+                    record?.customer_name ||
+                    record?.customer?.display_name ||
+                    record?.customer?.company_name ||
+                    record?.customer?.name ||
                     '-',
             },
             {
-                title: 'Bill Date',
-                dataIndex: 'bill_date',
-                key: 'bill_date',
+                title: 'Date',
+                dataIndex: 'date',
+                key: 'date',
                 width: 130,
                 backendSort: true,
-                sortField: 'bill_date',
+                sortField: 'date',
                 render: (value) => {
                     if (!value) return '-';
                     const parsed = dayjs(value);
@@ -804,12 +548,12 @@ export default function Index() {
                 },
             },
             {
-                title: 'Due Date',
-                dataIndex: 'due_date',
-                key: 'due_date',
-                width: 130,
+                title: 'Expiry Date',
+                dataIndex: 'expiry_date',
+                key: 'expiry_date',
+                width: 140,
                 backendSort: true,
-                sortField: 'due_date',
+                sortField: 'expiry_date',
                 render: (value) => {
                     if (!value) return '-';
                     const parsed = dayjs(value);
@@ -817,28 +561,21 @@ export default function Index() {
                 },
             },
             {
-                title: 'Reference No',
-                dataIndex: 'reference_no',
-                key: 'reference_no',
-                width: 160,
-                render: (value) => value || '-',
-            },
-            {
-                title: 'Warehouse',
-                dataIndex: 'warehouse_name',
-                key: 'warehouse_name',
-                width: 180,
+                title: 'Currency',
+                dataIndex: 'currency_name',
+                key: 'currency_name',
+                width: 140,
                 render: (_, record) =>
-                    record?.warehouse_name ||
-                    record?.warehouse?.name ||
-                    record?.warehouse?.code ||
+                    record?.currency_name ||
+                    record?.currency?.name ||
+                    record?.currency?.code ||
                     '-',
             },
             {
-                title: 'Total',
+                title: 'Grand Total',
                 dataIndex: 'grand_total',
                 key: 'grand_total',
-                width: 140,
+                width: 150,
                 align: 'right',
                 backendSort: true,
                 sortField: 'grand_total',
@@ -856,13 +593,12 @@ export default function Index() {
                 dataIndex: 'status',
                 key: 'status',
                 width: 120,
-                render: (value, record) => {
-                    const status = value || (record?.approved ? 'approved' : 'draft');
-
-                    if (status === 'approved') return <Tag color="green">Approved</Tag>;
-                    if (status === 'cancelled') return <Tag color="red">Cancelled</Tag>;
-                    if (status === 'paid') return <Tag color="blue">Paid</Tag>;
-
+                render: (value) => {
+                    if (value === 'approved') return <Tag color="green">Approved</Tag>;
+                    if (value === 'sent') return <Tag color="blue">Sent</Tag>;
+                    if (value === 'accepted') return <Tag color="green">Accepted</Tag>;
+                    if (value === 'rejected') return <Tag color="red">Rejected</Tag>;
+                    if (value === 'expired') return <Tag color="orange">Expired</Tag>;
                     return <Tag>Draft</Tag>;
                 },
             },
@@ -897,47 +633,33 @@ export default function Index() {
         const totals = calculateTotals(values);
 
         return {
-            supplier_id: values.supplier_id,
-            reference_no: values.reference_no || '',
-            bill_number: values.bill_number || '',
-            bill_date: dayjs(values.bill_date, 'DD-MM-YYYY').isValid()
-                ? dayjs(values.bill_date, 'DD-MM-YYYY').format('YYYY-MM-DD')
-                : values.bill_date,
-            due_date: dayjs(values.due_date, 'DD-MM-YYYY').isValid()
-                ? dayjs(values.due_date, 'DD-MM-YYYY').format('YYYY-MM-DD')
-                : values.due_date,
-            supplier_invoice_reference_no: values.supplier_invoice_reference_no || '',
-            warehouse_id: values.warehouse_id,
+            customer_id: values.customer_id,
+            code: values.code || 'DRAFT',
+
+            date: dayjs(values.date, 'DD-MM-YYYY').isValid()
+                ? dayjs(values.date, 'DD-MM-YYYY').format('YYYY-MM-DD')
+                : values.date,
+
+            expiry_date: dayjs(values.expiry_date, 'DD-MM-YYYY').isValid()
+                ? dayjs(values.expiry_date, 'DD-MM-YYYY').format('YYYY-MM-DD')
+                : values.expiry_date,
+
+            credit_terms: values.credit_terms || null,
             currency_id: values.currency_id || null,
             exchange_rate_to_npr: toNumber(values.exchange_rate_to_npr || 1),
-            is_import: !!values.is_import,
+
             notes: values.notes || '',
+            terms_and_conditions: values.terms_and_conditions || '',
 
-            bill_discount: toNumber(values.bill_discount),
-            bill_discount_type: values.bill_discount_type || 'percent',
-
-            additional_cost_product_wise: !!values.additional_cost_product_wise,
-            additional_costs: (values.additional_costs || [])
-                .filter((row) => row.cost_term_id || toNumber(row.amount_npr) > 0)
-                .map((row) => ({
-                    id: row.id,
-                    cost_term_id: row.cost_term_id,
-                    product_id: values.additional_cost_product_wise ? row.product_id : null,
-                    method: row.method || 'value',
-                    amount_npr: toNumber(row.amount_npr),
-                })),
-
-            tds_applicable: !!values.tds_applicable,
-            tds_account_id: values.tds_applicable ? values.tds_account_id : null,
-            tds_type: values.tds_applicable ? values.tds_type : null,
-            tds_amount: values.tds_applicable ? toNumber(values.tds_amount) : 0,
+            quote_discount: toNumber(values.quote_discount),
+            quote_discount_type: values.quote_discount_type || 'percent',
 
             sub_total: Number(totals.subTotal.toFixed(2)),
-            discount_amount: Number(totals.billDiscount.toFixed(2)),
+            discount_amount: Number(totals.quoteDiscount.toFixed(2)),
+            line_discount_amount: Number(totals.lineDiscount.toFixed(2)),
             non_taxable_total: Number(totals.nonTaxableTotal.toFixed(2)),
             taxable_total: Number(totals.taxableTotal.toFixed(2)),
             vat_amount: Number(totals.vat.toFixed(2)),
-            additional_cost_total: Number(totals.additionalCostTotal.toFixed(2)),
             grand_total: Number(totals.grandTotal.toFixed(2)),
 
             approved: !!values.approved,
@@ -993,11 +715,11 @@ export default function Index() {
                     product.unit?.code ||
                     product.product_unit?.code ||
                     row.unit_code ||
-                    'PC';
+                    'PCS';
 
                 const rate =
-                    product.purchase_rate ??
-                    product.cost_price ??
+                    product.sales_rate ??
+                    product.selling_price ??
                     product.rate ??
                     product.price ??
                     row.rate ??
@@ -1051,15 +773,15 @@ export default function Index() {
         <AuthenticatedLayout
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Purchase Bill
+                    Quotations
                 </h2>
             }
         >
-            <Head title="Purchase Bill" />
+            <Head title="Quotations" />
 
             <ReusableCrud
-                title="New Purchase Bill"
-                apiUrl={api('/api/purchase-bills/')}
+                title="Quotation"
+                apiUrl={api('/api/quotations/')}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}
@@ -1083,19 +805,25 @@ export default function Index() {
                     {
                         key: 'draft',
                         label: 'Draft',
-                        title: 'Purchase Bill',
-                        params: { approved: false },
+                        title: 'Quotations',
+                        params: { status: 'draft' },
+                    },
+                    {
+                        key: 'sent',
+                        label: 'Sent',
+                        title: 'Quotations',
+                        params: { status: 'sent' },
                     },
                     {
                         key: 'approved',
                         label: 'Approved',
-                        title: 'Purchase Bill',
+                        title: 'Quotations',
                         params: { approved: true },
                     },
                     {
                         key: 'all',
                         label: 'All',
-                        title: 'Purchase Bill',
+                        title: 'Quotations',
                         params: {},
                     },
                 ]}

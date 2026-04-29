@@ -2,6 +2,7 @@
 use Inertia\Inertia;
 
 Route::prefix('payment-in')->name('payment-in.')->group(function () {
+    Route::get('/quotations', fn () => Inertia::render('App/PaymentIn/Quotations/Index'))->name('quotations.index');
     Route::get('/bills', fn () => Inertia::render('App/PaymentIn/Bills/Index'))->name('bills.index');
     Route::get('/invoices', fn () => Inertia::render('App/PaymentIn/Invoices/Index'))->name('invoices.index');
     Route::get('/payments', fn () => Inertia::render('App/PaymentIn/Payments/Index'))->name('payments.index');

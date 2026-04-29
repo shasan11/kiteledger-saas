@@ -18,22 +18,29 @@ class BankAccountController extends Controller
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(BankAccount::query())
-            ->allowedIncludes('branch', 'currency', 'account')
+            ->allowedIncludes(
+                'branch',
+                'currency',
+                'account'
+            )
             ->allowedFilters(
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where(function (Builder $query) use ($value) {
                         $query->where('display_name', 'like', "%{$value}%")
                             ->orWhere('code', 'like', "%{$value}%")
+                            ->orWhere('description', 'like', "%{$value}%")
                             ->orWhere('bank_name', 'like', "%{$value}%")
                             ->orWhere('account_name', 'like', "%{$value}%")
-                            ->orWhere('account_number', 'like', "%{$value}%");
+                            ->orWhere('account_number', 'like', "%{$value}%")
+                            ->orWhere('account_type', 'like', "%{$value}%")
+                            ->orWhere('swift_code', 'like', "%{$value}%");
                     });
                 }),
                 AllowedFilter::exact('active'),
                 AllowedFilter::exact('type'),
                 AllowedFilter::exact('branch_id'),
                 AllowedFilter::exact('currency_id'),
-                AllowedFilter::exact('account_id'),
+                AllowedFilter::exact('account_id')
             )
             ->allowedSorts(
                 'id',
@@ -42,7 +49,7 @@ class BankAccountController extends Controller
                 'type',
                 'opening_balance',
                 'created_at',
-                'updated_at',
+                'updated_at'
             )
             ->defaultSort('-created_at')
             ->paginate($perPage)
@@ -55,7 +62,7 @@ class BankAccountController extends Controller
     {
         $data = $this->validateBankAccount($request);
 
-        $record = BankAccount::create($data);
+        $record = BankAccount::query()->create($data);
 
         return new BankAccountResource(
             $record->fresh(['branch', 'currency', 'account'])
@@ -109,16 +116,15 @@ class BankAccountController extends Controller
             'records.*.account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
             'records.*.opening_balance' => ['nullable', 'numeric'],
             'records.*.active' => ['nullable', 'boolean'],
+            'records.*.is_system_generated' => ['nullable', 'boolean'],
             'records.*.user_add_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
         $records = DB::transaction(function () use ($data) {
             return collect($data['records'])->map(function (array $record) {
-                return BankAccount::create($record)->fresh([
-                    'branch',
-                    'currency',
-                    'account',
-                ]);
+                return BankAccount::query()
+                    ->create($record)
+                    ->fresh(['branch', 'currency', 'account']);
             });
         });
 
@@ -146,22 +152,19 @@ class BankAccountController extends Controller
             'records.*.account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'records.*.opening_balance' => ['sometimes', 'nullable', 'numeric'],
             'records.*.active' => ['sometimes', 'nullable', 'boolean'],
+            'records.*.is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'records.*.user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ]);
 
         $records = DB::transaction(function () use ($data) {
             return collect($data['records'])->map(function (array $record) {
-                $model = BankAccount::findOrFail($record['id']);
+                $model = BankAccount::query()->findOrFail($record['id']);
 
                 unset($record['id']);
 
                 $model->update($record);
 
-                return $model->fresh([
-                    'branch',
-                    'currency',
-                    'account',
-                ]);
+                return $model->fresh(['branch', 'currency', 'account']);
             });
         });
 
@@ -206,6 +209,7 @@ class BankAccountController extends Controller
             'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'opening_balance' => ['sometimes', 'nullable', 'numeric'],
             'active' => ['sometimes', 'nullable', 'boolean'],
+            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ]);
     }

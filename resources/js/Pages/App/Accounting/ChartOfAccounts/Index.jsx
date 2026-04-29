@@ -6,9 +6,9 @@ import ReusableCrud from '@/Components/ResuableCrud';
 export default function Index({ branches = [], accounts = [], currencies = [] }) {
     const columns = useMemo(
         () => [
-            { title: 'Code', dataIndex: 'code', key: 'code', render: (value) => value || '-' },
-            { title: 'Account Name', dataIndex: 'name', key: 'name' },
-            { title: 'Description', dataIndex: 'description', key: 'description', render: (value) => value || '-' },
+            { title: 'Code', dataIndex: 'code', key: 'code', render: (value) => value || '-',width: 150 },
+            { title: 'Account Name', dataIndex: 'name', key: 'name', width: 200 },
+            { title: 'Description', dataIndex: 'description', key: 'description', render: (value) => value || '-', width: 300 },
         ],
         []
     );

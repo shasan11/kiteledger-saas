@@ -41,7 +41,7 @@ export default function ContactGroupCrud() {
         type: "text",
         placeholder: "Enter contact group name",
         required: true,
-        col: 12,
+        col: 24,
       },
       {
         name: "parent",
@@ -52,7 +52,7 @@ export default function ContactGroupCrud() {
         fkValueKey: "id",
         fkLabelKey: "name",
         allowClear: true,
-        col: 12,
+        col: 24,
       },
       {
         name: "description",
@@ -62,12 +62,7 @@ export default function ContactGroupCrud() {
         rows: 3,
         col: 24,
       },
-      {
-        name: "active",
-        label: "Active",
-        type: "switch",
-        col: 24,
-      },
+     
     ],
     []
   );
@@ -127,7 +122,7 @@ export default function ContactGroupCrud() {
       columns={columns}
       validationSchema={validationSchema}
       crudInitialValues={initialValues}
-      form_ui="drawer"
+      form_ui="modal"
       drawerWidth={720}
       modalWidth={720}
       showSearch={true}

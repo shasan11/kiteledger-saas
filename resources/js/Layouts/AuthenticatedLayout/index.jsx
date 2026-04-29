@@ -140,6 +140,15 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <CreditCardOutlined />,
                 label: 'Payment In',
                 children: [
+                     {
+                        key: 'pi-quotations',
+                        label: 'Quotations',
+                        onClick: () =>
+                            visit(
+                                'payment-in.quotations.index',
+                                '/payment-in/quotations',
+                            ),
+                    },
                     {
                         key: 'pi-bills',
                         label: 'Bills',
@@ -762,8 +771,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     {header && (
                         <div
                             style={{
-                                marginBottom: 14,
-                                padding: '9px 18px',
+                                 padding: '9px 18px',
                                 background: colorBgContainer,
                                
                                 border: `1px solid ${colorBorderSecondary}`,

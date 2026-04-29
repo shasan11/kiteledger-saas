@@ -1,36 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&family=Nunito+Sans:ital,opsz,wght@0,6..12,200..1000;1,6..12,200..1000&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Libre+Barcode+128&family=Libre+Barcode+128+Text&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* =========================
+   BASE
+========================= */
+
+:root {
+  --app-body-bg: #f5f7fb;
+  --app-body-text: #111827;
+}
+
+:root[data-theme="dark"] {
+  --app-body-bg: #060d19;
+  --app-body-text: #e5e7eb;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  font-family: "Manrope", sans-serif !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: var(--app-body-bg);
+  color: var(--app-body-text);
+}
+
+a {
+  text-decoration: none !important;
+}
+
 .app-sidebar-scroll {
-    height: calc(100vh - 116px);
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: none;
+  height: calc(100vh - 116px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
 
 .app-sidebar-scroll::-webkit-scrollbar {
-    width: 0;
+  width: 0;
 }
 
 .app-sidebar:hover .app-sidebar-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: #c7c7c7 transparent;
+  scrollbar-width: thin;
+  scrollbar-color: #c7c7c7 transparent;
 }
 
 .app-sidebar:hover .app-sidebar-scroll::-webkit-scrollbar {
-    width: 5px;
+  width: 5px;
 }
 
 .app-sidebar:hover .app-sidebar-scroll::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
 
 .app-sidebar:hover .app-sidebar-scroll::-webkit-scrollbar-thumb {
-    background: #c7c7c7;
-    border-radius: 999px;
+  background: #c7c7c7;
+  border-radius: 999px;
 }
 
 .app-sidebar:hover .app-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+  background: #9ca3af;
 }
