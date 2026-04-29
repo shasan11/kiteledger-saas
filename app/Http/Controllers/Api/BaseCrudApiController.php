@@ -762,8 +762,12 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
-        if (empty($data[$this->branchColumn]) && $this->autoFillBranchOnCreate) {
-            $defaultBranchId = $this->defaultWriteBranchId($request);
+        if (array_key_exists($this->branchColumn, $data)) {
+            unset($data[$this->branchColumn]);
+        }
+
+        if ($this->autoFillBranchOnCreate) {
+            $defaultBranchId = $this->defaultWriteBranchId($request, false);
 
             if ($defaultBranchId) {
                 $data[$this->branchColumn] = $defaultBranchId;
@@ -785,13 +789,8 @@ abstract class BaseCrudApiController extends Controller
 
         $this->assertRecordBranchAccess($request, $record);
 
-        if ($this->preventBranchChangeOnUpdate && array_key_exists($this->branchColumn, $data)) {
-            $incoming = (string) $data[$this->branchColumn];
-            $existing = (string) $record->{$this->branchColumn};
-
-            if ($incoming !== $existing) {
-                abort(403, 'Changing branch is not allowed.');
-            }
+        if (array_key_exists($this->branchColumn, $data)) {
+            unset($data[$this->branchColumn]);
         }
 
         if (!empty($data[$this->branchColumn])) {
@@ -852,9 +851,9 @@ abstract class BaseCrudApiController extends Controller
         return $branchId ? (string) $branchId : null;
     }
 
-    protected function defaultWriteBranchId(Request $request): ?string
+    protected function defaultWriteBranchId(Request $request, bool $allowRequestedBranch = true): ?string
     {
-        $requested = $this->requestedBranchId($request);
+        $requested = $allowRequestedBranch ? $this->requestedBranchId($request) : null;
 
         if ($requested) {
             return $requested;
