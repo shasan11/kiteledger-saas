@@ -2,196 +2,162 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Http\Resources\ProductResource;
 use App\Models\Product;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\ProductVariant;
+use App\Models\ProductVariantItem;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Spatie\QueryBuilder\AllowedFilter;
-use Spatie\QueryBuilder\QueryBuilder;
 
-class ProductController extends Controller
+class ProductController extends BaseCrudApiController
 {
-    public function index(Request $request)
-    {
-        $perPage = min($request->integer('per_page', 15), 100);
+    protected string $modelClass = Product::class;
+    protected ?string $permissionPrefix = null;
+    protected bool $usePolicyAuthorization = false;
+    protected bool $branchScoped = true;
+    protected bool $autoFillBranchOnCreate = true;
+    protected bool $preventBranchChangeOnUpdate = true;
 
-        $records = QueryBuilder::for(Product::class)
-            ->allowedIncludes('branch', 'productCategory', 'productUnit', 'warehouse')
-            ->allowedFilters(
-                AllowedFilter::callback('q', function (Builder $query, mixed $value) {
-                    $query->where(function (Builder $query) use ($value) {
-                        $query->where('name', 'like', "%{$value}%")
-                            ->orWhere('code', 'like', "%{$value}%")
-                            ->orWhere('barcode', 'like', "%{$value}%")
-                            ->orWhere('sku', 'like', "%{$value}%")
-                            ->orWhere('description', 'like', "%{$value}%");
-                    });
-                }),
-                AllowedFilter::exact('active'),
-                AllowedFilter::exact('branch_id'),
-                AllowedFilter::exact('product_category_id'),
-                AllowedFilter::exact('product_unit_id'),
-                AllowedFilter::exact('warehouse_id')
-            )
-            ->allowedSorts(
-                'id',
-                'name',
-                'code',
-                'sku',
-                'barcode',
-                'purchase_price',
-                'sales_price',
-                'opening_stock',
-                'reorder_level',
-                'created_at',
-                'updated_at'
-            )
-            ->defaultSort('-created_at')
-            ->paginate($perPage)
-            ->appends($request->query());
+    protected array $relations = ['branch', 'productCategory', 'productUnit', 'taxClass', 'productVariants', 'productVariants.productVariantItems'];
+    protected array $relationDetails = ['branch' => 'branch_id', 'productCategory' => 'product_category_id', 'productUnit' => 'product_unit_id', 'taxClass' => 'tax_class_id'];
+    protected array $searchable = ['name', 'code', 'barcode', 'description'];
+    protected array $filterable = ['branch_id', 'product_category_id', 'product_unit_id', 'tax_class_id', 'active'];
+    protected array $booleanFilters = ['active', 'track_inventory'];
+    protected array $sortable = ['id', 'name', 'code', 'barcode', 'created_at', 'updated_at'];
+    protected string $defaultSort = '-created_at';
 
-        return ProductResource::collection($records);
-    }
+    protected array $storeRules = [
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        'product_category_id' => ['nullable', 'uuid', 'exists:product_categories,id'],
+        'name' => ['required', 'string', 'max:180'],
+        'code' => ['nullable', 'string', 'max:60'],
+        'barcode' => ['nullable', 'string', 'max:80'],
+        'description' => ['nullable', 'string'],
+        'product_unit_id' => ['nullable', 'uuid', 'exists:product_units,id'],
+        'tax_class_id' => ['nullable', 'uuid', 'exists:tax_classes,id'],
+        'track_inventory' => ['nullable', 'boolean'],
+        'active' => ['nullable', 'boolean'],
+        'is_system_generated' => ['nullable', 'boolean'],
+        'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
+        'variants' => ['nullable', 'array'],
+        'deleted_variant_ids' => ['nullable', 'array'],
+        'deleted_variant_ids.*' => ['uuid', 'exists:product_variants,id'],
+        'deleted_variant_item_ids' => ['nullable', 'array'],
+        'deleted_variant_item_ids.*' => ['uuid', 'exists:product_variant_items,id'],
+    ];
 
     public function store(Request $request)
     {
-        $data = $this->validateProduct($request);
+        $this->checkAccess($request, 'store');
+        $input = $this->prepareIncomingPayload($request->all());
+        $input = $this->applyBranchToCreatePayload($input, $request);
+        $validated = $this->validateCompat($input, $this->rulesForStore($request));
 
-        $record = Product::create($data);
+        $record = DB::transaction(function () use ($validated) {
+            $variants = $validated['variants'] ?? [];
+            unset($validated['variants'], $validated['deleted_variant_ids'], $validated['deleted_variant_item_ids']);
+            $product = Product::create($validated);
+            $this->syncVariants($product, $variants, [], []);
 
-        return new ProductResource($record->fresh()->load(['branch', 'productCategory', 'productUnit', 'warehouse']));
-    }
-
-    public function show(Product $product)
-    {
-        return new ProductResource($product->load(['branch', 'productCategory', 'productUnit', 'warehouse']));
-    }
-
-    public function update(Request $request, Product $product)
-    {
-        $data = $this->validateProduct($request, true);
-
-        $product->update($data);
-
-        return new ProductResource($product->fresh()->load(['branch', 'productCategory', 'productUnit', 'warehouse']));
-    }
-
-    public function destroy(Product $product)
-    {
-        DB::transaction(function () use ($product) {
-            $product->delete();
+            return $product->fresh($this->relations);
         });
 
-        return response()->json([
-            'message' => 'Deleted successfully.',
-        ]);
+        return response()->json($this->serializeRecord($record), 201);
     }
 
-    public function bulkStore(Request $request)
+    public function update(Request $request, mixed $id)
     {
-        $data = $request->validate([
-            'records' => ['required', 'array', 'min:1'],
-            'records.*.branch_id' => ['required', 'uuid', 'exists:branches,id'],
-            'records.*.product_category_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_categories,id'],
-            'records.*.product_unit_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_units,id'],
-            'records.*.warehouse_id' => ['sometimes', 'nullable', 'uuid', 'exists:warehouses,id'],
-            'records.*.name' => ['required', 'string', 'max:180'],
-            'records.*.code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'records.*.barcode' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'records.*.sku' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'records.*.description' => ['sometimes', 'nullable', 'string'],
-            'records.*.purchase_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.sales_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.opening_stock' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.reorder_level' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.active' => ['sometimes', 'nullable', 'boolean'],
-            'records.*.user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
+        $record = $this->findRecord($id);
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
 
-        $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(function (array $record) {
-                return Product::create($record)->fresh()->load(['branch', 'productCategory', 'productUnit', 'warehouse']);
-            });
+        $input = $this->prepareIncomingPayload($request->all());
+        $input = $this->applyBranchToUpdatePayload($input, $request, $record);
+        $validated = $this->validateCompat($input, $this->rulesForUpdate($request, $record));
+
+        $record = DB::transaction(function () use ($record, $validated) {
+            $variants = $validated['variants'] ?? [];
+            $deletedVariantIds = $validated['deleted_variant_ids'] ?? [];
+            $deletedVariantItemIds = $validated['deleted_variant_item_ids'] ?? [];
+            unset($validated['variants'], $validated['deleted_variant_ids'], $validated['deleted_variant_item_ids']);
+
+            $record->update($validated);
+            $this->syncVariants($record, $variants, $deletedVariantIds, $deletedVariantItemIds);
+
+            return $record->fresh($this->relations);
         });
 
-        return ProductResource::collection($records);
+        return response()->json($this->serializeRecord($record));
     }
 
-    public function bulkUpdate(Request $request)
+    protected function updateRules(Request $request, Model $record): array
     {
-        $data = $request->validate([
-            'records' => ['required', 'array', 'min:1'],
-            'records.*.id' => ['required', 'uuid', 'exists:products,id'],
-            'records.*.branch_id' => ['sometimes', 'uuid', 'exists:branches,id'],
-            'records.*.product_category_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_categories,id'],
-            'records.*.product_unit_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_units,id'],
-            'records.*.warehouse_id' => ['sometimes', 'nullable', 'uuid', 'exists:warehouses,id'],
-            'records.*.name' => ['sometimes', 'string', 'max:180'],
-            'records.*.code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'records.*.barcode' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'records.*.sku' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'records.*.description' => ['sometimes', 'nullable', 'string'],
-            'records.*.purchase_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.sales_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.opening_stock' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.reorder_level' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'records.*.active' => ['sometimes', 'nullable', 'boolean'],
-            'records.*.user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
-
-        $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(function (array $record) {
-                $model = Product::findOrFail($record['id']);
-
-                unset($record['id']);
-
-                $model->update($record);
-
-                return $model->fresh()->load(['branch', 'productCategory', 'productUnit', 'warehouse']);
-            });
-        });
-
-        return ProductResource::collection($records);
-    }
-
-    public function bulkDestroy(Request $request)
-    {
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['required', 'uuid', 'exists:products,id'],
-        ]);
-
-        DB::transaction(function () use ($data) {
-            Product::query()->whereIn('id', $data['ids'])->delete();
-        });
-
-        return response()->json([
-            'message' => 'Deleted successfully.',
-        ]);
-    }
-
-    private function validateProduct(Request $request, bool $partial = false): array
-    {
-        $required = $partial ? 'sometimes' : 'required';
-
-        return $request->validate([
-            'branch_id' => [$required, 'uuid', 'exists:branches,id'],
+        return [
+            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'product_category_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_categories,id'],
-            'product_unit_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_units,id'],
-            'warehouse_id' => ['sometimes', 'nullable', 'uuid', 'exists:warehouses,id'],
-            'name' => [$required, 'string', 'max:180'],
-            'code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'barcode' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'sku' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'name' => ['sometimes', 'required', 'string', 'max:180'],
+            'code' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'barcode' => ['sometimes', 'nullable', 'string', 'max:80'],
             'description' => ['sometimes', 'nullable', 'string'],
-            'purchase_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'sales_price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'opening_stock' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'reorder_level' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'product_unit_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_units,id'],
+            'tax_class_id' => ['sometimes', 'nullable', 'uuid', 'exists:tax_classes,id'],
+            'track_inventory' => ['sometimes', 'nullable', 'boolean'],
             'active' => ['sometimes', 'nullable', 'boolean'],
+            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-        ]);
+            'variants' => ['sometimes', 'array'],
+            'deleted_variant_ids' => ['sometimes', 'array'],
+            'deleted_variant_ids.*' => ['uuid', 'exists:product_variants,id'],
+            'deleted_variant_item_ids' => ['sometimes', 'array'],
+            'deleted_variant_item_ids.*' => ['uuid', 'exists:product_variant_items,id'],
+        ];
+    }
+
+    private function syncVariants(Product $product, array $variants, array $deletedVariantIds, array $deletedVariantItemIds): void
+    {
+        if ($deletedVariantItemIds) {
+            ProductVariantItem::query()->whereIn('id', $deletedVariantItemIds)->delete();
+        }
+
+        if ($deletedVariantIds) {
+            ProductVariant::query()->where('product_id', $product->id)->whereIn('id', $deletedVariantIds)->delete();
+        }
+
+        foreach ($variants as $variantRow) {
+            $variantData = [
+                'name' => $variantRow['name'] ?? null,
+                'sku' => $variantRow['sku'] ?? null,
+                'product_unit_id' => $variantRow['product_unit_id'] ?? null,
+                'purchase_price' => $variantRow['purchase_price'] ?? 0,
+                'selling_price' => $variantRow['selling_price'] ?? 0,
+                'active' => $variantRow['active'] ?? true,
+                'is_system_generated' => $variantRow['is_system_generated'] ?? false,
+                'user_add_id' => $variantRow['user_add_id'] ?? null,
+                'branch_id' => $product->branch_id,
+            ];
+
+            $variant = !empty($variantRow['id'])
+                ? ProductVariant::query()->where('product_id', $product->id)->findOrFail($variantRow['id'])
+                : new ProductVariant(['product_id' => $product->id]);
+
+            $variant->fill($variantData);
+            $variant->product_id = $product->id;
+            $variant->save();
+
+            foreach (($variantRow['items'] ?? []) as $itemRow) {
+                $itemData = ['variant_line_id' => $itemRow['variant_line_id'] ?? null];
+                if (empty($itemData['variant_line_id'])) {
+                    continue;
+                }
+
+                $item = !empty($itemRow['id'])
+                    ? ProductVariantItem::query()->where('product_variant_id', $variant->id)->findOrFail($itemRow['id'])
+                    : new ProductVariantItem(['product_variant_id' => $variant->id]);
+
+                $item->fill($itemData);
+                $item->product_variant_id = $variant->id;
+                $item->save();
+            }
+        }
     }
 }
