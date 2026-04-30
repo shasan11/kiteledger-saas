@@ -7,8 +7,16 @@ use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ContactGroupController;
+use App\Http\Controllers\Api\CustomerPaymentController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\ProformaInvoiceController;
+use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
+use App\Http\Controllers\Api\InventoryAdjustmentController;
+use App\Http\Controllers\Api\QuotationController;
+use App\Http\Controllers\Api\SalesOrderController;
+use App\Http\Controllers\Api\WarehouseTransferController;
 use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
@@ -220,3 +228,43 @@ Route::apiResource('warehouses', WarehouseController::class)
     ->parameters([
         'warehouses' => 'warehouse',
     ]);
+
+Route::post('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkStore']);
+Route::patch('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkUpdate']);
+Route::delete('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkDestroy']);
+Route::apiResource('warehouse-transfers', WarehouseTransferController::class);
+
+Route::post('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkStore']);
+Route::patch('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpdate']);
+Route::delete('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
+Route::apiResource('inventory-adjustments', InventoryAdjustmentController::class);
+
+Route::post('quotations/bulk', [QuotationController::class, 'bulkStore']);
+Route::patch('quotations/bulk', [QuotationController::class, 'bulkUpdate']);
+Route::delete('quotations/bulk', [QuotationController::class, 'bulkDestroy']);
+Route::apiResource('quotations', QuotationController::class);
+
+Route::post('sales-orders/bulk', [SalesOrderController::class, 'bulkStore']);
+Route::patch('sales-orders/bulk', [SalesOrderController::class, 'bulkUpdate']);
+Route::delete('sales-orders/bulk', [SalesOrderController::class, 'bulkDestroy']);
+Route::apiResource('sales-orders', SalesOrderController::class);
+
+Route::post('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkStore']);
+Route::patch('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkUpdate']);
+Route::delete('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkDestroy']);
+Route::apiResource('proforma-invoices', ProformaInvoiceController::class);
+
+Route::post('invoices/bulk', [InvoiceController::class, 'bulkStore']);
+Route::patch('invoices/bulk', [InvoiceController::class, 'bulkUpdate']);
+Route::delete('invoices/bulk', [InvoiceController::class, 'bulkDestroy']);
+Route::apiResource('invoices', InvoiceController::class);
+
+Route::post('customer-payments/bulk', [CustomerPaymentController::class, 'bulkStore']);
+Route::patch('customer-payments/bulk', [CustomerPaymentController::class, 'bulkUpdate']);
+Route::delete('customer-payments/bulk', [CustomerPaymentController::class, 'bulkDestroy']);
+Route::apiResource('customer-payments', CustomerPaymentController::class);
+
+Route::post('sales-returns/bulk', [SalesReturnController::class, 'bulkStore']);
+Route::patch('sales-returns/bulk', [SalesReturnController::class, 'bulkUpdate']);
+Route::delete('sales-returns/bulk', [SalesReturnController::class, 'bulkDestroy']);
+Route::apiResource('sales-returns', SalesReturnController::class);
