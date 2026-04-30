@@ -7,6 +7,10 @@ use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ContactGroupController;
+use App\Http\Controllers\Api\CustomerPaymentController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\ProformaInvoiceController;
+use App\Http\Controllers\Api\SalesReturnController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
 use App\Http\Controllers\Api\InventoryAdjustmentController;
@@ -244,3 +248,23 @@ Route::post('sales-orders/bulk', [SalesOrderController::class, 'bulkStore']);
 Route::patch('sales-orders/bulk', [SalesOrderController::class, 'bulkUpdate']);
 Route::delete('sales-orders/bulk', [SalesOrderController::class, 'bulkDestroy']);
 Route::apiResource('sales-orders', SalesOrderController::class);
+
+Route::post('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkStore']);
+Route::patch('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkUpdate']);
+Route::delete('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkDestroy']);
+Route::apiResource('proforma-invoices', ProformaInvoiceController::class);
+
+Route::post('invoices/bulk', [InvoiceController::class, 'bulkStore']);
+Route::patch('invoices/bulk', [InvoiceController::class, 'bulkUpdate']);
+Route::delete('invoices/bulk', [InvoiceController::class, 'bulkDestroy']);
+Route::apiResource('invoices', InvoiceController::class);
+
+Route::post('customer-payments/bulk', [CustomerPaymentController::class, 'bulkStore']);
+Route::patch('customer-payments/bulk', [CustomerPaymentController::class, 'bulkUpdate']);
+Route::delete('customer-payments/bulk', [CustomerPaymentController::class, 'bulkDestroy']);
+Route::apiResource('customer-payments', CustomerPaymentController::class);
+
+Route::post('sales-returns/bulk', [SalesReturnController::class, 'bulkStore']);
+Route::patch('sales-returns/bulk', [SalesReturnController::class, 'bulkUpdate']);
+Route::delete('sales-returns/bulk', [SalesReturnController::class, 'bulkDestroy']);
+Route::apiResource('sales-returns', SalesReturnController::class);
