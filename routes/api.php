@@ -15,6 +15,8 @@ use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\ProformaInvoiceController;
 use App\Http\Controllers\Api\SalesReturnController;
+use App\Http\Controllers\Api\SupplierPaymentController;
+use App\Http\Controllers\Api\VariantController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
 use App\Http\Controllers\Api\InventoryAdjustmentController;
@@ -292,3 +294,13 @@ Route::post('debit-notes/bulk', [DebitNoteController::class, 'bulkStore']);
 Route::patch('debit-notes/bulk', [DebitNoteController::class, 'bulkUpdate']);
 Route::delete('debit-notes/bulk', [DebitNoteController::class, 'bulkDestroy']);
 Route::apiResource('debit-notes', DebitNoteController::class);
+
+Route::post('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkStore']);
+Route::patch('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkUpdate']);
+Route::delete('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkDestroy']);
+Route::apiResource('supplier-payments', SupplierPaymentController::class);
+
+Route::post('variants/bulk', [VariantController::class, 'bulkStore']);
+Route::patch('variants/bulk', [VariantController::class, 'bulkUpdate']);
+Route::delete('variants/bulk', [VariantController::class, 'bulkDestroy']);
+Route::apiResource('variants', VariantController::class);
