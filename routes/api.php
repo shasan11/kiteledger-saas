@@ -8,6 +8,10 @@ use App\Http\Controllers\Api\ChequeRegisterController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ContactGroupController;
 use App\Http\Controllers\Api\CustomerPaymentController;
+use App\Http\Controllers\Api\DebitNoteController;
+use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\PurchaseBillController;
+use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\ProformaInvoiceController;
 use App\Http\Controllers\Api\SalesReturnController;
@@ -268,3 +272,23 @@ Route::post('sales-returns/bulk', [SalesReturnController::class, 'bulkStore']);
 Route::patch('sales-returns/bulk', [SalesReturnController::class, 'bulkUpdate']);
 Route::delete('sales-returns/bulk', [SalesReturnController::class, 'bulkDestroy']);
 Route::apiResource('sales-returns', SalesReturnController::class);
+
+Route::post('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkStore']);
+Route::patch('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkUpdate']);
+Route::delete('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkDestroy']);
+Route::apiResource('purchase-orders', PurchaseOrderController::class);
+
+Route::post('purchase-bills/bulk', [PurchaseBillController::class, 'bulkStore']);
+Route::patch('purchase-bills/bulk', [PurchaseBillController::class, 'bulkUpdate']);
+Route::delete('purchase-bills/bulk', [PurchaseBillController::class, 'bulkDestroy']);
+Route::apiResource('purchase-bills', PurchaseBillController::class);
+
+Route::post('expenses/bulk', [ExpenseController::class, 'bulkStore']);
+Route::patch('expenses/bulk', [ExpenseController::class, 'bulkUpdate']);
+Route::delete('expenses/bulk', [ExpenseController::class, 'bulkDestroy']);
+Route::apiResource('expenses', ExpenseController::class);
+
+Route::post('debit-notes/bulk', [DebitNoteController::class, 'bulkStore']);
+Route::patch('debit-notes/bulk', [DebitNoteController::class, 'bulkUpdate']);
+Route::delete('debit-notes/bulk', [DebitNoteController::class, 'bulkDestroy']);
+Route::apiResource('debit-notes', DebitNoteController::class);

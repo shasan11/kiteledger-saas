@@ -1,0 +1,98 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Models\Expense;
+use App\Models\ExpenseLine;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
+
+class ExpenseController extends BaseCrudApiController
+{
+    protected string $modelClass = Expense::class;
+    protected ?string $permissionPrefix = null;
+    protected bool $usePolicyAuthorization = false;
+    protected bool $branchScoped = true;
+    protected bool $autoFillBranchOnCreate = true;
+    protected bool $preventBranchChangeOnUpdate = true;
+
+    protected array $relations = ['branch', 'contact', 'currency', 'tdsChargesAccount'];
+    protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'currency' => 'currency_id', 'tdsChargesAccount' => 'tds_charges_account_id'];
+    protected array $searchable = ['expense_no', 'reference', 'notes', 'status'];
+    protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'status'];
+    protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $dateRangeFilters = ['expense_date' => ['from' => 'date_from', 'to' => 'date_to']];
+    protected array $sortable = ['id', 'expense_no', 'expense_date', 'status', 'total', 'created_at'];
+    protected string $defaultSort = '-created_at';
+
+    protected array $nested = [
+        'items' => [
+            'relation' => 'expenseLines',
+            'model' => ExpenseLine::class,
+            'foreign_key' => 'expense_id',
+            'delete_key' => 'deleted_item_ids',
+            'required' => true,
+            'min' => 1,
+            'replace_on_update' => false,
+            'relations' => ['chartOfAccount', 'taxRate'],
+            'relation_details' => ['chartOfAccount' => 'chart_of_account_id', 'taxRate' => 'tax_rate_id'],
+            'rules' => [
+                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'description' => ['nullable', 'string', 'max:200'],
+                'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'amount' => ['required', 'numeric', 'min:0'],
+                'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'line_total' => ['nullable', 'numeric', 'min:0'],
+            ],
+            'update_rules' => [
+                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'description' => ['nullable', 'string', 'max:200'],
+                'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'amount' => ['required', 'numeric', 'min:0'],
+                'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'line_total' => ['nullable', 'numeric', 'min:0'],
+            ],
+        ],
+    ];
+
+    protected array $storeRules = [
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        'expense_no' => ['nullable', 'string', 'max:40', 'unique:expenses,expense_no'],
+        'reference' => ['nullable', 'string', 'max:120'],
+        'expense_date' => ['required', 'date'],
+        'due_date' => ['nullable', 'date'],
+        'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
+        'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
+        'notes' => ['nullable', 'string'],
+        'status' => ['nullable', 'in:draft,posted,cancelled'],
+        'tds_charges_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
+        'tds_type' => ['nullable', 'string', 'max:20'],
+        'tds_charges' => ['nullable', 'numeric', 'min:0'],
+    ];
+
+    protected function updateRules(Request $request, Model $record): array
+    {
+        return [
+            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            'expense_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:expenses,expense_no,' . $record->id . ',id'],
+            'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'expense_date' => ['sometimes', 'required', 'date'],
+            'due_date' => ['sometimes', 'nullable', 'date'],
+            'contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
+            'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
+            'notes' => ['sometimes', 'nullable', 'string'],
+            'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
+            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],
+            'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+        ];
+    }
+
+    protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
+    {
+        $total = (float) $record->expenseLines()->sum('line_total');
+        $record->forceFill(['total' => $total])->save();
+
+        return $record;
+    }
+}
