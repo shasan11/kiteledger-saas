@@ -1,120 +1,72 @@
-import React, { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head } from '@inertiajs/react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ResuableCrud';
+import { Head } from '@inertiajs/react';
+import * as Yup from 'yup';
+import { Tag } from 'antd';
+import { AppstoreOutlined } from '@ant-design/icons';
 
-export default function Index({ branches = [], currencies = [], accounts = [] }) {
-    const columns = useMemo(
-        () => [
-            {
-                title: 'Type',
-                dataIndex: 'type',
-                render: (value) => (value === 'cash' ? 'Cash' : 'Bank'),
-            },
-            { title: 'Display Name', dataIndex: 'display_name' },
-            { title: 'Code', dataIndex: 'code', render: (value) => value || '-' },
-            { title: 'Bank Name', dataIndex: 'bank_name', render: (value) => value || '-' },
-            { title: 'Account Number', dataIndex: 'account_number', render: (value) => value || '-' },
-        ],
-        []
-    );
+export default function BankAccounts(props) {
+  const columns = [
+    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+    {
+      title: 'Status',
+      dataIndex: 'active',
+      key: 'active',
+      sorter: true,
+      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+    },
+  ];
 
-    const fields = useMemo(
-        () => [
-            {
-                name: 'branch_id',
-                label: 'Branch',
-                type: 'select',
-                required: true,
-                options: branches.map((branch) => ({ label: branch.name, value: branch.id })),
-            },
-            {
-                name: 'type',
-                label: 'Type',
-                type: 'radio',
-                required: true,
-                col: 24,
-                options: [
-                    { label: 'Bank', value: 'bank' },
-                    { label: 'Cash', value: 'cash' },
-                ],
-            },
-            {
-                name: 'display_name',
-                label: 'Display Name',
-                placeholder: 'e.g. Nabil Bank / Petty Cash',
-                required: true,
-                col: 24,
-            },
-            {
-                name: 'currency_id',
-                label: 'Currency',
-                type: 'select',
-                required: true,
-                col: 24,
-                options: currencies.map((currency) => ({
-                    label: currency.code ? `${currency.code} - ${currency.name}` : currency.name,
-                    value: currency.id,
-                })),
-            },
-            {
-                type: 'group',
-                label: 'Bank Details',
-                defaultOpen: true,
-                accordion: false,
-                condition: (values) => values?.type === 'bank',
-                children: [
-                    { name: 'code', label: 'Code', placeholder: 'Enter code', col: 12, required: true },
-                    { name: 'bank_name', label: 'Bank Name', placeholder: 'Enter bank name', col: 12 },
-                    { name: 'account_name', label: 'Account Name', placeholder: 'Enter account holder name', col: 12 },
-                    { name: 'account_number', label: 'Account Number', placeholder: 'Enter account number', col: 12 },
-                    { name: 'account_type', label: 'Account Type', placeholder: 'Saving / Current / Checking', col: 12 },
-                    { name: 'swift_code', label: 'Swift Code', placeholder: 'Enter swift code', col: 12 },
-                    {
-                        name: 'account_id',
-                        label: 'Linked Account',
-                        type: 'select',
-                        col: 24,
-                        options: accounts.map((account) => ({
-                            label: account.code ? `${account.code} - ${account.name}` : account.name,
-                            value: account.id,
-                        })),
-                    },
-                    { name: 'description', label: 'Description', type: 'textarea', rows: 3, col: 24 },
-                ],
-            },
-        ],
-        [branches, currencies, accounts]
-    );
+  const fields = [
+    { name: 'name', label: 'Name', type: 'text', required: true },
+    { name: 'active', label: 'Active', type: 'switch' },
+  ];
 
-    return (
-        <AuthenticatedLayout
-            header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Bank Accounts</h2>}
-        >
-            <Head title="Bank Accounts" />
-            <ReusableCrud
-                title="Bank Accounts"
-                apiUrl="/api/bank-accounts/"
-                columns={columns}
-                fields={fields}
-                crudInitialValues={{
-                    branch_id: branches[0]?.id || null,
-                    type: 'bank',
-                    display_name: '',
-                    currency_id: null,
-                    code: '',
-                    description: '',
-                    bank_name: '',
-                    account_name: '',
-                    account_number: '',
-                    account_type: '',
-                    swift_code: '',
-                    account_id: null,
-                }}
-                searchParam="filter[q]"
-                pageSizeParam="per_page"
-                sortMode="sort"
-            />
-        </AuthenticatedLayout>
-    );
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required('Name is required'),
+    active: Yup.boolean().nullable(),
+  });
+
+  const crudInitialValues = {
+    name: '',
+    active: true,
+    deleted_item_ids: [],
+  };
+
+  const transformPayload = (values) => {
+    const payload = { ...values };
+    payload.name = payload.name?.trim() || null;
+    payload.active = Boolean(payload.active);
+    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
+    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
+    return payload;
+  };
+
+  return (
+    <AuthenticatedLayout user={props.auth?.user}>
+      <Head title="BankAccounts" />
+      <ReusableCrud
+        icon={<AppstoreOutlined />}
+        title="BankAccounts"
+        endpoint="/accounting/bankaccounts"
+        columns={columns}
+        fields={fields}
+        validationSchema={validationSchema}
+        initialValues={crudInitialValues}
+        transformPayload={transformPayload}
+        form_ui="drawer"
+        drawerWidth={1100}
+        searchParam="search"
+        pageParam="page"
+        pageSizeParam="page_size"
+        sortMode="ordering"
+        orderingParam="ordering"
+        activeParam="active"
+        enableServerPagination={true}
+        enableInactiveDrawer={true}
+        backendFilter={{ active: 'active' }}
+        backendSort={{ name: 'name', active: 'active' }}
+      />
+    </AuthenticatedLayout>
+  );
 }

@@ -5,7 +5,7 @@ import * as Yup from 'yup';
 import { Tag } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 
-export default function ContactGroups(props) {
+export default function DebitNotes(props) {
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
     {
@@ -44,18 +44,18 @@ export default function ContactGroups(props) {
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="ContactGroups" />
+      <Head title="DebitNotes" />
       <ReusableCrud
         icon={<AppstoreOutlined />}
-        title="ContactGroups"
-        endpoint="/crm/contactgroups"
+        title="DebitNotes"
+        endpoint="/purchase/debitnotes"
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
         initialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="modal"
-        modalWidth={900}
+        form_ui="drawer"
+        drawerWidth={1100}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

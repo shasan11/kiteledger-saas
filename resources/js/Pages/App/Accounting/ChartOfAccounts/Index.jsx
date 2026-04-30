@@ -1,83 +1,72 @@
-import React, { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head } from '@inertiajs/react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ResuableCrud';
+import { Head } from '@inertiajs/react';
+import * as Yup from 'yup';
+import { Tag } from 'antd';
+import { AppstoreOutlined } from '@ant-design/icons';
 
-export default function Index({ branches = [], accounts = [], currencies = [] }) {
-    const columns = useMemo(
-        () => [
-            { title: 'Code', dataIndex: 'code', key: 'code', render: (value) => value || '-',width: 150 },
-            { title: 'Account Name', dataIndex: 'name', key: 'name', width: 200 },
-            { title: 'Description', dataIndex: 'description', key: 'description', render: (value) => value || '-', width: 300 },
-        ],
-        []
-    );
+export default function ChartOfAccounts(props) {
+  const columns = [
+    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+    {
+      title: 'Status',
+      dataIndex: 'active',
+      key: 'active',
+      sorter: true,
+      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+    },
+  ];
 
-    const fields = useMemo(
-        () => [
-            {
-                name: 'branch_id',
-                label: 'Branch',
-                type: 'select',
-                placeholder: 'Select branch',
-                required: true,
-                options: branches.map((branch) => ({ label: branch.name, value: branch.id })),
-            },
-            {
-                name: 'account_id',
-                label: 'Account Group',
-                type: 'select',
-                placeholder: 'Select account group',
-                required: true,
-                options: accounts.map((account) => ({
-                    label: account.code ? `${account.code} - ${account.name}` : account.name,
-                    value: account.id,
-                })),
-            },
-            {
-                name: 'currency_id',
-                label: 'Currency',
-                type: 'select',
-                placeholder: 'Select currency',
-                options: currencies.map((currency) => ({
-                    label: currency.code ? `${currency.code} - ${currency.name}` : currency.name,
-                    value: currency.id,
-                })),
-            },
-            { name: 'code', label: 'Code', type: 'text', placeholder: 'Enter account code', required: true },
-            { name: 'name', label: 'Account Name', type: 'text', placeholder: 'Enter account name', required: true },
-            { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Enter description', rows: 3 },
-        ],
-        [branches, accounts, currencies]
-    );
+  const fields = [
+    { name: 'name', label: 'Name', type: 'text', required: true },
+    { name: 'active', label: 'Active', type: 'switch' },
+  ];
 
-    return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Chart of Accounts
-                </h2>
-            }
-        >
-            <Head title="Chart of Accounts" />
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required('Name is required'),
+    active: Yup.boolean().nullable(),
+  });
 
-            <ReusableCrud
-                title="Chart of Accounts"
-                apiUrl="/api/chart-of-accounts/"
-                columns={columns}
-                fields={fields}
-                crudInitialValues={{
-                    branch_id: branches[0]?.id || null,
-                    account_id: null,
-                    currency_id: null,
-                    code: '',
-                    name: '',
-                    description: '',
-                }}
-                searchParam="filter[q]"
-                pageSizeParam="per_page"
-                sortMode="sort"
-            />
-        </AuthenticatedLayout>
-    );
+  const crudInitialValues = {
+    name: '',
+    active: true,
+    deleted_item_ids: [],
+  };
+
+  const transformPayload = (values) => {
+    const payload = { ...values };
+    payload.name = payload.name?.trim() || null;
+    payload.active = Boolean(payload.active);
+    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
+    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
+    return payload;
+  };
+
+  return (
+    <AuthenticatedLayout user={props.auth?.user}>
+      <Head title="ChartOfAccounts" />
+      <ReusableCrud
+        icon={<AppstoreOutlined />}
+        title="ChartOfAccounts"
+        endpoint="/accounting/chartofaccounts"
+        columns={columns}
+        fields={fields}
+        validationSchema={validationSchema}
+        initialValues={crudInitialValues}
+        transformPayload={transformPayload}
+        form_ui="drawer"
+        drawerWidth={1100}
+        searchParam="search"
+        pageParam="page"
+        pageSizeParam="page_size"
+        sortMode="ordering"
+        orderingParam="ordering"
+        activeParam="active"
+        enableServerPagination={true}
+        enableInactiveDrawer={true}
+        backendFilter={{ active: 'active' }}
+        backendSort={{ name: 'name', active: 'active' }}
+      />
+    </AuthenticatedLayout>
+  );
 }

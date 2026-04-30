@@ -5,7 +5,7 @@ import * as Yup from 'yup';
 import { Tag } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 
-export default function ContactGroups(props) {
+export default function CustomTemplates(props) {
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
     {
@@ -44,11 +44,11 @@ export default function ContactGroups(props) {
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="ContactGroups" />
+      <Head title="CustomTemplates" />
       <ReusableCrud
         icon={<AppstoreOutlined />}
-        title="ContactGroups"
-        endpoint="/crm/contactgroups"
+        title="CustomTemplates"
+        endpoint="/settings/customtemplates"
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
