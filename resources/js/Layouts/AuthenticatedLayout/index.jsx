@@ -516,6 +516,41 @@ export default function AuthenticatedLayout({ header, children }) {
                     },
                 ],
             },
+
+            {
+                key: 'master',
+                icon: <ApartmentOutlined />,
+                label: 'Master',
+                children: [
+                    { key: 'master-branches', label: 'Branches', onClick: () => visit('master.branches.index', '/master/branches') },
+                    { key: 'master-currencies', label: 'Currencies', onClick: () => visit('master.currencies.index', '/master/currencies') },
+                    { key: 'master-credit-terms', label: 'Credit Terms', onClick: () => visit('master.credit-terms.index', '/master/credit-terms') },
+                ],
+            },
+            {
+                key: 'tax',
+                icon: <PercentageOutlined />,
+                label: 'Tax',
+                children: [
+                    { key: 'tax-classes', label: 'Tax Classes', onClick: () => visit('tax.tax-classes.index', '/tax/tax-classes') },
+                    { key: 'tax-rates', label: 'Tax Rates', onClick: () => visit('tax.tax-rates.index', '/tax/tax-rates') },
+                ],
+            },
+            {
+                key: 'settings',
+                icon: <SettingOutlined />,
+                label: 'Settings',
+                children: [
+                    { key: 'settings-alert-types', label: 'Alert Types', onClick: () => visit('settings.alert-types.index', '/settings/alert-types') },
+                    { key: 'settings-reporting-tags', label: 'Reporting Tags', onClick: () => visit('settings.reporting-tags.index', '/settings/reporting-tags') },
+                    { key: 'settings-document-numberings', label: 'Document Numberings', onClick: () => visit('settings.document-numberings.index', '/settings/document-numberings') },
+                    { key: 'settings-printing-templates', label: 'Printing Templates', onClick: () => visit('settings.printing-templates.index', '/settings/printing-templates') },
+                    { key: 'settings-custom-templates', label: 'Custom Templates', onClick: () => visit('settings.custom-templates.index', '/settings/custom-templates') },
+                    { key: 'settings-application-settings', label: 'Application Settings', onClick: () => visit('settings.application-settings.index', '/settings/application-settings') },
+                    { key: 'settings-general-settings', label: 'General Settings', onClick: () => visit('settings.general-settings.index', '/settings/general-settings') },
+                    { key: 'settings-master-data', label: 'Master Data', onClick: () => visit('settings.master-data.index', '/settings/master-data') },
+                ],
+            },
             {
                 key: 'configurations',
                 icon: <SettingOutlined />,
