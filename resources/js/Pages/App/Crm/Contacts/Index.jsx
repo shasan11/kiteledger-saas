@@ -1,58 +1,185 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { Tag, Typography } from 'antd';
+import { UserOutlined } from '@ant-design/icons';
+
+const { Text } = Typography;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
 
 export default function Contacts(props) {
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      sorter: true,
+      render: (val) => <Text strong>{val}</Text>,
+    },
+    {
+      title: 'Code',
+      dataIndex: 'code',
+      key: 'code',
+      render: (val) => val ? <Tag color="blue">{val}</Tag> : '-',
+    },
+    {
+      title: 'Type',
+      dataIndex: 'contact_type',
+      key: 'contact_type',
+      render: (val) => {
+        const colors = { customer: 'green', supplier: 'orange', lead: 'blue' };
+        return val ? <Tag color={colors[val] || 'default'}>{val}</Tag> : '-';
+      },
+    },
+    {
+      title: 'Group',
+      dataIndex: 'contactGroup',
+      key: 'contactGroup',
+      render: (_, record) =>
+        record?.contactGroup?.name || record?.contact_group?.name || '-',
+    },
+    {
+      title: 'Phone',
+      dataIndex: 'phone',
+      key: 'phone',
+      render: (val) => val || '-',
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      render: (val) => val || '-',
+    },
+    {
+      title: 'Credit Limit',
+      dataIndex: 'credit_limit',
+      key: 'credit_limit',
+      align: 'right',
+      render: (val) => val != null ? Number(val).toLocaleString() : '-',
+    },
     {
       title: 'Status',
       dataIndex: 'active',
       key: 'active',
       sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      render: (active) => (
+        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
+      ),
     },
   ];
 
   const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
+    {
+      name: 'name',
+      label: 'Contact Name',
+      type: 'text',
+      required: true,
+      col: 12,
+      placeholder: 'e.g. John Doe',
+    },
+    { name: 'code', label: 'Code', type: 'text', col: 6, placeholder: 'CUST-001' },
+    {
+      name: 'contact_type',
+      label: 'Contact Type',
+      type: 'select',
+      required: true,
+      col: 6,
+      options: [
+        { value: 'customer', label: 'Customer' },
+        { value: 'supplier', label: 'Supplier' },
+        { value: 'lead',     label: 'Lead' },
+      ],
+    },
+    {
+      name: 'contact_group_id',
+      label: 'Contact Group',
+      type: 'fkSelect',
+      col: 12,
+      placeholder: 'Select group',
+      fkUrl: api('/api/contact-groups'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      fkLabel: (row) => row?.name || '',
+      fkExtraParams: { active: true },
+    },
+    { name: 'phone', label: 'Phone', type: 'text', col: 6, placeholder: '+977 9800000000' },
+    { name: 'email', label: 'Email', type: 'text', col: 6, placeholder: 'contact@example.com' },
+    { name: 'pan', label: 'PAN / Tax No', type: 'text', col: 8, placeholder: 'PAN number' },
+    { name: 'credit_limit', label: 'Credit Limit', type: 'number', col: 8, min: 0, placeholder: '0.00' },
+    {
+      name: 'address',
+      label: 'Address',
+      type: 'textarea',
+      col: 24,
+      rows: 2,
+      placeholder: 'Full address',
+    },
+    { name: 'accept_purchase', label: 'Accept Purchase', type: 'switch', col: 8 },
+    { name: 'active', label: 'Active', type: 'switch', col: 8 },
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
+    name: Yup.string().required('Name is required').max(180),
+    code: Yup.string().nullable().max(50),
+    contact_type: Yup.string().required('Contact type is required').oneOf(['customer', 'supplier', 'lead']),
+    contact_group_id: Yup.string().nullable(),
+    phone: Yup.string().nullable().max(40),
+    email: Yup.string().nullable().email('Invalid email').max(120),
+    pan: Yup.string().nullable().max(80),
+    credit_limit: Yup.number().nullable().min(0),
+    address: Yup.string().nullable(),
+    accept_purchase: Yup.boolean().nullable(),
     active: Yup.boolean().nullable(),
   });
 
   const crudInitialValues = {
     name: '',
+    code: '',
+    contact_type: 'customer',
+    contact_group_id: null,
+    phone: '',
+    email: '',
+    pan: '',
+    credit_limit: null,
+    address: '',
+    accept_purchase: false,
     active: true,
-    deleted_item_ids: [],
   };
 
   const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
+    const p = { ...values };
+    p.name = p.name?.trim() || null;
+    p.code = p.code?.trim() || null;
+    p.phone = p.phone?.trim() || null;
+    p.email = p.email?.trim() || null;
+    p.pan = p.pan?.trim() || null;
+    p.address = p.address?.trim() || null;
+    p.contact_group_id = p.contact_group_id || null;
+    p.credit_limit = p.credit_limit != null ? Number(p.credit_limit) : null;
+    p.accept_purchase = Boolean(p.accept_purchase);
+    p.active = Boolean(p.active);
+    Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
+    return p;
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <AuthenticatedLayout
+      user={props.auth?.user}
+      header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Contacts</h2>}
+    >
       <Head title="Contacts" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
+        icon={<UserOutlined />}
         title="Contacts"
-        endpoint="/crm/contacts"
+        apiUrl={api('/api/contacts')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="drawer"
         drawerWidth={1100}
@@ -64,8 +191,20 @@ export default function Contacts(props) {
         activeParam="active"
         enableServerPagination={true}
         enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
+        anchorFilters={[
+          { key: 'all',      label: 'All',       title: 'Contacts', params: {} },
+          { key: 'customer', label: 'Customers', title: 'Contacts', params: { contact_type: 'customer' } },
+          { key: 'supplier', label: 'Suppliers', title: 'Contacts', params: { contact_type: 'supplier' } },
+          { key: 'lead',     label: 'Leads',     title: 'Contacts', params: { contact_type: 'lead' } },
+        ]}
+        defaultAnchorKey="all"
+        anchorSyncWithHash
       />
     </AuthenticatedLayout>
   );

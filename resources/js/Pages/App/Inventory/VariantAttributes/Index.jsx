@@ -1,226 +1,194 @@
-import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head } from '@inertiajs/react';
-import { Tag, Typography } from 'antd';
-import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ResuableCrud';
+import { Head } from '@inertiajs/react';
+import * as Yup from 'yup';
+import { Tag, Typography } from 'antd';
+import { BarsOutlined } from '@ant-design/icons';
+
 const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-const emptyOption = {
-    name: '',
+const emptyItem = {
+  value: '',
+  sort_order: 0,
+  active: true,
 };
 
-const initialValues = {
+export default function VariantAttributes(props) {
+  const columns = [
+    {
+      title: 'Attribute Name',
+      dataIndex: 'name',
+      key: 'name',
+      sorter: true,
+      render: (val) => <Text strong>{val}</Text>,
+    },
+    {
+      title: 'Values',
+      dataIndex: 'variantLines',
+      key: 'variantLines',
+      render: (_, record) => {
+        const lines = record?.variantLines || record?.variant_lines || [];
+        if (!lines.length) return '-';
+        return lines.slice(0, 5).map((l) => (
+          <Tag key={l.id || l.value} color="purple" style={{ marginBottom: 2 }}>
+            {l.value}
+          </Tag>
+        ));
+      },
+    },
+    {
+      title: 'Total Values',
+      dataIndex: 'variantLines',
+      key: 'count',
+      align: 'center',
+      render: (_, record) => {
+        const lines = record?.variantLines || record?.variant_lines || [];
+        return lines.length;
+      },
+    },
+    {
+      title: 'Status',
+      dataIndex: 'active',
+      key: 'active',
+      sorter: true,
+      render: (active) => (
+        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
+      ),
+    },
+  ];
+
+  const fields = [
+    {
+      name: 'name',
+      label: 'Attribute Name',
+      type: 'text',
+      required: true,
+      col: 12,
+      placeholder: 'e.g. Color, Size, Material',
+    },
+    {
+      name: 'active',
+      label: 'Active',
+      type: 'switch',
+      col: 12,
+    },
+    {
+      name: 'items',
+      label: 'Attribute Values',
+      type: 'objectArray',
+      col: 24,
+      headerBg: '#424b59',
+      headerColor: '#ffffff',
+      addButtonLabel: 'Add Value',
+      defaultItem: { ...emptyItem },
+      columns: [
+        {
+          key: 'value',
+          name: 'value',
+          label: 'Value',
+          type: 'text',
+          width: '3fr',
+          placeholder: 'e.g. Red, Small, Cotton',
+        },
+        {
+          key: 'sort_order',
+          name: 'sort_order',
+          label: 'Sort Order',
+          type: 'number',
+          width: '130px',
+          min: 0,
+          placeholder: '0',
+        },
+        {
+          key: 'active',
+          name: 'active',
+          label: 'Active',
+          type: 'switch',
+          width: '100px',
+        },
+      ],
+    },
+  ];
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required('Attribute name is required').max(80),
+    active: Yup.boolean().nullable(),
+    items: Yup.array()
+      .of(
+        Yup.object().shape({
+          value: Yup.string().required('Value is required').max(80),
+          sort_order: Yup.number().nullable().integer().min(0),
+          active: Yup.boolean().nullable(),
+        }),
+      )
+      .min(1, 'At least one value is required'),
+  });
+
+  const crudInitialValues = {
     name: '',
-    options: [{ ...emptyOption }],
     active: true,
-};
+    items: [{ ...emptyItem }],
+    deleted_item_ids: [],
+  };
 
-const validationSchema = Yup.object().shape({
-    name: Yup.string()
-        .trim()
-        .required('Name is required')
-        .max(120, 'Name must be less than 120 characters'),
+  const transformPayload = (values) => {
+    const payload = { ...values };
+    payload.name = payload.name?.trim() || null;
+    payload.active = Boolean(payload.active);
+    payload.items = (payload.items || [])
+      .filter((row) => row.value?.trim())
+      .map((row) => ({
+        id: row.id,
+        value: row.value?.trim(),
+        sort_order: row.sort_order != null ? Number(row.sort_order) : 0,
+        active: row.active !== false,
+      }));
+    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids)
+      ? payload.deleted_item_ids
+      : [];
+    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
+    return payload;
+  };
 
-    options: Yup.array()
-        .of(
-            Yup.object().shape({
-                name: Yup.string()
-                    .trim()
-                    .required('Option name is required')
-                    .max(120, 'Option name must be less than 120 characters'),
-            }),
-        )
-        .min(1, 'At least one option is required'),
-});
-
-export default function Index() {
-    const fields = useMemo(
-        () => [
-            {
-                name: 'name',
-                label: 'Name',
-                required: true,
-                col: 24,
-                placeholder: 'Name',
-            },
-
-            {
-                name: '_variant_options_title',
-                label: '',
-                type: 'custom',
-                col: 24,
-                render: () => (
-                    <div
-                        style={{
-                            marginTop: 12,
-                            marginBottom: 8,
-                            fontSize: 18,
-                            fontWeight: 700,
-                            color: '#8b95a5',
-                        }}
-                    >
-                        Variant Options
-                    </div>
-                ),
-            },
-
-            {
-                name: 'options',
-                label: '',
-                type: 'objectArray',
-                col: 24,
-                headerBg: '#424b59',
-                headerColor: '#ffffff',
-                addButtonLabel: '+ NEW',
-                defaultItem: { ...emptyOption },
-                columns: [
-                    {
-                        key: 'name',
-                        name: 'name',
-                        label: 'Options Name',
-                        placeholder: 'Enter Options',
-                        width: '1fr',
-                    },
-                ],
-            },
-        ],
-        [],
-    );
-
-    const columns = useMemo(
-        () => [
-            {
-                title: 'Name',
-                dataIndex: 'name',
-                key: 'name',
-                width: 240,
-                backendSort: true,
-                sortField: 'name',
-                render: (value) => <Text strong>{value || '-'}</Text>,
-            },
-            {
-                title: 'Options',
-                dataIndex: 'options',
-                key: 'options',
-                render: (value, record) => {
-                    const options = Array.isArray(value)
-                        ? value
-                        : Array.isArray(record?.variant_options)
-                            ? record.variant_options
-                            : [];
-
-                    if (!options.length) return '-';
-
-                    return (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {options.map((option, index) => (
-                                <Tag key={option?.id || index}>
-                                    {option?.name || option?.option_name || option}
-                                </Tag>
-                            ))}
-                        </div>
-                    );
-                },
-            },
-            {
-                title: 'Status',
-                dataIndex: 'active',
-                key: 'active',
-                width: 110,
-                render: (value, record) => {
-                    const isActive =
-                        record?.active !== undefined
-                            ? record.active
-                            : record?.is_active !== undefined
-                                ? record.is_active
-                                : value;
-
-                    return isActive ? (
-                        <Tag color="green">Active</Tag>
-                    ) : (
-                        <Tag color="red">Inactive</Tag>
-                    );
-                },
-            },
-        ],
-        [],
-    );
-
-    const transformPayload = (values) => ({
-        name: values.name || '',
-        active: values.active !== false,
-        options: (values.options || [])
-            .filter((row) => String(row?.name || '').trim())
-            .map((row) => ({
-                id: row.id,
-                name: String(row.name || '').trim(),
-            })),
-    });
-
-    return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Variant Attribute
-                </h2>
-            }
-        >
-            <Head title="Variant Attribute" />
-
-            <ReusableCrud
-                title="Variant Attribute"
-                apiUrl={api('/api/variant-attributes/')}
-                fields={fields}
-                columns={columns}
-                validationSchema={validationSchema}
-                crudInitialValues={initialValues}
-                form_ui="drawer"
-                drawerWidth={820}
-                modalWidth={820}
-                enableServerPagination
-                pageParam="page"
-                pageSizeParam="page_size"
-                searchParam="search"
-                activeParam="active"
-                sortMode="ordering"
-                orderingParam="ordering"
-                defaultSortField="name"
-                defaultSortOrder="ascend"
-                transformPayload={transformPayload}
-                anchorFilters={[
-                    {
-                        key: 'active',
-                        label: 'Active',
-                        title: 'Variant Attribute',
-                        params: { active: true },
-                    },
-                    {
-                        key: 'inactive',
-                        label: 'Inactive',
-                        title: 'Variant Attribute',
-                        params: { active: false },
-                    },
-                    {
-                        key: 'all',
-                        label: 'All',
-                        title: 'Variant Attribute',
-                        params: {},
-                    },
-                ]}
-                defaultAnchorKey="active"
-                anchorSyncWithHash
-                showSearch
-                canAdd
-                canEdit
-                canDelete
-                canView
-                hasActions
-                hasActionColumns
-            />
-        </AuthenticatedLayout>
-    );
+  return (
+    <AuthenticatedLayout
+      user={props.auth?.user}
+      header={
+        <h2 className="text-xl font-semibold leading-tight text-gray-800">
+          Variant Attributes
+        </h2>
+      }
+    >
+      <Head title="Variant Attributes" />
+      <ReusableCrud
+        icon={<BarsOutlined />}
+        title="Variant Attributes"
+        apiUrl={api('/api/variants')}
+        columns={columns}
+        fields={fields}
+        validationSchema={validationSchema}
+        crudInitialValues={crudInitialValues}
+        transformPayload={transformPayload}
+        form_ui="drawer"
+        drawerWidth={900}
+        searchParam="search"
+        pageParam="page"
+        pageSizeParam="page_size"
+        sortMode="ordering"
+        orderingParam="ordering"
+        activeParam="active"
+        enableServerPagination={true}
+        enableInactiveDrawer={true}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
+      />
+    </AuthenticatedLayout>
+  );
 }

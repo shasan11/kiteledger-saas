@@ -1,23 +1,40 @@
-import Checkbox from '@/Components/Checkbox';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Button, Checkbox, Form, Input, Alert } from 'antd';
+import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { Formik } from 'formik';
+import * as Yup from 'yup';
+import { useState } from 'react';
+
+const LoginSchema = Yup.object().shape({
+    email: Yup.string()
+        .email('Please enter a valid email address')
+        .required('Email is required'),
+    password: Yup.string()
+        .min(6, 'Password must be at least 6 characters')
+        .required('Password is required'),
+    remember: Yup.boolean(),
+});
 
 export default function Login({ status, canResetPassword }) {
-    const { data, setData, post, processing, errors, reset } = useForm({
-        email: '',
-        password: '',
-        remember: false,
-    });
+    const [processing, setProcessing] = useState(false);
+    const [serverErrors, setServerErrors] = useState({});
 
-    const submit = (e) => {
-        e.preventDefault();
+    const handleSubmit = (values, { setSubmitting, resetForm }) => {
+        setProcessing(true);
+        setServerErrors({});
 
-        post(route('login'), {
-            onFinish: () => reset('password'),
+        router.post(route('login'), values, {
+            onError: (errors) => {
+                setServerErrors(errors);
+            },
+            onFinish: () => {
+                setProcessing(false);
+                setSubmitting(false);
+                resetForm({
+                    values: { ...values, password: '' },
+                });
+            },
         });
     };
 
@@ -26,75 +43,128 @@ export default function Login({ status, canResetPassword }) {
             <Head title="Log in" />
 
             {status && (
-                <div className="mb-4 text-sm font-medium text-green-600">
-                    {status}
-                </div>
+                <Alert
+                    message={status}
+                    type="success"
+                    showIcon
+                    className="mb-4"
+                />
             )}
 
-            <form onSubmit={submit}>
-                <div>
-                    <InputLabel htmlFor="email" value="Email" />
-
-                    <TextInput
-                        id="email"
-                        type="email"
-                        name="email"
-                        value={data.email}
-                        className="mt-1 block w-full"
-                        autoComplete="username"
-                        isFocused={true}
-                        onChange={(e) => setData('email', e.target.value)}
-                    />
-
-                    <InputError message={errors.email} className="mt-2" />
-                </div>
-
-                <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
-
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        autoComplete="current-password"
-                        onChange={(e) => setData('password', e.target.value)}
-                    />
-
-                    <InputError message={errors.password} className="mt-2" />
-                </div>
-
-                <div className="mt-4 block">
-                    <label className="flex items-center">
-                        <Checkbox
-                            name="remember"
-                            checked={data.remember}
-                            onChange={(e) =>
-                                setData('remember', e.target.checked)
+            <Formik
+                initialValues={{
+                    email: '',
+                    password: '',
+                    remember: false,
+                }}
+                validationSchema={LoginSchema}
+                onSubmit={handleSubmit}
+            >
+                {({
+                    values,
+                    errors,
+                    touched,
+                    handleChange,
+                    handleBlur,
+                    handleSubmit,
+                    setFieldValue,
+                }) => (
+                    <Form
+                        layout="vertical"
+                        onFinish={handleSubmit}
+                        autoComplete="off"
+                    >
+                        <Form.Item
+                            label="Email"
+                            validateStatus={
+                                (touched.email && errors.email) ||
+                                serverErrors.email
+                                    ? 'error'
+                                    : ''
                             }
-                        />
-                        <span className="ms-2 text-sm text-gray-600">
-                            Remember me
-                        </span>
-                    </label>
-                </div>
-
-                <div className="mt-4 flex items-center justify-end">
-                    {canResetPassword && (
-                        <Link
-                            href={route('password.request')}
-                            className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            help={
+                                (touched.email && errors.email) ||
+                                serverErrors.email
+                            }
                         >
-                            Forgot your password?
-                        </Link>
-                    )}
+                            <Input
+                                id="email"
+                                name="email"
+                                type="email"
+                                size="large"
+                                prefix={<MailOutlined />}
+                                placeholder="Enter your email"
+                                value={values.email}
+                                onChange={handleChange}
+                                onBlur={handleBlur}
+                                autoComplete="username"
+                                autoFocus
+                            />
+                        </Form.Item>
 
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Log in
-                    </PrimaryButton>
-                </div>
-            </form>
+                        <Form.Item
+                            label="Password"
+                            validateStatus={
+                                (touched.password && errors.password) ||
+                                serverErrors.password
+                                    ? 'error'
+                                    : ''
+                            }
+                            help={
+                                (touched.password && errors.password) ||
+                                serverErrors.password
+                            }
+                        >
+                            <Input.Password
+                                id="password"
+                                name="password"
+                                size="large"
+                                prefix={<LockOutlined />}
+                                placeholder="Enter your password"
+                                value={values.password}
+                                onChange={handleChange}
+                                onBlur={handleBlur}
+                                autoComplete="current-password"
+                            />
+                        </Form.Item>
+
+                        <Form.Item>
+                            <Checkbox
+                                name="remember"
+                                checked={values.remember}
+                                onChange={(e) =>
+                                    setFieldValue('remember', e.target.checked)
+                                }
+                            >
+                                Remember me
+                            </Checkbox>
+                        </Form.Item>
+
+                        <Form.Item className="mb-0">
+                            <div className="flex items-center justify-end">
+                                {canResetPassword && (
+                                    <Link
+                                        href={route('password.request')}
+                                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                    >
+                                        Forgot your password?
+                                    </Link>
+                                )}
+
+                                <Button
+                                    type="primary"
+                                    htmlType="submit"
+                                    size="large"
+                                    loading={processing}
+                                    className="ms-4"
+                                >
+                                    Log in
+                                </Button>
+                            </div>
+                        </Form.Item>
+                    </Form>
+                )}
+            </Formik>
         </GuestLayout>
     );
 }

@@ -529,7 +529,7 @@ export default function AuthenticatedLayout({ header, children }) {
             },
             {
                 key: 'tax',
-                icon: <PercentageOutlined />,
+                icon: <ApartmentOutlined />,
                 label: 'Tax',
                 children: [
                     { key: 'tax-classes', label: 'Tax Classes', onClick: () => visit('tax.tax-classes.index', '/tax/tax-classes') },
