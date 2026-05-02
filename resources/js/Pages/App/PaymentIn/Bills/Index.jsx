@@ -727,7 +727,7 @@ export default function Index() {
 
     const columns = useMemo(
         () => [
-            { title: 'Bill No', dataIndex: 'invoice_code', key: 'invoice_code', width: 140, backendSort: true, sortField: 'invoice_code', render: (value) => <Text strong>{value || 'DRAFT'}</Text> },
+            { title: 'Invoice No', dataIndex: 'invoice_code', key: 'invoice_code', width: 140, backendSort: true, sortField: 'invoice_code', render: (value) => <Text strong>{value || 'DRAFT'}</Text> },
             { title: 'Date', dataIndex: 'invoice_date', key: 'invoice_date', width: 120, backendSort: true, sortField: 'invoice_date', render: (value) => value ? dayjs(value).format('DD-MM-YYYY') : '-' },
             { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, backendSort: true, sortField: 'due_date', render: (value) => value ? dayjs(value).format('DD-MM-YYYY') : '-' },
             { title: 'Customer', dataIndex: 'customer_name', key: 'customer_name', width: 200, backendSort: true, sortField: 'customer_name', render: (_, r) => r?.customer_name || r?.customer?.display_name || r?.customer?.name || '-' },
@@ -934,15 +934,15 @@ const transformPayload = (values) => {
         <AuthenticatedLayout
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Bills Register
+                    Invoices Register
                 </h2>
             }
         >
-            <Head title="Bills Register" />
+            <Head title="Invoices Register" />
 
             <ReusableCrud
-                title="Bills Register"
-                apiUrl={api('/api/payment-in/invoices/')}
+                title="Invoices Register"
+                apiUrl={api('/api/invoices/')}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}
@@ -977,25 +977,25 @@ const transformPayload = (values) => {
                     {
                         key: 'draft',
                         label: 'Draft',
-                        title: 'Bills Register',
+                        title: 'Invoices Register',
                         params: { approved: false },
                     },
                     {
                         key: 'approved',
                         label: 'Approved',
-                        title: 'Bills Register',
+                        title: 'Invoices Register',
                         params: { approved: true },
                     },
                     {
                         key: 'paid',
                         label: 'Paid',
-                        title: 'Bills Register',
+                        title: 'Invoices Register',
                         params: { status: 'paid' },
                     },
                     {
                         key: 'all',
                         label: 'All',
-                        title: 'Bills Register',
+                        title: 'Invoices Register',
                         params: {},
                     },
                 ]}
