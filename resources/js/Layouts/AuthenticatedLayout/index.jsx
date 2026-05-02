@@ -201,7 +201,7 @@ export default function AuthenticatedLayout({ header, children }) {
             {
                 key: 'payment-out',
                 icon: <WalletOutlined />,
-                label: 'Payment Out',
+                label: 'Supplier Payments',
                 children: [
                     {
                         key: 'po-purchase-bills',
