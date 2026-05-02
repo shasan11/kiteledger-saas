@@ -36,6 +36,13 @@ const TDS_TYPE_OPTIONS = [
 
 const STATUS_COLORS = { draft: 'default', posted: 'blue', cancelled: 'red' };
 
+const CANONICAL_SERIALIZER_KEYS = {
+    header: ['payment_no', 'payment_date', 'contact_id', 'account_id', 'currency_id', 'exchange_rate', 'amount', 'payment_method', 'reference', 'notes', 'status'],
+    optionalCharges: ['bank_charges_account_id', 'bank_charges', 'tds_charges_account_id', 'tds_type', 'tds_charges'],
+    lines: 'payment_lines',
+    lineKeys: ['purchase_bill_id', 'allocated_amount'],
+};
+
 const emptyItem = { purchase_bill_id: null, purchase_bill_id_detail: null, bill_label: '', allocated_amount: 0 };
 
 const initialValues = {
@@ -475,6 +482,7 @@ export default function SupplierPayments() {
     ], []);
 
     const transformPayload = (v) => {
+        // UI-form keys are normalized into serializer canonical keys using ReusableCrud submit hooks.
         const bankChargesOn = !!v._bank_charges_on;
         const tdsOn         = !!v._tds_on;
         return {
@@ -522,6 +530,8 @@ export default function SupplierPayments() {
                 validationSchema={validationSchema}
                 crudInitialValues={initialValues}
                 transformPayload={transformPayload}
+                beforeCreatePayload={(payload) => payload}
+                beforeUpdatePayload={(payload) => payload}
                 transformRecord={transformRecord}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 28px)"
