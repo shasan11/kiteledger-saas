@@ -22,6 +22,7 @@ class Currency extends Model
         'name',
         'symbol',
         'decimal_places',
+        'exchange_rate_to_npr',
         'is_base',
         'active',
         'is_system_generated',
@@ -36,7 +37,8 @@ class Currency extends Model
     protected function casts(): array
     {
         return [
-            'decimal_places' => 'integer',
+            'decimal_places'       => 'integer',
+            'exchange_rate_to_npr' => 'decimal:6',
             'is_base' => 'boolean',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',

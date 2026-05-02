@@ -24,19 +24,15 @@ class Designation extends Model
         'code',
         'description',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'active' => 'boolean',
-            'user_add_id' => 'integer',
+            'active'              => 'boolean',
+            'is_system_generated' => 'boolean',
         ];
     }
 
@@ -58,5 +54,10 @@ class Designation extends Model
     public function employees(): HasMany
     {
         return $this->hasMany(Employee::class);
+    }
+
+    public function designationHistories(): HasMany
+    {
+        return $this->hasMany(DesignationHistory::class);
     }
 }

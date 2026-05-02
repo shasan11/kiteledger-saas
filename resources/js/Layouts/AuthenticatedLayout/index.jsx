@@ -5,25 +5,36 @@ import {
     BankOutlined,
     BarChartOutlined,
     BookOutlined,
+    CalendarOutlined,
     CalculatorOutlined,
+    ClockCircleOutlined,
     ContactsOutlined,
     CreditCardOutlined,
     DashboardOutlined,
     DeploymentUnitOutlined,
     FileExcelOutlined,
+    FileProtectOutlined,
     FileTextOutlined,
+    FolderOutlined,
+    GiftOutlined,
     HomeOutlined,
     InboxOutlined,
+    KeyOutlined,
+    MailOutlined,
     ProfileOutlined,
-    ProductOutlined,
+    ProjectOutlined,
     SafetyCertificateOutlined,
+    ScheduleOutlined,
     SettingOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
+    SolutionOutlined,
     SwapOutlined,
     TeamOutlined,
     ToolOutlined,
+    TrophyOutlined,
     UserOutlined,
+    UsergroupAddOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
 import { Layout, theme } from 'antd';
@@ -413,48 +424,86 @@ export default function AuthenticatedLayout({ header, children }) {
                 onClick: () => visit('warehouse.index', '/warehouse'),
             },
             {
-                key: 'human-resource',
+                key: 'hrm',
                 icon: <TeamOutlined />,
                 label: 'Human Resource',
                 children: [
+                    // ── Workforce ────────────────────────────────────────
                     {
-                        key: 'human-resource-employees',
-                        label: 'Employees',
-                        onClick: () =>
-                            visit('human-resource.employees.index', '/human-resource/employees'),
+                        key: 'hrm-workforce',
+                        icon: <UsergroupAddOutlined />,
+                        label: 'Workforce',
+                        children: [
+                            { key: 'hrm-users',        label: 'Employees',          onClick: () => visit('hrm.users.index', '/hrm/users') },
+                            { key: 'hrm-attendance',   label: 'Attendance',         onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
+                            { key: 'hrm-leaves',       label: 'Leave Applications', onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
+                            { key: 'hrm-payslips',     label: 'Payslips',           onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
+                        ],
                     },
+                    // ── Masters ──────────────────────────────────────────
                     {
-                        key: 'human-resource-departments',
-                        label: 'Departments',
-                        onClick: () =>
-                            visit('human-resource.departments.index', '/human-resource/departments'),
+                        key: 'hrm-masters',
+                        icon: <FolderOutlined />,
+                        label: 'Masters',
+                        children: [
+                            { key: 'hrm-departments',        label: 'Departments',        onClick: () => visit('hrm.departments.index', '/hrm/departments') },
+                            { key: 'hrm-designations',       label: 'Designations',       onClick: () => visit('hrm.designations.index', '/hrm/designations') },
+                            { key: 'hrm-emp-statuses',       label: 'Employment Statuses',onClick: () => visit('hrm.employment-statuses.index', '/hrm/employment-statuses') },
+                            { key: 'hrm-leave-policies',     label: 'Leave Policies',     onClick: () => visit('hrm.leave-policies.index', '/hrm/leave-policies') },
+                            { key: 'hrm-weekly-holidays',    label: 'Weekly Holidays',    onClick: () => visit('hrm.weekly-holidays.index', '/hrm/weekly-holidays') },
+                            { key: 'hrm-shifts',             label: 'Shifts',             onClick: () => visit('hrm.shifts.index', '/hrm/shifts') },
+                            { key: 'hrm-public-holidays',    label: 'Public Holidays',    onClick: () => visit('hrm.public-holidays.index', '/hrm/public-holidays') },
+                            { key: 'hrm-awards',             label: 'Awards',             onClick: () => visit('hrm.awards.index', '/hrm/awards') },
+                            { key: 'hrm-priorities',         label: 'Priorities',         onClick: () => visit('hrm.priorities.index', '/hrm/priorities') },
+                        ],
                     },
+                    // ── Histories ────────────────────────────────────────
                     {
-                        key: 'human-resource-designations',
-                        label: 'Designations',
-                        onClick: () =>
-                            visit(
-                                'human-resource.designations.index',
-                                '/human-resource/designations',
-                            ),
+                        key: 'hrm-histories',
+                        icon: <ScheduleOutlined />,
+                        label: 'Histories',
+                        children: [
+                            { key: 'hrm-salary-hist',      label: 'Salary History',      onClick: () => visit('hrm.salary-histories.index', '/hrm/salary-histories') },
+                            { key: 'hrm-desig-hist',       label: 'Designation History', onClick: () => visit('hrm.designation-histories.index', '/hrm/designation-histories') },
+                            { key: 'hrm-award-hist',       label: 'Award History',       onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
+                            { key: 'hrm-education',        label: 'Education',           onClick: () => visit('hrm.educations.index', '/hrm/educations') },
+                        ],
                     },
+                    // ── Access Control ───────────────────────────────────
                     {
-                        key: 'human-resource-attendance',
-                        label: 'Attendance',
-                        onClick: () =>
-                            visit('human-resource.attendance.index', '/human-resource/attendance'),
+                        key: 'hrm-access',
+                        icon: <KeyOutlined />,
+                        label: 'Access Control',
+                        children: [
+                            { key: 'hrm-roles',        label: 'Roles',            onClick: () => visit('hrm.roles.index', '/hrm/roles') },
+                            { key: 'hrm-permissions',  label: 'Permissions',      onClick: () => visit('hrm.permissions.index', '/hrm/permissions') },
+                            { key: 'hrm-role-perms',   label: 'Role Permissions', onClick: () => visit('hrm.role-permissions.index', '/hrm/role-permissions') },
+                        ],
                     },
+                    // ── Projects ─────────────────────────────────────────
                     {
-                        key: 'human-resource-leaves',
-                        label: 'Leaves',
-                        onClick: () =>
-                            visit('human-resource.leaves.index', '/human-resource/leaves'),
+                        key: 'hrm-projects',
+                        icon: <ProjectOutlined />,
+                        label: 'Projects',
+                        children: [
+                            { key: 'hrm-projects-list',    label: 'Projects',          onClick: () => visit('hrm.projects.index', '/hrm/projects') },
+                            { key: 'hrm-milestones',       label: 'Milestones',        onClick: () => visit('hrm.milestones.index', '/hrm/milestones') },
+                            { key: 'hrm-tasks',            label: 'Tasks',             onClick: () => visit('hrm.tasks.index', '/hrm/tasks') },
+                            { key: 'hrm-task-statuses',    label: 'Task Statuses',     onClick: () => visit('hrm.task-statuses.index', '/hrm/task-statuses') },
+                            { key: 'hrm-assigned-tasks',   label: 'Assigned Tasks',    onClick: () => visit('hrm.assigned-tasks.index', '/hrm/assigned-tasks') },
+                            { key: 'hrm-project-teams',    label: 'Project Teams',     onClick: () => visit('hrm.project-teams.index', '/hrm/project-teams') },
+                            { key: 'hrm-team-members',     label: 'Team Members',      onClick: () => visit('hrm.project-team-members.index', '/hrm/project-team-members') },
+                        ],
                     },
+                    // ── Email ────────────────────────────────────────────
                     {
-                        key: 'human-resource-payroll',
-                        label: 'Payroll',
-                        onClick: () =>
-                            visit('human-resource.payroll.index', '/human-resource/payroll'),
+                        key: 'hrm-email',
+                        icon: <MailOutlined />,
+                        label: 'Email',
+                        children: [
+                            { key: 'hrm-email-configs', label: 'Email Configs', onClick: () => visit('hrm.email-configs.index', '/hrm/email-configs') },
+                            { key: 'hrm-emails',        label: 'Email Logs',    onClick: () => visit('hrm.emails.index', '/hrm/emails') },
+                        ],
                     },
                 ],
             },
@@ -663,6 +712,37 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/human-resource/attendance')) return ['human-resource-attendance'];
         if (isActive('/human-resource/leaves')) return ['human-resource-leaves'];
         if (isActive('/human-resource/payroll')) return ['human-resource-payroll'];
+
+        // HRM full module
+        if (isActive('/hrm/users'))                   return ['hrm-users'];
+        if (isActive('/hrm/attendance'))              return ['hrm-attendance'];
+        if (isActive('/hrm/leave-applications'))      return ['hrm-leaves'];
+        if (isActive('/hrm/payslips'))                return ['hrm-payslips'];
+        if (isActive('/hrm/departments'))             return ['hrm-departments'];
+        if (isActive('/hrm/designations'))            return ['hrm-designations'];
+        if (isActive('/hrm/employment-statuses'))     return ['hrm-emp-statuses'];
+        if (isActive('/hrm/leave-policies'))          return ['hrm-leave-policies'];
+        if (isActive('/hrm/weekly-holidays'))         return ['hrm-weekly-holidays'];
+        if (isActive('/hrm/shifts'))                  return ['hrm-shifts'];
+        if (isActive('/hrm/public-holidays'))         return ['hrm-public-holidays'];
+        if (isActive('/hrm/awards'))                  return ['hrm-awards'];
+        if (isActive('/hrm/priorities'))              return ['hrm-priorities'];
+        if (isActive('/hrm/salary-histories'))        return ['hrm-salary-hist'];
+        if (isActive('/hrm/designation-histories'))   return ['hrm-desig-hist'];
+        if (isActive('/hrm/award-histories'))         return ['hrm-award-hist'];
+        if (isActive('/hrm/educations'))              return ['hrm-education'];
+        if (isActive('/hrm/roles'))                   return ['hrm-roles'];
+        if (isActive('/hrm/permissions'))             return ['hrm-permissions'];
+        if (isActive('/hrm/role-permissions'))        return ['hrm-role-perms'];
+        if (isActive('/hrm/projects'))                return ['hrm-projects-list'];
+        if (isActive('/hrm/milestones'))              return ['hrm-milestones'];
+        if (isActive('/hrm/tasks'))                   return ['hrm-tasks'];
+        if (isActive('/hrm/task-statuses'))           return ['hrm-task-statuses'];
+        if (isActive('/hrm/assigned-tasks'))          return ['hrm-assigned-tasks'];
+        if (isActive('/hrm/project-teams'))           return ['hrm-project-teams'];
+        if (isActive('/hrm/project-team-members'))    return ['hrm-team-members'];
+        if (isActive('/hrm/email-configs'))           return ['hrm-email-configs'];
+        if (isActive('/hrm/emails'))                  return ['hrm-emails'];
 
         if (isActive('/reports')) return ['reports'];
 

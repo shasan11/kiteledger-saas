@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,36 +9,30 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Shift extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'branch_id',
         'name',
         'start_time',
         'end_time',
+        'work_hour',
+        // legacy fields kept for compatibility
         'grace_minutes',
         'hours_per_day',
         'active',
+        'is_system_generated',
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'grace_minutes' => 'integer',
-            'hours_per_day' => 'decimal:2',
-            'active' => 'boolean',
-            'user_add_id' => 'integer',
+            'work_hour'           => 'decimal:2',
+            'grace_minutes'       => 'integer',
+            'hours_per_day'       => 'decimal:2',
+            'active'              => 'boolean',
+            'is_system_generated' => 'boolean',
         ];
     }
 
@@ -48,13 +41,8 @@ class Shift extends Model
         return $this->belongsTo(Branch::class);
     }
 
-    public function userAdd(): BelongsTo
+    public function users(): HasMany
     {
-        return $this->belongsTo(User::class);
-    }
-
-    public function employees(): HasMany
-    {
-        return $this->hasMany(Employee::class);
+        return $this->hasMany(User::class);
     }
 }

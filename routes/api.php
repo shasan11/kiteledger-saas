@@ -28,7 +28,36 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\CurrencyController;
 use Illuminate\Support\Facades\Route;
+
+// HRM Controllers
+use App\Http\Controllers\Api\EmploymentStatusController;
+use App\Http\Controllers\Api\LeavePolicyController;
+use App\Http\Controllers\Api\WeeklyHolidayController;
+use App\Http\Controllers\Api\ShiftController as HrmShiftController;
+use App\Http\Controllers\Api\RoleController;
+use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\RolePermissionController;
+use App\Http\Controllers\Api\UserController as HrmUserController;
+use App\Http\Controllers\Api\DesignationHistoryController;
+use App\Http\Controllers\Api\SalaryHistoryController;
+use App\Http\Controllers\Api\EducationController;
+use App\Http\Controllers\Api\LeaveApplicationController;
+use App\Http\Controllers\Api\PayslipController;
+use App\Http\Controllers\Api\AwardController;
+use App\Http\Controllers\Api\AwardHistoryController;
+use App\Http\Controllers\Api\PublicHolidayController;
+use App\Http\Controllers\Api\EmailConfigController;
+use App\Http\Controllers\Api\EmailController;
+use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\MilestoneController;
+use App\Http\Controllers\Api\PriorityController;
+use App\Http\Controllers\Api\TaskStatusController;
+use App\Http\Controllers\Api\TaskController as HrmTaskController;
+use App\Http\Controllers\Api\AssignedTaskController;
+use App\Http\Controllers\Api\ProjectTeamController;
+use App\Http\Controllers\Api\ProjectTeamMemberController;
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +73,17 @@ Route::apiResource('bank-accounts', BankAccountController::class)
     ->parameters([
         'bank-accounts' => 'bankAccount',
     ]);
+
+/*
+|--------------------------------------------------------------------------
+| Currencies
+|--------------------------------------------------------------------------
+*/
+
+Route::post('currencies/bulk', [CurrencyController::class, 'bulkStore']);
+Route::patch('currencies/bulk', [CurrencyController::class, 'bulkUpdate']);
+Route::delete('currencies/bulk', [CurrencyController::class, 'bulkDestroy']);
+Route::apiResource('currencies', CurrencyController::class);
 
 /*
 |--------------------------------------------------------------------------
@@ -304,3 +344,40 @@ Route::post('variants/bulk', [VariantController::class, 'bulkStore']);
 Route::patch('variants/bulk', [VariantController::class, 'bulkUpdate']);
 Route::delete('variants/bulk', [VariantController::class, 'bulkDestroy']);
 Route::apiResource('variants', VariantController::class);
+
+/*
+|--------------------------------------------------------------------------
+| HRM Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('hrm')->group(function () {
+    Route::apiResource('employment-statuses', EmploymentStatusController::class);
+    Route::apiResource('departments', \App\Http\Controllers\Api\DepartmentController::class);
+    Route::apiResource('designations', \App\Http\Controllers\Api\DesignationController::class);
+    Route::apiResource('designation-histories', DesignationHistoryController::class);
+    Route::apiResource('salary-histories', SalaryHistoryController::class);
+    Route::apiResource('leave-policies', LeavePolicyController::class);
+    Route::apiResource('weekly-holidays', WeeklyHolidayController::class);
+    Route::apiResource('shifts', HrmShiftController::class);
+    Route::apiResource('roles', RoleController::class);
+    Route::apiResource('permissions', PermissionController::class);
+    Route::apiResource('role-permissions', RolePermissionController::class);
+    Route::apiResource('users', HrmUserController::class);
+    Route::apiResource('educations', EducationController::class);
+    Route::apiResource('attendances', \App\Http\Controllers\Api\AttendanceController::class);
+    Route::apiResource('leave-applications', LeaveApplicationController::class);
+    Route::apiResource('payslips', PayslipController::class);
+    Route::apiResource('awards', AwardController::class);
+    Route::apiResource('award-histories', AwardHistoryController::class);
+    Route::apiResource('public-holidays', PublicHolidayController::class);
+    Route::apiResource('email-configs', EmailConfigController::class);
+    Route::apiResource('emails', EmailController::class);
+    Route::apiResource('projects', ProjectController::class);
+    Route::apiResource('milestones', MilestoneController::class);
+    Route::apiResource('priorities', PriorityController::class);
+    Route::apiResource('task-statuses', TaskStatusController::class);
+    Route::apiResource('tasks', HrmTaskController::class);
+    Route::apiResource('assigned-tasks', AssignedTaskController::class);
+    Route::apiResource('project-teams', ProjectTeamController::class);
+    Route::apiResource('project-team-members', ProjectTeamMemberController::class);
+});
