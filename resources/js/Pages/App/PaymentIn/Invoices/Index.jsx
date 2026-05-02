@@ -5,6 +5,7 @@ import { Button, Checkbox, InputNumber, Select, Switch, Tag, Typography } from '
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ResuableCrud';
+import { STATUS_TABS_BY_MODULE, buildStandardFilters } from '@/Pages/App/FinanceConfigs';
 
 const { Text } = Typography;
 
@@ -1066,6 +1067,7 @@ export default function Index() {
                 defaultAnchorKey="draft"
                 anchorSyncWithHash
                 showSearch
+                serverFilters={buildStandardFilters()}
                 canAdd
                 canEdit
                 canDelete
