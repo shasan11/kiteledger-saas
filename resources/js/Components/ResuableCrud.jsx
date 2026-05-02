@@ -1704,6 +1704,8 @@ export default function ReusableCrud({
   onAnchorChange = null,
 
   transformPayload = null,
+  beforeCreatePayload = null,
+  beforeUpdatePayload = null,
 
   baseFilters = EMPTY_OBJECT,
   sortMode = "ordering",
@@ -4602,10 +4604,16 @@ const submitRecord = async (values, isEditMode, editId) => {
 
   const normalizedValues = normalizeFkValuesForSubmit(values);
 
-  const payload =
+  const basePayload =
     typeof transformPayload === "function"
       ? transformPayload(normalizedValues)
       : normalizedValues;
+
+  const payloadHook = isEditMode ? beforeUpdatePayload : beforeCreatePayload;
+  const payload =
+    typeof payloadHook === "function"
+      ? payloadHook(basePayload, { values: normalizedValues, isEditMode, editId })
+      : basePayload;
 
   const containsFile = hasAnyFile(payload);
 
