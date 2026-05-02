@@ -44,6 +44,9 @@ class BankAccount extends Model
     {
         return [
             'opening_balance' => 'decimal:2',
+            'dr_amount' => 'decimal:2',
+            'cr_amount' => 'decimal:2',
+            'balance' => 'decimal:2',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
