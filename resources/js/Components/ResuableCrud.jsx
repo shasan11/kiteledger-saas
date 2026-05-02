@@ -1715,6 +1715,12 @@ export default function ReusableCrud({
   defaultSortField = null,
   defaultSortOrder = null,
   orderingMinusForDesc = true,
+  rowActionContext = null,
+  formActionContext = null,
+  statusField = "status",
+  readOnlyStatuses = ["posted", "paid", "void"],
+  disabledStatuses = EMPTY_ARRAY,
+  footerActions = EMPTY_ARRAY,
 }) {
   const [data, setData] = useState(EMPTY_ARRAY);
   const [inactiveRows, setInactiveRows] = useState(EMPTY_ARRAY);
@@ -3195,6 +3201,7 @@ export default function ReusableCrud({
                 selectedRowKeys,
                 data,
                 viewActive,
+                editingRecord,
                 fetchData: () =>
                   fetchData({
                     page: pagination.current,
@@ -3204,6 +3211,7 @@ export default function ReusableCrud({
                 clearSelection: () => setSelectedRowKeys(EMPTY_ARRAY),
                 message,
                 fk: { refreshFkAndSelect },
+                context: rowActionContext,
               }),
           });
         });
@@ -3229,6 +3237,8 @@ export default function ReusableCrud({
     inactivePagination.total,
     filteredInactiveData.length,
     refreshFkAndSelect,
+    editingRecord,
+    rowActionContext,
   ]);
 
   const processedColumns = useMemo(() => {
@@ -3341,13 +3351,36 @@ export default function ReusableCrud({
     [objectArrayExpandedRows]
   );
 
+  /**
+   * Usage note (backward compatible):
+   * - statusField/readOnlyStatuses/disabledStatuses: dynamic locking by record status.
+   * - rowActionContext/formActionContext: custom context passed to callbacks.
+   * - footerActions: per-record footer buttons [{label,show,disabled,onClick,type,danger}].
+   * - objectArray field can expose summaryRows({ rows, values, field, editingRecord }).
+   * - group fields already support collapsible sections via { type:'group', accordion, defaultOpen }.
+   * - anchor/status tabs are supported with anchorFilters + anchorParamResolver.
+   */
   const renderFormFields = (values, setFieldValue, errors, touched, ui_type) => {
+    const normalizedStatus = String(values?.[statusField] ?? "").toLowerCase();
+    const statusReadOnly = (readOnlyStatuses || EMPTY_ARRAY)
+      .map((x) => String(x).toLowerCase())
+      .includes(normalizedStatus);
+    const statusDisabled = (disabledStatuses || EMPTY_ARRAY)
+      .map((x) => String(x).toLowerCase())
+      .includes(normalizedStatus);
     const renderOneField = (field, parentPath = "") => {
       if (!field) return null;
       if (field.condition && !field.condition(values)) return null;
 
       const colSpan = field.col ?? 24;
-      const readOnly = !!field.readOnly;
+      const readOnly =
+        (typeof field.readOnly === "function"
+          ? !!field.readOnly({ values, editingRecord, status: normalizedStatus, context: formActionContext })
+          : !!field.readOnly) || statusReadOnly;
+      const disabled =
+        (typeof field.disabled === "function"
+          ? !!field.disabled({ values, editingRecord, status: normalizedStatus, context: formActionContext })
+          : !!field.disabled) || statusDisabled;
       const label = field.label;
       const name = field.name;
 
@@ -3977,7 +4010,7 @@ export default function ReusableCrud({
                           const detailPath = `${name}[${idx}].${colKey}_detail`;
                           const val = rowValue?.[colKey];
                           const detailVal = rowValue?.[`${colKey}_detail`];
-                          const cellReadOnly = readOnly || !!c.readOnly;
+                          const cellReadOnly = readOnly || disabled || !!c.readOnly;
 
                           if (typeof c.formula === "function") {
                             const computed = c.formula(rowValue, values, idx);
@@ -4261,7 +4294,7 @@ export default function ReusableCrud({
                                       const val = r?.[colKey];
                                       const detailPath = `${name}[${idx}].${colKey}_detail`;
                                       const detailVal = r?.[`${colKey}_detail`];
-                                      const cellReadOnly = readOnly || !!c.readOnly;
+                                      const cellReadOnly = readOnly || disabled || !!c.readOnly;
 
                                       if (typeof c.formula === "function") {
                                         const computed = c.formula(r, values, idx);
@@ -4490,7 +4523,7 @@ export default function ReusableCrud({
                                       />
                                     ) : null}
 
-                                    {!readOnly ? (
+                                    {!readOnly && !disabled ? (
                                       <Button
                                         size="large"
                                         danger
@@ -4551,7 +4584,7 @@ export default function ReusableCrud({
                               );
                             })}
 
-                            {!readOnly && (
+                            {!readOnly && !disabled && (
                               <div style={{ padding: 12, borderTop: "1px solid #f0f0f0" }}>
                                 <Button
                                   size="large"
@@ -4563,6 +4596,27 @@ export default function ReusableCrud({
                                 </Button>
                               </div>
                             )}
+
+                            {typeof field.summaryRows === "function" &&
+                              (field.summaryRows({ rows, values, field, editingRecord }) || EMPTY_ARRAY).map(
+                                (sum, sumIdx) => (
+                                  <div
+                                    key={`${fieldKey}.summary.${sumIdx}`}
+                                    style={{ padding: "8px 12px", borderTop: "1px dashed #e5e7eb" }}
+                                  >
+                                    <Row gutter={[12, 8]}>
+                                      {(sum?.items || EMPTY_ARRAY).map((item, i) => (
+                                        <Col key={`${fieldKey}.summary.${sumIdx}.${i}`} {...getResponsiveColProps(item)}>
+                                          <span style={{ fontWeight: item?.strong ? 700 : 500 }}>
+                                            {item?.label ? `${item.label}: ` : ""}
+                                            {item?.value ?? ""}
+                                          </span>
+                                        </Col>
+                                      ))}
+                                    </Row>
+                                  </div>
+                                )
+                              )}
                           </div>
                         );
                       }}
@@ -4797,6 +4851,8 @@ const submitRecord = async (values, isEditMode, editId) => {
           isValid,
           isSubmitting,
           editingRecord,
+          status: String(values?.[statusField] ?? "").toLowerCase(),
+          context: formActionContext,
         };
 
         const inner = (
@@ -4876,7 +4932,33 @@ const submitRecord = async (values, isEditMode, editId) => {
                   setVisible(false);
                   setSubmitErrors(EMPTY_ARRAY);
                 }}
-                footer={null}
+                footer={
+                  Array.isArray(footerActions) && footerActions.length > 0 ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                      {footerActions
+                        .filter((btn) =>
+                          typeof btn?.show === "function"
+                            ? btn.show({ values, editingRecord, status: submitMeta.status, context: formActionContext })
+                            : btn?.show !== false
+                        )
+                        .map((btn, idx) => (
+                          <Button
+                            key={`modal-footer-${idx}`}
+                            type={btn?.type || "default"}
+                            danger={!!btn?.danger}
+                            disabled={
+                              typeof btn?.disabled === "function"
+                                ? btn.disabled({ values, editingRecord, status: submitMeta.status, context: formActionContext })
+                                : !!btn?.disabled
+                            }
+                            onClick={() => btn?.onClick?.({ values, editingRecord, status: submitMeta.status, submitForm, context: formActionContext })}
+                          >
+                            {btn?.label || `Action ${idx + 1}`}
+                          </Button>
+                        ))}
+                    </div>
+                  ) : null
+                }
                 destroyOnClose
               >
                 {inner}
