@@ -21,14 +21,12 @@ class ChartOfAccountController extends BaseCrudApiController
         'branch',
         'account',
         'parent',
-        'currency',
     ];
 
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'account' => 'account_id',
         'parent' => 'parent_id',
-        'currency' => 'currency_id',
     ];
 
     protected array $searchable = [
@@ -44,16 +42,12 @@ class ChartOfAccountController extends BaseCrudApiController
 
         'parent.name',
         'parent.code',
-
-        'currency.name',
-        'currency.code',
     ];
 
     protected array $filterable = [
         'branch_id',
         'account_id',
         'parent_id',
-        'currency_id',
     ];
 
     protected array $booleanFilters = [
@@ -68,7 +62,6 @@ class ChartOfAccountController extends BaseCrudApiController
         'branch_id',
         'account_id',
         'parent_id',
-        'currency_id',
         'is_system_generated',
         'active',
         'created_at',
@@ -97,7 +90,7 @@ class ChartOfAccountController extends BaseCrudApiController
         ],
 
         'code' => [
-            'nullable',
+            'required',
             'string',
             'max:30',
             'unique:chart_of_accounts,code',
@@ -112,12 +105,6 @@ class ChartOfAccountController extends BaseCrudApiController
         'description' => [
             'nullable',
             'string',
-        ],
-
-        'currency_id' => [
-            'nullable',
-            'uuid',
-            'exists:currencies,id',
         ],
 
         'is_system_generated' => [
@@ -267,13 +254,6 @@ class ChartOfAccountController extends BaseCrudApiController
                 'string',
             ],
 
-            'currency_id' => [
-                'sometimes',
-                'nullable',
-                'uuid',
-                'exists:currencies,id',
-            ],
-
             'is_system_generated' => [
                 'sometimes',
                 'nullable',
@@ -297,15 +277,16 @@ class ChartOfAccountController extends BaseCrudApiController
 
     protected function storeRules(Request $request): array
     {
-        $rules = $this->storeRules;
+        $rules = parent::storeRules($request);
+        $branchId = $request->input('branch_id');
 
         $rules['code'] = [
-            'nullable',
+            'required',
             'string',
             'max:30',
             Rule::unique('chart_of_accounts', 'code')
-                ->where(function ($query) use ($request) {
-                    return $query->where('branch_id', $request->input('branch_id'));
+                ->where(function ($query) use ($branchId) {
+                    return $query->where('branch_id', $branchId);
                 }),
         ];
 

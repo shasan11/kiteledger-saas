@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -A 10 'protected $fillable' app/Models/ChartOfAccount.php)",
+      "Bash(php -l app/Http/Controllers/Api/ChartOfAccountController.php app/Http/Controllers/Api/BankAccountController.php app/Services/Accounting/AccountSyncService.php app/Observers/BankAccountObserver.php)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

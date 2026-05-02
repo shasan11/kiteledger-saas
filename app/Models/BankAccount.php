@@ -29,7 +29,6 @@ class BankAccount extends Model
         'account_type',
         'swift_code',
         'account_id',
-        'opening_balance',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -43,7 +42,6 @@ class BankAccount extends Model
     protected function casts(): array
     {
         return [
-            'opening_balance' => 'decimal:2',
             'dr_amount' => 'decimal:2',
             'cr_amount' => 'decimal:2',
             'balance' => 'decimal:2',
