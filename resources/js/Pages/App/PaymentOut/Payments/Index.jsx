@@ -380,13 +380,23 @@ export default function SupplierPayments() {
             ),
         },
         {
+            name: '_allocation_actions_hint',
+            type: 'custom',
+            col: 24,
+            render: () => (
+                <div style={{ marginTop: -2, marginBottom: 8, color: '#6b7280', fontSize: 12 }}>
+                    Actions: Print Payment Voucher • Auto Allocate Oldest First
+                </div>
+            ),
+        },
+        {
             name: 'items',
             label: '',
             type: 'objectArray',
             col: 24,
             headerBg: '#3b1f6b',
             headerColor: '#ffffff',
-            addButtonLabel: '+ Add Bill Line',
+            addButtonLabel: '+ Add Allocation Line',
             defaultItem: { ...emptyItem },
             columns: [
                 {
@@ -515,7 +525,7 @@ export default function SupplierPayments() {
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold">Supplier Payments</h2>}>
             <Head title="Supplier Payments" />
             <ReusableCrud
-                title="Supplier Payment"
+                title="Supplier Payments"
                 apiUrl={api('/api/supplier-payments/')}
                 columns={columns}
                 fields={fields}
