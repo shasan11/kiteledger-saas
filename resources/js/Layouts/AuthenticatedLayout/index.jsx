@@ -161,6 +161,15 @@ export default function AuthenticatedLayout({ header, children }) {
                             ),
                     },
                     {
+                        key: 'pi-sales-orders',
+                        label: 'Sales Order',
+                        onClick: () =>
+                            visit(
+                                'payment-in.sales-orders.index',
+                                '/payment-in/sales-orders',
+                            ),
+                    },
+                    {
                         key: 'pi-invoices',
                         label: 'Invoices',
                         onClick: () =>
@@ -674,6 +683,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/workflow')) return ['workflow'];
 
         if (isActive('/payment-in/bills')) return ['pi-bills'];
+        if (isActive('/payment-in/sales-orders')) return ['pi-sales-orders'];
         if (isActive('/payment-in/invoices')) return ['pi-invoices'];
         if (isActive('/payment-in/payments')) return ['pi-payment'];
         if (isActive('/payment-in/credit-notes')) return ['pi-credit-notes'];
