@@ -55,6 +55,7 @@ class BankAccountController extends BaseCrudApiController
 
     protected array $booleanFilters = [
         'active',
+        'is_system_generated',
     ];
 
     protected array $sortable = [
@@ -63,6 +64,8 @@ class BankAccountController extends BaseCrudApiController
         'code',
         'type',
         'opening_balance',
+        'active',
+        'is_system_generated',
         'created_at',
         'updated_at',
     ];
@@ -70,10 +73,12 @@ class BankAccountController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
         'code' => ['required', 'string', 'max:30'],
+
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
         'description' => ['nullable', 'string'],
@@ -82,18 +87,24 @@ class BankAccountController extends BaseCrudApiController
         'account_number' => ['nullable', 'string', 'max:80'],
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
+
         'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+
         'opening_balance' => ['nullable', 'numeric'],
+
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
+
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
 
     protected array $updateRules = [
-        'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
+        'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+
         'type' => ['sometimes', 'required', 'in:bank,cash'],
         'display_name' => ['sometimes', 'required', 'string', 'max:150'],
         'code' => ['sometimes', 'required', 'string', 'max:30'],
+
         'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
         'description' => ['sometimes', 'nullable', 'string'],
@@ -102,10 +113,14 @@ class BankAccountController extends BaseCrudApiController
         'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
         'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
         'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
+
         'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+
         'opening_balance' => ['sometimes', 'nullable', 'numeric'],
+
         'active' => ['sometimes', 'nullable', 'boolean'],
         'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
+
         'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
     ];
 }
