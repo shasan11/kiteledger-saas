@@ -22,6 +22,8 @@ class Account extends Model
         'name',
         'code',
         'nature',
+        'owner_type',
+        'owner_id',
         'parent_id',
         'currency_id',
         'description',
