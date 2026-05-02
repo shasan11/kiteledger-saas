@@ -97,7 +97,7 @@ class ChartOfAccountController extends BaseCrudApiController
         ],
 
         'code' => [
-            'required',
+            'nullable',
             'string',
             'max:30',
             'unique:chart_of_accounts,code',
@@ -213,6 +213,8 @@ class ChartOfAccountController extends BaseCrudApiController
 
     protected function updateRules(Request $request, Model $record): array
     {
+        $branchId = $request->input('branch_id', $record->branch_id);
+
         return [
             'branch_id' => [
                 'sometimes',
@@ -242,10 +244,14 @@ class ChartOfAccountController extends BaseCrudApiController
 
             'code' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:30',
-                Rule::unique('chart_of_accounts', 'code')->ignore($record->getKey()),
+                Rule::unique('chart_of_accounts', 'code')
+                    ->where(function ($query) use ($branchId) {
+                        return $query->where('branch_id', $branchId);
+                    })
+                    ->ignore($record->getKey()),
             ],
 
             'name' => [
@@ -287,5 +293,22 @@ class ChartOfAccountController extends BaseCrudApiController
                 'exists:users,id',
             ],
         ];
+    }
+
+    protected function storeRules(Request $request): array
+    {
+        $rules = $this->storeRules;
+
+        $rules['code'] = [
+            'nullable',
+            'string',
+            'max:30',
+            Rule::unique('chart_of_accounts', 'code')
+                ->where(function ($query) use ($request) {
+                    return $query->where('branch_id', $request->input('branch_id'));
+                }),
+        ];
+
+        return $rules;
     }
 }

@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\BankAccount;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class BankAccountController extends BaseCrudApiController
 {
@@ -77,7 +80,7 @@ class BankAccountController extends BaseCrudApiController
 
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
-        'code' => ['required', 'string', 'max:30'],
+        'code' => ['nullable', 'string', 'max:30'],
 
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
@@ -98,29 +101,61 @@ class BankAccountController extends BaseCrudApiController
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
 
-    protected array $updateRules = [
-        'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+    protected function updateRules(Request $request, Model $record): array
+    {
+        $branchId = $request->input('branch_id', $record->branch_id);
 
-        'type' => ['sometimes', 'required', 'in:bank,cash'],
-        'display_name' => ['sometimes', 'required', 'string', 'max:150'],
-        'code' => ['sometimes', 'required', 'string', 'max:30'],
+        return [
+            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
 
-        'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
+            'type' => ['sometimes', 'required', 'in:bank,cash'],
+            'display_name' => ['sometimes', 'required', 'string', 'max:150'],
+            'code' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:30',
+                Rule::unique('bank_accounts', 'code')
+                    ->where(function ($query) use ($branchId) {
+                        return $query->where('branch_id', $branchId);
+                    })
+                    ->ignore($record->getKey()),
+            ],
 
-        'description' => ['sometimes', 'nullable', 'string'],
-        'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-        'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-        'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
-        'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
-        'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
-        'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+            'description' => ['sometimes', 'nullable', 'string'],
+            'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
+            'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
 
-        'opening_balance' => ['sometimes', 'nullable', 'numeric'],
+            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
 
-        'active' => ['sometimes', 'nullable', 'boolean'],
-        'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
+            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
 
-        'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-    ];
+            'active' => ['sometimes', 'nullable', 'boolean'],
+            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
+
+            'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+        ];
+    }
+
+    protected function storeRules(Request $request): array
+    {
+        $rules = $this->storeRules;
+
+        $rules['code'] = [
+            'nullable',
+            'string',
+            'max:30',
+            Rule::unique('bank_accounts', 'code')
+                ->where(function ($query) use ($request) {
+                    return $query->where('branch_id', $request->input('branch_id'));
+                }),
+        ];
+
+        return $rules;
+    }
 }
