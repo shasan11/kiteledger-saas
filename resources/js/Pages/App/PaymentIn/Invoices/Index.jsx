@@ -839,28 +839,24 @@ export default function Index() {
 
                 return {
                     id: row.id,
-                    product_id: row.product_id,
+                    product_variant_id: row.product_id || null,
+                    custom_product_name: row.product_name || '',
                     description: row.description || row.product_name || '',
-                    quantity: toNumber(row.quantity),
-                    unit_code: row.unit_code || '',
-                    rate: toNumber(row.rate),
-                    discount: toNumber(row.discount),
-                    discount_type: row.discount_type || 'percent',
-                    tax_code: row.tax_code || 'no_vat',
-                    taxable_amount: Number(line.taxable.toFixed(2)),
-                    non_taxable_amount: Number(line.nonTaxable.toFixed(2)),
-                    vat_amount: Number(line.vat.toFixed(2)),
-                    amount: Number(line.amount.toFixed(2)),
-                    notes: row.notes || '',
+                    qty: toNumber(row.quantity),
+                    unit_price: toNumber(row.rate),
+                    discount_percent:
+                        row.discount_type === 'percent' ? toNumber(row.discount) : 0,
+                    tax_amount: Number(line.vat.toFixed(2)),
+                    line_total: Number(line.amount.toFixed(2)),
                 };
             });
 
         const totals = calculateTotals(values);
 
         return {
-            customer_id: values.customer_id,
-            reference_no: values.reference_no || '',
-            invoice_code: values.invoice_code || 'DRAFT',
+            contact_id: values.customer_id,
+            reference: values.reference_no || '',
+            invoice_no: values.invoice_code || 'DRAFT',
 
             invoice_date: formatDateForBackend(values.invoice_date),
             due_date: formatDateForBackend(values.due_date),
@@ -869,12 +865,11 @@ export default function Index() {
             exchange_rate_to_npr: toNumber(values.exchange_rate_to_npr || 1),
             warehouse_id: values.warehouse_id,
 
-            is_export_sales: !!values.is_export_sales,
-            export_country_id: values.is_export_sales ? values.export_country_id : null,
-            export_document_date: values.is_export_sales
+            export_country: values.is_export_sales ? values.export_country_name || '' : '',
+            export_date: values.is_export_sales
                 ? formatDateForBackend(values.export_document_date)
                 : null,
-            export_document_no: values.is_export_sales ? values.export_document_no || '' : '',
+            export_document_number: values.is_export_sales ? values.export_document_no || '' : '',
 
             received_by: values.received_by || '',
             expiry: values.expiry || '',
@@ -883,24 +878,11 @@ export default function Index() {
 
             notes: values.notes || '',
 
-            invoice_discount: toNumber(values.invoice_discount),
-            invoice_discount_type: values.invoice_discount_type || 'percent',
-
-            tds_applicable: !!values.tds_applicable,
-            tds_account_id: values.tds_applicable ? values.tds_account_id : null,
-            tds_type: values.tds_applicable ? values.tds_type : null,
-            tds_amount: values.tds_applicable ? toNumber(values.tds_amount) : 0,
-
-            sub_total: Number(totals.subTotal.toFixed(2)),
-            discount_amount: Number(totals.invoiceDiscount.toFixed(2)),
-            line_discount_amount: Number(totals.lineDiscount.toFixed(2)),
-            non_taxable_total: Number(totals.nonTaxableTotal.toFixed(2)),
-            taxable_total: Number(totals.taxableTotal.toFixed(2)),
-            vat_amount: Number(totals.vat.toFixed(2)),
-            grand_total: Number(totals.grandTotal.toFixed(2)),
+            paid_total: 0,
+            balance_due: Number(totals.grandTotal.toFixed(2)),
 
             approved: !!values.approved,
-            status: values.status || 'draft',
+            status: values.status === 'approved' ? 'posted' : values.status || 'draft',
 
             items,
         };
@@ -1018,7 +1000,7 @@ export default function Index() {
 
             <ReusableCrud
                 title="Sales Invoice"
-                apiUrl={api('/api/sales-invoices/')}
+                apiUrl={api('/api/invoices/')}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}
