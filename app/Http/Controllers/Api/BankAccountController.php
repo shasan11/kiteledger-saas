@@ -121,9 +121,6 @@ class BankAccountController extends BaseCrudApiController
             // frontend fields
             'type' => ['sometimes', 'required', 'in:bank,cash'],
             'display_name' => ['sometimes', 'required', 'string', 'max:150'],
-<<<<<<< HEAD
-            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
-=======
             'code' => [
                 'sometimes',
                 'nullable',
@@ -135,7 +132,6 @@ class BankAccountController extends BaseCrudApiController
                     })
                     ->ignore($record->getKey()),
             ],
->>>>>>> 01538c9aab877fd89f34141025517712a207cd06
 
             'description' => ['sometimes', 'nullable', 'string'],
             'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
