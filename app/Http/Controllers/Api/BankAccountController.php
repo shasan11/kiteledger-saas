@@ -66,7 +66,6 @@ class BankAccountController extends BaseCrudApiController
         'display_name',
         'code',
         'type',
-        'opening_balance',
         'active',
         'created_at',
         'updated_at',
@@ -85,7 +84,11 @@ class BankAccountController extends BaseCrudApiController
         // frontend fields
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
+<<<<<<< HEAD
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
+=======
+        'code' => ['nullable', 'string', 'max:30'],
+>>>>>>> 01538c9aab877fd89f34141025517712a207cd06
 
         'description' => ['nullable', 'string'],
         'bank_name' => ['nullable', 'string', 'max:150'],
@@ -94,7 +97,14 @@ class BankAccountController extends BaseCrudApiController
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
 
+<<<<<<< HEAD
         'opening_balance' => ['nullable', 'numeric'],
+=======
+        'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
+
+        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+
+>>>>>>> 01538c9aab877fd89f34141025517712a207cd06
         'active' => ['nullable', 'boolean'],
     ];
 
@@ -111,7 +121,21 @@ class BankAccountController extends BaseCrudApiController
             // frontend fields
             'type' => ['sometimes', 'required', 'in:bank,cash'],
             'display_name' => ['sometimes', 'required', 'string', 'max:150'],
+<<<<<<< HEAD
             'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
+=======
+            'code' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:30',
+                Rule::unique('bank_accounts', 'code')
+                    ->where(function ($query) use ($branchId) {
+                        return $query->where('branch_id', $branchId);
+                    })
+                    ->ignore($record->getKey()),
+            ],
+>>>>>>> 01538c9aab877fd89f34141025517712a207cd06
 
             'description' => ['sometimes', 'nullable', 'string'],
             'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
@@ -120,7 +144,14 @@ class BankAccountController extends BaseCrudApiController
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
 
+<<<<<<< HEAD
             'opening_balance' => ['sometimes', 'nullable', 'numeric'],
+=======
+            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
+
+            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+
+>>>>>>> 01538c9aab877fd89f34141025517712a207cd06
             'active' => ['sometimes', 'nullable', 'boolean'],
         ];
     }

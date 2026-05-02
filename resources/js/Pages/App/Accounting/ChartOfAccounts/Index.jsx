@@ -86,19 +86,6 @@ export default function ChartOfAccounts(props) {
                     ),
             },
             {
-                title: 'Currency',
-                dataIndex: 'currency_name',
-                key: 'currency_name',
-                width: 150,
-                render: (_, record) =>
-                    getLabel(
-                        record?.currency_name,
-                        record?.currency?.label,
-                        record?.currency?.name,
-                        record?.currency?.code,
-                    ),
-            },
-            {
                 title: 'Type',
                 dataIndex: 'is_system_generated',
                 key: 'is_system_generated',
@@ -150,7 +137,28 @@ export default function ChartOfAccounts(props) {
                 labelField: 'parent_name',
                 fkExtraParams: {
                     active: true,
-                    is_system_generated: activeAnchor === 'system',
+                },
+                fkLabel: (row) => {
+                    const code = row?.code || '';
+                    const name = row?.name || '';
+
+                    return [code, name].filter(Boolean).join(' - ');
+                },
+            },
+            {
+                name: 'branch_id',
+                label: 'Branch',
+                type: 'fkSelect',
+                col: 12,
+                placeholder: 'Select branch',
+                fkUrl: '/api/branches/',
+                fkSearchParam: 'search',
+                fkPageSize: 20,
+                fkValueKey: 'id',
+                fkLabelKey: 'name',
+                labelField: 'branch_name',
+                fkExtraParams: {
+                    active: true,
                 },
                 fkLabel: (row) => {
                     const code = row?.code || '';
@@ -180,6 +188,8 @@ export default function ChartOfAccounts(props) {
 
         parent_id: Yup.string().nullable(),
 
+        branch_id: Yup.string().nullable(),
+
         description: Yup.string().nullable(),
 
         active: Yup.boolean().nullable(),
@@ -190,6 +200,7 @@ export default function ChartOfAccounts(props) {
         parent_id_detail: null,
         parent_name: '',
 
+        code: '',
         name: '',
         description: '',
 
@@ -199,6 +210,8 @@ export default function ChartOfAccounts(props) {
     const transformPayload = (values) => {
         const payload = {
             parent_id: values.parent_id || null,
+
+            code: values.code?.trim() || null,
             name: values.name?.trim() || null,
             description: values.description?.trim() || null,
             active: values.active !== false,

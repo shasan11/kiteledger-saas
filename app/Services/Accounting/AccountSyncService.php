@@ -72,7 +72,6 @@ class AccountSyncService
             'account_number' => $bankAccount->account_number,
             'account_type' => $bankAccount->account_type,
             'swift_code' => $bankAccount->swift_code,
-            'opening_balance' => $bankAccount->opening_balance ?? 0,
             'active' => (bool) $bankAccount->active,
             'is_system_generated' => (bool) $bankAccount->is_system_generated,
             'user_add_id' => $bankAccount->user_add_id,
@@ -82,6 +81,40 @@ class AccountSyncService
         if ((string) $bankAccount->account_id !== (string) $account->getKey()) {
             $bankAccount->forceFill(['account_id' => $account->getKey()])->saveQuietly();
         }
+
+        $this->syncBankAccountChartOfAccount($bankAccount, $account);
+    }
+
+    protected function syncBankAccountChartOfAccount(BankAccount $bankAccount, Account $account): void
+    {
+        $existingCoa = ChartOfAccount::query()
+            ->where('account_id', $account->getKey())
+            ->first();
+
+        if ($existingCoa) {
+            $existingCoa->fill([
+                'branch_id' => $bankAccount->branch_id,
+                'name' => $bankAccount->display_name,
+                'code' => $bankAccount->code,
+                'description' => $bankAccount->description,
+                'active' => (bool) $bankAccount->active,
+                'is_system_generated' => (bool) $bankAccount->is_system_generated,
+                'user_add_id' => $bankAccount->user_add_id,
+            ])->save();
+
+            return;
+        }
+
+        ChartOfAccount::create([
+            'branch_id' => $bankAccount->branch_id,
+            'account_id' => $account->getKey(),
+            'code' => $bankAccount->code,
+            'name' => $bankAccount->display_name,
+            'description' => $bankAccount->description,
+            'active' => (bool) $bankAccount->active,
+            'is_system_generated' => true,
+            'user_add_id' => $bankAccount->user_add_id,
+        ]);
     }
 
     public function deactivateLinkedAccount(string $accountId): void

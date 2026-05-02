@@ -20,6 +20,7 @@ class ChartOfAccountResource extends JsonResource
             'account_id' => $this->account_id,
             'code' => $this->code,
             'name' => $this->name,
+            'parent_id' => $this->parent_id,
             'description' => $this->description,
             'currency_id' => $this->currency_id,
             'is_system_generated' => $this->is_system_generated,
@@ -27,6 +28,10 @@ class ChartOfAccountResource extends JsonResource
             'user_add_id' => $this->user_add_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+
+            'branch' => $this->whenLoaded('branch'),
+            'account' => $this->whenLoaded('account'),
+            'parent' => $this->whenLoaded('parent'),
         ];
     }
 }

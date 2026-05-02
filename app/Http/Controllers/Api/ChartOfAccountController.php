@@ -25,14 +25,12 @@ class ChartOfAccountController extends BaseCrudApiController
         'branch',
         'account',
         'parent',
-        'currency',
     ];
 
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'account' => 'account_id',
         'parent' => 'parent_id',
-        'currency' => 'currency_id',
     ];
 
     protected array $searchable = [
@@ -45,14 +43,10 @@ class ChartOfAccountController extends BaseCrudApiController
         'account.code',
         'parent.name',
         'parent.code',
-        'currency.name',
-        'currency.code',
     ];
 
     protected array $filterable = [
         'parent_id',
-        'active',
-        'is_system_generated',
     ];
 
     protected array $booleanFilters = [
@@ -72,6 +66,60 @@ class ChartOfAccountController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = 'code';
+
+    protected array $storeRules = [
+        'branch_id' => [
+            'nullable',
+            'uuid',
+            'exists:branches,id',
+        ],
+
+        'account_id' => [
+            'required',
+            'uuid',
+            'exists:accounts,id',
+        ],
+
+        'parent_id' => [
+            'nullable',
+            'uuid',
+            'exists:chart_of_accounts,id',
+        ],
+
+        'code' => [
+            'required',
+            'string',
+            'max:30',
+            'unique:chart_of_accounts,code',
+        ],
+
+        'name' => [
+            'required',
+            'string',
+            'max:150',
+        ],
+
+        'description' => [
+            'nullable',
+            'string',
+        ],
+
+        'is_system_generated' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'active' => [
+            'nullable',
+            'boolean',
+        ],
+
+        'user_add_id' => [
+            'nullable',
+            'integer',
+            'exists:users,id',
+        ],
+    ];
 
     public function index(Request $request)
     {
@@ -225,5 +273,100 @@ class ChartOfAccountController extends BaseCrudApiController
 
             return $node;
         }, $nodes);
+    }
+
+    protected function updateRules(Request $request, Model $record): array
+    {
+        $branchId = $request->input('branch_id', $record->branch_id);
+
+        return [
+            'branch_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                'exists:branches,id',
+            ],
+
+            'account_id' => [
+                'sometimes',
+                'required',
+                'uuid',
+                'exists:accounts,id',
+            ],
+
+            'parent_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                'exists:chart_of_accounts,id',
+                function ($attribute, $value, $fail) use ($record) {
+                    if ($value && (string) $value === (string) $record->getKey()) {
+                        $fail('Parent chart account cannot be the same as this account.');
+                    }
+                },
+            ],
+
+            'code' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:30',
+                Rule::unique('chart_of_accounts', 'code')
+                    ->where(function ($query) use ($branchId) {
+                        return $query->where('branch_id', $branchId);
+                    })
+                    ->ignore($record->getKey()),
+            ],
+
+            'name' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:150',
+            ],
+
+            'description' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+
+            'is_system_generated' => [
+                'sometimes',
+                'nullable',
+                'boolean',
+            ],
+
+            'active' => [
+                'sometimes',
+                'nullable',
+                'boolean',
+            ],
+
+            'user_add_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
+        ];
+    }
+
+    protected function storeRules(Request $request): array
+    {
+        $rules = parent::storeRules($request);
+        $branchId = $request->input('branch_id');
+
+        $rules['code'] = [
+            'required',
+            'string',
+            'max:30',
+            Rule::unique('chart_of_accounts', 'code')
+                ->where(function ($query) use ($branchId) {
+                    return $query->where('branch_id', $branchId);
+                }),
+        ];
+
+        return $rules;
     }
 }

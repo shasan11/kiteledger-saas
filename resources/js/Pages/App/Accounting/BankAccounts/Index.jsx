@@ -278,55 +278,6 @@ export default function BankAccounts(props) {
                 },
             },
             {
-                name: 'account_id',
-                label: 'Linked Ledger Account',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select ledger account',
-                fkUrl: '/api/accounts/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'account_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || row?.display_name || '';
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
-                name: 'branch_id',
-                label: 'Branch',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select branch',
-                fkUrl: '/api/branches/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'branch_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || '';
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
-                name: 'opening_balance',
-                label: 'Opening Balance',
-                type: 'number',
-                col: 12,
-                placeholder: '0.00',
-            },
-            {
                 name: 'bank_name',
                 label: 'Bank Name',
                 type: 'text',
@@ -409,13 +360,6 @@ export default function BankAccounts(props) {
             .nullable()
             .required('Currency is required'),
 
-        account_id: Yup.string().nullable(),
-        branch_id: Yup.string().nullable(),
-
-        opening_balance: Yup.number()
-            .typeError('Opening balance must be a number')
-            .nullable(),
-
         description: Yup.string().nullable(),
 
         bank_name: Yup.string().nullable().max(150),
@@ -429,10 +373,6 @@ export default function BankAccounts(props) {
     });
 
     const crudInitialValues = {
-        branch_id: null,
-        branch_id_detail: null,
-        branch_name: '',
-
         type: 'bank',
         display_name: '',
         code: '',
@@ -440,10 +380,6 @@ export default function BankAccounts(props) {
         currency_id: null,
         currency_id_detail: null,
         currency_name: '',
-
-        account_id: null,
-        account_id_detail: null,
-        account_name: '',
 
         description: '',
 
@@ -453,8 +389,6 @@ export default function BankAccounts(props) {
         account_type: '',
         swift_code: '',
 
-        opening_balance: 0,
-
         active: true,
         is_system_generated: false,
     };
@@ -463,13 +397,11 @@ export default function BankAccounts(props) {
         const isBank = values.type === 'bank';
 
         const payload = {
-            branch_id: values.branch_id || null,
             type: values.type || 'bank',
             display_name: values.display_name?.trim() || null,
             code: values.code?.trim() || null,
             currency_id: values.currency_id || null,
 
-            account_id: values.account_id || null,
             description: values.description?.trim() || null,
 
             bank_name: isBank ? values.bank_name?.trim() || null : null,
@@ -477,8 +409,6 @@ export default function BankAccounts(props) {
             account_number: isBank ? values.account_number?.trim() || null : null,
             account_type: isBank ? values.account_type?.trim() || null : null,
             swift_code: isBank ? values.swift_code?.trim() || null : null,
-
-            opening_balance: Number(values.opening_balance || 0),
 
             active: values.active !== false,
             is_system_generated: !!values.is_system_generated,
@@ -492,15 +422,6 @@ export default function BankAccounts(props) {
     };
 
     const handleFormValuesChange = (values, { setFieldValue }) => {
-        const branch = values?.branch_id_detail;
-
-        if (branch) {
-            const label = branch.label || branch.name || branch.code || '';
-            if (label && values.branch_name !== label) {
-                setFieldValue('branch_name', label, false);
-            }
-        }
-
         const currency = values?.currency_id_detail;
 
         if (currency) {
@@ -512,20 +433,6 @@ export default function BankAccounts(props) {
 
             if (label && values.currency_name !== label) {
                 setFieldValue('currency_name', label, false);
-            }
-        }
-
-        const account = values?.account_id_detail;
-
-        if (account) {
-            const label =
-                account.label ||
-                [account.code, account.name].filter(Boolean).join(' - ') ||
-                account.name ||
-                '';
-
-            if (label && values.account_name !== label) {
-                setFieldValue('account_name', label, false);
             }
         }
     };
@@ -822,14 +729,6 @@ export default function BankAccounts(props) {
                                                     <Text strong>{currencyLabel}</Text>
                                                 </div>
 
-                                                <div>
-                                                    <Text type="secondary">Opening Balance</Text>
-                                                    <br />
-                                                    <Text strong>
-                                                        {money(record.opening_balance)}
-                                                    </Text>
-                                                </div>
-
                                                 {isBank ? (
                                                     <>
                                                         <div>
@@ -856,11 +755,6 @@ export default function BankAccounts(props) {
                                                     </>
                                                 ) : null}
 
-                                                <div>
-                                                    <Text type="secondary">Ledger Account</Text>
-                                                    <br />
-                                                    <Text>{ledgerLabel}</Text>
-                                                </div>
                                             </div>
 
                                             <div
