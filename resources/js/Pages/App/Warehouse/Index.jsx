@@ -9,6 +9,16 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const extractId = (value) => {
+  if (!value) return null;
+
+  if (typeof value === 'object') {
+    return value.id || value.value || null;
+  }
+
+  return value;
+};
+
 export default function Warehouses(props) {
   const columns = [
     {
@@ -23,6 +33,12 @@ export default function Warehouses(props) {
       dataIndex: 'code',
       key: 'code',
       render: (val) => val ? <Tag color="blue">{val}</Tag> : '-',
+    },
+    {
+      title: 'Branch',
+      dataIndex: 'branch',
+      key: 'branch',
+      render: (_, record) => record?.branch?.name || '-',
     },
     {
       title: 'Address',
@@ -58,6 +74,21 @@ export default function Warehouses(props) {
       placeholder: 'e.g. WH-001',
     },
     {
+      name: 'branch_id',
+      label: 'Branch',
+      type: 'fkSelect',
+      col: 12,
+      placeholder: 'Select branch',
+      fkUrl: api('/api/branches'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      fkLabel: (row) => row?.name || '',
+      allowClear: true,
+    },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+    {
       name: 'address',
       label: 'Address',
       type: 'textarea',
@@ -65,12 +96,12 @@ export default function Warehouses(props) {
       rows: 3,
       placeholder: 'Warehouse address',
     },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
   ];
 
   const validationSchema = Yup.object().shape({
     name: Yup.string().required('Warehouse name is required').max(150),
     code: Yup.string().nullable().max(50),
+    branch_id: Yup.string().nullable().uuid('Invalid branch selected'),
     address: Yup.string().nullable(),
     active: Yup.boolean().nullable(),
   });
@@ -78,6 +109,7 @@ export default function Warehouses(props) {
   const crudInitialValues = {
     name: '',
     code: '',
+    branch_id: null,
     address: '',
     active: true,
   };
@@ -87,6 +119,7 @@ export default function Warehouses(props) {
     p.name = p.name?.trim() || null;
     p.code = p.code?.trim() || null;
     p.address = p.address?.trim() || null;
+    p.branch_id = extractId(p.branch_id);
     p.active = Boolean(p.active);
     Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
     return p;
