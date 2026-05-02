@@ -38,7 +38,6 @@ class ChartOfAccount extends Model
     protected function casts(): array
     {
         return [
-            'opening_balance' => 'decimal:2',
             'dr_amount' => 'decimal:2',
             'cr_amount' => 'decimal:2',
             'balance' => 'decimal:2',

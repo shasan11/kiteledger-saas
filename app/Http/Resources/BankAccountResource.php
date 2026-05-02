@@ -28,11 +28,15 @@ class BankAccountResource extends JsonResource
             'account_type' => $this->account_type,
             'swift_code' => $this->swift_code,
             'account_id' => $this->account_id,
-            'opening_balance' => $this->opening_balance,
             'active' => $this->active,
+            'is_system_generated' => $this->is_system_generated,
             'user_add_id' => $this->user_add_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+
+            'branch' => $this->whenLoaded('branch'),
+            'currency' => $this->whenLoaded('currency'),
+            'account' => $this->whenLoaded('account'),
         ];
     }
 }

@@ -86,19 +86,6 @@ export default function ChartOfAccounts(props) {
                     ),
             },
             {
-                title: 'Currency',
-                dataIndex: 'currency_name',
-                key: 'currency_name',
-                width: 150,
-                render: (_, record) =>
-                    getLabel(
-                        record?.currency_name,
-                        record?.currency?.label,
-                        record?.currency?.name,
-                        record?.currency?.code,
-                    ),
-            },
-            {
                 title: 'Type',
                 dataIndex: 'is_system_generated',
                 key: 'is_system_generated',
@@ -193,28 +180,6 @@ export default function ChartOfAccounts(props) {
                 },
             },
             {
-                name: 'currency_id',
-                label: 'Currency',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select currency',
-                fkUrl: '/api/currencies/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'currency_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || '';
-
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
                 name: 'branch_id',
                 label: 'Branch',
                 type: 'fkSelect',
@@ -277,8 +242,6 @@ export default function ChartOfAccounts(props) {
 
         parent_id: Yup.string().nullable(),
 
-        currency_id: Yup.string().nullable(),
-
         branch_id: Yup.string().nullable(),
 
         description: Yup.string().nullable(),
@@ -301,10 +264,6 @@ export default function ChartOfAccounts(props) {
         parent_id_detail: null,
         parent_name: '',
 
-        currency_id: null,
-        currency_id_detail: null,
-        currency_name: '',
-
         code: '',
         name: '',
         description: '',
@@ -318,7 +277,6 @@ export default function ChartOfAccounts(props) {
             branch_id: values.branch_id || null,
             account_id: values.account_id || null,
             parent_id: values.parent_id || null,
-            currency_id: values.currency_id || null,
 
             code: values.code?.trim() || null,
             name: values.name?.trim() || null,
@@ -376,19 +334,6 @@ export default function ChartOfAccounts(props) {
             }
         }
 
-        const currency = values?.currency_id_detail;
-
-        if (currency) {
-            const label =
-                currency.label ||
-                [currency.code, currency.name].filter(Boolean).join(' - ') ||
-                currency.name ||
-                '';
-
-            if (label && values.currency_name !== label) {
-                setFieldValue('currency_name', label, false);
-            }
-        }
     };
 
     return (

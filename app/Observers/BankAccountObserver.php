@@ -27,6 +27,10 @@ class BankAccountObserver
         DB::transaction(function () use ($bankAccount): void {
             if ($bankAccount->account_id) {
                 $this->accountSyncService->deactivateLinkedAccount($bankAccount->account_id);
+
+                \App\Models\ChartOfAccount::query()
+                    ->where('account_id', $bankAccount->account_id)
+                    ->update(['active' => false]);
             }
         });
     }

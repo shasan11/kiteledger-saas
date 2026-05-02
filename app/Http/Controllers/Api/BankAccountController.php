@@ -66,7 +66,6 @@ class BankAccountController extends BaseCrudApiController
         'display_name',
         'code',
         'type',
-        'opening_balance',
         'active',
         'is_system_generated',
         'created_at',
@@ -82,8 +81,6 @@ class BankAccountController extends BaseCrudApiController
         'display_name' => ['required', 'string', 'max:150'],
         'code' => ['nullable', 'string', 'max:30'],
 
-        'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
-
         'description' => ['nullable', 'string'],
         'bank_name' => ['nullable', 'string', 'max:150'],
         'account_name' => ['nullable', 'string', 'max:150'],
@@ -91,9 +88,9 @@ class BankAccountController extends BaseCrudApiController
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
 
-        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+        'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
-        'opening_balance' => ['nullable', 'numeric'],
+        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
 
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -122,8 +119,6 @@ class BankAccountController extends BaseCrudApiController
                     ->ignore($record->getKey()),
             ],
 
-            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
-
             'description' => ['sometimes', 'nullable', 'string'],
             'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
             'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
@@ -131,9 +126,9 @@ class BankAccountController extends BaseCrudApiController
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
 
-            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
-            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
+            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
 
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
