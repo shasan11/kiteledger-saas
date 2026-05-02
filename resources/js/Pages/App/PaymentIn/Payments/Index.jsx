@@ -5,6 +5,7 @@ import { Switch, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ResuableCrud';
+import { STATUS_TABS_BY_MODULE, buildStandardFilters, formatMoney, renderApprovedTag, renderOverdueTag, renderStatusTag } from '@/Pages/App/FinanceConfigs';
 
 const { Text } = Typography;
 
@@ -12,7 +13,7 @@ const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (p) => `${BACKEND}${p}`;
 
 const toNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const money = (v) => toNum(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (v) => formatMoney(v, 'en-US');
 const fmtDate = (v) => {
     if (!v) return null;
     const d = dayjs(v, 'DD-MM-YYYY', true);
@@ -178,7 +179,21 @@ export default function CustomerPayments() {
             dataIndex: 'status',
             key: 'status',
             width: 100,
-            render: v => <Tag color={STATUS_COLORS[v] || 'default'}>{(v || 'draft').toUpperCase()}</Tag>,
+            render: renderStatusTag(STATUS_COLORS, 'draft'),
+        },
+        {
+            title: 'Approved',
+            dataIndex: 'approved',
+            key: 'approved',
+            width: 100,
+            render: renderApprovedTag,
+        },
+        {
+            title: 'Overdue',
+            dataIndex: 'due_date',
+            key: 'overdue',
+            width: 100,
+            render: renderOverdueTag,
         },
         {
             title: 'Created',
@@ -552,6 +567,7 @@ export default function CustomerPayments() {
                 defaultAnchorKey="all"
                 anchorSyncWithHash
                 showSearch
+                serverFilters={buildStandardFilters()}
                 canAdd canEdit canDelete canView hasActions hasActionColumns
             />
         </AuthenticatedLayout>
