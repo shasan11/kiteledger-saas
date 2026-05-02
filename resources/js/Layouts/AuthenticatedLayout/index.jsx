@@ -413,48 +413,48 @@ export default function AuthenticatedLayout({ header, children }) {
                 onClick: () => visit('warehouse.index', '/warehouse'),
             },
             {
-                key: 'hrm',
+                key: 'human-resource',
                 icon: <TeamOutlined />,
-                label: 'HRM',
+                label: 'Human Resource',
                 children: [
                     {
-                        key: 'hrm-employees',
+                        key: 'human-resource-employees',
                         label: 'Employees',
                         onClick: () =>
-                            visit('hrm.employees.index', '/hrm/employees'),
+                            visit('human-resource.employees.index', '/human-resource/employees'),
                     },
                     {
-                        key: 'hrm-departments',
+                        key: 'human-resource-departments',
                         label: 'Departments',
                         onClick: () =>
-                            visit('hrm.departments.index', '/hrm/departments'),
+                            visit('human-resource.departments.index', '/human-resource/departments'),
                     },
                     {
-                        key: 'hrm-designations',
+                        key: 'human-resource-designations',
                         label: 'Designations',
                         onClick: () =>
                             visit(
-                                'hrm.designations.index',
-                                '/hrm/designations',
+                                'human-resource.designations.index',
+                                '/human-resource/designations',
                             ),
                     },
                     {
-                        key: 'hrm-attendance',
+                        key: 'human-resource-attendance',
                         label: 'Attendance',
                         onClick: () =>
-                            visit('hrm.attendance.index', '/hrm/attendance'),
+                            visit('human-resource.attendance.index', '/human-resource/attendance'),
                     },
                     {
-                        key: 'hrm-leaves',
+                        key: 'human-resource-leaves',
                         label: 'Leaves',
                         onClick: () =>
-                            visit('hrm.leaves.index', '/hrm/leaves'),
+                            visit('human-resource.leaves.index', '/human-resource/leaves'),
                     },
                     {
-                        key: 'hrm-payroll',
+                        key: 'human-resource-payroll',
                         label: 'Payroll',
                         onClick: () =>
-                            visit('hrm.payroll.index', '/hrm/payroll'),
+                            visit('human-resource.payroll.index', '/human-resource/payroll'),
                     },
                 ],
             },
@@ -657,12 +657,12 @@ export default function AuthenticatedLayout({ header, children }) {
 
         if (isActive('/warehouse')) return ['warehouse'];
 
-        if (isActive('/hrm/employees')) return ['hrm-employees'];
-        if (isActive('/hrm/departments')) return ['hrm-departments'];
-        if (isActive('/hrm/designations')) return ['hrm-designations'];
-        if (isActive('/hrm/attendance')) return ['hrm-attendance'];
-        if (isActive('/hrm/leaves')) return ['hrm-leaves'];
-        if (isActive('/hrm/payroll')) return ['hrm-payroll'];
+        if (isActive('/human-resource/employees')) return ['human-resource-employees'];
+        if (isActive('/human-resource/departments')) return ['human-resource-departments'];
+        if (isActive('/human-resource/designations')) return ['human-resource-designations'];
+        if (isActive('/human-resource/attendance')) return ['human-resource-attendance'];
+        if (isActive('/human-resource/leaves')) return ['human-resource-leaves'];
+        if (isActive('/human-resource/payroll')) return ['human-resource-payroll'];
 
         if (isActive('/reports')) return ['reports'];
 
