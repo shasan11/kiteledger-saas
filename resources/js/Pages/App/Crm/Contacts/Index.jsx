@@ -19,18 +19,12 @@ export default function Contacts(props) {
       render: (val) => <Text strong>{val}</Text>,
     },
     {
-      title: 'Code',
-      dataIndex: 'code',
-      key: 'code',
-      render: (val) => val ? <Tag color="blue">{val}</Tag> : '-',
-    },
-    {
       title: 'Type',
       dataIndex: 'contact_type',
       key: 'contact_type',
       render: (val) => {
         const colors = { customer: 'green', supplier: 'orange', lead: 'blue' };
-        return val ? <Tag color={colors[val] || 'default'}>{val}</Tag> : '-';
+        return val ? <Tag color={colors[val] || 'default'}>{val ? String(val).charAt(0).toUpperCase() + String(val).slice(1) : ''}</Tag> : '-';
       },
     },
     {
@@ -52,13 +46,7 @@ export default function Contacts(props) {
       key: 'email',
       render: (val) => val || '-',
     },
-    {
-      title: 'Credit Limit',
-      dataIndex: 'credit_limit',
-      key: 'credit_limit',
-      align: 'right',
-      render: (val) => val != null ? Number(val).toLocaleString() : '-',
-    },
+    
     {
       title: 'Status',
       dataIndex: 'active',
@@ -71,27 +59,29 @@ export default function Contacts(props) {
   ];
 
   const fields = [
-    {
-      name: 'name',
-      label: 'Contact Name',
-      type: 'text',
-      required: true,
-      col: 12,
-      placeholder: 'e.g. John Doe',
-    },
-    { name: 'code', label: 'Code', type: 'text', col: 6, placeholder: 'CUST-001' },
-    {
+     {
       name: 'contact_type',
       label: 'Contact Type',
-      type: 'select',
+      type: 'radio',
       required: true,
-      col: 6,
+      col: 24,
       options: [
         { value: 'customer', label: 'Customer' },
         { value: 'supplier', label: 'Supplier' },
         { value: 'lead',     label: 'Lead' },
       ],
     },
+    {
+      name: 'name',
+      label: 'Contact Name',
+      type: 'text',
+      required: true,
+      col: 24,
+      placeholder: 'e.g. John Doe',
+    },
+     { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2, placeholder: 'Full address', },
+    { name: 'code', label: 'Code', type: 'text', col: 12, placeholder: 'CUST-001' },
+    
     {
       name: 'contact_group_id',
       label: 'Contact Group',
@@ -106,21 +96,13 @@ export default function Contacts(props) {
       fkLabel: (row) => row?.name || '',
       fkExtraParams: { active: true },
     },
-    { name: 'phone', label: 'Phone', type: 'text', col: 6, placeholder: '+977 9800000000' },
-    { name: 'email', label: 'Email', type: 'text', col: 6, placeholder: 'contact@example.com' },
-    { name: 'pan', label: 'PAN / Tax No', type: 'text', col: 8, placeholder: 'PAN number' },
-    { name: 'credit_limit', label: 'Credit Limit', type: 'number', col: 8, min: 0, placeholder: '0.00' },
-    {
-      name: 'address',
-      label: 'Address',
-      type: 'textarea',
-      col: 24,
-      rows: 2,
-      placeholder: 'Full address',
-    },
+    { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: '+977 9800000000' },
+    { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'contact@example.com' },
+    { name: 'pan', label: 'PAN / Tax No', type: 'text', col: 12, placeholder: 'PAN number' },
+    { name: 'credit_limit', label: 'Credit Limit', type: 'number', col: 12, min: 0, placeholder: '0.00' },
+    
     { name: 'accept_purchase', label: 'Accept Purchase', type: 'switch', col: 8 },
-    { name: 'active', label: 'Active', type: 'switch', col: 8 },
-  ];
+   ];
 
   const validationSchema = Yup.object().shape({
     name: Yup.string().required('Name is required').max(180),
@@ -169,8 +151,7 @@ export default function Contacts(props) {
   return (
     <AuthenticatedLayout
       user={props.auth?.user}
-      header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Contacts</h2>}
-    >
+     >
       <Head title="Contacts" />
       <ReusableCrud
         icon={<UserOutlined />}
@@ -181,8 +162,8 @@ export default function Contacts(props) {
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={1100}
+        form_ui="modal"
+        modalWidth={700}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

@@ -16,31 +16,23 @@ export default function ContactGroups(props) {
       dataIndex: 'name',
       key: 'name',
       sorter: true,
+      width:"30%",
       render: (val) => <Text strong>{val}</Text>,
     },
     {
       title: 'Parent Group',
       dataIndex: 'parent',
       key: 'parent',
+      width: '30%',
       render: (_, record) => record?.parent?.name || '-',
     },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-      render: (val) => val || '-',
-    },
-    {
-      title: 'Contacts',
-      dataIndex: 'contacts',
-      key: 'contacts',
-      align: 'center',
-      render: (_, record) => (record?.contacts || []).length || '-',
-    },
+     
+    
     {
       title: 'Status',
       dataIndex: 'active',
       key: 'active',
+      width: '15%',
       sorter: true,
       render: (active) => (
         <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
@@ -54,14 +46,14 @@ export default function ContactGroups(props) {
       label: 'Group Name',
       type: 'text',
       required: true,
-      col: 12,
+      col: 24,
       placeholder: 'e.g. Customers - Retail',
     },
     {
       name: 'parent_id',
       label: 'Parent Group',
       type: 'fkSelect',
-      col: 12,
+      col: 24,
       placeholder: 'Select parent group',
       fkUrl: api('/api/contact-groups'),
       fkSearchParam: 'search',
@@ -79,8 +71,7 @@ export default function ContactGroups(props) {
       rows: 3,
       placeholder: 'Optional description',
     },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-  ];
+   ];
 
   const validationSchema = Yup.object().shape({
     name: Yup.string().required('Name is required').max(120),
@@ -123,7 +114,7 @@ export default function ContactGroups(props) {
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="modal"
-        modalWidth={860}
+        modalWidth={500}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

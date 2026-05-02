@@ -23,7 +23,7 @@ class ProductCategoryController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'parent',
-        'childrens',
+        'children',
         'products',
     ];
 
@@ -47,6 +47,7 @@ class ProductCategoryController extends BaseCrudApiController
 
     protected array $booleanFilters = [
         'active',
+        'is_system_generated',
     ];
 
     protected array $sortable = [
@@ -82,12 +83,20 @@ class ProductCategoryController extends BaseCrudApiController
         ];
     }
 
+    protected function mutateParentDataBeforeCreate(
+        array $parentData,
+        array $nestedData
+    ): array {
+        $this->validateParentBranch($parentData);
+
+        return $parentData;
+    }
+
     protected function mutateParentDataBeforeUpdate(
         array $parentData,
         array $nestedData,
         Model $record
     ): array {
-        // Prevent self-reference as parent
         if (
             array_key_exists('parent_id', $parentData)
             && $parentData['parent_id'] !== null
@@ -96,23 +105,34 @@ class ProductCategoryController extends BaseCrudApiController
             abort(422, 'A product category cannot be its own parent.');
         }
 
-        // Ensure parent belongs to same branch
-        if (
-            array_key_exists('parent_id', $parentData)
-            && $parentData['parent_id'] !== null
-        ) {
-            $parent = ProductCategory::query()->find($parentData['parent_id']);
-
-            if (
-                $parent
-                && $record->branch_id !== null
-                && $parent->branch_id !== null
-                && (string) $parent->branch_id !== (string) $record->branch_id
-            ) {
-                abort(422, 'Parent category must belong to the same branch.');
-            }
-        }
+        $this->validateParentBranch($parentData, $record);
 
         return $parentData;
+    }
+
+    protected function validateParentBranch(array $parentData, ?Model $record = null): void
+    {
+        if (
+            !array_key_exists('parent_id', $parentData)
+            || $parentData['parent_id'] === null
+        ) {
+            return;
+        }
+
+        $parent = ProductCategory::query()->find($parentData['parent_id']);
+
+        if (!$parent) {
+            return;
+        }
+
+        $branchId = $record?->branch_id ?? ($parentData['branch_id'] ?? null);
+
+        if (
+            $branchId !== null
+            && $parent->branch_id !== null
+            && (string) $parent->branch_id !== (string) $branchId
+        ) {
+            abort(422, 'Parent category must belong to the same branch.');
+        }
     }
 }

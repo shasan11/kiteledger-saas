@@ -23,12 +23,14 @@ export default function VariantAttributes(props) {
       dataIndex: 'name',
       key: 'name',
       sorter: true,
+      width: '20%',
       render: (val) => <Text strong>{val}</Text>,
     },
     {
       title: 'Values',
       dataIndex: 'variantLines',
       key: 'variantLines',
+      width: '20%',
       render: (_, record) => {
         const lines = record?.variantLines || record?.variant_lines || [];
         if (!lines.length) return '-';
@@ -44,20 +46,13 @@ export default function VariantAttributes(props) {
       dataIndex: 'variantLines',
       key: 'count',
       align: 'center',
+      width: '15%',
       render: (_, record) => {
         const lines = record?.variantLines || record?.variant_lines || [];
         return lines.length;
       },
     },
-    {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
-      ),
-    },
+     
   ];
 
   const fields = [

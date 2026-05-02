@@ -3271,7 +3271,7 @@ export default function ReusableCrud({
     ? {
       title: "Actions",
       fixed: "right",
-      width: 90,
+      width: 10,
       render: (_, record) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Dropdown
@@ -5015,7 +5015,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             )}
 
             {(!hasAnchors || button_ui) && (
-              <div className="flex gap-2 mb-0">
+              <div className="flex gap-2 mb-0 bg-white">
                 <Row justify="space-between" style={{ width: "100%" }} className="m-0">
                   {showSearch && canView && (
                     <Col xs={16} style={{ display: "flex", gap: 6 }}>
@@ -5106,7 +5106,6 @@ const submitRecord = async (values, isEditMode, editId) => {
                 <Table
                   rowKey="id"
                   columns={mainColumns}
-                  scroll={{ x: 1800 }}
                   size="small"
                   dataSource={filteredData}
                   onRow={activeTableRowFunction}

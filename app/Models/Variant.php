@@ -12,11 +12,6 @@ class Variant extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'branch_id',
         'name',
@@ -25,11 +20,6 @@ class Variant extends Model
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -41,16 +31,17 @@ class Variant extends Model
 
     public function branch(): BelongsTo
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsTo(Branch::class, 'branch_id', 'id');
     }
 
     public function userAdd(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_add_id', 'id');
     }
 
     public function variantLines(): HasMany
     {
-        return $this->hasMany(VariantLine::class);
+        return $this->hasMany(VariantLine::class, 'variant_id', 'id')
+            ->orderBy('sort_order');
     }
 }

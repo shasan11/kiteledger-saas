@@ -12,11 +12,6 @@ class ProductCategory extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'branch_id',
         'name',
@@ -27,11 +22,6 @@ class ProductCategory extends Model
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -43,26 +33,26 @@ class ProductCategory extends Model
 
     public function branch(): BelongsTo
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsTo(Branch::class, 'branch_id', 'id');
     }
 
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(ProductCategory::class);
+        return $this->belongsTo(ProductCategory::class, 'parent_id', 'id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(ProductCategory::class, 'parent_id', 'id');
     }
 
     public function userAdd(): BelongsTo
     {
-        return $this->belongsTo(User::class);
-    }
-
-    public function childrens(): HasMany
-    {
-        return $this->hasMany(ProductCategory::class);
+        return $this->belongsTo(User::class, 'user_add_id', 'id');
     }
 
     public function products(): HasMany
     {
-        return $this->hasMany(Product::class);
+        return $this->hasMany(Product::class, 'product_category_id', 'id');
     }
 }

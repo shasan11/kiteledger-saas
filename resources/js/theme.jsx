@@ -163,9 +163,7 @@ export const themeMain = {
       defaultActiveBorderColor: brand.primaryHover,
       defaultActiveColor: brand.primaryActive,
 
-      primaryShadow: shadow.primary,
-      defaultShadow: "0 2px 6px rgba(15, 23, 42, 0.04)",
-      contentFontSize: 14,
+       contentFontSize: 14,
       contentFontSizeLG: 15,
       contentFontSizeSM: 13,
       paddingInline: 16,
@@ -174,7 +172,7 @@ export const themeMain = {
     },
 
     Card: {
-      borderRadiusLG: 5,
+      borderRadius:0,
       borderColor: "#e5eaf1",
       headerBg: "transparent",
       bodyPadding: 20,

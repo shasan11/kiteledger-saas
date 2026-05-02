@@ -12,11 +12,6 @@ class VariantLine extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'variant_id',
         'value',
@@ -25,11 +20,6 @@ class VariantLine extends Model
         'is_system_generated',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -41,11 +31,11 @@ class VariantLine extends Model
 
     public function variant(): BelongsTo
     {
-        return $this->belongsTo(Variant::class);
+        return $this->belongsTo(Variant::class, 'variant_id', 'id');
     }
 
     public function productVariantItems(): HasMany
     {
-        return $this->hasMany(ProductVariantItem::class);
+        return $this->hasMany(ProductVariantItem::class, 'variant_line_id', 'id');
     }
 }
