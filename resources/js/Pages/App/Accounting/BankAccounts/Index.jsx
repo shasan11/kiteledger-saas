@@ -593,7 +593,7 @@ export default function BankAccounts(props) {
                             Bank Accounts
                         </Title>
                         <Text type="secondary">
-                            Manage Bank Accounts and Cash Register.
+                            Manage bank and cash accounts in card view.
                         </Text>
                     </div>
 

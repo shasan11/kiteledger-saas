@@ -6,44 +6,58 @@ use Illuminate\Support\Facades\DB;
 
 class AccountCodeSequenceService
 {
-    public function nextCode(string $ownerType, ?string $branchId): string
+    public function nextCode(string $ownerType = 'coa', mixed $branchId = null): string
     {
-        return DB::transaction(function () use ($ownerType, $branchId): string {
-            $sequence = DB::table('account_code_sequences')
-                ->where('owner_type', $ownerType)
-                ->where('branch_id', $branchId)
-                ->lockForUpdate()
-                ->first();
+        $table = $this->tableForOwnerType($ownerType);
 
-            if ($sequence === null) {
-                DB::table('account_code_sequences')->insert([
-                    'owner_type' => $ownerType,
-                    'branch_id' => $branchId,
-                    'current_value' => 1,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+        $codes = DB::table($table)
+            ->whereNotNull('code')
+            ->pluck('code')
+            ->toArray();
 
-                return $this->formatCode($ownerType, 1);
+        $max = 1000;
+
+        foreach ($codes as $code) {
+            $number = $this->extractNumber($code);
+
+            if ($number > $max) {
+                $max = $number;
             }
+        }
 
-            $nextValue = ((int) $sequence->current_value) + 1;
+        $next = $max + 1;
 
-            DB::table('account_code_sequences')
-                ->where('id', $sequence->id)
-                ->update([
-                    'current_value' => $nextValue,
-                    'updated_at' => now(),
-                ]);
+        while ($this->codeExists($table, (string) $next)) {
+            $next++;
+        }
 
-            return $this->formatCode($ownerType, $nextValue);
-        });
+        return (string) $next;
     }
 
-    protected function formatCode(string $ownerType, int $value): string
+    protected function tableForOwnerType(string $ownerType): string
     {
-        $prefix = strtoupper(substr($ownerType, 0, 3));
+        return match ($ownerType) {
+            'coa', 'chart_of_account', 'chart_of_accounts' => 'chart_of_accounts',
+            'account', 'accounts' => 'accounts',
+            default => 'chart_of_accounts',
+        };
+    }
 
-        return sprintf('%s-%05d', $prefix, $value);
+    protected function extractNumber(string $code): int
+    {
+        preg_match_all('/\d+/', $code, $matches);
+
+        if (empty($matches[0])) {
+            return 0;
+        }
+
+        return (int) end($matches[0]);
+    }
+
+    protected function codeExists(string $table, string $code): bool
+    {
+        return DB::table($table)
+            ->where('code', $code)
+            ->exists();
     }
 }

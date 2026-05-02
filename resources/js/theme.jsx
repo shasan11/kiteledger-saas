@@ -322,7 +322,7 @@ export const themeMain = {
     },
 
     Modal: {
-      borderRadiusLG: 18,
+      borderRadiusLG: 3,
       contentBg: "#ffffff",
       headerBg: "#ffffff",
       footerBg: "#ffffff",

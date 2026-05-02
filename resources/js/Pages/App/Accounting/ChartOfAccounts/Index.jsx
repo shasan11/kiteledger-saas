@@ -112,19 +112,7 @@ export default function ChartOfAccounts(props) {
                         <Tag color="green">Non System</Tag>
                     ),
             },
-            {
-                title: 'Status',
-                dataIndex: 'active',
-                key: 'active',
-                width: 120,
-                backendSort: true,
-                sortField: 'active',
-                render: (active) => (
-                    <Tag color={active ? 'green' : 'red'}>
-                        {active ? 'Active' : 'Inactive'}
-                    </Tag>
-                ),
-            },
+             
         ],
         [isTreeView],
     );
@@ -132,49 +120,27 @@ export default function ChartOfAccounts(props) {
     const fields = useMemo(
         () => [
             {
-                name: 'code',
-                label: 'Code',
-                type: 'text',
-                required: true,
-                col: 12,
-                placeholder: 'Example: 1001',
-            },
-            {
                 name: 'name',
                 label: 'Name',
                 type: 'text',
                 required: true,
-                col: 12,
+                col: 24,
                 placeholder: 'Chart account name',
             },
             {
-                name: 'account_id',
-                label: 'Linked Account',
-                type: 'fkSelect',
-                required: true,
-                col: 12,
-                placeholder: 'Select linked account',
-                fkUrl: '/api/accounts/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'account_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || row?.display_name || '';
-
-                    return [code, name].filter(Boolean).join(' - ');
-                },
+                name: 'code',
+                label: 'Code',
+                type: 'text',
+                
+                col: 24,
+                readOnly:true,
+                placeholder: '#Auto Generated Code',
             },
             {
                 name: 'parent_id',
                 label: 'Parent Chart Account',
                 type: 'fkSelect',
-                col: 12,
+                col: 24,
                 placeholder: 'Select parent chart account',
                 fkUrl: '/api/chart-of-accounts/',
                 fkSearchParam: 'search',
@@ -184,50 +150,7 @@ export default function ChartOfAccounts(props) {
                 labelField: 'parent_name',
                 fkExtraParams: {
                     active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || '';
-
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
-                name: 'currency_id',
-                label: 'Currency',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select currency',
-                fkUrl: '/api/currencies/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'currency_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || '';
-
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
-                name: 'branch_id',
-                label: 'Branch',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select branch',
-                fkUrl: '/api/branches/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'branch_name',
-                fkExtraParams: {
-                    active: true,
+                    is_system_generated: activeAnchor === 'system',
                 },
                 fkLabel: (row) => {
                     const code = row?.code || '';
@@ -244,87 +167,40 @@ export default function ChartOfAccounts(props) {
                 rows: 3,
                 placeholder: 'Description',
             },
-            {
-                name: 'is_system_generated',
-                label: 'System Generated',
-                type: 'switch',
-                col: 12,
-            },
-            {
-                name: 'active',
-                label: 'Active',
-                type: 'switch',
-                col: 12,
-            },
+             
         ],
-        [],
+        [activeAnchor],
     );
 
     const validationSchema = Yup.object().shape({
-        code: Yup.string()
-            .trim()
-            .max(30, 'Code cannot exceed 30 characters')
-            .required('Code is required'),
-
         name: Yup.string()
             .trim()
             .max(150, 'Name cannot exceed 150 characters')
             .required('Name is required'),
 
-        account_id: Yup.string()
-            .nullable()
-            .required('Linked account is required'),
-
         parent_id: Yup.string().nullable(),
 
-        currency_id: Yup.string().nullable(),
-
-        branch_id: Yup.string().nullable(),
-
         description: Yup.string().nullable(),
-
-        is_system_generated: Yup.boolean().nullable(),
 
         active: Yup.boolean().nullable(),
     });
 
     const crudInitialValues = {
-        branch_id: null,
-        branch_id_detail: null,
-        branch_name: '',
-
-        account_id: null,
-        account_id_detail: null,
-        account_name: '',
-
         parent_id: null,
         parent_id_detail: null,
         parent_name: '',
 
-        currency_id: null,
-        currency_id_detail: null,
-        currency_name: '',
-
-        code: '',
         name: '',
         description: '',
 
-        is_system_generated: activeAnchor === 'system',
         active: true,
     };
 
     const transformPayload = (values) => {
         const payload = {
-            branch_id: values.branch_id || null,
-            account_id: values.account_id || null,
             parent_id: values.parent_id || null,
-            currency_id: values.currency_id || null,
-
-            code: values.code?.trim() || null,
             name: values.name?.trim() || null,
             description: values.description?.trim() || null,
-
-            is_system_generated: !!values.is_system_generated,
             active: values.active !== false,
         };
 
@@ -338,30 +214,6 @@ export default function ChartOfAccounts(props) {
     };
 
     const handleFormValuesChange = (values, { setFieldValue }) => {
-        const branch = values?.branch_id_detail;
-
-        if (branch) {
-            const label = branch.label || branch.name || branch.code || '';
-
-            if (label && values.branch_name !== label) {
-                setFieldValue('branch_name', label, false);
-            }
-        }
-
-        const account = values?.account_id_detail;
-
-        if (account) {
-            const label =
-                account.label ||
-                [account.code, account.name].filter(Boolean).join(' - ') ||
-                account.name ||
-                '';
-
-            if (label && values.account_name !== label) {
-                setFieldValue('account_name', label, false);
-            }
-        }
-
         const parent = values?.parent_id_detail;
 
         if (parent) {
@@ -373,20 +225,6 @@ export default function ChartOfAccounts(props) {
 
             if (label && values.parent_name !== label) {
                 setFieldValue('parent_name', label, false);
-            }
-        }
-
-        const currency = values?.currency_id_detail;
-
-        if (currency) {
-            const label =
-                currency.label ||
-                [currency.code, currency.name].filter(Boolean).join(' - ') ||
-                currency.name ||
-                '';
-
-            if (label && values.currency_name !== label) {
-                setFieldValue('currency_name', label, false);
             }
         }
     };
@@ -436,7 +274,7 @@ export default function ChartOfAccounts(props) {
                 onFormValuesChange={handleFormValuesChange}
 
                 form_ui="modal"
-                modalWidth={900}
+                modalWidth={720}
 
                 enableServerPagination
                 pageParam="page"
@@ -452,8 +290,8 @@ export default function ChartOfAccounts(props) {
                 baseFilters={
                     isTreeView
                         ? {
-                            tree: true,
-                        }
+                              tree: true,
+                          }
                         : {}
                 }
 
@@ -482,7 +320,7 @@ export default function ChartOfAccounts(props) {
                 enableInactiveDrawer={!isTreeView}
                 showSearch
 
-                canAdd
+                canAdd={activeAnchor === 'non_system'}
                 canEdit
                 canDelete
                 canView

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Models\BankAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class BankAccountController extends BaseCrudApiController
 {
@@ -15,7 +14,11 @@ class BankAccountController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = false;
+    protected bool $branchScoped = true;
+
+    protected bool $autoFillBranchOnCreate = true;
+
+    protected bool $preventBranchChangeOnUpdate = true;
 
     protected array $relations = [
         'branch',
@@ -51,14 +54,11 @@ class BankAccountController extends BaseCrudApiController
 
     protected array $filterable = [
         'type',
-        'branch_id',
         'currency_id',
-        'account_id',
     ];
 
     protected array $booleanFilters = [
         'active',
-        'is_system_generated',
     ];
 
     protected array $sortable = [
@@ -68,20 +68,23 @@ class BankAccountController extends BaseCrudApiController
         'type',
         'opening_balance',
         'active',
-        'is_system_generated',
         'created_at',
         'updated_at',
     ];
 
-    protected string $defaultSort = '-created_at';
+    protected string $defaultSort = 'created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        // backend-owned fields
+        'branch_id' => ['exclude'],
+        'code' => ['exclude'],
+        'account_id' => ['exclude'],
+        'is_system_generated' => ['exclude'],
+        'user_add_id' => ['exclude'],
 
+        // frontend fields
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
-        'code' => ['nullable', 'string', 'max:30'],
-
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
         'description' => ['nullable', 'string'],
@@ -91,37 +94,23 @@ class BankAccountController extends BaseCrudApiController
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
 
-        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
-
         'opening_balance' => ['nullable', 'numeric'],
-
         'active' => ['nullable', 'boolean'],
-        'is_system_generated' => ['nullable', 'boolean'],
-
-        'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
 
     protected function updateRules(Request $request, Model $record): array
     {
-        $branchId = $request->input('branch_id', $record->branch_id);
-
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            // backend-owned fields
+            'branch_id' => ['exclude'],
+            'code' => ['exclude'],
+            'account_id' => ['exclude'],
+            'is_system_generated' => ['exclude'],
+            'user_add_id' => ['exclude'],
 
+            // frontend fields
             'type' => ['sometimes', 'required', 'in:bank,cash'],
             'display_name' => ['sometimes', 'required', 'string', 'max:150'],
-            'code' => [
-                'sometimes',
-                'nullable',
-                'string',
-                'max:30',
-                Rule::unique('bank_accounts', 'code')
-                    ->where(function ($query) use ($branchId) {
-                        return $query->where('branch_id', $branchId);
-                    })
-                    ->ignore($record->getKey()),
-            ],
-
             'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
             'description' => ['sometimes', 'nullable', 'string'],
@@ -131,31 +120,8 @@ class BankAccountController extends BaseCrudApiController
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
 
-            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
-
             'opening_balance' => ['sometimes', 'nullable', 'numeric'],
-
             'active' => ['sometimes', 'nullable', 'boolean'],
-            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
-
-            'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
-    }
-
-    protected function storeRules(Request $request): array
-    {
-        $rules = $this->storeRules;
-
-        $rules['code'] = [
-            'nullable',
-            'string',
-            'max:30',
-            Rule::unique('bank_accounts', 'code')
-                ->where(function ($query) use ($request) {
-                    return $query->where('branch_id', $request->input('branch_id'));
-                }),
-        ];
-
-        return $rules;
     }
 }
