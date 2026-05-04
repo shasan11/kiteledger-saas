@@ -1,7 +1,33 @@
 <?php
 
+use App\Http\Controllers\Api\AlertTypeController;
+use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\AppSettingController;
+use App\Http\Controllers\Api\ApplicationSettingController;
 use App\Http\Controllers\Api\BankAccountController;
+use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CashTransferController;
+use App\Http\Controllers\Api\CreditTermController;
+use App\Http\Controllers\Api\CrmActivityController;
+use App\Http\Controllers\Api\CustomFieldController;
+use App\Http\Controllers\Api\CustomTemplateController;
+use App\Http\Controllers\Api\DealController;
+use App\Http\Controllers\Api\DealPipelineController;
+use App\Http\Controllers\Api\DocumentNumberingController;
+use App\Http\Controllers\Api\EmployeeProfileController;
+use App\Http\Controllers\Api\GeneralSettingController;
+use App\Http\Controllers\Api\LeadController;
+use App\Http\Controllers\Api\LoanAccountController;
+use App\Http\Controllers\Api\MasterDataController;
+use App\Http\Controllers\Api\PrintingTemplateController;
+use App\Http\Controllers\Api\ProductTaxCategoryController;
+use App\Http\Controllers\Api\ReportingTagController;
+use App\Http\Controllers\Api\TaxClassController;
+use App\Http\Controllers\Api\TaxExemptionController;
+use App\Http\Controllers\Api\TaxJurisdictionController;
+use App\Http\Controllers\Api\TaxRateController;
+use App\Http\Controllers\Api\TaxRegistrationController;
+use App\Http\Controllers\Api\TaxRuleController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
@@ -380,4 +406,183 @@ Route::prefix('hrm')->group(function () {
     Route::apiResource('assigned-tasks', AssignedTaskController::class);
     Route::apiResource('project-teams', ProjectTeamController::class);
     Route::apiResource('project-team-members', ProjectTeamMemberController::class);
+
+    Route::post('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkStore']);
+    Route::patch('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkUpdate']);
+    Route::delete('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkDestroy']);
+    Route::apiResource('employee-profiles', EmployeeProfileController::class);
 });
+
+/*
+|--------------------------------------------------------------------------
+| App Setting (Singleton)
+|--------------------------------------------------------------------------
+*/
+
+Route::get('app-setting', [AppSettingController::class, 'singletonShow']);
+Route::put('app-setting', [AppSettingController::class, 'singletonUpsert']);
+Route::patch('app-setting', [AppSettingController::class, 'singletonUpsert']);
+
+/*
+|--------------------------------------------------------------------------
+| Master / Settings
+|--------------------------------------------------------------------------
+*/
+
+Route::post('branches/bulk', [BranchController::class, 'bulkStore']);
+Route::patch('branches/bulk', [BranchController::class, 'bulkUpdate']);
+Route::delete('branches/bulk', [BranchController::class, 'bulkDestroy']);
+Route::apiResource('branches', BranchController::class);
+
+Route::post('application-settings/bulk', [ApplicationSettingController::class, 'bulkStore']);
+Route::patch('application-settings/bulk', [ApplicationSettingController::class, 'bulkUpdate']);
+Route::delete('application-settings/bulk', [ApplicationSettingController::class, 'bulkDestroy']);
+Route::apiResource('application-settings', ApplicationSettingController::class)
+    ->parameters(['application-settings' => 'applicationSetting']);
+
+Route::post('general-settings/bulk', [GeneralSettingController::class, 'bulkStore']);
+Route::patch('general-settings/bulk', [GeneralSettingController::class, 'bulkUpdate']);
+Route::delete('general-settings/bulk', [GeneralSettingController::class, 'bulkDestroy']);
+Route::apiResource('general-settings', GeneralSettingController::class)
+    ->parameters(['general-settings' => 'generalSetting']);
+
+Route::post('master-data/bulk', [MasterDataController::class, 'bulkStore']);
+Route::patch('master-data/bulk', [MasterDataController::class, 'bulkUpdate']);
+Route::delete('master-data/bulk', [MasterDataController::class, 'bulkDestroy']);
+Route::apiResource('master-data', MasterDataController::class)
+    ->parameters(['master-data' => 'masterData']);
+
+Route::post('alert-types/bulk', [AlertTypeController::class, 'bulkStore']);
+Route::patch('alert-types/bulk', [AlertTypeController::class, 'bulkUpdate']);
+Route::delete('alert-types/bulk', [AlertTypeController::class, 'bulkDestroy']);
+Route::apiResource('alert-types', AlertTypeController::class)
+    ->parameters(['alert-types' => 'alertType']);
+
+Route::post('document-numberings/bulk', [DocumentNumberingController::class, 'bulkStore']);
+Route::patch('document-numberings/bulk', [DocumentNumberingController::class, 'bulkUpdate']);
+Route::delete('document-numberings/bulk', [DocumentNumberingController::class, 'bulkDestroy']);
+Route::apiResource('document-numberings', DocumentNumberingController::class)
+    ->parameters(['document-numberings' => 'documentNumbering']);
+
+Route::post('printing-templates/bulk', [PrintingTemplateController::class, 'bulkStore']);
+Route::patch('printing-templates/bulk', [PrintingTemplateController::class, 'bulkUpdate']);
+Route::delete('printing-templates/bulk', [PrintingTemplateController::class, 'bulkDestroy']);
+Route::apiResource('printing-templates', PrintingTemplateController::class)
+    ->parameters(['printing-templates' => 'printingTemplate']);
+
+Route::post('custom-templates/bulk', [CustomTemplateController::class, 'bulkStore']);
+Route::patch('custom-templates/bulk', [CustomTemplateController::class, 'bulkUpdate']);
+Route::delete('custom-templates/bulk', [CustomTemplateController::class, 'bulkDestroy']);
+Route::apiResource('custom-templates', CustomTemplateController::class)
+    ->parameters(['custom-templates' => 'customTemplate']);
+
+Route::post('announcements/bulk', [AnnouncementController::class, 'bulkStore']);
+Route::patch('announcements/bulk', [AnnouncementController::class, 'bulkUpdate']);
+Route::delete('announcements/bulk', [AnnouncementController::class, 'bulkDestroy']);
+Route::apiResource('announcements', AnnouncementController::class);
+
+Route::post('reporting-tags/bulk', [ReportingTagController::class, 'bulkStore']);
+Route::patch('reporting-tags/bulk', [ReportingTagController::class, 'bulkUpdate']);
+Route::delete('reporting-tags/bulk', [ReportingTagController::class, 'bulkDestroy']);
+Route::apiResource('reporting-tags', ReportingTagController::class)
+    ->parameters(['reporting-tags' => 'reportingTag']);
+
+Route::post('custom-fields/bulk', [CustomFieldController::class, 'bulkStore']);
+Route::patch('custom-fields/bulk', [CustomFieldController::class, 'bulkUpdate']);
+Route::delete('custom-fields/bulk', [CustomFieldController::class, 'bulkDestroy']);
+Route::apiResource('custom-fields', CustomFieldController::class)
+    ->parameters(['custom-fields' => 'customField']);
+
+/*
+|--------------------------------------------------------------------------
+| Loans
+|--------------------------------------------------------------------------
+*/
+
+Route::post('loan-accounts/bulk', [LoanAccountController::class, 'bulkStore']);
+Route::patch('loan-accounts/bulk', [LoanAccountController::class, 'bulkUpdate']);
+Route::delete('loan-accounts/bulk', [LoanAccountController::class, 'bulkDestroy']);
+Route::apiResource('loan-accounts', LoanAccountController::class)
+    ->parameters(['loan-accounts' => 'loanAccount']);
+
+/*
+|--------------------------------------------------------------------------
+| CRM
+|--------------------------------------------------------------------------
+*/
+
+Route::post('credit-terms/bulk', [CreditTermController::class, 'bulkStore']);
+Route::patch('credit-terms/bulk', [CreditTermController::class, 'bulkUpdate']);
+Route::delete('credit-terms/bulk', [CreditTermController::class, 'bulkDestroy']);
+Route::apiResource('credit-terms', CreditTermController::class)
+    ->parameters(['credit-terms' => 'creditTerm']);
+
+Route::post('leads/bulk', [LeadController::class, 'bulkStore']);
+Route::patch('leads/bulk', [LeadController::class, 'bulkUpdate']);
+Route::delete('leads/bulk', [LeadController::class, 'bulkDestroy']);
+Route::apiResource('leads', LeadController::class);
+
+Route::post('deal-pipelines/bulk', [DealPipelineController::class, 'bulkStore']);
+Route::patch('deal-pipelines/bulk', [DealPipelineController::class, 'bulkUpdate']);
+Route::delete('deal-pipelines/bulk', [DealPipelineController::class, 'bulkDestroy']);
+Route::apiResource('deal-pipelines', DealPipelineController::class)
+    ->parameters(['deal-pipelines' => 'dealPipeline']);
+
+Route::post('deals/bulk', [DealController::class, 'bulkStore']);
+Route::patch('deals/bulk', [DealController::class, 'bulkUpdate']);
+Route::delete('deals/bulk', [DealController::class, 'bulkDestroy']);
+Route::apiResource('deals', DealController::class);
+
+Route::post('crm-activities/bulk', [CrmActivityController::class, 'bulkStore']);
+Route::patch('crm-activities/bulk', [CrmActivityController::class, 'bulkUpdate']);
+Route::delete('crm-activities/bulk', [CrmActivityController::class, 'bulkDestroy']);
+Route::apiResource('crm-activities', CrmActivityController::class)
+    ->parameters(['crm-activities' => 'crmActivity']);
+
+/*
+|--------------------------------------------------------------------------
+| Tax
+|--------------------------------------------------------------------------
+*/
+
+Route::post('tax-jurisdictions/bulk', [TaxJurisdictionController::class, 'bulkStore']);
+Route::patch('tax-jurisdictions/bulk', [TaxJurisdictionController::class, 'bulkUpdate']);
+Route::delete('tax-jurisdictions/bulk', [TaxJurisdictionController::class, 'bulkDestroy']);
+Route::apiResource('tax-jurisdictions', TaxJurisdictionController::class)
+    ->parameters(['tax-jurisdictions' => 'taxJurisdiction']);
+
+Route::post('tax-registrations/bulk', [TaxRegistrationController::class, 'bulkStore']);
+Route::patch('tax-registrations/bulk', [TaxRegistrationController::class, 'bulkUpdate']);
+Route::delete('tax-registrations/bulk', [TaxRegistrationController::class, 'bulkDestroy']);
+Route::apiResource('tax-registrations', TaxRegistrationController::class)
+    ->parameters(['tax-registrations' => 'taxRegistration']);
+
+Route::post('product-tax-categories/bulk', [ProductTaxCategoryController::class, 'bulkStore']);
+Route::patch('product-tax-categories/bulk', [ProductTaxCategoryController::class, 'bulkUpdate']);
+Route::delete('product-tax-categories/bulk', [ProductTaxCategoryController::class, 'bulkDestroy']);
+Route::apiResource('product-tax-categories', ProductTaxCategoryController::class)
+    ->parameters(['product-tax-categories' => 'productTaxCategory']);
+
+Route::post('tax-classes/bulk', [TaxClassController::class, 'bulkStore']);
+Route::patch('tax-classes/bulk', [TaxClassController::class, 'bulkUpdate']);
+Route::delete('tax-classes/bulk', [TaxClassController::class, 'bulkDestroy']);
+Route::apiResource('tax-classes', TaxClassController::class)
+    ->parameters(['tax-classes' => 'taxClass']);
+
+Route::post('tax-rates/bulk', [TaxRateController::class, 'bulkStore']);
+Route::patch('tax-rates/bulk', [TaxRateController::class, 'bulkUpdate']);
+Route::delete('tax-rates/bulk', [TaxRateController::class, 'bulkDestroy']);
+Route::apiResource('tax-rates', TaxRateController::class)
+    ->parameters(['tax-rates' => 'taxRate']);
+
+Route::post('tax-rules/bulk', [TaxRuleController::class, 'bulkStore']);
+Route::patch('tax-rules/bulk', [TaxRuleController::class, 'bulkUpdate']);
+Route::delete('tax-rules/bulk', [TaxRuleController::class, 'bulkDestroy']);
+Route::apiResource('tax-rules', TaxRuleController::class)
+    ->parameters(['tax-rules' => 'taxRule']);
+
+Route::post('tax-exemptions/bulk', [TaxExemptionController::class, 'bulkStore']);
+Route::patch('tax-exemptions/bulk', [TaxExemptionController::class, 'bulkUpdate']);
+Route::delete('tax-exemptions/bulk', [TaxExemptionController::class, 'bulkDestroy']);
+Route::apiResource('tax-exemptions', TaxExemptionController::class)
+    ->parameters(['tax-exemptions' => 'taxExemption']);
