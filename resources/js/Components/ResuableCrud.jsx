@@ -1640,6 +1640,7 @@ function CrudFormInner({
 /*                              main reusable crud                            */
 /* -------------------------------------------------------------------------- */
 export default function ReusableCrud({
+  mode = "list",
   apiUrl,
   title,
   fields = EMPTY_ARRAY,
@@ -1819,6 +1820,7 @@ export default function ReusableCrud({
 
   const accessToken = getAuthToken();
   const [formInitialValues, setFormInitialValues] = useState(crudInitialValues || EMPTY_OBJECT);
+  const isSingletonMode = mode === "singleton";
 
   const authHeaders = useMemo(
     () => (accessToken ? { Authorization: `Bearer ${accessToken}` } : EMPTY_OBJECT),
@@ -2359,12 +2361,13 @@ export default function ReusableCrud({
   );
 
   useEffect(() => {
+    if (isSingletonMode) return;
     fetchData({
       page: pagination.current,
       pageSize: pagination.pageSize,
       search: searchText,
     });
-  }, [fetchData]);
+  }, [fetchData, isSingletonMode]);
 
   useEffect(() => {
     if (!enableInactiveDrawer || !inactiveDrawer) return;
@@ -4701,6 +4704,93 @@ const submitRecord = async (values, isEditMode, editId) => {
 };
 
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
+
+  useEffect(() => {
+    if (!isSingletonMode) return;
+    if (!canView) return;
+
+    const loadSingletonRecord = async () => {
+      try {
+        setLoading(true);
+        setSubmitErrors(EMPTY_ARRAY);
+        const res = await axios.get(buildResourceUrl(apiUrl), { headers: authHeaders });
+        setFormInitialValues(res?.data || crudInitialValues || EMPTY_OBJECT);
+      } catch (error) {
+        console.error("Failed to load singleton record:", error);
+        message.error("Failed to load data");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSingletonRecord();
+  }, [isSingletonMode, canView, apiUrl, authHeaders, crudInitialValues]);
+
+  if (isSingletonMode) {
+    return (
+      <div className="pt-0">
+        <Formik
+          enableReinitialize
+          initialValues={formInitialValues}
+          validationSchema={validationSchema}
+          onSubmit={async (values, { setErrors }) => {
+            try {
+              if (!canEdit) {
+                message.error("You do not have permission to update this setting.");
+                return;
+              }
+              setSubmitErrors(EMPTY_ARRAY);
+              await submitRecord(values, true, null);
+              message.success("Saved successfully");
+            } catch (err) {
+              const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
+              if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
+              setSubmitErrors(allErrors);
+              if (globalErrors.length) showGlobalErrorsNotification(globalErrors);
+              else message.error("Validation failed");
+            }
+          }}
+        >
+          {({ handleSubmit, submitForm, setFieldValue, errors, touched, values, isValid, isSubmitting }) => {
+            formikLiveRef.current = { setFieldValue, values };
+            return (
+              <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 4, padding: 16 }}>
+                <CrudFormInner
+                  fields={fields}
+                  values={values}
+                  setFieldValue={setFieldValue}
+                  errors={errors}
+                  touched={touched}
+                  ui_type={ui_type}
+                  handleSubmit={handleSubmit}
+                  onFormValuesChange={onFormValuesChange}
+                  submitLabel={submitLabelOverride || "Save"}
+                  renderFormFields={renderFormFields}
+                  submitErrors={submitErrors}
+                  hideSubmitButton={hideSubmitButton}
+                  onSubmitButtonClick={onSubmitButtonClick}
+                  renderSubmitButton={renderSubmitButton}
+                  hydrateFkLabels={hydrateMissingFkLabel}
+                  submitMeta={{
+                    values,
+                    errors,
+                    touched,
+                    handleSubmit,
+                    submitForm,
+                    setFieldValue,
+                    isValid,
+                    isSubmitting,
+                    editingRecord: null,
+                    loading,
+                  }}
+                />
+              </div>
+            );
+          }}
+        </Formik>
+      </div>
+    );
+  }
 
   if (isFormOnlyMode) {
     const submitLabel = ui_type === "edit form" ? "Save" : "Save";
