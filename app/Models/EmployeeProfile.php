@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EmployeeProfile extends Model
 {
@@ -99,5 +100,10 @@ class EmployeeProfile extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function educations(): HasMany
+    {
+        return $this->hasMany(Education::class, 'user_id', 'user_id');
     }
 }
