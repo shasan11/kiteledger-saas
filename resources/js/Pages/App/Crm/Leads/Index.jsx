@@ -151,24 +151,7 @@ export default function Leads(props) {
         </div>
       ),
     },
-    {
-      title: "Company",
-      dataIndex: "company_name",
-      key: "company_name",
-      sorter: true,
-      width: 220,
-      render: (value, record) => (
-        <div style={{ lineHeight: 1.4 }}>
-          <div>
-            <BankOutlined style={{ marginRight: 6, color: "#64748b" }} />
-            {value || "-"}
-          </div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            {[record.city, record.state, record.country].filter(Boolean).join(", ") || "-"}
-          </div>
-        </div>
-      ),
-    },
+   
     {
       title: "Source",
       dataIndex: "lead_source",
@@ -177,20 +160,13 @@ export default function Leads(props) {
       width: 130,
       render: (value) => value ? <Tag>{String(value).replaceAll("_", " ")}</Tag> : "-",
     },
-    {
-      title: "Industry",
-      dataIndex: "industry",
-      key: "industry",
-      sorter: true,
-      width: 150,
-      render: (value) => value ? <Tag>{String(value).replaceAll("_", " ")}</Tag> : "-",
-    },
+     
     {
       title: "Expected Value",
       dataIndex: "expected_value",
       key: "expected_value",
       sorter: true,
-      align: "right",
+    
       width: 150,
       render: (value) =>
         value !== null && value !== undefined
@@ -232,18 +208,7 @@ export default function Leads(props) {
       width: 150,
       render: (value) => value || "-",
     },
-    {
-      title: "Active",
-      dataIndex: "active",
-      key: "active",
-      sorter: true,
-      width: 100,
-      render: (active) => (
-        <Tag color={active === false ? "red" : "green"}>
-          {active === false ? "Inactive" : "Active"}
-        </Tag>
-      ),
-    },
+    
   ];
 
   const fields = [
@@ -251,28 +216,23 @@ export default function Leads(props) {
       type: "group",
       label: "Basic Information",
       col: 24,
+      accordion:false,
       children: [
-        {
-          name: "lead_no",
-          label: "Lead No",
-          type: "text",
-          placeholder: "Auto or manual lead number",
-          col: 8,
-        },
+        
         {
           name: "name",
           label: "Lead Name",
           type: "text",
           required: true,
           placeholder: "Enter lead name",
-          col: 8,
+          col: 12,
         },
         {
           name: "company_name",
           label: "Company Name",
           type: "text",
           placeholder: "Enter company name",
-          col: 8,
+          col: 12,
         },
         {
           name: "contact_id",
@@ -309,6 +269,7 @@ export default function Leads(props) {
       type: "group",
       label: "Contact Details",
       col: 24,
+      accordion:false,
       children: [
         {
           name: "email",
@@ -324,13 +285,7 @@ export default function Leads(props) {
           placeholder: "Phone number",
           col: 8,
         },
-        {
-          name: "mobile",
-          label: "Mobile",
-          type: "text",
-          placeholder: "Mobile number",
-          col: 8,
-        },
+       
         {
           name: "website",
           label: "Website",
@@ -344,44 +299,18 @@ export default function Leads(props) {
           type: "textarea",
           rows: 2,
           placeholder: "Full address",
-          col: 16,
+          col: 24,
         },
       ],
     },
 
-    {
-      type: "group",
-      label: "Location",
-      col: 24,
-      children: [
-        {
-          name: "city",
-          label: "City",
-          type: "text",
-          placeholder: "City",
-          col: 8,
-        },
-        {
-          name: "state",
-          label: "State",
-          type: "text",
-          placeholder: "State",
-          col: 8,
-        },
-        {
-          name: "country",
-          label: "Country",
-          type: "text",
-          placeholder: "Country",
-          col: 8,
-        },
-      ],
-    },
+  
 
     {
       type: "group",
       label: "Lead Classification",
       col: 24,
+      accordion:false,
       children: [
         {
           name: "lead_source",
@@ -391,14 +320,7 @@ export default function Leads(props) {
           placeholder: "Select source",
           col: 8,
         },
-        {
-          name: "industry",
-          label: "Industry",
-          type: "select",
-          options: industryOptions,
-          placeholder: "Select industry",
-          col: 8,
-        },
+        
         {
           name: "status",
           label: "Status",
@@ -406,7 +328,7 @@ export default function Leads(props) {
           options: statusOptions,
           placeholder: "Select status",
           defaultValue: "new",
-          col: 4,
+          col: 8,
         },
         {
           name: "priority",
@@ -415,92 +337,15 @@ export default function Leads(props) {
           options: priorityOptions,
           placeholder: "Select priority",
           defaultValue: "medium",
-          col: 4,
+          col: 8,
         },
       ],
     },
 
-    {
-      type: "group",
-      label: "Follow Up",
-      col: 24,
-      children: [
-        {
-          name: "next_follow_up_date",
-          label: "Next Follow Up Date",
-          type: "datePicker",
-          col: 8,
-        },
-        {
-          name: "last_contacted_at",
-          label: "Last Contacted At",
-          type: "datePicker",
-          col: 8,
-        },
-        {
-          name: "converted_at",
-          label: "Converted At",
-          type: "datePicker",
-          col: 8,
-        },
-        {
-          name: "notes",
-          label: "Notes",
-          type: "textarea",
-          rows: 3,
-          placeholder: "Lead notes, conversation summary, follow-up details...",
-          col: 24,
-        },
-      ],
-    },
+     
+     
 
-    {
-      type: "group",
-      label: "Conversion",
-      col: 24,
-      children: [
-        {
-          name: "converted_contact_id",
-          label: "Converted Contact",
-          type: "fkSelect",
-          fkUrl: "/api/contacts",
-          fkValueKey: "id",
-          fkLabelKey: "name",
-          placeholder: "Select converted contact",
-          col: 12,
-        },
-        {
-          name: "converted_deal_id",
-          label: "Converted Deal",
-          type: "fkSelect",
-          fkUrl: "/api/deals",
-          fkValueKey: "id",
-          fkLabelKey: "name",
-          placeholder: "Select converted deal",
-          col: 12,
-        },
-      ],
-    },
-
-    {
-      type: "group",
-      label: "System",
-      col: 24,
-      children: [
-        {
-          name: "active",
-          label: "Active",
-          type: "switch",
-          col: 6,
-        },
-        {
-          name: "is_system_generated",
-          label: "System Generated",
-          type: "switch",
-          col: 6,
-        },
-      ],
-    },
+     
   ];
 
   const crudInitialValues = {
@@ -581,14 +426,13 @@ export default function Leads(props) {
 
       <ReusableCrud
         title="Leads"
-        apiUrl="/api/leads"
+        apiUrl="/api/leads/"
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
-        form_ui="drawer"
-        drawerWidth={1200}
-        modalWidth={1100}
+        form_ui="modal"
+         modalWidth={700}
         showSearch={true}
         enableServerPagination={true}
         enableInactiveDrawer={true}

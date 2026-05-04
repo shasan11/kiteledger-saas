@@ -4,6 +4,7 @@ import {
     BranchesOutlined,
     PlusOutlined,
     QuestionCircleOutlined,
+    RobotOutlined,
     SearchOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -18,6 +19,7 @@ import {
     Select,
     Space,
     Typography,
+    theme,
 } from 'antd';
 import { useState } from 'react';
 
@@ -29,42 +31,51 @@ export default function AppNavbar({
     user,
     branch,
     setBranch,
-    branchOptions,
-    quickAddItems,
-    profileItems,
+    branchOptions = [],
+    quickAddItems = [],
+    profileItems = [],
     getUrl,
 }) {
+    const { token } = theme.useToken();
     const screens = useBreakpoint();
     const [searchOpen, setSearchOpen] = useState(false);
 
     const isMobile = !screens.md;
     const isTablet = !screens.lg;
 
+    const darkBg = '#111827';
+    const darkSoft = '#1f2937';
+    const darkSoftHover = '#263244';
+    const darkBorder = 'rgba(255,255,255,0.10)';
+    const darkText = '#ffffff';
+    const mutedText = '#9ca3af';
+
     return (
         <>
             <Header
-                className="app-navbar-dark"
                 style={{
-                    height: 64,
-                    padding: isMobile ? '0 10px' : '0 18px',
-                    background: '#111827',
-                    borderBottom: '1px solid #1f2937',
-                    display: 'flex',
+                    height: 60,
+                    padding: isMobile ? '0 10px' : '0 16px',
+                    background: darkBg,
+                    borderBottom: `1px solid ${darkBorder}`,
+                    display: 'grid',
+                    gridTemplateColumns: isMobile
+                        ? 'auto 1fr auto'
+                        : '300px 1fr 260px',
                     alignItems: 'center',
-                    gap: isMobile ? 8 : 12,
+                    gap: 12,
                     position: 'sticky',
                     top: 0,
                     zIndex: 100,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
                 }}
             >
+                {/* LEFT: LOGO + BRANCH */}
                 <div
                     style={{
-                        width: isMobile ? 'auto' : isTablet ? 230 : 300,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
-                        flexShrink: 0,
+                        minWidth: 0,
                     }}
                 >
                     <Link
@@ -72,20 +83,32 @@ export default function AppNavbar({
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
+                            gap: 9,
                             textDecoration: 'none',
+                            flexShrink: 0,
                         }}
                     >
-                        <ApplicationLogo className="block h-9 w-auto fill-current text-white" />
+                        <div
+                            style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: token.borderRadius,
+                                background: darkSoft,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            <ApplicationLogo className="block h-6 w-auto fill-current text-white" />
+                        </div>
 
                         {!isMobile && (
                             <Text
                                 strong
                                 style={{
-                                    fontSize: 17,
-                                    color: '#ffffff',
+                                    fontSize: 15,
+                                    color: darkText,
                                     whiteSpace: 'nowrap',
-                                    letterSpacing: 0.2,
                                 }}
                             >
                                 KiteLedger
@@ -94,29 +117,30 @@ export default function AppNavbar({
                     </Link>
 
                     {!isMobile && (
-                        <Select 
-                            
+                        <Select
                             size="middle"
                             value={branch}
                             onChange={setBranch}
                             options={branchOptions}
+                            
                             suffixIcon={
-                                <BranchesOutlined style={{ color: '#d1d5db' }} />
+                                <BranchesOutlined style={{ color: mutedText }} />
                             }
-                            className="dark-navbar-select"
-                            popupClassName="dark-navbar-select-dropdown"
+                            className="app-dark-select"
+                            popupClassName="app-dark-select-dropdown"
+                            popupMatchSelectWidth={210}
                             style={{
-                                width: isTablet ? 120 : 140,
+                                width: isTablet ? 125 : 150,
                             }}
                         />
                     )}
                 </div>
 
+                {/* CENTER: SEARCH + AI + QUICK ADD */}
                 <div
                     style={{
-                        flex: 1,
                         display: 'flex',
-                        justifyContent: isMobile ? 'flex-end' : 'center',
+                        justifyContent: 'center',
                         alignItems: 'center',
                         gap: 8,
                         minWidth: 0,
@@ -125,17 +149,22 @@ export default function AppNavbar({
                     {!isMobile && (
                         <Input
                             allowClear
-                            prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
+                            prefix={
+                                <SearchOutlined style={{ color: mutedText }} />
+                            }
                             placeholder={
                                 isTablet
                                     ? 'Search...'
                                     : 'Search invoices, contacts, accounts...'
                             }
-                            className="dark-navbar-search"
+                            className="app-dark-search"
                             style={{
-                                maxWidth: isTablet ? 300 : 440,
-                                height: 38,
-                                borderRadius: 10,
+                                maxWidth: isTablet ? 280 : 420,
+                                height: 36,
+                                borderRadius: token.borderRadius,
+                                background: darkSoft,
+                                borderColor: darkBorder,
+                                color: darkText,
                             }}
                         />
                     )}
@@ -145,32 +174,43 @@ export default function AppNavbar({
                             type="text"
                             icon={<SearchOutlined />}
                             onClick={() => setSearchOpen(true)}
-                            className="dark-navbar-icon-button"
+                            style={{
+                                width: 36,
+                                height: 36,
+                                color: darkText,
+                                borderRadius: token.borderRadius,
+                            }}
                         />
                     )}
 
-                    {!isMobile && (
-                        <Button
-                            icon={<QuestionCircleOutlined />}
-                            className="dark-navbar-button"
-                        >
-                            {!isTablet && 'Support'}
-                        </Button>
-                    )}
+                    <Button
+                        icon={<RobotOutlined />}
+                        style={{
+                            height: 36,
+                            borderRadius: token.borderRadius,
+                            color: darkText,
+                            background: darkSoft,
+                            borderColor: darkBorder,
+                            fontWeight: 500,
+                        }}
+                    >
+                        {!isTablet && 'AI'}
+                    </Button>
 
                     <Dropdown
                         menu={{ items: quickAddItems }}
-                        placement="bottom"
+                        placement="bottomRight"
                         trigger={['click']}
                     >
                         <Button
                             type="primary"
                             icon={<PlusOutlined />}
                             style={{
-                                height: 38,
-                                borderRadius: 10,
-                                fontWeight: 600,
-                                paddingInline: isMobile ? 10 : 15,
+                                height: 36,
+                                borderRadius: token.borderRadius,
+                                fontWeight: 500,
+                                boxShadow: 'none',
+                                paddingInline: isMobile ? 10 : 14,
                             }}
                         >
                             {!isMobile && 'Quick Add'}
@@ -178,14 +218,32 @@ export default function AppNavbar({
                     </Dropdown>
                 </div>
 
+                {/* RIGHT: SUPPORT + PROFILE */}
                 <div
                     style={{
-                        width: isMobile ? 'auto' : isTablet ? 70 : 220,
                         display: 'flex',
                         justifyContent: 'flex-end',
-                        flexShrink: 0,
+                        alignItems: 'center',
+                        gap: 8,
+                        minWidth: 0,
                     }}
                 >
+                    {!isMobile && (
+                        <Button
+                            icon={<QuestionCircleOutlined />}
+                            style={{
+                                height: 36,
+                                borderRadius: token.borderRadius,
+                                color: darkText,
+                                background: darkSoft,
+                                borderColor: darkBorder,
+                                fontWeight: 500,
+                            }}
+                        >
+                            {!isTablet && 'Support'}
+                        </Button>
+                    )}
+
                     <Dropdown
                         menu={{ items: profileItems }}
                         placement="bottomRight"
@@ -194,18 +252,19 @@ export default function AppNavbar({
                         <Button
                             type="text"
                             style={{
-                                height: 44,
-                                paddingInline: isMobile ? 4 : 8,
-                                color: '#ffffff',
+                                height: 38,
+                                paddingInline: isMobile ? 4 : 6,
+                                color: darkText,
+                                borderRadius: token.borderRadius,
                             }}
                         >
                             <Space size={8}>
                                 <Avatar
-                                    size="small"
+                                    size={28}
                                     icon={<UserOutlined />}
                                     style={{
-                                        background: '#374151',
-                                        color: '#ffffff',
+                                        background: darkSoft,
+                                        color: darkText,
                                     }}
                                 />
 
@@ -213,14 +272,15 @@ export default function AppNavbar({
                                     <span
                                         style={{
                                             fontWeight: 500,
-                                            color: '#ffffff',
-                                            maxWidth: 130,
+                                            color: darkText,
+                                            maxWidth: 120,
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             whiteSpace: 'nowrap',
+                                            display: 'inline-block',
                                         }}
                                     >
-                                        {user.name}
+                                        {user?.name || 'User'}
                                     </span>
                                 )}
                             </Space>
@@ -234,8 +294,7 @@ export default function AppNavbar({
                 open={searchOpen}
                 onClose={() => setSearchOpen(false)}
                 placement="top"
-                height={180}
-                className="dark-mobile-search-drawer"
+                height={250}
             >
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                     <Input
@@ -246,23 +305,89 @@ export default function AppNavbar({
                         placeholder="Search invoices, contacts, accounts..."
                     />
 
-                    <Select
-                        size="large"
-                        value={branch}
-                        onChange={setBranch}
-                        options={branchOptions}
-                        suffixIcon={<BranchesOutlined />}
-                        style={{ width: '100%' }}
-                    />
+                    
 
-                    <Button
-                        block
-                        icon={<QuestionCircleOutlined />}
-                    >
+                    <Button block icon={<RobotOutlined />}>
+                        AI Assistant
+                    </Button>
+
+                    <Button block icon={<QuestionCircleOutlined />}>
                         Support
                     </Button>
                 </Space>
             </Drawer>
+
+            <style>
+                {`
+                    .app-dark-search input {
+                        color: #ffffff !important;
+                        background: transparent !important;
+                    }
+
+                    .app-dark-search input::placeholder {
+                        color: #9ca3af !important;
+                    }
+
+                    .app-dark-search .ant-input-clear-icon {
+                        color: #9ca3af !important;
+                    }
+
+                    .app-dark-search:hover,
+                    .app-dark-search:focus-within {
+                        border-color: ${token.colorPrimary} !important;
+                        background: ${darkSoftHover} !important;
+                    }
+
+                    .app-dark-select .ant-select-selector {
+                        background: #1f2937 !important;
+                        border-color: rgba(255,255,255,0.10) !important;
+                        border-radius: ${token.borderRadius}px !important;
+                        color: #ffffff !important;
+                    }
+
+                    .app-dark-select .ant-select-selection-item {
+                        color: #ffffff !important;
+                        font-weight: 500;
+                    }
+
+                    .app-dark-select:hover .ant-select-selector,
+                    .app-dark-select.ant-select-focused .ant-select-selector {
+                        border-color: ${token.colorPrimary} !important;
+                        background: ${darkSoftHover} !important;
+                    }
+
+                    .app-dark-select-dropdown {
+                        background: #111827 !important;
+                        border: 1px solid rgba(255,255,255,0.10) !important;
+                        border-radius: ${token.borderRadius}px !important;
+                        padding: 6px !important;
+                    }
+
+                    .app-dark-select-dropdown .ant-select-item {
+                        color: #e5e7eb !important;
+                        border-radius: ${token.borderRadiusSM}px !important;
+                    }
+
+                    .app-dark-select-dropdown .ant-select-item-option-active {
+                        background: #1f2937 !important;
+                    }
+
+                    .app-dark-select-dropdown .ant-select-item-option-selected {
+                        background: ${token.colorPrimary} !important;
+                        color: #ffffff !important;
+                    }
+
+                    .ant-layout-header .ant-btn-text:hover {
+                        background: rgba(255,255,255,0.06) !important;
+                    }
+
+                    .ant-layout-header .ant-btn-default:hover {
+                        color: #ffffff !important;
+                        border-color: ${token.colorPrimary} !important;
+                        background: ${darkSoftHover} !important;
+                    }
+                `}
+            </style>
         </>
     );
 }

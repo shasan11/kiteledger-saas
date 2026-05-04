@@ -3250,10 +3250,8 @@ export default function ReusableCrud({
       : null;
 
  const actionColumn = hasActionColumns
-  ? {
-      title: "Actions",
-      fixed: "right",
-      width: 90,
+  ? { 
+      width:10,
       render: (_, record) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Dropdown
@@ -3261,8 +3259,9 @@ export default function ReusableCrud({
             trigger={["click"]}
           >
             <Button
-              shape="circle"
-              icon={<EllipsisOutlined />}
+              shape="icon"
+              type="text"
+              icon={<MoreOutlined style={{fontSize:"18px"}}/>}
               onClick={(e) => e.stopPropagation()}
             />
           </Dropdown>
@@ -5032,7 +5031,7 @@ export default function ReusableCrud({
 
             {(!hasAnchors || button_ui) && (
               <div className="flex gap-2 mb-0">
-                <Row justify="space-between" style={{ width: "100%" }} className="m-0">
+                <Row justify="space-between" style={{ width: "100%" }} className="m-0 bg-white">
                   {showSearch && canView && (
                     <Col xs={16} style={{ display: "flex", gap: 6 }}>
                       <Input
@@ -5044,7 +5043,7 @@ export default function ReusableCrud({
                           setSearchText(e.target.value);
                           setPagination((p) => ({ ...p, current: 1 }));
                         }}
-                        style={{ width: "100%", borderRadius: 0 }}
+                        style={{ width: "100%", borderRadius: 0,borderColor:"none" }}
                       />
                     </Col>
                   )}
@@ -5122,12 +5121,13 @@ export default function ReusableCrud({
                 <Table
                   rowKey="id"
                   columns={mainColumns}
-                  scroll={{ x: 1800 }}
+                
                   size="small"
                   dataSource={filteredData}
                   onRow={activeTableRowFunction}
                   loading={loading}
-                  rowSelection={canView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
+                  rowSelection={canView ? { selectedRowKeys, onChange: setSelectedRowKeys,columnWidth: 5, } : null}
+              
                   pagination={{
                     current: pagination.current,
                     pageSize: pagination.pageSize,

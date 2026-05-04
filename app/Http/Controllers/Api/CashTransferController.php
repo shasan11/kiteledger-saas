@@ -6,6 +6,7 @@ use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CashTransferController extends BaseCrudApiController
 {
@@ -25,6 +26,8 @@ class CashTransferController extends BaseCrudApiController
         'branch',
         'fromAccount',
         'currency',
+        'cashTransferLines',
+        'cashTransferLines.toAccount',
     ];
 
     protected array $relationDetails = [
@@ -85,7 +88,7 @@ class CashTransferController extends BaseCrudApiController
 
     protected array $nested = [
         'items' => [
-            'relation' => 'items',
+            'relation' => 'cashTransferLines',
             'model' => CashTransferLine::class,
             'foreign_key' => 'cash_transfer_id',
             'delete_key' => 'deleted_item_ids',
@@ -93,10 +96,6 @@ class CashTransferController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
 
-            /*
-             * false = update existing rows, create new rows,
-             * delete only rows passed in deleted_item_ids.
-             */
             'replace_on_update' => false,
 
             'parent_total_field' => 'total_amount',
@@ -111,79 +110,295 @@ class CashTransferController extends BaseCrudApiController
             ],
 
             'rules' => [
-                'to_account_id' => ['required', 'uuid', 'exists:accounts,id'],
-                'exchange_rate_to_default' => ['nullable', 'numeric', 'min:0'],
-                'description' => ['nullable', 'string', 'max:200'],
-                'amount' => ['required', 'numeric', 'min:0.01'],
+                'to_account_id' => [
+                    'required',
+                    'uuid',
+                    'exists:accounts,id',
+                ],
+
+                'exchange_rate_to_default' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                ],
+
+                'amount' => [
+                    'required',
+                    'numeric',
+                    'min:0.01',
+                ],
+
+                'description' => [
+                    'nullable',
+                    'string',
+                    'max:200',
+                ],
             ],
 
             'update_rules' => [
-                'to_account_id' => ['required', 'uuid', 'exists:accounts,id'],
-                'exchange_rate_to_default' => ['nullable', 'numeric', 'min:0'],
-                'description' => ['nullable', 'string', 'max:200'],
-                'amount' => ['required', 'numeric', 'min:0.01'],
+                'to_account_id' => [
+                    'required',
+                    'uuid',
+                    'exists:accounts,id',
+                ],
+
+                'exchange_rate_to_default' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                ],
+
+                'amount' => [
+                    'required',
+                    'numeric',
+                    'min:0.01',
+                ],
+
+                'description' => [
+                    'nullable',
+                    'string',
+                    'max:200',
+                ],
             ],
         ],
     ];
 
-    protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+    protected function storeRules(Request $request): array
+    {
+        return [
+            'branch_id' => [
+                'nullable',
+                'uuid',
+                'exists:branches,id',
+            ],
 
-        'transfer_no' => ['nullable', 'string', 'max:40'],
-        'transfer_date' => ['required', 'date'],
-        'from_account_id' => ['required', 'uuid', 'exists:accounts,id'],
-        'reference' => ['nullable', 'string', 'max:120'],
-        'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
-        'total_amount' => ['nullable', 'numeric', 'min:0'],
-        'notes' => ['nullable', 'string'],
+            'transfer_no' => [
+                'nullable',
+                'string',
+                'max:40',
+                'unique:cash_transfers,transfer_no',
+            ],
 
-        'status' => ['nullable', 'in:draft,posted,cancelled'],
-        'active' => ['nullable', 'boolean'],
+            'transfer_date' => [
+                'required',
+                'date',
+            ],
 
-        'approved' => ['nullable', 'boolean'],
-        'approved_at' => ['nullable', 'date'],
-        'approved_by_id' => ['nullable', 'integer', 'exists:users,id'],
+            'from_account_id' => [
+                'required',
+                'uuid',
+                'exists:accounts,id',
+            ],
 
-        'void' => ['nullable', 'boolean'],
-        'voided_by_id' => ['nullable', 'integer', 'exists:users,id'],
-        'voided_reason' => ['nullable', 'string'],
-        'voided_at' => ['nullable', 'date'],
+            'reference' => [
+                'nullable',
+                'string',
+                'max:120',
+            ],
 
-        'exchange_rate' => ['nullable', 'numeric', 'min:0'],
-        'total' => ['nullable', 'numeric', 'min:0'],
+            'currency_id' => [
+                'required',
+                'uuid',
+                'exists:currencies,id',
+            ],
 
-        'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
-    ];
+            'notes' => [
+                'nullable',
+                'string',
+            ],
+
+            'status' => [
+                'nullable',
+                Rule::in([
+                    'draft',
+                    'posted',
+                    'cancelled',
+                ]),
+            ],
+
+            'active' => [
+                'nullable',
+                'boolean',
+            ],
+
+            'approved' => [
+                'nullable',
+                'boolean',
+            ],
+
+            'approved_at' => [
+                'nullable',
+                'date',
+            ],
+
+            'approved_by_id' => [
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
+
+            'void' => [
+                'nullable',
+                'boolean',
+            ],
+
+            'voided_by_id' => [
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
+
+            'voided_reason' => [
+                'nullable',
+                'string',
+            ],
+
+            'voided_at' => [
+                'nullable',
+                'date',
+            ],
+
+            'exchange_rate' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+            'total_amount' => [
+                'exclude',
+            ],
+
+            'user_add_id' => [
+                'exclude',
+            ],
+        ];
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            'branch_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                'exists:branches,id',
+            ],
 
-            'transfer_no' => ['sometimes', 'nullable', 'string', 'max:40'],
-            'transfer_date' => ['sometimes', 'required', 'date'],
-            'from_account_id' => ['sometimes', 'required', 'uuid', 'exists:accounts,id'],
-            'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
-            'total_amount' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'notes' => ['sometimes', 'nullable', 'string'],
+            'transfer_no' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:40',
+                Rule::unique('cash_transfers', 'transfer_no')->ignore($record->getKey()),
+            ],
 
-            'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
-            'active' => ['sometimes', 'nullable', 'boolean'],
+            'transfer_date' => [
+                'sometimes',
+                'required',
+                'date',
+            ],
 
-            'approved' => ['sometimes', 'nullable', 'boolean'],
-            'approved_at' => ['sometimes', 'nullable', 'date'],
-            'approved_by_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'from_account_id' => [
+                'sometimes',
+                'required',
+                'uuid',
+                'exists:accounts,id',
+            ],
 
-            'void' => ['sometimes', 'nullable', 'boolean'],
-            'voided_by_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
-            'voided_reason' => ['sometimes', 'nullable', 'string'],
-            'voided_at' => ['sometimes', 'nullable', 'date'],
+            'reference' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:120',
+            ],
 
-            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'total' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'currency_id' => [
+                'sometimes',
+                'required',
+                'uuid',
+                'exists:currencies,id',
+            ],
 
-            'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'notes' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+
+            'status' => [
+                'sometimes',
+                'nullable',
+                Rule::in([
+                    'draft',
+                    'posted',
+                    'cancelled',
+                ]),
+            ],
+
+            'active' => [
+                'sometimes',
+                'nullable',
+                'boolean',
+            ],
+
+            'approved' => [
+                'sometimes',
+                'nullable',
+                'boolean',
+            ],
+
+            'approved_at' => [
+                'sometimes',
+                'nullable',
+                'date',
+            ],
+
+            'approved_by_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
+
+            'void' => [
+                'sometimes',
+                'nullable',
+                'boolean',
+            ],
+
+            'voided_by_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                'exists:users,id',
+            ],
+
+            'voided_reason' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+
+            'voided_at' => [
+                'sometimes',
+                'nullable',
+                'date',
+            ],
+
+            'exchange_rate' => [
+                'sometimes',
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+            'total_amount' => [
+                'exclude',
+            ],
+
+            'user_add_id' => [
+                'exclude',
+            ],
         ];
     }
 
@@ -192,6 +407,10 @@ class CashTransferController extends BaseCrudApiController
         array $nestedData
     ): array {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+
+        if (empty($parentData['transfer_no'])) {
+            $parentData['transfer_no'] = $this->generateTransferNo();
+        }
 
         $parentData['status'] = $parentData['status'] ?? 'draft';
         $parentData['active'] = $parentData['active'] ?? true;
@@ -203,7 +422,7 @@ class CashTransferController extends BaseCrudApiController
             ->sum(fn ($item) => (float) ($item['amount'] ?? 0));
 
         $parentData['total_amount'] = $totalAmount;
-        $parentData['total'] = $totalAmount;
+        $parentData['user_add_id'] = request()->user()?->getAuthIdentifier();
 
         return $parentData;
     }
@@ -213,12 +432,21 @@ class CashTransferController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
-        if (array_key_exists('items', $nestedData)) {
-            $totalAmount = collect($nestedData['items'] ?? [])
-                ->sum(fn ($item) => (float) ($item['amount'] ?? 0));
+        unset(
+            $parentData['total_amount'],
+            $parentData['user_add_id']
+        );
 
-            $parentData['total_amount'] = $totalAmount;
-            $parentData['total'] = $totalAmount;
+        if (isset($parentData['approved']) && $parentData['approved']) {
+            $parentData['approved_at'] = $parentData['approved_at'] ?? now();
+            $parentData['approved_by_id'] = $parentData['approved_by_id']
+                ?? request()->user()?->getAuthIdentifier();
+        }
+
+        if (isset($parentData['void']) && $parentData['void']) {
+            $parentData['voided_at'] = $parentData['voided_at'] ?? now();
+            $parentData['voided_by_id'] = $parentData['voided_by_id']
+                ?? request()->user()?->getAuthIdentifier();
         }
 
         return $parentData;
@@ -241,15 +469,45 @@ class CashTransferController extends BaseCrudApiController
         array $nestedData,
         bool $isUpdate
     ): Model {
-        if (method_exists($record, 'items')) {
-            $totalAmount = $record->items()->sum('amount');
+        $totalAmount = $record->cashTransferLines()->sum('amount');
 
-            $record->forceFill([
-                'total_amount' => $totalAmount,
-                'total' => $totalAmount,
-            ])->save();
-        }
+        $record->forceFill([
+            'total_amount' => $totalAmount,
+        ])->saveQuietly();
 
-        return $record;
+        return $record->fresh([
+            'branch',
+            'fromAccount',
+            'currency',
+            'cashTransferLines',
+            'cashTransferLines.toAccount',
+        ]);
+    }
+
+    protected function generateTransferNo(): string
+    {
+        $prefix = 'CT-';
+
+        $numbers = CashTransfer::query()
+            ->where('transfer_no', 'like', $prefix . '%')
+            ->pluck('transfer_no')
+            ->map(function ($transferNo) use ($prefix) {
+                $number = str_replace($prefix, '', (string) $transferNo);
+
+                return is_numeric($number) ? (int) $number : 0;
+            });
+
+        $nextNumber = ((int) $numbers->max()) + 1;
+
+        do {
+            $transferNo = $prefix . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
+            $nextNumber++;
+        } while (
+            CashTransfer::query()
+                ->where('transfer_no', $transferNo)
+                ->exists()
+        );
+
+        return $transferNo;
     }
 }

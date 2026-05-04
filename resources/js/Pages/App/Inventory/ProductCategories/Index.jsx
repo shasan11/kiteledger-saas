@@ -293,14 +293,14 @@ export default function ProductCategories(props) {
         <ReusableCrud
           icon={<AppstoreOutlined />}
           title="Product Categories"
-          apiUrl={api('/api/product-categories')}
+          apiUrl={api('/api/product-categories/')}
           columns={columns}
           fields={fields}
           validationSchema={validationSchema}
           crudInitialValues={crudInitialValues}
           transformPayload={transformPayload}
           form_ui="modal"
-          modalWidth={860}
+          modalWidth={500}
           searchParam="search"
           pageParam="page"
           pageSizeParam="page_size"

@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Account;
+use App\Models\BankAccount;
+use App\Models\Branch;
 use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
 use App\Models\ChartOfAccount;
@@ -12,6 +14,7 @@ use App\Models\JournalVoucherLine;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class AccountingSeeder extends Seeder
 {
@@ -21,41 +24,53 @@ class AccountingSeeder extends Seeder
             $userId = User::query()->value('id');
             $now = now();
 
+            $branch = Branch::query()->first();
+
+            if (!$branch) {
+                throw new RuntimeException('No branch found. Please run BranchSeeder before AccountingSeeder.');
+            }
+
+            $branchId = $branch->id;
+
             /*
             |--------------------------------------------------------------------------
             | Base Currency
             |--------------------------------------------------------------------------
             */
 
-            $currency = Currency::query()->firstOrCreate(
-                ['code' => 'USD'],
-                [
-                    'name' => 'US Dollar',
-                    'symbol' => '$',
-                    'decimal_places' => 2,
-                    'is_base' => true,
-                    'active' => true,
-                    'is_system_generated' => true,
-                    'user_add_id' => $userId,
-                ]
-            );
+            $currency = Currency::query()
+                ->where('is_base', true)
+                ->first();
+
+            if (!$currency) {
+                $currency = Currency::query()->updateOrCreate(
+                    ['code' => 'USD'],
+                    [
+                        'name' => 'US Dollar',
+                        'symbol' => '$',
+                        'decimal_places' => 2,
+                        'is_base' => true,
+                        'active' => true,
+                        'is_system_generated' => true,
+                        'user_add_id' => $userId,
+                    ]
+                );
+            }
 
             /*
             |--------------------------------------------------------------------------
-            | Account Groups
+            | Account Master
             |--------------------------------------------------------------------------
             */
 
             $assetAccount = Account::query()->updateOrCreate(
                 ['code' => '1000'],
                 [
-                    'branch_id' => null,
                     'name' => 'Assets',
                     'nature' => 'coa',
                     'parent_id' => null,
                     'currency_id' => $currency->id,
-                    'description' => 'Asset control group',
-                    'opening_balance' => 0,
+                    'swift_code' => null,
                     'dr_amount' => 0,
                     'cr_amount' => 0,
                     'balance' => 0,
@@ -68,13 +83,11 @@ class AccountingSeeder extends Seeder
             $cashControlAccount = Account::query()->updateOrCreate(
                 ['code' => '1100'],
                 [
-                    'branch_id' => null,
                     'name' => 'Cash Accounts',
                     'nature' => 'coa',
                     'parent_id' => $assetAccount->id,
                     'currency_id' => $currency->id,
-                    'description' => 'Cash control group',
-                    'opening_balance' => 0,
+                    'swift_code' => null,
                     'dr_amount' => 0,
                     'cr_amount' => 0,
                     'balance' => 0,
@@ -87,13 +100,11 @@ class AccountingSeeder extends Seeder
             $bankControlAccount = Account::query()->updateOrCreate(
                 ['code' => '1200'],
                 [
-                    'branch_id' => null,
                     'name' => 'Bank Accounts',
                     'nature' => 'coa',
                     'parent_id' => $assetAccount->id,
                     'currency_id' => $currency->id,
-                    'description' => 'Bank control group',
-                    'opening_balance' => 0,
+                    'swift_code' => null,
                     'dr_amount' => 0,
                     'cr_amount' => 0,
                     'balance' => 0,
@@ -106,13 +117,11 @@ class AccountingSeeder extends Seeder
             $expenseAccount = Account::query()->updateOrCreate(
                 ['code' => '5000'],
                 [
-                    'branch_id' => null,
                     'name' => 'Expenses',
                     'nature' => 'coa',
                     'parent_id' => null,
                     'currency_id' => $currency->id,
-                    'description' => 'Expense control group',
-                    'opening_balance' => 0,
+                    'swift_code' => null,
                     'dr_amount' => 0,
                     'cr_amount' => 0,
                     'balance' => 0,
@@ -122,30 +131,17 @@ class AccountingSeeder extends Seeder
                 ]
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | Real Cash / Bank Accounts
-            |--------------------------------------------------------------------------
-            */
-
             $mainBank = Account::query()->updateOrCreate(
                 ['code' => 'BA-001'],
                 [
-                    'branch_id' => null,
                     'name' => 'Main Operating Bank',
                     'nature' => 'bank',
                     'parent_id' => $bankControlAccount->id,
                     'currency_id' => $currency->id,
-                    'description' => 'Main company operating bank account',
-                    'bank_name' => 'Kite Ledger Bank',
-                    'account_name' => 'Main Operations',
-                    'account_number' => '001122334455',
-                    'account_type' => 'checking',
                     'swift_code' => 'KITEUS00',
-                    'opening_balance' => 100000,
                     'dr_amount' => 100000,
-                    'cr_amount' => 0,
-                    'balance' => 100000,
+                    'cr_amount' => 500,
+                    'balance' => 99500,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -155,21 +151,14 @@ class AccountingSeeder extends Seeder
             $pettyCash = Account::query()->updateOrCreate(
                 ['code' => 'CA-001'],
                 [
-                    'branch_id' => null,
                     'name' => 'Petty Cash',
                     'nature' => 'cash',
                     'parent_id' => $cashControlAccount->id,
                     'currency_id' => $currency->id,
-                    'description' => 'Office petty cash account',
-                    'bank_name' => null,
-                    'account_name' => null,
-                    'account_number' => null,
-                    'account_type' => null,
                     'swift_code' => null,
-                    'opening_balance' => 1000,
-                    'dr_amount' => 1000,
-                    'cr_amount' => 0,
-                    'balance' => 1000,
+                    'dr_amount' => 1500,
+                    'cr_amount' => 150,
+                    'balance' => 1350,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -179,16 +168,62 @@ class AccountingSeeder extends Seeder
             $adminExpenseAccount = Account::query()->updateOrCreate(
                 ['code' => '5100'],
                 [
-                    'branch_id' => null,
                     'name' => 'Administrative Expense',
                     'nature' => 'coa',
                     'parent_id' => $expenseAccount->id,
                     'currency_id' => $currency->id,
-                    'description' => 'General office and administrative expenses',
-                    'opening_balance' => 0,
-                    'dr_amount' => 0,
+                    'swift_code' => null,
+                    'dr_amount' => 150,
                     'cr_amount' => 0,
-                    'balance' => 0,
+                    'balance' => 150,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | Bank / Cash Account Details
+            |--------------------------------------------------------------------------
+            */
+
+            BankAccount::query()->updateOrCreate(
+                ['code' => 'BA-001'],
+                [
+                    'branch_id' => $branchId,
+                    'type' => 'bank',
+                    'display_name' => 'Main Operating Bank',
+                    'currency_id' => $currency->id,
+                    'description' => 'Main company operating bank account',
+                    'bank_name' => 'Kite Ledger Bank',
+                    'account_name' => 'Main Operations',
+                    'account_number' => '001122334455',
+                    'account_type' => 'checking',
+                    'swift_code' => 'KITEUS00',
+                    'account_id' => $mainBank->id,
+                    'opening_balance' => 100000,
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => $userId,
+                ]
+            );
+
+            BankAccount::query()->updateOrCreate(
+                ['code' => 'CA-001'],
+                [
+                    'branch_id' => $branchId,
+                    'type' => 'cash',
+                    'display_name' => 'Petty Cash',
+                    'currency_id' => $currency->id,
+                    'description' => 'Office petty cash account',
+                    'bank_name' => null,
+                    'account_name' => null,
+                    'account_number' => null,
+                    'account_type' => null,
+                    'swift_code' => null,
+                    'account_id' => $pettyCash->id,
+                    'opening_balance' => 1000,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -204,12 +239,12 @@ class AccountingSeeder extends Seeder
             $assetCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1000'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $assetAccount->id,
+                    'type' => 'asset',
                     'name' => 'Assets',
                     'parent_id' => null,
                     'description' => 'Asset control ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -219,12 +254,12 @@ class AccountingSeeder extends Seeder
             $cashControlCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1100'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $cashControlAccount->id,
+                    'type' => 'asset',
                     'name' => 'Cash Accounts',
                     'parent_id' => $assetCOA->id,
                     'description' => 'Cash control ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -234,12 +269,12 @@ class AccountingSeeder extends Seeder
             $bankControlCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '1200'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $bankControlAccount->id,
+                    'type' => 'asset',
                     'name' => 'Bank Accounts',
                     'parent_id' => $assetCOA->id,
                     'description' => 'Bank control ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -249,12 +284,12 @@ class AccountingSeeder extends Seeder
             $mainBankCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => 'BA-001'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $mainBank->id,
+                    'type' => 'asset',
                     'name' => 'Main Operating Bank',
                     'parent_id' => $bankControlCOA->id,
                     'description' => 'Main operating bank ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -264,12 +299,12 @@ class AccountingSeeder extends Seeder
             $pettyCashCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => 'CA-001'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $pettyCash->id,
+                    'type' => 'asset',
                     'name' => 'Petty Cash',
                     'parent_id' => $cashControlCOA->id,
                     'description' => 'Petty cash ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -279,12 +314,12 @@ class AccountingSeeder extends Seeder
             $expenseCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '5000'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $expenseAccount->id,
+                    'type' => 'expense',
                     'name' => 'Expenses',
                     'parent_id' => null,
                     'description' => 'Expense control ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -294,12 +329,12 @@ class AccountingSeeder extends Seeder
             $adminExpenseCOA = ChartOfAccount::query()->updateOrCreate(
                 ['code' => '5100'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'account_id' => $adminExpenseAccount->id,
+                    'type' => 'expense',
                     'name' => 'Administrative Expense',
                     'parent_id' => $expenseCOA->id,
                     'description' => 'Administrative expense ledger',
-                    'currency_id' => $currency->id,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => $userId,
@@ -315,7 +350,7 @@ class AccountingSeeder extends Seeder
             $cashTransfer = CashTransfer::query()->updateOrCreate(
                 ['transfer_no' => 'CT-0001'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'transfer_date' => $now->toDateString(),
                     'from_account_id' => $mainBank->id,
                     'reference' => 'Seed opening transfer',
@@ -367,7 +402,7 @@ class AccountingSeeder extends Seeder
             $journalVoucher = JournalVoucher::query()->updateOrCreate(
                 ['voucher_no' => 'JV-0001'],
                 [
-                    'branch_id' => null,
+                    'branch_id' => $branchId,
                     'voucher_date' => $now->toDateString(),
                     'currency_id' => $currency->id,
                     'reference' => 'Seed opening JV',
@@ -417,6 +452,30 @@ class AccountingSeeder extends Seeder
 
             $journalVoucher->update([
                 'total' => $journalTotal,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Final Account Balances
+            |--------------------------------------------------------------------------
+            */
+
+            $mainBank->update([
+                'dr_amount' => 100000,
+                'cr_amount' => 500,
+                'balance' => 99500,
+            ]);
+
+            $pettyCash->update([
+                'dr_amount' => 1500,
+                'cr_amount' => 150,
+                'balance' => 1350,
+            ]);
+
+            $adminExpenseAccount->update([
+                'dr_amount' => 150,
+                'cr_amount' => 0,
+                'balance' => 150,
             ]);
 
             $this->command?->info('Accounting seed data inserted/updated successfully.');

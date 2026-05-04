@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             CurrencySeeder::class,
             // ContactGroupSeeder::class,
             // ContactSeeder::class
-            //AccountingSeeder::class,
+            AccountingSeeder::class,
         ]);
     }
 }

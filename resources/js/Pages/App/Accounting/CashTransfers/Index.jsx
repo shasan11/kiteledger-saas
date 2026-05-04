@@ -28,16 +28,18 @@ const statusColor = (s) => { if (s === 'posted') return 'green'; if (s === 'canc
 export default function CashTransfers(props) {
   const columns = useMemo(() => [
     {
-      title: 'Transfer No',
+      title: '#No',
       dataIndex: 'transfer_no',
       key: 'transfer_no',
       sorter: true,
+      width:50,
       render: (val) => <Text strong>{val || 'DRAFT'}</Text>,
     },
     {
       title: 'Date',
       dataIndex: 'transfer_date',
       key: 'transfer_date',
+      width:20,
       sorter: true,
       render: (val) => { if (!val) return '-'; const d = dayjs(val); return d.isValid() ? d.format('DD-MM-YYYY') : val; },
     },
@@ -45,30 +47,26 @@ export default function CashTransfers(props) {
       title: 'From Account',
       dataIndex: 'fromAccount',
       key: 'fromAccount',
+      width:60,
       render: (_, r) => r?.fromAccount?.name || r?.from_account?.name || '-',
     },
     {
       title: 'Reference',
       dataIndex: 'reference',
       key: 'reference',
+      width:100,
       render: (val) => val || '-',
     },
     {
       title: 'Total Amount',
       dataIndex: 'total_amount',
       key: 'total_amount',
-      align: 'right',
+       
       sorter: true,
+      width:70,
       render: (val) => <Text strong>{money(val)}</Text>,
     },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (val) => (
-        <Tag color={statusColor(val)}>{val ? val.charAt(0).toUpperCase() + val.slice(1) : 'Draft'}</Tag>
-      ),
-    },
+   
   ], []);
 
   const fields = useMemo(() => [
@@ -220,7 +218,6 @@ export default function CashTransfers(props) {
   return (
     <AuthenticatedLayout
       user={props.auth?.user}
-      header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Cash Transfers</h2>}
     >
       <Head title="Cash Transfers" />
       <ReusableCrud
@@ -248,12 +245,10 @@ export default function CashTransfers(props) {
         hasActions={true}
         hasActionColumns={true}
         anchorFilters={[
-          { key: 'draft',     label: 'Draft',     title: 'Cash Transfers', params: { status: 'draft' } },
-          { key: 'posted',    label: 'Posted',    title: 'Cash Transfers', params: { status: 'posted' } },
-          { key: 'cancelled', label: 'Cancelled', title: 'Cash Transfers', params: { status: 'cancelled' } },
-          { key: 'all',       label: 'All',       title: 'Cash Transfers', params: {} },
+          { key: 'approved',    label: 'Approved',    title: 'Cash Transfers', params: { approved: true } },
+          { key: 'draft',     label: 'Draft',     title: 'Cash Transfers', params: { approved: false  } },
         ]}
-        defaultAnchorKey="draft"
+        defaultAnchorKey="approved"
         anchorSyncWithHash
       />
     </AuthenticatedLayout>

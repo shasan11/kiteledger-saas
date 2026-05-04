@@ -8,6 +8,11 @@ import {
     AppstoreOutlined,
     BarsOutlined,
     ApartmentOutlined,
+    BankOutlined,
+    WalletOutlined,
+    RiseOutlined,
+    FallOutlined,
+    DollarCircleOutlined,
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -25,6 +30,63 @@ const getLabel = (...values) => {
     return '-';
 };
 
+const accountTypeMeta = {
+    asset: {
+        label: 'Asset',
+        color: 'blue',
+        icon: <BankOutlined />,
+    },
+    liability: {
+        label: 'Liability',
+        color: 'red',
+        icon: <WalletOutlined />,
+    },
+    equity: {
+        label: 'Equity',
+        color: 'purple',
+        icon: <ApartmentOutlined />,
+    },
+    income: {
+        label: 'Income',
+        color: 'green',
+        icon: <RiseOutlined />,
+    },
+    expense: {
+        label: 'Expense',
+        color: 'orange',
+        icon: <FallOutlined />,
+    },
+};
+
+const renderAccountType = (type) => {
+    const normalized = String(type || 'asset').toLowerCase();
+
+    const meta = accountTypeMeta[normalized] || {
+        label: normalized
+            ? normalized.charAt(0).toUpperCase() + normalized.slice(1)
+            : 'Asset',
+        color: 'default',
+        icon: <DollarCircleOutlined />,
+    };
+
+    return (
+        <Tag
+            color={meta.color}
+            icon={meta.icon}
+            style={{
+                marginInlineEnd: 0,
+                borderRadius: 999,
+                padding: '3px 10px',
+                fontWeight: 600,
+                minWidth: 96,
+                textAlign: 'center',
+            }}
+        >
+            {meta.label}
+        </Tag>
+    );
+};
+
 export default function ChartOfAccounts(props) {
     const [viewMode, setViewMode] = useState('list');
     const [activeAnchor, setActiveAnchor] = useState('non_system');
@@ -37,7 +99,7 @@ export default function ChartOfAccounts(props) {
                 title: 'Code',
                 dataIndex: 'code',
                 key: 'code',
-                width: 140,
+                width: 100,
                 backendSort: true,
                 sortField: 'code',
                 render: (value) => <Text strong>{value || '-'}</Text>,
@@ -46,7 +108,7 @@ export default function ChartOfAccounts(props) {
                 title: 'Name',
                 dataIndex: 'name',
                 key: 'name',
-                width: 260,
+                width: 300,
                 backendSort: true,
                 sortField: 'name',
                 render: (value, record) =>
@@ -60,23 +122,22 @@ export default function ChartOfAccounts(props) {
                     ),
             },
             {
-                title: 'Linked Account',
-                dataIndex: 'account_name',
-                key: 'account_name',
-                width: 240,
+                title: 'Account Type',
+                key: 'account_type',
+                width: 160,
+                align: 'center',
                 render: (_, record) =>
-                    getLabel(
-                        record?.account_name,
-                        record?.account?.label,
-                        record?.account?.name,
-                        record?.account?.code,
+                    renderAccountType(
+                        record?.type ||
+                            record?.parent?.type ||
+                            'asseta',
                     ),
             },
             {
                 title: 'Parent',
                 dataIndex: 'parent_name',
                 key: 'parent_name',
-                width: 240,
+                width: 200,
                 render: (_, record) =>
                     getLabel(
                         record?.parent_name,
@@ -85,21 +146,6 @@ export default function ChartOfAccounts(props) {
                         record?.parent?.code,
                     ),
             },
-            {
-                title: 'Type',
-                dataIndex: 'is_system_generated',
-                key: 'is_system_generated',
-                width: 160,
-                backendSort: true,
-                sortField: 'is_system_generated',
-                render: (value) =>
-                    value ? (
-                        <Tag color="blue">System Generated</Tag>
-                    ) : (
-                        <Tag color="green">Non System</Tag>
-                    ),
-            },
-             
         ],
         [isTreeView],
     );
@@ -118,9 +164,8 @@ export default function ChartOfAccounts(props) {
                 name: 'code',
                 label: 'Code',
                 type: 'text',
-                
                 col: 24,
-                readOnly:true,
+                readOnly: true,
                 placeholder: '#Auto Generated Code',
             },
             {
@@ -146,28 +191,6 @@ export default function ChartOfAccounts(props) {
                 },
             },
             {
-                name: 'branch_id',
-                label: 'Branch',
-                type: 'fkSelect',
-                col: 12,
-                placeholder: 'Select branch',
-                fkUrl: '/api/branches/',
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                labelField: 'branch_name',
-                fkExtraParams: {
-                    active: true,
-                },
-                fkLabel: (row) => {
-                    const code = row?.code || '';
-                    const name = row?.name || '';
-
-                    return [code, name].filter(Boolean).join(' - ');
-                },
-            },
-            {
                 name: 'description',
                 label: 'Description',
                 type: 'textarea',
@@ -175,7 +198,6 @@ export default function ChartOfAccounts(props) {
                 rows: 3,
                 placeholder: 'Description',
             },
-             
         ],
         [activeAnchor],
     );
@@ -285,21 +307,17 @@ export default function ChartOfAccounts(props) {
                 crudInitialValues={crudInitialValues}
                 transformPayload={transformPayload}
                 onFormValuesChange={handleFormValuesChange}
-
                 form_ui="modal"
-                modalWidth={720}
-
+                modalWidth={500}
                 enableServerPagination
                 pageParam="page"
                 pageSizeParam="page_size"
                 searchParam="search"
                 activeParam="active"
-
                 sortMode="ordering"
                 orderingParam="ordering"
                 defaultSortField={isTreeView ? 'code' : 'created_at'}
                 defaultSortOrder={isTreeView ? 'ascend' : 'descend'}
-
                 baseFilters={
                     isTreeView
                         ? {
@@ -307,7 +325,6 @@ export default function ChartOfAccounts(props) {
                           }
                         : {}
                 }
-
                 anchorFilters={[
                     {
                         key: 'non_system',
@@ -329,15 +346,12 @@ export default function ChartOfAccounts(props) {
                 defaultAnchorKey="non_system"
                 anchorSyncWithHash
                 onAnchorChange={(key) => setActiveAnchor(key)}
-
                 enableInactiveDrawer={!isTreeView}
                 showSearch
-
                 canAdd={activeAnchor === 'non_system'}
                 canEdit
                 canDelete
                 canView
-
                 hasActions
                 hasActionColumns
             />

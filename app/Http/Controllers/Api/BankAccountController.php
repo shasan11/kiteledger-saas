@@ -79,7 +79,7 @@ class BankAccountController extends BaseCrudApiController
 
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
-        'code' => ['required', 'string', 'max:30', 'unique:bank_accounts,code'],
+         
 
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
@@ -104,14 +104,7 @@ class BankAccountController extends BaseCrudApiController
             'type' => ['sometimes', 'required', 'in:bank,cash'],
             'display_name' => ['sometimes', 'required', 'string', 'max:150'],
 
-            'code' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:30',
-                Rule::unique('bank_accounts', 'code')->ignore($record->getKey()),
-            ],
-
+             
             'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
             'description' => ['sometimes', 'nullable', 'string'],

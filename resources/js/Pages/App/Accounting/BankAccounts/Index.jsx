@@ -14,6 +14,7 @@ import {
     CreditCardOutlined,
     WalletOutlined,
     MoreOutlined,
+    CopyOutlined,
 } from '@ant-design/icons';
 import {
     Button,
@@ -47,16 +48,6 @@ const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const money = (value) => {
-    const n = Number(value);
-    return Number.isFinite(n)
-        ? n.toLocaleString('en-NP', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-          })
-        : '0.00';
-};
-
 const getLabel = (...values) => {
     for (const value of values) {
         if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -84,6 +75,71 @@ const appendQueryParams = (url, params = {}) => {
     if (!qs) return url;
 
     return url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
+};
+
+const isValidCopyValue = (value) => {
+    if (value === undefined || value === null) return false;
+
+    const text = String(value).trim();
+
+    return text !== '' && text !== '-';
+};
+
+const buildBankAccountCopyText = (record, currencyLabel) => {
+    const isBank = record?.type === 'bank';
+
+    const rows = [
+        ['Account Type', isBank ? 'Bank Account' : 'Cash Account'],
+        ['Display Name', record?.display_name],
+        ['Code', record?.code],
+        ['Currency', currencyLabel],
+
+        ...(isBank
+            ? [
+                  ['Bank Name', record?.bank_name],
+                  ['Account Name', record?.account_name],
+                  ['Account Number', record?.account_number],
+                  ['Bank Account Type', record?.account_type],
+                  ['Swift Code', record?.swift_code],
+              ]
+            : []),
+
+        ['Description', record?.description],
+    ];
+
+    return rows
+        .filter(([, value]) => isValidCopyValue(value))
+        .map(([label, value]) => `${label}: ${value}`)
+        .join('\n');
+};
+
+const copyText = async (text) => {
+    if (!text) return false;
+
+    try {
+        if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (error) {
+        console.warn('Clipboard API failed, using fallback.', error);
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+
+    const copied = document.execCommand('copy');
+
+    document.body.removeChild(textarea);
+
+    return copied;
 };
 
 export default function BankAccounts(props) {
@@ -225,39 +281,159 @@ export default function BankAccounts(props) {
         }
     };
 
+    const handleCopyBankAccountInfo = async (record) => {
+        const currencyLabel = getLabel(
+            record?.currency_name,
+            record?.currency?.label,
+            record?.currency?.code,
+            record?.currency?.name,
+        );
+
+        const text = buildBankAccountCopyText(record, currencyLabel);
+
+        if (!text) {
+            message.warning('No bank account information available to copy.');
+            return;
+        }
+
+        try {
+            const copied = await copyText(text);
+
+            if (copied) {
+                message.success('Bank account details copied.');
+            } else {
+                message.error('Failed to copy bank account details.');
+            }
+        } catch (error) {
+            console.error(error);
+            message.error('Failed to copy bank account details.');
+        }
+    };
+
+    const accountTypeCard = ({ values, setFieldValue, readOnly }) => {
+        const selected = values?.type;
+
+        const items = [
+            {
+                value: 'bank',
+                label: 'Bank',
+                icon: <BankOutlined />,
+            },
+            {
+                value: 'cash',
+                label: 'Cash',
+                icon: <WalletOutlined />,
+            },
+        ];
+
+        return (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {items.map((item) => {
+                    const active = selected === item.value;
+
+                    return (
+                        <button
+                            key={item.value}
+                            type="button"
+                            disabled={readOnly}
+                            onClick={() => {
+                                setFieldValue('type', item.value);
+
+                                if (item.value === 'cash') {
+                                    setFieldValue('bank_name', '');
+                                    setFieldValue('account_name', '');
+                                    setFieldValue('account_number', '');
+                                    setFieldValue('account_type', '');
+                                    setFieldValue('swift_code', '');
+                                }
+                            }}
+                            style={{
+                                width: 220,
+                                height: 68,
+                                border: active
+                                    ? '1px solid #1d4ed8'
+                                    : '1px solid #d9dee7',
+                                background: active ? '#ffffff' : '#f1f4f8',
+                                color: '#0f172a',
+                                cursor: readOnly ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 18,
+                                padding: '0 22px',
+                                fontSize: 16,
+                                fontWeight: 500,
+                            }}
+                        >
+                            <span
+                                style={{
+                                    fontSize: 17,
+                                    color: active ? '#334155' : '#94a3b8',
+                                    display: 'inline-flex',
+                                }}
+                            >
+                                {item.icon}
+                            </span>
+
+                            <span>{item.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const sectionTitle = (title) => () => (
+        <div
+            style={{
+                fontSize: 16,
+                fontWeight: 700,
+                color: '#9ca3af',
+                marginTop: 4,
+                marginBottom: -8,
+            }}
+        >
+            {title}
+        </div>
+    );
+
     const fields = useMemo(
         () => [
             {
                 name: 'type',
-                label: 'Type',
-                type: 'select',
+                label: 'Type of Account',
+                type: 'custom',
                 required: true,
-                col: 12,
-                placeholder: 'Select type',
-                options: [
-                    { value: 'bank', label: 'Bank' },
-                    { value: 'cash', label: 'Cash' },
-                ],
+                col: 24,
+                render: accountTypeCard,
+            },
+            {
+                name: 'bank_name',
+                label: 'Select Bank',
+                type: 'text',
+                required: true,
+                col: 24,
+                placeholder: 'Select Bank / Enter Bank Name',
+                condition: (values) => values?.type === 'bank',
             },
             {
                 name: 'display_name',
                 label: 'Display Name',
                 type: 'text',
                 required: true,
-                col: 12,
-                placeholder: 'Example: Nabil Bank Main Account',
+                col: 24,
+                placeholder: 'Display Name',
             },
             {
                 name: 'code',
                 label: 'Code',
                 type: 'text',
-                required: true,
+                readOnly: true,
                 col: 12,
-                placeholder: 'Example: BANK-001',
+                placeholder: '#Auto-generated by system',
             },
             {
                 name: 'currency_id',
-                label: 'Currency',
+                label: 'Currency Code',
                 type: 'fkSelect',
                 required: true,
                 col: 12,
@@ -278,11 +454,11 @@ export default function BankAccounts(props) {
                 },
             },
             {
-                name: 'bank_name',
-                label: 'Bank Name',
-                type: 'text',
-                col: 12,
-                placeholder: 'Bank name',
+                name: 'bank_info_title',
+                label: '',
+                type: 'custom',
+                col: 24,
+                render: sectionTitle('Bank Info'),
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -290,7 +466,7 @@ export default function BankAccounts(props) {
                 label: 'Account Name',
                 type: 'text',
                 col: 12,
-                placeholder: 'Account holder name',
+                placeholder: 'Account Name',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -298,15 +474,23 @@ export default function BankAccounts(props) {
                 label: 'Account Number',
                 type: 'text',
                 col: 12,
-                placeholder: 'Bank account number',
+                placeholder: 'Account Number',
                 condition: (values) => values?.type === 'bank',
             },
             {
                 name: 'account_type',
                 label: 'Account Type',
-                type: 'text',
+                type: 'select',
                 col: 12,
-                placeholder: 'Savings / Current / Checking',
+                placeholder: 'Select...',
+                options: [
+                    { value: 'saving', label: 'Saving Account' },
+                    { value: 'current', label: 'Current Account' },
+                    { value: 'checking', label: 'Checking Account' },
+                    { value: 'fixed_deposit', label: 'Fixed Deposit' },
+                    { value: 'loan', label: 'Loan Account' },
+                    { value: 'overdraft', label: 'Overdraft Account' },
+                ],
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -314,7 +498,7 @@ export default function BankAccounts(props) {
                 label: 'Swift Code',
                 type: 'text',
                 col: 12,
-                placeholder: 'Swift code',
+                placeholder: 'Swift Code',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -322,20 +506,8 @@ export default function BankAccounts(props) {
                 label: 'Description',
                 type: 'textarea',
                 col: 24,
-                rows: 3,
+                rows: 1,
                 placeholder: 'Description',
-            },
-            {
-                name: 'is_system_generated',
-                label: 'System Generated',
-                type: 'switch',
-                col: 12,
-            },
-            {
-                name: 'active',
-                label: 'Active',
-                type: 'switch',
-                col: 12,
             },
         ],
         [],
@@ -344,30 +516,32 @@ export default function BankAccounts(props) {
     const validationSchema = Yup.object().shape({
         type: Yup.string()
             .oneOf(['bank', 'cash'])
-            .required('Type is required'),
+            .required('Type of Account is required'),
 
         display_name: Yup.string()
             .trim()
             .max(150, 'Display name cannot exceed 150 characters')
-            .required('Display name is required'),
+            .required('Display Name is required'),
 
-        code: Yup.string()
-            .trim()
-            .max(30, 'Code cannot exceed 30 characters')
-            .required('Code is required'),
-
-        currency_id: Yup.string()
+        currency_id: Yup.mixed()
             .nullable()
             .required('Currency is required'),
 
-        description: Yup.string().nullable(),
+        bank_name: Yup.string().when('type', {
+            is: 'bank',
+            then: (schema) =>
+                schema
+                    .trim()
+                    .max(150, 'Bank name cannot exceed 150 characters')
+                    .required('Bank is required'),
+            otherwise: (schema) => schema.nullable(),
+        }),
 
-        bank_name: Yup.string().nullable().max(150),
         account_name: Yup.string().nullable().max(150),
         account_number: Yup.string().nullable().max(80),
         account_type: Yup.string().nullable().max(50),
         swift_code: Yup.string().nullable().max(50),
-
+        description: Yup.string().nullable(),
         active: Yup.boolean().nullable(),
         is_system_generated: Yup.boolean().nullable(),
     });
@@ -375,7 +549,6 @@ export default function BankAccounts(props) {
     const crudInitialValues = {
         type: 'bank',
         display_name: '',
-        code: '',
 
         currency_id: null,
         currency_id_detail: null,
@@ -407,7 +580,7 @@ export default function BankAccounts(props) {
             bank_name: isBank ? values.bank_name?.trim() || null : null,
             account_name: isBank ? values.account_name?.trim() || null : null,
             account_number: isBank ? values.account_number?.trim() || null : null,
-            account_type: isBank ? values.account_type?.trim() || null : null,
+            account_type: isBank ? values.account_type || null : null,
             swift_code: isBank ? values.swift_code?.trim() || null : null,
 
             active: values.active !== false,
@@ -450,6 +623,12 @@ export default function BankAccounts(props) {
 
     const renderCardActions = (record) => {
         const items = [
+            {
+                key: 'copy',
+                label: 'Copy Details',
+                icon: <CopyOutlined />,
+                onClick: () => handleCopyBankAccountInfo(record),
+            },
             {
                 key: 'edit',
                 label: 'Edit',
@@ -499,8 +678,9 @@ export default function BankAccounts(props) {
                         <Title level={3} style={{ margin: 0 }}>
                             Bank Accounts
                         </Title>
+
                         <Text type="secondary">
-                            Manage bank and cash accounts in card view.
+                            Manage Bank And Cash Accounts
                         </Text>
                     </div>
 
@@ -607,6 +787,7 @@ export default function BankAccounts(props) {
                         <Row gutter={[16, 16]}>
                             {rows.map((record) => {
                                 const isBank = record.type === 'bank';
+
                                 const currencyLabel = getLabel(
                                     record?.currency_name,
                                     record?.currency?.label,
@@ -614,15 +795,8 @@ export default function BankAccounts(props) {
                                     record?.currency?.name,
                                 );
 
-                                const ledgerLabel = getLabel(
-                                    record?.account_name,
-                                    record?.account?.label,
-                                    record?.account?.name,
-                                    record?.account?.code,
-                                );
-
                                 return (
-                                    <Col xs={24} sm={24} md={12} lg={8} xl={6} key={record.id}>
+                                    <Col xs={24} sm={24} md={12} lg={8} xl={8} key={record.id}>
                                         <Card
                                             hoverable
                                             style={{
@@ -754,7 +928,6 @@ export default function BankAccounts(props) {
                                                         </div>
                                                     </>
                                                 ) : null}
-
                                             </div>
 
                                             <div
@@ -765,6 +938,8 @@ export default function BankAccounts(props) {
                                                     gap: 8,
                                                 }}
                                             >
+                                               
+
                                                 <Button
                                                     block
                                                     icon={<EditOutlined />}
@@ -780,10 +955,7 @@ export default function BankAccounts(props) {
                                                         cancelText="Cancel"
                                                         onConfirm={() => softDelete(record)}
                                                     >
-                                                        <Button
-                                                            danger
-                                                            icon={<DeleteOutlined />}
-                                                        >
+                                                        <Button danger icon={<DeleteOutlined />}>
                                                             Disable
                                                         </Button>
                                                     </Popconfirm>
@@ -846,7 +1018,7 @@ export default function BankAccounts(props) {
                     transformPayload={transformPayload}
                     onFormValuesChange={handleFormValuesChange}
                     form_ui="modal"
-                    modalWidth={900}
+                    modalWidth={760}
                     openOnMount={formKey > 0}
                     openMode={formMode}
                     openEditId={editId}

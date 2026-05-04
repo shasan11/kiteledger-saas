@@ -89,15 +89,7 @@ class ChartOfAccount extends Model
         return $this->hasMany(CustomerPayment::class);
     }
 
-    public function bankChargePayments(): HasMany
-    {
-        return $this->hasMany(SupplierPayment::class);
-    }
-
-    public function tdsPayments(): HasMany
-    {
-        return $this->hasMany(SupplierPayment::class);
-    }
+     
 
     public function taxRateComponents(): HasMany
     {

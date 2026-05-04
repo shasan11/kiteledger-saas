@@ -16,28 +16,19 @@ export default function ContactGroups(props) {
       dataIndex: 'name',
       key: 'name',
       sorter: true,
-      width:"30%",
+      width:500,
       render: (val) => <Text strong>{val}</Text>,
     },
     {
       title: 'Parent Group',
       dataIndex: 'parent',
       key: 'parent',
-      width: '30%',
+      width: 500,
       render: (_, record) => record?.parent?.name || '-',
     },
      
     
-    {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      width: '15%',
-      sorter: true,
-      render: (active) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
-      ),
-    },
+    
   ];
 
   const fields = [
