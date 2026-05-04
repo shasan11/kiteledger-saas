@@ -15,28 +15,23 @@ class VariantController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+   
 
     protected array $relations = [
-        'branch',
+         
         'variantLines',
     ];
 
-    protected array $relationDetails = [
-        'branch' => 'branch_id',
-    ];
+     
 
     protected array $searchable = [
         'name',
     ];
-
-    protected array $filterable = [
-        'branch_id',
-    ];
+ 
 
     protected array $booleanFilters = [
         'active',
@@ -78,7 +73,7 @@ class VariantController extends BaseCrudApiController
     ];
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        
         'name' => ['required', 'string', 'max:80'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -88,7 +83,7 @@ class VariantController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+             
             'name' => ['sometimes', 'required', 'string', 'max:80'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
