@@ -15,7 +15,7 @@ class ChartOfAccountController extends BaseCrudApiController
     protected bool $usePolicyAuthorization = false;
 
     // If branch should come from logged-in user's branch, keep this true.
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
     protected bool $autoFillBranchOnCreate = true;
 
@@ -275,98 +275,5 @@ class ChartOfAccountController extends BaseCrudApiController
         }, $nodes);
     }
 
-    protected function updateRules(Request $request, Model $record): array
-    {
-        $branchId = $request->input('branch_id', $record->branch_id);
-
-        return [
-            'branch_id' => [
-                'sometimes',
-                'nullable',
-                'uuid',
-                'exists:branches,id',
-            ],
-
-            'account_id' => [
-                'sometimes',
-                'required',
-                'uuid',
-                'exists:accounts,id',
-            ],
-
-            'parent_id' => [
-                'sometimes',
-                'nullable',
-                'uuid',
-                'exists:chart_of_accounts,id',
-                function ($attribute, $value, $fail) use ($record) {
-                    if ($value && (string) $value === (string) $record->getKey()) {
-                        $fail('Parent chart account cannot be the same as this account.');
-                    }
-                },
-            ],
-
-            'code' => [
-                'sometimes',
-                'nullable',
-                'string',
-                'max:30',
-                Rule::unique('chart_of_accounts', 'code')
-                    ->where(function ($query) use ($branchId) {
-                        return $query->where('branch_id', $branchId);
-                    })
-                    ->ignore($record->getKey()),
-            ],
-
-            'name' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:150',
-            ],
-
-            'description' => [
-                'sometimes',
-                'nullable',
-                'string',
-            ],
-
-            'is_system_generated' => [
-                'sometimes',
-                'nullable',
-                'boolean',
-            ],
-
-            'active' => [
-                'sometimes',
-                'nullable',
-                'boolean',
-            ],
-
-            'user_add_id' => [
-                'sometimes',
-                'nullable',
-                'integer',
-                'exists:users,id',
-            ],
-        ];
-    }
-
-    protected function storeRules(Request $request): array
-    {
-        $rules = parent::storeRules($request);
-        $branchId = $request->input('branch_id');
-
-        $rules['code'] = [
-            'required',
-            'string',
-            'max:30',
-            Rule::unique('chart_of_accounts', 'code')
-                ->where(function ($query) use ($branchId) {
-                    return $query->where('branch_id', $branchId);
-                }),
-        ];
-
-        return $rules;
-    }
+     
 }

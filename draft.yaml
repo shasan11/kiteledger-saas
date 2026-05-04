@@ -1,4 +1,8 @@
 models:
+  # ============================================================
+  # MASTER / SETTINGS / SYSTEM CONFIGURATION
+  # ============================================================
+
   Branch:
     id: uuid primary
     code: string:30 unique
@@ -20,7 +24,7 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      hasMany: ContactGroup, Contact, Account, BankAccount, ChartOfAccount, TaxClass, TaxRate, CreditTerm, ProductCategory, Variant, ProductUnit, Product, ProductVariant, Warehouse, CashTransfer, ChequeRegister, JournalVoucher, WarehouseTransfer, InventoryAdjustment, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData, EmploymentStatus, Department, Designation, LeavePolicy, WeeklyHoliday, Shift, Role, Permission, User, PublicHoliday, Award, Announcement, EmailConfig, Email, Project, Priority
+      hasMany: BankAccount, Warehouse, CashTransfer, ChequeRegister, JournalVoucher, WarehouseTransfer, InventoryAdjustment, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment, User, Attendance, LeaveApplication, Payslip
 
   Currency:
     id: uuid primary
@@ -33,58 +37,226 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      hasMany: Account, BankAccount, ChartOfAccount, CashTransfer, JournalVoucher, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
+      hasMany: Account, BankAccount, CashTransfer, JournalVoucher, Quotation, SalesOrder, ProformaInvoice, Invoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
 
-  ContactGroup:
+  AppSetting:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:120
-    parent_id: uuid foreign:contact_groups.id nullable
+    company_name: string:180
+    tag_line: string:200 nullable
+    address: string:255 nullable
+    phone: string:40 nullable
+    email: string:120 nullable
+    website: string:180 nullable
+    footer: text nullable
+    logo: string:255 nullable
+    suggest_selling: enum:recent,fixed default:recent
+    negative_cash_balance: enum:reject,warn,do_nothing default:warn
+    negative_item_balance: enum:reject,warn,do_nothing default:warn
+    credit_limit_exceed: enum:reject,warn,do_nothing default:warn
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  ApplicationSetting:
+    id: uuid primary
+    key: string:120
+    value: longtext nullable
+    group: string:80 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  GeneralSetting:
+    id: uuid primary
+    key: string:120
+    value: longtext nullable
+    group: string:80 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  MasterData:
+    id: uuid primary
+    type: enum:custom_status,lead_source,deal_stage,task_type,credit_term,cost_term,payment_mode,tds_type,industry,activity_type,lost_reason
+    group: string:80
+    key: string:120
+    value: string:180
+    meta: json nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  AlertType:
+    id: uuid primary
+    name: string:150
+    medium: enum:email,sms,whatsapp,in_app default:in_app
+    alert_type: string:80 nullable
+    schedule: enum:immediate,daily,weekly,monthly default:immediate
+    sync_time: time nullable
+    recipient: text nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  ReportingTag:
+    id: uuid primary
+    name: string:80
+    color: string:20 nullable
     description: text nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, ContactGroup:parent
-      hasMany: Contact, ContactGroup:children
+      hasMany: ReportingTagLine
 
-  Contact:
+  ReportingTagLine:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    contact_group_id: uuid foreign:contact_groups.id nullable
-    account_id: uuid foreign:accounts.id nullable
-    contact_type: enum:customer,supplier,lead default:customer
-    name: string:180
-    code: string:50 nullable
-    address: text nullable
-    pan: string:80 nullable
-    phone: string:40 nullable
-    email: string:120 nullable
-    accept_purchase: boolean default:false
-    credit_term_id: uuid foreign:credit_terms.id nullable
-    credit_limit: decimal:16,2 default:0
+    reporting_tag_id: uuid foreign:reporting_tags.id
+    name: string:80
+    color: string:20 nullable
+    sort_order: unsignedSmallInteger default:0
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, ContactGroup, Account, CreditTerm
-      hasMany: Quotation, Invoice, SalesOrder, ProformaInvoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
+      belongsTo: ReportingTag
+
+  DocumentNumbering:
+    id: uuid primary
+    document_type: enum:cash_transfer,credit_note,debit_note,expense,inventory_adjustment,invoice,journal_voucher,payment,production_journal,production_order,purchase_bill,purchase_order,quotation,receipt,sales_order,sales_return,warehouse_transfer,payroll,deduction,increment,contact,lead,deal,product,bank_account,capital,cash,current_asset,current_liability,direct_expense,direct_income,indirect_expense,indirect_income,non_current_asset,non_current_liability,reserve_surplus,loan_account,loan_topup,loan_charge
+    prefix: string:20 nullable
+    next_number: unsignedBigInteger default:1
+    type_of_account: enum:auto_numbering,manual_numbering default:auto_numbering
+    reset_every_fiscal_year: boolean default:false
+    add_fiscal_year_in_code: boolean default:false
+    enable_fiscal_year_next_number: boolean default:false
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  PrintingTemplate:
+    id: uuid primary
+    name: string:120
+    document_type: string:80
+    template_html: longtext nullable
+    template_css: longtext nullable
+    is_default: boolean default:false
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  CustomTemplate:
+    id: uuid primary
+    name: string:120
+    purpose: string:80 nullable
+    content: longtext nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  Announcement:
+    id: uuid primary
+    title: string:200
+    description: text
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  EmailConfig:
+    id: uuid primary
+    email_config_name: string:120
+    email_host: string:150
+    email_port: string:20
+    email_user: string:150
+    email_pass: string:255
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  Email:
+    id: uuid primary
+    sender_email: string:150
+    receiver_email: string:150
+    subject: string:255 nullable
+    body: longtext nullable
+    email_status: string:30 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+  CustomField:
+    id: uuid primary
+    name: string:120
+    key: string:120 unique
+    field_type: enum:text,textarea,number,decimal,date,datetime,time,select,multiselect,checkbox,radio,email,phone,url,file,boolean
+    placeholder: string:180 nullable
+    help_text: string:255 nullable
+    default_value: string:255 nullable
+    is_required: boolean default:false
+    sort_order: unsignedSmallInteger default:0
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: CustomFieldChoice, CustomFieldValidation, CustomFieldModule, CustomFieldValue
+
+  CustomFieldChoice:
+    id: uuid primary
+    custom_field_id: uuid foreign:custom_fields.id
+    label: string:120
+    value: string:120
+    color: string:20 nullable
+    sort_order: unsignedSmallInteger default:0
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: CustomField
+
+  CustomFieldValidation:
+    id: uuid primary
+    custom_field_id: uuid foreign:custom_fields.id
+    rule: enum:min,max,min_length,max_length,regex,email,url,numeric,integer,decimal,date,before,after,in,not_in
+    value: string:255 nullable
+    message: string:255 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: CustomField
+
+  CustomFieldModule:
+    id: uuid primary
+    custom_field_id: uuid foreign:custom_fields.id
+    module: enum:sales_invoice,quotation,sales_order,credit_note,customer_payment,quick_receipt,purchase_order,purchase_bill,expense,debit_note,supplier_payment,quick_payment,journal_voucher,cash_transfer,production_order,production_journal,contact,lead,deal,crm_activity,product,employee,project
+    active: boolean default:true
+    relationships:
+      belongsTo: CustomField
+
+  CustomFieldValue:
+    id: uuid primary
+    custom_field_id: uuid foreign:custom_fields.id
+    module: enum:sales_invoice,quotation,sales_order,credit_note,customer_payment,quick_receipt,purchase_order,purchase_bill,expense,debit_note,supplier_payment,quick_payment,journal_voucher,cash_transfer,production_order,production_journal,contact,lead,deal,crm_activity,product,employee,project
+    record_id: uuid
+    value: longtext nullable
+    value_json: json nullable
+    relationships:
+      belongsTo: CustomField
+    indexes:
+      - unique: custom_field_id, module, record_id
+
+  # ============================================================
+  # ACCOUNTING / FINANCE
+  # ============================================================
 
   Account:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120
     code: string:30 nullable
     nature: enum:actor,coa,bank,cash,employee default:coa
     parent_id: uuid foreign:accounts.id nullable
     currency_id: uuid foreign:currencies.id nullable
-    description: text nullable
-    bank_name: string:150 nullable
-    account_name: string:150 nullable
-    account_number: string:80 nullable
-    account_type: string:50 nullable
     swift_code: string:50 nullable
-    opening_balance: decimal:16,2 default:0
     dr_amount: decimal:16,2 default:0
     cr_amount: decimal:16,2 default:0
     balance: decimal:16,2 default:0
@@ -92,8 +264,24 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Account:parent, Currency
+      belongsTo: Account:parent, Currency
       hasMany: Account:children, Contact, BankAccount, ChartOfAccount, CashTransfer:from_transfers, CashTransferLine:to_transfer_lines, ChequeRegister:cheque_accounts, ChequeRegister:related_cheque_accounts, CustomerPayment, SupplierPayment
+
+  ChartOfAccount:
+    id: uuid primary
+    account_id: uuid foreign:accounts.id
+    branch_id: uuid foreign:branches.id nullable
+    type: enum:asset,liability,equity,income,expense default:asset
+    code: string:30 unique nullable
+    name: string:150
+    parent_id: uuid foreign:chart_of_accounts.id nullable
+    description: text nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Account, Branch, ChartOfAccount:parent
+      hasMany: ChartOfAccount:children, JournalVoucherLine, ExpenseLine, CustomerPayment:bank_charge_payments, CustomerPayment:tds_payments, SupplierPayment:bank_charge_payments, SupplierPayment:tds_payments, TaxRateComponent
 
   BankAccount:
     id: uuid primary
@@ -115,22 +303,6 @@ models:
     user_add_id: id foreign:users.id nullable
     relationships:
       belongsTo: Branch, Currency, Account
-
-  ChartOfAccount:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    account_id: uuid foreign:accounts.id
-    code: string:30 unique
-    name: string:150
-    parent_id: uuid foreign:chart_of_accounts.id nullable
-    description: text nullable
-    currency_id: uuid foreign:currencies.id nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch, Account, ChartOfAccount:parent, Currency
-      hasMany: ChartOfAccount:children, JournalVoucherLine, ExpenseLine, CustomerPayment:bank_charge_payments, CustomerPayment:tds_payments, SupplierPayment:bank_charge_payments, SupplierPayment:tds_payments
 
   CashTransfer:
     id: uuid primary
@@ -231,37 +403,89 @@ models:
     credit: decimal:16,2 default:0
     relationships:
       belongsTo: JournalVoucher, ChartOfAccount
+  
 
-  TaxClass:
+
+  LoanAccount:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
+    name: string:150
+    bank_name: string:150 nullable
+    loan_number: string:80 nullable
+    description: text nullable
+
+    opening_balance: decimal:18,6 default:0
+    current_balance: decimal:18,6 default:0
+    balance_as_of: date nullable
+
+    loan_received_in_account_id: uuid foreign:accounts.id nullable
+    related_account_id: uuid foreign:accounts.id nullable
+
+    interest_rate_per_annum: decimal:8,4 default:0
+    duration_in_month: unsignedSmallInteger default:0
+
+    processing_fee: decimal:18,6 default:0
+    processing_fee_paid_from_account_id: uuid foreign:accounts.id nullable
+
+    status: enum:active,closed,settled,cancelled default:active
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+    relationships:
+      belongsTo: Account:loan_received_in_account, Account:related_account, Account:processing_fee_paid_from_account
+      hasMany: LoanTopUp, LoanCharge
+
+  LoanTopUp:
+    id: uuid primary
+    loan_account_id: uuid foreign:loan_accounts.id
+    topup_date: date
+    loan_received_in_account_id: uuid foreign:accounts.id
+    amount: decimal:18,6 default:0
+    reference: string:120 nullable
+    notes: text nullable
+
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+    relationships:
+      belongsTo: LoanAccount, Account:loan_received_in_account
+
+  LoanCharge:
+    id: uuid primary
+    loan_account_id: uuid foreign:loan_accounts.id
+    charge_name: string:150
+    charge_date: date
+    amount: decimal:18,6 default:0
+    charges_paid_from_account_id: uuid foreign:accounts.id nullable
+    reference: string:120 nullable
+    notes: text nullable
+
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+
+    relationships:
+      belongsTo: LoanAccount, Account:charges_paid_from_account
+
+  # ============================================================
+  # CRM / CONTACTS / LEADS / DEALS / ACTIVITIES
+  # ============================================================
+
+  ContactGroup:
+    id: uuid primary
     name: string:120
-    code: string:30 unique
+    parent_id: uuid foreign:contact_groups.id nullable
     description: text nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch
-      hasMany: TaxRate
-
-  TaxRate:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    tax_class_id: uuid foreign:tax_classes.id
-    name: string:120
-    rate_percent: decimal:8,4 default:0
-    inclusive: boolean default:false
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch, TaxClass
-      hasMany: QuotationLine, SalesOrderLine, ProformaInvoiceLine, InvoiceLine, SalesReturnLine, PurchaseOrderLine, PurchaseBillLine, ExpenseLine, DebitNoteLine
+      belongsTo: ContactGroup:parent
+      hasMany: Contact, ContactGroup:children
 
   CreditTerm:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120
     days: unsignedSmallInteger default:0
     description: text nullable
@@ -269,12 +493,290 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch
       hasMany: Contact, Quotation, PurchaseOrder
+
+  Contact:
+    id: uuid primary
+    contact_group_id: uuid foreign:contact_groups.id nullable
+    account_id: uuid foreign:accounts.id nullable
+    contact_type: enum:customer,supplier,lead default:customer
+    tax_registration_no: string:80 nullable
+    tax_registration_type: enum:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id,none default:none
+    name: string:180
+    code: string:50 nullable
+    address: text nullable
+    pan: string:80 nullable
+    phone: string:40 nullable
+    email: string:120 nullable
+    accept_purchase: boolean default:false
+    credit_term_id: uuid foreign:credit_terms.id nullable
+    credit_limit: decimal:16,2 default:0 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: ContactGroup, Account, CreditTerm
+      hasMany: Lead, Deal, CrmActivity, TaxExemption, Quotation, Invoice, SalesOrder, ProformaInvoice, CustomerPayment, SalesReturn, PurchaseOrder, PurchaseBill, Expense, DebitNote, SupplierPayment
+
+  Lead:
+    id: uuid primary
+    lead_no: string:40 unique nullable
+    contact_id: uuid foreign:contacts.id nullable
+    assigned_to_id: id foreign:users.id nullable
+    converted_contact_id: uuid foreign:contacts.id nullable
+    converted_deal_id: uuid foreign:deals.id nullable
+    name: string:180
+    company_name: string:180 nullable
+    email: string:120 nullable
+    phone: string:40 nullable
+    mobile: string:40 nullable
+    website: string:180 nullable
+    address: text nullable
+    city: string:80 nullable
+    state: string:80 nullable
+    country: string:80 nullable
+    lead_source: string:80 nullable
+    industry: string:120 nullable
+    expected_value: decimal:16,2 default:0
+    status: enum:new,contacted,qualified,unqualified,converted,lost default:new
+    priority: enum:low,medium,high,urgent default:medium
+    next_follow_up_date: datetime nullable
+    last_contacted_at: datetime nullable
+    notes: text nullable
+    converted_at: datetime nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Contact, User:assigned_to, Contact:converted_contact, Deal:converted_deal
+      hasMany: Deal, CrmActivity
+
+  DealPipeline:
+    id: uuid primary
+    name: string:120
+    description: text nullable
+    is_default: boolean default:false
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: DealStage, Deal
+
+  DealStage:
+    id: uuid primary
+    deal_pipeline_id: uuid foreign:deal_pipelines.id
+    name: string:120
+    color: string:20 nullable
+    probability: unsignedTinyInteger default:0
+    sort_order: unsignedSmallInteger default:0
+    is_won_stage: boolean default:false
+    is_lost_stage: boolean default:false
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: DealPipeline
+      hasMany: Deal
+
+  Deal:
+    id: uuid primary
+    deal_no: string:40 unique nullable
+    lead_id: uuid foreign:leads.id nullable
+    contact_id: uuid foreign:contacts.id nullable
+    deal_pipeline_id: uuid foreign:deal_pipelines.id nullable
+    deal_stage_id: uuid foreign:deal_stages.id nullable
+    assigned_to_id: id foreign:users.id nullable
+    title: string:180
+    amount: decimal:16,2 default:0
+    expected_close_date: date nullable
+    closed_date: date nullable
+    probability: unsignedTinyInteger default:0
+    source: string:80 nullable
+    priority: enum:low,medium,high,urgent default:medium
+    status: enum:open,won,lost,cancelled default:open
+    lost_reason: string:255 nullable
+    description: text nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Lead, Contact, DealPipeline, DealStage, User:assigned_to
+      hasMany: CrmActivity
+
+  CrmActivity:
+    id: uuid primary
+    lead_id: uuid foreign:leads.id nullable
+    deal_id: uuid foreign:deals.id nullable
+    contact_id: uuid foreign:contacts.id nullable
+    assigned_to_id: id foreign:users.id nullable
+    activity_type: enum:call,email,meeting,task,note,whatsapp,sms,follow_up default:task
+    subject: string:180
+    description: text nullable
+    due_at: datetime nullable
+    completed_at: datetime nullable
+    status: enum:pending,in_progress,completed,cancelled default:pending
+    priority: enum:low,medium,high,urgent default:medium
+    outcome: string:255 nullable
+    next_follow_up_at: datetime nullable
+    reminder_at: datetime nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Lead, Deal, Contact, User:assigned_to
+      hasMany: CrmActivityComment
+
+  CrmActivityComment:
+    id: uuid primary
+    crm_activity_id: uuid foreign:crm_activities.id
+    user_id: id foreign:users.id nullable
+    comment: text
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: CrmActivity, User
+
+  # ============================================================
+  # TAX MASTER - NEPAL / INDIA / USA READY
+  # ============================================================
+
+  TaxJurisdiction:
+    id: uuid primary
+    country_code: enum:NP,IN,US
+    state_code: string:20 nullable
+    county_name: string:120 nullable
+    city_name: string:120 nullable
+    name: string:150
+    code: string:50 nullable
+    tax_system: enum:nepal_vat,india_gst,usa_sales_tax,withholding,custom
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: TaxRegistration, TaxClass, TaxRate, TaxRule
+
+  TaxRegistration:
+    id: uuid primary
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
+    registration_type: enum:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id
+    registration_no: string:80
+    legal_name: string:180 nullable
+    effective_from: date nullable
+    effective_to: date nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: TaxJurisdiction
+
+  ProductTaxCategory:
+    id: uuid primary
+    country_code: enum:NP,IN,US
+    code: string:80
+    name: string:180
+    tax_category_type: enum:goods,service,expense,exempt,zero_rated,non_taxable
+    hsn_sac_code: string:30 nullable
+    description: text nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: Product, TaxRule, TaxExemption
+
+  TaxClass:
+    id: uuid primary
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
+    country_code: enum:NP,IN,US
+    name: string:120
+    code: string:30
+    tax_type: enum:vat,gst,sales_tax,use_tax,withholding,tds,tcs,exempt,zero_rated
+    tax_behavior: enum:standard,exempt,zero_rated,reverse_charge,out_of_scope default:standard
+    description: text nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: TaxJurisdiction
+      hasMany: TaxRate
+    indexes:
+      - unique: country_code, code
+
+  TaxRate:
+    id: uuid primary
+    tax_class_id: uuid foreign:tax_classes.id
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
+    country_code: enum:NP,IN,US
+    tax_type: enum:vat,gst,sales_tax,use_tax,withholding,tds,tcs
+    name: string:120
+    code: string:50 nullable
+    rate_percent: decimal:8,4 default:0
+    inclusive: boolean default:false
+    calculation_method: enum:single,split,compound default:single
+    applies_on: enum:sale,purchase,both,expense default:both
+    effective_from: date nullable
+    effective_to: date nullable
+    report_code: string:80 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: TaxClass, TaxJurisdiction
+      hasMany: TaxRateComponent, TaxRule, QuotationLine, SalesOrderLine, ProformaInvoiceLine, InvoiceLine, SalesReturnLine, PurchaseOrderLine, PurchaseBillLine, ExpenseLine, DebitNoteLine
+
+  TaxRateComponent:
+    id: uuid primary
+    tax_rate_id: uuid foreign:tax_rates.id
+    component_name: string:80
+    component_type: enum:vat,cgst,sgst,igst,state_tax,county_tax,city_tax,special_tax,tds,tcs,withholding
+    rate_percent: decimal:8,4 default:0
+    account_id: uuid foreign:chart_of_accounts.id nullable
+    sort_order: unsignedSmallInteger default:0
+    active: boolean default:true
+    relationships:
+      belongsTo: TaxRate, ChartOfAccount
+
+  TaxRule:
+    id: uuid primary
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
+    tax_rate_id: uuid foreign:tax_rates.id
+    product_tax_category_id: uuid foreign:product_tax_categories.id nullable
+    country_code: enum:NP,IN,US
+    transaction_type: enum:sale,purchase,expense,import,export
+    customer_type: enum:registered,unregistered,consumer,business,exempt,any default:any
+    supply_type: enum:local,intrastate,interstate,import,export,any default:any
+    from_state_code: string:20 nullable
+    to_state_code: string:20 nullable
+    reverse_charge: boolean default:false
+    priority: unsignedSmallInteger default:100
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: TaxJurisdiction, TaxRate, ProductTaxCategory
+
+  TaxExemption:
+    id: uuid primary
+    contact_id: uuid foreign:contacts.id nullable
+    product_tax_category_id: uuid foreign:product_tax_categories.id nullable
+    country_code: enum:NP,IN,US
+    exemption_no: string:80 nullable
+    reason: string:180 nullable
+    effective_from: date nullable
+    effective_to: date nullable
+    attachment: string:255 nullable
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      belongsTo: Contact, ProductTaxCategory
+
+  # ============================================================
+  # PRODUCT / INVENTORY / WAREHOUSE
+  # ============================================================
 
   ProductCategory:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120
     parent_id: uuid foreign:product_categories.id nullable
     description: text nullable
@@ -282,18 +784,28 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, ProductCategory:parent
+      belongsTo: ProductCategory:parent
       hasMany: ProductCategory:children, Product
+
+  ProductUnit:
+    id: uuid primary
+    name: string:50
+    short_name: string:20 nullable
+    description: text nullable
+    accept_fractional: boolean default:true
+    active: boolean default:true
+    is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
+    relationships:
+      hasMany: Product
 
   Variant:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:80
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch
       hasMany: VariantLine
 
   VariantLine:
@@ -307,59 +819,44 @@ models:
       belongsTo: Variant
       hasMany: ProductVariantItem
 
-  ProductUnit:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:50
-    short_name: string:20 nullable
-    precision: unsignedTinyInteger default:0
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: Product, ProductVariant
-
   Product:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
+    parent_id: uuid foreign:products.id nullable
     product_category_id: uuid foreign:product_categories.id nullable
+    product_tax_category_id: uuid foreign:product_tax_categories.id nullable
     name: string:180
     code: string:60 nullable
+    sku: string:80 nullable
     barcode: string:80 nullable
     description: text nullable
     product_unit_id: uuid foreign:product_units.id nullable
     tax_class_id: uuid foreign:tax_classes.id nullable
-    track_inventory: boolean default:true
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch, ProductCategory, ProductUnit, TaxClass
-      hasMany: ProductVariant
+    product_type: enum:simple,variant_parent,variant default:simple
 
-  ProductVariant:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    product_id: uuid foreign:products.id
-    name: string:180 nullable
-    sku: string:80 nullable
-    product_unit_id: uuid foreign:product_units.id nullable
+    sales_account_id: uuid foreign:accounts.id nullable
+    purchase_account_id: uuid foreign:accounts.id nullable
+    sales_return_account_id: uuid foreign:accounts.id nullable
+    purchase_return_account_id: uuid foreign:accounts.id nullable
+    valuation_method: enum:standard,average_cost,first_in_first_out,last_in_first_out default:standard
+    reorder_level: decimal:16,4 default:0
     purchase_price: decimal:16,2 default:0
     selling_price: decimal:16,2 default:0
+    track_inventory: boolean default:true
+    allow_sale: boolean default:true
+    allow_purchase: boolean default:true
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, Product, ProductUnit
-      hasMany: ProductVariantItem, QuotationLine, InvoiceLine, SalesOrderLine, ProformaInvoiceLine, SalesReturnLine, PurchaseOrderLine, PurchaseBillLine, DebitNoteLine, InventoryAdjustmentLine, WarehouseTransferLine
+      belongsTo: Product:parent, ProductCategory, ProductTaxCategory, ProductUnit, TaxClass
+      hasMany: Product:variants, ProductVariantItem, QuotationLine, InvoiceLine, SalesOrderLine, ProformaInvoiceLine, SalesReturnLine, PurchaseOrderLine, PurchaseBillLine, DebitNoteLine, InventoryAdjustmentLine, WarehouseTransferLine
 
   ProductVariantItem:
     id: uuid primary
-    product_variant_id: uuid foreign:product_variants.id
+    product_id: uuid foreign:products.id
     variant_line_id: uuid foreign:variant_lines.id
     relationships:
-      belongsTo: ProductVariant, VariantLine
+      belongsTo: Product, VariantLine
 
   Warehouse:
     id: uuid primary
@@ -401,11 +898,11 @@ models:
   WarehouseTransferLine:
     id: uuid primary
     warehouse_transfer_id: uuid foreign:warehouse_transfers.id
-    product_variant_id: uuid foreign:product_variants.id
+    product_id: uuid foreign:products.id
     qty: decimal:16,4 default:0
     remarks: string:200 nullable
     relationships:
-      belongsTo: WarehouseTransfer, ProductVariant
+      belongsTo: WarehouseTransfer, Product
 
   InventoryAdjustment:
     id: uuid primary
@@ -434,14 +931,18 @@ models:
   InventoryAdjustmentLine:
     id: uuid primary
     inventory_adjustment_id: uuid foreign:inventory_adjustments.id
-    product_variant_id: uuid foreign:product_variants.id
+    product_id: uuid foreign:products.id
     adjustment_type: enum:increase,decrease default:increase
     qty: decimal:16,4 default:0
     unit_cost: decimal:16,2 default:0
     remarks: string:200 nullable
     active: boolean default:true
     relationships:
-      belongsTo: InventoryAdjustment, ProductVariant
+      belongsTo: InventoryAdjustment, Product
+
+  # ============================================================
+  # SALES / PAYMENT IN
+  # ============================================================
 
   Quotation:
     id: uuid primary
@@ -472,17 +973,19 @@ models:
   QuotationLine:
     id: uuid primary
     quotation_id: uuid foreign:quotations.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: Quotation, ProductVariant, TaxRate
+      belongsTo: Quotation, Product, TaxRate, TaxJurisdiction
 
   SalesOrder:
     id: uuid primary
@@ -517,17 +1020,19 @@ models:
   SalesOrderLine:
     id: uuid primary
     sales_order_id: uuid foreign:sales_orders.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: SalesOrder, ProductVariant, TaxRate
+      belongsTo: SalesOrder, Product, TaxRate, TaxJurisdiction
 
   ProformaInvoice:
     id: uuid primary
@@ -557,17 +1062,19 @@ models:
   ProformaInvoiceLine:
     id: uuid primary
     proforma_invoice_id: uuid foreign:proforma_invoices.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: ProformaInvoice, ProductVariant, TaxRate
+      belongsTo: ProformaInvoice, Product, TaxRate, TaxJurisdiction
 
   Invoice:
     id: uuid primary
@@ -604,17 +1111,19 @@ models:
   InvoiceLine:
     id: uuid primary
     invoice_id: uuid foreign:invoices.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: Invoice, ProductVariant, TaxRate
+      belongsTo: Invoice, Product, TaxRate, TaxJurisdiction
 
   CustomerPayment:
     id: uuid primary
@@ -686,16 +1195,22 @@ models:
   SalesReturnLine:
     id: uuid primary
     sales_return_id: uuid foreign:sales_returns.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: SalesReturn, ProductVariant, TaxRate
+      belongsTo: SalesReturn, Product, TaxRate, TaxJurisdiction
+
+  # ============================================================
+  # PURCHASE / PAYMENT OUT
+  # ============================================================
 
   PurchaseOrder:
     id: uuid primary
@@ -725,17 +1240,19 @@ models:
   PurchaseOrderLine:
     id: uuid primary
     purchase_order_id: uuid foreign:purchase_orders.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: PurchaseOrder, ProductVariant, TaxRate
+      belongsTo: PurchaseOrder, Product, TaxRate, TaxJurisdiction
 
   PurchaseBill:
     id: uuid primary
@@ -772,17 +1289,19 @@ models:
   PurchaseBillLine:
     id: uuid primary
     purchase_bill_id: uuid foreign:purchase_bills.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     custom_product_name: string:180 nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     discount_percent: decimal:8,4 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: PurchaseBill, ProductVariant, TaxRate
+      belongsTo: PurchaseBill, Product, TaxRate, TaxJurisdiction
 
   Expense:
     id: uuid primary
@@ -819,11 +1338,13 @@ models:
     chart_of_account_id: uuid foreign:chart_of_accounts.id
     description: string:200 nullable
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     amount: decimal:16,2 default:0
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: Expense, ChartOfAccount, TaxRate
+      belongsTo: Expense, ChartOfAccount, TaxRate, TaxJurisdiction
 
   DebitNote:
     id: uuid primary
@@ -854,15 +1375,17 @@ models:
   DebitNoteLine:
     id: uuid primary
     debit_note_id: uuid foreign:debit_notes.id
-    product_variant_id: uuid foreign:product_variants.id nullable
+    product_id: uuid foreign:products.id nullable
     description: string:200 nullable
     qty: decimal:16,4 default:0
     unit_price: decimal:16,2 default:0
     tax_rate_id: uuid foreign:tax_rates.id nullable
+    tax_jurisdiction_id: uuid foreign:tax_jurisdictions.id nullable
     tax_amount: decimal:16,2 default:0
+    tax_breakup: json nullable
     line_total: decimal:16,2 default:0
     relationships:
-      belongsTo: DebitNote, ProductVariant, TaxRate
+      belongsTo: DebitNote, Product, TaxRate, TaxJurisdiction
 
   SupplierPayment:
     id: uuid primary
@@ -905,303 +1428,91 @@ models:
     relationships:
       belongsTo: SupplierPayment, PurchaseBill
 
-  AlertType:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:150
-    medium: enum:email,sms,whatsapp,in_app default:in_app
-    alert_type: string:80 nullable
-    schedule: enum:immediate,daily,weekly,monthly default:immediate
-    sync_time: time nullable
-    recipient: text nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  ReportingTag:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:80
-    color: string:20 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  DocumentNumbering:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    document_type: enum:quotation,sales_order,proforma,invoice,sales_return,purchase_order,purchase_bill,debit_note,customer_payment,supplier_payment,cash_transfer,journal_voucher,expense,warehouse_transfer,inventory_adjustment
-    prefix: string:20 nullable
-    next_number: unsignedBigInteger default:1
-    padding: unsignedTinyInteger default:5
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  PrintingTemplate:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:120
-    document_type: string:80
-    template_html: longtext nullable
-    template_css: longtext nullable
-    is_default: boolean default:false
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  CustomTemplate:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:120
-    purpose: string:80 nullable
-    content: longtext nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  ApplicationSetting:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    key: string:120
-    value: longtext nullable
-    group: string:80 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  GeneralSetting:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    key: string:120
-    value: longtext nullable
-    group: string:80 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  MasterData:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    group: string:80
-    key: string:120
-    value: string:180
-    meta: json nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  AppSetting:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    company_name: string:180
-    tag_line: string:200 nullable
-    address: string:255 nullable
-    phone: string:40 nullable
-    email: string:120 nullable
-    website: string:180 nullable
-    footer: text nullable
-    logo: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  Announcement:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    title: string:200
-    description: text
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
+  # ============================================================
+  # HRM
+  # NOTE:
+  # User, Role, Permission are NOT generated here.
+  # Existing Laravel users / roles / permissions module is used.
+  # No history models are generated.
+  # ============================================================
 
   EmploymentStatus:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120 unique
     colour_value: string:30
     description: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User
 
   Department:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120
     description: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User
 
   Designation:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120 unique
     description: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: DesignationHistory
-
-  DesignationHistory:
-    id: uuid primary
-    user_id: id foreign:users.id
-    designation_id: uuid foreign:designations.id
-    start_date: datetime
-    end_date: datetime nullable
-    comment: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: User, Designation
-
-  SalaryHistory:
-    id: uuid primary
-    user_id: id foreign:users.id
-    salary: decimal:16,2
-    start_date: datetime
-    end_date: datetime nullable
-    comment: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: User
 
   LeavePolicy:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120 unique
-    paid_leave_count: integer
-    unpaid_leave_count: integer
+    paid_leave_count: integer default:0
+    unpaid_leave_count: integer default:0
     description: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User
 
   WeeklyHoliday:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120
     start_day: string:20
     end_day: string:20
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User
 
   Shift:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:120 unique
-    start_time: datetime
-    end_time: datetime
+    start_time: time
+    end_time: time
     work_hour: decimal:8,2 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User
 
-  Role:
+  EmployeeProfile:
     id: uuid primary
+    user_id: id foreign:users.id unique
     branch_id: uuid foreign:branches.id nullable
-    name: string:120
-    description: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: User, RolePermission
-      belongsToMany: Permission
-
-  Permission:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    name: string:150 unique
-    description: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: RolePermission
-      belongsToMany: Role
-
-  RolePermission:
-    id: uuid primary
-    role_id: uuid foreign:roles.id
-    permission_id: uuid foreign:permissions.id
-    relationships:
-      belongsTo: Role, Permission
-
-  User:
-    id: id primary
-    branch_id: uuid foreign:branches.id nullable
-    first_name: string:80
-    last_name: string:80
-    username: string:80 unique
-    password: string:255
-    email: string:120 unique
-    phone: string:40 nullable
-    street: string:180 nullable
-    city: string:80 nullable
-    state: string:80 nullable
-    zip_code: string:30 nullable
-    country: string:80 nullable
-    join_date: datetime nullable
-    leave_date: datetime nullable
-    employee_id: string:60 nullable
-    blood_group: string:10 nullable
-    image: string:255 nullable
     employment_status_id: uuid foreign:employment_statuses.id nullable
     department_id: uuid foreign:departments.id nullable
-    role_id: uuid foreign:roles.id nullable
+    designation_id: uuid foreign:designations.id nullable
     shift_id: uuid foreign:shifts.id nullable
     leave_policy_id: uuid foreign:leave_policies.id nullable
     weekly_holiday_id: uuid foreign:weekly_holidays.id nullable
+    employee_id: string:60 nullable
+    join_date: datetime nullable
+    leave_date: datetime nullable
+    salary: decimal:16,2 default:0
+    blood_group: string:10 nullable
+    emergency_contact_name: string:120 nullable
+    emergency_contact_phone: string:40 nullable
+    address: text nullable
     active: boolean default:true
     is_system_generated: boolean default:false
+    user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, EmploymentStatus, Department, Role, Shift, LeavePolicy, WeeklyHoliday
-      hasMany: Education, Attendance, LeaveApplication, Payslip, SalaryHistory, DesignationHistory, AwardHistory, AssignedTask, ProjectTeamMember, Project:managedProjects
+      belongsTo: Branch, EmploymentStatus, Department, Designation, Shift, LeavePolicy, WeeklyHoliday
 
   Education:
     id: uuid primary
@@ -1215,8 +1526,6 @@ models:
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: User
 
   Attendance:
     id: uuid primary
@@ -1234,7 +1543,7 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, User
+      belongsTo: Branch
 
   LeaveApplication:
     id: uuid primary
@@ -1255,7 +1564,7 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, User
+      belongsTo: Branch
 
   Payslip:
     id: uuid primary
@@ -1264,96 +1573,54 @@ models:
     salary_month: integer
     salary_year: integer
     salary: decimal:16,2
-    paid_leave: integer
-    unpaid_leave: integer
-    monthly_holiday: integer
-    public_holiday: integer
-    work_day: integer
-    shift_wise_work_hour: decimal:8,2
-    monthly_work_hour: decimal:8,2
-    hourly_salary: decimal:16,2
-    working_hour: decimal:8,2
-    salary_payable: decimal:16,2
+    paid_leave: integer default:0
+    unpaid_leave: integer default:0
+    monthly_holiday: integer default:0
+    public_holiday: integer default:0
+    work_day: integer default:0
+    shift_wise_work_hour: decimal:8,2 default:0
+    monthly_work_hour: decimal:8,2 default:0
+    hourly_salary: decimal:16,2 default:0
+    working_hour: decimal:8,2 default:0
+    salary_payable: decimal:16,2 default:0
     bonus: decimal:16,2 default:0
     bonus_comment: string:255 nullable
     deduction: decimal:16,2 default:0
     deduction_comment: string:255 nullable
-    total_payable: decimal:16,2
+    total_payable: decimal:16,2 default:0
     payment_status: enum:UNPAID,PAID,PARTIAL default:UNPAID
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, User
+      belongsTo: Branch
 
   Award:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:150 unique
     description: string:255 nullable
     image: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-      hasMany: AwardHistory
-
-  AwardHistory:
-    id: uuid primary
-    user_id: id foreign:users.id
-    award_id: uuid foreign:awards.id
-    awarded_date: datetime
-    comment: string:255 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: User, Award
 
   PublicHoliday:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:150
     date: datetime
     description: string:255 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
 
-  EmailConfig:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    email_config_name: string:120
-    email_host: string:150
-    email_port: string:20
-    email_user: string:150
-    email_pass: string:255
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
-
-  Email:
-    id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
-    sender_email: string:150
-    receiver_email: string:150
-    subject: string:255 nullable
-    body: longtext nullable
-    email_status: string:30 nullable
-    active: boolean default:true
-    is_system_generated: boolean default:false
-    user_add_id: id foreign:users.id nullable
-    relationships:
-      belongsTo: Branch
+  # ============================================================
+  # PROJECT / TASK MANAGEMENT
+  # NOTE:
+  # Existing users table is used for manager and assignees.
+  # ============================================================
 
   Project:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     project_manager_id: id foreign:users.id
     name: string:180
     start_date: datetime
@@ -1364,7 +1631,6 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch, User:projectManager
       hasMany: Milestone, TaskStatus, Task, ProjectTeam
 
   Milestone:
@@ -1384,14 +1650,12 @@ models:
 
   Priority:
     id: uuid primary
-    branch_id: uuid foreign:branches.id nullable
     name: string:80
     color: string:20 nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Branch
       hasMany: Task
 
   TaskStatus:
@@ -1411,14 +1675,14 @@ models:
   Task:
     id: uuid primary
     project_id: uuid foreign:projects.id
-    milestone_id: uuid foreign:milestones.id
-    priority_id: uuid foreign:priorities.id
-    task_status_id: uuid foreign:task_statuses.id
+    milestone_id: uuid foreign:milestones.id nullable
+    priority_id: uuid foreign:priorities.id nullable
+    task_status_id: uuid foreign:task_statuses.id nullable
     name: string:180
-    start_date: datetime
-    end_date: datetime
-    completion_time: decimal:8,2
-    description: text
+    start_date: datetime nullable
+    end_date: datetime nullable
+    completion_time: decimal:8,2 nullable
+    description: text nullable
     active: boolean default:true
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
@@ -1434,7 +1698,7 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: Task, User
+      belongsTo: Task
 
   ProjectTeam:
     id: uuid primary
@@ -1455,6 +1719,6 @@ models:
     is_system_generated: boolean default:false
     user_add_id: id foreign:users.id nullable
     relationships:
-      belongsTo: ProjectTeam, User
+      belongsTo: ProjectTeam
 
-seeders: Branch, Currency, Account, BankAccount, ContactGroup, CreditTerm, Contact, ChartOfAccount, TaxClass, TaxRate, ProductCategory, Variant, VariantLine, ProductUnit, Product, ProductVariant, ProductVariantItem, Warehouse, CashTransfer, CashTransferLine, ChequeRegister, JournalVoucher, JournalVoucherLine, WarehouseTransfer, WarehouseTransferLine, InventoryAdjustment, InventoryAdjustmentLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine, ProformaInvoice, ProformaInvoiceLine, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentLine, SalesReturn, SalesReturnLine, PurchaseOrder, PurchaseOrderLine, PurchaseBill, PurchaseBillLine, Expense, ExpenseLine, DebitNote, DebitNoteLine, SupplierPayment, SupplierPaymentLine, AlertType, ReportingTag, DocumentNumbering, PrintingTemplate, CustomTemplate, ApplicationSetting, GeneralSetting, MasterData, AppSetting, Announcement, EmploymentStatus, Department, Designation, DesignationHistory, SalaryHistory, LeavePolicy, WeeklyHoliday, Shift, Role, Permission, RolePermission, User, Education, Attendance, LeaveApplication, Payslip, Award, AwardHistory, PublicHoliday, EmailConfig, Email, Project, Milestone, Priority, TaskStatus, Task, AssignedTask, ProjectTeam, ProjectTeamMember
+seeders: Branch, Currency, AppSetting, ApplicationSetting, GeneralSetting, MasterData, AlertType, ReportingTag, ReportingTagLine, DocumentNumbering, PrintingTemplate, CustomTemplate, Announcement, EmailConfig, Email, CustomField, CustomFieldChoice, CustomFieldValidation, CustomFieldModule, CustomFieldValue, Account, ChartOfAccount, BankAccount, CashTransfer, CashTransferLine, ChequeRegister, JournalVoucher, JournalVoucherLine, LoanAccount, LoanTopUp, LoanCharge, ContactGroup, CreditTerm, Contact, Lead, DealPipeline, DealStage, Deal, CrmActivity, CrmActivityComment, TaxJurisdiction, TaxRegistration, ProductTaxCategory, TaxClass, TaxRate, TaxRateComponent, TaxRule, TaxExemption, ProductCategory, ProductUnit, Variant, VariantLine, Product, ProductVariantItem, Warehouse, WarehouseTransfer, WarehouseTransferLine, InventoryAdjustment, InventoryAdjustmentLine, Quotation, QuotationLine, SalesOrder, SalesOrderLine, ProformaInvoice, ProformaInvoiceLine, Invoice, InvoiceLine, CustomerPayment, CustomerPaymentLine, SalesReturn, SalesReturnLine, PurchaseOrder, PurchaseOrderLine, PurchaseBill, PurchaseBillLine, Expense, ExpenseLine, DebitNote, DebitNoteLine, SupplierPayment, SupplierPaymentLine, EmploymentStatus, Department, Designation, LeavePolicy, WeeklyHoliday, Shift, EmployeeProfile, Education, Attendance, LeaveApplication, Payslip, Award, PublicHoliday, Project, Milestone, Priority, TaskStatus, Task, AssignedTask, ProjectTeam, ProjectTeamMember
