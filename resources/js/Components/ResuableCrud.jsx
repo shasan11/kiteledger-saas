@@ -1640,7 +1640,9 @@ function CrudFormInner({
 /*                              main reusable crud                            */
 /* -------------------------------------------------------------------------- */
 export default function ReusableCrud({
+  apiEndpoint,
   apiUrl,
+  mode = "list",
   title,
   fields = EMPTY_ARRAY,
   columns = EMPTY_ARRAY,
@@ -1662,6 +1664,7 @@ export default function ReusableCrud({
   showRowActionMenu = true,
   custom_add = false,
   custom_add_link = null,
+  permissionPrefix = null,
   canView = true,
   canEdit = true,
   canAdd = true,
@@ -1722,6 +1725,26 @@ export default function ReusableCrud({
   disabledStatuses = EMPTY_ARRAY,
   footerActions = EMPTY_ARRAY,
 }) {
+  const normalizedMode = mode || "list";
+  const isSingletonMode = normalizedMode === "singleton";
+  const normalizedApiEndpoint = apiEndpoint || apiUrl;
+  const normalizedPermissionPrefix = typeof permissionPrefix === "string" ? permissionPrefix.trim() : "";
+  const normalizePermission = (ability, fallback) =>
+    typeof ability === "boolean"
+      ? ability
+      : normalizedPermissionPrefix
+      ? !!window?.auth_permissions?.includes(`${normalizedPermissionPrefix}.${fallback}`)
+      : true;
+
+  const normalizedCanView = normalizePermission(canView, "view");
+  const normalizedCanAdd = normalizePermission(canAdd, "create");
+  const normalizedCanEdit = normalizePermission(canEdit, "update");
+  const normalizedCanDelete = normalizePermission(canDelete, "delete");
+  const getEntityUrl = useCallback(
+    (id = null) => buildResourceUrl(normalizedApiEndpoint, isSingletonMode ? null : id),
+    [normalizedApiEndpoint, isSingletonMode]
+  );
+
   const [data, setData] = useState(EMPTY_ARRAY);
   const [inactiveRows, setInactiveRows] = useState(EMPTY_ARRAY);
   const [visible, setVisible] = useState(false);
@@ -1826,7 +1849,7 @@ export default function ReusableCrud({
   );
 
   const baseUrl = useMemo(() => {
-    const cleanApiUrl = cleanUrl(apiUrl);
+    const cleanApiUrl = cleanUrl(normalizedApiEndpoint);
 
     if (!filterUrl) return cleanApiUrl;
 
@@ -1835,7 +1858,7 @@ export default function ReusableCrud({
     }
 
     return `${cleanApiUrl}/${String(filterUrl).replace(/^\/+/, "")}`;
-  }, [apiUrl, filterUrl]);
+  }, [normalizedApiEndpoint, filterUrl]);
 
   const flattenFields = useCallback((arr, out = []) => {
     (arr || []).forEach((f) => {
@@ -2469,7 +2492,7 @@ export default function ReusableCrud({
 
         if (openEditId != null) {
           try {
-            const r = await axios.get(buildResourceUrl(apiUrl, openEditId), { headers: authHeaders });
+            const r = await axios.get(getEntityUrl(openEditId), { headers: authHeaders });
             setEditingRecord(r.data);
             setVisible(true);
             return;
@@ -2488,7 +2511,7 @@ export default function ReusableCrud({
     };
 
     open();
-  }, [openOnMount, openMode, openEditId, data, apiUrl, authHeaders]);
+  }, [openOnMount, openMode, openEditId, data, normalizedApiEndpoint, authHeaders]);
 
   useEffect(() => {
     const init = async () => {
@@ -2499,7 +2522,7 @@ export default function ReusableCrud({
           setFormInitialValues(look_up_var);
         } else if (look_up_var) {
           try {
-            const { data: rec } = await axios.get(buildResourceUrl(apiUrl, look_up_var), {
+            const { data: rec } = await axios.get(getEntityUrl(look_up_var), {
               headers: authHeaders,
             });
             setFormInitialValues(rec);
@@ -2513,14 +2536,14 @@ export default function ReusableCrud({
     };
 
     init();
-  }, [ui_type, look_up_var, apiUrl, authHeaders, crudInitialValues]);
+  }, [ui_type, look_up_var, normalizedApiEndpoint, authHeaders, crudInitialValues]);
 
   const updateRecordActiveState = async (record, nextActive) => {
     const updateField = record?.hasOwnProperty("active") ? "active" : "is_active";
     const normalizedRecord = normalizeFkValuesForSubmit(record);
 
     await axios.put(
-      buildResourceUrl(apiUrl, record.id),
+      getEntityUrl(record.id),
       { ...normalizedRecord, [updateField]: nextActive },
       { headers: authHeaders }
     );
@@ -2555,7 +2578,7 @@ export default function ReusableCrud({
   };
 
   const deletePermanent = async (record) => {
-    await axios.delete(buildResourceUrl(apiUrl, record.id), { headers: authHeaders });
+    await axios.delete(getEntityUrl(record.id), { headers: authHeaders });
 
     fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
 
@@ -3047,7 +3070,7 @@ export default function ReusableCrud({
   const getRowActionItems = (record, isInactive = false) => {
     const items = [];
 
-    if (canEdit) {
+    if (normalizedCanEdit) {
       items.push({
         key: "edit",
         icon: <EditOutlined />,
@@ -3070,7 +3093,7 @@ export default function ReusableCrud({
             if (!action?.actions) return;
             const normalizedRecord = normalizeFkValuesForSubmit(record);
             await axios.put(
-              buildResourceUrl(apiUrl, record.id),
+              getEntityUrl(record.id),
               { ...normalizedRecord, ...action.actions },
               { headers: authHeaders }
             );
@@ -3085,7 +3108,7 @@ export default function ReusableCrud({
     });
 
     if (isInactive) {
-      if (canDelete) {
+      if (normalizedCanDelete) {
         items.push({
           key: "activate",
           icon: <ReloadOutlined style={{ color: "green" }} />,
@@ -3101,7 +3124,7 @@ export default function ReusableCrud({
         });
       }
     } else {
-      if (canDelete) {
+      if (normalizedCanDelete) {
         items.push({
           key: "inactivate",
           icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3119,7 +3142,7 @@ export default function ReusableCrud({
   const topMenuItems = useMemo(() => {
     const items = [];
 
-    if (canView) {
+    if (normalizedCanView) {
       items.push(
         {
           key: "export",
@@ -3160,7 +3183,7 @@ export default function ReusableCrud({
       }
     }
 
-    if (canDelete && viewActive) {
+    if (normalizedCanDelete && viewActive) {
       items.push({
         key: "bulk-inactivate",
         icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3220,8 +3243,8 @@ export default function ReusableCrud({
     if (!items.length) items.push({ key: "noop", label: "No actions", disabled: true });
     return items;
   }, [
-    canView,
-    canDelete,
+    normalizedCanView,
+    normalizedCanDelete,
     viewActive,
     selectedRowKeys,
     rowMenu,
@@ -3263,7 +3286,7 @@ export default function ReusableCrud({
   }, [columns, buildBackendColumnFilter, sortState]);
 
   const canRowActionsExist =
-    showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
+    showRowActionMenu && (normalizedCanEdit || normalizedCanDelete || (singleactions && singleactions.length > 0));
 
   const viewColumn =
     showViewColumn && typeof viewPathBuilder === "function"
@@ -4672,8 +4695,8 @@ const submitRecord = async (values, isEditMode, editId) => {
   const containsFile = hasAnyFile(payload);
 
   const url = isEditMode
-    ? buildResourceUrl(apiUrl, editId)
-    : buildResourceUrl(apiUrl);
+    ? getEntityUrl(editId)
+    : getEntityUrl();
 
   if (!containsFile) {
     const res = isEditMode
@@ -4984,7 +5007,7 @@ const submitRecord = async (values, isEditMode, editId) => {
           </Button>
         </Link>
       ) : (<></>)}
-      {canAdd && !button_ui && ui_type !== "add_related" && (
+      {normalizedCanAdd && !button_ui && ui_type !== "add_related" && (
 
         <Button
           icon={<PlusOutlined />}
@@ -5002,7 +5025,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       )}
 
-      {hasActions && canView && (
+      {hasActions && normalizedCanView && (
         <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
           <Button icon={<MoreOutlined />}></Button>
         </Dropdown>
@@ -5039,14 +5062,14 @@ const submitRecord = async (values, isEditMode, editId) => {
           type="default"
           icon={button_ui_id ? <EditOutlined /> : <PlusOutlined />}
           onClick={handleQuickButtonClick}
-          disabled={(button_ui_id && !canEdit) || (!button_ui_id && !canAdd)}
+          disabled={(button_ui_id && !normalizedCanEdit) || (!button_ui_id && !normalizedCanAdd)}
         >
           {button_ui_id ? `Edit ${title?.slice?.(0, -1) || title}` : `Add ${title?.slice?.(0, -1) || title}`}
         </Button>
       ) : (
         <div>
           <div className="p-0">
-            {canView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
+            {normalizedCanView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
               <div
                 style={{
                   marginBottom: 0,
@@ -5080,7 +5103,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                           ...(action?.actions || EMPTY_OBJECT),
                         }));
 
-                        await axios.put(apiUrl, payload, {
+                        await axios.put(normalizedApiEndpoint, payload, {
                           headers: {
                             ...authHeaders,
                             "Content-Type": "application/json",
@@ -5107,7 +5130,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             {(!hasAnchors || button_ui) && (
               <div className="flex gap-2 mb-0 bg-white">
                 <Row justify="space-between" style={{ width: "100%" }} className="m-0">
-                  {showSearch && canView && (
+                  {showSearch && normalizedCanView && (
                     <Col xs={16} style={{ display: "flex", gap: 6 }}>
                       <Input
                         size="large"
@@ -5135,7 +5158,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                         </Button>
                       </Link>
                     ) : (<></>)}
-                    {canAdd && (
+                    {normalizedCanAdd && (
                       <Button
                         icon={<PlusOutlined />}
                         type="primary"
@@ -5149,7 +5172,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                       </Button>
                     )}
 
-                    {hasActions && canView && (
+                    {hasActions && normalizedCanView && (
                       <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
                         <Button icon={<MoreOutlined />} type="icon"></Button>
                       </Dropdown>
@@ -5159,7 +5182,7 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {hasAnchors && showSearch && canView && (
+            {hasAnchors && showSearch && normalizedCanView && (
               <div
                 className="d-flex justify-content-space-between w-100"
                 style={{ padding: "0px", borderBottom: "1px solid #eef0f4" }}
@@ -5191,7 +5214,7 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {canView ? (
+            {normalizedCanView ? (
               <div style={{ padding: "0px" }}>
                 <Table
                   rowKey="id"
@@ -5200,7 +5223,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                   dataSource={filteredData}
                   onRow={activeTableRowFunction}
                   loading={loading}
-                  rowSelection={canView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
+                  rowSelection={normalizedCanView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
                   pagination={{
                     current: pagination.current,
                     pageSize: pagination.pageSize,
@@ -5247,7 +5270,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       {formNode}
 
-      {canView && enableInactiveDrawer && (
+      {normalizedCanView && enableInactiveDrawer && (
         <Drawer
           width={900}
           title={`Inactive ${title} (${inactivePagination.total ?? filteredInactiveData.length})`}
@@ -5287,7 +5310,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             dataSource={filteredInactiveData}
             loading={inactiveLoading}
             rowSelection={
-              canView
+              normalizedCanView
                 ? {
                   selectedRowKeys: selectedInactiveRowKeys,
                   onChange: setSelectedInactiveRowKeys,
