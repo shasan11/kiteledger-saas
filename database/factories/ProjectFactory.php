@@ -1,0 +1,27 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class ProjectFactory extends Factory
+{
+    /**
+     * Define the model's default state.
+     */
+    public function definition(): array
+    {
+        return [
+            'project_manager_id' => User::factory(),
+            'name' => fake()->name(),
+            'start_date' => fake()->dateTime(),
+            'end_date' => fake()->dateTime(),
+            'description' => fake()->text(),
+            'status' => fake()->randomElement(["PENDING","IN_PROGRESS","COMPLETED","CANCELLED","ON_HOLD"]),
+            'active' => fake()->boolean(),
+            'is_system_generated' => fake()->boolean(),
+            'user_add_id' => User::factory(),
+        ];
+    }
+}
