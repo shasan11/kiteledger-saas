@@ -1640,7 +1640,9 @@ function CrudFormInner({
 /*                              main reusable crud                            */
 /* -------------------------------------------------------------------------- */
 export default function ReusableCrud({
+  apiEndpoint,
   apiUrl,
+  mode = "list",
   title,
   fields = EMPTY_ARRAY,
   columns = EMPTY_ARRAY,
@@ -1662,6 +1664,7 @@ export default function ReusableCrud({
   showRowActionMenu = true,
   custom_add = false,
   custom_add_link = null,
+  permissionPrefix = null,
   canView = true,
   canEdit = true,
   canAdd = true,
@@ -1722,6 +1725,26 @@ export default function ReusableCrud({
   disabledStatuses = EMPTY_ARRAY,
   footerActions = EMPTY_ARRAY,
 }) {
+  const normalizedMode = mode || "list";
+  const isSingletonMode = normalizedMode === "singleton";
+  const normalizedApiEndpoint = apiEndpoint || apiUrl;
+  const normalizedPermissionPrefix = typeof permissionPrefix === "string" ? permissionPrefix.trim() : "";
+  const normalizePermission = (ability, fallback) =>
+    typeof ability === "boolean"
+      ? ability
+      : normalizedPermissionPrefix
+      ? !!window?.auth_permissions?.includes(`${normalizedPermissionPrefix}.${fallback}`)
+      : true;
+
+  const normalizedCanView = normalizePermission(canView, "view");
+  const normalizedCanAdd = normalizePermission(canAdd, "create");
+  const normalizedCanEdit = normalizePermission(canEdit, "update");
+  const normalizedCanDelete = normalizePermission(canDelete, "delete");
+  const getEntityUrl = useCallback(
+    (id = null) => buildResourceUrl(normalizedApiEndpoint, isSingletonMode ? null : id),
+    [normalizedApiEndpoint, isSingletonMode]
+  );
+
   const [data, setData] = useState(EMPTY_ARRAY);
   const [inactiveRows, setInactiveRows] = useState(EMPTY_ARRAY);
   const [visible, setVisible] = useState(false);
@@ -1826,7 +1849,7 @@ export default function ReusableCrud({
   );
 
   const baseUrl = useMemo(() => {
-    const cleanApiUrl = cleanUrl(apiUrl);
+    const cleanApiUrl = cleanUrl(normalizedApiEndpoint);
 
     if (!filterUrl) return cleanApiUrl;
 
@@ -1835,7 +1858,7 @@ export default function ReusableCrud({
     }
 
     return `${cleanApiUrl}/${String(filterUrl).replace(/^\/+/, "")}`;
-  }, [apiUrl, filterUrl]);
+  }, [normalizedApiEndpoint, filterUrl]);
 
   const flattenFields = useCallback((arr, out = []) => {
     (arr || []).forEach((f) => {
@@ -1915,6 +1938,8 @@ export default function ReusableCrud({
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
   const [fkStore, setFkStore] = useState(EMPTY_OBJECT);
   const fkTimersRef = useRef(EMPTY_OBJECT);
+  const inlineTableKeyCounterRef = useRef(0);
+  const inlineTableRowKeysRef = useRef(EMPTY_OBJECT);
 
   const toFkOption = (row, field) => {
     const valueKey = field?.fkValueKey || "id";
@@ -2469,7 +2494,7 @@ export default function ReusableCrud({
 
         if (openEditId != null) {
           try {
-            const r = await axios.get(buildResourceUrl(apiUrl, openEditId), { headers: authHeaders });
+            const r = await axios.get(getEntityUrl(openEditId), { headers: authHeaders });
             setEditingRecord(r.data);
             setVisible(true);
             return;
@@ -2488,7 +2513,7 @@ export default function ReusableCrud({
     };
 
     open();
-  }, [openOnMount, openMode, openEditId, data, apiUrl, authHeaders]);
+  }, [openOnMount, openMode, openEditId, data, normalizedApiEndpoint, authHeaders]);
 
   useEffect(() => {
     const init = async () => {
@@ -2499,7 +2524,7 @@ export default function ReusableCrud({
           setFormInitialValues(look_up_var);
         } else if (look_up_var) {
           try {
-            const { data: rec } = await axios.get(buildResourceUrl(apiUrl, look_up_var), {
+            const { data: rec } = await axios.get(getEntityUrl(look_up_var), {
               headers: authHeaders,
             });
             setFormInitialValues(rec);
@@ -2513,14 +2538,14 @@ export default function ReusableCrud({
     };
 
     init();
-  }, [ui_type, look_up_var, apiUrl, authHeaders, crudInitialValues]);
+  }, [ui_type, look_up_var, normalizedApiEndpoint, authHeaders, crudInitialValues]);
 
   const updateRecordActiveState = async (record, nextActive) => {
     const updateField = record?.hasOwnProperty("active") ? "active" : "is_active";
     const normalizedRecord = normalizeFkValuesForSubmit(record);
 
     await axios.put(
-      buildResourceUrl(apiUrl, record.id),
+      getEntityUrl(record.id),
       { ...normalizedRecord, [updateField]: nextActive },
       { headers: authHeaders }
     );
@@ -2555,7 +2580,7 @@ export default function ReusableCrud({
   };
 
   const deletePermanent = async (record) => {
-    await axios.delete(buildResourceUrl(apiUrl, record.id), { headers: authHeaders });
+    await axios.delete(getEntityUrl(record.id), { headers: authHeaders });
 
     fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
 
@@ -3047,7 +3072,7 @@ export default function ReusableCrud({
   const getRowActionItems = (record, isInactive = false) => {
     const items = [];
 
-    if (canEdit) {
+    if (normalizedCanEdit) {
       items.push({
         key: "edit",
         icon: <EditOutlined />,
@@ -3070,7 +3095,7 @@ export default function ReusableCrud({
             if (!action?.actions) return;
             const normalizedRecord = normalizeFkValuesForSubmit(record);
             await axios.put(
-              buildResourceUrl(apiUrl, record.id),
+              getEntityUrl(record.id),
               { ...normalizedRecord, ...action.actions },
               { headers: authHeaders }
             );
@@ -3085,7 +3110,7 @@ export default function ReusableCrud({
     });
 
     if (isInactive) {
-      if (canDelete) {
+      if (normalizedCanDelete) {
         items.push({
           key: "activate",
           icon: <ReloadOutlined style={{ color: "green" }} />,
@@ -3101,7 +3126,7 @@ export default function ReusableCrud({
         });
       }
     } else {
-      if (canDelete) {
+      if (normalizedCanDelete) {
         items.push({
           key: "inactivate",
           icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3119,7 +3144,7 @@ export default function ReusableCrud({
   const topMenuItems = useMemo(() => {
     const items = [];
 
-    if (canView) {
+    if (normalizedCanView) {
       items.push(
         {
           key: "export",
@@ -3160,7 +3185,7 @@ export default function ReusableCrud({
       }
     }
 
-    if (canDelete && viewActive) {
+    if (normalizedCanDelete && viewActive) {
       items.push({
         key: "bulk-inactivate",
         icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3220,8 +3245,8 @@ export default function ReusableCrud({
     if (!items.length) items.push({ key: "noop", label: "No actions", disabled: true });
     return items;
   }, [
-    canView,
-    canDelete,
+    normalizedCanView,
+    normalizedCanDelete,
     viewActive,
     selectedRowKeys,
     rowMenu,
@@ -3263,7 +3288,7 @@ export default function ReusableCrud({
   }, [columns, buildBackendColumnFilter, sortState]);
 
   const canRowActionsExist =
-    showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
+    showRowActionMenu && (normalizedCanEdit || normalizedCanDelete || (singleactions && singleactions.length > 0));
 
   const viewColumn =
     showViewColumn && typeof viewPathBuilder === "function"
@@ -3990,6 +4015,155 @@ export default function ReusableCrud({
                     </FieldArray>
                   );
 
+                case "inlineTable":
+                  return (
+                    <FieldArray name={name}>
+                      {({ push, remove }) => {
+                        const rows = values?.[name] || EMPTY_ARRAY;
+                        const columnsConfig = field.columns || field.fields || EMPTY_ARRAY;
+                        const minRows = Math.max(0, Number(field.minRows ?? 0));
+                        const deleteKey = field.deleteKey || `${name}_deleted_ids`;
+                        const currentDeleteIds = Array.isArray(values?.[deleteKey]) ? values[deleteKey] : EMPTY_ARRAY;
+
+                        const getRowUiKey = (row, rowIndex) => {
+                          const idPart = row?.id != null ? `id-${row.id}` : `idx-${rowIndex}`;
+                          const mapKey = `${name}:${idPart}`;
+                          if (!inlineTableRowKeysRef.current[mapKey]) {
+                            inlineTableKeyCounterRef.current += 1;
+                            inlineTableRowKeysRef.current[mapKey] = `inline-row-${inlineTableKeyCounterRef.current}`;
+                          }
+                          return inlineTableRowKeysRef.current[mapKey];
+                        };
+
+                        const removeInlineRow = (idx) => {
+                          const target = rows?.[idx];
+                          const existingId = target?.id;
+                          if (existingId != null && existingId !== "") {
+                            const nextDeleteIds = currentDeleteIds.includes(existingId)
+                              ? currentDeleteIds
+                              : [...currentDeleteIds, existingId];
+                            setFieldValue(deleteKey, nextDeleteIds);
+                          }
+                          remove(idx);
+                        };
+
+                        const tableColumns = [
+                          ...columnsConfig.map((col, colIndex) => {
+                            const colKey = col.key ?? col.name ?? `col-${colIndex}`;
+                            return {
+                              title: col.label || col.title || colKey,
+                              dataIndex: colKey,
+                              key: colKey,
+                              width: col.width,
+                              render: (_, row, rowIndex) => {
+                                const path = `${name}[${rowIndex}].${colKey}`;
+                                const value = row?.[colKey];
+                                const cellReadOnly = readOnly || disabled || !!col.readOnly;
+                                const cellError = errors?.[name]?.[rowIndex]?.[colKey];
+                                const cellTouched = touched?.[name]?.[rowIndex]?.[colKey];
+                                const footerVal = typeof col.computeCell === "function"
+                                  ? col.computeCell({ row, rowIndex, rows, values, column: col })
+                                  : value;
+
+                                const cellNode = (() => {
+                                  if (col.type === "number") {
+                                    return (
+                                      <InputNumber
+                                        size="small"
+                                        value={footerVal}
+                                        style={{ width: "100%" }}
+                                        min={col.min}
+                                        max={col.max}
+                                        disabled={cellReadOnly || typeof col.computeCell === "function"}
+                                        onChange={(v) => setFieldValue(path, v)}
+                                      />
+                                    );
+                                  }
+                                  return (
+                                    <Input
+                                      size="small"
+                                      value={footerVal}
+                                      placeholder={col.placeholder || ""}
+                                      disabled={cellReadOnly || typeof col.computeCell === "function"}
+                                      onChange={(e) => setFieldValue(path, e.target.value)}
+                                    />
+                                  );
+                                })();
+
+                                return (
+                                  <div>
+                                    {cellNode}
+                                    {cellTouched && cellError ? (
+                                      <div style={{ color: "#ff4d4f", fontSize: 12, marginTop: 2 }}>{cellError}</div>
+                                    ) : null}
+                                  </div>
+                                );
+                              },
+                            };
+                          }),
+                          {
+                            title: "",
+                            key: "_actions",
+                            width: 52,
+                            render: (_, row, rowIndex) => (
+                              !readOnly && !disabled ? (
+                                <Button
+                                  size="small"
+                                  danger
+                                  type="text"
+                                  icon={<DeleteOutlined />}
+                                  disabled={rows.length <= minRows}
+                                  onClick={() => removeInlineRow(rowIndex)}
+                                />
+                              ) : null
+                            ),
+                          },
+                        ];
+
+                        const dataSource = rows.map((row, idx) => ({ ...row, __uiKey: getRowUiKey(row, idx) }));
+
+                        return (
+                          <div>
+                            <Table
+                              size="small"
+                              pagination={false}
+                              bordered={false}
+                              rowKey="__uiKey"
+                              columns={tableColumns}
+                              dataSource={dataSource}
+                              scroll={{ x: true }}
+                              summary={
+                                typeof field.footerTotals === "function"
+                                  ? () => {
+                                    const totals = field.footerTotals({ rows, values, field });
+                                    return totals ? (
+                                      <Table.Summary.Row>
+                                        <Table.Summary.Cell index={0} colSpan={tableColumns.length}>
+                                          {totals}
+                                        </Table.Summary.Cell>
+                                      </Table.Summary.Row>
+                                    ) : null;
+                                  }
+                                  : undefined
+                              }
+                            />
+                            {!readOnly && !disabled ? (
+                              <Button
+                                style={{ marginTop: 8 }}
+                                type="dashed"
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={() => push(field.defaultItem || EMPTY_OBJECT)}
+                              >
+                                {field.addButtonLabel || "Add Row"}
+                              </Button>
+                            ) : null}
+                          </div>
+                        );
+                      }}
+                    </FieldArray>
+                  );
+
                 case "objectArray":
                   return (
                     <FieldArray name={name}>
@@ -4672,8 +4846,8 @@ const submitRecord = async (values, isEditMode, editId) => {
   const containsFile = hasAnyFile(payload);
 
   const url = isEditMode
-    ? buildResourceUrl(apiUrl, editId)
-    : buildResourceUrl(apiUrl);
+    ? getEntityUrl(editId)
+    : getEntityUrl();
 
   if (!containsFile) {
     const res = isEditMode
@@ -4984,7 +5158,7 @@ const submitRecord = async (values, isEditMode, editId) => {
           </Button>
         </Link>
       ) : (<></>)}
-      {canAdd && !button_ui && ui_type !== "add_related" && (
+      {normalizedCanAdd && !button_ui && ui_type !== "add_related" && (
 
         <Button
           icon={<PlusOutlined />}
@@ -5002,7 +5176,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       )}
 
-      {hasActions && canView && (
+      {hasActions && normalizedCanView && (
         <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
           <Button icon={<MoreOutlined />}></Button>
         </Dropdown>
@@ -5039,14 +5213,14 @@ const submitRecord = async (values, isEditMode, editId) => {
           type="default"
           icon={button_ui_id ? <EditOutlined /> : <PlusOutlined />}
           onClick={handleQuickButtonClick}
-          disabled={(button_ui_id && !canEdit) || (!button_ui_id && !canAdd)}
+          disabled={(button_ui_id && !normalizedCanEdit) || (!button_ui_id && !normalizedCanAdd)}
         >
           {button_ui_id ? `Edit ${title?.slice?.(0, -1) || title}` : `Add ${title?.slice?.(0, -1) || title}`}
         </Button>
       ) : (
         <div>
           <div className="p-0">
-            {canView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
+            {normalizedCanView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
               <div
                 style={{
                   marginBottom: 0,
@@ -5080,7 +5254,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                           ...(action?.actions || EMPTY_OBJECT),
                         }));
 
-                        await axios.put(apiUrl, payload, {
+                        await axios.put(normalizedApiEndpoint, payload, {
                           headers: {
                             ...authHeaders,
                             "Content-Type": "application/json",
@@ -5107,7 +5281,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             {(!hasAnchors || button_ui) && (
               <div className="flex gap-2 mb-0 bg-white">
                 <Row justify="space-between" style={{ width: "100%" }} className="m-0">
-                  {showSearch && canView && (
+                  {showSearch && normalizedCanView && (
                     <Col xs={16} style={{ display: "flex", gap: 6 }}>
                       <Input
                         size="large"
@@ -5135,7 +5309,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                         </Button>
                       </Link>
                     ) : (<></>)}
-                    {canAdd && (
+                    {normalizedCanAdd && (
                       <Button
                         icon={<PlusOutlined />}
                         type="primary"
@@ -5149,7 +5323,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                       </Button>
                     )}
 
-                    {hasActions && canView && (
+                    {hasActions && normalizedCanView && (
                       <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
                         <Button icon={<MoreOutlined />} type="icon"></Button>
                       </Dropdown>
@@ -5159,7 +5333,7 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {hasAnchors && showSearch && canView && (
+            {hasAnchors && showSearch && normalizedCanView && (
               <div
                 className="d-flex justify-content-space-between w-100"
                 style={{ padding: "0px", borderBottom: "1px solid #eef0f4" }}
@@ -5191,7 +5365,7 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {canView ? (
+            {normalizedCanView ? (
               <div style={{ padding: "0px" }}>
                 <Table
                   rowKey="id"
@@ -5200,7 +5374,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                   dataSource={filteredData}
                   onRow={activeTableRowFunction}
                   loading={loading}
-                  rowSelection={canView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
+                  rowSelection={normalizedCanView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
                   pagination={{
                     current: pagination.current,
                     pageSize: pagination.pageSize,
@@ -5247,7 +5421,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       {formNode}
 
-      {canView && enableInactiveDrawer && (
+      {normalizedCanView && enableInactiveDrawer && (
         <Drawer
           width={900}
           title={`Inactive ${title} (${inactivePagination.total ?? filteredInactiveData.length})`}
@@ -5287,7 +5461,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             dataSource={filteredInactiveData}
             loading={inactiveLoading}
             rowSelection={
-              canView
+              normalizedCanView
                 ? {
                   selectedRowKeys: selectedInactiveRowKeys,
                   onChange: setSelectedInactiveRowKeys,

@@ -5,6 +5,9 @@ import * as Yup from 'yup';
 import { Tag } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+
 export default function SupplierPayments(props) {
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
@@ -48,7 +51,7 @@ export default function SupplierPayments(props) {
       <ReusableCrud
         icon={<AppstoreOutlined />}
         title="SupplierPayments"
-        endpoint="/purchase/supplierpayments"
+        endpoint={api('/api/purchase/supplierpayments')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
