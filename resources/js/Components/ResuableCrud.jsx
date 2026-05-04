@@ -1938,6 +1938,8 @@ export default function ReusableCrud({
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
   const [fkStore, setFkStore] = useState(EMPTY_OBJECT);
   const fkTimersRef = useRef(EMPTY_OBJECT);
+  const inlineTableKeyCounterRef = useRef(0);
+  const inlineTableRowKeysRef = useRef(EMPTY_OBJECT);
 
   const toFkOption = (row, field) => {
     const valueKey = field?.fkValueKey || "id";
@@ -4010,6 +4012,155 @@ export default function ReusableCrud({
                           )}
                         </div>
                       )}
+                    </FieldArray>
+                  );
+
+                case "inlineTable":
+                  return (
+                    <FieldArray name={name}>
+                      {({ push, remove }) => {
+                        const rows = values?.[name] || EMPTY_ARRAY;
+                        const columnsConfig = field.columns || field.fields || EMPTY_ARRAY;
+                        const minRows = Math.max(0, Number(field.minRows ?? 0));
+                        const deleteKey = field.deleteKey || `${name}_deleted_ids`;
+                        const currentDeleteIds = Array.isArray(values?.[deleteKey]) ? values[deleteKey] : EMPTY_ARRAY;
+
+                        const getRowUiKey = (row, rowIndex) => {
+                          const idPart = row?.id != null ? `id-${row.id}` : `idx-${rowIndex}`;
+                          const mapKey = `${name}:${idPart}`;
+                          if (!inlineTableRowKeysRef.current[mapKey]) {
+                            inlineTableKeyCounterRef.current += 1;
+                            inlineTableRowKeysRef.current[mapKey] = `inline-row-${inlineTableKeyCounterRef.current}`;
+                          }
+                          return inlineTableRowKeysRef.current[mapKey];
+                        };
+
+                        const removeInlineRow = (idx) => {
+                          const target = rows?.[idx];
+                          const existingId = target?.id;
+                          if (existingId != null && existingId !== "") {
+                            const nextDeleteIds = currentDeleteIds.includes(existingId)
+                              ? currentDeleteIds
+                              : [...currentDeleteIds, existingId];
+                            setFieldValue(deleteKey, nextDeleteIds);
+                          }
+                          remove(idx);
+                        };
+
+                        const tableColumns = [
+                          ...columnsConfig.map((col, colIndex) => {
+                            const colKey = col.key ?? col.name ?? `col-${colIndex}`;
+                            return {
+                              title: col.label || col.title || colKey,
+                              dataIndex: colKey,
+                              key: colKey,
+                              width: col.width,
+                              render: (_, row, rowIndex) => {
+                                const path = `${name}[${rowIndex}].${colKey}`;
+                                const value = row?.[colKey];
+                                const cellReadOnly = readOnly || disabled || !!col.readOnly;
+                                const cellError = errors?.[name]?.[rowIndex]?.[colKey];
+                                const cellTouched = touched?.[name]?.[rowIndex]?.[colKey];
+                                const footerVal = typeof col.computeCell === "function"
+                                  ? col.computeCell({ row, rowIndex, rows, values, column: col })
+                                  : value;
+
+                                const cellNode = (() => {
+                                  if (col.type === "number") {
+                                    return (
+                                      <InputNumber
+                                        size="small"
+                                        value={footerVal}
+                                        style={{ width: "100%" }}
+                                        min={col.min}
+                                        max={col.max}
+                                        disabled={cellReadOnly || typeof col.computeCell === "function"}
+                                        onChange={(v) => setFieldValue(path, v)}
+                                      />
+                                    );
+                                  }
+                                  return (
+                                    <Input
+                                      size="small"
+                                      value={footerVal}
+                                      placeholder={col.placeholder || ""}
+                                      disabled={cellReadOnly || typeof col.computeCell === "function"}
+                                      onChange={(e) => setFieldValue(path, e.target.value)}
+                                    />
+                                  );
+                                })();
+
+                                return (
+                                  <div>
+                                    {cellNode}
+                                    {cellTouched && cellError ? (
+                                      <div style={{ color: "#ff4d4f", fontSize: 12, marginTop: 2 }}>{cellError}</div>
+                                    ) : null}
+                                  </div>
+                                );
+                              },
+                            };
+                          }),
+                          {
+                            title: "",
+                            key: "_actions",
+                            width: 52,
+                            render: (_, row, rowIndex) => (
+                              !readOnly && !disabled ? (
+                                <Button
+                                  size="small"
+                                  danger
+                                  type="text"
+                                  icon={<DeleteOutlined />}
+                                  disabled={rows.length <= minRows}
+                                  onClick={() => removeInlineRow(rowIndex)}
+                                />
+                              ) : null
+                            ),
+                          },
+                        ];
+
+                        const dataSource = rows.map((row, idx) => ({ ...row, __uiKey: getRowUiKey(row, idx) }));
+
+                        return (
+                          <div>
+                            <Table
+                              size="small"
+                              pagination={false}
+                              bordered={false}
+                              rowKey="__uiKey"
+                              columns={tableColumns}
+                              dataSource={dataSource}
+                              scroll={{ x: true }}
+                              summary={
+                                typeof field.footerTotals === "function"
+                                  ? () => {
+                                    const totals = field.footerTotals({ rows, values, field });
+                                    return totals ? (
+                                      <Table.Summary.Row>
+                                        <Table.Summary.Cell index={0} colSpan={tableColumns.length}>
+                                          {totals}
+                                        </Table.Summary.Cell>
+                                      </Table.Summary.Row>
+                                    ) : null;
+                                  }
+                                  : undefined
+                              }
+                            />
+                            {!readOnly && !disabled ? (
+                              <Button
+                                style={{ marginTop: 8 }}
+                                type="dashed"
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={() => push(field.defaultItem || EMPTY_OBJECT)}
+                              >
+                                {field.addButtonLabel || "Add Row"}
+                              </Button>
+                            ) : null}
+                          </div>
+                        );
+                      }}
                     </FieldArray>
                   );
 
