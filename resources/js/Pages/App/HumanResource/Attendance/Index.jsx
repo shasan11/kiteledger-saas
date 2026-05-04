@@ -5,6 +5,9 @@ import * as Yup from 'yup';
 import { Tag } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+
 export default function Attendance(props) {
   const columns = [
     { title: 'Employee', key: 'employee', render: (_, r) => r?.employee?.name || '-' },
@@ -20,5 +23,5 @@ export default function Attendance(props) {
   const validationSchema = Yup.object().shape({ employee_id: Yup.mixed().required('Employee is required'), attendance_date: Yup.string().required('Date is required'), status: Yup.string().required('Status is required'), remarks: Yup.string().nullable() });
   const initialValues = { employee_id: null, attendance_date: null, status: 'present', remarks: '', deleted_item_ids: [] };
   const transformPayload = (v) => { const p = { ...v }; p.employee_id = p.employee_id || null; p.remarks = p.remarks?.trim() || null; Object.keys(p).forEach((k)=>p[k]===''&&(p[k]=null)); return p; };
-  return <AuthenticatedLayout user={props.auth?.user}><Head title="Attendance" /><ReusableCrud icon={<AppstoreOutlined />} title="Attendance" endpoint="/hrm/attendance" columns={columns} fields={fields} validationSchema={validationSchema} initialValues={initialValues} transformPayload={transformPayload} form_ui="modal" modalWidth={900} searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering" enableServerPagination={true} backendFilter={{ employee: 'employee_id', status: 'status' }} backendSort={{ attendance_date: 'attendance_date', status: 'status' }} /></AuthenticatedLayout>;
+  return <AuthenticatedLayout user={props.auth?.user}><Head title="Attendance" /><ReusableCrud icon={<AppstoreOutlined />} title="Attendance" endpoint={api('/api/hrm/attendance')} columns={columns} fields={fields} validationSchema={validationSchema} initialValues={initialValues} transformPayload={transformPayload} form_ui="modal" modalWidth={900} searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering" enableServerPagination={true} backendFilter={{ employee: 'employee_id', status: 'status' }} backendSort={{ attendance_date: 'attendance_date', status: 'status' }} /></AuthenticatedLayout>;
 }
