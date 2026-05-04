@@ -132,18 +132,6 @@ const resolveUrl = (u) => {
   return isAbsoluteUrl(u) ? u : `${domain}${u}`;
 };
 
-const cleanUrl = (url = "") => String(url || "").replace(/\/+$/, "");
-
-const buildResourceUrl = (baseUrl, id = null) => {
-  const cleanBaseUrl = cleanUrl(resolveUrl(baseUrl));
-
-  if (id === null || id === undefined || id === "") {
-    return cleanBaseUrl;
-  }
-
-  return `${cleanBaseUrl}/${id}`;
-};
-
 const getUploadUrlFromValue = (value) => {
   if (!value) return "";
 
@@ -1640,9 +1628,7 @@ function CrudFormInner({
 /*                              main reusable crud                            */
 /* -------------------------------------------------------------------------- */
 export default function ReusableCrud({
-  mode = "list",
   apiUrl,
-  mode = "list",
   title,
   fields = EMPTY_ARRAY,
   columns = EMPTY_ARRAY,
@@ -1664,7 +1650,6 @@ export default function ReusableCrud({
   showRowActionMenu = true,
   custom_add = false,
   custom_add_link = null,
-  permissionPrefix = null,
   canView = true,
   canEdit = true,
   canAdd = true,
@@ -1707,8 +1692,6 @@ export default function ReusableCrud({
   onAnchorChange = null,
 
   transformPayload = null,
-  beforeCreatePayload = null,
-  beforeUpdatePayload = null,
 
   baseFilters = EMPTY_OBJECT,
   sortMode = "ordering",
@@ -1718,33 +1701,7 @@ export default function ReusableCrud({
   defaultSortField = null,
   defaultSortOrder = null,
   orderingMinusForDesc = true,
-  rowActionContext = null,
-  formActionContext = null,
-  statusField = "status",
-  readOnlyStatuses = ["posted", "paid", "void"],
-  disabledStatuses = EMPTY_ARRAY,
-  footerActions = EMPTY_ARRAY,
 }) {
-  const normalizedMode = mode || "list";
-  const isSingletonMode = normalizedMode === "singleton";
-  const normalizedApiEndpoint = apiEndpoint || apiUrl;
-  const normalizedPermissionPrefix = typeof permissionPrefix === "string" ? permissionPrefix.trim() : "";
-  const normalizePermission = (ability, fallback) =>
-    typeof ability === "boolean"
-      ? ability
-      : normalizedPermissionPrefix
-      ? !!window?.auth_permissions?.includes(`${normalizedPermissionPrefix}.${fallback}`)
-      : true;
-
-  const normalizedCanView = normalizePermission(canView, "view");
-  const normalizedCanAdd = normalizePermission(canAdd, "create");
-  const normalizedCanEdit = normalizePermission(canEdit, "update");
-  const normalizedCanDelete = normalizePermission(canDelete, "delete");
-  const getEntityUrl = useCallback(
-    (id = null) => buildResourceUrl(normalizedApiEndpoint, isSingletonMode ? null : id),
-    [normalizedApiEndpoint, isSingletonMode]
-  );
-
   const [data, setData] = useState(EMPTY_ARRAY);
   const [inactiveRows, setInactiveRows] = useState(EMPTY_ARRAY);
   const [visible, setVisible] = useState(false);
@@ -1761,6 +1718,7 @@ export default function ReusableCrud({
   const [bulkAddLoading, setBulkAddLoading] = useState(false);
   const [serverPaginated, setServerPaginated] = useState(false);
   const [submitErrors, setSubmitErrors] = useState(EMPTY_ARRAY);
+  const [quickAddState, setQuickAddState] = useState(null);
 
   const [columnFilters, setColumnFilters] = useState(EMPTY_OBJECT);
   const [objectArrayExpandedRows, setObjectArrayExpandedRows] = useState(EMPTY_OBJECT);
@@ -1842,24 +1800,16 @@ export default function ReusableCrud({
 
   const accessToken = getAuthToken();
   const [formInitialValues, setFormInitialValues] = useState(crudInitialValues || EMPTY_OBJECT);
-  const isSingletonMode = mode === "singleton";
 
   const authHeaders = useMemo(
     () => (accessToken ? { Authorization: `Bearer ${accessToken}` } : EMPTY_OBJECT),
     [accessToken]
   );
 
-  const baseUrl = useMemo(() => {
-    const cleanApiUrl = cleanUrl(normalizedApiEndpoint);
-
-    if (!filterUrl) return cleanApiUrl;
-
-    if (String(filterUrl).startsWith("?")) {
-      return `${cleanApiUrl}${filterUrl}`;
-    }
-
-    return `${cleanApiUrl}/${String(filterUrl).replace(/^\/+/, "")}`;
-  }, [normalizedApiEndpoint, filterUrl]);
+  const baseUrl = useMemo(
+    () => `${apiUrl}${filterUrl ? filterUrl : ""}`,
+    [apiUrl, filterUrl]
+  );
 
   const flattenFields = useCallback((arr, out = []) => {
     (arr || []).forEach((f) => {
@@ -1939,8 +1889,6 @@ export default function ReusableCrud({
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
   const [fkStore, setFkStore] = useState(EMPTY_OBJECT);
   const fkTimersRef = useRef(EMPTY_OBJECT);
-  const inlineTableKeyCounterRef = useRef(0);
-  const inlineTableRowKeysRef = useRef(EMPTY_OBJECT);
 
   const toFkOption = (row, field) => {
     const valueKey = field?.fkValueKey || "id";
@@ -1977,7 +1925,7 @@ export default function ReusableCrud({
       if (!field?.fkUrl || id == null || id === "") return null;
 
       try {
-       const detailUrl = buildResourceUrl(field.fkUrl, id);
+        const detailUrl = `${resolveUrl(field.fkUrl)}${id}/`;
         const res = await axios.get(detailUrl, { headers: authHeaders });
         return toFkOption(res?.data, field);
       } catch (error) {
@@ -2385,13 +2333,12 @@ export default function ReusableCrud({
   );
 
   useEffect(() => {
-    if (isSingletonMode) return;
     fetchData({
       page: pagination.current,
       pageSize: pagination.pageSize,
       search: searchText,
     });
-  }, [fetchData, isSingletonMode]);
+  }, [fetchData]);
 
   useEffect(() => {
     if (!enableInactiveDrawer || !inactiveDrawer) return;
@@ -2496,7 +2443,7 @@ export default function ReusableCrud({
 
         if (openEditId != null) {
           try {
-            const r = await axios.get(getEntityUrl(openEditId), { headers: authHeaders });
+            const r = await axios.get(`${apiUrl}${openEditId}/`, { headers: authHeaders });
             setEditingRecord(r.data);
             setVisible(true);
             return;
@@ -2515,7 +2462,7 @@ export default function ReusableCrud({
     };
 
     open();
-  }, [openOnMount, openMode, openEditId, data, normalizedApiEndpoint, authHeaders]);
+  }, [openOnMount, openMode, openEditId, data, apiUrl, authHeaders]);
 
   useEffect(() => {
     const init = async () => {
@@ -2526,7 +2473,7 @@ export default function ReusableCrud({
           setFormInitialValues(look_up_var);
         } else if (look_up_var) {
           try {
-            const { data: rec } = await axios.get(getEntityUrl(look_up_var), {
+            const { data: rec } = await axios.get(`${apiUrl}${look_up_var}/`, {
               headers: authHeaders,
             });
             setFormInitialValues(rec);
@@ -2540,14 +2487,14 @@ export default function ReusableCrud({
     };
 
     init();
-  }, [ui_type, look_up_var, normalizedApiEndpoint, authHeaders, crudInitialValues]);
+  }, [ui_type, look_up_var, apiUrl, authHeaders, crudInitialValues]);
 
   const updateRecordActiveState = async (record, nextActive) => {
     const updateField = record?.hasOwnProperty("active") ? "active" : "is_active";
     const normalizedRecord = normalizeFkValuesForSubmit(record);
 
     await axios.put(
-      getEntityUrl(record.id),
+      `${apiUrl}${record.id}/`,
       { ...normalizedRecord, [updateField]: nextActive },
       { headers: authHeaders }
     );
@@ -2582,7 +2529,7 @@ export default function ReusableCrud({
   };
 
   const deletePermanent = async (record) => {
-    await axios.delete(getEntityUrl(record.id), { headers: authHeaders });
+    await axios.delete(`${apiUrl}${record.id}/`, { headers: authHeaders });
 
     fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
 
@@ -3074,7 +3021,7 @@ export default function ReusableCrud({
   const getRowActionItems = (record, isInactive = false) => {
     const items = [];
 
-    if (normalizedCanEdit) {
+    if (canEdit) {
       items.push({
         key: "edit",
         icon: <EditOutlined />,
@@ -3097,7 +3044,7 @@ export default function ReusableCrud({
             if (!action?.actions) return;
             const normalizedRecord = normalizeFkValuesForSubmit(record);
             await axios.put(
-              getEntityUrl(record.id),
+              `${apiUrl}${record.id}/`,
               { ...normalizedRecord, ...action.actions },
               { headers: authHeaders }
             );
@@ -3112,7 +3059,7 @@ export default function ReusableCrud({
     });
 
     if (isInactive) {
-      if (normalizedCanDelete) {
+      if (canDelete) {
         items.push({
           key: "activate",
           icon: <ReloadOutlined style={{ color: "green" }} />,
@@ -3128,7 +3075,7 @@ export default function ReusableCrud({
         });
       }
     } else {
-      if (normalizedCanDelete) {
+      if (canDelete) {
         items.push({
           key: "inactivate",
           icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3146,7 +3093,7 @@ export default function ReusableCrud({
   const topMenuItems = useMemo(() => {
     const items = [];
 
-    if (normalizedCanView) {
+    if (canView) {
       items.push(
         {
           key: "export",
@@ -3187,7 +3134,7 @@ export default function ReusableCrud({
       }
     }
 
-    if (normalizedCanDelete && viewActive) {
+    if (canDelete && viewActive) {
       items.push({
         key: "bulk-inactivate",
         icon: <DeleteOutlined style={{ color: "red" }} />,
@@ -3228,7 +3175,6 @@ export default function ReusableCrud({
                 selectedRowKeys,
                 data,
                 viewActive,
-                editingRecord,
                 fetchData: () =>
                   fetchData({
                     page: pagination.current,
@@ -3238,7 +3184,6 @@ export default function ReusableCrud({
                 clearSelection: () => setSelectedRowKeys(EMPTY_ARRAY),
                 message,
                 fk: { refreshFkAndSelect },
-                context: rowActionContext,
               }),
           });
         });
@@ -3247,8 +3192,8 @@ export default function ReusableCrud({
     if (!items.length) items.push({ key: "noop", label: "No actions", disabled: true });
     return items;
   }, [
-    normalizedCanView,
-    normalizedCanDelete,
+    canView,
+    canDelete,
     viewActive,
     selectedRowKeys,
     rowMenu,
@@ -3264,8 +3209,6 @@ export default function ReusableCrud({
     inactivePagination.total,
     filteredInactiveData.length,
     refreshFkAndSelect,
-    editingRecord,
-    rowActionContext,
   ]);
 
   const processedColumns = useMemo(() => {
@@ -3290,7 +3233,7 @@ export default function ReusableCrud({
   }, [columns, buildBackendColumnFilter, sortState]);
 
   const canRowActionsExist =
-    showRowActionMenu && (normalizedCanEdit || normalizedCanDelete || (singleactions && singleactions.length > 0));
+    showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
 
   const viewColumn =
     showViewColumn && typeof viewPathBuilder === "function"
@@ -3306,11 +3249,11 @@ export default function ReusableCrud({
       }
       : null;
 
-  const actionColumn = hasActionColumns
-    ? {
+ const actionColumn = hasActionColumns
+  ? {
       title: "Actions",
       fixed: "right",
-      width: 10,
+      width: 90,
       render: (_, record) => (
         <div onClick={(e) => e.stopPropagation()}>
           <Dropdown
@@ -3326,7 +3269,7 @@ export default function ReusableCrud({
         </div>
       ),
     }
-    : null;
+  : null;
   const mainColumns = canRowActionsExist
     ? [...processedColumns, ...(viewColumn ? [viewColumn] : []), ...(actionColumn ? [actionColumn] : [])]
     : [...processedColumns, ...(viewColumn ? [viewColumn] : [])];
@@ -3378,36 +3321,13 @@ export default function ReusableCrud({
     [objectArrayExpandedRows]
   );
 
-  /**
-   * Usage note (backward compatible):
-   * - statusField/readOnlyStatuses/disabledStatuses: dynamic locking by record status.
-   * - rowActionContext/formActionContext: custom context passed to callbacks.
-   * - footerActions: per-record footer buttons [{label,show,disabled,onClick,type,danger}].
-   * - objectArray field can expose summaryRows({ rows, values, field, editingRecord }).
-   * - group fields already support collapsible sections via { type:'group', accordion, defaultOpen }.
-   * - anchor/status tabs are supported with anchorFilters + anchorParamResolver.
-   */
   const renderFormFields = (values, setFieldValue, errors, touched, ui_type) => {
-    const normalizedStatus = String(values?.[statusField] ?? "").toLowerCase();
-    const statusReadOnly = (readOnlyStatuses || EMPTY_ARRAY)
-      .map((x) => String(x).toLowerCase())
-      .includes(normalizedStatus);
-    const statusDisabled = (disabledStatuses || EMPTY_ARRAY)
-      .map((x) => String(x).toLowerCase())
-      .includes(normalizedStatus);
     const renderOneField = (field, parentPath = "") => {
       if (!field) return null;
       if (field.condition && !field.condition(values)) return null;
 
       const colSpan = field.col ?? 24;
-      const readOnly =
-        (typeof field.readOnly === "function"
-          ? !!field.readOnly({ values, editingRecord, status: normalizedStatus, context: formActionContext })
-          : !!field.readOnly) || statusReadOnly;
-      const disabled =
-        (typeof field.disabled === "function"
-          ? !!field.disabled({ values, editingRecord, status: normalizedStatus, context: formActionContext })
-          : !!field.disabled) || statusDisabled;
+      const readOnly = !!field.readOnly;
       const label = field.label;
       const name = field.name;
 
@@ -3588,7 +3508,7 @@ export default function ReusableCrud({
                       ]
                       : options;
 
-                  return (
+                  const selectEl = (
                     <Select
                       showSearch
                       size="large"
@@ -3648,6 +3568,21 @@ export default function ReusableCrud({
                       }}
                       options={mergedOptions}
                     />
+                  );
+
+                  if (!field.quickAdd) return selectEl;
+
+                  return (
+                    <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>{selectEl}</div>
+                      <Button
+                        icon={<PlusOutlined />}
+                        size="large"
+                        disabled={readOnly}
+                        title={`Quick add ${field.quickAdd.title || name}`}
+                        onClick={() => setQuickAddState({ fieldName: name, field })}
+                      />
+                    </div>
                   );
                 }
 
@@ -4017,155 +3952,6 @@ export default function ReusableCrud({
                     </FieldArray>
                   );
 
-                case "inlineTable":
-                  return (
-                    <FieldArray name={name}>
-                      {({ push, remove }) => {
-                        const rows = values?.[name] || EMPTY_ARRAY;
-                        const columnsConfig = field.columns || field.fields || EMPTY_ARRAY;
-                        const minRows = Math.max(0, Number(field.minRows ?? 0));
-                        const deleteKey = field.deleteKey || `${name}_deleted_ids`;
-                        const currentDeleteIds = Array.isArray(values?.[deleteKey]) ? values[deleteKey] : EMPTY_ARRAY;
-
-                        const getRowUiKey = (row, rowIndex) => {
-                          const idPart = row?.id != null ? `id-${row.id}` : `idx-${rowIndex}`;
-                          const mapKey = `${name}:${idPart}`;
-                          if (!inlineTableRowKeysRef.current[mapKey]) {
-                            inlineTableKeyCounterRef.current += 1;
-                            inlineTableRowKeysRef.current[mapKey] = `inline-row-${inlineTableKeyCounterRef.current}`;
-                          }
-                          return inlineTableRowKeysRef.current[mapKey];
-                        };
-
-                        const removeInlineRow = (idx) => {
-                          const target = rows?.[idx];
-                          const existingId = target?.id;
-                          if (existingId != null && existingId !== "") {
-                            const nextDeleteIds = currentDeleteIds.includes(existingId)
-                              ? currentDeleteIds
-                              : [...currentDeleteIds, existingId];
-                            setFieldValue(deleteKey, nextDeleteIds);
-                          }
-                          remove(idx);
-                        };
-
-                        const tableColumns = [
-                          ...columnsConfig.map((col, colIndex) => {
-                            const colKey = col.key ?? col.name ?? `col-${colIndex}`;
-                            return {
-                              title: col.label || col.title || colKey,
-                              dataIndex: colKey,
-                              key: colKey,
-                              width: col.width,
-                              render: (_, row, rowIndex) => {
-                                const path = `${name}[${rowIndex}].${colKey}`;
-                                const value = row?.[colKey];
-                                const cellReadOnly = readOnly || disabled || !!col.readOnly;
-                                const cellError = errors?.[name]?.[rowIndex]?.[colKey];
-                                const cellTouched = touched?.[name]?.[rowIndex]?.[colKey];
-                                const footerVal = typeof col.computeCell === "function"
-                                  ? col.computeCell({ row, rowIndex, rows, values, column: col })
-                                  : value;
-
-                                const cellNode = (() => {
-                                  if (col.type === "number") {
-                                    return (
-                                      <InputNumber
-                                        size="small"
-                                        value={footerVal}
-                                        style={{ width: "100%" }}
-                                        min={col.min}
-                                        max={col.max}
-                                        disabled={cellReadOnly || typeof col.computeCell === "function"}
-                                        onChange={(v) => setFieldValue(path, v)}
-                                      />
-                                    );
-                                  }
-                                  return (
-                                    <Input
-                                      size="small"
-                                      value={footerVal}
-                                      placeholder={col.placeholder || ""}
-                                      disabled={cellReadOnly || typeof col.computeCell === "function"}
-                                      onChange={(e) => setFieldValue(path, e.target.value)}
-                                    />
-                                  );
-                                })();
-
-                                return (
-                                  <div>
-                                    {cellNode}
-                                    {cellTouched && cellError ? (
-                                      <div style={{ color: "#ff4d4f", fontSize: 12, marginTop: 2 }}>{cellError}</div>
-                                    ) : null}
-                                  </div>
-                                );
-                              },
-                            };
-                          }),
-                          {
-                            title: "",
-                            key: "_actions",
-                            width: 52,
-                            render: (_, row, rowIndex) => (
-                              !readOnly && !disabled ? (
-                                <Button
-                                  size="small"
-                                  danger
-                                  type="text"
-                                  icon={<DeleteOutlined />}
-                                  disabled={rows.length <= minRows}
-                                  onClick={() => removeInlineRow(rowIndex)}
-                                />
-                              ) : null
-                            ),
-                          },
-                        ];
-
-                        const dataSource = rows.map((row, idx) => ({ ...row, __uiKey: getRowUiKey(row, idx) }));
-
-                        return (
-                          <div>
-                            <Table
-                              size="small"
-                              pagination={false}
-                              bordered={false}
-                              rowKey="__uiKey"
-                              columns={tableColumns}
-                              dataSource={dataSource}
-                              scroll={{ x: true }}
-                              summary={
-                                typeof field.footerTotals === "function"
-                                  ? () => {
-                                    const totals = field.footerTotals({ rows, values, field });
-                                    return totals ? (
-                                      <Table.Summary.Row>
-                                        <Table.Summary.Cell index={0} colSpan={tableColumns.length}>
-                                          {totals}
-                                        </Table.Summary.Cell>
-                                      </Table.Summary.Row>
-                                    ) : null;
-                                  }
-                                  : undefined
-                              }
-                            />
-                            {!readOnly && !disabled ? (
-                              <Button
-                                style={{ marginTop: 8 }}
-                                type="dashed"
-                                size="small"
-                                icon={<PlusOutlined />}
-                                onClick={() => push(field.defaultItem || EMPTY_OBJECT)}
-                              >
-                                {field.addButtonLabel || "Add Row"}
-                              </Button>
-                            ) : null}
-                          </div>
-                        );
-                      }}
-                    </FieldArray>
-                  );
-
                 case "objectArray":
                   return (
                     <FieldArray name={name}>
@@ -4186,7 +3972,7 @@ export default function ReusableCrud({
                           const detailPath = `${name}[${idx}].${colKey}_detail`;
                           const val = rowValue?.[colKey];
                           const detailVal = rowValue?.[`${colKey}_detail`];
-                          const cellReadOnly = readOnly || disabled || !!c.readOnly;
+                          const cellReadOnly = readOnly || !!c.readOnly;
 
                           if (typeof c.formula === "function") {
                             const computed = c.formula(rowValue, values, idx);
@@ -4470,7 +4256,7 @@ export default function ReusableCrud({
                                       const val = r?.[colKey];
                                       const detailPath = `${name}[${idx}].${colKey}_detail`;
                                       const detailVal = r?.[`${colKey}_detail`];
-                                      const cellReadOnly = readOnly || disabled || !!c.readOnly;
+                                      const cellReadOnly = readOnly || !!c.readOnly;
 
                                       if (typeof c.formula === "function") {
                                         const computed = c.formula(r, values, idx);
@@ -4699,7 +4485,7 @@ export default function ReusableCrud({
                                       />
                                     ) : null}
 
-                                    {!readOnly && !disabled ? (
+                                    {!readOnly ? (
                                       <Button
                                         size="large"
                                         danger
@@ -4760,7 +4546,7 @@ export default function ReusableCrud({
                               );
                             })}
 
-                            {!readOnly && !disabled && (
+                            {!readOnly && (
                               <div style={{ padding: 12, borderTop: "1px solid #f0f0f0" }}>
                                 <Button
                                   size="large"
@@ -4772,27 +4558,6 @@ export default function ReusableCrud({
                                 </Button>
                               </div>
                             )}
-
-                            {typeof field.summaryRows === "function" &&
-                              (field.summaryRows({ rows, values, field, editingRecord }) || EMPTY_ARRAY).map(
-                                (sum, sumIdx) => (
-                                  <div
-                                    key={`${fieldKey}.summary.${sumIdx}`}
-                                    style={{ padding: "8px 12px", borderTop: "1px dashed #e5e7eb" }}
-                                  >
-                                    <Row gutter={[12, 8]}>
-                                      {(sum?.items || EMPTY_ARRAY).map((item, i) => (
-                                        <Col key={`${fieldKey}.summary.${sumIdx}.${i}`} {...getResponsiveColProps(item)}>
-                                          <span style={{ fontWeight: item?.strong ? 700 : 500 }}>
-                                            {item?.label ? `${item.label}: ` : ""}
-                                            {item?.value ?? ""}
-                                          </span>
-                                        </Col>
-                                      ))}
-                                    </Row>
-                                  </div>
-                                )
-                              )}
                           </div>
                         );
                       }}
@@ -4828,145 +4593,48 @@ export default function ReusableCrud({
     );
   };
 
-const submitRecord = async (values, isEditMode, editId) => {
-  const token = getAuthToken();
-  const headers = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
+  const submitRecord = async (values, isEditMode, editId) => {
+    const token = getAuthToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
 
-  const normalizedValues = normalizeFkValuesForSubmit(values);
+    const normalizedValues = normalizeFkValuesForSubmit(values);
+    const payload =
+      typeof transformPayload === "function" ? transformPayload(normalizedValues) : normalizedValues;
+    const containsFile = hasAnyFile(payload);
 
-  const basePayload =
-    typeof transformPayload === "function"
-      ? transformPayload(normalizedValues)
-      : normalizedValues;
-
-  const payloadHook = isEditMode ? beforeUpdatePayload : beforeCreatePayload;
-  const payload =
-    typeof payloadHook === "function"
-      ? payloadHook(basePayload, { values: normalizedValues, isEditMode, editId })
-      : basePayload;
-
-  const containsFile = hasAnyFile(payload);
-
-  const url = isEditMode
-    ? getEntityUrl(editId)
-    : getEntityUrl();
-
-  if (!containsFile) {
-    const res = isEditMode
-      ? await axios.put(url, payload, {
-          headers: { ...headers, "Content-Type": "application/json" },
-        })
-      : await axios.post(url, payload, {
+    if (!containsFile) {
+      if (isEditMode) {
+        const res = await axios.put(`${apiUrl}${editId}/`, payload, {
           headers: { ...headers, "Content-Type": "application/json" },
         });
+        return res.data;
+      }
 
-    return res.data;
-  }
+      const res = await axios.post(apiUrl, payload, {
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+      return res.data;
+    }
 
-  const fd = buildFormData(payload);
+    const fd = buildFormData(payload);
 
-  const res = isEditMode
-    ? await axios.put(url, fd, {
-        headers: { ...headers, "Content-Type": "multipart/form-data" },
-      })
-    : await axios.post(url, fd, {
+    if (isEditMode) {
+      const res = await axios.put(`${apiUrl}${editId}/`, fd, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
+      return res.data;
+    }
 
-  return res.data;
-};
+    const res = await axios.post(apiUrl, fd, {
+      headers: { ...headers, "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  };
 
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
 
-  useEffect(() => {
-    if (!isSingletonMode) return;
-    if (!canView) return;
-
-    const loadSingletonRecord = async () => {
-      try {
-        setLoading(true);
-        setSubmitErrors(EMPTY_ARRAY);
-        const res = await axios.get(buildResourceUrl(apiUrl), { headers: authHeaders });
-        setFormInitialValues(res?.data || crudInitialValues || EMPTY_OBJECT);
-      } catch (error) {
-        console.error("Failed to load singleton record:", error);
-        message.error("Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSingletonRecord();
-  }, [isSingletonMode, canView, apiUrl, authHeaders, crudInitialValues]);
-
-  if (isSingletonMode) {
-    return (
-      <div className="pt-0">
-        <Formik
-          enableReinitialize
-          initialValues={formInitialValues}
-          validationSchema={validationSchema}
-          onSubmit={async (values, { setErrors }) => {
-            try {
-              if (!canEdit) {
-                message.error("You do not have permission to update this setting.");
-                return;
-              }
-              setSubmitErrors(EMPTY_ARRAY);
-              await submitRecord(values, true, null);
-              message.success("Saved successfully");
-            } catch (err) {
-              const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
-              if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
-              setSubmitErrors(allErrors);
-              if (globalErrors.length) showGlobalErrorsNotification(globalErrors);
-              else message.error("Validation failed");
-            }
-          }}
-        >
-          {({ handleSubmit, submitForm, setFieldValue, errors, touched, values, isValid, isSubmitting }) => {
-            formikLiveRef.current = { setFieldValue, values };
-            return (
-              <div style={{ background: "#fff", border: "1px solid #f0f0f0", borderRadius: 4, padding: 16 }}>
-                <CrudFormInner
-                  fields={fields}
-                  values={values}
-                  setFieldValue={setFieldValue}
-                  errors={errors}
-                  touched={touched}
-                  ui_type={ui_type}
-                  handleSubmit={handleSubmit}
-                  onFormValuesChange={onFormValuesChange}
-                  submitLabel={submitLabelOverride || "Save"}
-                  renderFormFields={renderFormFields}
-                  submitErrors={submitErrors}
-                  hideSubmitButton={hideSubmitButton}
-                  onSubmitButtonClick={onSubmitButtonClick}
-                  renderSubmitButton={renderSubmitButton}
-                  hydrateFkLabels={hydrateMissingFkLabel}
-                  submitMeta={{
-                    values,
-                    errors,
-                    touched,
-                    handleSubmit,
-                    submitForm,
-                    setFieldValue,
-                    isValid,
-                    isSubmitting,
-                    editingRecord: null,
-                    loading,
-                  }}
-                />
-              </div>
-            );
-          }}
-        </Formik>
-      </div>
-    );
-  }
-
   if (isFormOnlyMode) {
-    const submitLabel = ui_type === "edit form" ? "Save" : "Save";
+    const submitLabel = ui_type === "edit form" ? "Update" : "Add";
 
     return (
       <div className="pt-0">
@@ -5048,6 +4716,29 @@ const submitRecord = async (values, isEditMode, editId) => {
             );
           }}
         </Formik>
+        {quickAddState && (
+          <QuickAddModal
+            open
+            title={quickAddState.field.quickAdd.title || "Quick Add"}
+            apiUrl={`${import.meta.env.VITE_APP_BACKEND_URL}${quickAddState.field.quickAdd.apiUrl}`}
+            fields={quickAddState.field.quickAdd.fields || []}
+            validationSchema={quickAddState.field.quickAdd.validationSchema}
+            initialValues={quickAddState.field.quickAdd.initialValues || {}}
+            transformPayload={quickAddState.field.quickAdd.transformPayload}
+            onClose={() => setQuickAddState(null)}
+            onSuccess={(newRecord) => {
+              const { fieldName, field: f } = quickAddState;
+              refreshFkAndSelect(fieldName, {
+                value: newRecord[f.fkValueKey || "id"],
+                label: f.fkLabel
+                  ? f.fkLabel(newRecord)
+                  : newRecord.name || String(newRecord[f.fkValueKey || "id"]),
+                raw: newRecord,
+              });
+              setQuickAddState(null);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -5114,8 +4805,6 @@ const submitRecord = async (values, isEditMode, editId) => {
           isValid,
           isSubmitting,
           editingRecord,
-          status: String(values?.[statusField] ?? "").toLowerCase(),
-          context: formActionContext,
         };
 
         const inner = (
@@ -5128,7 +4817,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             touched={touched}
             handleSubmit={handleSubmit}
             onFormValuesChange={onFormValuesChange}
-            submitLabel={submitLabelOverride || (editingRecord ? "Save" : "Save")}
+            submitLabel={submitLabelOverride || (editingRecord ? "Update" : "Add")}
             renderFormFields={renderFormFields}
             hideSubmitButton={hideSubmitButton || form_ui === "drawer"}
             submitErrors={submitErrors}
@@ -5195,33 +4884,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                   setVisible(false);
                   setSubmitErrors(EMPTY_ARRAY);
                 }}
-                footer={
-                  Array.isArray(footerActions) && footerActions.length > 0 ? (
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                      {footerActions
-                        .filter((btn) =>
-                          typeof btn?.show === "function"
-                            ? btn.show({ values, editingRecord, status: submitMeta.status, context: formActionContext })
-                            : btn?.show !== false
-                        )
-                        .map((btn, idx) => (
-                          <Button
-                            key={`modal-footer-${idx}`}
-                            type={btn?.type || "default"}
-                            danger={!!btn?.danger}
-                            disabled={
-                              typeof btn?.disabled === "function"
-                                ? btn.disabled({ values, editingRecord, status: submitMeta.status, context: formActionContext })
-                                : !!btn?.disabled
-                            }
-                            onClick={() => btn?.onClick?.({ values, editingRecord, status: submitMeta.status, submitForm, context: formActionContext })}
-                          >
-                            {btn?.label || `Action ${idx + 1}`}
-                          </Button>
-                        ))}
-                    </div>
-                  ) : null
-                }
+                footer={null}
                 destroyOnClose
               >
                 {inner}
@@ -5247,7 +4910,7 @@ const submitRecord = async (values, isEditMode, editId) => {
           </Button>
         </Link>
       ) : (<></>)}
-      {normalizedCanAdd && !button_ui && ui_type !== "add_related" && (
+      {canAdd && !button_ui && ui_type !== "add_related" && (
 
         <Button
           icon={<PlusOutlined />}
@@ -5265,7 +4928,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       )}
 
-      {hasActions && normalizedCanView && (
+      {hasActions && canView && (
         <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
           <Button icon={<MoreOutlined />}></Button>
         </Dropdown>
@@ -5302,14 +4965,14 @@ const submitRecord = async (values, isEditMode, editId) => {
           type="default"
           icon={button_ui_id ? <EditOutlined /> : <PlusOutlined />}
           onClick={handleQuickButtonClick}
-          disabled={(button_ui_id && !normalizedCanEdit) || (!button_ui_id && !normalizedCanAdd)}
+          disabled={(button_ui_id && !canEdit) || (!button_ui_id && !canAdd)}
         >
           {button_ui_id ? `Edit ${title?.slice?.(0, -1) || title}` : `Add ${title?.slice?.(0, -1) || title}`}
         </Button>
       ) : (
         <div>
           <div className="p-0">
-            {normalizedCanView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
+            {canView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
               <div
                 style={{
                   marginBottom: 0,
@@ -5343,7 +5006,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                           ...(action?.actions || EMPTY_OBJECT),
                         }));
 
-                        await axios.put(normalizedApiEndpoint, payload, {
+                        await axios.put(apiUrl, payload, {
                           headers: {
                             ...authHeaders,
                             "Content-Type": "application/json",
@@ -5368,9 +5031,9 @@ const submitRecord = async (values, isEditMode, editId) => {
             )}
 
             {(!hasAnchors || button_ui) && (
-              <div className="flex gap-2 mb-0 bg-white">
+              <div className="flex gap-2 mb-0">
                 <Row justify="space-between" style={{ width: "100%" }} className="m-0">
-                  {showSearch && normalizedCanView && (
+                  {showSearch && canView && (
                     <Col xs={16} style={{ display: "flex", gap: 6 }}>
                       <Input
                         size="large"
@@ -5398,7 +5061,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                         </Button>
                       </Link>
                     ) : (<></>)}
-                    {normalizedCanAdd && (
+                    {canAdd && (
                       <Button
                         icon={<PlusOutlined />}
                         type="primary"
@@ -5412,7 +5075,7 @@ const submitRecord = async (values, isEditMode, editId) => {
                       </Button>
                     )}
 
-                    {hasActions && normalizedCanView && (
+                    {hasActions && canView && (
                       <Dropdown menu={{ items: topMenuItems }} placement="bottomLeft" trigger={["click"]}>
                         <Button icon={<MoreOutlined />} type="icon"></Button>
                       </Dropdown>
@@ -5422,7 +5085,7 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {hasAnchors && showSearch && normalizedCanView && (
+            {hasAnchors && showSearch && canView && (
               <div
                 className="d-flex justify-content-space-between w-100"
                 style={{ padding: "0px", borderBottom: "1px solid #eef0f4" }}
@@ -5454,16 +5117,17 @@ const submitRecord = async (values, isEditMode, editId) => {
               </div>
             )}
 
-            {normalizedCanView ? (
+            {canView ? (
               <div style={{ padding: "0px" }}>
                 <Table
                   rowKey="id"
                   columns={mainColumns}
+                  scroll={{ x: 1800 }}
                   size="small"
                   dataSource={filteredData}
                   onRow={activeTableRowFunction}
                   loading={loading}
-                  rowSelection={normalizedCanView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
+                  rowSelection={canView ? { selectedRowKeys, onChange: setSelectedRowKeys } : null}
                   pagination={{
                     current: pagination.current,
                     pageSize: pagination.pageSize,
@@ -5510,7 +5174,7 @@ const submitRecord = async (values, isEditMode, editId) => {
 
       {formNode}
 
-      {normalizedCanView && enableInactiveDrawer && (
+      {canView && enableInactiveDrawer && (
         <Drawer
           width={900}
           title={`Inactive ${title} (${inactivePagination.total ?? filteredInactiveData.length})`}
@@ -5550,7 +5214,7 @@ const submitRecord = async (values, isEditMode, editId) => {
             dataSource={filteredInactiveData}
             loading={inactiveLoading}
             rowSelection={
-              normalizedCanView
+              canView
                 ? {
                   selectedRowKeys: selectedInactiveRowKeys,
                   onChange: setSelectedInactiveRowKeys,
@@ -5592,6 +5256,30 @@ const submitRecord = async (values, isEditMode, editId) => {
             }}
           />
         </Drawer>
+      )}
+
+      {quickAddState && (
+        <QuickAddModal
+          open
+          title={quickAddState.field.quickAdd.title || "Quick Add"}
+          apiUrl={`${import.meta.env.VITE_APP_BACKEND_URL}${quickAddState.field.quickAdd.apiUrl}`}
+          fields={quickAddState.field.quickAdd.fields || []}
+          validationSchema={quickAddState.field.quickAdd.validationSchema}
+          initialValues={quickAddState.field.quickAdd.initialValues || {}}
+          transformPayload={quickAddState.field.quickAdd.transformPayload}
+          onClose={() => setQuickAddState(null)}
+          onSuccess={(newRecord) => {
+            const { fieldName, field: f } = quickAddState;
+            refreshFkAndSelect(fieldName, {
+              value: newRecord[f.fkValueKey || "id"],
+              label: f.fkLabel
+                ? f.fkLabel(newRecord)
+                : newRecord.name || String(newRecord[f.fkValueKey || "id"]),
+              raw: newRecord,
+            });
+            setQuickAddState(null);
+          }}
+        />
       )}
     </>
   );

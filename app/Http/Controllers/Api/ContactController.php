@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Contact;
+use App\Models\ContactGroup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -15,6 +16,10 @@ class ContactController extends BaseCrudApiController
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = true;
+
+    protected bool $autoFillBranchOnCreate = true;
+
+    protected bool $preventBranchChangeOnUpdate = true;
 
     protected array $relations = [
         'branch',
@@ -37,6 +42,7 @@ class ContactController extends BaseCrudApiController
         'branch.name',
         'branch.code',
         'contactGroup.name',
+        'creditTerm.name',
     ];
 
     protected array $filterable = [
@@ -68,7 +74,7 @@ class ContactController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
         'contact_type' => ['required', 'in:customer,supplier,lead'],
         'name' => ['required', 'string', 'max:180'],
@@ -87,7 +93,7 @@ class ContactController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
+            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'contact_group_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
             'contact_type' => ['sometimes', 'required', 'in:customer,supplier,lead'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
@@ -102,5 +108,51 @@ class ContactController extends BaseCrudApiController
             'active' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateParentDataBeforeCreate(
+        array $parentData,
+        array $nestedData
+    ): array {
+        $this->validateContactGroupBranch($parentData);
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $data = $parentData;
+
+        if (!array_key_exists('branch_id', $data)) {
+            $data['branch_id'] = $record->branch_id;
+        }
+
+        $this->validateContactGroupBranch($data);
+
+        return $parentData;
+    }
+
+    protected function validateContactGroupBranch(array $data): void
+    {
+        if (empty($data['contact_group_id'])) {
+            return;
+        }
+
+        $contactGroup = ContactGroup::query()->find($data['contact_group_id']);
+
+        if (!$contactGroup) {
+            return;
+        }
+
+        if (
+            !empty($data['branch_id'])
+            && !empty($contactGroup->branch_id)
+            && (string) $contactGroup->branch_id !== (string) $data['branch_id']
+        ) {
+            abort(422, 'Contact group must belong to the same branch.');
+        }
     }
 }

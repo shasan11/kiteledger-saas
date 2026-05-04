@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Branch;
 use App\Models\ContactGroup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -47,6 +46,7 @@ class ContactGroupController extends BaseCrudApiController
 
     protected array $booleanFilters = [
         'active',
+        'is_system_generated',
     ];
 
     protected array $sortable = [
@@ -84,31 +84,6 @@ class ContactGroupController extends BaseCrudApiController
         ];
     }
 
-    /**
-     * Force branch assignment on create.
-     */
-    protected function applyBranchToCreatePayload(array $data, Request $request): array
-    {
-        if (!empty($data['branch_id'])) {
-            return $data;
-        }
-
-        $branchId =
-            $request->input('branch_id')
-            ?: $request->query('branch_id')
-            ?: $request->header('X-Branch-ID')
-            ?: $request->user()?->current_branch_id
-            ?: $request->user()?->branch_id
-            ?: Branch::query()->where('code', 'MAIN')->value('id')
-            ?: Branch::query()->value('id');
-
-        if ($branchId) {
-            $data['branch_id'] = (string) $branchId;
-        }
-
-        return $data;
-    }
-
     protected function mutateParentDataBeforeCreate(
         array $parentData,
         array $nestedData
@@ -121,8 +96,8 @@ class ContactGroupController extends BaseCrudApiController
 
             if (
                 $parent
-                && $parentData['branch_id'] !== null
-                && $parent->branch_id !== null
+                && !empty($parentData['branch_id'])
+                && !empty($parent->branch_id)
                 && (string) $parent->branch_id !== (string) $parentData['branch_id']
             ) {
                 abort(422, 'Parent contact group must belong to the same branch.');
@@ -153,8 +128,8 @@ class ContactGroupController extends BaseCrudApiController
 
             if (
                 $parent
-                && $record->branch_id !== null
-                && $parent->branch_id !== null
+                && !empty($record->branch_id)
+                && !empty($parent->branch_id)
                 && (string) $parent->branch_id !== (string) $record->branch_id
             ) {
                 abort(422, 'Parent contact group must belong to the same branch.');

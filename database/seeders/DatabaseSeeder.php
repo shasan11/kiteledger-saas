@@ -17,8 +17,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             MainBranchSeeder::class,
             CurrencySeeder::class,
-            ContactGroupSeeder::class,
-            ContactSeeder::class
+            // ContactGroupSeeder::class,
+            // ContactSeeder::class
             //AccountingSeeder::class,
         ]);
     }

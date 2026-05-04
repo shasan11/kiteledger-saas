@@ -10,6 +10,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -51,7 +52,12 @@ abstract class BaseCrudApiController extends Controller
 
     protected array $updateRules = [];
 
-    protected bool $branchScoped = true;
+    /**
+     * IMPORTANT:
+     * Default false because many master tables do NOT have branch_id.
+     * Enable this only inside controllers whose table actually has branch_id.
+     */
+    protected bool $branchScoped = false;
 
     protected string $branchColumn = 'branch_id';
 
@@ -59,9 +65,9 @@ abstract class BaseCrudApiController extends Controller
 
     protected string $branchHeaderKey = 'X-Branch-ID';
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected ?string $branchBypassPermission = 'branches.view-all';
 
@@ -125,8 +131,9 @@ abstract class BaseCrudApiController extends Controller
 
             $this->saveNestedCollections($record, $nestedData, $deletedIds, false);
 
-            return $this->afterSave($record, $parentData, $nestedData, false)
-                ->fresh($this->eagerLoadRelations());
+            $record = $this->afterSave($record, $parentData, $nestedData, false);
+
+            return $record->fresh($this->validEagerLoadRelations($record));
         });
 
         return response()->json(
@@ -143,7 +150,7 @@ abstract class BaseCrudApiController extends Controller
         $this->assertRecordBranchAccess($request, $record);
 
         return response()->json(
-            $this->serializeRecord($record->load($this->eagerLoadRelations()))
+            $this->serializeRecord($record->load($this->validEagerLoadRelations($record)))
         );
     }
 
@@ -173,8 +180,9 @@ abstract class BaseCrudApiController extends Controller
 
             $this->saveNestedCollections($record, $nestedData, $deletedIds, true);
 
-            return $this->afterSave($record, $parentData, $nestedData, true)
-                ->fresh($this->eagerLoadRelations());
+            $record = $this->afterSave($record, $parentData, $nestedData, true);
+
+            return $record->fresh($this->validEagerLoadRelations($record));
         });
 
         return response()->json(
@@ -262,8 +270,9 @@ abstract class BaseCrudApiController extends Controller
 
                 $this->saveNestedCollections($record, $nestedData, $deletedIds, false);
 
-                return $this->afterSave($record, $parentData, $nestedData, false)
-                    ->fresh($this->eagerLoadRelations());
+                $record = $this->afterSave($record, $parentData, $nestedData, false);
+
+                return $record->fresh($this->validEagerLoadRelations($record));
             });
         });
 
@@ -276,6 +285,12 @@ abstract class BaseCrudApiController extends Controller
     public function bulkUpdate(Request $request)
     {
         $records = $request->input('records', []);
+
+        if (!is_array($records)) {
+            $this->throwValidation([
+                'records' => ['The records field must be an array.'],
+            ]);
+        }
 
         return $this->bulkUpdateRecords($request, $records);
     }
@@ -297,7 +312,7 @@ abstract class BaseCrudApiController extends Controller
     {
         $this->checkAccess($request, 'bulkUpdate');
 
-        if (!is_array($records) || count($records) < 1) {
+        if (count($records) < 1) {
             $this->throwValidation([
                 'records' => ['The records field is required and must contain at least one item.'],
             ]);
@@ -368,8 +383,9 @@ abstract class BaseCrudApiController extends Controller
 
                 $this->saveNestedCollections($record, $nestedData, $deletedIds, true);
 
-                return $this->afterSave($record, $parentData, $nestedData, true)
-                    ->fresh($this->eagerLoadRelations());
+                $record = $this->afterSave($record, $parentData, $nestedData, true);
+
+                return $record->fresh($this->validEagerLoadRelations($record));
             });
         });
 
@@ -426,7 +442,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function baseQuery(): Builder
     {
-        return $this->newQuery()->with($this->eagerLoadRelations());
+        return $this->newQuery()->with($this->validEagerLoadRelations());
     }
 
     protected function newQuery(): Builder
@@ -548,18 +564,29 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        $query->where(function (Builder $query) use ($search) {
+        $model = $this->newModelInstance();
+
+        $query->where(function (Builder $query) use ($search, $model) {
             foreach ($this->searchable as $field) {
                 if (Str::contains($field, '.')) {
                     $parts = explode('.', $field);
                     $column = array_pop($parts);
                     $relationPath = implode('.', $parts);
+                    $rootRelation = explode('.', $relationPath)[0];
+
+                    if (!method_exists($model, $rootRelation)) {
+                        continue;
+                    }
 
                     $query->orWhereHas($relationPath, function (Builder $q) use ($column, $search) {
                         $q->where($column, 'like', "%{$search}%");
                     });
                 } else {
-                    $query->orWhere($field, 'like', "%{$search}%");
+                    if (!$this->tableHasColumn($field)) {
+                        continue;
+                    }
+
+                    $query->orWhere($this->qualifiedColumn($field), 'like', "%{$search}%");
                 }
             }
         });
@@ -568,14 +595,22 @@ abstract class BaseCrudApiController extends Controller
     protected function applyFilters(Builder $query, Request $request): void
     {
         foreach ($this->filterable as $field) {
+            if (!$this->tableHasColumn($field)) {
+                continue;
+            }
+
             $value = $this->requestParam($request, $field);
 
             if ($value !== null && $value !== '') {
-                $query->where($field, $value);
+                $query->where($this->qualifiedColumn($field), $value);
             }
         }
 
         foreach ($this->booleanFilters as $field) {
+            if (!$this->tableHasColumn($field)) {
+                continue;
+            }
+
             $value = $this->requestParam($request, $field);
 
             if ($value === null || $value === '') {
@@ -585,7 +620,7 @@ abstract class BaseCrudApiController extends Controller
             $bool = $this->toBool($value);
 
             if ($bool !== null) {
-                $query->where($field, $bool);
+                $query->where($this->qualifiedColumn($field), $bool);
             }
         }
 
@@ -600,15 +635,19 @@ abstract class BaseCrudApiController extends Controller
 
             $actualColumn = is_array($config) ? $column : $config;
 
+            if (!$this->tableHasColumn($actualColumn)) {
+                continue;
+            }
+
             $from = $this->requestParam($request, $fromKey);
             $to = $this->requestParam($request, $toKey);
 
             if ($from) {
-                $query->whereDate($actualColumn, '>=', $from);
+                $query->whereDate($this->qualifiedColumn($actualColumn), '>=', $from);
             }
 
             if ($to) {
-                $query->whereDate($actualColumn, '<=', $to);
+                $query->whereDate($this->qualifiedColumn($actualColumn), '<=', $to);
             }
         }
     }
@@ -657,8 +696,13 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        if (!$applied) {
+        if (!$applied && $this->tableHasColumn('created_at')) {
             $query->orderBy($this->qualifiedColumn('created_at'), 'desc');
+            $applied = true;
+        }
+
+        if (!$applied && $this->tableHasColumn($this->primaryKeyName())) {
+            $query->orderBy($this->qualifiedColumn($this->primaryKeyName()), 'desc');
         }
     }
 
@@ -671,13 +715,19 @@ abstract class BaseCrudApiController extends Controller
         if (array_key_exists($field, $this->sortable)) {
             $column = $this->sortable[$field];
 
-            return Str::contains($column, '.')
-                ? $column
-                : $this->qualifiedColumn($column);
+            if (Str::contains($column, '.')) {
+                return $column;
+            }
+
+            return $this->tableHasColumn($column)
+                ? $this->qualifiedColumn($column)
+                : null;
         }
 
         if (in_array($field, $this->sortable, true)) {
-            return $this->qualifiedColumn($field);
+            return $this->tableHasColumn($field)
+                ? $this->qualifiedColumn($field)
+                : null;
         }
 
         return null;
@@ -685,7 +735,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchScope(Builder $query, Request $request): void
     {
-        if (!$this->branchScoped) {
+        if (!$this->usesBranchScope()) {
             return;
         }
 
@@ -722,7 +772,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchToCreatePayload(array $data, Request $request): array
     {
-        if (!$this->branchScoped) {
+        if (!$this->usesBranchScope()) {
             return $data;
         }
 
@@ -749,7 +799,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchToUpdatePayload(array $data, Request $request, Model $record): array
     {
-        if (!$this->branchScoped) {
+        if (!$this->usesBranchScope()) {
             return $data;
         }
 
@@ -768,7 +818,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function assertRecordBranchAccess(Request $request, Model $record): void
     {
-        if (!$this->branchScoped) {
+        if (!$this->usesBranchScope()) {
             return;
         }
 
@@ -787,7 +837,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function assertBranchIdAllowed(Request $request, mixed $branchId): void
     {
-        if (!$this->branchScoped) {
+        if (!$this->usesBranchScope()) {
             return;
         }
 
@@ -1021,6 +1071,10 @@ abstract class BaseCrudApiController extends Controller
         bool $isUpdate
     ): void {
         foreach ($this->nested as $field => $config) {
+            if (empty($config['model']) || empty($config['foreign_key'])) {
+                continue;
+            }
+
             $relation = $config['relation'] ?? $field;
             $childModel = $config['model'];
             $foreignKey = $config['foreign_key'];
@@ -1082,7 +1136,7 @@ abstract class BaseCrudApiController extends Controller
         array $config,
         bool $isUpdate
     ): ?Model {
-        $relation = $config['relation'];
+        $relation = $config['relation'] ?? null;
         $childModel = $config['model'];
         $foreignKey = $config['foreign_key'];
         $childKey = $this->primaryKeyName($childModel);
@@ -1109,16 +1163,16 @@ abstract class BaseCrudApiController extends Controller
 
             if (!$child) {
                 $this->throwValidation([
-                    $relation => ['One or more child record IDs do not belong to this parent.'],
+                    $relation ?: 'items' => ['One or more child record IDs do not belong to this parent.'],
                 ]);
             }
 
             $child->update($row);
 
-            return $child->fresh($config['relations'] ?? []);
+            return $child->fresh($this->validRelationsForModel($child, $config['relations'] ?? []));
         }
 
-        if (method_exists($parent, $relation)) {
+        if ($relation && method_exists($parent, $relation)) {
             return $parent->{$relation}()->create($row);
         }
 
@@ -1212,7 +1266,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function serializeRecord(Model $record): array
     {
-        $record->loadMissing($this->eagerLoadRelations());
+        $record->loadMissing($this->validEagerLoadRelations($record));
 
         $data = $record->toArray();
 
@@ -1240,7 +1294,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function serializeNestedRecord(Model $child, array $config): array
     {
-        $child->loadMissing($config['relations'] ?? []);
+        $child->loadMissing($this->validRelationsForModel($child, $config['relations'] ?? []));
 
         $data = $child->toArray();
 
@@ -1256,6 +1310,10 @@ abstract class BaseCrudApiController extends Controller
     protected function attachRelationDetails(array $data, Model $record, array $relationDetails): array
     {
         foreach ($relationDetails as $relation => $foreignKey) {
+            if (!method_exists($record, $relation)) {
+                continue;
+            }
+
             $related = $record->{$relation} ?? null;
 
             $serialized = $this->serializeRelated($related);
@@ -1313,7 +1371,33 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        return array_values(array_unique($relations));
+        return array_values(array_unique(array_filter($relations)));
+    }
+
+    protected function validEagerLoadRelations(?Model $model = null): array
+    {
+        $model = $model ?: $this->newModelInstance();
+
+        return $this->validRelationsForModel($model, $this->eagerLoadRelations());
+    }
+
+    protected function validRelationsForModel(Model $model, array $relations): array
+    {
+        $valid = [];
+
+        foreach ($relations as $relation) {
+            if (!$relation || !is_string($relation)) {
+                continue;
+            }
+
+            $rootRelation = explode('.', $relation)[0];
+
+            if (method_exists($model, $rootRelation)) {
+                $valid[] = $relation;
+            }
+        }
+
+        return array_values(array_unique($valid));
     }
 
     protected function checkAccess(Request $request, string $action, mixed $record = null): void
@@ -1464,6 +1548,32 @@ abstract class BaseCrudApiController extends Controller
         return $this->tableName() . '.' . $column;
     }
 
+    protected function tableHasColumn(string $column, ?string $class = null): bool
+    {
+        if ($column === '') {
+            return false;
+        }
+
+        if (Str::contains($column, '.')) {
+            $column = Str::afterLast($column, '.');
+        }
+
+        try {
+            return Schema::hasColumn($this->tableName($class), $column);
+        } catch (\Throwable $e) {
+            return true;
+        }
+    }
+
+    protected function usesBranchScope(): bool
+    {
+        if (!$this->branchScoped) {
+            return false;
+        }
+
+        return $this->tableHasColumn($this->branchColumn);
+    }
+
     protected function isListArray(array $array): bool
     {
         if ($array === []) {
@@ -1484,6 +1594,7 @@ abstract class BaseCrudApiController extends Controller
             $original->server->all()
         );
 
+        $request->headers->replace($original->headers->all());
         $request->setUserResolver($original->getUserResolver());
 
         return $request;

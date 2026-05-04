@@ -14,34 +14,29 @@ class ProductCategoryController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'parent',
         'children',
         'products',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'parent' => 'parent_id',
     ];
 
     protected array $searchable = [
         'name',
         'description',
-        'branch.name',
-        'branch.code',
         'parent.name',
     ];
 
     protected array $filterable = [
-        'branch_id',
         'parent_id',
     ];
 
@@ -61,8 +56,7 @@ class ProductCategoryController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id'           => ['nullable', 'uuid', 'exists:branches,id'],
-        'name'                => ['required', 'string', 'max:150'],
+        'name'                => ['required', 'string', 'max:120'],
         'parent_id'           => ['nullable', 'uuid', 'exists:product_categories,id'],
         'description'         => ['nullable', 'string'],
         'active'              => ['nullable', 'boolean'],
@@ -73,8 +67,7 @@ class ProductCategoryController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id'           => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'name'                => ['sometimes', 'required', 'string', 'max:150'],
+            'name'                => ['sometimes', 'required', 'string', 'max:120'],
             'parent_id'           => ['sometimes', 'nullable', 'uuid', 'exists:product_categories,id'],
             'description'         => ['sometimes', 'nullable', 'string'],
             'active'              => ['sometimes', 'nullable', 'boolean'],
@@ -87,7 +80,7 @@ class ProductCategoryController extends BaseCrudApiController
         array $parentData,
         array $nestedData
     ): array {
-        $this->validateParentBranch($parentData);
+        $this->validateParent($parentData);
 
         return $parentData;
     }
@@ -97,20 +90,12 @@ class ProductCategoryController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
-        if (
-            array_key_exists('parent_id', $parentData)
-            && $parentData['parent_id'] !== null
-            && (string) $parentData['parent_id'] === (string) $record->id
-        ) {
-            abort(422, 'A product category cannot be its own parent.');
-        }
-
-        $this->validateParentBranch($parentData, $record);
+        $this->validateParent($parentData, $record);
 
         return $parentData;
     }
 
-    protected function validateParentBranch(array $parentData, ?Model $record = null): void
+    protected function validateParent(array $parentData, ?Model $record = null): void
     {
         if (
             !array_key_exists('parent_id', $parentData)
@@ -119,20 +104,34 @@ class ProductCategoryController extends BaseCrudApiController
             return;
         }
 
-        $parent = ProductCategory::query()->find($parentData['parent_id']);
-
-        if (!$parent) {
-            return;
-        }
-
-        $branchId = $record?->branch_id ?? ($parentData['branch_id'] ?? null);
-
         if (
-            $branchId !== null
-            && $parent->branch_id !== null
-            && (string) $parent->branch_id !== (string) $branchId
+            $record
+            && (string) $parentData['parent_id'] === (string) $record->id
         ) {
-            abort(422, 'Parent category must belong to the same branch.');
+            abort(422, 'A product category cannot be its own parent.');
         }
+
+        if ($record && $this->wouldCreateCircularParent($record, $parentData['parent_id'])) {
+            abort(422, 'Circular parent category is not allowed.');
+        }
+    }
+
+    protected function wouldCreateCircularParent(Model $record, string $parentId): bool
+    {
+        $currentParent = ProductCategory::query()->find($parentId);
+
+        while ($currentParent) {
+            if ((string) $currentParent->id === (string) $record->id) {
+                return true;
+            }
+
+            if (!$currentParent->parent_id) {
+                return false;
+            }
+
+            $currentParent = ProductCategory::query()->find($currentParent->parent_id);
+        }
+
+        return false;
     }
 }

@@ -107,7 +107,7 @@ export default function ContactGroups(props) {
       <ReusableCrud
         icon={<TeamOutlined />}
         title="Contact Groups"
-        apiUrl={api('/api/contact-groups')}
+        apiUrl={api('/api/contact-groups/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
