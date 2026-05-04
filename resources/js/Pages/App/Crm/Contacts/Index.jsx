@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Space, Tag, Typography } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
@@ -160,8 +160,8 @@ export default function Contacts(props) {
             rows: 2,
             placeholder: 'Full address',
         },
-       
-         
+
+
         {
             name: 'phone',
             label: 'Phone',
@@ -281,6 +281,10 @@ export default function Contacts(props) {
                 canDelete={true}
                 hasActions={true}
                 hasActionColumns={true}
+                activeTableRowFunction={(record) => ({
+                    onClick: () => router.visit(route('crm.contacts.show', record.id)),
+                    style: { cursor: 'pointer' },
+                })}
                 anchorFilters={[
                     {
                         key: 'all',
