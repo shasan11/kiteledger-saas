@@ -90,9 +90,9 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () => visit('crm.contacts.index', '/crm/contacts'),
                     },
                     {
-                        key: 'deals',
-                        label: 'Deals',
-                        onClick: () => visit('crm.deals.index', '/crm/deals'),
+                        key: 'leads',
+                        label: 'Leads',
+                        onClick: () => visit('crm.leads.index', '/crm/leads'),
                     },
                     {
                         key: 'activities',
