@@ -117,7 +117,12 @@ class MasterDataTypesSeeder extends Seeder
         foreach ($masterData as $data) {
             MasterData::updateOrCreate(
                 ['type' => $data['type'], 'key' => $data['key']],
-                ['name' => $data['name']]
+                [
+                    'group' => $data['type'],
+                    'value' => $data['name'],
+                    'active' => true,
+                    'is_system_generated' => true,
+                ]
             );
         }
     }

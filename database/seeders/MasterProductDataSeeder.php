@@ -27,22 +27,27 @@ class MasterProductDataSeeder extends Seeder
         }
 
         $units = [
-            ['code' => 'PCS', 'name' => 'Pcs'],
-            ['code' => 'KG', 'name' => 'Kg'],
-            ['code' => 'GRAM', 'name' => 'Gram'],
-            ['code' => 'LITER', 'name' => 'Liter'],
-            ['code' => 'METER', 'name' => 'Meter'],
-            ['code' => 'BOX', 'name' => 'Box'],
-            ['code' => 'CARTON', 'name' => 'Carton'],
-            ['code' => 'HOUR', 'name' => 'Hour'],
-            ['code' => 'DAY', 'name' => 'Day'],
-            ['code' => 'SERVICE', 'name' => 'Service'],
+            ['short_name' => 'PCS', 'name' => 'Pcs'],
+            ['short_name' => 'KG', 'name' => 'Kg'],
+            ['short_name' => 'GRAM', 'name' => 'Gram'],
+            ['short_name' => 'LITER', 'name' => 'Liter'],
+            ['short_name' => 'METER', 'name' => 'Meter'],
+            ['short_name' => 'BOX', 'name' => 'Box'],
+            ['short_name' => 'CARTON', 'name' => 'Carton'],
+            ['short_name' => 'HOUR', 'name' => 'Hour'],
+            ['short_name' => 'DAY', 'name' => 'Day'],
+            ['short_name' => 'SERVICE', 'name' => 'Service'],
         ];
 
         foreach ($units as $unit) {
             ProductUnit::updateOrCreate(
-                ['code' => $unit['code']],
-                ['name' => $unit['name']]
+                ['short_name' => $unit['short_name']],
+                [
+                    'name' => $unit['name'],
+                    'accept_fractional' => true,
+                    'active' => true,
+                    'is_system_generated' => true,
+                ]
             );
         }
     }

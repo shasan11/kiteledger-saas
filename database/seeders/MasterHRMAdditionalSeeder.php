@@ -22,10 +22,12 @@ class MasterHRMAdditionalSeeder extends Seeder
         );
 
         WeeklyHoliday::updateOrCreate(
-            ['start_day' => 'Saturday'],
+            ['name' => 'Saturday Weekly Holiday'],
             [
+                'start_day' => 'Saturday',
                 'end_day' => 'Saturday',
-                'is_secondary' => false,
+                'active' => true,
+                'is_system_generated' => true,
             ]
         );
 
@@ -35,7 +37,8 @@ class MasterHRMAdditionalSeeder extends Seeder
                 'start_time' => '09:00:00',
                 'end_time' => '18:00:00',
                 'work_hour' => 8,
-                'description' => 'General working hours',
+                'active' => true,
+                'is_system_generated' => true,
             ]
         );
 

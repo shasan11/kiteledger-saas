@@ -39,10 +39,10 @@ class MasterContactDataSeeder extends Seeder
         }
 
         $priorities = [
-            ['name' => 'Low', 'order' => 1],
-            ['name' => 'Medium', 'order' => 2],
-            ['name' => 'High', 'order' => 3],
-            ['name' => 'Urgent', 'order' => 4],
+            ['name' => 'Low', 'color' => '#52c41a'],
+            ['name' => 'Medium', 'color' => '#1677ff'],
+            ['name' => 'High', 'color' => '#faad14'],
+            ['name' => 'Urgent', 'color' => '#ff4d4f'],
         ];
 
         foreach ($priorities as $priority) {

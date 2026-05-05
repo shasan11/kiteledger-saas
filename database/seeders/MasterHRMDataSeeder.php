@@ -12,13 +12,13 @@ class MasterHRMDataSeeder extends Seeder
     public function run(): void
     {
         $statuses = [
-            ['name' => 'Full Time'],
-            ['name' => 'Part Time'],
-            ['name' => 'Contract'],
-            ['name' => 'Probation'],
-            ['name' => 'Intern'],
-            ['name' => 'Resigned'],
-            ['name' => 'Terminated'],
+            ['name' => 'Full Time', 'colour_value' => '#52c41a'],
+            ['name' => 'Part Time', 'colour_value' => '#1677ff'],
+            ['name' => 'Contract', 'colour_value' => '#722ed1'],
+            ['name' => 'Probation', 'colour_value' => '#faad14'],
+            ['name' => 'Intern', 'colour_value' => '#13c2c2'],
+            ['name' => 'Resigned', 'colour_value' => '#8c8c8c'],
+            ['name' => 'Terminated', 'colour_value' => '#ff4d4f'],
         ];
 
         foreach ($statuses as $status) {

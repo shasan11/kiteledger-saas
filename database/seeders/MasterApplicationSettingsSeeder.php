@@ -12,74 +12,17 @@ class MasterApplicationSettingsSeeder extends Seeder
     public function run(): void
     {
         AppSetting::updateOrCreate(
-            ['key' => 'company_name'],
+            ['company_name' => 'Demo Company Pvt. Ltd.'],
             [
-                'value' => 'Demo Company Pvt. Ltd.',
-                'group' => 'company',
-                'label' => 'Company Name',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'tag_line'],
-            [
-                'value' => 'Smart ERP for Growing Businesses',
-                'group' => 'company',
-                'label' => 'Tag Line',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'address'],
-            [
-                'value' => 'Kathmandu, Nepal',
-                'group' => 'company',
-                'label' => 'Address',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'footer'],
-            [
-                'value' => 'Thank you for your business.',
-                'group' => 'company',
-                'label' => 'Footer Text',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'suggest_selling'],
-            [
-                'value' => 'recent',
-                'group' => 'sales',
-                'label' => 'Suggest Selling',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'negative_cash_balance'],
-            [
-                'value' => 'warn',
-                'group' => 'warnings',
-                'label' => 'Negative Cash Balance',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'negative_item_balance'],
-            [
-                'value' => 'warn',
-                'group' => 'warnings',
-                'label' => 'Negative Item Balance',
-            ]
-        );
-
-        AppSetting::updateOrCreate(
-            ['key' => 'credit_limit_exceed'],
-            [
-                'value' => 'warn',
-                'group' => 'warnings',
-                'label' => 'Credit Limit Exceed',
+                'tag_line' => 'Smart ERP for Growing Businesses',
+                'address' => 'Kathmandu, Nepal',
+                'footer' => 'Thank you for your business.',
+                'suggest_selling' => 'recent',
+                'negative_cash_balance' => 'warn',
+                'negative_item_balance' => 'warn',
+                'credit_limit_exceed' => 'warn',
+                'active' => true,
+                'is_system_generated' => true,
             ]
         );
 

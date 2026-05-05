@@ -25,10 +25,15 @@ class MasterDealDataSeeder extends Seeder
             ['name' => 'Lost', 'probability' => 0, 'is_won_stage' => false, 'is_lost_stage' => true],
         ];
 
-        foreach ($stages as $stage) {
+        foreach ($stages as $index => $stage) {
             DealStage::updateOrCreate(
                 ['name' => $stage['name'], 'deal_pipeline_id' => $pipeline->id],
-                $stage
+                [
+                    ...$stage,
+                    'sort_order' => $index + 1,
+                    'active' => true,
+                    'is_system_generated' => true,
+                ]
             );
         }
     }
