@@ -190,15 +190,7 @@ export default function Dashboard() {
                                 </Col>
                             </Row>
 
-                            <Row gutter={[16, 16]}>
-                                <Col xs={24} xl={10}>
-                                    <AccountingHealthCard health={dashboardData.accounting_health || {}} token={token} />
-                                </Col>
-                                <Col xs={24} xl={14}>
-                                    <AccountingIssuesTable issues={dashboardData.accounting_issues || []} token={token} />
-                                </Col>
-                            </Row>
-
+                           
                             <Row gutter={[16, 16]}>
                                 <Col xs={24} xl={14}>
                                     <CashFlowChart cashFlow={cashFlow} token={token} />
@@ -271,19 +263,17 @@ function HeaderArea({ token, filters, setFilters, branches, refresh, quickAction
 function KpiSummary({ summary, token }) {
     const items = [
         ['Sales Today', summary.sales_today, 'Posted sales for today', <DollarOutlined />, token.colorSuccess, true],
-        ['Sales This Month', summary.sales_this_month, 'Approved invoice total', <BarChartOutlined />, token.colorPrimary, true],
         ['Receivables', summary.receivables, 'Customers owe us', <FileTextOutlined />, token.colorWarning, true],
         ['Payables', summary.payables, 'We owe suppliers', <FileDoneOutlined />, token.colorError, true],
         ['Cash / Bank Balance', summary.cash_bank_balance, 'Available balance', <BankOutlined />, token.colorInfo, true],
         ['Pending Approvals', summary.pending_approvals, 'Drafts awaiting action', <ClockCircleOutlined />, token.colorWarning, false],
         ['Low Stock Items', summary.low_stock_items, 'Below reorder level', <InboxOutlined />, token.colorWarning, false],
-        ['Approved but JV Missing', summary.approved_jv_missing, 'Accounting posting gap', <WarningOutlined />, token.colorError, false],
     ];
 
     return (
         <Row gutter={[12, 12]}>
             {items.map(([title, value, description, icon, color, isMoney]) => (
-                <Col xs={24} sm={12} lg={6} xl={3} key={title}>
+                <Col xs={24} sm={12} lg={6} xl={8} key={title}>
                     <KpiCard title={title} value={value} description={description} icon={icon} color={color} isMoney={isMoney} token={token} />
                 </Col>
             ))}
