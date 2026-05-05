@@ -9,17 +9,22 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
         $this->call([
-            MainBranchSeeder::class,
-            CurrencySeeder::class,
-            // ContactGroupSeeder::class,
-            // ContactSeeder::class
-            AccountingSeeder::class,
+            MasterBranchSeeder::class,
+            MasterCurrencySeeder::class,
+            MasterApplicationSettingsSeeder::class,
+            MasterDocumentNumberingSeeder::class,
+            MasterChartOfAccountSeeder::class,
+            MasterBankAccountSeeder::class,
+            MasterContactDataSeeder::class,
+            MasterProductDataSeeder::class,
+            MasterHRMDataSeeder::class,
+            MasterHRMAdditionalSeeder::class,
+            MasterDealDataSeeder::class,
+            MasterDataTypesSeeder::class,
+            MasterTaxJurisdictionSeeder::class,
         ]);
     }
 }

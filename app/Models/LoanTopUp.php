@@ -18,11 +18,20 @@ class LoanTopUp extends Model
      */
     protected $fillable = [
         'loan_account_id',
+        'topup_no',
         'topup_date',
         'loan_received_in_account_id',
         'amount',
         'reference',
         'notes',
+        'approved',
+        'approved_at',
+        'approved_by_id',
+        'void',
+        'voided_by_id',
+        'voided_reason',
+        'voided_at',
+        'status',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -38,6 +47,12 @@ class LoanTopUp extends Model
         return [
             'topup_date' => 'date',
             'amount' => 'decimal:6',
+            'approved' => 'boolean',
+            'approved_at' => 'datetime',
+            'approved_by_id' => 'integer',
+            'void' => 'boolean',
+            'voided_by_id' => 'integer',
+            'voided_at' => 'datetime',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
@@ -52,6 +67,16 @@ class LoanTopUp extends Model
     public function loanReceivedInAccount(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_id');
     }
 
     public function userAdd(): BelongsTo

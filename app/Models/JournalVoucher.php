@@ -24,6 +24,14 @@ class JournalVoucher extends Model
         'currency_id',
         'reference',
         'narration',
+        'source_type',
+        'source_id',
+        'source_no',
+        'source_module',
+        'is_auto_generated',
+        'reversed_journal_voucher_id',
+        'reversal_reason',
+        'reversed_at',
         'status',
         'active',
         'approved',
@@ -51,6 +59,8 @@ class JournalVoucher extends Model
             'approved' => 'boolean',
             'approved_at' => 'datetime',
             'approved_by_id' => 'integer',
+            'is_auto_generated' => 'boolean',
+            'reversed_at' => 'datetime',
             'void' => 'boolean',
             'voided_by_id' => 'integer',
             'voided_at' => 'datetime',
@@ -88,5 +98,10 @@ class JournalVoucher extends Model
     public function journalVoucherLines(): HasMany
     {
         return $this->hasMany(JournalVoucherLine::class);
+    }
+
+    public function reversedJournalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class, 'reversed_journal_voucher_id');
     }
 }

@@ -2,52 +2,30 @@
 
 namespace App\Observers;
 
-use App\Models\LoanCharge;
-use App\Observers\Concerns\CapturesAccountingEffect;
-use App\Domain\Accounting\Services\LoanChargeService;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use App\Models$model;
+use App\Services\TransactionApprovalService;
+use App\Services\TransactionVoidService;
 
 class LoanChargeObserver
 {
-    use CapturesAccountingEffect;
+    public function __construct(
+        protected TransactionApprovalService $approvalService,
+        protected TransactionVoidService $voidService,
+    ) {
+    }
 
-    public function saving(LoanCharge $loanCharge): void
+    public function updated(LoanCharge $model): void
     {
-        if ((float) $loanCharge->amount <= 0) {
-            throw ValidationException::withMessages([
-                'amount' => 'Loan charge amount must be greater than zero.',
-            ]);
+        if ($model->wasChanged('approved') && (bool) $model->approved === true) {
+            $this->approvalService->handleApprovedTransition($model);
         }
-    }
 
-    public function updating(LoanCharge $loanCharge): void
-    {
-        $fresh = LoanCharge::query()->find($loanCharge->getKey());
-
-        if ($fresh) {
-            $oldEffect = app(LoanChargeService::class)->snapshotEffect($fresh);
-
-            $this->storeOldEffect($loanCharge, null, $oldEffect);
+        if ($model->wasChanged('void') && (bool) $model->void === true) {
+            $this->voidService->void($model, $model->voided_reason ?? 'Voided');
         }
-    }
 
-    public function saved(LoanCharge $loanCharge): void
-    {
-        DB::transaction(function () use ($loanCharge) {
-            $oldEffect = $this->pullOldEffect($loanCharge);
-
-            app(LoanChargeService::class)->syncFinancials(
-                loanCharge: $loanCharge->fresh(),
-                oldEffect: $oldEffect
-            );
-        });
-    }
-
-    public function deleting(LoanCharge $loanCharge): void
-    {
-        throw ValidationException::withMessages([
-            'loan_charge' => 'Loan charge should not be deleted. Reverse it using a proper adjustment.',
-        ]);
+        if ($model->wasChanged('status') && in_array($model->status, ['cancelled', 'void'], true)) {
+            $this->voidService->cancel($model, $model->voided_reason ?? 'Cancelled');
+        }
     }
 }
