@@ -76,7 +76,7 @@ export default function AlertTypes(props) {
       <ReusableCrud
         icon={<BellOutlined />}
         title="Alert Types"
-        apiUrl={api('/api/master/alert-types/')}
+        apiUrl={api('/api/alert-types/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

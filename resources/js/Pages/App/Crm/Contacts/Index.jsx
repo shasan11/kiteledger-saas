@@ -156,7 +156,7 @@ export default function Contacts(props) {
       type: 'fkSelect',
       col: 6,
       placeholder: 'Select group',
-      fkUrl: api('/api/crm/contact-groups/'),
+      fkUrl: api('/api/contact-groups/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -168,7 +168,7 @@ export default function Contacts(props) {
       type: 'fkSelect',
       col: 8,
       placeholder: 'Select account',
-      fkUrl: api('/api/accounting/accounts/'),
+      fkUrl: api('/api/accounts/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -199,7 +199,7 @@ export default function Contacts(props) {
       type: 'fkSelect',
       col: 8,
       placeholder: 'Select credit term',
-      fkUrl: api('/api/crm/credit-terms/'),
+      fkUrl: api('/api/credit-terms/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -287,7 +287,7 @@ export default function Contacts(props) {
       <ReusableCrud
         icon={<ContactsOutlined />}
         title="Contacts"
-        apiUrl={api('/api/crm/contacts/')}
+        apiUrl={api('/api/contacts/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

@@ -214,7 +214,7 @@ export default function Leads(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select contact',
-          fkUrl: api('/api/crm/contacts/'),
+          fkUrl: api('/api/contacts/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -226,7 +226,7 @@ export default function Leads(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select user',
-          fkUrl: api('/api/users'),
+          fkUrl: api('/api/hrm/users'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -360,7 +360,7 @@ export default function Leads(props) {
       <ReusableCrud
         icon={<UserSwitchOutlined />}
         title="Leads"
-        apiUrl={api('/api/crm/leads/')}
+        apiUrl={api('/api/leads/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

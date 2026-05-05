@@ -81,7 +81,7 @@ export default function ReportingTags(props) {
       <ReusableCrud
         icon={<TagsOutlined />}
         title="Reporting Tags"
-        apiUrl={api('/api/master/reporting-tags/')}
+        apiUrl={api('/api/reporting-tags/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

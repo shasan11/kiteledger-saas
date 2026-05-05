@@ -45,7 +45,7 @@ export default function GeneralSettings(props) {
       <ReusableCrud
         icon={<ControlOutlined />}
         title="General Settings"
-        apiUrl={api('/api/master/general-settings/')}
+        apiUrl={api('/api/general-settings/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

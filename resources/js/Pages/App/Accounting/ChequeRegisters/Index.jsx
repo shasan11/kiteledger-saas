@@ -51,11 +51,11 @@ export default function ChequeRegisters(props) {
       <ReusableCrud
         icon={<AppstoreOutlined />}
         title="ChequeRegisters"
-        endpoint={api('/api/accounting/chequeregisters')}
+        apiUrl={api('/api/cheque-registers')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="modal"
         modalWidth={900}

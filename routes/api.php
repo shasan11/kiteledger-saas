@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\CustomTemplateController;
 use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\Api\DealPipelineController;
+use App\Http\Controllers\Api\DealStageController;
 use App\Http\Controllers\Api\DocumentNumberingController;
 use App\Http\Controllers\Api\EmployeeProfileController;
 use App\Http\Controllers\Api\GeneralSettingController;
@@ -52,6 +53,7 @@ use App\Http\Controllers\Api\WarehouseTransferController;
 use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
+use App\Http\Controllers\Api\ProductVariantItemController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\CurrencyController;
@@ -59,7 +61,10 @@ use Illuminate\Support\Facades\Route;
 
 // HRM Controllers
 use App\Http\Controllers\Api\EmploymentStatusController;
+use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\LeaveRequestController;
 use App\Http\Controllers\Api\LeavePolicyController;
+use App\Http\Controllers\Api\LeaveTypeController;
 use App\Http\Controllers\Api\WeeklyHolidayController;
 use App\Http\Controllers\Api\ShiftController as HrmShiftController;
 use App\Http\Controllers\Api\RoleController;
@@ -370,6 +375,7 @@ Route::post('variants/bulk', [VariantController::class, 'bulkStore']);
 Route::patch('variants/bulk', [VariantController::class, 'bulkUpdate']);
 Route::delete('variants/bulk', [VariantController::class, 'bulkDestroy']);
 Route::apiResource('variants', VariantController::class);
+Route::apiResource('product-variants', ProductVariantItemController::class);
 
 /*
 |--------------------------------------------------------------------------
@@ -389,8 +395,11 @@ Route::prefix('hrm')->group(function () {
     Route::apiResource('permissions', PermissionController::class);
     Route::apiResource('role-permissions', RolePermissionController::class);
     Route::apiResource('users', HrmUserController::class);
+    Route::apiResource('employees', EmployeeController::class);
     Route::apiResource('educations', EducationController::class);
     Route::apiResource('attendances', \App\Http\Controllers\Api\AttendanceController::class);
+    Route::apiResource('leave-types', LeaveTypeController::class);
+    Route::apiResource('leave-requests', LeaveRequestController::class);
     Route::apiResource('leave-applications', LeaveApplicationController::class);
     Route::apiResource('payslips', PayslipController::class);
     Route::apiResource('awards', AwardController::class);
@@ -527,6 +536,8 @@ Route::patch('deal-pipelines/bulk', [DealPipelineController::class, 'bulkUpdate'
 Route::delete('deal-pipelines/bulk', [DealPipelineController::class, 'bulkDestroy']);
 Route::apiResource('deal-pipelines', DealPipelineController::class)
     ->parameters(['deal-pipelines' => 'dealPipeline']);
+Route::apiResource('deal-stages', DealStageController::class)
+    ->parameters(['deal-stages' => 'dealStage']);
 
 Route::post('deals/bulk', [DealController::class, 'bulkStore']);
 Route::patch('deals/bulk', [DealController::class, 'bulkUpdate']);

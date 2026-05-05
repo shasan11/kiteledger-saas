@@ -44,12 +44,12 @@ export default function Expenses({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
-    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'reference', label: 'Reference', type: 'text', col: 8 },
     { name: 'tds_type', label: 'TDS Type', type: 'text', col: 8 },
     { name: 'tds_charges', label: 'TDS Charges', type: 'number', col: 8, min: 0 },
-    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
     { name: 'notes', label: 'Notes', type: 'textarea', col: 24 },
     {
@@ -57,9 +57,9 @@ export default function Expenses({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyExpenseLine },
       columns: [
-        { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', required: true, fkUrl: api('/api/accounting/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', required: true, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
-        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0, required: true },
         { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
       ],
@@ -113,7 +113,7 @@ export default function Expenses({ auth }) {
       <ReusableCrud
         title="Expenses"
         icon={<CreditCardOutlined />}
-        apiUrl={api('/api/payment-out/expenses/')}
+        apiUrl={api('/api/expenses/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

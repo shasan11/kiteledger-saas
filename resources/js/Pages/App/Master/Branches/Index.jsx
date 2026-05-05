@@ -101,7 +101,7 @@ export default function Branches(props) {
       <ReusableCrud
         icon={<BankOutlined />}
         title="Branches"
-        apiUrl={api('/api/master/branchs/')}
+        apiUrl={api('/api/branches/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

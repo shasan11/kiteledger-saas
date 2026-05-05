@@ -75,7 +75,7 @@ export default function JournalVouchers(props) {
       type: 'fkSelect',
       col: 8,
       placeholder: 'Select currency',
-      fkUrl: api('/api/master/currencies/'),
+      fkUrl: api('/api/currencies/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -114,7 +114,7 @@ export default function JournalVouchers(props) {
           width: '3fr',
           required: true,
           placeholder: 'Select account',
-          fkUrl: api('/api/accounting/chart-of-accounts/'),
+          fkUrl: api('/api/chart-of-accounts/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -203,7 +203,7 @@ export default function JournalVouchers(props) {
       <ReusableCrud
         icon={<FileTextOutlined />}
         title="Journal Vouchers"
-        apiUrl={api('/api/accounting/journal-vouchers/')}
+        apiUrl={api('/api/journal-vouchers/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

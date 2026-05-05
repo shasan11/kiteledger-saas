@@ -17,7 +17,7 @@ export default function ProductTaxCategories({ auth }) {
 
   const fields = useMemo(() => [
     { name: 'name', label: 'Category Name', type: 'text', col: 12, required: true },
-    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 12, fkUrl: api('/api/tax/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 12, fkUrl: api('/api/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
   ], []);
 
@@ -30,7 +30,7 @@ export default function ProductTaxCategories({ auth }) {
       <ReusableCrud
         title="Product Tax Categories"
         icon={<TagsOutlined />}
-        apiUrl={api('/api/tax/product-tax-categories/')}
+        apiUrl={api('/api/product-tax-categories/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

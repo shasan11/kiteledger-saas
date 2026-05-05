@@ -37,7 +37,7 @@ export default function PublicHolidays({ auth }) {
       <ReusableCrud
         title="Public Holidays"
         icon={<CalendarOutlined />}
-        apiUrl={api('/api/hrm/public-holidaies/')}
+        apiUrl={api('/api/hrm/public-holidays/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

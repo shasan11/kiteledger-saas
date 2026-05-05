@@ -44,7 +44,7 @@ export default function CustomTemplates(props) {
       <ReusableCrud
         icon={<FileTextOutlined />}
         title="Custom Templates"
-        apiUrl={api('/api/master/custom-templates/')}
+        apiUrl={api('/api/custom-templates/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

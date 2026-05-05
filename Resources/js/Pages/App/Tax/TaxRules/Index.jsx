@@ -20,8 +20,8 @@ export default function TaxRules({ auth }) {
 
   const fields = useMemo(() => [
     { name: 'name', label: 'Rule Name', type: 'text', col: 12, required: true },
-    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', col: 8, fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', col: 8, fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'transaction_type', label: 'Transaction Type', type: 'select', col: 8, options: [
       { value: 'sales', label: 'Sales' },
       { value: 'purchase', label: 'Purchase' },
@@ -40,7 +40,7 @@ export default function TaxRules({ auth }) {
       <ReusableCrud
         title="Tax Rules"
         icon={<NodeIndexOutlined />}
-        apiUrl={api('/api/tax/tax-rules/')}
+        apiUrl={api('/api/tax-rules/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

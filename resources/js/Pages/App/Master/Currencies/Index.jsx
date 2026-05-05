@@ -63,7 +63,7 @@ export default function Currencies(props) {
       <ReusableCrud
         icon={<DollarOutlined />}
         title="Currencies"
-        apiUrl={api('/api/master/currencies/')}
+        apiUrl={api('/api/currencies/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

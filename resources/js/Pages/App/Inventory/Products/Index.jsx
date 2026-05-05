@@ -35,15 +35,15 @@ export default function Products({ auth }) {
     { name: 'sku', label: 'SKU', type: 'text', col: 6 },
     { name: 'barcode', label: 'Barcode', type: 'text', col: 8 },
     { name: 'reorder_level', label: 'Reorder Level', type: 'number', col: 8, min: 0 },
-    { name: 'parent_id', label: 'Parent Product', type: 'fkSelect', col: 12, fkUrl: api('/api/inventory/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'product_category_id', label: 'Category', type: 'fkSelect', col: 12, fkUrl: api('/api/inventory/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'product_unit_id', label: 'Unit', type: 'fkSelect', col: 8, fkUrl: api('/api/inventory/product-units/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'product_tax_category_id', label: 'Tax Category', type: 'fkSelect', col: 8, fkUrl: api('/api/tax/product-tax-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax/tax-class/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'sales_account_id', label: 'Sales Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'purchase_account_id', label: 'Purchase Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'sales_return_account_id', label: 'Sales Return Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'purchase_return_account_id', label: 'Purchase Return Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'parent_id', label: 'Parent Product', type: 'fkSelect', col: 12, fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'product_category_id', label: 'Category', type: 'fkSelect', col: 12, fkUrl: api('/api/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'product_unit_id', label: 'Unit', type: 'fkSelect', col: 8, fkUrl: api('/api/product-units/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'product_tax_category_id', label: 'Tax Category', type: 'fkSelect', col: 8, fkUrl: api('/api/product-tax-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'sales_account_id', label: 'Sales Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'purchase_account_id', label: 'Purchase Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'sales_return_account_id', label: 'Sales Return Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'purchase_return_account_id', label: 'Purchase Return Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'purchase_price', label: 'Purchase Price', type: 'number', col: 8, min: 0 },
     { name: 'selling_price', label: 'Selling Price', type: 'number', col: 8, min: 0 },
     {
@@ -110,7 +110,7 @@ export default function Products({ auth }) {
       <ReusableCrud
         title="Products"
         icon={<ShoppingOutlined />}
-        apiUrl={api('/api/inventory/products/')}
+        apiUrl={api('/api/products/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

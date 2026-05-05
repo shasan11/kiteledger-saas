@@ -128,7 +128,7 @@ export default function Deals(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select lead',
-          fkUrl: api('/api/crm/leads/'),
+          fkUrl: api('/api/leads/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -140,7 +140,7 @@ export default function Deals(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select contact',
-          fkUrl: api('/api/crm/contacts/'),
+          fkUrl: api('/api/contacts/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -152,7 +152,7 @@ export default function Deals(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select user',
-          fkUrl: api('/api/users'),
+          fkUrl: api('/api/hrm/users'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -164,7 +164,7 @@ export default function Deals(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select pipeline',
-          fkUrl: api('/api/crm/deal-pipelines/'),
+          fkUrl: api('/api/deal-pipelines/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -176,7 +176,7 @@ export default function Deals(props) {
           type: 'fkSelect',
           col: 8,
           placeholder: 'Select stage',
-          fkUrl: api('/api/crm/deal-stages/'),
+          fkUrl: api('/api/deal-stages/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -326,7 +326,7 @@ export default function Deals(props) {
       <ReusableCrud
         icon={<FundOutlined />}
         title="Deals"
-        apiUrl={api('/api/crm/deals/')}
+        apiUrl={api('/api/deals/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

@@ -63,7 +63,7 @@ export default function MasterData(props) {
       <ReusableCrud
         icon={<DatabaseOutlined />}
         title="Master Data"
-        apiUrl={api('/api/master/master-datas/')}
+        apiUrl={api('/api/master-data/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

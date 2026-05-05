@@ -6,7 +6,7 @@ import { Typography } from 'antd';
 import { TeamOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
-const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || 'http://localhost:8000';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
 export default function ContactGroups(props) {
@@ -47,7 +47,7 @@ export default function ContactGroups(props) {
       type: 'fkSelect',
       col: 24,
       placeholder: 'Select parent group',
-      fkUrl: api('/api/crm/contact-groups/'),
+      fkUrl: api('/api/contact-groups/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -90,7 +90,7 @@ export default function ContactGroups(props) {
       <ReusableCrud
         icon={<TeamOutlined />}
         title="Contact Groups"
-        apiUrl={api('/api/crm/contact-groups/')}
+        apiUrl={api('/api/contact-groups/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

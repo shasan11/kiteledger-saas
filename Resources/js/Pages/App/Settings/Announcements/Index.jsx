@@ -41,7 +41,7 @@ export default function Announcements(props) {
       <ReusableCrud
         icon={<NotificationOutlined />}
         title="Announcements"
-        apiUrl={api('/api/master/announcements/')}
+        apiUrl={api('/api/announcements/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

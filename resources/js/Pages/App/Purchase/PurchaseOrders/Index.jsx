@@ -43,9 +43,9 @@ export default function PurchaseOrders({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
-    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'credit_term_id', label: 'Credit Term', type: 'fkSelect', col: 8, fkUrl: api('/api/crm/credit-terms/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'credit_term_id', label: 'Credit Term', type: 'fkSelect', col: 8, fkUrl: api('/api/credit-terms/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
     { name: 'notes', label: 'Notes', type: 'textarea', col: 24 },
     {
@@ -53,13 +53,13 @@ export default function PurchaseOrders({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyLine },
       columns: [
-        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/inventory/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'custom_product_name', name: 'custom_product_name', label: 'Product Name', type: 'text', width: '2fr' },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
         { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '90px', min: 0 },
         { key: 'unit_price', name: 'unit_price', label: 'Unit Price', type: 'number', width: '130px', min: 0 },
         { key: 'discount_percent', name: 'discount_percent', label: 'Disc %', type: 'number', width: '90px', min: 0, max: 100 },
-        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
       ],
     },
@@ -109,7 +109,7 @@ export default function PurchaseOrders({ auth }) {
       <ReusableCrud
         title="Purchase Orders"
         icon={<ShoppingOutlined />}
-        apiUrl={api('/api/payment-out/purchase-orders/')}
+        apiUrl={api('/api/purchase-orders/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

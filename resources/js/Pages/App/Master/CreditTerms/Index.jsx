@@ -88,7 +88,7 @@ export default function CreditTerms(props) {
       <ReusableCrud
         icon={<ClockCircleOutlined />}
         title="Credit Terms"
-        apiUrl={api('/api/crm/credit-terms/')}
+        apiUrl={api('/api/credit-terms/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

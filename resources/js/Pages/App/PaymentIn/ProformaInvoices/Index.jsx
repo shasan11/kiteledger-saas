@@ -1034,7 +1034,7 @@ export default function Index() {
 
             <ReusableCrud
                 title="Payment-in Proforma Invoices"
-                apiUrl={api('/api/payment-in/proforma-invoices/')}
+                apiUrl={api('/api/proforma-invoices/')}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

@@ -31,7 +31,7 @@ export default function Priorities({ auth }) {
       <ReusableCrud
         title="Priorities"
         icon={<FlagOutlined />}
-        apiUrl={api('/api/projects/priorities/')}
+        apiUrl={api('/api/hrm/priorities/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

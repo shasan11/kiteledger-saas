@@ -22,7 +22,7 @@ export default function TaxExemptions({ auth }) {
   const fields = useMemo(() => [
     { name: 'name', label: 'Exemption Name', type: 'text', col: 12, required: true },
     { name: 'exemption_code', label: 'Exemption Code', type: 'text', col: 8 },
-    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 8, fkUrl: api('/api/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'effective_from', label: 'Effective From', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     { name: 'effective_to', label: 'Effective To', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
@@ -39,7 +39,7 @@ export default function TaxExemptions({ auth }) {
       <ReusableCrud
         title="Tax Exemptions"
         icon={<ExceptionOutlined />}
-        apiUrl={api('/api/tax/tax-exemptions/')}
+        apiUrl={api('/api/tax-exemptions/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

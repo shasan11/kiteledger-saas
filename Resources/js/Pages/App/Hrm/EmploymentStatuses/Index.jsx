@@ -31,7 +31,7 @@ export default function EmploymentStatuses({ auth }) {
       <ReusableCrud
         title="Employment Statuses"
         icon={<IdcardOutlined />}
-        apiUrl={api('/api/hrm/employment-status/')}
+        apiUrl={api('/api/hrm/employment-statuses/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

@@ -27,7 +27,7 @@ export default function TaxClasses({ auth }) {
   const fields = useMemo(() => [
     { name: 'name', label: 'Name', type: 'text', col: 12, required: true },
     { name: 'code', label: 'Code', type: 'text', col: 6, required: true },
-    { name: 'tax_jurisdiction_id', label: 'Tax Jurisdiction', type: 'fkSelect', col: 12, fkUrl: api('/api/tax/tax-jurisdictions/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_jurisdiction_id', label: 'Tax Jurisdiction', type: 'fkSelect', col: 12, fkUrl: api('/api/tax-jurisdictions/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     {
       name: 'country_code', label: 'Country Code', type: 'select', col: 8,
       options: [
@@ -81,7 +81,7 @@ export default function TaxClasses({ auth }) {
       <ReusableCrud
         title="Tax Classes"
         icon={<AuditOutlined />}
-        apiUrl={api('/api/tax/tax-class/')}
+        apiUrl={api('/api/tax-classes/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

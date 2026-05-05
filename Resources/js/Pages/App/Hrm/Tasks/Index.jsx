@@ -25,10 +25,10 @@ export default function Tasks({ auth }) {
 
   const fields = useMemo(() => [
     { name: 'name', label: 'Task Name', type: 'text', col: 16, required: true },
-    { name: 'project_id', label: 'Project', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/projects/projects/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'milestone_id', label: 'Milestone', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/projects/milestones/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'priority_id', label: 'Priority', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/projects/priorities/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'task_status_id', label: 'Status', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/projects/task-statuses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'project_id', label: 'Project', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/hrm/projects/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'milestone_id', label: 'Milestone', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/hrm/milestones/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'priority_id', label: 'Priority', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/hrm/priorities/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'task_status_id', label: 'Status', type: 'fkSelect', col: 8, required: true, fkUrl: api('/api/hrm/task-statuses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'start_date', label: 'Start Date', type: 'datePicker', col: 8, required: true, format: 'DD-MM-YYYY' },
     { name: 'end_date', label: 'End Date', type: 'datePicker', col: 8, required: true, format: 'DD-MM-YYYY' },
     { name: 'completion_time', label: 'Completion Time (hrs)', type: 'number', col: 8, min: 0 },
@@ -38,7 +38,7 @@ export default function Tasks({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Assignee',
       defaultItem: { ...emptyAssignee },
       columns: [
-        { key: 'user_id', name: 'user_id', label: 'User', type: 'fkSelect', width: '1fr', fkUrl: api('/api/master/users/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'user_id', name: 'user_id', label: 'User', type: 'fkSelect', width: '1fr', fkUrl: api('/api/hrm/users/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
       ],
     },
   ], []);
@@ -75,7 +75,7 @@ export default function Tasks({ auth }) {
       <ReusableCrud
         title="Tasks"
         icon={<CheckCircleOutlined />}
-        apiUrl={api('/api/projects/tasks/')}
+        apiUrl={api('/api/hrm/tasks/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

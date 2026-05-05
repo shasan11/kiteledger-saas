@@ -44,7 +44,7 @@ export default function WeeklyHolidays({ auth }) {
       <ReusableCrud
         title="Weekly Holidays"
         icon={<CalendarOutlined />}
-        apiUrl={api('/api/hrm/weekly-holidaies/')}
+        apiUrl={api('/api/hrm/weekly-holidays/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

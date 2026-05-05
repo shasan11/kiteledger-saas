@@ -95,7 +95,7 @@ export default function DocumentNumberings(props) {
       <ReusableCrud
         icon={<OrderedListOutlined />}
         title="Document Numberings"
-        apiUrl={api('/api/master/document-numberings/')}
+        apiUrl={api('/api/document-numberings/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

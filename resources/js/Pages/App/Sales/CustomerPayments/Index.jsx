@@ -40,24 +40,24 @@ export default function CustomerPayments({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
-    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'account_id', label: 'Account', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'account_id', label: 'Account', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'payment_method', label: 'Payment Method', type: 'text', col: 8 },
     { name: 'reference', label: 'Reference', type: 'text', col: 8 },
     { name: 'amount', label: 'Amount', type: 'number', col: 8, required: true, min: 0 },
     { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
     { name: 'bank_charges', label: 'Bank Charges', type: 'number', col: 8, min: 0 },
-    { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'tds_type', label: 'TDS Type', type: 'text', col: 8 },
     { name: 'tds_charges', label: 'TDS Charges', type: 'number', col: 8, min: 0 },
-    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     {
       name: 'items', label: 'Invoice Allocations', type: 'objectArray', col: 24,
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Invoice',
       defaultItem: { invoice_id: null, allocated_amount: 0 },
       columns: [
-        { key: 'invoice_id', name: 'invoice_id', label: 'Invoice', type: 'fkSelect', width: '3fr', fkUrl: api('/api/payment-in/invoices/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'invoice_id', name: 'invoice_id', label: 'Invoice', type: 'fkSelect', width: '3fr', fkUrl: api('/api/invoices/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '150px', min: 0, required: true },
       ],
     },
@@ -118,7 +118,7 @@ export default function CustomerPayments({ auth }) {
       <ReusableCrud
         title="Customer Payments"
         icon={<DollarOutlined />}
-        apiUrl={api('/api/payment-in/customer-payments/')}
+        apiUrl={api('/api/customer-payments/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

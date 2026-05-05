@@ -43,9 +43,9 @@ export default function Invoices(props) {
     { name: 'invoice_date', label: 'Invoice Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     { name: 'status', label: 'Status', type: 'select', col: 6, options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'partial', label: 'Partial' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }] },
-    { name: 'contact_id', label: 'Contact', type: 'fkSelect', required: true, col: 10, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.code ? `${r.code} - ${r.name}` : r?.name || '' },
-    { name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8, fkUrl: api('/api/inventory/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', required: true, col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.code ? `${r.code} - ${r.name}` : r?.name || '' },
+    { name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8, fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference number' },
     { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
     { name: 'export_date', label: 'Export Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
@@ -55,13 +55,13 @@ export default function Invoices(props) {
       name: 'items', label: 'Invoice Lines', type: 'objectArray', col: 24, headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyLine },
       columns: [
-        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/inventory/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'custom_product_name', name: 'custom_product_name', label: 'Product Name', type: 'text', width: '2fr' },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
         { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '100px', min: 0 },
         { key: 'unit_price', name: 'unit_price', label: 'Unit Price', type: 'number', width: '130px', min: 0 },
         { key: 'discount_percent', name: 'discount_percent', label: 'Disc %', type: 'number', width: '100px', min: 0, max: 100 },
-        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '160px', fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '160px', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '120px', min: 0 },
       ],
     },
@@ -99,7 +99,7 @@ export default function Invoices(props) {
       <Head title="Invoices" />
       <ReusableCrud
         icon={<FileProtectOutlined />} title="Invoices"
-        apiUrl={api('/api/payment-in/invoices/')}
+        apiUrl={api('/api/invoices/')}
         columns={columns} fields={fields} validationSchema={validationSchema}
         crudInitialValues={crudInitialValues} transformPayload={transformPayload}
         form_ui="drawer" drawerWidth="calc(100vw - 32px)"

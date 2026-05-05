@@ -187,7 +187,7 @@ export default function DealPipelines(props) {
       <ReusableCrud
         icon={<NodeIndexOutlined />}
         title="Deal Pipelines"
-        apiUrl={api('/api/crm/deal-pipelines/')}
+        apiUrl={api('/api/deal-pipelines/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

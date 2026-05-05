@@ -22,7 +22,7 @@ export default function ProductCategories({ auth }) {
 
   const fields = useMemo(() => [
     { name: 'name', label: 'Name', type: 'text', col: 16, required: true },
-    { name: 'parent_id', label: 'Parent Category', type: 'fkSelect', col: 8, fkUrl: api('/api/inventory/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'parent_id', label: 'Parent Category', type: 'fkSelect', col: 8, fkUrl: api('/api/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24 },
   ], []);
 
@@ -44,7 +44,7 @@ export default function ProductCategories({ auth }) {
       <ReusableCrud
         title="Product Categories"
         icon={<AppstoreOutlined />}
-        apiUrl={api('/api/inventory/product-categories/')}
+        apiUrl={api('/api/product-categories/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

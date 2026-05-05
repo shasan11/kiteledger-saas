@@ -60,7 +60,7 @@ export default function PrintingTemplates(props) {
       <ReusableCrud
         icon={<PrinterOutlined />}
         title="Printing Templates"
-        apiUrl={api('/api/master/printing-templates/')}
+        apiUrl={api('/api/printing-templates/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

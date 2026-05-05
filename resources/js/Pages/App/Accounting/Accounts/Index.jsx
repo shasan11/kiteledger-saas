@@ -52,7 +52,7 @@ export default function Accounts(props) {
       type: 'fkSelect',
       col: 12,
       placeholder: 'Select parent account',
-      fkUrl: api('/api/accounting/accounts/'),
+      fkUrl: api('/api/accounts/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -64,7 +64,7 @@ export default function Accounts(props) {
       type: 'fkSelect',
       col: 12,
       placeholder: 'Select currency',
-      fkUrl: api('/api/master/currencies/'),
+      fkUrl: api('/api/currencies/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -129,7 +129,7 @@ export default function Accounts(props) {
       <ReusableCrud
         icon={<AccountBookOutlined />}
         title="Accounts"
-        apiUrl={api('/api/accounting/accounts/')}
+        apiUrl={api('/api/accounts/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

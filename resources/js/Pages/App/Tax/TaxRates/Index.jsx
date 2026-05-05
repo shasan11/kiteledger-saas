@@ -35,8 +35,8 @@ export default function TaxRates({ auth }) {
   const fields = useMemo(() => [
     { name: 'name', label: 'Name', type: 'text', col: 12, required: true },
     { name: 'code', label: 'Code', type: 'text', col: 6 },
-    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 12, required: true, fkUrl: api('/api/tax/tax-class/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-    { name: 'tax_jurisdiction_id', label: 'Tax Jurisdiction', type: 'fkSelect', col: 12, fkUrl: api('/api/tax/tax-jurisdictions/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 12, required: true, fkUrl: api('/api/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tax_jurisdiction_id', label: 'Tax Jurisdiction', type: 'fkSelect', col: 12, fkUrl: api('/api/tax-jurisdictions/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     {
       name: 'country_code', label: 'Country Code', type: 'select', col: 8,
       options: [
@@ -102,7 +102,7 @@ export default function TaxRates({ auth }) {
           ],
         },
         { key: 'rate_percent', name: 'rate_percent', label: 'Rate %', type: 'number', width: '100px', min: 0 },
-        { key: 'account_id', name: 'account_id', label: 'Account', type: 'fkSelect', width: '2fr', fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'account_id', name: 'account_id', label: 'Account', type: 'fkSelect', width: '2fr', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'sort_order', name: 'sort_order', label: 'Sort', type: 'number', width: '90px', min: 0 },
       ],
     },
@@ -151,7 +151,7 @@ export default function TaxRates({ auth }) {
       <ReusableCrud
         title="Tax Rates"
         icon={<PercentageOutlined />}
-        apiUrl={api('/api/tax/tax-rates/')}
+        apiUrl={api('/api/tax-rates/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

@@ -45,7 +45,7 @@ export default function ApplicationSettings(props) {
       <ReusableCrud
         icon={<SettingOutlined />}
         title="Application Settings"
-        apiUrl={api('/api/master/application-settings/')}
+        apiUrl={api('/api/application-settings/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
