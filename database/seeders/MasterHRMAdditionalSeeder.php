@@ -1,0 +1,52 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Award;
+use App\Models\LeavePolicy;
+use App\Models\Shift;
+use App\Models\WeeklyHoliday;
+use Illuminate\Database\Seeder;
+
+class MasterHRMAdditionalSeeder extends Seeder
+{
+    public function run(): void
+    {
+        LeavePolicy::updateOrCreate(
+            ['name' => 'Standard Leave Policy'],
+            [
+                'paid_leave_count' => 12,
+                'unpaid_leave_count' => 0,
+                'description' => 'Standard leave policy with 12 paid days per year',
+            ]
+        );
+
+        WeeklyHoliday::updateOrCreate(
+            ['start_day' => 'Saturday'],
+            [
+                'end_day' => 'Saturday',
+                'is_secondary' => false,
+            ]
+        );
+
+        Shift::updateOrCreate(
+            ['name' => 'General Shift'],
+            [
+                'start_time' => '09:00:00',
+                'end_time' => '18:00:00',
+                'work_hour' => 8,
+                'description' => 'General working hours',
+            ]
+        );
+
+        Award::updateOrCreate(
+            ['name' => 'Employee of the Month'],
+            ['description' => 'Award for best performing employee']
+        );
+
+        Award::updateOrCreate(
+            ['name' => 'Best Performer'],
+            ['description' => 'Award for best performer']
+        );
+    }
+}

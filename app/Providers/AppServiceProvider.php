@@ -4,33 +4,34 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
-use App\Models\ChartOfAccount;
-use App\Models\BankAccount;
-use App\Models\CashTransfer;
-use App\Models\CashTransferLine;
-use App\Models\JournalVoucher;
-use App\Models\JournalVoucherLine;
-use App\Models\ChequeRegister;
-use App\Models\LoanAccount;
-use App\Models\LoanTopUp;
-use App\Models\LoanCharge;
+use App\Models\{
+    ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
+    JournalVoucher, JournalVoucherLine, ChequeRegister,
+    LoanAccount, LoanTopUp, LoanCharge,
+    Invoice, CustomerPayment, PurchaseBill, SupplierPayment,
+    Expense, SalesReturn, DebitNote, InventoryAdjustment,
+    Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
+    Contact, Product, Lead, Deal
+};
 
-use App\Observers\ChartOfAccountObserver;
-use App\Observers\BankAccountObserver;
-use App\Observers\CashTransferObserver;
-use App\Observers\CashTransferLineObserver;
-use App\Observers\JournalVoucherObserver;
-use App\Observers\JournalVoucherLineObserver;
-use App\Observers\ChequeRegisterObserver;
-use App\Observers\LoanAccountObserver;
-use App\Observers\LoanTopUpObserver;
-use App\Observers\LoanChargeObserver;
+use App\Observers\{
+    ChartOfAccountObserver, BankAccountObserver,
+    CashTransferObserver, CashTransferLineObserver,
+    JournalVoucherObserver, JournalVoucherLineObserver,
+    ChequeRegisterObserver,
+    LoanAccountObserver, LoanTopUpObserver, LoanChargeObserver,
+    InvoiceObserver, CustomerPaymentObserver,
+    PurchaseBillObserver, SupplierPaymentObserver,
+    ExpenseObserver, SalesReturnObserver, DebitNoteObserver,
+    InventoryAdjustmentObserver, QuotationObserver,
+    SalesOrderObserver, PurchaseOrderObserver, ProformaInvoiceObserver,
+    ContactObserver, ProductObserver, LeadObserver, DealObserver
+};
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
     }
 
     public function boot(): void
@@ -49,5 +50,23 @@ class AppServiceProvider extends ServiceProvider
         LoanAccount::observe(LoanAccountObserver::class);
         LoanTopUp::observe(LoanTopUpObserver::class);
         LoanCharge::observe(LoanChargeObserver::class);
+
+        Invoice::observe(InvoiceObserver::class);
+        CustomerPayment::observe(CustomerPaymentObserver::class);
+        PurchaseBill::observe(PurchaseBillObserver::class);
+        SupplierPayment::observe(SupplierPaymentObserver::class);
+        Expense::observe(ExpenseObserver::class);
+        SalesReturn::observe(SalesReturnObserver::class);
+        DebitNote::observe(DebitNoteObserver::class);
+        InventoryAdjustment::observe(InventoryAdjustmentObserver::class);
+        Quotation::observe(QuotationObserver::class);
+        SalesOrder::observe(SalesOrderObserver::class);
+        PurchaseOrder::observe(PurchaseOrderObserver::class);
+        ProformaInvoice::observe(ProformaInvoiceObserver::class);
+
+        Contact::observe(ContactObserver::class);
+        Product::observe(ProductObserver::class);
+        Lead::observe(LeadObserver::class);
+        Deal::observe(DealObserver::class);
     }
 }

@@ -6,7 +6,7 @@ use App\Models$model;
 use App\Services\TransactionApprovalService;
 use App\Services\TransactionVoidService;
 
-class LoanTopUpObserver
+class InventoryAdjustmentObserver
 {
     public function __construct(
         protected TransactionApprovalService $approvalService,
@@ -14,7 +14,7 @@ class LoanTopUpObserver
     ) {
     }
 
-    public function updated(LoanTopUp $model): void
+    public function updated(InventoryAdjustment $model): void
     {
         if ($model->wasChanged('approved') && (bool) $model->approved === true) {
             $this->approvalService->handleApprovedTransition($model);
