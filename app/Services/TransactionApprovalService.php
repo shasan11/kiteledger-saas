@@ -102,10 +102,8 @@ class TransactionApprovalService
 
     public function markPostedIfSupported(Model $transaction): void
     {
-        if ($this->validationService->hasStatusField($transaction) && in_array('posted', $transaction->getAttributes()['status'] ?? [], true)) {
-            if ($transaction->status === 'draft') {
-                $transaction->status = 'posted';
-            }
+        if ($this->validationService->hasStatusField($transaction) && $transaction->status === 'draft') {
+            $transaction->status = 'posted';
         }
     }
 

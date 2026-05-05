@@ -36,6 +36,7 @@ class LoanCharge extends Model
         'active',
         'is_system_generated',
         'user_add_id',
+        'journal_voucher_id',
     ];
 
     /**
@@ -83,5 +84,10 @@ class LoanCharge extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function journalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class);
     }
 }
