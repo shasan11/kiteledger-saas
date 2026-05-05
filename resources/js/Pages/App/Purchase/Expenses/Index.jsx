@@ -1,74 +1,138 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { Tag, Typography } from 'antd';
+import { CreditCardOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-export default function Expenses(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+const emptyExpenseLine = { chart_of_account_id: null, description: '', tax_rate_id: null, amount: 0, tax_amount: 0 };
+
+const statusColors = { draft: 'default', posted: 'green', cancelled: 'red' };
+
+export default function Expenses({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Expense No', dataIndex: 'expense_no', key: 'expense_no' },
     {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      title: 'Status', dataIndex: 'status', key: 'status',
+      render: (v) => <Tag color={statusColors[v] || 'default'}>{v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}</Tag>,
     },
-  ];
+    { title: 'Expense Date', dataIndex: 'expense_date', key: 'expense_date' },
+    { title: 'Due Date', dataIndex: 'due_date', key: 'due_date' },
+    { title: 'Contact', dataIndex: ['contact', 'name'], key: 'contact_name', render: (v) => v || '-' },
+    { title: 'Reference', dataIndex: 'reference', key: 'reference' },
+    { title: 'Total', dataIndex: 'total', key: 'total', render: (v) => money(v), align: 'right' },
+  ], []);
 
-  const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
-  ];
+  const fields = useMemo(() => [
+    { name: 'expense_no', label: 'Expense No', type: 'text', col: 8 },
+    { name: 'expense_date', label: 'Expense Date', type: 'datePicker', col: 8, required: true },
+    { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8 },
+    {
+      name: 'status', label: 'Status', type: 'select', col: 8,
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'posted', label: 'Posted' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'reference', label: 'Reference', type: 'text', col: 8 },
+    { name: 'tds_type', label: 'TDS Type', type: 'text', col: 8 },
+    { name: 'tds_charges', label: 'TDS Charges', type: 'number', col: 8, min: 0 },
+    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounting/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
+    { name: 'notes', label: 'Notes', type: 'textarea', col: 24 },
+    {
+      name: 'items', label: 'Expense Lines', type: 'objectArray', col: 24,
+      headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
+      defaultItem: { ...emptyExpenseLine },
+      columns: [
+        { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', required: true, fkUrl: api('/api/accounting/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
+        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0, required: true },
+        { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
+      ],
+    },
+  ], []);
 
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    active: Yup.boolean().nullable(),
+  const validationSchema = Yup.object({
+    expense_date: Yup.string().required('Expense date is required'),
   });
 
   const crudInitialValues = {
-    name: '',
-    active: true,
+    expense_no: '',
+    expense_date: dayjs().format('YYYY-MM-DD'),
+    due_date: null,
+    status: 'draft',
+    contact_id: null,
+    currency_id: null,
+    reference: '',
+    tds_type: '',
+    tds_charges: 0,
+    tds_charges_account_id: null,
+    exchange_rate: 1,
+    notes: '',
+    items: [{ ...emptyExpenseLine }],
     deleted_item_ids: [],
   };
 
-  const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
-  };
+  const transformPayload = (values) => ({
+    ...values,
+    expense_date: formatDate(values.expense_date),
+    due_date: formatDate(values.due_date),
+    exchange_rate: toNumber(values.exchange_rate),
+    tds_charges: toNumber(values.tds_charges),
+    items: (values.items || []).map((item) => ({
+      ...item,
+      amount: toNumber(item.amount),
+      tax_amount: toNumber(item.tax_amount),
+    })),
+    deleted_item_ids: values.deleted_item_ids || [],
+  });
+
+  const anchorFilters = [
+    { label: 'Draft', value: 'draft' },
+    { label: 'Posted', value: 'posted' },
+    { label: 'All', value: 'all' },
+  ];
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <AuthenticatedLayout auth={auth}>
       <Head title="Expenses" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
         title="Expenses"
-        endpoint={api('/api/purchase/expenses')}
+        icon={<CreditCardOutlined />}
+        apiUrl={api('/api/payment-out/expenses/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="drawer"
-        drawerWidth={1100}
+        anchorFilters={anchorFilters}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
-        activeParam="active"
         enableServerPagination={true}
-        enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
       />
     </AuthenticatedLayout>
   );

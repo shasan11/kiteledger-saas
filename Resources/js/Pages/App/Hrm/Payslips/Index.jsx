@@ -1,158 +1,117 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Tooltip } from 'antd';
 import { DollarOutlined } from '@ant-design/icons';
+import { Tag, Typography } from 'antd';
+import dayjs from 'dayjs';
 
-const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (p) => `${BACKEND}${p}`;
+const { Text } = Typography;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
+const statusColor = (s) => ({ draft: 'default', approved: 'green', paid: 'blue', cancelled: 'red' }[s] || 'default');
 
-const PAY_STATUS_COLORS = { UNPAID: 'red', PARTIAL: 'orange', PAID: 'green' };
-const fmtMoney = (v) => v != null ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-';
+const emptyEarning = { title: '', amount: 0 };
+const emptyDeduction = { title: '', amount: 0 };
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+export default function Payslips({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Employee', dataIndex: ['employee', 'name'], key: 'employee_name', render: (v) => v || '-' },
+    { title: 'Period', dataIndex: 'pay_period', key: 'pay_period' },
+    { title: 'Gross Salary', dataIndex: 'gross_salary', key: 'gross_salary', align: 'right', render: (v) => <Text strong>{money(v)}</Text> },
+    { title: 'Net Salary', dataIndex: 'net_salary', key: 'net_salary', align: 'right', render: (v) => <Text strong>{money(v)}</Text> },
+    { title: 'Status', dataIndex: 'status', key: 'status', render: (v) => <Tag color={statusColor(v)}>{v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}</Tag> },
+  ], []);
 
-export default function Payslips(props) {
-  const columns = [
+  const fields = useMemo(() => [
+    { name: 'employee_id', label: 'Employee', type: 'fkSelect', col: 12, required: true, fkUrl: api('/api/hrm/employees/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'pay_period', label: 'Pay Period', type: 'text', col: 8, placeholder: 'e.g. January 2024' },
+    { name: 'status', label: 'Status', type: 'select', col: 8, options: [
+      { value: 'draft', label: 'Draft' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'paid', label: 'Paid' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ]},
+    { name: 'from_date', label: 'From Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
+    { name: 'to_date', label: 'To Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
+    { name: 'payment_date', label: 'Payment Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
+    { name: 'basic_salary', label: 'Basic Salary', type: 'number', col: 8, min: 0 },
+    { name: 'gross_salary', label: 'Gross Salary', type: 'number', col: 8, min: 0 },
+    { name: 'net_salary', label: 'Net Salary', type: 'number', col: 8, min: 0 },
     {
-      title: 'Employee', key: 'user', width: 180,
-      render: (_, r) => {
-        const u = r.user;
-        return u ? <strong>{[u.first_name, u.last_name].filter(Boolean).join(' ') || u.username}</strong> : '-';
-      },
+      name: 'earnings', label: 'Earnings', type: 'objectArray', col: 24,
+      headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Earning',
+      defaultItem: { ...emptyEarning },
+      columns: [
+        { key: 'title', name: 'title', label: 'Title', type: 'text', width: '3fr' },
+        { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '180px', min: 0 },
+      ],
     },
     {
-      title: 'Period', key: 'period', sorter: false, width: 110,
-      render: (_, r) => <Tag color="geekblue">{MONTHS[(r.salary_month || 1) - 1]} {r.salary_year}</Tag>,
+      name: 'deductions', label: 'Deductions', type: 'objectArray', col: 24,
+      headerBg: '#5e1a1a', headerColor: '#ffffff', addButtonLabel: 'Add Deduction',
+      defaultItem: { ...emptyDeduction },
+      columns: [
+        { key: 'title', name: 'title', label: 'Title', type: 'text', width: '3fr' },
+        { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '180px', min: 0 },
+      ],
     },
-    { title: 'Salary', dataIndex: 'salary', key: 'salary', sorter: true, width: 110, render: fmtMoney },
-    { title: 'Work Days', dataIndex: 'work_day', key: 'work_day', sorter: true, width: 90, render: (v) => v ?? '-' },
-    { title: 'Work Hours', dataIndex: 'working_hour', key: 'working_hour', sorter: true, width: 100, render: (v) => v != null ? `${Number(v).toFixed(1)}h` : '-' },
-    { title: 'Payable', dataIndex: 'salary_payable', key: 'salary_payable', sorter: true, width: 110, render: fmtMoney },
-    { title: 'Bonus', dataIndex: 'bonus', key: 'bonus', width: 90, render: (v) => v ? <span style={{ color: 'green' }}>+{fmtMoney(v)}</span> : '-' },
-    { title: 'Deduction', dataIndex: 'deduction', key: 'deduction', width: 100, render: (v) => v ? <span style={{ color: '#d4380d' }}>-{fmtMoney(v)}</span> : '-' },
-    { title: 'Total Payable', dataIndex: 'total_payable', key: 'total_payable', sorter: true, width: 120, render: (v) => <strong>{fmtMoney(v)}</strong> },
-    {
-      title: 'Payment', dataIndex: 'payment_status', key: 'payment_status', sorter: true, width: 100,
-      render: (v) => <Tag color={PAY_STATUS_COLORS[v] || 'default'}>{v || '—'}</Tag>,
-    },
-  ];
+    { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 2 },
+  ], []);
 
-  const fields = [
-    // Section A: Period
-    { name: 'user_id', label: 'Employee', type: 'fkSelect', required: true, col: 24,
-      fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20,
-      fkValueKey: 'id', fkLabelKey: 'first_name',
-      fkLabel: (r) => r ? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.username : '' },
-    { name: 'salary_month', label: 'Salary Month', type: 'select', required: true, col: 8,
-      options: MONTHS.map((m, i) => ({ label: m, value: i + 1 })) },
-    { name: 'salary_year', label: 'Salary Year', type: 'number', required: true, col: 8, min: 2000, max: 2100 },
-    // Section B: Salary Base
-    { name: 'salary', label: 'Base Salary', type: 'number', required: true, col: 8, min: 0 },
-    { name: 'paid_leave', label: 'Paid Leave Days', type: 'number', required: true, col: 6, min: 0 },
-    { name: 'unpaid_leave', label: 'Unpaid Leave Days', type: 'number', required: true, col: 6, min: 0 },
-    { name: 'monthly_holiday', label: 'Monthly Holidays', type: 'number', required: true, col: 6, min: 0 },
-    { name: 'public_holiday', label: 'Public Holidays', type: 'number', required: true, col: 6, min: 0 },
-    { name: 'work_day', label: 'Work Days', type: 'number', required: true, col: 8, min: 0 },
-    // Section C: Work Hour
-    { name: 'shift_wise_work_hour', label: 'Shift-wise Work Hours', type: 'number', required: true, col: 8, min: 0 },
-    { name: 'monthly_work_hour', label: 'Monthly Work Hours', type: 'number', required: true, col: 8, min: 0 },
-    { name: 'hourly_salary', label: 'Hourly Salary', type: 'number', required: true, col: 8, min: 0 },
-    { name: 'working_hour', label: 'Actual Working Hours', type: 'number', required: true, col: 8, min: 0 },
-    // Section D: Calculation
-    { name: 'salary_payable', label: 'Salary Payable', type: 'number', required: true, col: 8, min: 0 },
-    { name: 'bonus', label: 'Bonus', type: 'number', col: 8, min: 0 },
-    { name: 'bonus_comment', label: 'Bonus Remark', type: 'text', col: 8 },
-    { name: 'deduction', label: 'Deduction', type: 'number', col: 8, min: 0 },
-    { name: 'deduction_comment', label: 'Deduction Remark', type: 'text', col: 8 },
-    { name: 'total_payable', label: 'Total Payable', type: 'number', required: true, col: 8, min: 0 },
-    // Section E: Payment
-    { name: 'payment_status', label: 'Payment Status', type: 'select', col: 12,
-      options: ['UNPAID','PARTIAL','PAID'].map(v => ({ label: v, value: v })) },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-  ];
-
-  const validationSchema = Yup.object().shape({
-    user_id: Yup.mixed().required('Employee is required'),
-    salary_month: Yup.number().required('Month is required').min(1).max(12),
-    salary_year: Yup.number().required('Year is required').min(2000),
-    salary: Yup.number().required('Salary is required').min(0),
-    paid_leave: Yup.number().required().min(0),
-    unpaid_leave: Yup.number().required().min(0),
-    monthly_holiday: Yup.number().required().min(0),
-    public_holiday: Yup.number().required().min(0),
-    work_day: Yup.number().required().min(0),
-    shift_wise_work_hour: Yup.number().required().min(0),
-    monthly_work_hour: Yup.number().required().min(0),
-    hourly_salary: Yup.number().required().min(0),
-    working_hour: Yup.number().required().min(0),
-    salary_payable: Yup.number().required().min(0),
-    total_payable: Yup.number().required().min(0),
-    bonus: Yup.number().nullable().min(0),
-    deduction: Yup.number().nullable().min(0),
-    payment_status: Yup.string().nullable(),
-    active: Yup.boolean().nullable(),
+  const validationSchema = Yup.object({
+    employee_id: Yup.mixed().required('Employee is required'),
   });
 
-  const initialValues = {
-    user_id: null, salary_month: new Date().getMonth() + 1, salary_year: new Date().getFullYear(),
-    salary: 0, paid_leave: 0, unpaid_leave: 0, monthly_holiday: 0, public_holiday: 0, work_day: 26,
-    shift_wise_work_hour: 208, monthly_work_hour: 208, hourly_salary: 0, working_hour: 208,
-    salary_payable: 0, bonus: null, bonus_comment: '', deduction: null, deduction_comment: '',
-    total_payable: 0, payment_status: 'UNPAID', active: true,
+  const crudInitialValues = {
+    employee_id: null, pay_period: '', status: 'draft',
+    from_date: null, to_date: null, payment_date: null,
+    basic_salary: 0, gross_salary: 0, net_salary: 0,
+    earnings: [{ ...emptyEarning }], deductions: [{ ...emptyDeduction }],
+    deleted_earning_ids: [], deleted_deduction_ids: [],
+    notes: '',
   };
 
-  const transformPayload = (v) => {
-    const p = { ...v };
-    p.active = Boolean(p.active);
-    Object.keys(p).forEach(k => p[k] === '' && (p[k] = null));
-    if (p.user_id && typeof p.user_id === 'object') p.user_id = p.user_id.id ?? p.user_id.value;
-    return p;
-  };
-
-  const filters = [
-    {
-      name: 'user_id', label: 'Employee', type: 'fkSelect',
-      fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20,
-      fkValueKey: 'id', fkLabelKey: 'first_name',
-      fkLabel: (r) => r ? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.username : '',
-    },
-    {
-      name: 'salary_month', label: 'Month', type: 'select',
-      options: MONTHS.map((m, i) => ({ label: m, value: i + 1 })),
-    },
-    {
-      name: 'payment_status', label: 'Payment', type: 'select',
-      options: ['UNPAID','PARTIAL','PAID'].map(v => ({ label: v, value: v })),
-    },
-  ];
+  const transformPayload = (values) => ({
+    ...values,
+    from_date: formatDate(values.from_date),
+    to_date: formatDate(values.to_date),
+    payment_date: formatDate(values.payment_date),
+    basic_salary: toNumber(values.basic_salary),
+    gross_salary: toNumber(values.gross_salary),
+    net_salary: toNumber(values.net_salary),
+    earnings: (values.earnings || []).map((r) => ({ ...r, amount: toNumber(r.amount) })),
+    deductions: (values.deductions || []).map((r) => ({ ...r, amount: toNumber(r.amount) })),
+  });
 
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Payslips</h2>}>
+    <AuthenticatedLayout auth={auth}>
       <Head title="Payslips" />
       <ReusableCrud
+        title="Payslips"
         icon={<DollarOutlined />}
-        title="Payslip"
-        apiUrl={api('/api/hrm/payslips')}
+        apiUrl={api('/api/hrm/payslips/')}
         columns={columns}
         fields={fields}
-        filters={filters}
         validationSchema={validationSchema}
-        crudInitialValues={initialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={900}
-        searchParam="search"
-        pageParam="page"
-        pageSizeParam="page_size"
-        sortMode="ordering"
-        orderingParam="ordering"
-        activeParam="active"
-        enableServerPagination
-        enableInactiveDrawer
-        showSearch
-        canAdd canEdit canDelete hasActions hasActionColumns
+        form_ui="drawer" drawerWidth="calc(100vw - 32px)"
+        searchParam="search" pageParam="page" pageSizeParam="page_size"
+        sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+        showSearch={true} canAdd={true} canEdit={true} canDelete={true}
+        hasActions={true} hasActionColumns={true}
+        anchorFilters={[
+          { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+          { key: 'approved', label: 'Approved', params: { status: 'approved' } },
+          { key: 'paid', label: 'Paid', params: { status: 'paid' } },
+          { key: 'all', label: 'All', params: {} },
+        ]}
+        defaultAnchorKey="draft" anchorSyncWithHash
       />
     </AuthenticatedLayout>
   );

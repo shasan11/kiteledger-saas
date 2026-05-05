@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Milestone;
 use App\Models\Project;
+use App\Models\ProjectTeam;
+use App\Models\TaskStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -13,17 +16,18 @@ class ProjectController extends BaseCrudApiController
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
-    protected bool $autoFillBranchOnCreate = true;
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $branchScoped = false;
+    protected bool $autoFillBranchOnCreate = false;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'projectManager',
+        'milestones',
+        'taskStatuses',
+        'projectTeams',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'projectManager' => 'project_manager_id',
     ];
 
@@ -31,8 +35,6 @@ class ProjectController extends BaseCrudApiController
         'name',
         'description',
         'status',
-        'branch.name',
-        'branch.code',
         'projectManager.first_name',
         'projectManager.last_name',
         'projectManager.username',
@@ -40,7 +42,6 @@ class ProjectController extends BaseCrudApiController
     ];
 
     protected array $filterable = [
-        'branch_id',
         'project_manager_id',
         'status',
     ];
@@ -62,7 +63,6 @@ class ProjectController extends BaseCrudApiController
         'start_date',
         'end_date',
         'status',
-        'branch_id',
         'active',
         'created_at',
         'updated_at',
@@ -70,13 +70,76 @@ class ProjectController extends BaseCrudApiController
 
     protected string $defaultSort = '-created_at';
 
+    protected array $nested = [
+        'milestones' => [
+            'relation' => 'milestones',
+            'model' => Milestone::class,
+            'foreign_key' => 'project_id',
+            'delete_key' => 'deleted_milestone_ids',
+            'required' => false,
+            'min' => 0,
+            'replace_on_update' => false,
+            'relations' => [],
+            'relation_details' => [],
+            'rules' => [
+                'name' => ['required', 'string', 'max:180'],
+                'start_date' => ['nullable', 'date'],
+                'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+                'description' => ['nullable', 'string'],
+                'status' => ['nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
+            ],
+            'update_rules' => [
+                'name' => ['required', 'string', 'max:180'],
+                'start_date' => ['nullable', 'date'],
+                'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+                'description' => ['nullable', 'string'],
+                'status' => ['nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
+            ],
+        ],
+        'task_statuses' => [
+            'relation' => 'taskStatuses',
+            'model' => TaskStatus::class,
+            'foreign_key' => 'project_id',
+            'delete_key' => 'deleted_task_status_ids',
+            'required' => false,
+            'min' => 0,
+            'replace_on_update' => false,
+            'relations' => [],
+            'relation_details' => [],
+            'rules' => [
+                'name' => ['required', 'string', 'max:120'],
+                'color' => ['nullable', 'string', 'max:30'],
+            ],
+            'update_rules' => [
+                'name' => ['required', 'string', 'max:120'],
+                'color' => ['nullable', 'string', 'max:30'],
+            ],
+        ],
+        'teams' => [
+            'relation' => 'projectTeams',
+            'model' => ProjectTeam::class,
+            'foreign_key' => 'project_id',
+            'delete_key' => 'deleted_team_ids',
+            'required' => false,
+            'min' => 0,
+            'replace_on_update' => false,
+            'relations' => [],
+            'relation_details' => [],
+            'rules' => [
+                'project_team_name' => ['required', 'string', 'max:180'],
+            ],
+            'update_rules' => [
+                'project_team_name' => ['required', 'string', 'max:180'],
+            ],
+        ],
+    ];
+
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'project_manager_id' => ['required', 'integer', 'exists:users,id'],
         'name' => ['required', 'string', 'max:180'],
         'start_date' => ['required', 'date'],
         'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-        'description' => ['required', 'string'],
+        'description' => ['nullable', 'string'],
         'status' => ['nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -86,12 +149,11 @@ class ProjectController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'project_manager_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'start_date' => ['sometimes', 'required', 'date'],
             'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:start_date'],
-            'description' => ['sometimes', 'required', 'string'],
+            'description' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],

@@ -1,74 +1,135 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { Tag, Typography } from 'antd';
+import { FileDoneOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-export default function ProformaInvoices(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+const emptyLine = { product_id: null, custom_product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_amount: 0 };
+
+const statusColors = { draft: 'default', sent: 'blue', accepted: 'green', cancelled: 'red' };
+
+export default function ProformaInvoices({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Proforma No', dataIndex: 'proforma_no', key: 'proforma_no' },
     {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      title: 'Status', dataIndex: 'status', key: 'status',
+      render: (v) => <Tag color={statusColors[v] || 'default'}>{v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}</Tag>,
     },
-  ];
+    { title: 'Date', dataIndex: 'proforma_date', key: 'proforma_date' },
+    { title: 'Contact', dataIndex: ['contact', 'name'], key: 'contact_name', render: (v) => v || '-' },
+    { title: 'Reference', dataIndex: 'reference', key: 'reference' },
+    { title: 'Total', dataIndex: 'total', key: 'total', render: (v) => money(v), align: 'right' },
+    { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true },
+  ], []);
 
-  const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
-  ];
+  const fields = useMemo(() => [
+    { name: 'proforma_no', label: 'Proforma No', type: 'text', col: 8 },
+    { name: 'proforma_date', label: 'Proforma Date', type: 'datePicker', col: 8, required: true },
+    {
+      name: 'status', label: 'Status', type: 'select', col: 8,
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'sent', label: 'Sent' },
+        { value: 'accepted', label: 'Accepted' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/crm/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/master/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'reference', label: 'Reference', type: 'text', col: 8 },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
+    {
+      name: 'items', label: 'Lines', type: 'objectArray', col: 24,
+      headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
+      defaultItem: { ...emptyLine },
+      columns: [
+        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/inventory/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'custom_product_name', name: 'custom_product_name', label: 'Product Name', type: 'text', width: '2fr' },
+        { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
+        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '90px', min: 0 },
+        { key: 'unit_price', name: 'unit_price', label: 'Unit Price', type: 'number', width: '130px', min: 0 },
+        { key: 'discount_percent', name: 'discount_percent', label: 'Disc %', type: 'number', width: '90px', min: 0, max: 100 },
+        { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
+      ],
+    },
+    { name: 'notes', label: 'Notes', type: 'textarea', col: 24 },
+  ], []);
 
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    active: Yup.boolean().nullable(),
+  const validationSchema = Yup.object({
+    proforma_date: Yup.string().required('Proforma date is required'),
+    contact_id: Yup.mixed().required('Contact is required'),
   });
 
   const crudInitialValues = {
-    name: '',
-    active: true,
+    proforma_no: '',
+    proforma_date: dayjs().format('YYYY-MM-DD'),
+    status: 'draft',
+    contact_id: null,
+    currency_id: null,
+    reference: '',
+    exchange_rate: 1,
+    notes: '',
+    items: [{ ...emptyLine }],
     deleted_item_ids: [],
   };
 
-  const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
-  };
+  const transformPayload = (values) => ({
+    ...values,
+    proforma_date: formatDate(values.proforma_date),
+    exchange_rate: toNumber(values.exchange_rate),
+    items: (values.items || []).map((item) => ({
+      ...item,
+      qty: toNumber(item.qty),
+      unit_price: toNumber(item.unit_price),
+      discount_percent: toNumber(item.discount_percent),
+      tax_amount: toNumber(item.tax_amount),
+    })),
+    deleted_item_ids: values.deleted_item_ids || [],
+  });
+
+  const anchorFilters = [
+    { label: 'Draft', value: 'draft' },
+    { label: 'Sent', value: 'sent' },
+    { label: 'All', value: 'all' },
+  ];
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="ProformaInvoices" />
+    <AuthenticatedLayout auth={auth}>
+      <Head title="Proforma Invoices" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
-        title="ProformaInvoices"
-        endpoint={api('/api/sales/proformainvoices')}
+        title="Proforma Invoices"
+        icon={<FileDoneOutlined />}
+        apiUrl={api('/api/payment-in/proforma-invoices/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="drawer"
-        drawerWidth={1100}
+        anchorFilters={anchorFilters}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
-        activeParam="active"
         enableServerPagination={true}
-        enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
       />
     </AuthenticatedLayout>
   );

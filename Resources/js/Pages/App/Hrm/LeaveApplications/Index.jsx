@@ -1,127 +1,76 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Tooltip } from 'antd';
-import { ScheduleOutlined } from '@ant-design/icons';
+import { FormOutlined } from '@ant-design/icons';
+import { Tag } from 'antd';
+import dayjs from 'dayjs';
 
-const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (p) => `${BACKEND}${p}`;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-const STATUS_COLORS = { PENDING: 'orange', APPROVED: 'green', REJECTED: 'red', CANCELLED: 'default' };
-const fmtDate = (v) => v ? new Date(v).toLocaleDateString() : '-';
+const statusColor = (s) => ({ pending: 'default', approved: 'green', rejected: 'red', cancelled: 'volcano' }[s] || 'default');
 
-export default function LeaveApplications(props) {
-  const columns = [
-    {
-      title: 'Employee', key: 'user', width: 170,
-      render: (_, r) => {
-        const u = r.user;
-        return u ? <strong>{[u.first_name, u.last_name].filter(Boolean).join(' ') || u.username}</strong> : '-';
-      },
-    },
-    { title: 'Leave Type', dataIndex: 'leave_type', key: 'leave_type', sorter: true, render: (v) => v || '-' },
-    { title: 'From', dataIndex: 'leave_from', key: 'leave_from', sorter: true, width: 100, render: fmtDate },
-    { title: 'To', dataIndex: 'leave_to', key: 'leave_to', sorter: true, width: 100, render: fmtDate },
-    {
-      title: 'Duration', dataIndex: 'leave_duration', key: 'leave_duration', sorter: true, width: 90,
-      render: (v) => v != null ? <Tag color="blue">{v} day{v !== 1 ? 's' : ''}</Tag> : '-',
-    },
-    {
-      title: 'Status', dataIndex: 'status', key: 'status', sorter: true, width: 110,
-      render: (v) => <Tag color={STATUS_COLORS[v] || 'default'}>{v || '—'}</Tag>,
-    },
-    { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (v) => v ? <Tooltip title={v}><span style={{ fontSize: 12 }}>{v.length > 50 ? v.slice(0,50)+'…' : v}</span></Tooltip> : '-' },
-    { title: 'Active', dataIndex: 'active', key: 'active', width: 70, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Yes' : 'No'}</Tag> },
-  ];
+export default function LeaveApplications({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Employee', dataIndex: ['employee', 'name'], key: 'employee_name', render: (v) => v || '-' },
+    { title: 'Leave Policy', dataIndex: ['leavePolicy', 'name'], key: 'leave_policy', render: (v) => v || '-' },
+    { title: 'From', dataIndex: 'from_date', key: 'from_date', render: (v) => v ? dayjs(v).format('DD-MM-YYYY') : '-' },
+    { title: 'To', dataIndex: 'to_date', key: 'to_date', render: (v) => v ? dayjs(v).format('DD-MM-YYYY') : '-' },
+    { title: 'Days', dataIndex: 'total_days', key: 'total_days', align: 'right' },
+    { title: 'Status', dataIndex: 'status', key: 'status', render: (v) => <Tag color={statusColor(v)}>{v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}</Tag> },
+  ], []);
 
-  const fields = [
-    {
-      name: 'user_id', label: 'Employee', type: 'fkSelect', required: true, col: 12,
-      fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20,
-      fkValueKey: 'id', fkLabelKey: 'first_name',
-      fkLabel: (r) => r ? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.username : '',
-    },
-    {
-      name: 'leave_type', label: 'Leave Type', type: 'select', required: true, col: 12,
-      options: ['Annual Leave','Sick Leave','Maternity Leave','Paternity Leave','Emergency Leave','Unpaid Leave','Casual Leave'].map(v => ({ label: v, value: v })),
-    },
-    { name: 'leave_from', label: 'Leave From', type: 'date', required: true, col: 8 },
-    { name: 'leave_to', label: 'Leave To', type: 'date', required: true, col: 8 },
-    { name: 'leave_duration', label: 'Duration (days)', type: 'number', col: 8, min: 0 },
-    { name: 'reason', label: 'Reason', type: 'textarea', col: 24, rows: 2 },
-    { name: 'attachment', label: 'Attachment', type: 'upload', col: 24 },
-    {
-      name: 'status', label: 'Status', type: 'select', col: 12,
-      options: ['PENDING','APPROVED','REJECTED','CANCELLED'].map(v => ({ label: v, value: v })),
-    },
-    { name: 'review_comment', label: 'Review Comment', type: 'textarea', col: 12, rows: 2 },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-  ];
+  const fields = useMemo(() => [
+    { name: 'employee_id', label: 'Employee', type: 'fkSelect', col: 12, required: true, fkUrl: api('/api/hrm/employees/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'leave_policy_id', label: 'Leave Policy', type: 'fkSelect', col: 12, fkUrl: api('/api/hrm/leave-policies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'from_date', label: 'From Date', type: 'datePicker', col: 8, required: true, format: 'DD-MM-YYYY' },
+    { name: 'to_date', label: 'To Date', type: 'datePicker', col: 8, required: true, format: 'DD-MM-YYYY' },
+    { name: 'total_days', label: 'Total Days', type: 'number', col: 8, min: 0 },
+    { name: 'status', label: 'Status', type: 'select', col: 8, options: [
+      { value: 'pending', label: 'Pending' },
+      { value: 'approved', label: 'Approved' },
+      { value: 'rejected', label: 'Rejected' },
+      { value: 'cancelled', label: 'Cancelled' },
+    ]},
+    { name: 'reason', label: 'Reason', type: 'textarea', col: 24, rows: 3 },
+  ], []);
 
-  const validationSchema = Yup.object().shape({
-    user_id: Yup.mixed().required('Employee is required'),
-    leave_type: Yup.string().required('Leave type is required').max(60),
-    leave_from: Yup.string().required('Leave from is required'),
-    leave_to: Yup.string().required('Leave to is required'),
-    leave_duration: Yup.number().nullable().min(0),
-    reason: Yup.string().nullable().max(255),
-    status: Yup.string().nullable(),
-    active: Yup.boolean().nullable(),
+  const validationSchema = Yup.object({
+    employee_id: Yup.mixed().required('Employee is required'),
+    from_date: Yup.string().required('From date is required'),
+    to_date: Yup.string().required('To date is required'),
   });
 
-  const initialValues = {
-    user_id: null, leave_type: '', leave_from: '', leave_to: '',
-    leave_duration: null, reason: '', attachment: null,
-    status: 'PENDING', review_comment: '', active: true,
-  };
+  const crudInitialValues = { employee_id: null, leave_policy_id: null, from_date: null, to_date: null, total_days: null, status: 'pending', reason: '' };
 
-  const transformPayload = (v) => {
-    const p = { ...v };
-    p.active = Boolean(p.active);
-    Object.keys(p).forEach(k => p[k] === '' && (p[k] = null));
-    if (p.user_id && typeof p.user_id === 'object') p.user_id = p.user_id.id ?? p.user_id.value;
-    return p;
-  };
-
-  const filters = [
-    {
-      name: 'user_id', label: 'Employee', type: 'fkSelect',
-      fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20,
-      fkValueKey: 'id', fkLabelKey: 'first_name',
-      fkLabel: (r) => r ? [r.first_name, r.last_name].filter(Boolean).join(' ') || r.username : '',
-    },
-    {
-      name: 'status', label: 'Status', type: 'select',
-      options: ['PENDING','APPROVED','REJECTED','CANCELLED'].map(v => ({ label: v, value: v })),
-    },
-  ];
+  const transformPayload = (values) => ({ ...values, from_date: formatDate(values.from_date), to_date: formatDate(values.to_date) });
 
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Leave Applications</h2>}>
+    <AuthenticatedLayout auth={auth}>
       <Head title="Leave Applications" />
       <ReusableCrud
-        icon={<ScheduleOutlined />}
-        title="Leave Application"
-        apiUrl={api('/api/hrm/leave-applications')}
+        title="Leave Applications"
+        icon={<FormOutlined />}
+        apiUrl={api('/api/hrm/leave-applications/')}
         columns={columns}
         fields={fields}
-        filters={filters}
         validationSchema={validationSchema}
-        crudInitialValues={initialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="drawer"
-        drawerWidth={780}
-        searchParam="search"
-        pageParam="page"
-        pageSizeParam="page_size"
-        sortMode="ordering"
-        orderingParam="ordering"
-        activeParam="active"
-        enableServerPagination
-        enableInactiveDrawer
-        showSearch
-        canAdd canEdit canDelete hasActions hasActionColumns
+        searchParam="search" pageParam="page" pageSizeParam="page_size"
+        sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+        showSearch={true} canAdd={true} canEdit={true} canDelete={true}
+        hasActions={true} hasActionColumns={true}
+        anchorFilters={[
+          { key: 'pending', label: 'Pending', params: { status: 'pending' } },
+          { key: 'approved', label: 'Approved', params: { status: 'approved' } },
+          { key: 'all', label: 'All', params: {} },
+        ]}
+        defaultAnchorKey="pending" anchorSyncWithHash
       />
     </AuthenticatedLayout>
   );

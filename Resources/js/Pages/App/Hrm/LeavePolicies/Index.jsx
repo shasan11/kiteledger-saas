@@ -1,52 +1,57 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Tooltip, Space } from 'antd';
 import { FileProtectOutlined } from '@ant-design/icons';
 
-const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (p) => `${BACKEND}${p}`;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
 
-export default function LeavePolicies(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <strong>{v}</strong> },
-    {
-      title: 'Paid Leaves', dataIndex: 'paid_leave_count', key: 'paid_leave_count', sorter: true, width: 110,
-      render: (v) => <Tag color="green">{v ?? 0} days</Tag>,
-    },
-    {
-      title: 'Unpaid Leaves', dataIndex: 'unpaid_leave_count', key: 'unpaid_leave_count', sorter: true, width: 120,
-      render: (v) => <Tag color="orange">{v ?? 0} days</Tag>,
-    },
-    { title: 'Description', dataIndex: 'description', key: 'description', render: (v) => v ? <Tooltip title={v}><span style={{ fontSize: 12, color: '#555' }}>{v.length > 60 ? v.slice(0,60)+'…' : v}</span></Tooltip> : '-' },
-    { title: 'Status', dataIndex: 'active', key: 'active', sorter: true, width: 80, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
-    { title: 'Created', dataIndex: 'created_at', key: 'created_at', sorter: true, width: 110, render: (v) => v ? new Date(v).toLocaleDateString() : '-' },
-  ];
-  const fields = [
-    { name: 'name', label: 'Policy Name', type: 'text', required: true, col: 24 },
-    { name: 'paid_leave_count', label: 'Paid Leave Days', type: 'number', required: true, col: 12, min: 0 },
-    { name: 'unpaid_leave_count', label: 'Unpaid Leave Days', type: 'number', required: true, col: 12, min: 0 },
+export default function LeavePolicies({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+    { title: 'Leave Type', dataIndex: 'leave_type', key: 'leave_type' },
+    { title: 'Days Allowed', dataIndex: 'days_allowed', key: 'days_allowed', align: 'right' },
+    { title: 'Carry Forward', dataIndex: 'carry_forward', key: 'carry_forward', render: (v) => v ? 'Yes' : 'No' },
+  ], []);
+
+  const fields = useMemo(() => [
+    { name: 'name', label: 'Policy Name', type: 'text', col: 12, required: true },
+    { name: 'leave_type', label: 'Leave Type', type: 'select', col: 12, options: [
+      { value: 'annual', label: 'Annual Leave' },
+      { value: 'sick', label: 'Sick Leave' },
+      { value: 'maternity', label: 'Maternity Leave' },
+      { value: 'paternity', label: 'Paternity Leave' },
+      { value: 'unpaid', label: 'Unpaid Leave' },
+      { value: 'other', label: 'Other' },
+    ]},
+    { name: 'days_allowed', label: 'Days Allowed', type: 'number', col: 8, min: 0 },
+    { name: 'max_carry_forward_days', label: 'Max Carry Forward Days', type: 'number', col: 8, min: 0 },
+    { name: 'carry_forward', label: 'Carry Forward', type: 'switch', col: 8 },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-  ];
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Policy name is required').max(120),
-    paid_leave_count: Yup.number().required('Required').min(0),
-    unpaid_leave_count: Yup.number().required('Required').min(0),
-    description: Yup.string().nullable().max(255),
-    active: Yup.boolean().nullable(),
-  });
-  const initialValues = { name: '', paid_leave_count: 0, unpaid_leave_count: 0, description: '', active: true };
-  const transformPayload = (v) => { const p={...v}; p.name=p.name?.trim()||null; p.active=Boolean(p.active); Object.keys(p).forEach(k=>p[k]===''&&(p[k]=null)); return p; };
+  ], []);
+
+  const validationSchema = Yup.object({ name: Yup.string().required('Name is required') });
+  const crudInitialValues = { name: '', leave_type: 'annual', days_allowed: 0, max_carry_forward_days: 0, carry_forward: false, description: '' };
+
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Leave Policies</h2>}>
+    <AuthenticatedLayout auth={auth}>
       <Head title="Leave Policies" />
-      <ReusableCrud icon={<FileProtectOutlined />} title="Leave Policy" apiUrl={api('/api/hrm/leave-policies')}
-        columns={columns} fields={fields} validationSchema={validationSchema} crudInitialValues={initialValues}
-        transformPayload={transformPayload} form_ui="modal" modalWidth={680}
-        searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
-        activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
+      <ReusableCrud
+        title="Leave Policies"
+        icon={<FileProtectOutlined />}
+        apiUrl={api('/api/hrm/leave-policies/')}
+        columns={columns}
+        fields={fields}
+        validationSchema={validationSchema}
+        crudInitialValues={crudInitialValues}
+        form_ui="drawer"
+        searchParam="search" pageParam="page" pageSizeParam="page_size"
+        sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+        showSearch={true} canAdd={true} canEdit={true} canDelete={true}
+        hasActions={true} hasActionColumns={true}
+      />
     </AuthenticatedLayout>
   );
 }

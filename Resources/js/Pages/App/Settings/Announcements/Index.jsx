@@ -2,49 +2,46 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { FileTextOutlined } from '@ant-design/icons';
+import { NotificationOutlined } from '@ant-design/icons';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-export default function CustomTemplates(props) {
+export default function Announcements(props) {
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
-    { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', sorter: true },
+    { title: 'Title', dataIndex: 'title', key: 'title', sorter: true },
+    { title: 'Description', dataIndex: 'description', key: 'description', sorter: true },
   ];
 
   const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'purpose', label: 'Purpose', type: 'text' },
-    { name: 'content', label: 'Content', type: 'textarea' },
+    { name: 'title', label: 'Title', type: 'text', required: true },
+    { name: 'description', label: 'Description', type: 'textarea' },
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    purpose: Yup.string().nullable(),
-    content: Yup.string().nullable(),
+    title: Yup.string().required('Title is required'),
+    description: Yup.string().nullable(),
   });
 
   const crudInitialValues = {
-    name: '',
-    purpose: '',
-    content: '',
+    title: '',
+    description: '',
   };
 
   const transformPayload = (values) => {
     const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
+    payload.title = payload.title?.trim() || null;
     Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
     return payload;
   };
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="Custom Templates" />
+      <Head title="Announcements" />
       <ReusableCrud
-        icon={<FileTextOutlined />}
-        title="Custom Templates"
-        apiUrl={api('/api/master/custom-templates/')}
+        icon={<NotificationOutlined />}
+        title="Announcements"
+        apiUrl={api('/api/master/announcements/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
