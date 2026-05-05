@@ -132,7 +132,7 @@ class JournalVoucherController extends BaseCrudApiController
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
 
-        'voucher_no' => ['required', 'string', 'max:40', 'unique:journal_vouchers,voucher_no'],
+        'voucher_no' => ['nullable', 'string', 'max:40', 'unique:journal_vouchers,voucher_no'],
         'voucher_date' => ['required', 'date'],
 
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
@@ -164,7 +164,7 @@ class JournalVoucherController extends BaseCrudApiController
 
             'voucher_no' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:40',
                 'unique:journal_vouchers,voucher_no,' . $record->id . ',id',

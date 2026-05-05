@@ -19,6 +19,8 @@ use App\Http\Controllers\Api\EmployeeProfileController;
 use App\Http\Controllers\Api\GeneralSettingController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\LoanAccountController;
+use App\Http\Controllers\Api\LoanChargeController;
+use App\Http\Controllers\Api\LoanTopUpController;
 use App\Http\Controllers\Api\MasterDataController;
 use App\Http\Controllers\Api\PrintingTemplateController;
 use App\Http\Controllers\Api\ProductTaxCategoryController;
@@ -513,6 +515,10 @@ Route::patch('loan-accounts/bulk', [LoanAccountController::class, 'bulkUpdate'])
 Route::delete('loan-accounts/bulk', [LoanAccountController::class, 'bulkDestroy']);
 Route::apiResource('loan-accounts', LoanAccountController::class)
     ->parameters(['loan-accounts' => 'loanAccount']);
+Route::apiResource('loan-top-ups', LoanTopUpController::class)
+    ->parameters(['loan-top-ups' => 'loanTopUp']);
+Route::apiResource('loan-charges', LoanChargeController::class)
+    ->parameters(['loan-charges' => 'loanCharge']);
 
 /*
 |--------------------------------------------------------------------------

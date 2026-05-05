@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography } from 'antd';
 import { UserSwitchOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
@@ -22,8 +22,7 @@ const statusOptions = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
-  { value: 'proposal', label: 'Proposal' },
-  { value: 'negotiation', label: 'Negotiation' },
+  { value: 'unqualified', label: 'Unqualified' },
   { value: 'lost', label: 'Lost' },
   { value: 'converted', label: 'Converted' },
 ];
@@ -39,8 +38,7 @@ const statusColor = {
   new: 'blue',
   contacted: 'cyan',
   qualified: 'green',
-  proposal: 'geekblue',
-  negotiation: 'orange',
+  unqualified: 'volcano',
   lost: 'red',
   converted: 'purple',
 };
@@ -291,7 +289,7 @@ export default function Leads(props) {
     expected_value: Yup.number().nullable().min(0),
     contact_id: Yup.string().nullable(),
     assigned_to_id: Yup.number().nullable(),
-    status: Yup.string().nullable().oneOf(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'lost', 'converted', null]),
+    status: Yup.string().nullable().oneOf(['new', 'contacted', 'qualified', 'unqualified', 'lost', 'converted', null]),
     priority: Yup.string().nullable().oneOf(['low', 'medium', 'high', 'urgent', null]),
     next_follow_up_date: Yup.string().nullable(),
     address: Yup.string().nullable(),
@@ -375,6 +373,14 @@ export default function Leads(props) {
         orderingParam="ordering"
         enableServerPagination={true}
         showSearch={true}
+        canView={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('crm.leads.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         canAdd={true}
         canEdit={true}
         canDelete={true}

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography, Button } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
@@ -125,6 +125,45 @@ export default function JournalVouchers(props) {
         { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '160px', min: 0, placeholder: '0.00' },
       ],
     },
+    {
+      name: '_balance_status',
+      label: '',
+      type: 'custom',
+      col: 24,
+      render: ({ values }) => {
+        const items = values?.items || [];
+        const totalDebit = items.reduce((sum, row) => sum + toNumber(row?.debit), 0);
+        const totalCredit = items.reduce((sum, row) => sum + toNumber(row?.credit), 0);
+        const difference = Number(Math.abs(totalDebit - totalCredit).toFixed(2));
+        const balanced = totalDebit > 0 && totalCredit > 0 && difference === 0;
+        const color = balanced ? '#0f8a3b' : '#c62828';
+        const bg = balanced ? '#f0fff4' : '#fff5f5';
+        const border = balanced ? '#9be7b2' : '#ffc9c9';
+
+        return (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              flexWrap: 'wrap',
+              border: `1px solid ${border}`,
+              background: bg,
+              color,
+              padding: '14px 16px',
+              borderRadius: 4,
+              fontWeight: 650,
+            }}
+          >
+            <span>{balanced ? 'Balanced' : 'Not balanced'}</span>
+            <span>Debit: {money(totalDebit)}</span>
+            <span>Credit: {money(totalCredit)}</span>
+            <span>Difference: {money(difference)}</span>
+          </div>
+        );
+      },
+    },
   ], []);
 
   const validationSchema = Yup.object().shape({
@@ -142,7 +181,13 @@ export default function JournalVouchers(props) {
         debit: Yup.number().nullable().min(0),
         credit: Yup.number().nullable().min(0),
       }))
-      .min(2, 'At least two lines are required'),
+      .min(2, 'At least two lines are required')
+      .test('balanced', 'Journal voucher is not balanced. Debit and credit totals must be equal.', (items = []) => {
+        const totalDebit = items.reduce((sum, row) => sum + toNumber(row?.debit), 0);
+        const totalCredit = items.reduce((sum, row) => sum + toNumber(row?.credit), 0);
+
+        return totalDebit > 0 && totalCredit > 0 && Number(Math.abs(totalDebit - totalCredit).toFixed(2)) === 0;
+      }),
   });
 
   const crudInitialValues = {
@@ -210,6 +255,13 @@ export default function JournalVouchers(props) {
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         renderSubmitButton={renderSaveButton}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('accounting.journal-vouchers.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         form_ui="drawer"
         drawerWidth="calc(100vw - 32px)"
         searchParam="search"
@@ -224,6 +276,12 @@ export default function JournalVouchers(props) {
         canDelete={true}
         hasActions={true}
         hasActionColumns={true}
+        anchorFilters={[
+          { key: 'approved',    label: 'Approved',    title: 'Cash Transfers', params: { approved: true } },
+          { key: 'draft',     label: 'Draft',     title: 'Cash Transfers', params: { approved: false  } },
+        ]}
+         defaultAnchorKey="approved"
+        anchorSyncWithHash
       />
     </AuthenticatedLayout>
   );

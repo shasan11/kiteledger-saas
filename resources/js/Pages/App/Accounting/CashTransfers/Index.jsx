@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography, Button } from 'antd';
 import { SwapOutlined } from '@ant-design/icons';
@@ -90,7 +90,7 @@ export default function CashTransfers(props) {
       required: true,
       col: 12,
       placeholder: 'Select source account',
-      fkUrl: api('/api/accounts'),
+      fkUrl: api('/api/accounts/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -105,7 +105,7 @@ export default function CashTransfers(props) {
       required: true,
       col: 6,
       placeholder: 'Select currency',
-      fkUrl: api('/api/currencies'),
+      fkUrl: api('/api/currencies/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
@@ -130,7 +130,7 @@ export default function CashTransfers(props) {
           type: 'fkSelect',
           width: '3fr',
           placeholder: 'Select destination account',
-          fkUrl: api('/api/accounts'),
+          fkUrl: api('/api/accounts/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
@@ -223,13 +223,20 @@ export default function CashTransfers(props) {
       <ReusableCrud
         icon={<SwapOutlined />}
         title="Cash Transfers"
-        apiUrl={api('/api/cash-transfers')}
+        apiUrl={api('/api/cash-transfers/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         renderSubmitButton={renderSaveButton}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('accounting.cash-transfers.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         form_ui="drawer"
         drawerWidth="calc(100vw - 32px)"
         searchParam="search"

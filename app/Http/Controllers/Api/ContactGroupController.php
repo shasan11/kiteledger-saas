@@ -14,33 +14,28 @@ class ContactGroupController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'parent',
         'contacts',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'parent' => 'parent_id',
     ];
 
     protected array $searchable = [
         'name',
         'description',
-        'branch.name',
-        'branch.code',
         'parent.name',
     ];
 
     protected array $filterable = [
-        'branch_id',
         'parent_id',
     ];
 
@@ -62,7 +57,6 @@ class ContactGroupController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'name' => ['required', 'string', 'max:120'],
         'parent_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
         'description' => ['nullable', 'string'],
@@ -74,7 +68,6 @@ class ContactGroupController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'parent_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
             'description' => ['sometimes', 'nullable', 'string'],
@@ -88,22 +81,6 @@ class ContactGroupController extends BaseCrudApiController
         array $parentData,
         array $nestedData
     ): array {
-        if (
-            array_key_exists('parent_id', $parentData)
-            && $parentData['parent_id'] !== null
-        ) {
-            $parent = ContactGroup::query()->find($parentData['parent_id']);
-
-            if (
-                $parent
-                && !empty($parentData['branch_id'])
-                && !empty($parent->branch_id)
-                && (string) $parent->branch_id !== (string) $parentData['branch_id']
-            ) {
-                abort(422, 'Parent contact group must belong to the same branch.');
-            }
-        }
-
         return $parentData;
     }
 
@@ -118,22 +95,6 @@ class ContactGroupController extends BaseCrudApiController
             && (string) $parentData['parent_id'] === (string) $record->id
         ) {
             abort(422, 'Parent cannot be the same as the current contact group.');
-        }
-
-        if (
-            array_key_exists('parent_id', $parentData)
-            && $parentData['parent_id'] !== null
-        ) {
-            $parent = ContactGroup::query()->find($parentData['parent_id']);
-
-            if (
-                $parent
-                && !empty($record->branch_id)
-                && !empty($parent->branch_id)
-                && (string) $parent->branch_id !== (string) $record->branch_id
-            ) {
-                abort(422, 'Parent contact group must belong to the same branch.');
-            }
         }
 
         return $parentData;

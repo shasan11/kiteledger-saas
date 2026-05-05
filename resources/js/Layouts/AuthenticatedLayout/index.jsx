@@ -134,8 +134,8 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'chart-of-accounts', label: 'Chart of Accounts', onClick: () => visit('accounting.chart-of-accounts.index', '/accounting/chart-of-accounts') },
                     { key: 'bank-accounts', label: 'Bank Accounts', onClick: () => visit('accounting.bank-accounts.index', '/accounting/bank-accounts') },
                     { key: 'cash-transfer', label: 'Cash Transfer', onClick: () => visit('accounting.cash-transfers.index', '/accounting/cash-transfers') },
+                    { key: 'cheque-register', label: 'Cheque Register', onClick: () => visit('accounting.cheque-registers.index', '/accounting/cheque-registers') },
                     { key: 'journal-voucher', label: 'Journal Voucher', onClick: () => visit('accounting.journal-vouchers.index', '/accounting/journal-vouchers') },
-                    { key: 'fixed-asset', label: 'Fixed Asset', onClick: () => visit('accounting.fixed-assets.index', '/accounting/fixed-assets') },
                     { key: 'loan-accounts', label: 'Loan Accounts', onClick: () => visit('accounting.loan-accounts.index', '/accounting/loan-accounts') },
                 ],
             },
@@ -157,6 +157,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'inventory-products', label: 'Products', onClick: () => visit('inventory.products.index', '/inventory/products') },
                     { key: 'inventory-variant-attributes', label: 'Variant Attributes', onClick: () => visit('inventory.variant-attributes.index', '/inventory/variant-attributes') },
                     { key: 'inventory-unit-of-measurement', label: 'Unit of Measurement', onClick: () => visit('inventory.unit-of-measurements.index', '/inventory/unit-of-measurements') },
+                    { key: 'warehouse', label: 'Warehouses', onClick: () => visit('warehouse.index', '/warehouse') },
                     { key: 'inventory-warehouse-transfer', label: 'Warehouse Transfer', onClick: () => visit('inventory.warehouse-transfers.index', '/inventory/warehouse-transfers') },
                     { key: 'inventory-adjustment', label: 'Inventory Adjustment', onClick: () => visit('inventory.adjustments.index', '/inventory/adjustments') },
                     { key: 'inventory-bill-of-materials', label: 'Bill of Materials', onClick: () => visit('inventory.bill-of-materials.index', '/inventory/bill-of-materials') },
@@ -237,6 +238,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/chart-of-accounts')) return ['chart-of-accounts'];
         if (isActive('/accounting/bank-accounts')) return ['bank-accounts'];
         if (isActive('/accounting/cash-transfers')) return ['cash-transfer'];
+        if (isActive('/accounting/cheque-registers')) return ['cheque-register'];
         if (isActive('/accounting/journal-vouchers')) return ['journal-voucher'];
         if (isActive('/accounting/quick-bills')) return ['quick-bill'];
         if (isActive('/accounting/quick-receipts')) return ['quick-receipt'];

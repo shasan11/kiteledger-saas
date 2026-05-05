@@ -2,8 +2,11 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Typography } from 'antd';
-import { HomeOutlined } from '@ant-design/icons';
+import { Space, Tag, Typography } from 'antd';
+import {
+  HomeOutlined,
+  InboxOutlined,
+} from '@ant-design/icons';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -26,19 +29,33 @@ export default function Warehouses(props) {
       dataIndex: 'name',
       key: 'name',
       sorter: true,
-      render: (val) => <Text strong>{val}</Text>,
+      backendSort: true,
+      sortField: 'name',
+      render: (val) => (
+        <Space>
+          <InboxOutlined style={{ color: '#1677ff' }} />
+          <Text strong>{val || '-'}</Text>
+        </Space>
+      ),
     },
     {
       title: 'Code',
       dataIndex: 'code',
       key: 'code',
+      backendSort: true,
+      sortField: 'code',
       render: (val) => val ? <Tag color="blue">{val}</Tag> : '-',
     },
     {
       title: 'Branch',
       dataIndex: 'branch',
       key: 'branch',
-      render: (_, record) => record?.branch?.name || '-',
+      render: (_, record) =>
+        record?.branch?.label ||
+        [record?.branch?.code, record?.branch?.name].filter(Boolean).join(' - ') ||
+        record?.branch_name ||
+        record?.branch_id_detail?.label ||
+        '-',
     },
     {
       title: 'Address',
@@ -51,8 +68,20 @@ export default function Warehouses(props) {
       dataIndex: 'active',
       key: 'active',
       sorter: true,
+      backendSort: true,
+      sortField: 'active',
       render: (active) => (
         <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
+      ),
+    },
+    {
+      title: 'Type',
+      dataIndex: 'is_system_generated',
+      key: 'is_system_generated',
+      render: (value) => (
+        <Tag color={value ? 'purple' : 'default'}>
+          {value ? 'System' : 'Manual'}
+        </Tag>
       ),
     },
   ];
@@ -79,15 +108,17 @@ export default function Warehouses(props) {
       type: 'fkSelect',
       col: 12,
       placeholder: 'Select branch',
-      fkUrl: api('/api/branches'),
+      fkUrl: api('/api/branches/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
       fkValueKey: 'id',
       fkLabelKey: 'name',
-      fkLabel: (row) => row?.name || '',
+      labelField: 'branch_name',
+      fkLabel: (row) => [row?.code, row?.name].filter(Boolean).join(' - ') || row?.name || '',
       allowClear: true,
     },
     { name: 'active', label: 'Active', type: 'switch', col: 12 },
+    { name: 'is_system_generated', label: 'System Generated', type: 'switch', col: 12, readOnly: true },
     {
       name: 'address',
       label: 'Address',
@@ -99,19 +130,22 @@ export default function Warehouses(props) {
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Warehouse name is required').max(150),
-    code: Yup.string().nullable().max(50),
+    name: Yup.string().trim().required('Warehouse name is required').max(150),
+    code: Yup.string().nullable().max(30, 'Code cannot exceed 30 characters'),
     branch_id: Yup.string().nullable().uuid('Invalid branch selected'),
     address: Yup.string().nullable(),
     active: Yup.boolean().nullable(),
+    is_system_generated: Yup.boolean().nullable(),
   });
 
   const crudInitialValues = {
     name: '',
     code: '',
     branch_id: null,
+    branch_name: '',
     address: '',
     active: true,
+    is_system_generated: false,
   };
 
   const transformPayload = (values) => {
@@ -121,6 +155,7 @@ export default function Warehouses(props) {
     p.address = p.address?.trim() || null;
     p.branch_id = extractId(p.branch_id);
     p.active = Boolean(p.active);
+    p.is_system_generated = Boolean(p.is_system_generated);
     Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
     return p;
   };
@@ -134,7 +169,7 @@ export default function Warehouses(props) {
       <ReusableCrud
         icon={<HomeOutlined />}
         title="Warehouses"
-        apiUrl={api('/api/warehouses')}
+        apiUrl={api('/api/warehouses/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
@@ -151,11 +186,32 @@ export default function Warehouses(props) {
         enableServerPagination={true}
         enableInactiveDrawer={true}
         showSearch={true}
+        searchFields={['name', 'code', 'address']}
+        defaultSortField="created_at"
+        defaultSortOrder="descend"
+        anchorFilters={[
+          {
+            key: 'manual',
+            label: 'Manual',
+            title: 'Warehouses',
+            params: { is_system_generated: false },
+          },
+          {
+            key: 'system',
+            label: 'System',
+            title: 'System Warehouses',
+            params: { is_system_generated: true },
+          },
+        ]}
+        defaultAnchorKey="manual"
+        anchorSyncWithHash
         canAdd={true}
         canEdit={true}
         canDelete={true}
+        canView={true}
         hasActions={true}
         hasActionColumns={true}
+        showRowActionMenu={true}
       />
     </AuthenticatedLayout>
   );

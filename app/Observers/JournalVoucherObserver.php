@@ -37,10 +37,16 @@ class JournalVoucherObserver
     public function saved(JournalVoucher $journalVoucher): void
     {
         DB::transaction(function () use ($journalVoucher) {
+            $journalVoucher = $journalVoucher->fresh(['journalVoucherLines']);
+
+            if (!$journalVoucher || !$this->isReadyForFinancialSync($journalVoucher)) {
+                return;
+            }
+
             $oldEffect = $this->pullOldEffect($journalVoucher);
 
             app(JournalVoucherService::class)->syncFinancials(
-                journalVoucher: $journalVoucher->fresh(['journalVoucherLines']),
+                journalVoucher: $journalVoucher,
                 oldEffect: $oldEffect
             );
         });
@@ -71,5 +77,19 @@ class JournalVoucherObserver
                 || str_contains((string) $journalVoucher->reference, 'Cash Transfer')
             )
         );
+    }
+
+    protected function isReadyForFinancialSync(JournalVoucher $journalVoucher): bool
+    {
+        $lines = $journalVoucher->journalVoucherLines;
+
+        if ($lines->count() < 2) {
+            return false;
+        }
+
+        $debit = round((float) $lines->sum(fn ($line) => (float) $line->debit), 2);
+        $credit = round((float) $lines->sum(fn ($line) => (float) $line->credit), 2);
+
+        return $debit > 0 && $credit > 0 && $debit === $credit;
     }
 }

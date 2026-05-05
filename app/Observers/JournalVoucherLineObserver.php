@@ -83,6 +83,10 @@ class JournalVoucherLineObserver
                 return;
             }
 
+            if (!$this->isReadyForFinancialSync($voucher)) {
+                return;
+            }
+
             $oldEffect = $this->pullOldEffect(JournalVoucher::class, $voucher->id);
 
             app(JournalVoucherService::class)->syncFinancials(
@@ -90,5 +94,19 @@ class JournalVoucherLineObserver
                 oldEffect: $oldEffect
             );
         });
+    }
+
+    protected function isReadyForFinancialSync(JournalVoucher $voucher): bool
+    {
+        $lines = $voucher->journalVoucherLines;
+
+        if ($lines->count() < 2) {
+            return false;
+        }
+
+        $debit = round((float) $lines->sum(fn ($line) => (float) $line->debit), 2);
+        $credit = round((float) $lines->sum(fn ($line) => (float) $line->credit), 2);
+
+        return $debit > 0 && $credit > 0 && $debit === $credit;
     }
 }

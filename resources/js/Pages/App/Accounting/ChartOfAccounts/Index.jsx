@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Radio, Tag, Typography } from 'antd';
+import { Radio, Tag, Typography, Space } from 'antd';
 import {
     AppstoreOutlined,
     BarsOutlined,
@@ -13,9 +13,11 @@ import {
     RiseOutlined,
     FallOutlined,
     DollarCircleOutlined,
+    NodeIndexOutlined,
+    UnorderedListOutlined,
 } from '@ant-design/icons';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -87,6 +89,94 @@ const renderAccountType = (type) => {
     );
 };
 
+const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
+    const isTree = viewMode === 'tree';
+
+    return (
+        <div
+            style={{
+                background: '#fff',
+                border: '1px solid #eef0f4',
+                borderRadius: 6,
+                
+                padding: '14px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+            }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                    style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 6,
+                        background: '#f6f8fb',
+                        border: '1px solid #e8edf3',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        color: '#1677ff',
+                    }}
+                >
+                    {isTree ? <NodeIndexOutlined /> : <UnorderedListOutlined />}
+                </div>
+
+                <div>
+                    <Title
+                        level={4}
+                        style={{
+                            margin: 0,
+                            fontSize: 18,
+                            fontWeight: 700,
+                            color: '#0f172a',
+                        }}
+                    >
+                        Chart Of Accounts
+                    </Title>
+
+                    <Text style={{ color: '#64748b', fontSize: 13 }}>
+                        {isTree
+                            ? 'Tree view shows the account hierarchy with parent and child accounts.'
+                            : 'List view shows accounts in a flat table for quick search, edit and sorting.'}
+                    </Text>
+                </div>
+            </div>
+
+            <Space size={12} wrap>
+                <Tag
+                    color={activeAnchor === 'system' ? 'gold' : 'green'}
+                    style={{
+                        borderRadius: 999,
+                        padding: '4px 12px',
+                        fontWeight: 600,
+                    }}
+                >
+                    {activeAnchor === 'system' ? 'System Generated' : 'Non System Generated'}
+                </Tag>
+
+                <Radio.Group
+                    value={viewMode}
+                    onChange={(event) => setViewMode(event.target.value)}
+                    optionType="button"
+                    buttonStyle="solid"
+                >
+                    <Radio.Button value="list">
+                        <BarsOutlined /> List
+                    </Radio.Button>
+
+                    <Radio.Button value="tree">
+                        <AppstoreOutlined /> Tree
+                    </Radio.Button>
+                </Radio.Group>
+            </Space>
+        </div>
+    );
+};
+
 export default function ChartOfAccounts(props) {
     const [viewMode, setViewMode] = useState('list');
     const [activeAnchor, setActiveAnchor] = useState('non_system');
@@ -99,27 +189,79 @@ export default function ChartOfAccounts(props) {
                 title: 'Code',
                 dataIndex: 'code',
                 key: 'code',
-                width: 100,
+                width: 110,
                 backendSort: true,
                 sortField: 'code',
-                render: (value) => <Text strong>{value || '-'}</Text>,
+                render: (value) => (
+                    <Text
+                        strong
+                        style={{
+                            color: '#0f172a',
+                            fontSize: 13,
+                        }}
+                    >
+                        {value || '-'}
+                    </Text>
+                ),
             },
             {
                 title: 'Name',
                 dataIndex: 'name',
                 key: 'name',
-                width: 300,
+                width: 340,
                 backendSort: true,
                 sortField: 'name',
-                render: (value, record) =>
-                    isTreeView ? (
-                        <span>
-                            <ApartmentOutlined style={{ marginRight: 8 }} />
-                            <Text strong={!record?.parent_id}>{value || '-'}</Text>
+                render: (value, record) => {
+                    const isParent = !record?.parent_id && !record?.parent;
+
+                    return (
+                        <span
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                            }}
+                        >
+                            {isTreeView ? (
+                                <span
+                                    style={{
+                                        width: 26,
+                                        height: 26,
+                                        borderRadius: 6,
+                                        background: isParent ? '#f0f7ff' : '#f8fafc',
+                                        border: '1px solid #e5eaf1',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: isParent ? '#1677ff' : '#64748b',
+                                    }}
+                                >
+                                    {isParent ? <ApartmentOutlined /> : <NodeIndexOutlined />}
+                                </span>
+                            ) : null}
+
+                            <span>
+                                <Text strong={isTreeView && isParent}>
+                                    {value || '-'}
+                                </Text>
+
+                                {isTreeView && record?.children?.length ? (
+                                    <Text
+                                        style={{
+                                            display: 'block',
+                                            fontSize: 12,
+                                            color: '#94a3b8',
+                                            lineHeight: '16px',
+                                        }}
+                                    >
+                                        {record.children.length} child account
+                                        {record.children.length > 1 ? 's' : ''}
+                                    </Text>
+                                ) : null}
+                            </span>
                         </span>
-                    ) : (
-                        value || '-'
-                    ),
+                    );
+                },
             },
             {
                 title: 'Account Type',
@@ -130,21 +272,36 @@ export default function ChartOfAccounts(props) {
                     renderAccountType(
                         record?.type ||
                             record?.parent?.type ||
-                            'asseta',
+                            'asset',
                     ),
             },
             {
                 title: 'Parent',
                 dataIndex: 'parent_name',
                 key: 'parent_name',
-                width: 200,
-                render: (_, record) =>
-                    getLabel(
+                width: 220,
+                render: (_, record) => {
+                    const parent = getLabel(
                         record?.parent_name,
                         record?.parent?.label,
                         record?.parent?.name,
                         record?.parent?.code,
-                    ),
+                    );
+
+                    return parent === '-' ? (
+                        <Tag
+                            style={{
+                                borderRadius: 999,
+                                marginInlineEnd: 0,
+                                color: '#475569',
+                            }}
+                        >
+                            Root Account
+                        </Tag>
+                    ) : (
+                        <Text style={{ color: '#475569' }}>{parent}</Text>
+                    );
+                },
             },
         ],
         [isTreeView],
@@ -199,7 +356,7 @@ export default function ChartOfAccounts(props) {
                 placeholder: 'Description',
             },
         ],
-        [activeAnchor],
+        [],
     );
 
     const validationSchema = Yup.object().shape({
@@ -232,7 +389,6 @@ export default function ChartOfAccounts(props) {
     const transformPayload = (values) => {
         const payload = {
             parent_id: values.parent_id || null,
-
             code: values.code?.trim() || null,
             name: values.name?.trim() || null,
             description: values.description?.trim() || null,
@@ -270,91 +426,90 @@ export default function ChartOfAccounts(props) {
 
             <div
                 style={{
-                    background: '#fff',
-                    borderBottom: '1px solid #eef0f4',
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center',
-                    gap: 12,
-                    flexWrap: 'wrap',
+                    background: '#f6f8fb',
+                    minHeight: '100vh',
+                    paddingBottom: 16,
                 }}
             >
-                <Radio.Group
-                    value={viewMode}
-                    onChange={(event) => setViewMode(event.target.value)}
-                    optionType="button"
-                    buttonStyle="solid"
-                >
-                    <Radio.Button value="list">
-                        <BarsOutlined /> List
-                    </Radio.Button>
+                <ViewModeHeader
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    activeAnchor={activeAnchor}
+                />
 
-                    <Radio.Button value="tree">
-                        <AppstoreOutlined /> Tree
-                    </Radio.Button>
-                </Radio.Group>
-            </div>
-
-            <ReusableCrud
-                key={`chart-of-accounts-${viewMode}-${activeAnchor}`}
-                icon={<AppstoreOutlined />}
-                title="Chart Of Accounts"
-                apiUrl={api('/api/chart-of-accounts/')}
-                columns={columns}
-                fields={fields}
-                validationSchema={validationSchema}
-                crudInitialValues={crudInitialValues}
-                transformPayload={transformPayload}
+                <div style={{ marginTop: 12 }}>
+                    <ReusableCrud
+                        key={`chart-of-accounts-${viewMode}-${activeAnchor}`}
+                        icon={isTreeView ? <NodeIndexOutlined /> : <AppstoreOutlined />}
+                        title={isTreeView ? 'Chart Of Accounts Tree' : 'Chart Of Accounts'}
+                        apiUrl={api('/api/chart-of-accounts/')}
+                        columns={columns}
+                        fields={fields}
+                        validationSchema={validationSchema}
+                        crudInitialValues={crudInitialValues}
+                        transformPayload={transformPayload}
                 onFormValuesChange={handleFormValuesChange}
+                activeTableRowFunction={(record) => ({
+                    onClick: (event) => {
+                        if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+                        router.visit(route('accounting.chart-of-accounts.show', record.id));
+                    },
+                    style: { cursor: 'pointer' },
+                })}
                 form_ui="modal"
-                modalWidth={500}
-                enableServerPagination
-                pageParam="page"
-                pageSizeParam="page_size"
-                searchParam="search"
-                activeParam="active"
-                sortMode="ordering"
-                orderingParam="ordering"
-                defaultSortField={isTreeView ? 'code' : 'created_at'}
-                defaultSortOrder={isTreeView ? 'ascend' : 'descend'}
-                baseFilters={
-                    isTreeView
-                        ? {
-                              tree: true,
-                          }
-                        : {}
-                }
-                anchorFilters={[
-                    {
-                        key: 'non_system',
-                        label: 'Non System Generated',
-                        title: 'Chart Of Accounts',
-                        params: {
-                            is_system_generated: false,
-                        },
-                    },
-                    {
-                        key: 'system',
-                        label: 'System Generated',
-                        title: 'Chart Of Accounts',
-                        params: {
-                            is_system_generated: true,
-                        },
-                    },
-                ]}
-                defaultAnchorKey="non_system"
-                anchorSyncWithHash
-                onAnchorChange={(key) => setActiveAnchor(key)}
-                enableInactiveDrawer={!isTreeView}
-                showSearch
-                canAdd={activeAnchor === 'non_system'}
-                canEdit
-                canDelete
-                canView
-                hasActions
-                hasActionColumns
-            />
+                        modalWidth={500}
+                        enableServerPagination
+                        pageParam="page"
+                        pageSizeParam="page_size"
+                        searchParam="search"
+                        activeParam="active"
+                        sortMode="ordering"
+                        orderingParam="ordering"
+                        defaultSortField={isTreeView ? 'code' : 'created_at'}
+                        defaultSortOrder={isTreeView ? 'ascend' : 'descend'}
+                        baseFilters={
+                            isTreeView
+                                ? {
+                                      tree: true,
+                                  }
+                                : {}
+                        }
+                        anchorFilters={[
+                            {
+                                key: 'non_system',
+                                label: 'Non System Generated',
+                                title: isTreeView
+                                    ? 'Chart Of Accounts Tree'
+                                    : 'Chart Of Accounts',
+                                params: {
+                                    is_system_generated: false,
+                                },
+                            },
+                            {
+                                key: 'system',
+                                label: 'System Generated',
+                                title: isTreeView
+                                    ? 'System Chart Tree'
+                                    : 'System Chart Of Accounts',
+                                params: {
+                                    is_system_generated: true,
+                                },
+                            },
+                        ]}
+                        defaultAnchorKey="non_system"
+                        anchorSyncWithHash
+                        onAnchorChange={(key) => setActiveAnchor(key)}
+                        enableInactiveDrawer={!isTreeView}
+                        showSearch
+                        canAdd={activeAnchor === 'non_system'}
+                        canEdit={activeAnchor === 'non_system'}
+                        canDelete={activeAnchor === 'non_system'}
+                        canView
+                        hasActions
+                        hasActionColumns
+                    />
+                </div>
+            </div>
         </AuthenticatedLayout>
     );
 }

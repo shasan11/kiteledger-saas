@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Contact;
-use App\Models\ContactGroup;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -15,21 +14,21 @@ class ContactController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'contactGroup',
+        'account',
         'creditTerm',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'contactGroup' => 'contact_group_id',
+        'account' => 'account_id',
         'creditTerm' => 'credit_term_id',
     ];
 
@@ -39,15 +38,15 @@ class ContactController extends BaseCrudApiController
         'phone',
         'email',
         'pan',
-        'branch.name',
-        'branch.code',
         'contactGroup.name',
+        'account.name',
+        'account.code',
         'creditTerm.name',
     ];
 
     protected array $filterable = [
-        'branch_id',
         'contact_group_id',
+        'account_id',
         'contact_type',
         'credit_term_id',
     ];
@@ -74,13 +73,15 @@ class ContactController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
+        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'contact_type' => ['required', 'in:customer,supplier,lead'],
         'name' => ['required', 'string', 'max:180'],
         'code' => ['nullable', 'string', 'max:50'],
         'address' => ['nullable', 'string'],
         'pan' => ['nullable', 'string', 'max:80'],
+        'tax_registration_no' => ['nullable', 'string', 'max:80'],
+        'tax_registration_type' => ['nullable', 'in:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id,none'],
         'phone' => ['nullable', 'string', 'max:40'],
         'accept_purchase' => ['nullable', 'boolean'],
         'email' => ['nullable', 'email', 'max:120'],
@@ -93,13 +94,15 @@ class ContactController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'contact_group_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
+            'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'contact_type' => ['sometimes', 'required', 'in:customer,supplier,lead'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'code' => ['sometimes', 'nullable', 'string', 'max:50'],
             'address' => ['sometimes', 'nullable', 'string'],
             'pan' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'tax_registration_no' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'tax_registration_type' => ['sometimes', 'nullable', 'in:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id,none'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'accept_purchase' => ['sometimes', 'nullable', 'boolean'],
             'email' => ['sometimes', 'nullable', 'email', 'max:120'],
@@ -114,8 +117,6 @@ class ContactController extends BaseCrudApiController
         array $parentData,
         array $nestedData
     ): array {
-        $this->validateContactGroupBranch($parentData);
-
         return $parentData;
     }
 
@@ -124,35 +125,6 @@ class ContactController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
-        $data = $parentData;
-
-        if (!array_key_exists('branch_id', $data)) {
-            $data['branch_id'] = $record->branch_id;
-        }
-
-        $this->validateContactGroupBranch($data);
-
         return $parentData;
-    }
-
-    protected function validateContactGroupBranch(array $data): void
-    {
-        if (empty($data['contact_group_id'])) {
-            return;
-        }
-
-        $contactGroup = ContactGroup::query()->find($data['contact_group_id']);
-
-        if (!$contactGroup) {
-            return;
-        }
-
-        if (
-            !empty($data['branch_id'])
-            && !empty($contactGroup->branch_id)
-            && (string) $contactGroup->branch_id !== (string) $data['branch_id']
-        ) {
-            abort(422, 'Contact group must belong to the same branch.');
-        }
     }
 }

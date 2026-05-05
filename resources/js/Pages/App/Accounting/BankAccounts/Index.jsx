@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import axios from 'axios';
 import {
@@ -648,7 +648,7 @@ export default function BankAccounts(props) {
                 }}
                 trigger={['click']}
             >
-                <Button icon={<MoreOutlined />} />
+                <Button icon={<MoreOutlined />} onClick={(event) => event.stopPropagation()} />
             </Dropdown>
         );
     };
@@ -799,6 +799,7 @@ export default function BankAccounts(props) {
                                     <Col xs={24} sm={24} md={12} lg={8} xl={8} key={record.id}>
                                         <Card
                                             hoverable
+                                            onClick={() => router.visit(route('accounting.bank-accounts.show', record.id))}
                                             style={{
                                                 height: '100%',
                                                 borderRadius: 6,
@@ -938,12 +939,23 @@ export default function BankAccounts(props) {
                                                     gap: 8,
                                                 }}
                                             >
-                                               
+                                                <Button
+                                                    block
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        router.visit(route('accounting.bank-accounts.show', record.id));
+                                                    }}
+                                                >
+                                                    View
+                                                </Button>
 
                                                 <Button
                                                     block
                                                     icon={<EditOutlined />}
-                                                    onClick={() => openEditForm(record)}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        openEditForm(record);
+                                                    }}
                                                 >
                                                     Edit
                                                 </Button>
@@ -953,16 +965,22 @@ export default function BankAccounts(props) {
                                                         title="Deactivate this account?"
                                                         okText="Deactivate"
                                                         cancelText="Cancel"
-                                                        onConfirm={() => softDelete(record)}
+                                                        onConfirm={(event) => {
+                                                            event?.stopPropagation?.();
+                                                            softDelete(record);
+                                                        }}
                                                     >
-                                                        <Button danger icon={<DeleteOutlined />}>
+                                                        <Button danger icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()}>
                                                             Disable
                                                         </Button>
                                                     </Popconfirm>
                                                 ) : (
                                                     <Button
                                                         icon={<CreditCardOutlined />}
-                                                        onClick={() => restoreRecord(record)}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            restoreRecord(record);
+                                                        }}
                                                     >
                                                         Restore
                                                     </Button>

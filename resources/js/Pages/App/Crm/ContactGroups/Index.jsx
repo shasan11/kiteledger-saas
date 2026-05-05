@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Typography } from 'antd';
 import { TeamOutlined } from '@ant-design/icons';
@@ -105,6 +105,14 @@ export default function ContactGroups(props) {
         orderingParam="ordering"
         enableServerPagination={true}
         showSearch={true}
+        canView={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('crm.contact-groups.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         canAdd={true}
         canEdit={true}
         canDelete={true}

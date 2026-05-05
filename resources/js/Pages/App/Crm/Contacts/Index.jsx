@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Space, Tag, Typography } from 'antd';
 import { ContactsOutlined } from '@ant-design/icons';
@@ -74,7 +74,7 @@ export default function Contacts(props) {
       key: 'contact_type',
       sorter: true,
       render: (val) => {
-        const colors = { customer: 'green', vendor: 'orange', both: 'blue' };
+        const colors = { customer: 'green', supplier: 'orange', lead: 'blue' };
         return val ? (
           <Tag color={colors[val] || 'default'}>{capitalizeFirst(val)}</Tag>
         ) : '-';
@@ -125,8 +125,8 @@ export default function Contacts(props) {
       placeholder: 'Select type',
       options: [
         { value: 'customer', label: 'Customer' },
-        { value: 'vendor', label: 'Vendor' },
-        { value: 'both', label: 'Both' },
+        { value: 'supplier', label: 'Supplier' },
+        { value: 'lead', label: 'Lead' },
       ],
     },
     {
@@ -241,7 +241,7 @@ export default function Contacts(props) {
     tax_registration_type: Yup.string().nullable().oneOf(['pan', 'vat', 'none', null]),
     credit_term_id: Yup.string().nullable(),
     credit_limit: Yup.number().nullable().min(0),
-    contact_type: Yup.string().nullable().oneOf(['customer', 'vendor', 'both', null]),
+    contact_type: Yup.string().nullable().oneOf(['customer', 'supplier', 'lead', null]),
     accept_purchase: Yup.boolean().nullable(),
     address: Yup.string().nullable(),
   });
@@ -302,6 +302,14 @@ export default function Contacts(props) {
         orderingParam="ordering"
         enableServerPagination={true}
         showSearch={true}
+        canView={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('crm.contacts.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         canAdd={true}
         canEdit={true}
         canDelete={true}
@@ -310,8 +318,8 @@ export default function Contacts(props) {
         anchorFilters={[
           { key: 'all', label: 'All', title: 'Contacts', params: {} },
           { key: 'customer', label: 'Customers', title: 'Customers', params: { contact_type: 'customer' } },
-          { key: 'vendor', label: 'Vendors', title: 'Vendors', params: { contact_type: 'vendor' } },
-          { key: 'both', label: 'Both', title: 'Both', params: { contact_type: 'both' } },
+          { key: 'supplier', label: 'Suppliers', title: 'Suppliers', params: { contact_type: 'supplier' } },
+          { key: 'lead', label: 'Leads', title: 'Lead Contacts', params: { contact_type: 'lead' } },
         ]}
         defaultAnchorKey="all"
         anchorSyncWithHash

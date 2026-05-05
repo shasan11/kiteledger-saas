@@ -1806,6 +1806,11 @@ export default function ReusableCrud({
     [accessToken]
   );
 
+  const recordUrl = useCallback((base, id) => {
+    const normalizedBase = String(base || "").replace(/\/+$/, "");
+    return `${normalizedBase}/${encodeURIComponent(id)}/`;
+  }, []);
+
   const baseUrl = useMemo(
     () => `${apiUrl}${filterUrl ? filterUrl : ""}`,
     [apiUrl, filterUrl]
@@ -1925,14 +1930,14 @@ export default function ReusableCrud({
       if (!field?.fkUrl || id == null || id === "") return null;
 
       try {
-        const detailUrl = `${resolveUrl(field.fkUrl)}${id}/`;
+        const detailUrl = recordUrl(resolveUrl(field.fkUrl), id);
         const res = await axios.get(detailUrl, { headers: authHeaders });
         return toFkOption(res?.data, field);
       } catch (error) {
         return null;
       }
     },
-    [fieldByName, authHeaders]
+    [fieldByName, recordUrl, authHeaders]
   );
 
   const hydrateMissingFkLabel = useCallback(
@@ -2443,7 +2448,7 @@ export default function ReusableCrud({
 
         if (openEditId != null) {
           try {
-            const r = await axios.get(`${apiUrl}${openEditId}/`, { headers: authHeaders });
+            const r = await axios.get(recordUrl(apiUrl, openEditId), { headers: authHeaders });
             setEditingRecord(r.data);
             setVisible(true);
             return;
@@ -2462,7 +2467,7 @@ export default function ReusableCrud({
     };
 
     open();
-  }, [openOnMount, openMode, openEditId, data, apiUrl, authHeaders]);
+  }, [openOnMount, openMode, openEditId, data, apiUrl, recordUrl, authHeaders]);
 
   useEffect(() => {
     const init = async () => {
@@ -2473,7 +2478,7 @@ export default function ReusableCrud({
           setFormInitialValues(look_up_var);
         } else if (look_up_var) {
           try {
-            const { data: rec } = await axios.get(`${apiUrl}${look_up_var}/`, {
+            const { data: rec } = await axios.get(recordUrl(apiUrl, look_up_var), {
               headers: authHeaders,
             });
             setFormInitialValues(rec);
@@ -2487,14 +2492,14 @@ export default function ReusableCrud({
     };
 
     init();
-  }, [ui_type, look_up_var, apiUrl, authHeaders, crudInitialValues]);
+  }, [ui_type, look_up_var, apiUrl, recordUrl, authHeaders, crudInitialValues]);
 
   const updateRecordActiveState = async (record, nextActive) => {
     const updateField = record?.hasOwnProperty("active") ? "active" : "is_active";
     const normalizedRecord = normalizeFkValuesForSubmit(record);
 
     await axios.put(
-      `${apiUrl}${record.id}/`,
+      recordUrl(apiUrl, record.id),
       { ...normalizedRecord, [updateField]: nextActive },
       { headers: authHeaders }
     );
@@ -2529,7 +2534,7 @@ export default function ReusableCrud({
   };
 
   const deletePermanent = async (record) => {
-    await axios.delete(`${apiUrl}${record.id}/`, { headers: authHeaders });
+    await axios.delete(recordUrl(apiUrl, record.id), { headers: authHeaders });
 
     fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
 
@@ -3044,7 +3049,7 @@ export default function ReusableCrud({
             if (!action?.actions) return;
             const normalizedRecord = normalizeFkValuesForSubmit(record);
             await axios.put(
-              `${apiUrl}${record.id}/`,
+              recordUrl(apiUrl, record.id),
               { ...normalizedRecord, ...action.actions },
               { headers: authHeaders }
             );
@@ -4603,7 +4608,7 @@ export default function ReusableCrud({
 
     if (!containsFile) {
       if (isEditMode) {
-        const res = await axios.put(`${apiUrl}${editId}/`, payload, {
+        const res = await axios.put(recordUrl(apiUrl, editId), payload, {
           headers: { ...headers, "Content-Type": "application/json" },
         });
         return res.data;
@@ -4618,7 +4623,7 @@ export default function ReusableCrud({
     const fd = buildFormData(payload);
 
     if (isEditMode) {
-      const res = await axios.put(`${apiUrl}${editId}/`, fd, {
+      const res = await axios.put(recordUrl(apiUrl, editId), fd, {
         headers: { ...headers, "Content-Type": "multipart/form-data" },
       });
       return res.data;

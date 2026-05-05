@@ -42,6 +42,7 @@ class WarehouseController extends BaseCrudApiController
 
     protected array $booleanFilters = [
         'active',
+        'is_system_generated',
     ];
 
     protected array $sortable = [

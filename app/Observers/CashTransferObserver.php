@@ -44,10 +44,16 @@ class CashTransferObserver
     public function saved(CashTransfer $cashTransfer): void
     {
         DB::transaction(function () use ($cashTransfer) {
+            $cashTransfer = $cashTransfer->fresh(['cashTransferLines']);
+
+            if (!$cashTransfer || $cashTransfer->cashTransferLines->isEmpty()) {
+                return;
+            }
+
             $oldEffect = $this->pullOldEffect($cashTransfer);
 
             app(CashTransferService::class)->syncFinancials(
-                cashTransfer: $cashTransfer->fresh(['cashTransferLines']),
+                cashTransfer: $cashTransfer,
                 oldEffect: $oldEffect
             );
         });

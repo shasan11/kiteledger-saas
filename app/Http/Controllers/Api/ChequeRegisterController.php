@@ -3,21 +3,31 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\ChequeRegister;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 
 class ChequeRegisterController extends BaseCrudApiController
 {
     protected string $modelClass = ChequeRegister::class;
 
+    protected ?string $permissionPrefix = null;
+
+    protected bool $usePolicyAuthorization = false;
+
+    protected bool $branchScoped = false;
+
     protected array $relations = [
         'branch',
-        'bankAccount',
         'account',
+        'relatedAccount',
+        'receiverRelatedAccount',
     ];
 
     protected array $relationDetails = [
         'branch' => 'branch_id',
-        'bankAccount' => 'bank_account_id',
         'account' => 'account_id',
+        'relatedAccount' => 'related_account_id',
+        'receiverRelatedAccount' => 'receiver_related_account_id',
     ];
 
     protected array $searchable = [
@@ -30,20 +40,18 @@ class ChequeRegisterController extends BaseCrudApiController
         'branch.name',
         'branch.code',
 
-        'bankAccount.display_name',
-        'bankAccount.code',
-        'bankAccount.bank_name',
-        'bankAccount.account_name',
-        'bankAccount.account_number',
-
         'account.name',
         'account.code',
+
+        'relatedAccount.name',
+        'relatedAccount.code',
     ];
 
     protected array $filterable = [
         'branch_id',
-        'bank_account_id',
         'account_id',
+        'related_account_id',
+        'receiver_related_account_id',
         'direction',
         'status',
     ];
@@ -51,7 +59,7 @@ class ChequeRegisterController extends BaseCrudApiController
     protected array $booleanFilters = [
         'active',
         'approved',
-        'voided',
+        'void',
     ];
 
     protected array $dateRangeFilters = [
@@ -73,7 +81,7 @@ class ChequeRegisterController extends BaseCrudApiController
         'direction',
         'status',
         'approved',
-        'voided',
+        'void',
         'active',
         'created_at',
         'updated_at',
@@ -81,28 +89,36 @@ class ChequeRegisterController extends BaseCrudApiController
 
     protected string $defaultSort = '-created_at';
 
-    protected ?string $permissionPrefix = 'cheque-registers';
-
     protected array $storeRules = [
-        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'cheque_no' => ['required', 'string', 'max:80'],
         'cheque_date' => ['required', 'date'],
         'issued_date' => ['required', 'date'],
-        'received_date' => ['required', 'date'],
+        'received_date' => ['nullable', 'date'],
         'payee_name' => ['nullable', 'string', 'max:150'],
         'cleared_date' => ['nullable', 'date'],
         'direction' => ['required', 'in:issued,received'],
-        'bank_account_id' => ['required', 'uuid', 'exists:bank_accounts,id'],
-        'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+        'account_id' => ['required', 'uuid', 'exists:accounts,id'],
+        'related_account_id' => ['required', 'uuid', 'exists:accounts,id'],
+        'receiver_related_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'amount' => ['required', 'numeric', 'min:0.01'],
         'status' => ['required', 'in:pending,cleared,bounced,cancelled'],
         'notes' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'approved' => ['nullable', 'boolean'],
-        'voided' => ['nullable', 'boolean'],
+        'approved_at' => ['nullable', 'date'],
+        'approved_by_id' => ['nullable', 'integer', 'exists:users,id'],
+        'void' => ['nullable', 'boolean'],
         'voided_reason' => ['nullable', 'string'],
-        'voided_date' => ['nullable', 'date'],
+        'voided_at' => ['nullable', 'date'],
         'voided_by_id' => ['nullable', 'integer', 'exists:users,id'],
+        'exchange_rate' => ['nullable', 'numeric', 'min:0.000001'],
+        'total' => ['nullable', 'numeric', 'min:0'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
+
+    protected function updateRules(Request $request, Model $record): array
+    {
+        return $this->makeRulesPartial($this->storeRules($request));
+    }
 }
