@@ -53,8 +53,11 @@ class SystemJournalVoucherService
                 'approved' => false,
                 'void' => false,
                 'exchange_rate' => $exchangeRate ?: 1,
-                'is_system_generated' => true,
             ];
+
+            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_system_generated')) {
+                $voucherPayload['is_system_generated'] = true;
+            }
 
             $voucherPayload = $this->addOptionalSourceColumns(
                 payload: $voucherPayload,
