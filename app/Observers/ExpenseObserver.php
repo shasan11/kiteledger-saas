@@ -2,7 +2,7 @@
 
 namespace App\Observers;
 
-use App\Models$model;
+use App\Models\Expense;
 use App\Services\TransactionApprovalService;
 use App\Services\TransactionVoidService;
 
