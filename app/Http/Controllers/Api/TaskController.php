@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AssignedTask;
 use App\Models\Task;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class TaskController extends BaseCrudApiController
         'milestone',
         'priority',
         'taskStatus',
+        'assignedTasks',
     ];
 
     protected array $relationDetails = [
@@ -71,6 +73,26 @@ class TaskController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected array $nested = [
+        'assigned_tasks' => [
+            'relation' => 'assignedTasks',
+            'model' => AssignedTask::class,
+            'foreign_key' => 'task_id',
+            'delete_key' => 'deleted_assigned_task_ids',
+            'required' => false,
+            'min' => 0,
+            'replace_on_update' => false,
+            'relations' => [],
+            'relation_details' => [],
+            'rules' => [
+                'user_id' => ['required', 'integer', 'exists:users,id'],
+            ],
+            'update_rules' => [
+                'user_id' => ['required', 'integer', 'exists:users,id'],
+            ],
+        ],
+    ];
 
     protected array $storeRules = [
         'project_id' => ['required', 'uuid', 'exists:projects,id'],

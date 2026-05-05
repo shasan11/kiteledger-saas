@@ -1,74 +1,229 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { Tag, Typography, Button } from 'antd';
+import { FileTextOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const formatDate = (value) => {
+  if (!value) return null;
+  const d = dayjs(value, 'DD-MM-YYYY', true);
+  if (d.isValid()) return d.format('YYYY-MM-DD');
+  const d2 = dayjs(value);
+  return d2.isValid() ? d2.format('YYYY-MM-DD') : value;
+};
+
+const statusColor = (s) => {
+  if (s === 'posted') return 'green';
+  if (s === 'cancelled') return 'red';
+  return 'default';
+};
+
+const emptyLine = { chart_of_account_id: null, description: '', debit: 0, credit: 0 };
+
 export default function JournalVouchers(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+  const columns = useMemo(() => [
+    {
+      title: 'Voucher No',
+      dataIndex: 'voucher_no',
+      key: 'voucher_no',
+      sorter: true,
+      width: 130,
+      render: (val) => <Text strong>{val || 'DRAFT'}</Text>,
+    },
     {
       title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (val) => val ? <Tag color={statusColor(val)}>{val}</Tag> : '-',
     },
-  ];
+    {
+      title: 'Voucher Date',
+      dataIndex: 'voucher_date',
+      key: 'voucher_date',
+      sorter: true,
+      width: 120,
+      render: (val) => { if (!val) return '-'; const d = dayjs(val); return d.isValid() ? d.format('DD-MM-YYYY') : val; },
+    },
+    {
+      title: 'Total',
+      dataIndex: 'total',
+      key: 'total',
+      sorter: true,
+      width: 140,
+      render: (val) => <Text strong>{money(val)}</Text>,
+    },
+    { title: 'Reference', dataIndex: 'reference', key: 'reference', width: 140, render: (val) => val || '-' },
+    { title: 'Narration', dataIndex: 'narration', key: 'narration', ellipsis: true, render: (val) => val || '-' },
+  ], []);
 
-  const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
-  ];
+  const fields = useMemo(() => [
+    { name: 'voucher_no', label: 'Voucher No', type: 'text', col: 8, placeholder: 'Auto-generated if blank' },
+    {
+      name: 'currency_id',
+      label: 'Currency',
+      type: 'fkSelect',
+      col: 8,
+      placeholder: 'Select currency',
+      fkUrl: api('/api/master/currencies/'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+    },
+    { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      col: 8,
+      options: [
+        { value: 'draft', label: 'Draft' },
+        { value: 'posted', label: 'Posted' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    { name: 'voucher_date', label: 'Voucher Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY', placeholder: 'Select date' },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, placeholder: '1.00' },
+    { name: 'narration', label: 'Narration', type: 'textarea', col: 24, rows: 2, placeholder: 'Narration' },
+    {
+      name: 'items',
+      label: 'Journal Lines',
+      type: 'objectArray',
+      col: 24,
+      headerBg: '#424b59',
+      headerColor: '#ffffff',
+      addButtonLabel: 'Add Line',
+      defaultItem: { ...emptyLine },
+      columns: [
+        {
+          key: 'chart_of_account_id',
+          name: 'chart_of_account_id',
+          label: 'Chart of Account',
+          type: 'fkSelect',
+          width: '3fr',
+          required: true,
+          placeholder: 'Select account',
+          fkUrl: api('/api/accounting/chart-of-accounts/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+        },
+        { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr', placeholder: 'Description' },
+        { key: 'debit', name: 'debit', label: 'Debit', type: 'number', width: '160px', min: 0, placeholder: '0.00' },
+        { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '160px', min: 0, placeholder: '0.00' },
+      ],
+    },
+  ], []);
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    active: Yup.boolean().nullable(),
+    voucher_no: Yup.string().nullable(),
+    currency_id: Yup.string().nullable(),
+    reference: Yup.string().nullable().max(120),
+    status: Yup.string().nullable().oneOf(['draft', 'posted', 'cancelled']),
+    voucher_date: Yup.string().required('Voucher date is required'),
+    exchange_rate: Yup.number().nullable(),
+    narration: Yup.string().nullable(),
+    items: Yup.array()
+      .of(Yup.object().shape({
+        chart_of_account_id: Yup.string().nullable().required('Account is required'),
+        description: Yup.string().nullable(),
+        debit: Yup.number().nullable().min(0),
+        credit: Yup.number().nullable().min(0),
+      }))
+      .min(2, 'At least two lines are required'),
   });
 
   const crudInitialValues = {
-    name: '',
-    active: true,
+    voucher_no: '',
+    currency_id: null,
+    reference: '',
+    status: 'draft',
+    voucher_date: dayjs().format('YYYY-MM-DD'),
+    exchange_rate: 1,
+    narration: '',
+    items: [{ ...emptyLine }, { ...emptyLine }],
     deleted_item_ids: [],
   };
 
   const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
+    const items = (values.items || [])
+      .filter((row) => row.chart_of_account_id)
+      .map((row) => ({
+        id: row.id,
+        chart_of_account_id: row.chart_of_account_id,
+        description: row.description?.trim() || null,
+        debit: toNumber(row.debit),
+        credit: toNumber(row.credit),
+      }));
+
+    const totalDebit = items.reduce((sum, r) => sum + r.debit, 0);
+    const totalCredit = items.reduce((sum, r) => sum + r.credit, 0);
+
+    return {
+      voucher_no: values.voucher_no?.trim() || null,
+      currency_id: values.currency_id || null,
+      reference: values.reference?.trim() || null,
+      status: values.status || 'draft',
+      voucher_date: formatDate(values.voucher_date),
+      exchange_rate: toNumber(values.exchange_rate) || 1,
+      narration: values.narration?.trim() || null,
+      total: totalDebit,
+      items,
+      deleted_item_ids: Array.isArray(values.deleted_item_ids) ? values.deleted_item_ids : [],
+    };
   };
+
+  const renderSaveButton = ({ submitForm, isValid, isSubmitting }) => (
+    <Button
+      type="primary"
+      loading={isSubmitting}
+      disabled={!isValid || isSubmitting}
+      onClick={submitForm}
+      style={{ minWidth: 165, height: 52, borderRadius: 2, background: '#18b957', borderColor: '#18b957', fontWeight: 650, fontSize: 16 }}
+    >
+      Save Voucher
+    </Button>
+  );
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="JournalVouchers" />
+      <Head title="Journal Vouchers" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
-        title="JournalVouchers"
-        endpoint={api('/api/accounting/journalvouchers')}
+        icon={<FileTextOutlined />}
+        title="Journal Vouchers"
+        apiUrl={api('/api/accounting/journal-vouchers/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
+        renderSubmitButton={renderSaveButton}
         form_ui="drawer"
-        drawerWidth={1100}
+        drawerWidth="calc(100vw - 32px)"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
-        activeParam="active"
         enableServerPagination={true}
-        enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
       />
     </AuthenticatedLayout>
   );

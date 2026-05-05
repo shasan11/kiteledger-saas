@@ -3,35 +3,34 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { IdcardOutlined } from '@ant-design/icons';
-import { Tag } from 'antd';
+import { TagsOutlined } from '@ant-design/icons';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-export default function EmploymentStatuses({ auth }) {
+export default function ProductTaxCategories({ auth }) {
   const columns = useMemo(() => [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
-    { title: 'Color', dataIndex: 'colour_value', key: 'colour_value', render: (v) => v ? <Tag color={v}>{v}</Tag> : '-' },
+    { title: 'Tax Class', dataIndex: ['taxClass', 'name'], key: 'tax_class', render: (v) => v || '-' },
     { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
   ], []);
 
   const fields = useMemo(() => [
-    { name: 'name', label: 'Status Name', type: 'text', col: 12, required: true },
-    { name: 'colour_value', label: 'Color', type: 'text', col: 12, placeholder: 'e.g. #4CAF50 or green' },
+    { name: 'name', label: 'Category Name', type: 'text', col: 12, required: true },
+    { name: 'tax_class_id', label: 'Tax Class', type: 'fkSelect', col: 12, fkUrl: api('/api/tax/tax-classes/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
   ], []);
 
   const validationSchema = Yup.object({ name: Yup.string().required('Name is required') });
-  const crudInitialValues = { name: '', colour_value: '', description: '' };
+  const crudInitialValues = { name: '', tax_class_id: null, description: '' };
 
   return (
     <AuthenticatedLayout auth={auth}>
-      <Head title="Employment Statuses" />
+      <Head title="Product Tax Categories" />
       <ReusableCrud
-        title="Employment Statuses"
-        icon={<IdcardOutlined />}
-        apiUrl={api('/api/hrm/employment-status/')}
+        title="Product Tax Categories"
+        icon={<TagsOutlined />}
+        apiUrl={api('/api/tax/product-tax-categories/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

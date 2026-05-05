@@ -1,74 +1,88 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { DatabaseOutlined } from '@ant-design/icons';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
 export default function MasterData(props) {
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
-    {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
-    },
+    { title: 'Type', dataIndex: 'type', key: 'type', sorter: true },
+    { title: 'Group', dataIndex: 'group', key: 'group', sorter: true },
+    { title: 'Key', dataIndex: 'key', key: 'key', sorter: true },
+    { title: 'Value', dataIndex: 'value', key: 'value', sorter: true },
+    { title: 'Meta', dataIndex: 'meta', key: 'meta', sorter: true },
   ];
 
   const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
+    {
+      name: 'type',
+      label: 'Type',
+      type: 'select',
+      options: [
+        { label: 'Country', value: 'country' },
+        { label: 'State', value: 'state' },
+        { label: 'City', value: 'city' },
+        { label: 'Industry', value: 'industry' },
+      ],
+    },
+    { name: 'group', label: 'Group', type: 'text' },
+    { name: 'key', label: 'Key', type: 'text', required: true },
+    { name: 'value', label: 'Value', type: 'text' },
+    { name: 'meta', label: 'Meta', type: 'textarea' },
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    active: Yup.boolean().nullable(),
+    type: Yup.string().nullable(),
+    group: Yup.string().nullable(),
+    key: Yup.string().required('Key is required'),
+    value: Yup.string().nullable(),
+    meta: Yup.string().nullable(),
   });
 
   const crudInitialValues = {
-    name: '',
-    active: true,
-    deleted_item_ids: [],
+    type: '',
+    group: '',
+    key: '',
+    value: '',
+    meta: '',
   };
 
   const transformPayload = (values) => {
     const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
+    payload.key = payload.key?.trim() || null;
     Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
     return payload;
   };
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="MasterData" />
+      <Head title="Master Data" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
-        title="MasterData"
-        endpoint={api('/api/settings/masterdata')}
+        icon={<DatabaseOutlined />}
+        title="Master Data"
+        apiUrl={api('/api/master/master-datas/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="modal"
-        modalWidth={900}
+        form_ui="drawer"
+        drawerWidth={900}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
-        activeParam="active"
         enableServerPagination={true}
-        enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
       />
     </AuthenticatedLayout>
   );

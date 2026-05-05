@@ -17,14 +17,13 @@ class ProductController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'productCategory',
         'productUnit',
         'taxClass',
@@ -36,7 +35,6 @@ class ProductController extends BaseCrudApiController
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'productCategory' => 'product_category_id',
         'productUnit' => 'product_unit_id',
         'taxClass' => 'tax_class_id',
@@ -53,7 +51,6 @@ class ProductController extends BaseCrudApiController
     ];
 
     protected array $filterable = [
-        'branch_id',
         'product_category_id',
         'product_unit_id',
         'tax_class_id',

@@ -1,51 +1,56 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Avatar } from 'antd';
 import { TrophyOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
-const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (p) => `${BACKEND}${p}`;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-export default function Awards(props) {
-  const columns = [
-    {
-      title: 'Award', key: 'award', width: 260,
-      render: (_, r) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {r.image
-            ? <Avatar src={`${BACKEND}${r.image}`} shape="square" size={36} />
-            : <Avatar shape="square" size={36} style={{ background: '#f5a623', fontSize: 18 }}>🏆</Avatar>}
-          <strong>{r.name}</strong>
-        </div>
-      ),
-    },
-    { title: 'Description', dataIndex: 'description', key: 'description', render: (v) => v ? <span style={{ fontSize: 12, color: '#555' }}>{v.length > 70 ? v.slice(0,70)+'…' : v}</span> : '-' },
-    { title: 'Status', dataIndex: 'active', key: 'active', sorter: true, width: 80, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
-    { title: 'Created', dataIndex: 'created_at', key: 'created_at', sorter: true, width: 110, render: (v) => v ? new Date(v).toLocaleDateString() : '-' },
-  ];
-  const fields = [
-    { name: 'name', label: 'Award Name', type: 'text', required: true, col: 24 },
+export default function Awards({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Employee', dataIndex: ['employee', 'name'], key: 'employee_name', render: (v) => v || '-' },
+    { title: 'Award Name', dataIndex: 'name', key: 'name' },
+    { title: 'Award Date', dataIndex: 'award_date', key: 'award_date', render: (v) => v ? dayjs(v).format('DD-MM-YYYY') : '-' },
+    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
+  ], []);
+
+  const fields = useMemo(() => [
+    { name: 'employee_id', label: 'Employee', type: 'fkSelect', col: 12, required: true, fkUrl: api('/api/hrm/employees/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'name', label: 'Award Name', type: 'text', col: 12, required: true },
+    { name: 'award_date', label: 'Award Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
-    { name: 'image', label: 'Image', type: 'upload', col: 24, accept: 'image/*' },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-  ];
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Award name is required').max(150),
-    description: Yup.string().nullable().max(255),
-    active: Yup.boolean().nullable(),
+  ], []);
+
+  const validationSchema = Yup.object({
+    employee_id: Yup.mixed().required('Employee is required'),
+    name: Yup.string().required('Award name is required'),
   });
-  const initialValues = { name: '', description: '', image: null, active: true };
-  const transformPayload = (v) => { const p={...v}; p.name=p.name?.trim()||null; p.active=Boolean(p.active); return p; };
+  const crudInitialValues = { employee_id: null, name: '', award_date: null, description: '' };
+
+  const transformPayload = (values) => ({ ...values, award_date: formatDate(values.award_date) });
+
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Awards</h2>}>
+    <AuthenticatedLayout auth={auth}>
       <Head title="Awards" />
-      <ReusableCrud icon={<TrophyOutlined />} title="Award" apiUrl={api('/api/hrm/awards')}
-        columns={columns} fields={fields} validationSchema={validationSchema} crudInitialValues={initialValues}
-        transformPayload={transformPayload} form_ui="modal" modalWidth={600}
-        searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
-        activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
+      <ReusableCrud
+        title="Awards"
+        icon={<TrophyOutlined />}
+        apiUrl={api('/api/hrm/awards/')}
+        columns={columns}
+        fields={fields}
+        validationSchema={validationSchema}
+        crudInitialValues={crudInitialValues}
+        transformPayload={transformPayload}
+        form_ui="drawer"
+        searchParam="search" pageParam="page" pageSizeParam="page_size"
+        sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+        showSearch={true} canAdd={true} canEdit={true} canDelete={true}
+        hasActions={true} hasActionColumns={true}
+      />
     </AuthenticatedLayout>
   );
 }

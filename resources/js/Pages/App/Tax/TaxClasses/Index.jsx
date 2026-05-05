@@ -1,74 +1,105 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useMemo } from 'react';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag } from 'antd';
-import { AppstoreOutlined } from '@ant-design/icons';
+import { Typography } from 'antd';
+import { AuditOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-export default function TaxClasses(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+export default function TaxClasses({ auth }) {
+  const columns = useMemo(() => [
+    { title: 'Code', dataIndex: 'code', key: 'code' },
+    { title: 'Name', dataIndex: 'name', key: 'name' },
+    { title: 'Country Code', dataIndex: 'country_code', key: 'country_code' },
+    { title: 'Tax Type', dataIndex: 'tax_type', key: 'tax_type' },
+    { title: 'Tax Behavior', dataIndex: 'tax_behavior', key: 'tax_behavior' },
+    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
+  ], []);
+
+  const fields = useMemo(() => [
+    { name: 'name', label: 'Name', type: 'text', col: 12, required: true },
+    { name: 'code', label: 'Code', type: 'text', col: 6, required: true },
+    { name: 'tax_jurisdiction_id', label: 'Tax Jurisdiction', type: 'fkSelect', col: 12, fkUrl: api('/api/tax/tax-jurisdictions/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     {
-      title: 'Status',
-      dataIndex: 'active',
-      key: 'active',
-      sorter: true,
-      render: (active) => <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>,
+      name: 'country_code', label: 'Country Code', type: 'select', col: 8,
+      options: [
+        { value: 'NP', label: 'NP - Nepal' },
+        { value: 'IN', label: 'IN - India' },
+        { value: 'US', label: 'US - United States' },
+      ],
     },
-  ];
+    {
+      name: 'tax_type', label: 'Tax Type', type: 'select', col: 8,
+      options: [
+        { value: 'vat', label: 'VAT' },
+        { value: 'gst', label: 'GST' },
+        { value: 'igst', label: 'IGST' },
+        { value: 'cgst', label: 'CGST' },
+        { value: 'sgst', label: 'SGST' },
+        { value: 'sales_tax', label: 'Sales Tax' },
+        { value: 'service_tax', label: 'Service Tax' },
+      ],
+    },
+    {
+      name: 'tax_behavior', label: 'Tax Behavior', type: 'select', col: 8,
+      options: [
+        { value: 'inclusive', label: 'Inclusive' },
+        { value: 'exclusive', label: 'Exclusive' },
+      ],
+    },
+    { name: 'description', label: 'Description', type: 'textarea', col: 24 },
+  ], []);
 
-  const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'active', label: 'Active', type: 'switch' },
-  ];
-
-  const validationSchema = Yup.object().shape({
+  const validationSchema = Yup.object({
     name: Yup.string().required('Name is required'),
-    active: Yup.boolean().nullable(),
+    code: Yup.string().required('Code is required'),
   });
 
   const crudInitialValues = {
     name: '',
-    active: true,
-    deleted_item_ids: [],
+    code: '',
+    tax_jurisdiction_id: null,
+    country_code: null,
+    tax_type: null,
+    tax_behavior: null,
+    description: '',
   };
 
-  const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    payload.active = Boolean(payload.active);
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids) ? payload.deleted_item_ids : [];
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
-  };
+  const transformPayload = (values) => ({ ...values });
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
-      <Head title="TaxClasses" />
+    <AuthenticatedLayout auth={auth}>
+      <Head title="Tax Classes" />
       <ReusableCrud
-        icon={<AppstoreOutlined />}
-        title="TaxClasses"
-        endpoint={api('/api/tax/taxclasses')}
+        title="Tax Classes"
+        icon={<AuditOutlined />}
+        apiUrl={api('/api/tax/tax-class/')}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
-        initialValues={crudInitialValues}
+        crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="modal"
-        modalWidth={900}
+        form_ui="drawer"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
-        activeParam="active"
         enableServerPagination={true}
-        enableInactiveDrawer={true}
-        backendFilter={{ active: 'active' }}
-        backendSort={{ name: 'name', active: 'active' }}
+        showSearch={true}
+        canAdd={true}
+        canEdit={true}
+        canDelete={true}
+        hasActions={true}
+        hasActionColumns={true}
       />
     </AuthenticatedLayout>
   );
