@@ -44,6 +44,7 @@ class Invoice extends Model
         'exchange_rate',
         'total',
         'user_add_id',
+        'journal_voucher_id',
     ];
 
     /**
@@ -105,6 +106,11 @@ class Invoice extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function journalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class);
     }
 
     public function invoiceLines(): HasMany

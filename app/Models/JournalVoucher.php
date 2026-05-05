@@ -100,8 +100,18 @@ class JournalVoucher extends Model
         return $this->hasMany(JournalVoucherLine::class);
     }
 
+    public function lines(): HasMany
+    {
+        return $this->hasMany(JournalVoucherLine::class);
+    }
+
     public function reversedJournalVoucher(): BelongsTo
     {
         return $this->belongsTo(JournalVoucher::class, 'reversed_journal_voucher_id');
+    }
+
+    public function reversalJournalVouchers(): HasMany
+    {
+        return $this->hasMany(JournalVoucher::class, 'reversed_journal_voucher_id');
     }
 }
