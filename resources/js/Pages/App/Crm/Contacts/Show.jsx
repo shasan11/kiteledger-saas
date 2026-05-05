@@ -86,6 +86,6 @@ export default function ContactShow({ auth, id }) {
           </>
         )}
       </Space>
-        </AuthenticatedLayout>
-    );
+    </AuthenticatedLayout>
+  );
 }
