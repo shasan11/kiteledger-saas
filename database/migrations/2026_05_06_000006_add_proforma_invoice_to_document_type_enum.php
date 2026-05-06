@@ -7,6 +7,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE document_numberings MODIFY COLUMN document_type ENUM(
             'cash_transfer','credit_note','debit_note','expense','inventory_adjustment',
             'invoice','proforma_invoice','journal_voucher','payment','production_journal',
@@ -21,6 +25,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement("ALTER TABLE document_numberings MODIFY COLUMN document_type ENUM(
             'cash_transfer','credit_note','debit_note','expense','inventory_adjustment',
             'invoice','journal_voucher','payment','production_journal',

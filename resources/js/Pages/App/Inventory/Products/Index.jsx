@@ -14,7 +14,7 @@ const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0
 const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-const productTypeColors = { goods: 'blue', services: 'green', composite: 'purple' };
+const productTypeColors = { simple: 'blue', variant_parent: 'purple', variant: 'green' };
 
 export default function Products({ auth }) {
   const columns = useMemo(() => [
@@ -49,17 +49,18 @@ export default function Products({ auth }) {
     {
       name: 'product_type', label: 'Product Type', type: 'select', col: 8,
       options: [
-        { value: 'goods', label: 'Goods' },
-        { value: 'services', label: 'Services' },
-        { value: 'composite', label: 'Composite' },
+        { value: 'simple', label: 'Simple' },
+        { value: 'variant_parent', label: 'Variant Parent' },
+        { value: 'variant', label: 'Variant' },
       ],
     },
     {
       name: 'valuation_method', label: 'Valuation Method', type: 'select', col: 8,
       options: [
-        { value: 'fifo', label: 'FIFO' },
-        { value: 'lifo', label: 'LIFO' },
-        { value: 'weighted_average', label: 'Weighted Average' },
+        { value: 'standard', label: 'Standard' },
+        { value: 'average_cost', label: 'Average Cost' },
+        { value: 'first_in_first_out', label: 'FIFO' },
+        { value: 'last_in_first_out', label: 'LIFO' },
       ],
     },
     { name: 'track_inventory', label: 'Track Inventory', type: 'switch', col: 6 },
@@ -89,8 +90,8 @@ export default function Products({ auth }) {
     purchase_return_account_id: null,
     purchase_price: 0,
     selling_price: 0,
-    product_type: 'goods',
-    valuation_method: 'fifo',
+    product_type: 'simple',
+    valuation_method: 'standard',
     track_inventory: false,
     allow_sale: true,
     allow_purchase: true,

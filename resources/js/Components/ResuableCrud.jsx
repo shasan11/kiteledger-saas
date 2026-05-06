@@ -45,7 +45,7 @@ import { saveAs } from "file-saver";
 import axios from "axios";
 import moment from "moment";
 import dayjs from "dayjs";
-import { Link } from "react-router-dom";
+import { router } from "@inertiajs/react";
 
 const { Panel } = Collapse;
 const { Dragger } = Upload;
@@ -66,6 +66,88 @@ const hasAnyFile = (obj) => {
     return false;
   };
   return walk(obj);
+};
+
+const isUploadField = (field) => ["file", "image", "upload"].includes(field?.type);
+
+const cleanUploadValueForSubmit = (target, key, originalValue, isEditMode) => {
+  if (!target || !key) return;
+
+  const currentValue = target[key];
+
+  if (isFileLike(currentValue)) return;
+
+  if (!isEditMode) {
+    if (currentValue === undefined || currentValue === null || currentValue === "") {
+      delete target[key];
+      return;
+    }
+
+    if (typeof currentValue === "string" || typeof currentValue === "object") {
+      delete target[key];
+    }
+
+    return;
+  }
+
+  if (currentValue === null) {
+    if (originalValue !== undefined && originalValue !== null && originalValue !== "") return;
+    delete target[key];
+    return;
+  }
+
+  if (currentValue === undefined || currentValue === "") {
+    delete target[key];
+    return;
+  }
+
+  // Existing backend file/image values normally arrive as URL strings or objects.
+  // Sending those back to DRF/Laravel file validators causes "submitted data was not a file" errors.
+  delete target[key];
+};
+
+const cleanUploadValuesForSubmit = (inputValues, fields = EMPTY_ARRAY, options = EMPTY_OBJECT) => {
+  const { isEditMode = false, originalRecord = EMPTY_OBJECT } = options || EMPTY_OBJECT;
+  const next = { ...(inputValues || EMPTY_OBJECT) };
+
+  const walk = (items = EMPTY_ARRAY) => {
+    (items || EMPTY_ARRAY).forEach((field) => {
+      if (!field) return;
+
+      if (field.type === "group" && Array.isArray(field.children)) {
+        walk(field.children);
+        return;
+      }
+
+      if (!field.name) return;
+
+      if (isUploadField(field)) {
+        cleanUploadValueForSubmit(next, field.name, originalRecord?.[field.name], isEditMode);
+        return;
+      }
+
+      if (field.type === "objectArray" && Array.isArray(next[field.name])) {
+        const rowFields = [...(field.columns || EMPTY_ARRAY), ...(field.collapsedFields || EMPTY_ARRAY)];
+        const originalRows = Array.isArray(originalRecord?.[field.name]) ? originalRecord[field.name] : EMPTY_ARRAY;
+
+        next[field.name] = next[field.name].map((row, rowIndex) => {
+          const rowCopy = { ...(row || EMPTY_OBJECT) };
+          const originalRow = originalRows?.[rowIndex] || EMPTY_OBJECT;
+
+          rowFields.forEach((rowField) => {
+            const rowKey = rowField?.key ?? rowField?.name;
+            if (!rowKey || !isUploadField(rowField)) return;
+            cleanUploadValueForSubmit(rowCopy, rowKey, originalRow?.[rowKey], isEditMode);
+          });
+
+          return rowCopy;
+        });
+      }
+    });
+  };
+
+  walk(fields);
+  return next;
 };
 
 const appendFormDataValue = (fd, key, value) => {
@@ -1624,6 +1706,372 @@ function CrudFormInner({
   );
 }
 
+
+/* -------------------------------------------------------------------------- */
+/*                            quick add / quick edit                          */
+/* -------------------------------------------------------------------------- */
+function QuickAddModal({
+  open,
+  title,
+  apiUrl,
+  fields = EMPTY_ARRAY,
+  validationSchema,
+  initialValues = EMPTY_OBJECT,
+  editRecord = null,
+  editId = null,
+  mode = "add",
+  transformPayload = null,
+  updateMethod = "patch",
+  onClose,
+  onSuccess,
+}) {
+  const [submitErrors, setSubmitErrors] = useState(EMPTY_ARRAY);
+  const isEditMode = mode === "edit";
+  const token = getAuthToken();
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
+
+  const normalizedApiUrl = useMemo(() => resolveUrl(apiUrl), [apiUrl]);
+
+  const quickInitialValues = useMemo(
+    () => ({ ...(initialValues || EMPTY_OBJECT), ...(isEditMode ? editRecord || EMPTY_OBJECT : EMPTY_OBJECT) }),
+    [initialValues, editRecord, isEditMode]
+  );
+
+  const recordSubmitUrl = useCallback((base, id) => {
+    const normalizedBase = String(base || "").replace(/\/+$/, "");
+    return `${normalizedBase}/${encodeURIComponent(id)}/`;
+  }, []);
+
+  const normalizeQuickFkValues = useCallback((values) => {
+    const next = { ...(values || EMPTY_OBJECT) };
+
+    const walk = (items = EMPTY_ARRAY) => {
+      (items || EMPTY_ARRAY).forEach((field) => {
+        if (!field) return;
+
+        if (field.type === "group" && Array.isArray(field.children)) {
+          walk(field.children);
+          return;
+        }
+
+        if (!field.name) return;
+
+        if ((field.type === "fkSelect" || field.type === "autocomplete") && next[field.name] && typeof next[field.name] === "object") {
+          next[field.name] = getFkValue(next[field.name], field);
+        }
+      });
+    };
+
+    walk(fields);
+    return next;
+  }, [fields]);
+
+  const submitQuickRecord = async (values) => {
+    const normalizedValues = normalizeQuickFkValues(values);
+    const uploadSafeValues = cleanUploadValuesForSubmit(normalizedValues, fields, {
+      isEditMode,
+      originalRecord: isEditMode ? editRecord || EMPTY_OBJECT : EMPTY_OBJECT,
+    });
+
+    const transformedPayload =
+      typeof transformPayload === "function"
+        ? transformPayload(uploadSafeValues, { isEditMode, editRecord })
+        : uploadSafeValues;
+
+    const payload = cleanUploadValuesForSubmit(transformedPayload, fields, {
+      isEditMode,
+      originalRecord: isEditMode ? editRecord || EMPTY_OBJECT : EMPTY_OBJECT,
+    });
+
+    const containsFile = hasAnyFile(payload);
+    const url = isEditMode ? recordSubmitUrl(normalizedApiUrl, editId || payload?.id) : normalizedApiUrl;
+    const method = isEditMode ? String(updateMethod || "patch").toLowerCase() : "post";
+
+    if (!url) throw new Error("Quick add API URL is missing.");
+    if (isEditMode && !(editId || payload?.id)) throw new Error("Quick edit record id is missing.");
+
+    const res = await axios({
+      method,
+      url,
+      data: containsFile ? buildFormData(payload) : payload,
+      headers: containsFile
+        ? authHeaders
+        : { ...authHeaders, "Content-Type": "application/json" },
+    });
+
+    return res.data;
+  };
+
+  const renderQuickFields = (values, setFieldValue, errors, touched) => {
+    const renderOne = (field, parentKey = "quick") => {
+      if (!field) return null;
+      if (field.condition && !field.condition(values)) return null;
+
+      if (field.type === "group") {
+        return (
+          <Col key={`${parentKey}-${field.label || "group"}`} {...getResponsiveColProps(field)}>
+            {field.label ? <div style={{ fontWeight: 700, marginBottom: 8 }}>{field.label}</div> : null}
+            <Row gutter={[12, 12]}>
+              {(field.children || EMPTY_ARRAY).map((child, idx) => renderOne(child, `${parentKey}-${idx}`))}
+            </Row>
+          </Col>
+        );
+      }
+
+      const name = field.name;
+      if (!name) return null;
+
+      const readOnly = !!field.readOnly;
+      const fieldKey = `${parentKey}-${name}`;
+
+      return (
+        <Col key={fieldKey} {...getResponsiveColProps(field)}>
+          <Form.Item
+            layout="vertical"
+            label={field.label}
+            required={field.required}
+            validateStatus={touched?.[name] && errors?.[name] ? "error" : ""}
+            help={touched?.[name] && errors?.[name]}
+          >
+            {(() => {
+              switch (field.type) {
+                case "textarea":
+                  return (
+                    <Input.TextArea
+                      rows={field.rows || 2}
+                      value={values?.[name] || ""}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || ""}
+                      onChange={(e) => setFieldValue(name, e.target.value)}
+                    />
+                  );
+
+                case "number":
+                  return (
+                    <InputNumber
+                      size="large"
+                      style={{ width: "100%" }}
+                      value={values?.[name]}
+                      min={field.min}
+                      max={field.max}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || ""}
+                      onChange={(v) => setFieldValue(name, v)}
+                    />
+                  );
+
+                case "select":
+                  return (
+                    <Select
+                      size="large"
+                      showSearch
+                      allowClear={field.allowClear ?? true}
+                      value={values?.[name] ?? undefined}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || "Select..."}
+                      onChange={(v) => setFieldValue(name, v)}
+                      options={(field.options || EMPTY_ARRAY).map(normalizeOption)}
+                      filterOption={(input, opt) =>
+                        String(opt?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                      }
+                    />
+                  );
+
+                case "fkSelect":
+                case "autocomplete":
+                  return (
+                    <BackendAutocomplete
+                      field={field}
+                      value={values?.[name]}
+                      detailValue={values?.[`${name}_detail`]}
+                      disabled={readOnly}
+                      authHeaders={authHeaders}
+                      placeholder={field.placeholder}
+                      valuesContext={values}
+                      parentFieldName={name}
+                      onValueChange={(v) => setFieldValue(name, v)}
+                      onDetailChange={(d) => setFieldValue(`${name}_detail`, d, false)}
+                    />
+                  );
+
+                case "date":
+                  return (
+                    <Input
+                      size="large"
+                      type="date"
+                      value={values?.[name] || ""}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || ""}
+                      onChange={(e) => setFieldValue(name, e.target.value)}
+                    />
+                  );
+
+                case "datePicker":
+                  return (
+                    <StableDatePicker
+                      value={values?.[name]}
+                      disabled={readOnly}
+                      format={field.format || "YYYY-MM-DD"}
+                      placeholder={field.placeholder || "Select date"}
+                      onChange={(v) => setFieldValue(name, v)}
+                    />
+                  );
+
+                case "switch":
+                  return (
+                    <Switch
+                      checked={!!values?.[name]}
+                      disabled={readOnly}
+                      onChange={(v) => setFieldValue(name, v)}
+                    />
+                  );
+
+                case "checkbox":
+                  return (
+                    <Checkbox
+                      checked={!!values?.[name]}
+                      disabled={readOnly}
+                      onChange={(e) => setFieldValue(name, e.target.checked)}
+                    >
+                      {field.inlineLabel || field.label}
+                    </Checkbox>
+                  );
+
+                case "radio":
+                case "radiobtn":
+                  return (
+                    <Radio.Group
+                      size="large"
+                      disabled={readOnly}
+                      value={values?.[name]}
+                      onChange={(e) => setFieldValue(name, e.target.value)}
+                    >
+                      {(field.options || EMPTY_ARRAY).map((opt) => (
+                        <Radio key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </Radio>
+                      ))}
+                    </Radio.Group>
+                  );
+
+                case "file":
+                case "image": {
+                  const isImage = field.type === "image";
+                  const fileList = getSingleUploadFileList(values?.[name], name);
+
+                  return (
+                    <Dragger
+                      name={name}
+                      multiple={false}
+                      maxCount={1}
+                      disabled={readOnly}
+                      accept={field.accept || (isImage ? "image/*" : ".pdf,.doc,.docx,.xls,.xlsx,.csv,.zip,.rar,.txt")}
+                      fileList={fileList}
+                      beforeUpload={(file) => {
+                        const result = validateUploadFile({ file, field, mode: isImage ? "image" : "file" });
+                        if (result === Upload.LIST_IGNORE) return Upload.LIST_IGNORE;
+                        setFieldValue(name, file);
+                        return false;
+                      }}
+                      onRemove={() => {
+                        setFieldValue(name, null);
+                        return true;
+                      }}
+                      onPreview={openUploadPreview}
+                      showUploadList={{ showPreviewIcon: true, showRemoveIcon: !readOnly }}
+                    >
+                      <div style={{ padding: 12 }}>
+                        <p className="ant-upload-drag-icon" style={{ marginBottom: 8 }}>
+                          <InboxOutlined />
+                        </p>
+                        <p className="ant-upload-text" style={{ marginBottom: 6 }}>
+                          {field.dragText || (isImage ? "Upload image" : "Upload file")}
+                        </p>
+                        <p className="ant-upload-hint" style={{ marginBottom: 0 }}>
+                          Max {field.maxSizeMB ?? 5} MB
+                        </p>
+                      </div>
+                    </Dragger>
+                  );
+                }
+
+                default:
+                  return (
+                    <Input
+                      size="large"
+                      value={values?.[name] || ""}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || ""}
+                      onChange={(e) => setFieldValue(name, e.target.value)}
+                      maxLength={field.maxLength}
+                    />
+                  );
+              }
+            })()}
+          </Form.Item>
+        </Col>
+      );
+    };
+
+    return <Row gutter={[12, 12]}>{(fields || EMPTY_ARRAY).map((field, idx) => renderOne(field, `quick-root-${idx}`))}</Row>;
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={isEditMode ? `Quick Edit ${title || "Record"}` : title || "Quick Add"}
+      onCancel={onClose}
+      footer={null}
+      destroyOnClose
+      width={720}
+    >
+      <Formik
+        enableReinitialize
+        initialValues={quickInitialValues}
+        validationSchema={validationSchema}
+        onSubmit={async (values, { resetForm, setErrors }) => {
+          try {
+            setSubmitErrors(EMPTY_ARRAY);
+            const savedRecord = await submitQuickRecord(values);
+            message.success(isEditMode ? "Updated successfully" : "Created successfully");
+            if (typeof onSuccess === "function") await onSuccess(savedRecord, { isEditMode, values });
+            if (!isEditMode) resetForm();
+          } catch (err) {
+            const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
+            if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
+            setSubmitErrors(allErrors);
+            if (globalErrors.length) showGlobalErrorsNotification(globalErrors);
+            else message.error(isEditMode ? "Update failed" : "Create failed");
+          }
+        }}
+      >
+        {({ handleSubmit, setFieldValue, errors, touched, values, isSubmitting }) => (
+          <FormikForm onSubmit={handleSubmit}>
+            {renderQuickFields(values, setFieldValue, errors, touched)}
+
+            {submitErrors?.length > 0 && (
+              <div style={{ marginTop: 8, padding: 10, border: "1px solid #ffccc7" }}>
+                {submitErrors.map((err, idx) => (
+                  <div key={idx}>{err}</div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+              <Button onClick={onClose} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <Button type="primary" htmlType="submit" loading={isSubmitting}>
+                {isEditMode ? "Update" : "Create"}
+              </Button>
+            </div>
+          </FormikForm>
+        )}
+      </Formik>
+    </Modal>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              main reusable crud                            */
 /* -------------------------------------------------------------------------- */
@@ -1692,6 +2140,7 @@ export default function ReusableCrud({
   onAnchorChange = null,
 
   transformPayload = null,
+  transformRecord = null,
 
   baseFilters = EMPTY_OBJECT,
   sortMode = "ordering",
@@ -1701,6 +2150,8 @@ export default function ReusableCrud({
   defaultSortField = null,
   defaultSortOrder = null,
   orderingMinusForDesc = true,
+
+  updateMethod = "patch",
 }) {
   const [data, setData] = useState(EMPTY_ARRAY);
   const [inactiveRows, setInactiveRows] = useState(EMPTY_ARRAY);
@@ -1816,6 +2267,25 @@ export default function ReusableCrud({
     [apiUrl, filterUrl]
   );
 
+  const applyRecordTransform = useCallback(
+    (record) => {
+      if (!record || typeof transformRecord !== "function") return record;
+
+      try {
+        return transformRecord(record) || record;
+      } catch (error) {
+        console.error("Failed to transform CRUD record:", error);
+        return record;
+      }
+    },
+    [transformRecord]
+  );
+
+  const applyRecordsTransform = useCallback(
+    (records) => (Array.isArray(records) ? records.map((record) => applyRecordTransform(record)) : records),
+    [applyRecordTransform]
+  );
+
   const flattenFields = useCallback((arr, out = []) => {
     (arr || []).forEach((f) => {
       if (!f) return;
@@ -1875,6 +2345,12 @@ export default function ReusableCrud({
     [fields, flattenFields]
   );
 
+  const normalizeFileValuesForSubmit = useCallback(
+    (inputValues, options = EMPTY_OBJECT) =>
+      cleanUploadValuesForSubmit(inputValues, fields, options),
+    [fields]
+  );
+
   const sanitizeBulkActionRecord = useCallback(
     (record) => {
       const cleaned = { ...(record || EMPTY_OBJECT) };
@@ -1886,9 +2362,13 @@ export default function ReusableCrud({
         if (k.endsWith("_detail")) delete cleaned[k];
       });
 
-      return normalizeFkValuesForSubmit(cleaned);
+      const fkNormalized = normalizeFkValuesForSubmit(cleaned);
+      return normalizeFileValuesForSubmit(fkNormalized, {
+        isEditMode: true,
+        originalRecord: record,
+      });
     },
-    [normalizeFkValuesForSubmit]
+    [normalizeFkValuesForSubmit, normalizeFileValuesForSubmit]
   );
 
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
@@ -2220,7 +2700,7 @@ export default function ReusableCrud({
 
         if (res?.data && typeof res.data === "object" && Array.isArray(res.data.results)) {
           setServerPaginated(true);
-          setData(res.data.results);
+          setData(applyRecordsTransform(res.data.results));
           setPagination((p) => ({
             ...p,
             current: page ?? p.current,
@@ -2232,7 +2712,7 @@ export default function ReusableCrud({
 
         if (Array.isArray(res.data)) {
           setServerPaginated(false);
-          setData(res.data);
+          setData(applyRecordsTransform(res.data));
           setPagination((p) => ({
             ...p,
             current: 1,
@@ -2264,6 +2744,7 @@ export default function ReusableCrud({
       mergedBaseFilters,
       sortQueryParams,
       authHeaders,
+      applyRecordsTransform,
     ]
   );
 
@@ -2291,7 +2772,7 @@ export default function ReusableCrud({
         const res = await axios.get(finalUrl, { headers: authHeaders });
 
         if (res?.data && typeof res.data === "object" && Array.isArray(res.data.results)) {
-          setInactiveRows(res.data.results);
+          setInactiveRows(applyRecordsTransform(res.data.results));
           setInactivePagination((p) => ({
             ...p,
             current: page ?? p.current,
@@ -2308,7 +2789,7 @@ export default function ReusableCrud({
             return false;
           });
 
-          setInactiveRows(list);
+          setInactiveRows(applyRecordsTransform(list));
           setInactivePagination((p) => ({ ...p, current: 1, total: list.length }));
           return;
         }
@@ -2334,6 +2815,7 @@ export default function ReusableCrud({
       mergedBaseFilters,
       sortQueryParams,
       authHeaders,
+      applyRecordsTransform,
     ]
   );
 
@@ -2356,26 +2838,28 @@ export default function ReusableCrud({
   }, [fetchInactive, enableInactiveDrawer, inactiveDrawer]);
 
   const upsertSavedRecord = useCallback((savedRecord) => {
-    if (!savedRecord?.id) return;
+    const normalizedRecord = applyRecordTransform(savedRecord);
 
-    const isActiveRecord = savedRecord?.hasOwnProperty("active")
-      ? !!savedRecord.active
-      : savedRecord?.hasOwnProperty("is_active")
-        ? !!savedRecord.is_active
+    if (!normalizedRecord?.id) return;
+
+    const isActiveRecord = normalizedRecord?.hasOwnProperty("active")
+      ? !!normalizedRecord.active
+      : normalizedRecord?.hasOwnProperty("is_active")
+        ? !!normalizedRecord.is_active
         : true;
 
     setData((prev) => {
       const list = Array.isArray(prev) ? [...prev] : [];
-      const next = list.filter((item) => String(item?.id) !== String(savedRecord.id));
-      return isActiveRecord ? [savedRecord, ...next] : next;
+      const next = list.filter((item) => String(item?.id) !== String(normalizedRecord.id));
+      return isActiveRecord ? [normalizedRecord, ...next] : next;
     });
 
     setInactiveRows((prev) => {
       const list = Array.isArray(prev) ? [...prev] : [];
-      const next = list.filter((item) => String(item?.id) !== String(savedRecord.id));
-      return isActiveRecord ? next : [savedRecord, ...next];
+      const next = list.filter((item) => String(item?.id) !== String(normalizedRecord.id));
+      return isActiveRecord ? next : [normalizedRecord, ...next];
     });
-  }, []);
+  }, [applyRecordTransform]);
 
   const refreshAfterSubmit = useCallback(async () => {
     await fetchData({
@@ -2441,7 +2925,7 @@ export default function ReusableCrud({
       if (openMode === "edit") {
         const fromList = (data || EMPTY_ARRAY).find((d) => String(d.id) === String(openEditId));
         if (fromList) {
-          setEditingRecord(fromList);
+          setEditingRecord(applyRecordTransform(fromList));
           setVisible(true);
           return;
         }
@@ -2449,7 +2933,7 @@ export default function ReusableCrud({
         if (openEditId != null) {
           try {
             const r = await axios.get(recordUrl(apiUrl, openEditId), { headers: authHeaders });
-            setEditingRecord(r.data);
+            setEditingRecord(applyRecordTransform(r.data));
             setVisible(true);
             return;
           } catch (e) {
@@ -2467,7 +2951,7 @@ export default function ReusableCrud({
     };
 
     open();
-  }, [openOnMount, openMode, openEditId, data, apiUrl, recordUrl, authHeaders]);
+  }, [openOnMount, openMode, openEditId, data, apiUrl, recordUrl, authHeaders, applyRecordTransform]);
 
   useEffect(() => {
     const init = async () => {
@@ -2475,13 +2959,13 @@ export default function ReusableCrud({
 
       if (ui_type === "edit form") {
         if (look_up_var && typeof look_up_var === "object") {
-          setFormInitialValues(look_up_var);
+          setFormInitialValues(applyRecordTransform(look_up_var));
         } else if (look_up_var) {
           try {
             const { data: rec } = await axios.get(recordUrl(apiUrl, look_up_var), {
               headers: authHeaders,
             });
-            setFormInitialValues(rec);
+            setFormInitialValues(applyRecordTransform(rec));
           } catch (err) {
             console.error("Failed to fetch record for edit form:", err);
           }
@@ -2492,7 +2976,7 @@ export default function ReusableCrud({
     };
 
     init();
-  }, [ui_type, look_up_var, apiUrl, recordUrl, authHeaders, crudInitialValues]);
+  }, [ui_type, look_up_var, apiUrl, recordUrl, authHeaders, crudInitialValues, applyRecordTransform]);
 
   const updateRecordActiveState = async (record, nextActive) => {
     const updateField = record?.hasOwnProperty("active") ? "active" : "is_active";
@@ -2640,8 +3124,10 @@ export default function ReusableCrud({
     viewActive,
     mergedBaseFilters,
     sortQueryParams,
-    authHeaders,
-  ]);
+      authHeaders,
+      applyRecordTransform,
+      data,
+    ]);
 
   const handleExportAll = useCallback(async () => {
     try {
@@ -3033,7 +3519,7 @@ export default function ReusableCrud({
         label: "Edit",
         onClick: () => {
           setSubmitErrors(EMPTY_ARRAY);
-          setEditingRecord(record);
+          setEditingRecord(applyRecordTransform(record));
           setVisible(true);
         },
       });
@@ -3047,12 +3533,13 @@ export default function ReusableCrud({
         onClick: async () => {
           try {
             if (!action?.actions) return;
-            const normalizedRecord = normalizeFkValuesForSubmit(record);
-            await axios.put(
-              recordUrl(apiUrl, record.id),
-              { ...normalizedRecord, ...action.actions },
-              { headers: authHeaders }
-            );
+            const normalizedRecord = sanitizeBulkActionRecord(record);
+            await axios({
+              method: String(updateMethod || "patch").toLowerCase(),
+              url: recordUrl(apiUrl, record.id),
+              data: { ...normalizedRecord, ...action.actions },
+              headers: { ...authHeaders, "Content-Type": "application/json" },
+            });
             fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
             message.success(`${action.label} successful`);
           } catch (e) {
@@ -3249,7 +3736,19 @@ export default function ReusableCrud({
         render: (_, record) => {
           const path = viewPathBuilder(record);
           if (!path) return "-";
-          return <Link to={path}>View</Link>;
+          return (
+            <Button
+              type="link"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.visit(path);
+              }}
+              style={{ padding: 0 }}
+            >
+              View
+            </Button>
+          );
         },
       }
       : null;
@@ -3299,7 +3798,7 @@ export default function ReusableCrud({
     setSubmitErrors(EMPTY_ARRAY);
     if (button_ui_id) {
       const rec = (data || EMPTY_ARRAY).find((d) => d.id === button_ui_id);
-      setEditingRecord(rec || null);
+      setEditingRecord(applyRecordTransform(rec) || null);
     } else {
       setEditingRecord(null);
     }
@@ -3576,6 +4075,9 @@ export default function ReusableCrud({
 
                   if (!field.quickAdd) return selectEl;
 
+                  const canQuickEdit =
+                    field.quickAdd.allowEdit !== false && finalVal !== undefined && finalVal !== null && finalVal !== "";
+
                   return (
                     <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>{selectEl}</div>
@@ -3584,8 +4086,32 @@ export default function ReusableCrud({
                         size="large"
                         disabled={readOnly}
                         title={`Quick add ${field.quickAdd.title || name}`}
-                        onClick={() => setQuickAddState({ fieldName: name, field })}
+                        onClick={() => setQuickAddState({ mode: "add", fieldName: name, field })}
                       />
+                      {canQuickEdit && (
+                        <Button
+                          icon={<EditOutlined />}
+                          size="large"
+                          disabled={readOnly}
+                          title={`Quick edit ${field.quickAdd.title || name}`}
+                          onClick={async () => {
+                            let record = detailCurrent || (rawCurrent && typeof rawCurrent === "object" ? rawCurrent : null);
+
+                            if (!record || !record.id) {
+                              const opt = await fetchFkOptionById(name, finalVal);
+                              record = opt?.raw || record;
+                            }
+
+                            setQuickAddState({
+                              mode: "edit",
+                              fieldName: name,
+                              field,
+                              recordId: finalVal,
+                              record: record || { id: finalVal },
+                            });
+                          }}
+                        />
+                      )}
                     </div>
                   );
                 }
@@ -4600,39 +5126,77 @@ export default function ReusableCrud({
   const submitRecord = async (values, isEditMode, editId) => {
     const token = getAuthToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : EMPTY_OBJECT;
+    const originalRecord = isEditMode
+      ? editingRecord || formInitialValues || crudInitialValues || EMPTY_OBJECT
+      : EMPTY_OBJECT;
 
     const normalizedValues = normalizeFkValuesForSubmit(values);
-    const payload =
-      typeof transformPayload === "function" ? transformPayload(normalizedValues) : normalizedValues;
-    const containsFile = hasAnyFile(payload);
-
-    if (!containsFile) {
-      if (isEditMode) {
-        const res = await axios.put(recordUrl(apiUrl, editId), payload, {
-          headers: { ...headers, "Content-Type": "application/json" },
-        });
-        return res.data;
-      }
-
-      const res = await axios.post(apiUrl, payload, {
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-      return res.data;
-    }
-
-    const fd = buildFormData(payload);
-
-    if (isEditMode) {
-      const res = await axios.put(recordUrl(apiUrl, editId), fd, {
-        headers: { ...headers, "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    }
-
-    const res = await axios.post(apiUrl, fd, {
-      headers: { ...headers, "Content-Type": "multipart/form-data" },
+    const uploadSafeValues = normalizeFileValuesForSubmit(normalizedValues, {
+      isEditMode,
+      originalRecord,
     });
+
+    const transformedPayload =
+      typeof transformPayload === "function"
+        ? transformPayload(uploadSafeValues, { isEditMode, editingRecord: originalRecord })
+        : uploadSafeValues;
+
+    const payload = normalizeFileValuesForSubmit(transformedPayload, {
+      isEditMode,
+      originalRecord,
+    });
+
+    const containsFile = hasAnyFile(payload);
+    const method = isEditMode ? String(updateMethod || "patch").toLowerCase() : "post";
+    const url = isEditMode ? recordUrl(apiUrl, editId) : apiUrl;
+
+    const res = await axios({
+      method,
+      url,
+      data: containsFile ? buildFormData(payload) : payload,
+      headers: containsFile
+        ? headers
+        : { ...headers, "Content-Type": "application/json" },
+    });
+
     return res.data;
+  };
+
+  const renderQuickAddModal = () => {
+    if (!quickAddState?.field?.quickAdd) return null;
+
+    const { fieldName, field, mode = "add", recordId, record } = quickAddState;
+    const quickAdd = field.quickAdd;
+    const isQuickEdit = mode === "edit";
+    const quickValueKey = field.fkValueKey || "id";
+
+    return (
+      <QuickAddModal
+        open
+        mode={mode}
+        title={quickAdd.title || (isQuickEdit ? "Quick Edit" : "Quick Add")}
+        apiUrl={resolveUrl(quickAdd.apiUrl)}
+        fields={quickAdd.fields || EMPTY_ARRAY}
+        validationSchema={quickAdd.validationSchema}
+        initialValues={quickAdd.initialValues || EMPTY_OBJECT}
+        editRecord={isQuickEdit ? record || EMPTY_OBJECT : null}
+        editId={isQuickEdit ? recordId || record?.[quickValueKey] || record?.id : null}
+        updateMethod={quickAdd.updateMethod || updateMethod}
+        transformPayload={quickAdd.transformPayload}
+        onClose={() => setQuickAddState(null)}
+        onSuccess={(savedRecord) => {
+          const savedId = savedRecord?.[quickValueKey] ?? savedRecord?.id;
+          refreshFkAndSelect(fieldName, {
+            value: savedId,
+            label: field.fkLabel
+              ? field.fkLabel(savedRecord)
+              : savedRecord?.name || savedRecord?.display_name || savedRecord?.code || String(savedId ?? ""),
+            raw: savedRecord,
+          });
+          setQuickAddState(null);
+        }}
+      />
+    );
   };
 
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
@@ -4720,29 +5284,7 @@ export default function ReusableCrud({
             );
           }}
         </Formik>
-        {quickAddState && (
-          <QuickAddModal
-            open
-            title={quickAddState.field.quickAdd.title || "Quick Add"}
-            apiUrl={`${import.meta.env.VITE_APP_BACKEND_URL}${quickAddState.field.quickAdd.apiUrl}`}
-            fields={quickAddState.field.quickAdd.fields || []}
-            validationSchema={quickAddState.field.quickAdd.validationSchema}
-            initialValues={quickAddState.field.quickAdd.initialValues || {}}
-            transformPayload={quickAddState.field.quickAdd.transformPayload}
-            onClose={() => setQuickAddState(null)}
-            onSuccess={(newRecord) => {
-              const { fieldName, field: f } = quickAddState;
-              refreshFkAndSelect(fieldName, {
-                value: newRecord[f.fkValueKey || "id"],
-                label: f.fkLabel
-                  ? f.fkLabel(newRecord)
-                  : newRecord.name || String(newRecord[f.fkValueKey || "id"]),
-                raw: newRecord,
-              });
-              setQuickAddState(null);
-            }}
-          />
-        )}
+        {renderQuickAddModal()}
       </div>
     );
   }
@@ -4904,15 +5446,14 @@ export default function ReusableCrud({
     <>
 
       {custom_add ? (
-        <Link to={custom_add_link}>
-          <Button
-            icon={<PlusOutlined />}
-            type="primary"
-            style={{ borderRadius: 2, fontWeight: 650 }}
-          >
-            ADD NEW
-          </Button>
-        </Link>
+        <Button
+          icon={<PlusOutlined />}
+          type="primary"
+          style={{ borderRadius: 2, fontWeight: 650 }}
+          onClick={() => custom_add_link && router.visit(custom_add_link)}
+        >
+          ADD NEW
+        </Button>
       ) : (<></>)}
       {canAdd && !button_ui && ui_type !== "add_related" && (
 
@@ -5010,7 +5551,10 @@ export default function ReusableCrud({
                           ...(action?.actions || EMPTY_OBJECT),
                         }));
 
-                        await axios.put(apiUrl, payload, {
+                        await axios({
+                          method: String(updateMethod || "patch").toLowerCase(),
+                          url: apiUrl,
+                          data: payload,
                           headers: {
                             ...authHeaders,
                             "Content-Type": "application/json",
@@ -5055,15 +5599,14 @@ export default function ReusableCrud({
 
                   <Col xs={8} style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                     {custom_add ? (
-                      <Link to={custom_add_link}>
-                        <Button
-                          icon={<PlusOutlined />}
-                          type="primary"
-                          style={{ borderRadius: 2, fontWeight: 650 }}
-                        >
-                          ADD NEW
-                        </Button>
-                      </Link>
+                      <Button
+                        icon={<PlusOutlined />}
+                        type="primary"
+                        style={{ borderRadius: 2, fontWeight: 650 }}
+                        onClick={() => custom_add_link && router.visit(custom_add_link)}
+                      >
+                        ADD NEW
+                      </Button>
                     ) : (<></>)}
                     {canAdd && (
                       <Button
@@ -5263,29 +5806,7 @@ export default function ReusableCrud({
         </Drawer>
       )}
 
-      {quickAddState && (
-        <QuickAddModal
-          open
-          title={quickAddState.field.quickAdd.title || "Quick Add"}
-          apiUrl={`${import.meta.env.VITE_APP_BACKEND_URL}${quickAddState.field.quickAdd.apiUrl}`}
-          fields={quickAddState.field.quickAdd.fields || []}
-          validationSchema={quickAddState.field.quickAdd.validationSchema}
-          initialValues={quickAddState.field.quickAdd.initialValues || {}}
-          transformPayload={quickAddState.field.quickAdd.transformPayload}
-          onClose={() => setQuickAddState(null)}
-          onSuccess={(newRecord) => {
-            const { fieldName, field: f } = quickAddState;
-            refreshFkAndSelect(fieldName, {
-              value: newRecord[f.fkValueKey || "id"],
-              label: f.fkLabel
-                ? f.fkLabel(newRecord)
-                : newRecord.name || String(newRecord[f.fkValueKey || "id"]),
-              raw: newRecord,
-            });
-            setQuickAddState(null);
-          }}
-        />
-      )}
+      {renderQuickAddModal()}
     </>
   );
 }

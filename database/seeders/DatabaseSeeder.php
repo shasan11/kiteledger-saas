@@ -25,6 +25,9 @@ class DatabaseSeeder extends Seeder
             MasterDealDataSeeder::class,
             MasterDataTypesSeeder::class,
             MasterTaxJurisdictionSeeder::class,
+            InventorySeeder::class,
+            SalesModuleSeeder::class,
+            PurchaseModuleSeeder::class,
         ]);
     }
 }

@@ -25,6 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__.'/menu/pos.php';
     require __DIR__.'/menu/crm.php';
     require __DIR__.'/menu/workflow.php';
+    require __DIR__.'/menu/sales.php';
     require __DIR__.'/menu/payment-in.php';
     require __DIR__.'/menu/payment-out.php';
     require __DIR__.'/menu/accounting.php';

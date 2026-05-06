@@ -17,7 +17,9 @@ return new class extends Migration
             $table->foreignId('voided_by_id')->nullable()->constrained('users')->after('void');
             $table->text('voided_reason')->nullable()->after('voided_by_id');
             $table->dateTime('voided_at')->nullable()->after('voided_reason');
-            $table->enum('status', ['draft', 'posted', 'cancelled'])->default('draft')->after('voided_at');
+            $table->uuid('journal_voucher_id')->nullable()->after('voided_at');
+            $table->foreign('journal_voucher_id')->references('id')->on('journal_vouchers')->nullOnDelete();
+            $table->enum('status', ['draft', 'posted', 'cancelled'])->default('draft')->after('journal_voucher_id');
         });
     }
 
@@ -27,6 +29,7 @@ return new class extends Migration
             $table->dropUnique(['charge_no']);
             $table->dropForeign(['approved_by_id']);
             $table->dropForeign(['voided_by_id']);
+            $table->dropForeign(['journal_voucher_id']);
             $table->dropColumn([
                 'charge_no',
                 'approved',
@@ -36,6 +39,7 @@ return new class extends Migration
                 'voided_by_id',
                 'voided_reason',
                 'voided_at',
+                'journal_voucher_id',
                 'status',
             ]);
         });

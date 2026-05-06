@@ -48,10 +48,10 @@ export default function SupplierPayments({ auth }) {
     { name: 'amount', label: 'Amount', type: 'number', col: 8, required: true, min: 0 },
     { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 6, min: 0 },
     { name: 'bank_charges', label: 'Bank Charges', type: 'number', col: 8, min: 0 },
-    { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'tds_type', label: 'TDS Type', type: 'text', col: 8 },
     { name: 'tds_charges', label: 'TDS Charges', type: 'number', col: 8, min: 0 },
-    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'tds_charges_account_id', label: 'TDS Charges Account', type: 'fkSelect', col: 8, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     {
       name: 'items', label: 'Bill Allocations', type: 'objectArray', col: 24,
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Bill',
@@ -94,6 +94,7 @@ export default function SupplierPayments({ auth }) {
 
   const transformPayload = (values) => ({
     ...values,
+    payment_no: values.payment_no || null,
     payment_date: formatDate(values.payment_date),
     amount: toNumber(values.amount),
     exchange_rate: toNumber(values.exchange_rate),
@@ -107,9 +108,9 @@ export default function SupplierPayments({ auth }) {
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Posted', value: 'posted' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+    { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (
@@ -126,6 +127,7 @@ export default function SupplierPayments({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="all"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

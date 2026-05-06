@@ -14,6 +14,14 @@ return new class extends Migration
             $table->string('invoice_no', 40)->nullable()->change();
         });
 
+        Schema::table('sales_orders', function (Blueprint $table) {
+            $table->string('sales_order_no', 40)->nullable()->change();
+        });
+
+        Schema::table('proforma_invoices', function (Blueprint $table) {
+            $table->string('proforma_no', 40)->nullable()->change();
+        });
+
         Schema::table('customer_payments', function (Blueprint $table) {
             $table->string('payment_no', 40)->nullable()->change();
         });

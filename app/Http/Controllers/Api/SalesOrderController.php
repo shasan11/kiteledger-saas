@@ -96,27 +96,27 @@ class SalesOrderController extends BaseCrudApiController
             'replace_on_update' => false,
 
             'relations' => [
-                'productVariant',
+                'product',
                 'taxRate',
             ],
 
             'relation_details' => [
-                'productVariant' => 'product_variant_id',
+                'product' => 'product_id',
                 'taxRate' => 'tax_rate_id',
             ],
 
             'rules' => [
-                'product_variant_id' => [
+                'product_id' => [
                     'nullable',
                     'uuid',
-                    'exists:product_variants,id',
+                    'exists:products,id',
                     'required_without:custom_product_name',
                 ],
                 'custom_product_name' => [
                     'nullable',
                     'string',
                     'max:180',
-                    'required_without:product_variant_id',
+                    'required_without:product_id',
                 ],
                 'description' => [
                     'nullable',
@@ -157,17 +157,17 @@ class SalesOrderController extends BaseCrudApiController
             ],
 
             'update_rules' => [
-                'product_variant_id' => [
+                'product_id' => [
                     'nullable',
                     'uuid',
-                    'exists:product_variants,id',
+                    'exists:products,id',
                     'required_without:custom_product_name',
                 ],
                 'custom_product_name' => [
                     'nullable',
                     'string',
                     'max:180',
-                    'required_without:product_variant_id',
+                    'required_without:product_id',
                 ],
                 'description' => [
                     'nullable',
@@ -216,7 +216,7 @@ class SalesOrderController extends BaseCrudApiController
             'exists:branches,id',
         ],
         'sales_order_no' => [
-            'required',
+            'nullable',
             'string',
             'max:40',
             'unique:sales_orders,sales_order_no',
@@ -248,6 +248,11 @@ class SalesOrderController extends BaseCrudApiController
         'notes' => [
             'nullable',
             'string',
+        ],
+        'exchange_rate' => [
+            'nullable',
+            'numeric',
+            'gt:0',
         ],
         'subtotal' => [
             'nullable',
@@ -298,7 +303,7 @@ class SalesOrderController extends BaseCrudApiController
             ],
             'sales_order_no' => [
                 'sometimes',
-                'required',
+                'nullable',
                 'string',
                 'max:40',
                 Rule::unique('sales_orders', 'sales_order_no')->ignore($record->getKey()),
@@ -336,6 +341,12 @@ class SalesOrderController extends BaseCrudApiController
                 'sometimes',
                 'nullable',
                 'string',
+            ],
+            'exchange_rate' => [
+                'sometimes',
+                'nullable',
+                'numeric',
+                'gt:0',
             ],
             'subtotal' => [
                 'sometimes',

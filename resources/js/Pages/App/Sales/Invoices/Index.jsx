@@ -22,7 +22,7 @@ const formatDate = (value) => {
 const statusColor = (s) => {
   if (s === 'posted' || s === 'paid') return 'green';
   if (s === 'void' || s === 'cancelled') return 'red';
-  if (s === 'partial') return 'orange';
+  if (s === 'part_paid') return 'orange';
   return 'default';
 };
 
@@ -42,7 +42,7 @@ export default function Invoices(props) {
     { name: 'invoice_no', label: 'Invoice No', type: 'text', col: 8, placeholder: 'Auto-generated if blank' },
     { name: 'invoice_date', label: 'Invoice Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
-    { name: 'status', label: 'Status', type: 'select', col: 6, options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'partial', label: 'Partial' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }] },
+    { name: 'status', label: 'Status', type: 'select', col: 6, options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'part_paid', label: 'Part Paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }] },
     { name: 'contact_id', label: 'Contact', type: 'fkSelect', required: true, col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.code ? `${r.code} - ${r.name}` : r?.name || '' },
     { name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8, fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
@@ -110,6 +110,7 @@ export default function Invoices(props) {
         anchorFilters={[
           { key: 'draft', label: 'Draft', params: { status: 'draft' } },
           { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+          { key: 'part_paid', label: 'Part Paid', params: { status: 'part_paid' } },
           { key: 'paid', label: 'Paid', params: { status: 'paid' } },
           { key: 'all', label: 'All', params: {} },
         ]}

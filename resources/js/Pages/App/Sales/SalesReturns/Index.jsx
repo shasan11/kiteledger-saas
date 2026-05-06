@@ -96,9 +96,9 @@ export default function SalesReturns({ auth }) {
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Posted', value: 'posted' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+    { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (
@@ -115,6 +115,8 @@ export default function SalesReturns({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="draft"
+        anchorSyncWithHash
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

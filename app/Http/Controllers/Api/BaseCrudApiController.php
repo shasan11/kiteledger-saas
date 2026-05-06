@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Services\DocumentNumberingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -1199,6 +1200,8 @@ abstract class BaseCrudApiController extends Controller
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
+        $parentData = $this->assignDocumentNumberIfMissing($parentData);
+
         foreach ($this->nested as $field => $config) {
             if (
                 isset($config['parent_total_field'], $config['child_total_field'])
@@ -1208,6 +1211,31 @@ abstract class BaseCrudApiController extends Controller
                 $parentData[$config['parent_total_field']] = collect($nestedData[$field])
                     ->sum(fn ($row) => (float) ($row[$config['child_total_field']] ?? 0));
             }
+        }
+
+        return $parentData;
+    }
+
+    protected function assignDocumentNumberIfMissing(array $parentData): array
+    {
+        try {
+            $model = $this->newModelInstance();
+            $mapping = app(DocumentNumberingService::class)->getMappingForModel($model);
+
+            if (!$mapping) {
+                return $parentData;
+            }
+
+            $field = $mapping['field'] ?? null;
+            $documentType = $mapping['document_type'] ?? null;
+
+            if (!$field || !$documentType || !empty($parentData[$field])) {
+                return $parentData;
+            }
+
+            $parentData[$field] = app(DocumentNumberingService::class)->generate($documentType);
+        } catch (\Throwable $e) {
+            //
         }
 
         return $parentData;

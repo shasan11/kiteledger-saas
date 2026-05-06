@@ -14,41 +14,35 @@ class ProductUnitController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
         'products',
     ];
 
-    protected array $relationDetails = [
-        'branch' => 'branch_id',
-    ];
+    protected array $relationDetails = [];
 
     protected array $searchable = [
         'name',
         'short_name',
-        'branch.name',
-        'branch.code',
     ];
 
-    protected array $filterable = [
-        'branch_id',
-    ];
+    protected array $filterable = [];
 
     protected array $booleanFilters = [
         'active',
+        'accept_fractional',
+        'is_system_generated',
     ];
 
     protected array $sortable = [
         'id',
         'name',
         'short_name',
-        'precision',
         'active',
         'created_at',
         'updated_at',
@@ -57,10 +51,10 @@ class ProductUnitController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id'           => ['nullable', 'uuid', 'exists:branches,id'],
-        'name'                => ['required', 'string', 'max:100'],
-        'short_name'          => ['nullable', 'string', 'max:30'],
-        'precision'           => ['nullable', 'integer', 'min:0', 'max:10'],
+        'name'                => ['required', 'string', 'max:50'],
+        'short_name'          => ['nullable', 'string', 'max:20'],
+        'description'         => ['nullable', 'string'],
+        'accept_fractional'   => ['nullable', 'boolean'],
         'active'              => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id'         => ['nullable', 'integer', 'exists:users,id'],
@@ -69,10 +63,10 @@ class ProductUnitController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id'           => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'name'                => ['sometimes', 'required', 'string', 'max:100'],
-            'short_name'          => ['sometimes', 'nullable', 'string', 'max:30'],
-            'precision'           => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10'],
+            'name'                => ['sometimes', 'required', 'string', 'max:50'],
+            'short_name'          => ['sometimes', 'nullable', 'string', 'max:20'],
+            'description'         => ['sometimes', 'nullable', 'string'],
+            'accept_fractional'   => ['sometimes', 'nullable', 'boolean'],
             'active'              => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id'         => ['sometimes', 'nullable', 'integer', 'exists:users,id'],

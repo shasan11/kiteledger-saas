@@ -102,6 +102,19 @@ export default function AuthenticatedLayout({ header, children }) {
                 ],
             },
             {
+                key: 'sales',
+                icon: <FileTextOutlined />,
+                label: 'Sales',
+                children: [
+                    { key: 'sales-quotations', label: 'Quotations', onClick: () => visit('sales.quotations.index', '/sales/quotations') },
+                    { key: 'sales-sales-orders', label: 'Sales Orders', onClick: () => visit('sales.sales-orders.index', '/sales/sales-orders') },
+                    { key: 'sales-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('sales.proforma-invoices.index', '/sales/proforma-invoices') },
+                    { key: 'sales-invoices', label: 'Invoices', onClick: () => visit('sales.invoices.index', '/sales/invoices') },
+                    { key: 'sales-customer-payments', label: 'Customer Payments', onClick: () => visit('sales.customer-payments.index', '/sales/customer-payments') },
+                    { key: 'sales-sales-returns', label: 'Sales Returns', onClick: () => visit('sales.sales-returns.index', '/sales/sales-returns') },
+                ],
+            },
+            {
                 key: 'payment-in',
                 icon: <CreditCardOutlined />,
                 label: 'Payment In',
@@ -221,6 +234,13 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/crm/activities')) return ['activities'];
 
         if (isActive('/workflow')) return ['workflow'];
+
+        if (isActive('/sales/quotations')) return ['sales-quotations'];
+        if (isActive('/sales/sales-orders')) return ['sales-sales-orders'];
+        if (isActive('/sales/proforma-invoices')) return ['sales-proforma-invoices'];
+        if (isActive('/sales/invoices')) return ['sales-invoices'];
+        if (isActive('/sales/customer-payments')) return ['sales-customer-payments'];
+        if (isActive('/sales/sales-returns')) return ['sales-sales-returns'];
 
         if (isActive('/payment-in/bills')) return ['pi-bills'];
         if (isActive('/payment-in/sales-orders')) return ['pi-sales-orders'];

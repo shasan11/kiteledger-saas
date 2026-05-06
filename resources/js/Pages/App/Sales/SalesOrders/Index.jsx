@@ -99,9 +99,10 @@ export default function SalesOrders({ auth }) {
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Confirmed', value: 'confirmed' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+    { key: 'confirmed', label: 'Confirmed', params: { status: 'confirmed' } },
+    { key: 'fulfilled', label: 'Fulfilled', params: { status: 'fulfilled' } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (
@@ -118,6 +119,8 @@ export default function SalesOrders({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="draft"
+        anchorSyncWithHash
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

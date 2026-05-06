@@ -16,7 +16,7 @@ const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY'
 
 const emptyLine = { product_id: null, custom_product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_amount: 0 };
 
-const statusColors = { draft: 'default', sent: 'blue', accepted: 'green', cancelled: 'red' };
+const statusColors = { draft: 'default', issued: 'blue', cancelled: 'red' };
 
 export default function ProformaInvoices({ auth }) {
   const columns = useMemo(() => [
@@ -39,8 +39,7 @@ export default function ProformaInvoices({ auth }) {
       name: 'status', label: 'Status', type: 'select', col: 8,
       options: [
         { value: 'draft', label: 'Draft' },
-        { value: 'sent', label: 'Sent' },
-        { value: 'accepted', label: 'Accepted' },
+        { value: 'issued', label: 'Issued' },
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
@@ -99,9 +98,9 @@ export default function ProformaInvoices({ auth }) {
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Sent', value: 'sent' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+    { key: 'issued', label: 'Issued', params: { status: 'issued' } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (
@@ -118,6 +117,8 @@ export default function ProformaInvoices({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="draft"
+        anchorSyncWithHash
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

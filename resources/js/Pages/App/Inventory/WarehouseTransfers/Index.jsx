@@ -20,9 +20,9 @@ const formatDate = (value) => {
 };
 
 const emptyLine = {
-  product_variant_id: null,
-  product_variant_id_detail: null,
-  product_variant_name: '',
+  product_id: null,
+  product_id_detail: null,
+  product_name: '',
   qty: 1,
   remarks: '',
 };
@@ -85,7 +85,7 @@ export default function WarehouseTransfers(props) {
   ], []);
 
   const fields = useMemo(() => [
-    { name: 'transfer_no', label: 'Transfer No', type: 'text', required: true, col: 8, placeholder: 'WT-0001' },
+    { name: 'transfer_no', label: 'Transfer No', type: 'text', col: 8, placeholder: 'Auto draft ref if blank' },
     { name: 'transfer_date', label: 'Transfer Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY', placeholder: 'Select date' },
     {
       name: 'status',
@@ -139,18 +139,19 @@ export default function WarehouseTransfers(props) {
       defaultItem: { ...emptyLine },
       columns: [
         {
-          key: 'product_variant_id',
-          name: 'product_variant_id',
-          label: 'Product / Variant',
+          key: 'product_id',
+          name: 'product_id',
+          label: 'Product',
           type: 'fkSelect',
           width: '3fr',
-          placeholder: 'Search product variant',
+          placeholder: 'Search product',
           fkUrl: api('/api/products'),
           fkSearchParam: 'search',
           fkPageSize: 20,
           fkValueKey: 'id',
           fkLabelKey: 'name',
-          labelField: 'product_variant_name',
+          labelField: 'product_name',
+          fkExtraParams: { active: true, track_inventory: true },
           fkLabel: (row) => {
             const name = row?.name || row?.display_name || '';
             const code = row?.code || row?.sku || '';
@@ -165,7 +166,7 @@ export default function WarehouseTransfers(props) {
   ], []);
 
   const validationSchema = Yup.object().shape({
-    transfer_no: Yup.string().required('Transfer number is required').max(40),
+    transfer_no: Yup.string().nullable().max(40),
     transfer_date: Yup.string().required('Date is required'),
     from_warehouse_id: Yup.string().nullable().required('Source warehouse is required'),
     to_warehouse_id: Yup.string().nullable().required('Destination warehouse is required')
@@ -175,7 +176,7 @@ export default function WarehouseTransfers(props) {
     status: Yup.string().nullable().oneOf(['draft', 'posted', 'cancelled']),
     items: Yup.array()
       .of(Yup.object().shape({
-        product_variant_id: Yup.string().nullable().required('Product is required'),
+        product_id: Yup.string().nullable().required('Product is required'),
         qty: Yup.number().typeError('Qty required').min(0.0001, 'Qty must be > 0').required('Qty required'),
         remarks: Yup.string().nullable(),
       }))
@@ -195,10 +196,10 @@ export default function WarehouseTransfers(props) {
 
   const transformPayload = (values) => {
     const items = (values.items || [])
-      .filter((row) => row.product_variant_id)
+      .filter((row) => row.product_id)
       .map((row) => ({
         id: row.id,
-        product_variant_id: row.product_variant_id,
+        product_id: row.product_id,
         qty: Number(row.qty) || 0,
         remarks: row.remarks?.trim() || null,
       }));

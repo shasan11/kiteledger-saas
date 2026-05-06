@@ -34,10 +34,10 @@ class PurchaseOrderController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant', 'taxRate'],
-            'relation_details' => ['productVariant' => 'product_variant_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['product', 'taxRate'],
+            'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'custom_product_name' => ['nullable', 'string', 'max:180'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
@@ -48,7 +48,7 @@ class PurchaseOrderController extends BaseCrudApiController
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'custom_product_name' => ['nullable', 'string', 'max:180'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
@@ -68,7 +68,9 @@ class PurchaseOrderController extends BaseCrudApiController
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'credit_term_id' => ['nullable', 'uuid', 'exists:credit_terms,id'],
+        'exchange_rate' => ['nullable', 'numeric', 'min:0'],
         'notes' => ['nullable', 'string'],
+        'approved' => ['nullable', 'boolean'],
         'status' => ['nullable', 'in:draft,confirmed,received,cancelled'],
     ];
 
@@ -81,7 +83,9 @@ class PurchaseOrderController extends BaseCrudApiController
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'credit_term_id' => ['sometimes', 'nullable', 'uuid', 'exists:credit_terms,id'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'approved' => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', 'nullable', 'in:draft,confirmed,received,cancelled'],
         ];
     }
@@ -92,5 +96,24 @@ class PurchaseOrderController extends BaseCrudApiController
         $record->forceFill(['total' => $total])->save();
 
         return $record;
+    }
+
+    protected function mutateNestedRowBeforeSave(
+        array $row,
+        Model $parent,
+        array $config,
+        bool $isUpdate
+    ): array {
+        $row['line_total'] = $this->calculateLineTotal($row);
+
+        return $row;
+    }
+
+    protected function calculateLineTotal(array $row): float
+    {
+        $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
+        $discount = ($gross * (float) ($row['discount_percent'] ?? 0)) / 100;
+
+        return round(max($gross - $discount, 0) + (float) ($row['tax_amount'] ?? 0), 2);
     }
 }

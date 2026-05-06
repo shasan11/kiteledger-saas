@@ -12,12 +12,8 @@ class Product extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
+        'branch_id',
         'parent_id',
         'product_category_id',
         'product_tax_category_id',
@@ -45,11 +41,6 @@ class Product extends Model
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -65,113 +56,118 @@ class Product extends Model
         ];
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
-    }
-
-    public function productCategory(): BelongsTo
-    {
-        return $this->belongsTo(ProductCategory::class);
-    }
-
-    public function productTaxCategory(): BelongsTo
-    {
-        return $this->belongsTo(ProductTaxCategory::class);
-    }
-
-    public function productUnit(): BelongsTo
-    {
-        return $this->belongsTo(ProductUnit::class);
-    }
-
-    public function taxClass(): BelongsTo
-    {
-        return $this->belongsTo(TaxClass::class);
-    }
-
-    public function salesAccount(): BelongsTo
-    {
-        return $this->belongsTo(Account::class);
-    }
-
-    public function purchaseAccount(): BelongsTo
-    {
-        return $this->belongsTo(Account::class);
-    }
-
-    public function salesReturnAccount(): BelongsTo
-    {
-        return $this->belongsTo(Account::class);
-    }
-
-    public function purchaseReturnAccount(): BelongsTo
-    {
-        return $this->belongsTo(Account::class);
-    }
-
-    public function userAdd(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Product::class, 'parent_id');
     }
 
     public function variants(): HasMany
     {
-        return $this->hasMany(Product::class);
+        return $this->hasMany(Product::class, 'parent_id');
+    }
+
+    public function productCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'product_category_id');
+    }
+
+    public function productTaxCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductTaxCategory::class, 'product_tax_category_id');
+    }
+
+    public function productUnit(): BelongsTo
+    {
+        return $this->belongsTo(ProductUnit::class, 'product_unit_id');
+    }
+
+    public function taxClass(): BelongsTo
+    {
+        return $this->belongsTo(TaxClass::class, 'tax_class_id');
+    }
+
+    public function salesAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'sales_account_id');
+    }
+
+    public function purchaseAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'purchase_account_id');
+    }
+
+    public function salesReturnAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'sales_return_account_id');
+    }
+
+    public function purchaseReturnAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'purchase_return_account_id');
+    }
+
+    public function userAdd(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_add_id');
     }
 
     public function productVariantItems(): HasMany
     {
-        return $this->hasMany(ProductVariantItem::class);
+        return $this->hasMany(ProductVariantItem::class, 'product_id');
     }
 
     public function quotationLines(): HasMany
     {
-        return $this->hasMany(QuotationLine::class);
+        return $this->hasMany(QuotationLine::class, 'product_id');
     }
 
     public function invoiceLines(): HasMany
     {
-        return $this->hasMany(InvoiceLine::class);
+        return $this->hasMany(InvoiceLine::class, 'product_id');
     }
 
     public function salesOrderLines(): HasMany
     {
-        return $this->hasMany(SalesOrderLine::class);
+        return $this->hasMany(SalesOrderLine::class, 'product_id');
     }
 
     public function proformaInvoiceLines(): HasMany
     {
-        return $this->hasMany(ProformaInvoiceLine::class);
+        return $this->hasMany(ProformaInvoiceLine::class, 'product_id');
     }
 
     public function salesReturnLines(): HasMany
     {
-        return $this->hasMany(SalesReturnLine::class);
+        return $this->hasMany(SalesReturnLine::class, 'product_id');
     }
 
     public function purchaseOrderLines(): HasMany
     {
-        return $this->hasMany(PurchaseOrderLine::class);
+        return $this->hasMany(PurchaseOrderLine::class, 'product_id');
     }
 
     public function purchaseBillLines(): HasMany
     {
-        return $this->hasMany(PurchaseBillLine::class);
+        return $this->hasMany(PurchaseBillLine::class, 'product_id');
     }
 
     public function debitNoteLines(): HasMany
     {
-        return $this->hasMany(DebitNoteLine::class);
+        return $this->hasMany(DebitNoteLine::class, 'product_id');
     }
 
     public function inventoryAdjustmentLines(): HasMany
     {
-        return $this->hasMany(InventoryAdjustmentLine::class);
+        return $this->hasMany(InventoryAdjustmentLine::class, 'product_id');
     }
 
     public function warehouseTransferLines(): HasMany
     {
-        return $this->hasMany(WarehouseTransferLine::class);
+        return $this->hasMany(WarehouseTransferLine::class, 'product_id');
     }
 }

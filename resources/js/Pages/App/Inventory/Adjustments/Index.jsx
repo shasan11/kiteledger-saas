@@ -33,18 +33,9 @@ const formatDateForBackend = (value) => {
     return value;
 };
 
-const unitOptions = [
-    { value: 'PCS', label: 'PCS' },
-    { value: 'PC', label: 'PC' },
-    { value: 'CC', label: 'CC' },
-    { value: 'BX', label: 'BX' },
-    { value: 'KG', label: 'KG' },
-    { value: 'LTR', label: 'LTR' },
-];
-
 const adjustmentTypeOptions = [
-    { value: 'in', label: 'In' },
-    { value: 'out', label: 'Out' },
+    { value: 'increase', label: 'Increase' },
+    { value: 'decrease', label: 'Decrease' },
 ];
 
 const emptyAdjustmentItem = {
@@ -52,28 +43,27 @@ const emptyAdjustmentItem = {
     product_id_detail: null,
     product_name: '',
     product_code: '',
-    quantity: 1,
-    unit_code: '',
-    adjustment_type: 'in',
-    rate: 0,
+    qty: 1,
+    adjustment_type: 'increase',
+    unit_cost: 0,
     amount: 0,
-    notes: '',
+    remarks: '',
 };
 
 const calculateLine = (row = {}) => {
-    const quantity = toNumber(row.quantity);
-    const rate = toNumber(row.rate);
+    const quantity = toNumber(row.qty);
+    const rate = toNumber(row.unit_cost);
 
     return {
         amount: quantity * rate,
-        signedQuantity: row.adjustment_type === 'out' ? quantity * -1 : quantity,
+        signedQuantity: row.adjustment_type === 'decrease' ? quantity * -1 : quantity,
     };
 };
 
 const initialValues = {
-    adjustment_number: 'DRAFT',
-    date: dayjs().format('YYYY-MM-DD'),
-    reference: '',
+    adjustment_no: '',
+    adjustment_date: dayjs().format('YYYY-MM-DD'),
+    reason: '',
 
     warehouse_id: null,
     warehouse_id_detail: null,
@@ -87,7 +77,7 @@ const initialValues = {
 };
 
 const validationSchema = Yup.object().shape({
-    date: Yup.string().required('Date is required'),
+    adjustment_date: Yup.string().required('Date is required'),
 
     warehouse_id: Yup.string()
         .nullable()
@@ -100,19 +90,19 @@ const validationSchema = Yup.object().shape({
                     .nullable()
                     .required('Product is required'),
 
-                quantity: Yup.number()
+                qty: Yup.number()
                     .typeError('Qty is required')
                     .min(0.0001, 'Qty must be greater than 0')
                     .required('Qty is required'),
 
                 adjustment_type: Yup.string()
-                    .oneOf(['in', 'out'])
+                    .oneOf(['increase', 'decrease'])
                     .required('Type is required'),
 
-                rate: Yup.number()
-                    .typeError('Rate is required')
-                    .min(0, 'Rate cannot be negative')
-                    .required('Rate is required'),
+                unit_cost: Yup.number()
+                    .typeError('Unit cost is required')
+                    .min(0, 'Unit cost cannot be negative')
+                    .required('Unit cost is required'),
             }),
         )
         .min(1, 'At least one product is required'),
@@ -122,14 +112,13 @@ export default function Index() {
     const fields = useMemo(
         () => [
             {
-                name: 'adjustment_number',
+                name: 'adjustment_no',
                 label: '#ADJUSTMENT',
                 col: 8,
-                readOnly: true,
-                placeholder: '#ADJUSTMENT',
+                placeholder: 'IA-0001',
             },
             {
-                name: 'date',
+                name: 'adjustment_date',
                 label: 'Date',
                 type: 'datePicker',
                 required: true,
@@ -138,8 +127,8 @@ export default function Index() {
                 placeholder: 'Date',
             },
             {
-                name: 'reference',
-                label: 'Reference',
+                name: 'reason',
+                label: 'Reason',
                 col: 8,
                 placeholder: 'Reference',
             },
@@ -204,7 +193,7 @@ export default function Index() {
                         labelField: 'product_name',
                         fkExtraParams: (values) => ({
                             active: true,
-                            product_type: 'goods',
+                            product_type: 'simple',
                             track_inventory: true,
                             warehouse_id: values?.warehouse_id || '',
                         }),
@@ -226,22 +215,13 @@ export default function Index() {
                         },
                     },
                     {
-                        key: 'quantity',
-                        name: 'quantity',
+                        key: 'qty',
+                        name: 'qty',
                         label: 'Quantity',
                         type: 'number',
                         width: '120px',
                         min: 0,
                         placeholder: 'Qty',
-                    },
-                    {
-                        key: 'unit_code',
-                        name: 'unit_code',
-                        label: '',
-                        type: 'select',
-                        width: '95px',
-                        options: unitOptions,
-                        placeholder: 'Unit',
                     },
                     {
                         key: 'adjustment_type',
@@ -252,9 +232,9 @@ export default function Index() {
                         options: adjustmentTypeOptions,
                     },
                     {
-                        key: 'rate',
-                        name: 'rate',
-                        label: 'RATE',
+                        key: 'unit_cost',
+                        name: 'unit_cost',
+                        label: 'Unit Cost',
                         type: 'number',
                         width: '150px',
                         min: 0,
@@ -272,9 +252,9 @@ export default function Index() {
                 ],
                 collapsedFields: [
                     {
-                        key: 'notes',
-                        name: 'notes',
-                        label: 'Line Notes',
+                        key: 'remarks',
+                        name: 'remarks',
+                        label: 'Line Remarks',
                         type: 'textarea',
                         col: 24,
                         rows: 2,
@@ -299,20 +279,20 @@ export default function Index() {
         () => [
             {
                 title: '#ADJUSTMENT',
-                dataIndex: 'adjustment_number',
-                key: 'adjustment_number',
+                dataIndex: 'adjustment_no',
+                key: 'adjustment_no',
                 width: 170,
                 backendSort: true,
-                sortField: 'adjustment_number',
+                sortField: 'adjustment_no',
                 render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
             },
             {
                 title: 'Date',
-                dataIndex: 'date',
-                key: 'date',
+                dataIndex: 'adjustment_date',
+                key: 'adjustment_date',
                 width: 130,
                 backendSort: true,
-                sortField: 'date',
+                sortField: 'adjustment_date',
                 render: (value) => {
                     if (!value) return '-';
                     const parsed = dayjs(value);
@@ -320,9 +300,9 @@ export default function Index() {
                 },
             },
             {
-                title: 'Reference',
-                dataIndex: 'reference',
-                key: 'reference',
+                title: 'Reason',
+                dataIndex: 'reason',
+                key: 'reason',
                 width: 170,
                 render: (value) => value || '-',
             },
@@ -346,8 +326,8 @@ export default function Index() {
                 render: (value, record) => {
                     const items = Array.isArray(value)
                         ? value
-                        : Array.isArray(record?.lines)
-                            ? record.lines
+                        : Array.isArray(record?.inventoryAdjustmentLines)
+                            ? record.inventoryAdjustmentLines
                             : [];
 
                     return items.length;
@@ -355,15 +335,15 @@ export default function Index() {
             },
             {
                 title: 'Total Amount',
-                dataIndex: 'total_amount',
-                key: 'total_amount',
+                dataIndex: 'total',
+                key: 'total',
                 width: 150,
                 align: 'right',
                 render: (_, record) => {
                     const total =
-                        record?.total_amount ??
+                        record?.total ??
                         (record?.items || record?.lines || []).reduce(
-                            (sum, row) => sum + toNumber(row?.amount),
+                            (sum, row) => sum + (toNumber(row?.qty) * toNumber(row?.unit_cost)),
                             0,
                         );
 
@@ -379,7 +359,7 @@ export default function Index() {
                     const status = value || (record?.approved ? 'approved' : 'draft');
 
                     if (status === 'approved') return <Tag color="green">Approved</Tag>;
-                    if (status === 'adjusted') return <Tag color="blue">Adjusted</Tag>;
+                    if (status === 'posted') return <Tag color="green">Posted</Tag>;
                     if (status === 'cancelled') return <Tag color="red">Cancelled</Tag>;
 
                     return <Tag>Draft</Tag>;
@@ -393,38 +373,33 @@ export default function Index() {
         const items = (values.items || [])
             .filter((row) => row.product_id)
             .map((row) => {
-                const line = calculateLine(row);
-
                 return {
                     id: row.id,
                     product_id: row.product_id,
-                    quantity: toNumber(row.quantity),
-                    signed_quantity: line.signedQuantity,
-                    unit_code: row.unit_code || '',
-                    adjustment_type: row.adjustment_type || 'in',
-                    rate: toNumber(row.rate),
-                    amount: Number(line.amount.toFixed(2)),
-                    notes: row.notes || '',
+                    qty: toNumber(row.qty),
+                    adjustment_type: row.adjustment_type || 'increase',
+                    unit_cost: toNumber(row.unit_cost),
+                    remarks: row.remarks || '',
+                    active: row.active !== false,
                 };
             });
 
-        const totalAmount = items.reduce(
-            (sum, row) => sum + toNumber(row.amount),
+        const total = items.reduce(
+            (sum, row) => sum + (toNumber(row.qty) * toNumber(row.unit_cost)),
             0,
         );
 
         return {
-            adjustment_number: values.adjustment_number || 'DRAFT',
-            date: formatDateForBackend(values.date),
-            reference: values.reference || '',
+            adjustment_no: values.adjustment_no?.trim() || null,
+            adjustment_date: formatDateForBackend(values.adjustment_date),
+            reason: values.reason || '',
 
             warehouse_id: values.warehouse_id,
 
             notes: values.notes || '',
 
-            total_amount: Number(totalAmount.toFixed(2)),
+            total: Number(total.toFixed(2)),
 
-            approved: !!values.approved,
             status: values.status || 'draft',
 
             items,
@@ -462,21 +437,12 @@ export default function Index() {
                 product.sku ||
                 '';
 
-            const unitCode =
-                product.unit_code ||
-                product.primary_unit?.short_name ||
-                product.primary_unit?.name ||
-                product.unit?.short_name ||
-                product.unit?.name ||
-                row.unit_code ||
-                '';
-
             const rate =
                 product.purchase_price ??
                 product.purchase_rate ??
                 product.cost_price ??
                 product.rate ??
-                row.rate ??
+                row.unit_cost ??
                 0;
 
             if (productName && values.items?.[index]?.product_name !== productName) {
@@ -487,17 +453,13 @@ export default function Index() {
                 setFieldValue(`items[${index}].product_code`, productCode, false);
             }
 
-            if (unitCode && values.items?.[index]?.unit_code !== unitCode) {
-                setFieldValue(`items[${index}].unit_code`, unitCode, false);
-            }
-
             if (
-                (row.rate === null ||
-                    row.rate === undefined ||
-                    Number(row.rate) === 0) &&
+                (row.unit_cost === null ||
+                    row.unit_cost === undefined ||
+                    Number(row.unit_cost) === 0) &&
                 rate
             ) {
-                setFieldValue(`items[${index}].rate`, Number(rate), false);
+                setFieldValue(`items[${index}].unit_cost`, Number(rate), false);
             }
 
             const nextAmount = Number(calculateLine(row).amount.toFixed(2));
@@ -574,10 +536,10 @@ export default function Index() {
                         params: { approved: true },
                     },
                     {
-                        key: 'adjusted',
-                        label: 'Adjusted',
+                        key: 'posted',
+                        label: 'Posted',
                         title: 'Inventory Adjustment',
-                        params: { status: 'adjusted' },
+                        params: { status: 'posted' },
                     },
                     {
                         key: 'all',

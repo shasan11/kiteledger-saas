@@ -34,13 +34,13 @@ class InvoiceController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant', 'taxRate'],
-            'relation_details' => ['productVariant' => 'product_variant_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['product', 'taxRate'],
+            'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id', 'required_without:custom_product_name'],
+                'custom_product_name' => ['nullable', 'string', 'max:180', 'required_without:product_id'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
@@ -48,10 +48,10 @@ class InvoiceController extends BaseCrudApiController
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id', 'required_without:custom_product_name'],
+                'custom_product_name' => ['nullable', 'string', 'max:180', 'required_without:product_id'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
@@ -63,7 +63,7 @@ class InvoiceController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-        'invoice_no' => ['required', 'string', 'max:40', 'unique:invoices,invoice_no'],
+        'invoice_no' => ['nullable', 'string', 'max:40', 'unique:invoices,invoice_no'],
         'invoice_date' => ['required', 'date'],
         'due_date' => ['nullable', 'date'],
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
@@ -71,6 +71,7 @@ class InvoiceController extends BaseCrudApiController
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'paid_total' => ['nullable', 'numeric', 'min:0'],
         'balance_due' => ['nullable', 'numeric', 'min:0'],
         'export_country' => ['nullable', 'string', 'max:80'],
@@ -83,7 +84,7 @@ class InvoiceController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'invoice_no' => ['sometimes', 'required', 'string', 'max:40', 'unique:invoices,invoice_no,' . $record->id . ',id'],
+            'invoice_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:invoices,invoice_no,' . $record->id . ',id'],
             'invoice_date' => ['sometimes', 'required', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date'],
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
@@ -91,6 +92,7 @@ class InvoiceController extends BaseCrudApiController
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'paid_total' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'balance_due' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'export_country' => ['sometimes', 'nullable', 'string', 'max:80'],
@@ -102,11 +104,39 @@ class InvoiceController extends BaseCrudApiController
 
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
-        $total = (float) $record->invoiceLines()->sum('line_total');
+        $lines = $record->invoiceLines()->with('taxRate')->get();
+
+        if ($lines->count() < 1) {
+            $this->throwValidation([
+                'items' => ['At least one invoice item is required.'],
+            ]);
+        }
+
+        $total = 0;
+        foreach ($lines as $line) {
+            $qty = (float) $line->qty;
+            $unitPrice = (float) $line->unit_price;
+            $discountPercent = (float) ($line->discount_percent ?? 0);
+            $baseAmount = $qty * $unitPrice;
+            $discountAmount = $baseAmount * ($discountPercent / 100);
+            $taxableAmount = max($baseAmount - $discountAmount, 0);
+            $taxAmount = $line->taxRate
+                ? $taxableAmount * ((float) ($line->taxRate->rate_percent ?? 0) / 100)
+                : (float) ($line->tax_amount ?? 0);
+            $lineTotal = $taxableAmount + $taxAmount;
+
+            $line->forceFill([
+                'tax_amount' => round($taxAmount, 2),
+                'line_total' => round($lineTotal, 2),
+            ])->save();
+
+            $total += $lineTotal;
+        }
+
         $paidTotal = (float) ($record->paid_total ?? 0);
         $record->forceFill([
-            'total' => $total,
-            'balance_due' => $total - $paidTotal,
+            'total' => round($total, 2),
+            'balance_due' => round($total - $paidTotal, 2),
         ])->save();
 
         return $record;

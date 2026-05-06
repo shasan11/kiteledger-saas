@@ -34,26 +34,26 @@ class ProformaInvoiceController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant', 'taxRate'],
-            'relation_details' => ['productVariant' => 'product_variant_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['product', 'taxRate'],
+            'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id', 'required_without:custom_product_name'],
+                'custom_product_name' => ['nullable', 'string', 'max:180', 'required_without:product_id'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
-                'discount_percent' => ['nullable', 'numeric', 'min:0'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id', 'required_without:custom_product_name'],
+                'custom_product_name' => ['nullable', 'string', 'max:180', 'required_without:product_id'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
-                'discount_percent' => ['nullable', 'numeric', 'min:0'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
@@ -63,11 +63,12 @@ class ProformaInvoiceController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-        'proforma_no' => ['required', 'string', 'max:40', 'unique:proforma_invoices,proforma_no'],
+        'proforma_no' => ['nullable', 'string', 'max:40', 'unique:proforma_invoices,proforma_no'],
         'reference' => ['nullable', 'string', 'max:120'],
         'proforma_date' => ['required', 'date'],
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,issued,cancelled'],
     ];
@@ -76,11 +77,12 @@ class ProformaInvoiceController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'proforma_no' => ['sometimes', 'required', 'string', 'max:40', 'unique:proforma_invoices,proforma_no,' . $record->id . ',id'],
+            'proforma_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:proforma_invoices,proforma_no,' . $record->id . ',id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'proforma_date' => ['sometimes', 'required', 'date'],
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,issued,cancelled'],
         ];
@@ -88,8 +90,37 @@ class ProformaInvoiceController extends BaseCrudApiController
 
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
-        $total = (float) $record->proformaInvoiceLines()->sum('line_total');
-        $record->forceFill(['total' => $total])->save();
+        $lines = $record->proformaInvoiceLines()->with('taxRate')->get();
+
+        if ($lines->count() < 1) {
+            $this->throwValidation([
+                'items' => ['At least one proforma invoice item is required.'],
+            ]);
+        }
+
+        $total = 0;
+
+        foreach ($lines as $line) {
+            $qty = (float) $line->qty;
+            $unitPrice = (float) $line->unit_price;
+            $discountPercent = (float) ($line->discount_percent ?? 0);
+            $baseAmount = $qty * $unitPrice;
+            $discountAmount = $baseAmount * ($discountPercent / 100);
+            $taxableAmount = max($baseAmount - $discountAmount, 0);
+            $taxAmount = $line->taxRate
+                ? $taxableAmount * ((float) ($line->taxRate->rate_percent ?? 0) / 100)
+                : (float) ($line->tax_amount ?? 0);
+            $lineTotal = $taxableAmount + $taxAmount;
+
+            $line->forceFill([
+                'tax_amount' => round($taxAmount, 2),
+                'line_total' => round($lineTotal, 2),
+            ])->save();
+
+            $total += $lineTotal;
+        }
+
+        $record->forceFill(['total' => round($total, 2)])->save();
 
         return $record;
     }

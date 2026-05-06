@@ -56,7 +56,7 @@ class CustomerPaymentController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-        'payment_no' => ['required', 'string', 'max:40', 'unique:customer_payments,payment_no'],
+        'payment_no' => ['nullable', 'string', 'max:40', 'unique:customer_payments,payment_no'],
         'payment_date' => ['required', 'date'],
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
@@ -77,7 +77,7 @@ class CustomerPaymentController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'payment_no' => ['sometimes', 'required', 'string', 'max:40', 'unique:customer_payments,payment_no,' . $record->id . ',id'],
+            'payment_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:customer_payments,payment_no,' . $record->id . ',id'],
             'payment_date' => ['sometimes', 'required', 'date'],
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],

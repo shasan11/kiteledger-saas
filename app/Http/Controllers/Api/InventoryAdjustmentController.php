@@ -25,16 +25,40 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
     protected array $nested = ['items'=>[
         'relation'=>'inventoryAdjustmentLines','model'=>InventoryAdjustmentLine::class,'foreign_key'=>'inventory_adjustment_id','delete_key'=>'deleted_item_ids','required'=>true,'min'=>1,'replace_on_update'=>false,
-        'relations'=>['productVariant'],'relation_details'=>['productVariant'=>'product_variant_id'],
-        'rules'=>['product_variant_id'=>['required','uuid','exists:product_variants,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
-        'update_rules'=>['product_variant_id'=>['required','uuid','exists:product_variants,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
+        'relations'=>['product'],'relation_details'=>['product'=>'product_id'],
+        'rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
+        'update_rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
     ]];
-    protected array $storeRules = ['branch_id'=>['nullable','uuid','exists:branches,id'],'adjustment_no'=>['required','string','max:40','unique:inventory_adjustments,adjustment_no'],'adjustment_date'=>['required','date'],'warehouse_id'=>['required','uuid','exists:warehouses,id'],'reason'=>['nullable','string','max:150'],'notes'=>['nullable','string'],'status'=>['nullable','in:draft,posted,cancelled']];
+    protected array $storeRules = ['branch_id'=>['nullable','uuid','exists:branches,id'],'adjustment_no'=>['nullable','string','max:40','unique:inventory_adjustments,adjustment_no'],'adjustment_date'=>['required','date'],'warehouse_id'=>['required','uuid','exists:warehouses,id'],'reason'=>['nullable','string','max:150'],'notes'=>['nullable','string'],'status'=>['nullable','in:draft,posted,cancelled']];
     protected function updateRules(Request $request, Model $record): array { return ['branch_id'=>['sometimes','nullable','uuid','exists:branches,id'],'adjustment_no'=>['sometimes','required','string','max:40','unique:inventory_adjustments,adjustment_no,'.$record->id.',id'],'adjustment_date'=>['sometimes','required','date'],'warehouse_id'=>['sometimes','required','uuid','exists:warehouses,id'],'reason'=>['sometimes','nullable','string','max:150'],'notes'=>['sometimes','nullable','string'],'status'=>['sometimes','nullable','in:draft,posted,cancelled']]; }
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
         $total = $record->inventoryAdjustmentLines()->get()->sum(fn ($i) => (float) $i->qty * (float) ($i->unit_cost ?? 0));
         $record->forceFill(['total' => $total])->save();
         return $record;
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $parentData['adjustment_no'] = $parentData['adjustment_no'] ?? $this->draftAdjustmentNo();
+
+        return $parentData;
+    }
+
+    private function draftAdjustmentNo(): string
+    {
+        do {
+            $number = 'DRAFT-IA-' . now()->format('YmdHis') . '-' . random_int(100, 999);
+        } while (InventoryAdjustment::query()->where('adjustment_no', $number)->exists());
+
+        return $number;
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $data['items'] = $data['items'] ?? $data['inventory_adjustment_lines'] ?? [];
+
+        return $data;
     }
 }

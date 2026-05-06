@@ -32,15 +32,15 @@ class WarehouseTransferController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant'],
-            'relation_details' => ['productVariant' => 'product_variant_id'],
+            'relations' => ['product'],
+            'relation_details' => ['product' => 'product_id'],
             'rules' => [
-                'product_variant_id' => ['required','uuid','exists:product_variants,id'],
+                'product_id' => ['required','uuid','exists:products,id'],
                 'qty' => ['required','numeric','min:0.0001'],
                 'remarks' => ['nullable','string','max:200'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['required','uuid','exists:product_variants,id'],
+                'product_id' => ['required','uuid','exists:products,id'],
                 'qty' => ['required','numeric','min:0.0001'],
                 'remarks' => ['nullable','string','max:200'],
             ],
@@ -48,7 +48,7 @@ class WarehouseTransferController extends BaseCrudApiController
     ];
     protected array $storeRules = [
         'branch_id' => ['nullable','uuid','exists:branches,id'],
-        'transfer_no' => ['required','string','max:40','unique:warehouse_transfers,transfer_no'],
+        'transfer_no' => ['nullable','string','max:40','unique:warehouse_transfers,transfer_no'],
         'transfer_date' => ['required','date'],
         'from_warehouse_id' => ['required','uuid','exists:warehouses,id'],
         'to_warehouse_id' => ['required','uuid','exists:warehouses,id','different:from_warehouse_id'],
@@ -66,5 +66,38 @@ class WarehouseTransferController extends BaseCrudApiController
             'notes' => ['sometimes','nullable','string'],
             'status' => ['sometimes','nullable','in:draft,posted,cancelled'],
         ];
+    }
+
+    protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
+    {
+        $record->forceFill([
+            'total' => $record->warehouseTransferLines()->sum('qty'),
+        ])->save();
+
+        return $record;
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $parentData['transfer_no'] = $parentData['transfer_no'] ?? $this->draftTransferNo();
+
+        return $parentData;
+    }
+
+    private function draftTransferNo(): string
+    {
+        do {
+            $number = 'DRAFT-WT-' . now()->format('YmdHis') . '-' . random_int(100, 999);
+        } while (WarehouseTransfer::query()->where('transfer_no', $number)->exists());
+
+        return $number;
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $data['items'] = $data['items'] ?? $data['warehouse_transfer_lines'] ?? [];
+
+        return $data;
     }
 }

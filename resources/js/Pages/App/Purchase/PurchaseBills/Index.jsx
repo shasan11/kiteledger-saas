@@ -14,9 +14,15 @@ const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0
 const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY', true); if (d.isValid()) return d.format('YYYY-MM-DD'); const d2 = dayjs(v); return d2.isValid() ? d2.format('YYYY-MM-DD') : v; };
 
-const emptyLine = { product_id: null, custom_product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_amount: 0 };
+const emptyLine = { product_id: null, custom_product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_amount: 0, line_total: 0 };
 
-const statusColors = { draft: 'default', posted: 'blue', partial: 'orange', paid: 'green', void: 'red' };
+const statusColors = { draft: 'default', posted: 'blue', part_paid: 'orange', paid: 'green', void: 'red' };
+
+const calculateLineTotal = (item = {}) => {
+  const gross = toNumber(item.qty) * toNumber(item.unit_price);
+  const discount = (gross * toNumber(item.discount_percent)) / 100;
+  return Math.max(gross - discount, 0) + toNumber(item.tax_amount);
+};
 
 export default function PurchaseBills({ auth }) {
   const columns = useMemo(() => [
@@ -40,7 +46,7 @@ export default function PurchaseBills({ auth }) {
       options: [
         { value: 'draft', label: 'Draft' },
         { value: 'posted', label: 'Posted' },
-        { value: 'partial', label: 'Partial' },
+        { value: 'part_paid', label: 'Part Paid' },
         { value: 'paid', label: 'Paid' },
         { value: 'void', label: 'Void' },
       ],
@@ -67,6 +73,7 @@ export default function PurchaseBills({ auth }) {
         { key: 'discount_percent', name: 'discount_percent', label: 'Disc %', type: 'number', width: '90px', min: 0, max: 100 },
         { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
+        { key: 'line_total', name: 'line_total', label: 'Line Total', type: 'number', width: '120px', readOnly: true, formula: (row) => Number(calculateLineTotal(row).toFixed(2)) },
       ],
     },
   ], []);
@@ -106,15 +113,16 @@ export default function PurchaseBills({ auth }) {
       unit_price: toNumber(item.unit_price),
       discount_percent: toNumber(item.discount_percent),
       tax_amount: toNumber(item.tax_amount),
+      line_total: Number(calculateLineTotal(item).toFixed(2)),
     })),
     deleted_item_ids: values.deleted_item_ids || [],
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Posted', value: 'posted' },
-    { label: 'Paid', value: 'paid' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
+    { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+    { key: 'paid', label: 'Paid', params: { status: 'paid' } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (
@@ -131,6 +139,7 @@ export default function PurchaseBills({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="all"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

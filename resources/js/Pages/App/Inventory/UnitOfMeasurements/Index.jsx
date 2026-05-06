@@ -26,11 +26,11 @@ export default function UnitOfMeasurements(props) {
       render: (val) => val ? <Tag>{val}</Tag> : '-',
     },
     {
-      title: 'Decimal Precision',
-      dataIndex: 'precision',
-      key: 'precision',
+      title: 'Fractional Qty',
+      dataIndex: 'accept_fractional',
+      key: 'accept_fractional',
       align: 'center',
-      render: (val) => val ?? 2,
+      render: (val) => <Tag color={val ? 'blue' : 'default'}>{val ? 'Allowed' : 'Whole only'}</Tag>,
     },
     {
       title: 'Status',
@@ -60,13 +60,10 @@ export default function UnitOfMeasurements(props) {
       placeholder: 'e.g. kg',
     },
     {
-      name: 'precision',
-      label: 'Decimal Precision',
-      type: 'number',
+      name: 'accept_fractional',
+      label: 'Allow Fractional Quantity',
+      type: 'switch',
       col: 12,
-      min: 0,
-      max: 10,
-      placeholder: '2',
     },
     {
       name: 'active',
@@ -79,14 +76,15 @@ export default function UnitOfMeasurements(props) {
   const validationSchema = Yup.object().shape({
     name: Yup.string().required('Name is required').max(100),
     short_name: Yup.string().nullable().max(30),
-    precision: Yup.number().nullable().integer().min(0).max(10),
+    accept_fractional: Yup.boolean().nullable(),
     active: Yup.boolean().nullable(),
   });
 
   const crudInitialValues = {
     name: '',
     short_name: '',
-    precision: 2,
+    description: '',
+    accept_fractional: true,
     active: true,
   };
 
@@ -94,7 +92,7 @@ export default function UnitOfMeasurements(props) {
     const payload = { ...values };
     payload.name = payload.name?.trim() || null;
     payload.short_name = payload.short_name?.trim() || null;
-    payload.precision = payload.precision != null ? Number(payload.precision) : null;
+    payload.accept_fractional = payload.accept_fractional !== false;
     payload.active = Boolean(payload.active);
     Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
     return payload;

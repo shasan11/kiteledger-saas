@@ -34,10 +34,10 @@ class PurchaseBillController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant', 'taxRate'],
-            'relation_details' => ['productVariant' => 'product_variant_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['product', 'taxRate'],
+            'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'custom_product_name' => ['nullable', 'string', 'max:180'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
@@ -48,7 +48,7 @@ class PurchaseBillController extends BaseCrudApiController
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'custom_product_name' => ['nullable', 'string', 'max:180'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
@@ -63,7 +63,7 @@ class PurchaseBillController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-        'bill_no' => ['required', 'string', 'max:40', 'unique:purchase_bills,bill_no'],
+        'bill_no' => ['nullable', 'string', 'max:40', 'unique:purchase_bills,bill_no'],
         'bill_date' => ['required', 'date'],
         'due_date' => ['nullable', 'date'],
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
@@ -74,8 +74,10 @@ class PurchaseBillController extends BaseCrudApiController
         'import_country' => ['nullable', 'string', 'max:80'],
         'import_date' => ['nullable', 'date'],
         'import_document_number' => ['nullable', 'string', 'max:80'],
+        'exchange_rate' => ['nullable', 'numeric', 'min:0'],
         'paid_total' => ['nullable', 'numeric', 'min:0'],
         'balance_due' => ['nullable', 'numeric', 'min:0'],
+        'approved' => ['nullable', 'boolean'],
         'status' => ['nullable', 'in:draft,posted,part_paid,paid,void'],
     ];
 
@@ -83,7 +85,7 @@ class PurchaseBillController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'bill_no' => ['sometimes', 'required', 'string', 'max:40', 'unique:purchase_bills,bill_no,' . $record->id . ',id'],
+            'bill_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:purchase_bills,bill_no,' . $record->id . ',id'],
             'bill_date' => ['sometimes', 'required', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date'],
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
@@ -94,8 +96,10 @@ class PurchaseBillController extends BaseCrudApiController
             'import_country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'import_date' => ['sometimes', 'nullable', 'date'],
             'import_document_number' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'paid_total' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'balance_due' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'approved' => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,part_paid,paid,void'],
         ];
     }
@@ -111,5 +115,24 @@ class PurchaseBillController extends BaseCrudApiController
         ])->save();
 
         return $record;
+    }
+
+    protected function mutateNestedRowBeforeSave(
+        array $row,
+        Model $parent,
+        array $config,
+        bool $isUpdate
+    ): array {
+        $row['line_total'] = $this->calculateLineTotal($row);
+
+        return $row;
+    }
+
+    protected function calculateLineTotal(array $row): float
+    {
+        $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
+        $discount = ($gross * (float) ($row['discount_percent'] ?? 0)) / 100;
+
+        return round(max($gross - $discount, 0) + (float) ($row['tax_amount'] ?? 0), 2);
     }
 }

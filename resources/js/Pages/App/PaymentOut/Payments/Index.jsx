@@ -47,7 +47,7 @@ const CANONICAL_SERIALIZER_KEYS = {
 const emptyItem = { purchase_bill_id: null, purchase_bill_id_detail: null, bill_label: '', allocated_amount: 0 };
 
 const initialValues = {
-    payment_no:               'DRAFT',
+    payment_no:               '',
     payment_date:             dayjs().format('YYYY-MM-DD'),
     contact_id:               null,
     contact_id_detail:        null,
@@ -79,6 +79,7 @@ const initialValues = {
     tds_charges:              0,
     // lines
     items: [{ ...emptyItem }],
+    deleted_item_ids: [],
 };
 
 const validationSchema = Yup.object().shape({
@@ -511,7 +512,7 @@ export default function SupplierPayments() {
         const bankChargesOn = !!v._bank_charges_on;
         const tdsOn         = !!v._tds_on;
         return {
-            payment_no:              v.payment_no || 'DRAFT',
+            payment_no:              v.payment_no && v.payment_no !== 'DRAFT' ? v.payment_no : null,
             payment_date:            fmtDate(v.payment_date),
             contact_id:              v.contact_id,
             account_id:              v.account_id,
@@ -532,6 +533,7 @@ export default function SupplierPayments() {
                 purchase_bill_id: row.purchase_bill_id,
                 allocated_amount: toNum(row.allocated_amount),
             })),
+            deleted_item_ids: Array.isArray(v.deleted_item_ids) ? v.deleted_item_ids : [],
         };
     };
 
