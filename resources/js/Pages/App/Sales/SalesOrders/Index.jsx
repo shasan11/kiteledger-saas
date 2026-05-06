@@ -131,6 +131,13 @@ export default function SalesOrders({ auth }) {
         canAdd={true}
         canEdit={true}
         canDelete={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('sales.sales-orders.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         hasActions={true}
         hasActionColumns={true}
       />

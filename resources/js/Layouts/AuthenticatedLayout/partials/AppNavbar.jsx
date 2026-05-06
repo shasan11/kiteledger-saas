@@ -54,8 +54,8 @@ export default function AppNavbar({
         <>
             <Header
                 style={{
-                    height: 60,
-                    padding: isMobile ? '0 10px' : '0 16px',
+                    height: 52,
+                    padding: isMobile ? '0 10px' : '0 14px',
                     background: darkBg,
                     borderBottom: `1px solid ${darkBorder}`,
                     display: 'grid',

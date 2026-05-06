@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Button, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
@@ -1192,6 +1192,13 @@ export default function Index() {
                 canEdit
                 canDelete
                 canView
+                activeTableRowFunction={(record) => ({
+                    onClick: (event) => {
+                        if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+                        router.visit(route('inventory.production-journals.show', record.id));
+                    },
+                    style: { cursor: 'pointer' },
+                })}
                 hasActions
                 hasActionColumns
             />

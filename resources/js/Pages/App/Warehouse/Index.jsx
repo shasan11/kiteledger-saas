@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Space, Tag, Typography } from 'antd';
 import {
@@ -209,6 +209,13 @@ export default function Warehouses(props) {
         canEdit={true}
         canDelete={true}
         canView={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('warehouse.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         hasActions={true}
         hasActionColumns={true}
         showRowActionMenu={true}
