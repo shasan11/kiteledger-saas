@@ -44,13 +44,18 @@ class MasterChartOfAccountSeeder extends Seeder
             ['code' => '4100', 'name' => 'Sales Income', 'type' => 'income', 'parent_code' => '4000'],
             ['code' => '4200', 'name' => 'Service Income', 'type' => 'income', 'parent_code' => '4000'],
             ['code' => '4300', 'name' => 'Other Income', 'type' => 'income', 'parent_code' => '4000'],
+            ['code' => '4310', 'name' => 'Exchange Rate Gain', 'type' => 'income', 'parent_code' => '4300'],
+            ['code' => '4400', 'name' => 'Discount Received', 'type' => 'income', 'parent_code' => '4300'],
 
             ['code' => '5000', 'name' => 'Expenses', 'type' => 'expense', 'parent_code' => null],
             ['code' => '5100', 'name' => 'Purchase Expense', 'type' => 'expense', 'parent_code' => '5000'],
             ['code' => '5200', 'name' => 'Direct Expense', 'type' => 'expense', 'parent_code' => '5000'],
             ['code' => '5300', 'name' => 'Indirect Expense', 'type' => 'expense', 'parent_code' => '5000'],
+            ['code' => '5310', 'name' => 'Exchange Rate Loss', 'type' => 'expense', 'parent_code' => '5300'],
             ['code' => '5400', 'name' => 'Salary Expense', 'type' => 'expense', 'parent_code' => '5000'],
             ['code' => '5500', 'name' => 'Bank Charges', 'type' => 'expense', 'parent_code' => '5000'],
+            ['code' => '5600', 'name' => 'Depreciation Expense', 'type' => 'expense', 'parent_code' => '5000'],
+            ['code' => '5700', 'name' => 'Discount Allowed', 'type' => 'expense', 'parent_code' => '5000'],
         ];
 
         foreach ($accounts as $account) {
