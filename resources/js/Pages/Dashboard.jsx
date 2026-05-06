@@ -208,9 +208,9 @@ export default function Dashboard() {
                         loading={loading}
                     />
 
-                    {error && <Alert type="error" showIcon message={error} />}
+                    {/* {error && <Alert type="error" showIcon message={error} />}
 
-                    {!loading && <TopAlerts alerts={dashboardData.alerts || []} />}
+                    {!loading && <TopAlerts alerts={dashboardData.alerts || []} />} */}
 
                     {loading ? (
                         <Skeleton active paragraph={{ rows: 14 }} />

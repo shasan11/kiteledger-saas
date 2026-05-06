@@ -17,7 +17,7 @@ class ChartOfAccountController extends BaseCrudApiController
 
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
+    protected bool $branchScoped = false;
 
     protected bool $autoFillBranchOnCreate = true;
 

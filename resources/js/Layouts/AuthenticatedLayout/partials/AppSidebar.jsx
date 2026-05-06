@@ -1,8 +1,3 @@
-import {
-    MenuFoldOutlined,
-    MenuUnfoldOutlined,
-    SearchOutlined,
-} from '@ant-design/icons';
 import { Button, Empty, Input, Layout, Menu, theme } from 'antd';
 import {
     Children,
@@ -11,6 +6,11 @@ import {
     useMemo,
     useState,
 } from 'react';
+import {
+    LuChevronLeft,
+    LuChevronRight,
+    LuSearch,
+} from 'react-icons/lu';
 
 const { Sider } = Layout;
 
@@ -93,10 +93,16 @@ function getAllParentKeys(items = []) {
     return keys;
 }
 
+function getRootSubmenuKeys(items = []) {
+    return items
+        .filter((item) => Array.isArray(item.children) && item.children.length > 0)
+        .map((item) => item.key);
+}
+
 export default function AppSidebar({
     collapsed,
     setCollapsed,
-    selectedKeys,
+    selectedKeys = [],
     menuItems = [],
     colorBgContainer,
     colorBorderSecondary,
@@ -115,6 +121,11 @@ export default function AppSidebar({
 
     const parentKeyMap = useMemo(
         () => buildParentKeyMap(menuItems),
+        [menuItems],
+    );
+
+    const rootSubmenuKeys = useMemo(
+        () => getRootSubmenuKeys(menuItems),
         [menuItems],
     );
 
@@ -143,6 +154,27 @@ export default function AppSidebar({
 
         setOpenKeys(activeParentKeys);
     }, [activeParentKeys, collapsed, searchOpenKeys, searchText]);
+
+    const handleOpenChange = (keys) => {
+        if (searchText.trim()) {
+            setOpenKeys(keys);
+            return;
+        }
+
+        const latestOpenKey = keys.find((key) => !openKeys.includes(key));
+
+        if (!latestOpenKey) {
+            setOpenKeys([]);
+            return;
+        }
+
+        if (rootSubmenuKeys.includes(latestOpenKey)) {
+            setOpenKeys([latestOpenKey]);
+            return;
+        }
+
+        setOpenKeys(keys);
+    };
 
     return (
         <Sider
@@ -252,6 +284,11 @@ export default function AppSidebar({
                         color: var(--sidebar-active-color) !important;
                     }
 
+                    .app-sidebar-toggle svg,
+                    .app-sidebar-search svg {
+                        display: block;
+                    }
+
                     .app-sidebar-scroll {
                         flex: 1;
                         overflow-y: auto;
@@ -330,10 +367,23 @@ export default function AppSidebar({
                         font-weight: 700;
                     }
 
-                    .app-sidebar .ant-menu-item .anticon,
-                    .app-sidebar .ant-menu-submenu-title .anticon {
+                    .app-sidebar .ant-menu-item-icon,
+                    .app-sidebar .ant-menu-submenu-title .ant-menu-item-icon {
                         font-size: 16px !important;
                         color: inherit;
+                        display: inline-flex !important;
+                        align-items: center;
+                        justify-content: center;
+                    }
+
+                    .app-sidebar .ant-menu-item svg,
+                    .app-sidebar .ant-menu-submenu-title svg {
+                        font-size: 16px;
+                        width: 16px;
+                        height: 16px;
+                        stroke-width: 2;
+                        color: inherit;
+                        display: block;
                     }
 
                     .app-sidebar .ant-menu-sub {
@@ -421,10 +471,10 @@ export default function AppSidebar({
                 {!collapsed && (
                     <Input
                         allowClear
-                        variant='filled'
+                        variant="filled"
                         className="app-sidebar-search"
                         placeholder="Search menu..."
-                        prefix={<SearchOutlined />}
+                        prefix={<LuSearch size={15} />}
                         value={searchText}
                         onChange={(event) => setSearchText(event.target.value)}
                     />
@@ -436,9 +486,9 @@ export default function AppSidebar({
                     className="app-sidebar-toggle"
                     icon={
                         collapsed ? (
-                            <MenuUnfoldOutlined />
+                            <LuChevronRight size={18} />
                         ) : (
-                            <MenuFoldOutlined />
+                            <LuChevronLeft size={18} />
                         )
                     }
                     onClick={() => setCollapsed(!collapsed)}
@@ -451,7 +501,7 @@ export default function AppSidebar({
                         mode="inline"
                         selectedKeys={selectedKeys}
                         openKeys={collapsed ? [] : openKeys}
-                        onOpenChange={setOpenKeys}
+                        onOpenChange={handleOpenChange}
                         inlineCollapsed={collapsed}
                         items={filteredMenuItems}
                         style={{
