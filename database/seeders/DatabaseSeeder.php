@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             MasterDocumentNumberingSeeder::class,
             MasterChartOfAccountSeeder::class,
             MasterBankAccountSeeder::class,
+            AccountingModuleSeeder::class,
             MasterContactDataSeeder::class,
             MasterProductDataSeeder::class,
             MasterHRMDataSeeder::class,
