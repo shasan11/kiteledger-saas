@@ -429,7 +429,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 colorBorderSecondary={colorBorderSecondary}
             />
 
-            <Layout>
+            <Layout style={{ marginTop: 0 }}>
                 <AppSidebar
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}

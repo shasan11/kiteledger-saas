@@ -277,8 +277,8 @@ export default function JournalVouchers(props) {
         hasActions={true}
         hasActionColumns={true}
         anchorFilters={[
-          { key: 'approved',    label: 'Approved',    title: 'Cash Transfers', params: { approved: true } },
-          { key: 'draft',     label: 'Draft',     title: 'Cash Transfers', params: { approved: false  } },
+          { key: 'approved', label: 'Approved', title: 'Journal Vouchers', params: { approved: true } },
+          { key: 'draft',    label: 'Draft',    title: 'Draft Vouchers',   params: { approved: false } },
         ]}
          defaultAnchorKey="approved"
         anchorSyncWithHash

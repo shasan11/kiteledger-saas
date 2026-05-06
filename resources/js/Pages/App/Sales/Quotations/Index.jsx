@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
@@ -80,6 +80,13 @@ export default function Quotations(props) {
         form_ui="drawer" drawerWidth="calc(100vw - 32px)"
         searchParam="search" pageParam="page" pageSizeParam="page_size"
         sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('sales.quotations.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         showSearch={true} canAdd={true} canEdit={true} canDelete={true} hasActions={true} hasActionColumns={true}
         anchorFilters={[{ key: 'draft', label: 'Draft', params: { status: 'draft' } }, { key: 'sent', label: 'Sent', params: { status: 'sent' } }, { key: 'accepted', label: 'Accepted', params: { status: 'accepted' } }, { key: 'all', label: 'All', params: {} }]}
         defaultAnchorKey="draft" anchorSyncWithHash

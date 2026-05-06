@@ -167,9 +167,9 @@ export default function AppSidebar({
                 '--sidebar-shadow': '6px 0 24px rgba(15, 23, 42, 0.045)',
                 background: sidebarBg,
                 borderRight: `1px solid ${sidebarBorder}`,
-                height: 'calc(100vh - 64px)',
+                height: 'calc(100vh - 52px)',
                 position: 'sticky',
-                top: 64,
+                top: 52,
                 overflow: 'hidden',
                 boxShadow: 'var(--sidebar-shadow)',
                 zIndex: 90,
@@ -183,7 +183,7 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar-header {
-                        height: 64px;
+                        height: 52px;
                         display: flex;
                         align-items: center;
                         gap: 10px;
@@ -256,7 +256,7 @@ export default function AppSidebar({
                         flex: 1;
                         overflow-y: auto;
                         overflow-x: hidden;
-                        padding: 12px 10px 16px;
+                        padding: 8px 8px 12px;
                         background: var(--sidebar-bg);
                     }
 
@@ -286,9 +286,9 @@ export default function AppSidebar({
                     .app-sidebar .ant-menu-item,
                     .app-sidebar .ant-menu-submenu-title {
                         position: relative;
-                        height: 40px !important;
-                        line-height: 40px !important;
-                        margin: 3px 0 !important;
+                        height: 36px !important;
+                        line-height: 36px !important;
+                        margin: 2px 0 !important;
                         width: 100% !important;
                         border-radius: 12px !important;
                         color: var(--sidebar-text-muted);
@@ -341,11 +341,11 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar .ant-menu-sub .ant-menu-item {
-                        height: 34px !important;
-                        line-height: 34px !important;
-                        margin: 2px 0 !important;
-                        padding-left: 42px !important;
-                        font-size: 12.5px;
+                        height: 30px !important;
+                        line-height: 30px !important;
+                        margin: 1px 0 !important;
+                        padding-left: 40px !important;
+                        font-size: 12px;
                         font-weight: 600;
                         border-radius: 10px !important;
                         color: var(--sidebar-text-muted);

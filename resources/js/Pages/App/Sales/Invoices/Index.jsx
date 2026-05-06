@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography } from 'antd';
 import { FileProtectOutlined } from '@ant-design/icons';
@@ -115,6 +115,13 @@ export default function Invoices(props) {
           { key: 'all', label: 'All', params: {} },
         ]}
         defaultAnchorKey="draft" anchorSyncWithHash
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('sales.invoices.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
       />
     </AuthenticatedLayout>
   );

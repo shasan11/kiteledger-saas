@@ -420,6 +420,18 @@ export default function Index({ auth }) {
                 defaultSortOrder="descend"
                 anchorFilters={[
                     {
+                        key: 'approved',
+                        label: 'Approved',
+                        title: 'Approved Loan Accounts',
+                        params: { approved: true },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Draft Loan Accounts',
+                        params: { approved: false },
+                    },
+                    {
                         key: 'active',
                         label: 'Active',
                         title: 'Active Loan Accounts',
@@ -444,7 +456,7 @@ export default function Index({ auth }) {
                         params: { status: 'cancelled' },
                     },
                 ]}
-                defaultAnchorKey="active"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
                 enableInactiveDrawer
                 showSearch
