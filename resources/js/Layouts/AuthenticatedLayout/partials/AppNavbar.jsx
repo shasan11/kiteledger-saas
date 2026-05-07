@@ -38,6 +38,7 @@ export default function AppNavbar({
 }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
+
     const [searchOpen, setSearchOpen] = useState(false);
 
     const isMobile = !screens.md;
@@ -46,106 +47,68 @@ export default function AppNavbar({
     const darkBg = '#111827';
     const darkSoft = '#1f2937';
     const darkSoftHover = '#263244';
-    const darkBorder = 'rgba(255,255,255,0.10)';
+    const darkBorder = 'rgba(255,255,255,0.12)';
     const darkText = '#ffffff';
     const mutedText = '#9ca3af';
+
+    const controlHeight = 40;
+    const radius = 8;
 
     return (
         <>
             <Header
+                className="app-navbar"
                 style={{
-                    height: 52,
-                    padding: isMobile ? '0 10px' : '0 14px',
+                    height: 64,
+                    padding: isMobile ? '0 12px' : '0 18px',
                     background: darkBg,
                     borderBottom: `1px solid ${darkBorder}`,
                     display: 'grid',
                     gridTemplateColumns: isMobile
                         ? 'auto 1fr auto'
-                        : '300px 1fr 260px',
+                        : isTablet
+                          ? '260px minmax(0, 1fr) 220px'
+                          : '340px minmax(0, 1fr) 330px',
                     alignItems: 'center',
-                    gap: 12,
+                    gap: 14,
                     position: 'sticky',
                     top: 0,
                     zIndex: 100,
                 }}
             >
-                {/* LEFT: LOGO + BRANCH */}
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        minWidth: 0,
-                    }}
-                >
+                <div className="app-navbar__left">
                     <Link
                         href={getUrl('dashboard', '/dashboard')}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 9,
-                            textDecoration: 'none',
-                            flexShrink: 0,
-                        }}
+                        className="app-navbar__brand"
                     >
-                        <div
-                            style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: token.borderRadius,
-                                background: darkSoft,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                            }}
-                        >
-                            <ApplicationLogo className="block h-6 w-auto fill-current text-white" />
+                        <div className="app-navbar__logo-box">
+                            <ApplicationLogo className="block h-7 w-auto fill-current text-white" />
                         </div>
 
-                        {!isMobile && (
-                            <Text
-                                strong
-                                style={{
-                                    fontSize: 15,
-                                    color: darkText,
-                                    whiteSpace: 'nowrap',
-                                }}
-                            >
-                                KiteLedger
-                            </Text>
-                        )}
+                         
                     </Link>
 
                     {!isMobile && (
                         <Select
-                            size="middle"
+                            size="small"
                             value={branch}
                             onChange={setBranch}
                             options={branchOptions}
-                            
                             suffixIcon={
                                 <BranchesOutlined style={{ color: mutedText }} />
                             }
                             className="app-dark-select"
-                            popupClassName="app-dark-select-dropdown"
-                            popupMatchSelectWidth={210}
+                            type="text"
+                             popupMatchSelectWidth={230}
                             style={{
-                                width: isTablet ? 125 : 150,
+                                width: 150,
+                                height: controlHeight,
                             }}
                         />
                     )}
                 </div>
 
-                {/* CENTER: SEARCH + AI + QUICK ADD */}
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        gap: 8,
-                        minWidth: 0,
-                    }}
-                >
+                <div className="app-navbar__center">
                     {!isMobile && (
                         <Input
                             allowClear
@@ -159,9 +122,10 @@ export default function AppNavbar({
                             }
                             className="app-dark-search"
                             style={{
-                                maxWidth: isTablet ? 280 : 420,
-                                height: 36,
-                                borderRadius: token.borderRadius,
+                                width: '100%',
+                                maxWidth: isTablet ? 330 : 520,
+                                height: controlHeight,
+                                borderRadius: radius,
                                 background: darkSoft,
                                 borderColor: darkBorder,
                                 color: darkText,
@@ -174,29 +138,11 @@ export default function AppNavbar({
                             type="text"
                             icon={<SearchOutlined />}
                             onClick={() => setSearchOpen(true)}
-                            style={{
-                                width: 36,
-                                height: 36,
-                                color: darkText,
-                                borderRadius: token.borderRadius,
-                            }}
+                            className="app-navbar__icon-btn"
                         />
                     )}
 
-                    <Button
-                        icon={<RobotOutlined />}
-                        style={{
-                            height: 36,
-                            borderRadius: token.borderRadius,
-                            color: darkText,
-                            background: darkSoft,
-                            borderColor: darkBorder,
-                            fontWeight: 500,
-                        }}
-                    >
-                        {!isTablet && 'AI'}
-                    </Button>
-
+                   
                     <Dropdown
                         menu={{ items: quickAddItems }}
                         placement="bottomRight"
@@ -204,43 +150,24 @@ export default function AppNavbar({
                     >
                         <Button
                             type="primary"
+                            shape='circle'
                             icon={<PlusOutlined />}
-                            style={{
-                                height: 36,
-                                borderRadius: token.borderRadius,
-                                fontWeight: 500,
-                                boxShadow: 'none',
-                                paddingInline: isMobile ? 10 : 14,
-                            }}
+                            className="app-navbar__primary-btn"
                         >
-                            {!isMobile && 'Quick Add'}
+                     
                         </Button>
                     </Dropdown>
                 </div>
 
-                {/* RIGHT: SUPPORT + PROFILE */}
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        alignItems: 'center',
-                        gap: 8,
-                        minWidth: 0,
-                    }}
-                >
+                <div className="app-navbar__right">
                     {!isMobile && (
                         <Button
                             icon={<QuestionCircleOutlined />}
-                            style={{
-                                height: 36,
-                                borderRadius: token.borderRadius,
-                                color: darkText,
-                                background: darkSoft,
-                                borderColor: darkBorder,
-                                fontWeight: 500,
-                            }}
+                            className="app-navbar__soft-btn"
+                            shape='circle'
+                            type='text'
                         >
-                            {!isTablet && 'Support'}
+                             
                         </Button>
                     )}
 
@@ -249,40 +176,15 @@ export default function AppNavbar({
                         placement="bottomRight"
                         trigger={['click']}
                     >
-                        <Button
-                            type="text"
-                            style={{
-                                height: 38,
-                                paddingInline: isMobile ? 4 : 6,
-                                color: darkText,
-                                borderRadius: token.borderRadius,
-                            }}
-                        >
-                            <Space size={8}>
+                        <Button type="text" className="app-navbar__profile-btn">
+                            <Space size={10}>
                                 <Avatar
-                                    size={28}
+                                    size={34}
                                     icon={<UserOutlined />}
-                                    style={{
-                                        background: darkSoft,
-                                        color: darkText,
-                                    }}
+                                    className="app-navbar__avatar"
                                 />
 
-                                {!isTablet && (
-                                    <span
-                                        style={{
-                                            fontWeight: 500,
-                                            color: darkText,
-                                            maxWidth: 120,
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            whiteSpace: 'nowrap',
-                                            display: 'inline-block',
-                                        }}
-                                    >
-                                        {user?.name || 'User'}
-                                    </span>
-                                )}
+                                 
                             </Space>
                         </Button>
                     </Dropdown>
@@ -294,7 +196,7 @@ export default function AppNavbar({
                 open={searchOpen}
                 onClose={() => setSearchOpen(false)}
                 placement="top"
-                height={250}
+                height={280}
             >
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                     <Input
@@ -305,23 +207,141 @@ export default function AppNavbar({
                         placeholder="Search invoices, contacts, accounts..."
                     />
 
-                    
-
-                    <Button block icon={<RobotOutlined />}>
-                        AI Assistant
-                    </Button>
-
-                    <Button block icon={<QuestionCircleOutlined />}>
-                        Support
-                    </Button>
+                    <Button block size="large" icon={<RobotOutlined />} />
+                    <Button block size="large" icon={<QuestionCircleOutlined />}/>
                 </Space>
             </Drawer>
 
             <style>
                 {`
+                    .app-navbar__left,
+                    .app-navbar__center,
+                    .app-navbar__right {
+                        display: flex;
+                        align-items: center;
+                        min-width: 0;
+                    }
+
+                    .app-navbar__left {
+                        justify-content: flex-start;
+                        gap: 14px;
+                    }
+
+                    .app-navbar__center {
+                        justify-content: center;
+                        gap: 10px;
+                    }
+
+                    .app-navbar__right {
+                        justify-content: flex-end;
+                        gap: 10px;
+                    }
+
+                    .app-navbar__brand {
+                        display: flex;
+                        align-items: center;
+                        gap: 11px;
+                        min-width: 0;
+                        text-decoration: none;
+                        flex-shrink: 0;
+                    }
+
+                    .app-navbar__logo-box {
+                        width: 42px;
+                        height: 42px;
+                        border-radius: ${radius}px;
+                        background: #1f2937;
+                        border: 1px solid rgba(255,255,255,0.08);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex-shrink: 0;
+                    }
+
+                    .app-navbar__brand-text {
+                        display: flex;
+                        flex-direction: column;
+                        line-height: 1.1;
+                        min-width: 0;
+                    }
+
+                    .app-navbar__brand-name {
+                        color: #ffffff !important;
+                        font-size: 16px;
+                        line-height: 1.15;
+                        white-space: nowrap;
+                    }
+
+                    .app-navbar__brand-sub {
+                        color: #9ca3af !important;
+                        font-size: 11px;
+                        margin-top: 2px;
+                        line-height: 1.15;
+                        white-space: nowrap;
+                    }
+
+                    .app-navbar__soft-btn,
+                    .app-navbar__primary-btn,
+                    .app-navbar__icon-btn {
+                        height: ${controlHeight}px;
+                        border-radius: ${radius}px;
+                        font-weight: 600;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+
+                    .app-navbar__soft-btn {
+                        color: #ffffff;
+                        background: #1f2937;
+                        border-color: rgba(255,255,255,0.12);
+                        padding-inline: 14px;
+                    }
+
+                    .app-navbar__primary-btn {
+                        padding-inline: 16px;
+                        box-shadow: none;
+                    }
+
+                    .app-navbar__icon-btn {
+                        width: ${controlHeight}px;
+                        color: #ffffff;
+                    }
+
+                    .app-navbar__profile-btn {
+                        height: 44px;
+                        padding: 0 8px;
+                        color: #ffffff;
+                        border-radius: ${radius}px;
+                        display: inline-flex;
+                        align-items: center;
+                    }
+
+                    .app-navbar__avatar {
+                        background: #1f2937;
+                        color: #ffffff;
+                        border: 1px solid rgba(255,255,255,0.12);
+                    }
+
+                    .app-navbar__user-name {
+                        font-weight: 600;
+                        color: #ffffff;
+                        max-width: 135px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        display: inline-block;
+                        line-height: 1;
+                    }
+
+                    .app-dark-search.ant-input-affix-wrapper {
+                        padding-inline: 13px;
+                    }
+
                     .app-dark-search input {
                         color: #ffffff !important;
                         background: transparent !important;
+                        font-weight: 500;
                     }
 
                     .app-dark-search input::placeholder {
@@ -339,15 +359,19 @@ export default function AppNavbar({
                     }
 
                     .app-dark-select .ant-select-selector {
+                        height: ${controlHeight}px !important;
                         background: #1f2937 !important;
-                        border-color: rgba(255,255,255,0.10) !important;
-                        border-radius: ${token.borderRadius}px !important;
+                        border-color: rgba(255,255,255,0.12) !important;
+                        border-radius: ${radius}px !important;
                         color: #ffffff !important;
+                        display: flex;
+                        align-items: center;
                     }
 
                     .app-dark-select .ant-select-selection-item {
                         color: #ffffff !important;
-                        font-weight: 500;
+                        font-weight: 600;
+                        line-height: ${controlHeight}px !important;
                     }
 
                     .app-dark-select:hover .ant-select-selector,
@@ -358,8 +382,8 @@ export default function AppNavbar({
 
                     .app-dark-select-dropdown {
                         background: #111827 !important;
-                        border: 1px solid rgba(255,255,255,0.10) !important;
-                        border-radius: ${token.borderRadius}px !important;
+                        border: 1px solid rgba(255,255,255,0.12) !important;
+                        border-radius: ${radius}px !important;
                         padding: 6px !important;
                     }
 
@@ -377,14 +401,44 @@ export default function AppNavbar({
                         color: #ffffff !important;
                     }
 
-                    .ant-layout-header .ant-btn-text:hover {
-                        background: rgba(255,255,255,0.06) !important;
+                    .app-navbar .ant-btn-text:hover {
+                        background: rgba(255,255,255,0.08) !important;
+                        color: #ffffff !important;
                     }
 
-                    .ant-layout-header .ant-btn-default:hover {
+                    .app-navbar .ant-btn-default:hover {
                         color: #ffffff !important;
                         border-color: ${token.colorPrimary} !important;
                         background: ${darkSoftHover} !important;
+                    }
+
+                    .app-navbar .ant-btn-primary {
+                        font-weight: 700;
+                    }
+
+                    @media (max-width: 767px) {
+                        .app-navbar__center {
+                            justify-content: flex-end;
+                        }
+
+                        .app-navbar__left {
+                            gap: 8px;
+                        }
+
+                        .app-navbar__logo-box {
+                            width: 40px;
+                            height: 40px;
+                        }
+
+                        .app-navbar__soft-btn,
+                        .app-navbar__primary-btn {
+                            width: 40px;
+                            padding-inline: 0;
+                        }
+
+                        .app-navbar__right {
+                            gap: 4px;
+                        }
                     }
                 `}
             </style>

@@ -7,14 +7,11 @@ import {
   Avatar,
   Button,
   Card,
-  Col,
   Dropdown,
   Empty,
-  Row,
   Skeleton,
   Space,
   Statistic,
-  Tabs,
   Tag,
   Typography,
   message,
@@ -30,7 +27,6 @@ import {
   MoreOutlined,
   PhoneOutlined,
   StopOutlined,
-  TeamOutlined,
   UsergroupAddOutlined,
 } from '@ant-design/icons';
 
@@ -159,7 +155,15 @@ function ContactTypeTag({ value }) {
 
 function DisplayText({ value }) {
   if (isBlank(value)) return <Text type="secondary">Not Available</Text>;
-  return value;
+  return <span>{value}</span>;
+}
+
+function DetailsCard({ title, extra, children }) {
+  return (
+    <Card className="contact-group-show__card" title={title} extra={extra} bordered={false}>
+      {children}
+    </Card>
+  );
 }
 
 function StatCard({ title, value, tone = 'default', token }) {
@@ -172,20 +176,7 @@ function StatCard({ title, value, tone = 'default', token }) {
   };
 
   return (
-    <Card
-      size="small"
-      style={{
-        borderRadius: token.borderRadiusLG,
-        height: '100%',
-        borderColor: token.colorBorderSecondary,
-        background: token.colorBgContainer,
-      }}
-      styles={{
-        body: {
-          padding: token.padding,
-        },
-      }}
-    >
+    <Card className="contact-group-show__metric" bordered={false}>
       <Statistic
         title={
           <span style={{ fontSize: token.fontSizeSM, color: token.colorTextSecondary }}>
@@ -194,8 +185,8 @@ function StatCard({ title, value, tone = 'default', token }) {
         }
         value={value}
         valueStyle={{
-          fontSize: token.fontSizeHeading3,
-          fontWeight: token.fontWeightStrong,
+          fontSize: 19,
+          fontWeight: 700,
           color: colorMap[tone] || token.colorText,
           lineHeight: 1.2,
         }}
@@ -204,29 +195,28 @@ function StatCard({ title, value, tone = 'default', token }) {
   );
 }
 
-function InfoBlock({ label, value, token }) {
+function InfoGrid({ rows = [] }) {
   return (
-    <div>
-      <div
-        style={{
-          fontSize: token.fontSizeSM,
-          color: token.colorTextSecondary,
-          marginBottom: token.marginXXS,
-        }}
-      >
-        {label}
-      </div>
+    <div className="contact-group-show__info-grid">
+      {rows.filter(Boolean).map((row) => (
+        <div className="contact-group-show__info-item" key={row.label}>
+          <div className="contact-group-show__info-label">{row.label}</div>
+          <div className="contact-group-show__info-value">{row.value ?? '-'}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-      <div
-        style={{
-          fontSize: token.fontSize,
-          fontWeight: token.fontWeightStrong,
-          color: token.colorText,
-          wordBreak: 'break-word',
-        }}
-      >
-        <DisplayText value={value} />
-      </div>
+function RailGrid({ rows = [] }) {
+  return (
+    <div className="contact-group-show__rail-grid">
+      {rows.filter(Boolean).map((row) => (
+        <div className="contact-group-show__rail-row" key={row.label}>
+          <div className="contact-group-show__rail-label">{row.label}</div>
+          <div className="contact-group-show__rail-value">{row.value ?? '-'}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -240,6 +230,8 @@ export default function ContactGroupShow({ auth, id }) {
     contacts: 0,
     subGroups: 0,
   });
+
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [countLoading, setCountLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -325,13 +317,7 @@ export default function ContactGroupShow({ auth, id }) {
   };
 
   const goEdit = () => {
-    router.visit(
-      safeRoute(
-        'crm.contact-groups.edit',
-        id,
-        `/crm/contact-groups/${id}/edit`
-      )
-    );
+    router.visit(safeRoute('crm.contact-groups.edit', id, `/crm/contact-groups/${id}/edit`));
   };
 
   const updateStatus = async () => {
@@ -373,21 +359,11 @@ export default function ContactGroupShow({ auth, id }) {
   });
 
   const contactTableRowFunction = (record) =>
-    clickableRow(
-      safeRoute(
-        'crm.contacts.show',
-        record?.id,
-        `/crm/contacts/${record?.id}`
-      )
-    );
+    clickableRow(safeRoute('crm.contacts.show', record?.id, `/crm/contacts/${record?.id}`));
 
   const groupTableRowFunction = (record) =>
     clickableRow(
-      safeRoute(
-        'crm.contact-groups.show',
-        record?.id,
-        `/crm/contact-groups/${record?.id}`
-      )
+      safeRoute('crm.contact-groups.show', record?.id, `/crm/contact-groups/${record?.id}`)
     );
 
   const groupColumns = useMemo(
@@ -682,15 +658,170 @@ export default function ContactGroupShow({ auth, id }) {
       key: 'edit',
       icon: <EditOutlined />,
       label: 'Edit Group',
-      onClick: goEdit,
     },
     {
       key: 'toggle-status',
       icon: group?.active === false ? <CheckCircleOutlined /> : <StopOutlined />,
       label: group?.active === false ? 'Make Active' : 'Make Inactive',
-      onClick: updateStatus,
     },
   ];
+
+  const overviewContent = (
+    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <div className="contact-group-show__stats">
+        <StatCard
+          title="Contacts"
+          value={countLoading ? '-' : contactsCount}
+          tone="blue"
+          token={token}
+        />
+
+        <StatCard
+          title="Sub Groups"
+          value={countLoading ? '-' : childGroupsCount}
+          tone="green"
+          token={token}
+        />
+
+        <StatCard
+          title="Status"
+          value={group?.active === false ? 'Inactive' : 'Active'}
+          tone={group?.active === false ? 'red' : 'green'}
+          token={token}
+        />
+      </div>
+
+      <DetailsCard title="Overview">
+        <InfoGrid
+          rows={[
+            { label: 'Group Name', value: group?.name },
+            { label: 'Parent Group', value: parentName || '-' },
+            { label: 'Status', value: <StatusTag active={group?.active} /> },
+            { label: 'Contacts', value: contactsCount },
+            { label: 'Sub Groups', value: childGroupsCount },
+            { label: 'Created At', value: formatDateTime(group?.created_at) },
+            { label: 'Updated At', value: formatDateTime(group?.updated_at) },
+          ]}
+        />
+      </DetailsCard>
+
+      <DetailsCard title="Description">
+        <Paragraph style={{ margin: 0 }}>
+          <DisplayText value={group?.description} />
+        </Paragraph>
+      </DetailsCard>
+    </Space>
+  );
+
+  const contactsContent = (
+    <DetailsCard title="Contacts">
+      <ReusableCrud
+        key={`contacts-${id}`}
+        icon={<ContactsOutlined />}
+        title="Contacts"
+        apiUrl={api('/api/contacts/')}
+        baseFilters={{ contact_group_id: id }}
+        columns={contactColumns}
+        fields={contactFields}
+        validationSchema={Yup.object({
+          name: Yup.string().required('Name is required'),
+          contact_type: Yup.string().required('Contact type is required'),
+          email: Yup.string().nullable().email('Invalid email'),
+        })}
+        crudInitialValues={contactInitialValues}
+        transformPayload={(values) => ({
+          ...values,
+          name: clean(values.name),
+          code: clean(values.code),
+          phone: clean(values.phone),
+          email: clean(values.email),
+          pan: clean(values.pan),
+          tax_registration_no: clean(values.tax_registration_no),
+          tax_registration_type: clean(values.tax_registration_type) || 'none',
+          address: clean(values.address),
+          contact_group_id: id,
+          credit_limit:
+            values.credit_limit !== null &&
+            values.credit_limit !== undefined &&
+            values.credit_limit !== ''
+              ? Number(values.credit_limit)
+              : 0,
+          accept_purchase: Boolean(values.accept_purchase),
+          active: values.active !== false,
+        })}
+        form_ui="drawer"
+        drawerWidth={860}
+        enableServerPagination
+        showSearch
+        canView
+        canAdd
+        canEdit
+        canDelete
+        hasActions
+        hasActionColumns
+        activeTableRowFunction={contactTableRowFunction}
+      />
+    </DetailsCard>
+  );
+
+  const subGroupsContent = (
+    <DetailsCard title="Sub Groups">
+      <ReusableCrud
+        key={`child-groups-${id}`}
+        icon={<UsergroupAddOutlined />}
+        title="Sub Groups"
+        apiUrl={api('/api/contact-groups/')}
+        baseFilters={{ parent_id: id }}
+        columns={groupColumns}
+        fields={groupFields}
+        validationSchema={Yup.object({
+          name: Yup.string().required('Name is required'),
+        })}
+        crudInitialValues={groupInitialValues}
+        transformPayload={(values) => ({
+          ...values,
+          name: clean(values.name),
+          parent_id: id,
+          description: clean(values.description),
+          active: values.active !== false,
+        })}
+        form_ui="modal"
+        modalWidth={640}
+        enableServerPagination
+        showSearch
+        canView
+        canAdd
+        canEdit
+        canDelete
+        hasActions
+        hasActionColumns
+        activeTableRowFunction={groupTableRowFunction}
+      />
+    </DetailsCard>
+  );
+
+  const tabs = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      count: null,
+      content: overviewContent,
+    },
+    {
+      key: 'contacts',
+      label: 'Contacts',
+      count: contactsCount,
+      content: contactsContent,
+    },
+    {
+      key: 'groups',
+      label: 'Sub Groups',
+      count: childGroupsCount,
+      content: subGroupsContent,
+    },
+  ];
+
+  const activeContent = tabs.find((tab) => tab.key === activeTab)?.content || overviewContent;
 
   return (
     <AuthenticatedLayout user={auth?.user}>
@@ -698,326 +829,438 @@ export default function ContactGroupShow({ auth, id }) {
 
       <Head title={groupName} />
 
-      <div
-        style={{
-          minHeight: '100vh',
-          background: token.colorBgLayout,
-        }}
-      >
-        <div
-          style={{
-            height: token.controlHeightLG + token.paddingSM,
-            background: token.colorBgContainer,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingInline: token.paddingLG,
-            position: 'sticky',
-            top: 0,
-            zIndex: 20,
-          }}
-        >
-          <Space size={token.marginSM}>
-            <Button
-              type="text"
-              icon={<ArrowLeftOutlined />}
-              onClick={goBack}
-              style={{
-                fontWeight: token.fontWeightStrong,
-                paddingLeft: 0,
-              }}
-            >
+      <style>{`
+        .contact-group-show {
+          min-height: calc(100vh - 64px);
+          background: ${token.colorBgLayout};
+        }
+
+        .contact-group-show__bar {
+          height: 44px;
+          background: ${token.colorBgContainer};
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 12px;
+          position: sticky;
+          top: 0;
+          z-index: 20;
+        }
+
+        .contact-group-show__crumb {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .contact-group-show__body {
+          display: grid;
+          grid-template-columns: 250px minmax(0, 1fr);
+          gap: 8px;
+        }
+
+        .contact-group-show__rail {
+          background: ${token.colorBgContainer};
+          border-right: 1px solid ${token.colorBorderSecondary};
+          min-height: calc(100vh - 108px);
+          padding: 12px;
+        }
+
+        .contact-group-show__entity {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+        }
+
+        .contact-group-show__entity-title {
+          margin: 0 !important;
+          font-size: 15px !important;
+          line-height: 1.25 !important;
+          color: ${token.colorText};
+          word-break: break-word;
+        }
+
+        .contact-group-show__entity-subtitle {
+          display: block;
+          margin-top: 2px;
+          font-size: 12px;
+        }
+
+        .contact-group-show__tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-top: 6px;
+        }
+
+        .contact-group-show__rail-summary {
+          padding: 10px 0;
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+
+        .contact-group-show__mini-stat {
+          border: 1px solid ${token.colorBorderSecondary};
+          background: ${token.colorFillQuaternary};
+          border-radius: ${token.borderRadius}px;
+          padding: 8px;
+        }
+
+        .contact-group-show__mini-stat span {
+          display: block;
+          font-size: 11px;
+          color: ${token.colorTextSecondary};
+          margin-bottom: 2px;
+        }
+
+        .contact-group-show__mini-stat strong {
+          font-size: 15px;
+          color: ${token.colorText};
+        }
+
+        .contact-group-show__rail-grid {
+          margin-top: 10px;
+          border: 1px solid ${token.colorBorderSecondary};
+          border-bottom: 0;
+        }
+
+        .contact-group-show__rail-row {
+          display: grid;
+          grid-template-columns: 78px minmax(0, 1fr);
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+          font-size: 12px;
+        }
+
+        .contact-group-show__rail-label {
+          padding: 6px;
+          background: ${token.colorFillAlter};
+          color: ${token.colorTextSecondary};
+          font-weight: 600;
+          border-right: 1px solid ${token.colorBorderSecondary};
+        }
+
+        .contact-group-show__rail-value {
+          padding: 6px;
+          color: ${token.colorText};
+          word-break: break-word;
+        }
+
+        .contact-group-show__tabs {
+          padding-top: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .contact-group-show__tab {
+          width: 100%;
+          height: 34px;
+          border: 0;
+          border-radius: ${token.borderRadius}px;
+          background: transparent;
+          color: ${token.colorTextSecondary};
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 9px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+          text-align: left;
+        }
+
+        .contact-group-show__tab:hover {
+          background: ${token.colorFillAlter};
+          color: ${token.colorText};
+        }
+
+        .contact-group-show__tab--active {
+          background: ${token.colorPrimaryBg};
+          color: ${token.colorPrimary};
+        }
+
+        .contact-group-show__main {
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          min-width: 0;
+          overflow: hidden;
+        }
+
+        .contact-group-show__stats {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .contact-group-show__card.ant-card,
+        .contact-group-show__metric.ant-card {
+          border-radius: ${token.borderRadius}px;
+          box-shadow: none;
+          border: 0;
+        }
+
+        .contact-group-show__card .ant-card-head {
+          min-height: 38px;
+          padding: 0 10px;
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+        }
+
+        .contact-group-show__card .ant-card-head-title {
+          font-size: 13px;
+          font-weight: 700;
+          color: ${token.colorText};
+        }
+
+        .contact-group-show__card .ant-card-body {
+          padding: 10px;
+          min-width: 0;
+        }
+
+        .contact-group-show__metric .ant-card-body {
+          padding: 10px;
+          min-height: 76px;
+        }
+
+        .contact-group-show__info-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          border: 1px solid ${token.colorBorderSecondary};
+          border-right: 0;
+          border-bottom: 0;
+          font-size: 12px;
+        }
+
+        .contact-group-show__info-item {
+          display: grid;
+          grid-template-columns: 150px minmax(0, 1fr);
+          border-right: 1px solid ${token.colorBorderSecondary};
+          border-bottom: 1px solid ${token.colorBorderSecondary};
+          min-width: 0;
+        }
+
+        .contact-group-show__info-label {
+          padding: 7px 8px;
+          background: ${token.colorFillAlter};
+          color: ${token.colorTextSecondary};
+          font-weight: 600;
+          border-right: 1px solid ${token.colorBorderSecondary};
+          white-space: nowrap;
+        }
+
+        .contact-group-show__info-value {
+          padding: 7px 8px;
+          background: ${token.colorBgContainer};
+          color: ${token.colorText};
+          word-break: break-word;
+          min-width: 0;
+        }
+
+        .contact-group-show .ant-table {
+          font-size: 12px;
+        }
+
+        .contact-group-show .ant-table-thead > tr > th {
+          padding: 7px 8px !important;
+          background: ${token.colorFillAlter} !important;
+          font-weight: 700;
+          color: ${token.colorTextSecondary};
+          white-space: nowrap;
+        }
+
+        .contact-group-show .ant-table-tbody > tr > td {
+          padding: 6px 8px !important;
+          vertical-align: middle;
+        }
+
+        .contact-group-show .ant-tag {
+          margin-inline-end: 0;
+          font-size: 11px;
+          line-height: 18px;
+          padding-inline: 6px;
+        }
+
+        .contact-group-show .ant-card .ant-card {
+          border: 1px solid ${token.colorBorderSecondary};
+        }
+
+        @media (max-width: 992px) {
+          .contact-group-show__body {
+            grid-template-columns: 1fr;
+          }
+
+          .contact-group-show__rail {
+            min-height: auto;
+            border-right: 0;
+            border-bottom: 1px solid ${token.colorBorderSecondary};
+          }
+
+          .contact-group-show__tabs {
+            flex-direction: row;
+            overflow-x: auto;
+          }
+
+          .contact-group-show__tab {
+            width: auto;
+            white-space: nowrap;
+            flex: none;
+          }
+
+          .contact-group-show__stats,
+          .contact-group-show__info-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .contact-group-show__info-item {
+            grid-template-columns: 130px minmax(0, 1fr);
+          }
+
+          .contact-group-show__card .ant-card-body {
+            overflow-x: auto;
+          }
+        }
+      `}</style>
+
+      <div className="contact-group-show">
+        <div className="contact-group-show__bar">
+          <div className="contact-group-show__crumb">
+            <Button type="text" size="small" icon={<ArrowLeftOutlined />} onClick={goBack}>
               Contact Groups
             </Button>
 
             <Text type="secondary">/</Text>
 
-            <Text strong>{groupName}</Text>
-          </Space>
+            <Text strong ellipsis style={{ maxWidth: 420 }}>
+              {groupName}
+            </Text>
+          </div>
 
-          <Space>
-            <Button icon={<EditOutlined />} onClick={goEdit}>
+          <Space size={6}>
+            <Button size="small" icon={<EditOutlined />} onClick={goEdit}>
               Edit
             </Button>
 
             <Dropdown
-              menu={{ items: actionItems }}
+              menu={{
+                items: actionItems,
+                onClick: ({ key }) => {
+                  if (key === 'edit') goEdit();
+                  if (key === 'toggle-status') updateStatus();
+                },
+              }}
               placement="bottomRight"
               trigger={['click']}
             >
-              <Button loading={saving} icon={<MoreOutlined />}>
-                Options
+              <Button size="small" loading={saving}>
+                Options <MoreOutlined />
               </Button>
             </Dropdown>
           </Space>
         </div>
 
-        <div style={{ padding: token.paddingLG }}>
-          {error && (
+        {error ? (
+          <div style={{ padding: 12 }}>
             <Alert
               type="error"
               message={error}
               showIcon
               closable
               onClose={() => setError('')}
-              style={{ marginBottom: token.margin }}
             />
-          )}
+          </div>
+        ) : null}
 
-          {loading && (
-            <Card
-              style={{
-                borderRadius: token.borderRadiusLG,
-                borderColor: token.colorBorderSecondary,
-              }}
-            >
-              <Skeleton active paragraph={{ rows: 8 }} />
-            </Card>
-          )}
+        {loading ? (
+          <div style={{ padding: 18 }}>
+            <Skeleton active paragraph={{ rows: 8 }} />
+          </div>
+        ) : null}
 
-          {!loading && !group && !error && (
-            <Card
-              style={{
-                borderRadius: token.borderRadiusLG,
-                borderColor: token.colorBorderSecondary,
-              }}
-            >
-              <Empty description="Contact group not found" />
-            </Card>
-          )}
+        {!loading && !group && !error ? (
+          <div style={{ padding: 18 }}>
+            <Empty description="Contact group not found" />
+          </div>
+        ) : null}
 
-          {!loading && group && (
-            <Space direction="vertical" size={token.margin} style={{ width: '100%' }}>
-              <Card
-                style={{
-                  borderRadius: token.borderRadiusLG,
-                  borderColor: token.colorBorderSecondary,
-                  background: token.colorBgContainer,
-                }}
-                styles={{
-                  body: {
-                    padding: token.paddingLG,
-                  },
-                }}
-              >
-                <Row gutter={[token.marginLG, token.marginLG]} align="middle">
-                  <Col xs={24} lg={10}>
-                    <Space size={token.margin} align="start">
-                      <Avatar
-                        size={58}
-                        icon={<FolderOpenOutlined />}
-                        style={{
-                          background: token.colorPrimaryBg,
-                          color: token.colorPrimary,
-                          fontSize: token.fontSizeHeading3,
-                        }}
-                      />
+        {!loading && group ? (
+          <div className="contact-group-show__body">
+            <aside className="contact-group-show__rail">
+              <div className="contact-group-show__entity">
+                <Avatar
+                  size={42}
+                  icon={<FolderOpenOutlined />}
+                  style={{
+                    background: token.colorPrimaryBg,
+                    color: token.colorPrimary,
+                    flex: 'none',
+                  }}
+                />
 
-                      <div>
-                        <Space size={token.marginXS} wrap>
-                          <Title level={3} style={{ margin: 0, color: token.colorText }}>
-                            {groupName}
-                          </Title>
+                <div style={{ minWidth: 0 }}>
+                  <Title level={4} className="contact-group-show__entity-title">
+                    {groupName}
+                  </Title>
 
-                          <StatusTag active={group?.active} />
-                        </Space>
+                  <Text type="secondary" className="contact-group-show__entity-subtitle">
+                    {parentName ? `Under ${parentName}` : 'Root contact group'}
+                  </Text>
 
-                        <Paragraph
-                          type="secondary"
-                          style={{
-                            margin: `${token.marginXS}px 0 0`,
-                            maxWidth: 680,
-                          }}
-                          ellipsis={{ rows: 2, expandable: true }}
-                        >
-                          {group?.description || 'No description has been added for this contact group.'}
-                        </Paragraph>
-                      </div>
-                    </Space>
-                  </Col>
+                  <div className="contact-group-show__tags">
+                    <StatusTag active={group?.active} />
+                  </div>
+                </div>
+              </div>
 
-                  <Col xs={24} lg={14}>
-                    <Row gutter={[token.marginSM, token.marginSM]}>
-                      <Col xs={24} sm={8}>
-                        <StatCard
-                          title="Contacts"
-                          value={contactsCount}
-                          tone="blue"
-                          token={token}
-                        />
-                      </Col>
+              <div className="contact-group-show__rail-summary">
+                <div className="contact-group-show__mini-stat">
+                  <span>Contacts</span>
+                  <strong>{countLoading ? '-' : contactsCount}</strong>
+                </div>
 
-                      <Col xs={24} sm={8}>
-                        <StatCard
-                          title="Sub Groups"
-                          value={childGroupsCount}
-                          tone="green"
-                          token={token}
-                        />
-                      </Col>
+                <div className="contact-group-show__mini-stat">
+                  <span>Sub Groups</span>
+                  <strong>{countLoading ? '-' : childGroupsCount}</strong>
+                </div>
+              </div>
 
-                      <Col xs={24} sm={8}>
-                        <StatCard
-                          title="Status"
-                          value={group?.active === false ? 'Inactive' : 'Active'}
-                          tone={group?.active === false ? 'red' : 'green'}
-                          token={token}
-                        />
-                      </Col>
-                    </Row>
-                  </Col>
-                </Row>
-              </Card>
+              <RailGrid
+                rows={[
+                  { label: 'Parent', value: parentName || '-' },
+                  { label: 'Status', value: <StatusTag active={group?.active} /> },
+                  { label: 'Created', value: formatDateTime(group?.created_at) },
+                  { label: 'Updated', value: formatDateTime(group?.updated_at) },
+                ]}
+              />
 
-              <Row gutter={[token.margin, token.margin]}>
-                <Col xs={24} lg={7} xl={6}>
-                  <Card
-                    title="Group Summary"
-                    size="small"
-                    style={{
-                      borderRadius: token.borderRadiusLG,
-                      borderColor: token.colorBorderSecondary,
-                      background: token.colorBgContainer,
-                    }}
+              <div className="contact-group-show__tabs">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    className={`contact-group-show__tab ${
+                      activeTab === tab.key ? 'contact-group-show__tab--active' : ''
+                    }`}
+                    onClick={() => setActiveTab(tab.key)}
                   >
-                    <Space direction="vertical" size={token.margin} style={{ width: '100%' }}>
-                      <InfoBlock label="Group Name" value={group?.name} token={token} />
-                      <InfoBlock label="Parent Group" value={parentName} token={token} />
-                      <InfoBlock label="Description" value={group?.description} token={token} />
-                      <InfoBlock label="Created At" value={formatDateTime(group?.created_at)} token={token} />
-                      <InfoBlock label="Updated At" value={formatDateTime(group?.updated_at)} token={token} />
-                    </Space>
-                  </Card>
-                </Col>
+                    <span>{tab.label}</span>
+                    {tab.count !== null && tab.count !== undefined ? (
+                      <span>{tab.count}</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </aside>
 
-                <Col xs={24} lg={17} xl={18}>
-                  <Card
-                    style={{
-                      borderRadius: token.borderRadiusLG,
-                      borderColor: token.colorBorderSecondary,
-                      background: token.colorBgContainer,
-                    }}
-                    styles={{
-                      body: {
-                        padding: 0,
-                      },
-                    }}
-                  >
-                    <Tabs
-                      defaultActiveKey="contacts"
-                      size="large"
-                      style={{
-                        padding: `0 ${token.paddingLG}px ${token.paddingLG}px`,
-                      }}
-                      items={[
-                        {
-                          key: 'contacts',
-                          label: (
-                            <Space>
-                              <ContactsOutlined />
-                              Contacts
-                            </Space>
-                          ),
-                          children: (
-                            <ReusableCrud
-                              key={`contacts-${id}`}
-                              icon={<ContactsOutlined />}
-                              title="Contacts"
-                              apiUrl={api('/api/contacts/')}
-                              baseFilters={{ contact_group_id: id }}
-                              columns={contactColumns}
-                              fields={contactFields}
-                              validationSchema={Yup.object({
-                                name: Yup.string().required('Name is required'),
-                                contact_type: Yup.string().required('Contact type is required'),
-                                email: Yup.string().nullable().email('Invalid email'),
-                              })}
-                              crudInitialValues={contactInitialValues}
-                              transformPayload={(values) => ({
-                                ...values,
-                                name: clean(values.name),
-                                code: clean(values.code),
-                                phone: clean(values.phone),
-                                email: clean(values.email),
-                                pan: clean(values.pan),
-                                tax_registration_no: clean(values.tax_registration_no),
-                                tax_registration_type: clean(values.tax_registration_type) || 'none',
-                                address: clean(values.address),
-                                contact_group_id: id,
-                                credit_limit:
-                                  values.credit_limit !== null &&
-                                  values.credit_limit !== undefined &&
-                                  values.credit_limit !== ''
-                                    ? Number(values.credit_limit)
-                                    : 0,
-                                accept_purchase: Boolean(values.accept_purchase),
-                                active: values.active !== false,
-                              })}
-                              form_ui="drawer"
-                              drawerWidth={860}
-                              enableServerPagination
-                              showSearch
-                              canView
-                              canAdd
-                              canEdit
-                              canDelete
-                              hasActions
-                              hasActionColumns
-                              activeTableRowFunction={contactTableRowFunction}
-                            />
-                          ),
-                        },
-                        {
-                          key: 'groups',
-                          label: (
-                            <Space>
-                              <TeamOutlined />
-                              Sub Groups
-                            </Space>
-                          ),
-                          children: (
-                            <ReusableCrud
-                              key={`child-groups-${id}`}
-                              icon={<UsergroupAddOutlined />}
-                              title="Sub Groups"
-                              apiUrl={api('/api/contact-groups/')}
-                              baseFilters={{ parent_id: id }}
-                              columns={groupColumns}
-                              fields={groupFields}
-                              validationSchema={Yup.object({
-                                name: Yup.string().required('Name is required'),
-                              })}
-                              crudInitialValues={groupInitialValues}
-                              transformPayload={(values) => ({
-                                ...values,
-                                name: clean(values.name),
-                                parent_id: id,
-                                description: clean(values.description),
-                                active: values.active !== false,
-                              })}
-                              form_ui="modal"
-                              modalWidth={640}
-                              enableServerPagination
-                              showSearch
-                              canView
-                              canAdd
-                              canEdit
-                              canDelete
-                              hasActions
-                              hasActionColumns
-                              activeTableRowFunction={groupTableRowFunction}
-                            />
-                          ),
-                        },
-                      ]}
-                    />
-                  </Card>
-                </Col>
-              </Row>
-            </Space>
-          )}
-        </div>
+            <main className="contact-group-show__main">{activeContent}</main>
+          </div>
+        ) : null}
       </div>
     </AuthenticatedLayout>
   );

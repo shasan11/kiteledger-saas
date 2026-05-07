@@ -32,7 +32,7 @@ return new class extends Migration
             $table->string('country', 80)->nullable();
             $table->string('lead_source', 80)->nullable();
             $table->string('industry', 120)->nullable();
-            $table->decimal('expected_value', 16, 2)->default(0);
+            $table->decimal('expected_value', 16, 2)->default(0)->nullable();
             $table->enum('status', ["new","contacted","qualified","unqualified","converted","lost"])->default('new');
             $table->enum('priority', ["low","medium","high","urgent"])->default('medium');
             $table->dateTime('next_follow_up_date')->nullable();

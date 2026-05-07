@@ -1,70 +1,33 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ResuableCrud';
 import { Head } from '@inertiajs/react';
-import * as Yup from 'yup';
+import { Card } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
-
-const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (path) => `${BACKEND_BASE}${path}`;
+import SimpleSettingsCrud from '../SimpleSettingsCrud';
 
 export default function CustomTemplates(props) {
-  const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
-    { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', sorter: true },
-  ];
-
-  const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'purpose', label: 'Purpose', type: 'text' },
-    { name: 'content', label: 'Content', type: 'textarea' },
-  ];
-
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required'),
-    purpose: Yup.string().nullable(),
-    content: Yup.string().nullable(),
-  });
-
-  const crudInitialValues = {
-    name: '',
-    purpose: '',
-    content: '',
-  };
-
-  const transformPayload = (values) => {
-    const payload = { ...values };
-    payload.name = payload.name?.trim() || null;
-    Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
-    return payload;
-  };
-
   return (
     <AuthenticatedLayout user={props.auth?.user}>
       <Head title="Custom Templates" />
-      <ReusableCrud
-        icon={<FileTextOutlined />}
-        title="Custom Templates"
-        apiUrl={api('/api/custom-templates/')}
-        columns={columns}
-        fields={fields}
-        validationSchema={validationSchema}
-        crudInitialValues={crudInitialValues}
-        transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={900}
-        searchParam="search"
-        pageParam="page"
-        pageSizeParam="page_size"
-        sortMode="ordering"
-        orderingParam="ordering"
-        enableServerPagination={true}
-        showSearch={true}
-        canAdd={true}
-        canEdit={true}
-        canDelete={true}
-        hasActions={true}
-        hasActionColumns={true}
-      />
+      <div style={{ padding: 18 }}>
+        <Card title={<><FileTextOutlined /> Custom Templates</>} style={{ borderRadius: 8 }}>
+          <SimpleSettingsCrud
+            endpoint="/api/custom-templates"
+            columns={[
+              { title: 'Name', dataIndex: 'name' },
+              { title: 'Purpose', dataIndex: 'purpose' },
+              { title: 'Key', dataIndex: 'template_key' },
+            ]}
+            fields={[
+              { name: 'name', label: 'Name', rules: [{ required: true }] },
+              { name: 'purpose', label: 'Purpose' },
+              { name: 'template_key', label: 'Template Key' },
+              { name: 'content', label: 'Content', type: 'richtext' },
+              { name: 'active', label: 'Active', type: 'switch' },
+            ]}
+            initialValues={{ name: '', purpose: '', template_key: '', content: '', active: true }}
+          />
+        </Card>
+      </div>
     </AuthenticatedLayout>
   );
 }

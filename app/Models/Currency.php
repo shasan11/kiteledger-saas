@@ -22,6 +22,7 @@ class Currency extends Model
         'name',
         'symbol',
         'decimal_places',
+        'exchange_rate',
         'is_base',
         'active',
         'is_system_generated',
@@ -37,6 +38,7 @@ class Currency extends Model
     {
         return [
             'decimal_places' => 'integer',
+            'exchange_rate' => 'decimal:6',
             'is_base' => 'boolean',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
