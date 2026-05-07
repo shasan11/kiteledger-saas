@@ -422,6 +422,9 @@ Route::prefix('hrm')->group(function () {
     Route::patch('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkUpdate']);
     Route::delete('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkDestroy']);
     Route::apiResource('employee-profiles', EmployeeProfileController::class);
+
+    Route::apiResource('employee-documents', \App\Http\Controllers\Api\EmployeeDocumentController::class);
+    Route::apiResource('onboarding-checklists', \App\Http\Controllers\Api\OnboardingChecklistController::class);
 });
 
 /*

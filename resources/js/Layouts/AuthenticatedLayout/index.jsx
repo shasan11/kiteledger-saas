@@ -185,15 +185,26 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <TeamOutlined />,
                 label: 'HRM',
                 children: [
-                    { key: 'hrm-users', label: 'Employees', onClick: () => visit('hrm.users.index', '/hrm/users') },
-                    { key: 'hrm-attendance', label: 'Attendance', onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
-                    { key: 'hrm-leaves', label: 'Leave Applications', onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
-                    { key: 'hrm-payslips', label: 'Payslips', onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
-                    { key: 'hrm-departments', label: 'Departments', onClick: () => visit('hrm.departments.index', '/hrm/departments') },
-                    { key: 'hrm-designations', label: 'Designations', onClick: () => visit('hrm.designations.index', '/hrm/designations') },
+                    { key: 'hrm-users',      label: 'Employees',           onClick: () => visit('hrm.users.index', '/hrm/users') },
+                    { key: 'hrm-attendance', label: 'Attendance',          onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
+                    { key: 'hrm-leaves',     label: 'Leave Applications',  onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
+                    { key: 'hrm-payslips',   label: 'Payslips',            onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
+                    { key: 'hrm-emp-docs',   label: 'Employee Documents',  onClick: () => visit('hrm.employee-documents.index', '/hrm/employee-documents') },
+                    { key: 'hrm-onboarding', label: 'Onboarding',          onClick: () => visit('hrm.onboarding.index', '/hrm/onboarding') },
+                    { key: 'hrm-departments',  label: 'Departments',         onClick: () => visit('hrm.departments.index', '/hrm/departments') },
+                    { key: 'hrm-designations', label: 'Designations',        onClick: () => visit('hrm.designations.index', '/hrm/designations') },
                     { key: 'hrm-emp-statuses', label: 'Employment Statuses', onClick: () => visit('hrm.employment-statuses.index', '/hrm/employment-statuses') },
-                    { key: 'hrm-leave-policies', label: 'Leave Policies', onClick: () => visit('hrm.leave-policies.index', '/hrm/leave-policies') },
-                    { key: 'hrm-shifts', label: 'Shifts', onClick: () => visit('hrm.shifts.index', '/hrm/shifts') },
+                    { key: 'hrm-leave-policies', label: 'Leave Policies',  onClick: () => visit('hrm.leave-policies.index', '/hrm/leave-policies') },
+                    { key: 'hrm-shifts',       label: 'Shifts',             onClick: () => visit('hrm.shifts.index', '/hrm/shifts') },
+                    { key: 'hrm-weekly-holidays', label: 'Weekly Holidays', onClick: () => visit('hrm.weekly-holidays.index', '/hrm/weekly-holidays') },
+                    { key: 'hrm-public-holidays', label: 'Public Holidays', onClick: () => visit('hrm.public-holidays.index', '/hrm/public-holidays') },
+                    { key: 'hrm-salary-hist',   label: 'Salary Histories',      onClick: () => visit('hrm.salary-histories.index', '/hrm/salary-histories') },
+                    { key: 'hrm-desig-hist',    label: 'Designation Histories', onClick: () => visit('hrm.designation-histories.index', '/hrm/designation-histories') },
+                    { key: 'hrm-award-hist',    label: 'Award Histories',       onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
+                    { key: 'hrm-education',     label: 'Education',             onClick: () => visit('hrm.educations.index', '/hrm/educations') },
+                    { key: 'hrm-awards',        label: 'Awards',                onClick: () => visit('hrm.awards.index', '/hrm/awards') },
+                    { key: 'hrm-roles',         label: 'Roles',                 onClick: () => visit('hrm.roles.index', '/hrm/roles') },
+                    { key: 'hrm-permissions',   label: 'Permissions',           onClick: () => visit('hrm.permissions.index', '/hrm/permissions') },
                 ],
             },
             {
@@ -289,10 +300,13 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/human-resource/payroll')) return ['human-resource-payroll'];
 
         // HRM full module
+        if (isActive('/hrm/users/'))                  return ['hrm-users']; // show pages
         if (isActive('/hrm/users'))                   return ['hrm-users'];
         if (isActive('/hrm/attendance'))              return ['hrm-attendance'];
         if (isActive('/hrm/leave-applications'))      return ['hrm-leaves'];
         if (isActive('/hrm/payslips'))                return ['hrm-payslips'];
+        if (isActive('/hrm/employee-documents'))      return ['hrm-emp-docs'];
+        if (isActive('/hrm/onboarding'))              return ['hrm-onboarding'];
         if (isActive('/hrm/departments'))             return ['hrm-departments'];
         if (isActive('/hrm/designations'))            return ['hrm-designations'];
         if (isActive('/hrm/employment-statuses'))     return ['hrm-emp-statuses'];

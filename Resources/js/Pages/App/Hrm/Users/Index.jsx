@@ -184,6 +184,8 @@ export default function Users(props) {
         enableInactiveDrawer
         showSearch
         canAdd canEdit canDelete hasActions hasActionColumns
+        showViewColumn
+        viewPathBuilder={(record) => route('hrm.users.show', record.id)}
       />
     </AuthenticatedLayout>
   );
