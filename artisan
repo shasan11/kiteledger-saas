@@ -9,6 +9,28 @@ define('LARAVEL_START', microtime(true));
 // Register the Composer autoloader...
 require __DIR__.'/vendor/autoload.php';
 
+// Register worktree-specific namespaces so new classes are found
+// (needed when vendor is a junction to the main project)
+spl_autoload_register(function (string $class): bool {
+    $map = [
+        'App\\'               => __DIR__ . '/app/',
+        'Database\\Seeders\\' => __DIR__ . '/database/seeders/',
+        'Database\\Factories\\' => __DIR__ . '/database/factories/',
+    ];
+    foreach ($map as $prefix => $base) {
+        $len = strlen($prefix);
+        if (strncmp($prefix, $class, $len) !== 0) {
+            continue;
+        }
+        $file = $base . str_replace('\\', '/', substr($class, $len)) . '.php';
+        if (is_file($file)) {
+            require $file;
+            return true;
+        }
+    }
+    return false;
+}, true, true); // prepend so worktree files take priority
+
 // Bootstrap Laravel and handle the command...
 /** @var Application $app */
 $app = require_once __DIR__.'/bootstrap/app.php';

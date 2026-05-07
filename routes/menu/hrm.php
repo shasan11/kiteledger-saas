@@ -6,9 +6,12 @@ Route::prefix('hrm')->name('hrm.')->group(function () {
 
     // ── Workforce ─────────────────────────────────────────────────────────────
     Route::get('/users',              fn () => Inertia::render('App/Hrm/Users/Index'))->name('users.index');
+    Route::get('/users/{id}',         fn ($id) => Inertia::render('App/Hrm/Users/Show', ['id' => $id]))->name('users.show');
     Route::get('/attendance',         fn () => Inertia::render('App/Hrm/Attendance/Index'))->name('attendance.index');
     Route::get('/leave-applications', fn () => Inertia::render('App/Hrm/LeaveApplications/Index'))->name('leave-applications.index');
     Route::get('/payslips',           fn () => Inertia::render('App/Hrm/Payslips/Index'))->name('payslips.index');
+    Route::get('/employee-documents', fn () => Inertia::render('App/Hrm/EmployeeDocuments/Index'))->name('employee-documents.index');
+    Route::get('/onboarding',         fn () => Inertia::render('App/Hrm/Onboarding/Index'))->name('onboarding.index');
 
     // ── Masters ───────────────────────────────────────────────────────────────
     Route::get('/employment-statuses', fn () => Inertia::render('App/Hrm/EmploymentStatuses/Index'))->name('employment-statuses.index');
