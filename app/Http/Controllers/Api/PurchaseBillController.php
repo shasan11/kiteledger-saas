@@ -16,7 +16,7 @@ class PurchaseBillController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency'];
+    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['bill_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];

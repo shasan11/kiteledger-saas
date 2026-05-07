@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import PaymentInRecordShow from '@/Pages/App/PaymentIn/Shared/PaymentInRecordShow';
 
 export default function PurchaseBillShow({ id }) {
     return (
-        <AccountingRecordShow
+        <PaymentInRecordShow
             id={id}
             title="Purchase Bill"
             endpoint="/api/purchase-bills/"
             backRoute="payment-out.purchase-bills.index"
             backLabel="Back to Purchase Bills"
-            titleField="bill_no"
-            subtitleField="reference"
+            documentType="purchase_bill"
         />
     );
 }

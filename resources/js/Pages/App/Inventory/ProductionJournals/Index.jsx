@@ -1161,22 +1161,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Production Journal',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Production Journal',
                         params: { approved: true },
                     },
                     {
-                        key: 'posted',
-                        label: 'Posted',
+                        key: 'draft',
+                        label: 'Draft',
                         title: 'Production Journal',
-                        params: { status: 'posted' },
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -1185,13 +1179,15 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
                 showSearch
                 canAdd
                 canEdit
                 canDelete
                 canView
+                showViewColumn
+                viewPathBuilder={(record) => route('inventory.production-journals.show', record.id)}
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
                         if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

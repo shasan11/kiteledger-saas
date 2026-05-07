@@ -1056,28 +1056,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
+                        key: 'approved',
+                        label: 'Approved',
+                        title: 'Payment-in Proforma Invoices',
+                        params: { approved: true },
+                    },
+                    {
                         key: 'draft',
                         label: 'Draft',
                         title: 'Payment-in Proforma Invoices',
-                        params: { status: 'draft' },
-                    },
-                    {
-                        key: 'issued',
-                        label: 'Issued',
-                        title: 'Payment-in Proforma Invoices',
-                        params: { status: 'issued' },
-                    },
-                    {
-                        key: 'cancelled',
-                        label: 'Cancelled',
-                        title: 'Payment-in Proforma Invoices',
-                        params: { status: 'cancelled' },
-                    },
-                    {
-                        key: 'void',
-                        label: 'Void',
-                        title: 'Payment-in Proforma Invoices',
-                        params: { status: 'void' },
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -1086,8 +1074,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.proforma-invoices.show', record.id)}
                 showSearch
                 canAdd
                 canEdit

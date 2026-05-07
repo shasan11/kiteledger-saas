@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import PaymentInRecordShow from '@/Pages/App/PaymentIn/Shared/PaymentInRecordShow';
 
 export default function DebitNoteShow({ id }) {
     return (
-        <AccountingRecordShow
+        <PaymentInRecordShow
             id={id}
             title="Debit Note"
             endpoint="/api/debit-notes/"
             backRoute="payment-out.debit-notes.index"
             backLabel="Back to Debit Notes"
-            titleField="debit_note_no"
-            subtitleField="reference"
+            documentType="debit_note"
         />
     );
 }

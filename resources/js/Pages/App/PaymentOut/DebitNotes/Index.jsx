@@ -787,16 +787,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Debit Note',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Debit Note',
                         params: { approved: true },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Debit Note',
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -805,8 +805,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-out.debit-notes.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

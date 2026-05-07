@@ -764,16 +764,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Expenses',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Expenses',
                         params: { approved: true },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Expenses',
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -782,8 +782,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-out.expenses.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

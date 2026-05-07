@@ -804,22 +804,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Quotations',
-                        params: { status: 'draft' },
-                    },
-                    {
-                        key: 'sent',
-                        label: 'Sent',
-                        title: 'Quotations',
-                        params: { status: 'sent' },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Quotations',
                         params: { approved: true },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Quotations',
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -828,8 +822,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.quotations.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

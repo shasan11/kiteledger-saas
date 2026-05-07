@@ -8,6 +8,7 @@ Route::prefix('crm')->name('crm.')->group(function () {
     Route::get('/contacts/{id}', fn (string $id) => Inertia::render('App/Crm/Contacts/Show', ['id' => $id]))->name('contacts.show');
     Route::get('/leads', fn () => Inertia::render('App/Crm/Leads/Index'))->name('leads.index');
     Route::get('/leads/{id}', fn (string $id) => Inertia::render('App/Crm/Leads/Show', ['id' => $id]))->name('leads.show');
+    Route::get('/deals', fn () => Inertia::render('App/Crm/Deals/Index'))->name('deals.index');
     Route::get('/projects', fn () => Inertia::render('App/Crm/Projects/Index'))->name('projects.index');
     Route::get('/activities', fn () => Inertia::render('App/Crm/Activities/Index'))->name('activities.index');
     Route::get('/activities/{id}', fn (string $id) => Inertia::render('App/Crm/Activities/Show', ['id' => $id]))->name('activities.show');

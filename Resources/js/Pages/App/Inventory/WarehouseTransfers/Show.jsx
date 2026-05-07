@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import InventoryRecordShow from '@/Pages/App/Inventory/Shared/InventoryRecordShow';
 
 export default function WarehouseTransferShow({ id }) {
     return (
-        <AccountingRecordShow
+        <InventoryRecordShow
             id={id}
             title="Warehouse Transfer"
             endpoint="/api/warehouse-transfers/"
             backRoute="inventory.warehouse-transfers.index"
             backLabel="Back to Warehouse Transfers"
-            titleField="transfer_no"
-            subtitleField="reference"
+            documentType="warehouse_transfer"
         />
     );
 }

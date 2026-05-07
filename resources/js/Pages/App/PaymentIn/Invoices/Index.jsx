@@ -1022,22 +1022,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Sales Invoice',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Sales Invoice',
                         params: { approved: true },
                     },
                     {
-                        key: 'paid',
-                        label: 'Paid',
+                        key: 'draft',
+                        label: 'Draft',
                         title: 'Sales Invoice',
-                        params: { status: 'paid' },
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -1046,8 +1040,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.invoices.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

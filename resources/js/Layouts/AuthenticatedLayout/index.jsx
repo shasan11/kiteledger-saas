@@ -12,13 +12,14 @@ import {
     ProfileOutlined,
     ProjectOutlined,
     SettingOutlined,
+    ShopOutlined,
     SwapOutlined,
     TeamOutlined,
     UserOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
 import { Layout, theme } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
@@ -28,9 +29,17 @@ const { Content } = Layout;
 export default function AuthenticatedLayout({ header, children }) {
     const page = usePage();
     const user = page.props.auth.user;
+    const permissions = page.props.auth?.permissions || [];
+    const branchContext = page.props.branchContext || {};
 
     const [collapsed, setCollapsed] = useState(false);
-    const [branch, setBranch] = useState('main');
+    const [branch, setBranch] = useState(branchContext.selectedBranchId || null);
+
+    useEffect(() => {
+        if (branchContext.selectedBranchId) {
+            setBranch((current) => current || branchContext.selectedBranchId);
+        }
+    }, [branchContext.selectedBranchId]);
 
     const {
         token: { colorBgContainer, borderRadiusLG, colorBorderSecondary },
@@ -73,6 +82,19 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <HomeOutlined />,
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
+            },
+            {
+                key: 'pos',
+                icon: <ShopOutlined />,
+                label: 'POS',
+                children: [
+                    { key: 'pos-screen', label: 'POS Screen', onClick: () => visit('pos.index', '/pos') },
+                    { key: 'pos-sales', label: 'Sales', onClick: () => visit('pos.sales.index', '/pos/sales') },
+                    { key: 'pos-shifts', label: 'Shifts', onClick: () => visit('pos.shifts.index', '/pos/shifts') },
+                    { key: 'pos-terminals', label: 'Terminals', onClick: () => visit('pos.terminals.index', '/pos/terminals') },
+                    { key: 'pos-cash-movements', label: 'Cash Movements', onClick: () => visit('pos.cash-movements.index', '/pos/cash-movements') },
+                    { key: 'pos-returns', label: 'Returns', onClick: () => visit('pos.returns.index', '/pos/returns') },
+                ],
             },
             {
                 key: 'crm',
@@ -218,12 +240,24 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'hrm-task-statuses', label: 'Task Statuses', onClick: () => visit('hrm.task-statuses.index', '/hrm/task-statuses') },
                 ],
             },
-            {
-                key: 'reports',
-                icon: <AuditOutlined />,
-                label: 'Reports',
-                onClick: () => visit('reports.index', '/reports'),
-            },
+            ...([
+                'reports.view',
+                'reports.financial.view',
+                'reports.sales.view',
+                'reports.purchase.view',
+                'reports.inventory.view',
+                'reports.tax.view',
+                'reports.hrm.view',
+                'reports.system.view',
+                'reports.analytics.view',
+            ].some((permission) => permissions.includes(permission))
+                ? [{
+                    key: 'reports',
+                    icon: <AuditOutlined />,
+                    label: 'Reports',
+                    onClick: () => visit('reports.index', '/reports'),
+                }]
+                : []),
             {
                 key: 'settings',
                 icon: <SettingOutlined />,
@@ -235,12 +269,17 @@ export default function AuthenticatedLayout({ header, children }) {
                 ],
             },
         ],
-        [page.url],
+        [page.url, permissions],
     );
 
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
-        if (isActive('/pos')) return ['pos'];
+        if (isActive('/pos/returns')) return ['pos-returns'];
+        if (isActive('/pos/cash-movements')) return ['pos-cash-movements'];
+        if (isActive('/pos/terminals')) return ['pos-terminals'];
+        if (isActive('/pos/shifts')) return ['pos-shifts'];
+        if (isActive('/pos/sales')) return ['pos-sales'];
+        if (isActive('/pos')) return ['pos-screen'];
 
         if (isActive('/crm/contact-groups')) return ['contact-groups'];
         if (isActive('/crm/contacts')) return ['contacts'];
@@ -379,20 +418,20 @@ export default function AuthenticatedLayout({ header, children }) {
         return ['home'];
     }, [page.url]);
 
-    const branchOptions = [
-        {
-            value: 'main',
-            label: 'Main Branch',
-        },
-        {
-            value: 'branch-1',
-            label: 'Branch 1',
-        },
-        {
-            value: 'branch-2',
-            label: 'Branch 2',
-        },
-    ];
+    const branchOptions = useMemo(() => {
+        const items = Array.isArray(branchContext.branches)
+            ? branchContext.branches.map((item) => ({
+                  value: item.id,
+                  label: item.name,
+              }))
+            : [];
+
+        if (branchContext.canViewAllBranches) {
+            return [{ value: 'all', label: 'All Branches' }, ...items];
+        }
+
+        return items;
+    }, [branchContext]);
 
     const quickAddItems = [
         {
@@ -468,6 +507,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 user={user}
                 branch={branch}
                 setBranch={setBranch}
+                branchContext={branchContext}
                 branchOptions={branchOptions}
                 quickAddItems={quickAddItems}
                 profileItems={profileItems}

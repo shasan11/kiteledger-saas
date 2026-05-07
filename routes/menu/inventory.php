@@ -15,6 +15,7 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/bill-of-materials', fn () => Inertia::render('App/Inventory/BillOfMaterials/Index'))->name('bill-of-materials.index');
     Route::get('/bill-of-materials/{id}', fn ($id) => Inertia::render('App/Inventory/BillOfMaterials/Show', ['id' => $id]))->name('bill-of-materials.show');
     Route::get('/production-orders', fn () => Inertia::render('App/Inventory/ProductionOrders/Index'))->name('production-orders.index');
+    Route::get('/production-orders/{id}', fn ($id) => Inertia::render('App/Inventory/ProductionOrders/Show', ['id' => $id]))->name('production-orders.show');
     Route::get('/production-journals', fn () => Inertia::render('App/Inventory/ProductionJournals/Index'))->name('production-journals.index');
     Route::get('/production-journals/{id}', fn ($id) => Inertia::render('App/Inventory/ProductionJournals/Show', ['id' => $id]))->name('production-journals.show');
 });

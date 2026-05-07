@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import InventoryRecordShow from '@/Pages/App/Inventory/Shared/InventoryRecordShow';
 
 export default function ProductionJournalShow({ id }) {
     return (
-        <AccountingRecordShow
+        <InventoryRecordShow
             id={id}
             title="Production Journal"
             endpoint="/api/production-journals/"
             backRoute="inventory.production-journals.index"
             backLabel="Back to Production Journals"
-            titleField="journal_no"
-            subtitleField="description"
+            documentType="production_journal"
         />
     );
 }

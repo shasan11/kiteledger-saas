@@ -32,7 +32,7 @@ class WarehouseTransferController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['product'],
+            'relations' => ['product', 'product.productUnit'],
             'relation_details' => ['product' => 'product_id'],
             'rules' => [
                 'product_id' => ['required','uuid','exists:products,id'],

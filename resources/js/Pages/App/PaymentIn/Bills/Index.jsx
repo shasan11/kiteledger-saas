@@ -975,22 +975,16 @@ const transformPayload = (values) => {
                 }}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Invoices Register',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Invoices Register',
                         params: { approved: true },
                     },
                     {
-                        key: 'paid',
-                        label: 'Paid',
+                        key: 'draft',
+                        label: 'Draft',
                         title: 'Invoices Register',
-                        params: { status: 'paid' },
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -999,8 +993,10 @@ const transformPayload = (values) => {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.bills.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

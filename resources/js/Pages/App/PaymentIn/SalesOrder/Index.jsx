@@ -852,43 +852,19 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Sales Order',
-                        params: {
-                            status: 'draft',
-                        },
-                    },
-                    {
-                        key: 'confirmed',
-                        label: 'Confirmed',
-                        title: 'Sales Order',
-                        params: {
-                            status: 'confirmed',
-                        },
-                    },
-                    {
-                        key: 'fulfilled',
-                        label: 'Fulfilled',
-                        title: 'Sales Order',
-                        params: {
-                            status: 'fulfilled',
-                        },
-                    },
-                    {
-                        key: 'cancelled',
-                        label: 'Cancelled',
-                        title: 'Sales Order',
-                        params: {
-                            status: 'cancelled',
-                        },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Sales Order',
                         params: {
                             approved: true,
+                        },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Sales Order',
+                        params: {
+                            approved: false,
                         },
                     },
                     {
@@ -898,8 +874,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.sales-orders.show', record.id)}
                 showSearch
                 canAdd
                 canEdit

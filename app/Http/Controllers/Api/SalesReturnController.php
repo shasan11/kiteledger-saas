@@ -59,6 +59,21 @@ class SalesReturnController extends BaseCrudApiController
         ],
     ];
 
+    protected function prepareIncomingPayload(array $input): array
+    {
+        $input = parent::prepareIncomingPayload($input);
+
+        if (array_key_exists('note_number', $input) && !array_key_exists('sales_return_no', $input)) {
+            $input['sales_return_no'] = $input['note_number'];
+        }
+
+        if (array_key_exists('date', $input) && !array_key_exists('sales_return_date', $input)) {
+            $input['sales_return_date'] = $input['date'];
+        }
+
+        return $input;
+    }
+
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'sales_return_no' => ['nullable', 'string', 'max:40', 'unique:sales_returns,sales_return_no'],
@@ -120,5 +135,17 @@ class SalesReturnController extends BaseCrudApiController
         $record->forceFill(['total' => round($total, 2)])->save();
 
         return $record;
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $data = parent::mutateSerializedRecord($data, $record);
+
+        $data['note_number'] = $data['sales_return_no'] ?? null;
+        $data['date'] = $data['sales_return_date'] ?? null;
+        $data['reference_no'] = $data['reference'] ?? null;
+        $data['grand_total'] = $data['total'] ?? 0;
+
+        return $data;
     }
 }

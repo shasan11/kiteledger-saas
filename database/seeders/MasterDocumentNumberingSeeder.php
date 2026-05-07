@@ -49,6 +49,12 @@ class MasterDocumentNumberingSeeder extends Seeder
             'loan_account' => 'LOAN',
             'loan_topup' => 'LTOP',
             'loan_charge' => 'LCHG',
+            'pos_terminal' => 'PT',
+            'pos_shift' => 'SHIFT',
+            'pos_sale' => 'POS',
+            'pos_payment' => 'PPAY',
+            'pos_cash_movement' => 'PCM',
+            'pos_return' => 'PRET',
         ];
 
         foreach ($documentTypes as $docType => $prefix) {

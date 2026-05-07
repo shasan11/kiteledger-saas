@@ -108,8 +108,8 @@ export default function PurchaseOrders({ auth }) {
   });
 
   const anchorFilters = [
-    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'approved', label: 'Approved', params: { approved: true } },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'all', label: 'All', params: {} },
   ];
 
@@ -127,7 +127,7 @@ export default function PurchaseOrders({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
-        defaultAnchorKey="all"
+        defaultAnchorKey="approved"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
@@ -138,6 +138,8 @@ export default function PurchaseOrders({ auth }) {
         canAdd={true}
         canEdit={true}
         canDelete={true}
+        showViewColumn
+        viewPathBuilder={(record) => route('payment-out.purchase-orders.show', record.id)}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

@@ -11,7 +11,8 @@ use App\Models\{
     Invoice, CustomerPayment, PurchaseBill, SupplierPayment,
     Expense, SalesReturn, DebitNote, InventoryAdjustment,
     Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
-    Contact, Product, Lead, Deal
+    Contact, Product, Lead, Deal,
+    PosCashMovement, PosReturn, PosSale, PosShift
 };
 
 use App\Observers\{
@@ -25,7 +26,8 @@ use App\Observers\{
     ExpenseObserver, SalesReturnObserver, DebitNoteObserver,
     InventoryAdjustmentObserver, QuotationObserver,
     SalesOrderObserver, PurchaseOrderObserver, ProformaInvoiceObserver,
-    ContactObserver, ProductObserver, LeadObserver, DealObserver
+    ContactObserver, ProductObserver, LeadObserver, DealObserver,
+    PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver
 };
 
 class AppServiceProvider extends ServiceProvider
@@ -68,5 +70,10 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(ProductObserver::class);
         Lead::observe(LeadObserver::class);
         Deal::observe(DealObserver::class);
+
+        PosShift::observe(PosShiftObserver::class);
+        PosSale::observe(PosSaleObserver::class);
+        PosCashMovement::observe(PosCashMovementObserver::class);
+        PosReturn::observe(PosReturnObserver::class);
     }
 }

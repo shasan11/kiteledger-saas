@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import InventoryRecordShow from '@/Pages/App/Inventory/Shared/InventoryRecordShow';
 
 export default function BillOfMaterialsShow({ id }) {
     return (
-        <AccountingRecordShow
+        <InventoryRecordShow
             id={id}
             title="Bill of Materials"
             endpoint="/api/bills-of-material/"
             backRoute="inventory.bill-of-materials.index"
             backLabel="Back to Bill of Materials"
-            titleField="name"
-            subtitleField="description"
+            documentType="bom"
         />
     );
 }

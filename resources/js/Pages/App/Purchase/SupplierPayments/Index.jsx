@@ -110,8 +110,8 @@ export default function SupplierPayments({ auth }) {
   });
 
   const anchorFilters = [
-    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'approved', label: 'Approved', params: { approved: true } },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'all', label: 'All', params: {} },
   ];
 
@@ -129,7 +129,7 @@ export default function SupplierPayments({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
-        defaultAnchorKey="all"
+        defaultAnchorKey="approved"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
@@ -140,10 +140,12 @@ export default function SupplierPayments({ auth }) {
         canAdd={true}
         canEdit={true}
         canDelete={true}
+        showViewColumn
+        viewPathBuilder={(record) => route('payment-out.supplier-payments.show', record.id)}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
-            router.visit(route('payment-out.payments.show', record.id));
+            router.visit(route('payment-out.supplier-payments.show', record.id));
           },
           style: { cursor: 'pointer' },
         })}

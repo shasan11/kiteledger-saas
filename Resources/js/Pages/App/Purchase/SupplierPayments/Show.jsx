@@ -1,15 +1,14 @@
-import AccountingRecordShow from '@/Pages/App/Accounting/Shared/AccountingRecordShow';
+import PaymentInRecordShow from '@/Pages/App/PaymentIn/Shared/PaymentInRecordShow';
 
 export default function SupplierPaymentShow({ id }) {
     return (
-        <AccountingRecordShow
+        <PaymentInRecordShow
             id={id}
             title="Supplier Payment"
             endpoint="/api/supplier-payments/"
-            backRoute="payment-out.payments.index"
+            backRoute="payment-out.supplier-payments.index"
             backLabel="Back to Supplier Payments"
-            titleField="payment_no"
-            subtitleField="reference"
+            documentType="supplier_payment"
         />
     );
 }

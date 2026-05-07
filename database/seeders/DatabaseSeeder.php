@@ -47,6 +47,7 @@ class DatabaseSeeder extends Seeder
             InventoryConfigurationSeeder::class,
             SalesModuleSeeder::class,
             SalesConfigurationSeeder::class,
+            PosSeeder::class,
             PurchaseModuleSeeder::class,
             PurchaseConfigurationSeeder::class,
             TransactionalRecordSeeder::class,

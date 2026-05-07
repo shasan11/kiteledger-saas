@@ -259,13 +259,14 @@ export default function WarehouseTransfers(props) {
         hasActions={true}
         hasActionColumns={true}
         anchorFilters={[
-          { key: 'draft',     label: 'Draft',     title: 'Warehouse Transfers', params: { status: 'draft' } },
-          { key: 'posted',    label: 'Posted',    title: 'Warehouse Transfers', params: { status: 'posted' } },
-          { key: 'cancelled', label: 'Cancelled', title: 'Warehouse Transfers', params: { status: 'cancelled' } },
+          { key: 'approved',  label: 'Approved',  title: 'Warehouse Transfers', params: { approved: true } },
+          { key: 'draft',     label: 'Draft',     title: 'Warehouse Transfers', params: { approved: false } },
           { key: 'all',       label: 'All',       title: 'Warehouse Transfers', params: {} },
         ]}
-        defaultAnchorKey="draft"
+        defaultAnchorKey="approved"
         anchorSyncWithHash
+        showViewColumn
+        viewPathBuilder={(record) => route('inventory.warehouse-transfers.show', record.id)}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

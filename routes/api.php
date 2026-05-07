@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\DealStageController;
 use App\Http\Controllers\Api\DocumentNumberingController;
 use App\Http\Controllers\Api\EmployeeProfileController;
 use App\Http\Controllers\Api\GeneralSettingController;
+use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\LeadController;
 use App\Http\Controllers\Api\LoanAccountController;
 use App\Http\Controllers\Api\LoanChargeController;
@@ -60,6 +61,12 @@ use App\Http\Controllers\Api\ProductVariantItemController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\CurrencyController;
+use App\Http\Controllers\Api\Pos\PosCashMovementController;
+use App\Http\Controllers\Api\Pos\PosPaymentController;
+use App\Http\Controllers\Api\Pos\PosReturnController;
+use App\Http\Controllers\Api\Pos\PosSaleController;
+use App\Http\Controllers\Api\Pos\PosShiftController;
+use App\Http\Controllers\Api\Pos\PosTerminalController;
 use Illuminate\Support\Facades\Route;
 
 // HRM Controllers
@@ -92,9 +99,13 @@ use App\Http\Controllers\Api\PriorityController;
 use App\Http\Controllers\Api\TaskStatusController;
 use App\Http\Controllers\Api\TaskController as HrmTaskController;
 use App\Http\Controllers\Api\AssignedTaskController;
+use App\Http\Controllers\Api\Reports\ReportController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
 use App\Http\Controllers\Api\SettingsConfigurationController;
+
+Route::middleware('auth')->get('global-search', GlobalSearchController::class)
+    ->name('api.global-search');
 
 /*
 |--------------------------------------------------------------------------
@@ -138,6 +149,9 @@ Route::apiResource('fiscal-years', FiscalYearController::class);
 
 Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
 Route::apiResource('email-templates', EmailTemplateController::class);
+
+Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
+Route::get('reports/{category}/{report_key}/export', [ReportController::class, 'export']);
 
 /*
 |--------------------------------------------------------------------------
@@ -369,6 +383,11 @@ Route::patch('sales-returns/bulk', [SalesReturnController::class, 'bulkUpdate'])
 Route::delete('sales-returns/bulk', [SalesReturnController::class, 'bulkDestroy']);
 Route::apiResource('sales-returns', SalesReturnController::class);
 
+Route::post('credit-notes/bulk', [SalesReturnController::class, 'bulkStore']);
+Route::patch('credit-notes/bulk', [SalesReturnController::class, 'bulkUpdate']);
+Route::delete('credit-notes/bulk', [SalesReturnController::class, 'bulkDestroy']);
+Route::apiResource('credit-notes', SalesReturnController::class);
+
 Route::post('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkStore']);
 Route::patch('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkUpdate']);
 Route::delete('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkDestroy']);
@@ -399,6 +418,40 @@ Route::patch('variants/bulk', [VariantController::class, 'bulkUpdate']);
 Route::delete('variants/bulk', [VariantController::class, 'bulkDestroy']);
 Route::apiResource('variants', VariantController::class);
 Route::apiResource('product-variants', ProductVariantItemController::class);
+
+Route::get('pos/dashboard', [PosSaleController::class, 'dashboard']);
+Route::get('pos/products/search', [PosSaleController::class, 'productSearch']);
+
+Route::apiResource('pos-terminals', PosTerminalController::class);
+
+Route::get('pos-shifts/current', [PosShiftController::class, 'current']);
+Route::post('pos-shifts/open', [PosShiftController::class, 'open']);
+Route::post('pos-shifts/{id}/close', [PosShiftController::class, 'close']);
+Route::get('pos-shifts', [PosShiftController::class, 'index']);
+Route::get('pos-shifts/{id}', [PosShiftController::class, 'show']);
+
+Route::get('pos-sales', [PosSaleController::class, 'index']);
+Route::post('pos-sales', [PosSaleController::class, 'store']);
+Route::get('pos-sales/{id}', [PosSaleController::class, 'show']);
+Route::patch('pos-sales/{id}', [PosSaleController::class, 'update']);
+Route::post('pos-sales/{id}/hold', [PosSaleController::class, 'hold']);
+Route::post('pos-sales/{id}/complete', [PosSaleController::class, 'complete']);
+Route::post('pos-sales/{id}/cancel', [PosSaleController::class, 'cancel']);
+Route::post('pos-sales/{id}/void', [PosSaleController::class, 'void']);
+
+Route::get('pos-payments', [PosPaymentController::class, 'index']);
+Route::get('pos-payments/{pos_payment}', [PosPaymentController::class, 'show']);
+
+Route::get('pos-cash-movements', [PosCashMovementController::class, 'index']);
+Route::post('pos-cash-movements', [PosCashMovementController::class, 'store']);
+Route::get('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'show']);
+Route::patch('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'update']);
+
+Route::get('pos-returns', [PosReturnController::class, 'index']);
+Route::post('pos-returns', [PosReturnController::class, 'store']);
+Route::get('pos-returns/{id}', [PosReturnController::class, 'show']);
+Route::post('pos-returns/{id}/complete', [PosReturnController::class, 'complete']);
+Route::post('pos-returns/{id}/cancel', [PosReturnController::class, 'cancel']);
 
 /*
 |--------------------------------------------------------------------------

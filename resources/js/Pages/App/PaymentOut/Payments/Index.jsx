@@ -572,12 +572,14 @@ export default function SupplierPayments() {
                 defaultSortField="created_at"
                 defaultSortOrder="descend"
                 anchorFilters={[
-                    { key: 'draft',  label: 'Draft',  params: { status: 'draft' } },
-                    { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+                    { key: 'approved', label: 'Approved', params: { approved: true } },
+                    { key: 'draft',  label: 'Draft',  params: { approved: false } },
                     { key: 'all',    label: 'All',    params: {} },
                 ]}
-                defaultAnchorKey="all"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-out.supplier-payments.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd canEdit canDelete canView hasActions hasActionColumns

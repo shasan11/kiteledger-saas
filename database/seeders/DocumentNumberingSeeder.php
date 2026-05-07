@@ -17,6 +17,8 @@ class DocumentNumberingSeeder extends Seeder
             ['inventory_adjustment', 'ADJ'], ['loan_account', 'LOAN'], ['loan_topup', 'LTOP'],
             ['loan_charge', 'LCHG'], ['payroll', 'PAYRUN'], ['contact', 'CON'], ['lead', 'LEAD'],
             ['deal', 'DEAL'], ['product', 'PROD'], ['bank_account', 'BANK'],
+            ['pos_terminal', 'PT'], ['pos_shift', 'SHIFT'], ['pos_sale', 'POS'],
+            ['pos_payment', 'PPAY'], ['pos_cash_movement', 'PCM'], ['pos_return', 'PRET'],
         ];
 
         foreach ($items as [$type, $prefix]) {

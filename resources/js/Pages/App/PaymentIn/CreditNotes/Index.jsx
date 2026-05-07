@@ -844,16 +844,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Credit Note',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Credit Note',
                         params: { approved: true },
+                    },
+                    {
+                        key: 'draft',
+                        label: 'Draft',
+                        title: 'Credit Note',
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -862,8 +862,10 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
+                showViewColumn
+                viewPathBuilder={(record) => route('payment-in.credit-notes.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
                 canAdd

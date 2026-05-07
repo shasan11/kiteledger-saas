@@ -1,36 +1,31 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
+import GlobalSearchCommand from '@/Components/App/GlobalSearchCommand';
 import { Link } from '@inertiajs/react';
 import {
     BranchesOutlined,
     PlusOutlined,
     QuestionCircleOutlined,
-    RobotOutlined,
-    SearchOutlined,
     UserOutlined,
 } from '@ant-design/icons';
 import {
     Avatar,
     Button,
-    Drawer,
     Dropdown,
     Grid,
-    Input,
     Layout,
     Select,
     Space,
-    Typography,
     theme,
 } from 'antd';
-import { useState } from 'react';
 
 const { Header } = Layout;
-const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
 export default function AppNavbar({
     user,
     branch,
     setBranch,
+    branchContext,
     branchOptions = [],
     quickAddItems = [],
     profileItems = [],
@@ -38,8 +33,6 @@ export default function AppNavbar({
 }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
-
-    const [searchOpen, setSearchOpen] = useState(false);
 
     const isMobile = !screens.md;
     const isTablet = !screens.lg;
@@ -109,36 +102,29 @@ export default function AppNavbar({
                 </div>
 
                 <div className="app-navbar__center">
-                    {!isMobile && (
-                        <Input
-                            allowClear
-                            prefix={
-                                <SearchOutlined style={{ color: mutedText }} />
-                            }
-                            placeholder={
-                                isTablet
-                                    ? 'Search...'
-                                    : 'Search invoices, contacts, accounts...'
-                            }
-                            className="app-dark-search"
+                    {!isMobile ? (
+                        <GlobalSearchCommand
+                            branchContext={branchContext}
+                            className="global-search-command__trigger"
                             style={{
                                 width: '100%',
-                                maxWidth: isTablet ? 330 : 520,
+                                maxWidth: isTablet ? 360 : 540,
                                 height: controlHeight,
-                                borderRadius: radius,
-                                background: darkSoft,
-                                borderColor: darkBorder,
-                                color: darkText,
                             }}
                         />
-                    )}
-
-                    {isMobile && (
-                        <Button
-                            type="text"
-                            icon={<SearchOutlined />}
-                            onClick={() => setSearchOpen(true)}
+                    ) : (
+                        <GlobalSearchCommand
+                            branchContext={branchContext}
+                            compact
                             className="app-navbar__icon-btn"
+                            style={{
+                                width: controlHeight,
+                                height: controlHeight,
+                                color: darkText,
+                                background: darkSoft,
+                                border: `1px solid ${darkBorder}`,
+                                borderRadius: radius,
+                            }}
                         />
                     )}
 
@@ -190,27 +176,6 @@ export default function AppNavbar({
                     </Dropdown>
                 </div>
             </Header>
-
-            <Drawer
-                title="Search"
-                open={searchOpen}
-                onClose={() => setSearchOpen(false)}
-                placement="top"
-                height={280}
-            >
-                <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                    <Input
-                        autoFocus
-                        allowClear
-                        size="large"
-                        prefix={<SearchOutlined />}
-                        placeholder="Search invoices, contacts, accounts..."
-                    />
-
-                    <Button block size="large" icon={<RobotOutlined />} />
-                    <Button block size="large" icon={<QuestionCircleOutlined />}/>
-                </Space>
-            </Drawer>
 
             <style>
                 {`
@@ -332,30 +297,6 @@ export default function AppNavbar({
                         white-space: nowrap;
                         display: inline-block;
                         line-height: 1;
-                    }
-
-                    .app-dark-search.ant-input-affix-wrapper {
-                        padding-inline: 13px;
-                    }
-
-                    .app-dark-search input {
-                        color: #ffffff !important;
-                        background: transparent !important;
-                        font-weight: 500;
-                    }
-
-                    .app-dark-search input::placeholder {
-                        color: #9ca3af !important;
-                    }
-
-                    .app-dark-search .ant-input-clear-icon {
-                        color: #9ca3af !important;
-                    }
-
-                    .app-dark-search:hover,
-                    .app-dark-search:focus-within {
-                        border-color: ${token.colorPrimary} !important;
-                        background: ${darkSoftHover} !important;
                     }
 
                     .app-dark-select .ant-select-selector {

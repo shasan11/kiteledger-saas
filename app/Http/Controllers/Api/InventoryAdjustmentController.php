@@ -25,7 +25,7 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
     protected array $nested = ['items'=>[
         'relation'=>'inventoryAdjustmentLines','model'=>InventoryAdjustmentLine::class,'foreign_key'=>'inventory_adjustment_id','delete_key'=>'deleted_item_ids','required'=>true,'min'=>1,'replace_on_update'=>false,
-        'relations'=>['product'],'relation_details'=>['product'=>'product_id'],
+        'relations'=>['product','product.productUnit'],'relation_details'=>['product'=>'product_id'],
         'rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
         'update_rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
     ]];

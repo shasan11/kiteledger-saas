@@ -99,8 +99,8 @@ export default function DebitNotes({ auth }) {
   });
 
   const anchorFilters = [
-    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'approved', label: 'Approved', params: { approved: true } },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
     { key: 'all', label: 'All', params: {} },
   ];
 
@@ -118,6 +118,7 @@ export default function DebitNotes({ auth }) {
         transformPayload={transformPayload}
         form_ui="drawer"
         anchorFilters={anchorFilters}
+        defaultAnchorKey="approved"
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"
@@ -128,6 +129,8 @@ export default function DebitNotes({ auth }) {
         canAdd={true}
         canEdit={true}
         canDelete={true}
+        showViewColumn
+        viewPathBuilder={(record) => route('payment-out.debit-notes.show', record.id)}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

@@ -844,22 +844,16 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'draft',
-                        label: 'Draft',
-                        title: 'Bills Of Material',
-                        params: { approved: false },
-                    },
-                    {
                         key: 'approved',
                         label: 'Approved',
                         title: 'Bills Of Material',
                         params: { approved: true },
                     },
                     {
-                        key: 'active',
-                        label: 'Active',
+                        key: 'draft',
+                        label: 'Draft',
                         title: 'Bills Of Material',
-                        params: { active: true },
+                        params: { approved: false },
                     },
                     {
                         key: 'all',
@@ -868,13 +862,15 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="draft"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
                 showSearch
                 canAdd
                 canEdit
                 canDelete
                 canView
+                showViewColumn
+                viewPathBuilder={(record) => route('inventory.bill-of-materials.show', record.id)}
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
                         if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

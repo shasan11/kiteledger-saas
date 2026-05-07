@@ -22,6 +22,7 @@ import {
   Tag,
   Typography,
   message,
+  theme,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -39,6 +40,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { relationLabel, toNumber, useMoneyFormatter } from './currency';
 
 const { Text, Title } = Typography;
+const { useToken } = theme;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
@@ -76,24 +78,24 @@ const moduleFromTitle = (title) => {
   return 'generic';
 };
 
-const accountTypeColor = (type) =>
+const accountTypeColor = (type, token) =>
   ({
-    asset: '#1677ff',
-    liability: '#d46b08',
-    equity: '#722ed1',
-    income: '#389e0d',
-    expense: '#cf1322',
-  }[String(type || '').toLowerCase()] || '#4f46e5');
+    asset: token.colorPrimary,
+    liability: token.colorWarning,
+    equity: token.colorInfo,
+    income: token.colorSuccess,
+    expense: token.colorError,
+  }[String(type || '').toLowerCase()] || token.colorPrimary);
 
-const moduleColor = (module, record) =>
+const moduleColor = (module, record, token) =>
   ({
-    bank: '#1647a6',
-    cash: '#0f9f6e',
-    chart: accountTypeColor(record?.type),
-    journal: '#0f8f4f',
-    loan: '#b7791f',
-    generic: '#1647a6',
-  }[module]);
+    bank: token.colorPrimary,
+    cash: token.colorSuccess,
+    chart: accountTypeColor(record?.type, token),
+    journal: token.colorSuccess,
+    loan: token.colorWarning,
+    generic: token.colorPrimary,
+  }[module] || token.colorPrimary);
 
 const moduleIcon = (module) =>
   ({
@@ -110,18 +112,22 @@ function DetailsCard({ title, extra, children }) {
       className="accounting-show__card"
       title={title}
       extra={extra}
-      bordered={false}
+      bordered
     >
       {children}
     </Card>
   );
 }
 
-function Metric({ label, value, action, tone = '#1647a6' }) {
+function Metric({ label, value, action, tone = 'primary' }) {
   return (
-    <Card className="accounting-show__metric" bordered={false}>
+    <Card
+      className="accounting-show__metric"
+      bordered
+      style={{ '--metric-color': `var(--accounting-show-${tone})` }}
+    >
       <Text type="secondary">{label}</Text>
-      <strong style={{ color: tone }}>{value}</strong>
+      <strong>{value}</strong>
       {action}
     </Card>
   );
@@ -173,23 +179,23 @@ function RailInfoTable({ rows = [] }) {
 }
 
 function StatusTag({ record }) {
-  if (record?.approved === true) return <Tag color="green">Approved</Tag>;
-  if (record?.approved === false) return <Tag color="orange">Not Approved</Tag>;
+  if (record?.approved === true) return <Tag color="success">Approved</Tag>;
+  if (record?.approved === false) return <Tag color="warning">Not Approved</Tag>;
   if (record?.active === false) return <Tag>Inactive</Tag>;
 
   if (record?.status) {
     return (
-      <Tag color={record.status === 'posted' ? 'green' : 'blue'}>
+      <Tag color={record.status === 'posted' ? 'success' : 'processing'}>
         {humanize(record.status)}
       </Tag>
     );
   }
 
-  return <Tag color="blue">Active</Tag>;
+  return <Tag color="processing">Active</Tag>;
 }
 
-function SummaryRail({ module, record, recordTitle, subtitle, title, formatMoney }) {
-  const color = moduleColor(module, record);
+function SummaryRail({ module, record, recordTitle, subtitle, title, formatMoney, token }) {
+  const color = moduleColor(module, record, token);
 
   const amount =
     record?.amount ??
@@ -201,18 +207,12 @@ function SummaryRail({ module, record, recordTitle, subtitle, title, formatMoney
     0;
 
   return (
-    <aside className="accounting-show__rail">
+    <aside
+      className="accounting-show__rail"
+      style={{ '--module-color': color }}
+    >
       <div className="accounting-show__entity">
-        <div
-          className="accounting-show__icon"
-          style={{
-            color,
-            borderColor: `${color}33`,
-            background: `${color}0f`,
-          }}
-        >
-          {moduleIcon(module)}
-        </div>
+        <div className="accounting-show__icon">{moduleIcon(module)}</div>
 
         <div className="accounting-show__entity-text">
           <Title level={4}>{recordTitle}</Title>
@@ -455,7 +455,7 @@ function ChartOfAccountDetails({ record, formatMoney }) {
               dataIndex: 'approval_status',
               width: 140,
               render: (value) => (
-                <Tag color={value === 'Approved' ? 'green' : 'orange'}>
+                <Tag color={value === 'Approved' ? 'success' : 'warning'}>
                   {value || 'Not Approved'}
                 </Tag>
               ),
@@ -519,12 +519,12 @@ function BankAccountDetails({ record, formatMoney, currency }) {
         />
       </DetailsCard>
 
-      <Row gutter={[10, 10]}>
+      <Row gutter={[12, 12]}>
         <Col xs={24} md={8}>
           <Metric
             label="Balance in Bank Account"
             value={formatMoney(statementBalance)}
-            tone="#1647a6"
+            tone="primary"
             action={
               <Text type="secondary">
                 {currency?.code || 'Base'} · Last statement {formatDate(record?.last_statement_date)}
@@ -537,7 +537,7 @@ function BankAccountDetails({ record, formatMoney, currency }) {
           <Metric
             label="Balance in Software"
             value={formatMoney(softwareBalance)}
-            tone="#0f8f4f"
+            tone="success"
             action={
               <Text type="secondary">
                 Base currency · Last transaction {formatDate(record?.last_software_transaction_date)}
@@ -550,7 +550,7 @@ function BankAccountDetails({ record, formatMoney, currency }) {
           <Metric
             label={reconciled ? 'Reconciled' : 'Reconciliation Needed'}
             value={`Difference ${formatMoney(difference)}`}
-            tone={reconciled ? '#0f8f4f' : '#b7791f'}
+            tone={reconciled ? 'success' : 'warning'}
             action={
               !reconciled ? (
                 <Button
@@ -770,7 +770,7 @@ function CashTransferDetails({ record, formatMoney }) {
 
         <Table
           size="small"
-          style={{ marginTop: 10 }}
+          className="accounting-show__spaced-table"
           pagination={false}
           rowKey={(row, index) => row?.id || index}
           dataSource={lines}
@@ -837,7 +837,7 @@ function JournalVoucherDetails({ record, formatMoney }) {
 
       <Table
         size="small"
-        style={{ marginTop: 10 }}
+        className="accounting-show__spaced-table"
         pagination={false}
         rowKey={(row, index) => row?.id || index}
         dataSource={lines}
@@ -918,7 +918,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
     [];
 
   const approvalTag = (approved) => (
-    <Tag color={approved ? 'green' : 'orange'}>
+    <Tag color={approved ? 'success' : 'warning'}>
       {approved ? 'Approved' : 'Not Approved'}
     </Tag>
   );
@@ -1083,7 +1083,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
 
   return (
     <>
-      <Row gutter={[10, 10]}>
+      <Row gutter={[12, 12]}>
         <Col xs={24} md={6}>
           <Metric label="Opening Balance" value={formatMoney(record?.opening_balance)} />
         </Col>
@@ -1092,7 +1092,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
           <Metric
             label="Current Balance"
             value={formatMoney(record?.current_balance)}
-            tone="#0f8f4f"
+            tone="success"
           />
         </Col>
 
@@ -1100,7 +1100,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
           <Metric
             label="Interest Rate"
             value={`${toNumber(record?.interest_rate_per_annum).toLocaleString()}%`}
-            tone="#b7791f"
+            tone="warning"
           />
         </Col>
 
@@ -1108,7 +1108,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
           <Metric
             label="Duration"
             value={`${toNumber(record?.duration_in_month).toLocaleString()} months`}
-            tone="#4f46e5"
+            tone="info"
           />
         </Col>
       </Row>
@@ -1377,6 +1377,7 @@ export default function AccountingRecordShow({
   titleField = 'name',
   subtitleField,
 }) {
+  const { token } = useToken();
   const { currency, formatMoney } = useMoneyFormatter();
 
   const [record, setRecord] = useState(null);
@@ -1387,6 +1388,37 @@ export default function AccountingRecordShow({
 
   const module = moduleFromTitle(title);
   const baseEndpoint = endpoint.replace(/\/+$/, '');
+
+  const uiVars = useMemo(
+    () => ({
+      '--accounting-show-bg': token.colorBgLayout,
+      '--accounting-show-surface': token.colorBgContainer,
+      '--accounting-show-surface-soft': token.colorFillQuaternary,
+      '--accounting-show-surface-muted': token.colorFillTertiary,
+      '--accounting-show-border': token.colorBorderSecondary,
+      '--accounting-show-border-strong': token.colorBorder,
+      '--accounting-show-text': token.colorText,
+      '--accounting-show-text-secondary': token.colorTextSecondary,
+      '--accounting-show-text-tertiary': token.colorTextTertiary,
+      '--accounting-show-primary': token.colorPrimary,
+      '--accounting-show-success': token.colorSuccess,
+      '--accounting-show-warning': token.colorWarning,
+      '--accounting-show-error': token.colorError,
+      '--accounting-show-info': token.colorInfo,
+      '--accounting-show-radius': `${token.borderRadius}px`,
+      '--accounting-show-radius-lg': `${token.borderRadiusLG}px`,
+      '--accounting-show-padding-xxs': `${token.paddingXXS}px`,
+      '--accounting-show-padding-xs': `${token.paddingXS}px`,
+      '--accounting-show-padding-sm': `${token.paddingSM}px`,
+      '--accounting-show-padding': `${token.padding}px`,
+      '--accounting-show-font-size-sm': `${token.fontSizeSM}px`,
+      '--accounting-show-font-size': `${token.fontSize}px`,
+      '--accounting-show-font-size-lg': `${token.fontSizeLG}px`,
+      '--accounting-show-shadow': token.boxShadowTertiary || 'none',
+      '--accounting-show-control-height-sm': `${token.controlHeightSM}px`,
+    }),
+    [token]
+  );
 
   const loadRecord = async () => {
     setLoading(true);
@@ -1491,45 +1523,47 @@ export default function AccountingRecordShow({
       <style>{`
         .accounting-show {
           min-height: calc(100vh - 64px);
-          background: #edf2f8;
+          background: var(--accounting-show-bg);
+          color: var(--accounting-show-text);
         }
 
         .accounting-show__bar {
-          height: 44px;
+          min-height: 44px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 12px;
-          background: #fff;
-          border-bottom: 1px solid #d9e1ec;
+          gap: var(--accounting-show-padding-sm);
+          padding: 0 var(--accounting-show-padding-sm);
+          background: var(--accounting-show-surface);
+          border-bottom: 1px solid var(--accounting-show-border);
         }
 
         .accounting-show__crumb {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--accounting-show-padding-xs);
           min-width: 0;
         }
 
         .accounting-show__body {
           display: grid;
-          grid-template-columns: 220px minmax(0, 1fr);
-          gap: 8px;
+          grid-template-columns: 232px minmax(0, 1fr);
+          gap: var(--accounting-show-padding-xs);
         }
 
         .accounting-show__rail {
-          background: #fff;
-          border-right: 1px solid #d9e1ec;
+          background: var(--accounting-show-surface);
+          border-right: 1px solid var(--accounting-show-border);
           min-height: calc(100vh - 108px);
-          padding: 12px;
+          padding: var(--accounting-show-padding-sm);
         }
 
         .accounting-show__entity {
           display: flex;
           align-items: flex-start;
-          gap: 8px;
-          padding-bottom: 10px;
-          border-bottom: 1px solid #e3e9f2;
+          gap: var(--accounting-show-padding-xs);
+          padding-bottom: var(--accounting-show-padding-sm);
+          border-bottom: 1px solid var(--accounting-show-border);
         }
 
         .accounting-show__entity-text {
@@ -1538,134 +1572,141 @@ export default function AccountingRecordShow({
 
         .accounting-show__entity-text h4 {
           margin: 0 !important;
-          font-size: 14px !important;
+          font-size: var(--accounting-show-font-size) !important;
           line-height: 1.25 !important;
+          color: var(--accounting-show-text) !important;
           word-break: break-word;
         }
 
         .accounting-show__entity-text .ant-typography {
-          font-size: 12px;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
         .accounting-show__icon {
-          width: 32px;
-          height: 32px;
-          border: 1px solid;
-          border-radius: 6px;
+          width: 34px;
+          height: 34px;
+          border: 1px solid color-mix(in srgb, var(--module-color) 32%, var(--accounting-show-border));
+          border-radius: var(--accounting-show-radius);
           display: grid;
           place-items: center;
-          font-size: 15px;
+          font-size: var(--accounting-show-font-size-lg);
           flex: none;
+          color: var(--module-color);
+          background: color-mix(in srgb, var(--module-color) 10%, var(--accounting-show-surface));
         }
 
         .accounting-show__amount {
-          padding: 10px 0;
-          border-bottom: 1px solid #e3e9f2;
+          padding: var(--accounting-show-padding-sm) 0;
+          border-bottom: 1px solid var(--accounting-show-border);
           display: flex;
           flex-direction: column;
-          gap: 3px;
+          gap: var(--accounting-show-padding-xxs);
         }
 
         .accounting-show__amount .ant-typography {
-          font-size: 12px;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
         .accounting-show__amount strong {
-          font-size: 15px;
-          color: #10233f;
+          font-size: var(--accounting-show-font-size-lg);
+          color: var(--accounting-show-text);
           word-break: break-word;
         }
 
         .accounting-show__rail-table {
           width: 100%;
-          margin-top: 10px;
+          margin-top: var(--accounting-show-padding-sm);
           border-collapse: collapse;
           table-layout: fixed;
-          font-size: 12px;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
         .accounting-show__rail-table th {
-          width: 70px;
-          padding: 6px;
-          background: #f6f8fb;
-          border: 1px solid #e5ebf3;
-          color: #667085;
+          width: 74px;
+          padding: var(--accounting-show-padding-xs);
+          background: var(--accounting-show-surface-soft);
+          border: 1px solid var(--accounting-show-border);
+          color: var(--accounting-show-text-secondary);
           font-weight: 600;
           text-align: left;
           vertical-align: top;
         }
 
         .accounting-show__rail-table td {
-          padding: 6px;
-          border: 1px solid #e5ebf3;
-          color: #10233f;
+          padding: var(--accounting-show-padding-xs);
+          border: 1px solid var(--accounting-show-border);
+          color: var(--accounting-show-text);
           vertical-align: top;
           word-break: break-word;
         }
 
         .accounting-show__main {
-          padding: 8px;
+          padding: var(--accounting-show-padding-xs);
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: var(--accounting-show-padding-sm);
           min-width: 0;
           overflow: hidden;
         }
 
         .accounting-show__card.ant-card,
         .accounting-show__metric.ant-card {
-          border-radius: 5px;
+          border-radius: var(--accounting-show-radius);
+          border-color: var(--accounting-show-border);
           box-shadow: none;
+          background: var(--accounting-show-surface);
         }
 
         .accounting-show__card .ant-card-head {
-          min-height: 38px;
-          padding: 0 10px;
-          border-bottom: 1px solid #e5ebf3;
+          min-height: 40px;
+          padding: 0 var(--accounting-show-padding-sm);
+          border-bottom: 1px solid var(--accounting-show-border);
+          background: var(--accounting-show-surface);
         }
 
         .accounting-show__card .ant-card-head-title {
-          font-size: 13px;
+          font-size: var(--accounting-show-font-size-sm);
           font-weight: 700;
-          color: #10233f;
+          color: var(--accounting-show-text);
         }
 
         .accounting-show__card .ant-card-extra {
-          font-size: 12px;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
         .accounting-show__card .ant-card-body {
-          padding: 10px;
+          padding: var(--accounting-show-padding-sm);
           min-width: 0;
         }
 
         .accounting-show__metric .ant-card-body {
-          min-height: 84px;
-          padding: 10px;
+          min-height: 86px;
+          padding: var(--accounting-show-padding-sm);
           display: flex;
           flex-direction: column;
-          gap: 5px;
+          gap: var(--accounting-show-padding-xxs);
         }
 
         .accounting-show__metric strong {
-          font-size: 16px;
+          font-size: var(--accounting-show-font-size-lg);
           font-weight: 650;
+          color: var(--metric-color);
         }
 
         .accounting-show__info-table {
           width: 100%;
           border-collapse: collapse;
           table-layout: fixed;
-          font-size: 12px;
-          border: 1px solid #e5ebf3;
+          font-size: var(--accounting-show-font-size-sm);
+          border: 1px solid var(--accounting-show-border);
         }
 
         .accounting-show__info-table th {
           width: 15%;
-          padding: 7px 8px;
-          background: #f6f8fb;
-          border: 1px solid #e5ebf3;
-          color: #667085;
+          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm);
+          background: var(--accounting-show-surface-soft);
+          border: 1px solid var(--accounting-show-border);
+          color: var(--accounting-show-text-secondary);
           font-weight: 600;
           text-align: left;
           vertical-align: top;
@@ -1674,55 +1715,71 @@ export default function AccountingRecordShow({
 
         .accounting-show__info-table td {
           width: 35%;
-          padding: 7px 8px;
-          background: #fff;
-          border: 1px solid #e5ebf3;
-          color: #10233f;
+          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm);
+          background: var(--accounting-show-surface);
+          border: 1px solid var(--accounting-show-border);
+          color: var(--accounting-show-text);
           vertical-align: top;
           word-break: break-word;
         }
 
         .accounting-show .ant-table {
-          font-size: 12px;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
-        .accounting-show .ant-table-thead > tr > th {
-          padding: 7px 8px !important;
-          background: #e9eff7 !important;
+        .accounting-show .ant-table-wrapper .ant-table-thead > tr > th {
+          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
+          background: var(--accounting-show-surface-muted) !important;
           font-weight: 700;
-          color: #344054;
+          color: var(--accounting-show-text);
           white-space: nowrap;
+          border-color: var(--accounting-show-border) !important;
         }
 
-        .accounting-show .ant-table-tbody > tr > td {
-          padding: 6px 8px !important;
+        .accounting-show .ant-table-wrapper .ant-table-tbody > tr > td {
+          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
           vertical-align: middle;
+          border-color: var(--accounting-show-border) !important;
         }
 
-        .accounting-show .ant-table-summary > tr > td {
-          padding: 7px 8px !important;
-          background: #f3f6fa;
+        .accounting-show .ant-table-wrapper .ant-table-summary > tr > td {
+          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
+          background: var(--accounting-show-surface-soft);
           font-weight: 700;
+          border-color: var(--accounting-show-border) !important;
+        }
+
+        .accounting-show .ant-table-wrapper .ant-table-container {
+          border-color: var(--accounting-show-border);
         }
 
         .accounting-show .ant-tag {
           margin-inline-end: 0;
-          font-size: 11px;
+          font-size: var(--accounting-show-font-size-sm);
           line-height: 18px;
-          padding-inline: 6px;
+          padding-inline: var(--accounting-show-padding-xs);
+          border-radius: var(--accounting-show-radius);
         }
 
         .accounting-show .ant-tabs-nav {
-          margin-bottom: 8px !important;
+          margin-bottom: var(--accounting-show-padding-xs) !important;
         }
 
         .accounting-show .ant-tabs-tab {
-          padding: 6px 0 !important;
-          font-size: 12px;
+          padding: var(--accounting-show-padding-xs) 0 !important;
+          font-size: var(--accounting-show-font-size-sm);
         }
 
         .accounting-show__filters {
-          margin-bottom: 10px;
+          margin-bottom: var(--accounting-show-padding-sm);
+        }
+
+        .accounting-show__spaced-table {
+          margin-top: var(--accounting-show-padding-sm);
+        }
+
+        .accounting-show__state {
+          padding: var(--accounting-show-padding);
         }
 
         @media (max-width: 992px) {
@@ -1733,7 +1790,7 @@ export default function AccountingRecordShow({
           .accounting-show__rail {
             min-height: auto;
             border-right: 0;
-            border-bottom: 1px solid #d9e1ec;
+            border-bottom: 1px solid var(--accounting-show-border);
           }
 
           .accounting-show__info-table {
@@ -1746,7 +1803,7 @@ export default function AccountingRecordShow({
         }
       `}</style>
 
-      <div className="accounting-show">
+      <div className="accounting-show" style={uiVars}>
         <div className="accounting-show__bar">
           <div className="accounting-show__crumb">
             <Link href={route(backRoute)}>
@@ -1818,11 +1875,11 @@ export default function AccountingRecordShow({
         </div>
 
         {loading ? (
-          <div style={{ padding: 18 }}>
+          <div className="accounting-show__state">
             <Skeleton active paragraph={{ rows: 8 }} />
           </div>
         ) : !record ? (
-          <div style={{ padding: 18 }}>
+          <div className="accounting-show__state">
             <Empty description={`${title} not found`} />
           </div>
         ) : (
@@ -1834,6 +1891,7 @@ export default function AccountingRecordShow({
               subtitle={subtitle}
               title={title}
               formatMoney={formatMoney}
+              token={token}
             />
 
             <main className="accounting-show__main">

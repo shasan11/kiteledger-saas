@@ -34,10 +34,10 @@ class DebitNoteController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['productVariant', 'taxRate'],
-            'relation_details' => ['productVariant' => 'product_variant_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['product', 'taxRate'],
+            'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
@@ -46,7 +46,7 @@ class DebitNoteController extends BaseCrudApiController
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'product_variant_id' => ['nullable', 'uuid', 'exists:product_variants,id'],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
