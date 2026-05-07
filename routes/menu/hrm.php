@@ -34,6 +34,7 @@ Route::prefix('hrm')->name('hrm.')->group(function () {
 
     // ── Projects ──────────────────────────────────────────────────────────────
     Route::get('/projects',              fn () => Inertia::render('App/Hrm/Projects/Index'))->name('projects.index');
+    Route::get('/projects/{id}',         fn ($id) => Inertia::render('App/Hrm/Projects/Show', ['id' => $id]))->name('projects.show');
     Route::get('/milestones',            fn () => Inertia::render('App/Hrm/Milestones/Index'))->name('milestones.index');
     Route::get('/task-statuses',         fn () => Inertia::render('App/Hrm/TaskStatuses/Index'))->name('task-statuses.index');
     Route::get('/tasks',                 fn () => Inertia::render('App/Hrm/Tasks/Index'))->name('tasks.index');

@@ -5553,8 +5553,8 @@ export default function ReusableCrud({
 
                         await axios({
                           method: String(updateMethod || "patch").toLowerCase(),
-                          url: apiUrl,
-                          data: payload,
+                          url: `${String(apiUrl).replace(/\/+$/, "")}/bulk`,
+                          data: { records: payload },
                           headers: {
                             ...authHeaders,
                             "Content-Type": "application/json",

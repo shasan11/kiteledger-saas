@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Account;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
+use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -422,5 +423,43 @@ class ChartOfAccountController extends BaseCrudApiController
 
             return $node;
         }, $nodes);
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $lines = JournalVoucherLine::query()
+            ->with(['journalVoucher.branch'])
+            ->where('chart_of_account_id', $record->getKey())
+            ->whereHas('journalVoucher')
+            ->latest('created_at')
+            ->limit(25)
+            ->get();
+
+        $data['amount'] = $lines->sum(fn ($line) => (float) $line->debit - (float) $line->credit);
+        $data['balance'] = $data['amount'];
+        $data['recent_transactions'] = $lines->map(function (JournalVoucherLine $line) {
+            $voucher = $line->journalVoucher;
+            $debit = (float) $line->debit;
+            $credit = (float) $line->credit;
+
+            return [
+                'id' => $line->getKey(),
+                'journal_voucher_id' => $voucher?->getKey(),
+                'voucher_no' => $voucher?->voucher_no,
+                'voucher_date' => optional($voucher?->voucher_date)->toDateString(),
+                'description' => $line->description ?: $voucher?->narration,
+                'debit' => $debit,
+                'credit' => $credit,
+                'net_movement' => round($debit - $credit, 2),
+                'status' => $voucher?->status,
+                'approved' => (bool) ($voucher?->approved ?? false),
+                'approval_status' => ($voucher?->approved ?? false) ? 'Approved' : 'Not Approved',
+                'branch' => $this->serializeRelated($voucher?->branch),
+            ];
+        })->values()->all();
+
+        unset($data['account'], $data['account_id_detail'], $data['account_name']);
+
+        return $data;
     }
 }

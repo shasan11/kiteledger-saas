@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Tooltip } from 'antd';
 import { ProjectOutlined } from '@ant-design/icons';
@@ -60,6 +60,13 @@ export default function Projects(props) {
       <ReusableCrud icon={<ProjectOutlined />} title="Project" apiUrl={api('/api/hrm/projects')}
         columns={columns} fields={fields} filters={filters} validationSchema={validationSchema}
         crudInitialValues={initialValues} transformPayload={transformPayload}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('hrm.projects.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         form_ui="drawer" drawerWidth={780}
         searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
         activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />

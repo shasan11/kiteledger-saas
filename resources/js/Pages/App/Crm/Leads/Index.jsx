@@ -113,18 +113,12 @@ export default function Leads(props) {
           col: 12,
           placeholder: 'Enter lead name',
         },
-        {
-          name: 'lead_no',
-          label: 'Lead No',
-          type: 'text',
-          col: 6,
-          placeholder: 'Auto or manual',
-        },
+       
         {
           name: 'company_name',
           label: 'Company Name',
           type: 'text',
-          col: 6,
+          col: 12,
           placeholder: 'Company name',
         },
         {
@@ -141,13 +135,7 @@ export default function Leads(props) {
           col: 8,
           placeholder: 'Phone number',
         },
-        {
-          name: 'mobile',
-          label: 'Mobile',
-          type: 'text',
-          col: 8,
-          placeholder: 'Mobile number',
-        },
+         
         {
           name: 'website',
           label: 'Website',
@@ -155,27 +143,7 @@ export default function Leads(props) {
           col: 8,
           placeholder: 'https://example.com',
         },
-        {
-          name: 'city',
-          label: 'City',
-          type: 'text',
-          col: 8,
-          placeholder: 'City',
-        },
-        {
-          name: 'state',
-          label: 'State',
-          type: 'text',
-          col: 8,
-          placeholder: 'State',
-        },
-        {
-          name: 'country',
-          label: 'Country',
-          type: 'text',
-          col: 8,
-          placeholder: 'Country',
-        },
+         
       ],
     },
     {
@@ -191,13 +159,7 @@ export default function Leads(props) {
           col: 8,
           placeholder: 'e.g. Website, Referral',
         },
-        {
-          name: 'industry',
-          label: 'Industry',
-          type: 'text',
-          col: 8,
-          placeholder: 'e.g. IT, Manufacturing',
-        },
+       
         {
           name: 'expected_value',
           label: 'Expected Value',
@@ -246,13 +208,7 @@ export default function Leads(props) {
           placeholder: 'Select priority',
           options: priorityOptions,
         },
-        {
-          name: 'next_follow_up_date',
-          label: 'Next Follow Up',
-          type: 'datePicker',
-          col: 8,
-          placeholder: 'Select date',
-        },
+         
       ],
     },
     {
@@ -364,8 +320,8 @@ export default function Leads(props) {
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={1100}
+        form_ui="modal"
+        drawerWidth={1200}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

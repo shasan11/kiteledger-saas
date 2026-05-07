@@ -51,6 +51,7 @@ class BankAccountController extends BaseCrudApiController
     ];
 
     protected array $filterable = [
+        'branch_id',
         'type',
         'currency_id',
     ];
@@ -89,6 +90,7 @@ class BankAccountController extends BaseCrudApiController
         'account_number' => ['nullable', 'string', 'max:80'],
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
+        'opening_balance' => ['nullable', 'numeric'],
 
         'active' => ['nullable', 'boolean'],
     ];
@@ -113,8 +115,29 @@ class BankAccountController extends BaseCrudApiController
             'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
 
             'active' => ['sometimes', 'nullable', 'boolean'],
         ];
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $statementBalance = (float) ($record->opening_balance ?? 0);
+        $softwareBalance = (float) optional($record->account)->balance ?: $statementBalance;
+        $difference = round($statementBalance - $softwareBalance, 2);
+
+        $data['statement_balance'] = $statementBalance;
+        $data['software_ledger_balance'] = $softwareBalance;
+        $data['current_balance'] = $softwareBalance;
+        $data['reconciliation_difference'] = abs($difference);
+        $data['reconciliation_status'] = abs($difference) < 0.01 ? 'reconciled' : 'needs_review';
+        $data['last_statement_date'] = null;
+        $data['last_software_transaction_date'] = null;
+        $data['balance_history'] = [];
+        $data['deposit_withdrawal_summary'] = [];
+        $data['bank_transactions'] = [];
+
+        return $data;
     }
 }

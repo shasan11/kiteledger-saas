@@ -463,6 +463,14 @@ class CashTransferController extends BaseCrudApiController
         return $row;
     }
 
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $data['items'] = $data['items'] ?? $data['cash_transfer_lines'] ?? [];
+        $data['approval_status'] = ($record->approved ?? false) ? 'Approved' : 'Not Approved';
+
+        return $data;
+    }
+
     protected function afterSave(
         Model $record,
         array $parentData,

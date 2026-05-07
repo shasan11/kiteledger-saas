@@ -33,6 +33,7 @@ export default function Quotations(props) {
     { name: 'quotation_date', label: 'Quotation Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     { name: 'expiry_date', label: 'Expiry Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     { name: 'status', label: 'Status', type: 'select', col: 6, options: [{ value: 'draft', label: 'Draft' }, { value: 'sent', label: 'Sent' }, { value: 'accepted', label: 'Accepted' }, { value: 'rejected', label: 'Rejected' }, { value: 'cancelled', label: 'Cancelled' }] },
+    { name: 'approved', label: 'Approved', type: 'switch', col: 6 },
     { name: 'contact_id', label: 'Contact', type: 'fkSelect', required: true, col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'credit_term_id', label: 'Credit Term', type: 'fkSelect', col: 8, fkUrl: api('/api/credit-terms/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.code ? `${r.code} - ${r.name}` : r?.name || '' },
@@ -60,7 +61,7 @@ export default function Quotations(props) {
     items: Yup.array().of(Yup.object().shape({ qty: Yup.number().min(0).required(), unit_price: Yup.number().min(0).required() })).min(1, 'At least one line required'),
   });
 
-  const crudInitialValues = { quotation_no: '', quotation_date: dayjs().format('YYYY-MM-DD'), expiry_date: null, status: 'draft', contact_id: null, credit_term_id: null, currency_id: null, exchange_rate: 1, notes: '', items: [{ ...emptyLine }], deleted_item_ids: [] };
+  const crudInitialValues = { quotation_no: '', quotation_date: dayjs().format('YYYY-MM-DD'), expiry_date: null, status: 'draft', approved: false, contact_id: null, credit_term_id: null, currency_id: null, exchange_rate: 1, notes: '', items: [{ ...emptyLine }], deleted_item_ids: [] };
 
   const transformPayload = (values) => ({
     ...values,
@@ -88,7 +89,7 @@ export default function Quotations(props) {
           style: { cursor: 'pointer' },
         })}
         showSearch={true} canAdd={true} canEdit={true} canDelete={true} hasActions={true} hasActionColumns={true}
-        anchorFilters={[{ key: 'draft', label: 'Draft', params: { status: 'draft' } }, { key: 'sent', label: 'Sent', params: { status: 'sent' } }, { key: 'accepted', label: 'Accepted', params: { status: 'accepted' } }, { key: 'all', label: 'All', params: {} }]}
+        anchorFilters={[{ key: 'draft', label: 'Draft', params: { approved: false } }, { key: 'approved', label: 'Approved', params: { approved: true } }, { key: 'all', label: 'All', params: {} }]}
         defaultAnchorKey="draft" anchorSyncWithHash
       />
     </AuthenticatedLayout>

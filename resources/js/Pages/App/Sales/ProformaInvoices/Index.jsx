@@ -43,6 +43,7 @@ export default function ProformaInvoices({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
+    { name: 'approved', label: 'Approved', type: 'switch', col: 6 },
     { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'reference', label: 'Reference', type: 'text', col: 8 },
@@ -74,6 +75,7 @@ export default function ProformaInvoices({ auth }) {
     proforma_no: '',
     proforma_date: dayjs().format('YYYY-MM-DD'),
     status: 'draft',
+    approved: false,
     contact_id: null,
     currency_id: null,
     reference: '',
@@ -98,8 +100,8 @@ export default function ProformaInvoices({ auth }) {
   });
 
   const anchorFilters = [
-    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
-    { key: 'issued', label: 'Issued', params: { status: 'issued' } },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
+    { key: 'approved', label: 'Approved', params: { approved: true } },
     { key: 'all', label: 'All', params: {} },
   ];
 

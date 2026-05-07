@@ -24,7 +24,12 @@ class ProjectController extends BaseCrudApiController
         'projectManager',
         'milestones',
         'taskStatuses',
+        'tasks.milestone',
+        'tasks.priority',
+        'tasks.taskStatus',
+        'tasks.assignedTasks.user',
         'projectTeams',
+        'projectTeams.projectTeamMembers.user',
     ];
 
     protected array $relationDetails = [

@@ -44,6 +44,7 @@ export default function Expenses({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
+    { name: 'approved', label: 'Approved', type: 'switch', col: 6 },
     { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'reference', label: 'Reference', type: 'text', col: 8 },
@@ -75,6 +76,7 @@ export default function Expenses({ auth }) {
     expense_date: dayjs().format('YYYY-MM-DD'),
     due_date: null,
     status: 'draft',
+    approved: false,
     contact_id: null,
     currency_id: null,
     reference: '',
@@ -102,9 +104,9 @@ export default function Expenses({ auth }) {
   });
 
   const anchorFilters = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Posted', value: 'posted' },
-    { label: 'All', value: 'all' },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
+    { key: 'approved', label: 'Approved', params: { approved: true } },
+    { key: 'all', label: 'All', params: {} },
   ];
 
   return (

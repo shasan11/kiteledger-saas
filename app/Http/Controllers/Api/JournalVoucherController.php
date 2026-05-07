@@ -24,6 +24,8 @@ class JournalVoucherController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'currency',
+        'items',
+        'items.chartOfAccount',
     ];
 
     protected array $relationDetails = [
@@ -275,6 +277,22 @@ class JournalVoucherController extends BaseCrudApiController
         }
 
         return $record;
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $lines = collect($record->items ?? $record->journalVoucherLines ?? []);
+        $debit = round((float) $lines->sum('debit'), 2);
+        $credit = round((float) $lines->sum('credit'), 2);
+
+        $data['items'] = $data['items'] ?? $data['journal_voucher_lines'] ?? [];
+        $data['lines'] = $data['items'];
+        $data['total_debit'] = $debit;
+        $data['total_credit'] = $credit;
+        $data['difference'] = round(abs($debit - $credit), 2);
+        $data['approval_status'] = ($record->approved ?? false) ? 'Approved' : 'Not Approved';
+
+        return $data;
     }
 
     protected function calculateLineTotals(array $items): array

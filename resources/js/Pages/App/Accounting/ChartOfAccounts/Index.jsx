@@ -135,13 +135,13 @@ const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
                             color: '#0f172a',
                         }}
                     >
-                        Chart Of Accounts
+                        Chart of Accounts
                     </Title>
 
                     <Text style={{ color: '#64748b', fontSize: 13 }}>
                         {isTree
-                            ? 'Tree view shows the account hierarchy with parent and child accounts.'
-                            : 'List view shows accounts in a flat table for quick search, edit and sorting.'}
+                            ? 'Tree view'
+                            : 'Default list view'}
                     </Text>
                 </div>
             </div>
@@ -155,7 +155,7 @@ const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
                         fontWeight: 600,
                     }}
                 >
-                    {activeAnchor === 'system' ? 'System Generated' : 'Non System Generated'}
+                    {activeAnchor === 'system' ? 'Groups' : 'Accounts'}
                 </Tag>
 
                 <Radio.Group
@@ -165,11 +165,11 @@ const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
                     buttonStyle="solid"
                 >
                     <Radio.Button value="list">
-                        <BarsOutlined /> List
+                        <BarsOutlined /> Default List View
                     </Radio.Button>
 
                     <Radio.Button value="tree">
-                        <AppstoreOutlined /> Tree
+                        <AppstoreOutlined /> Tree View
                     </Radio.Button>
                 </Radio.Group>
             </Space>
@@ -422,7 +422,7 @@ export default function ChartOfAccounts(props) {
 
     return (
         <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="Chart Of Accounts" />
+            <Head title="Chart of Accounts" />
 
             <div
                 style={{
@@ -441,7 +441,7 @@ export default function ChartOfAccounts(props) {
                     <ReusableCrud
                         key={`chart-of-accounts-${viewMode}-${activeAnchor}`}
                         icon={isTreeView ? <NodeIndexOutlined /> : <AppstoreOutlined />}
-                        title={isTreeView ? 'Chart Of Accounts Tree' : 'Chart Of Accounts'}
+                        title="Chart of Accounts"
                         apiUrl={api('/api/chart-of-accounts/')}
                         columns={columns}
                         fields={fields}
@@ -477,20 +477,16 @@ export default function ChartOfAccounts(props) {
                         anchorFilters={[
                             {
                                 key: 'non_system',
-                                label: 'Non System Generated',
-                                title: isTreeView
-                                    ? 'Chart Of Accounts Tree'
-                                    : 'Chart Of Accounts',
+                                label: 'Accounts',
+                                title: 'Chart of Accounts',
                                 params: {
                                     is_system_generated: false,
                                 },
                             },
                             {
                                 key: 'system',
-                                label: 'System Generated',
-                                title: isTreeView
-                                    ? 'System Chart Tree'
-                                    : 'System Chart Of Accounts',
+                                label: 'Groups',
+                                title: 'Chart of Accounts',
                                 params: {
                                     is_system_generated: true,
                                 },

@@ -39,18 +39,12 @@ const capitalizeFirst = (value) => {
 
 export default function Contacts(props) {
   const columns = [
-    {
-      title: 'Code',
-      dataIndex: 'code',
-      key: 'code',
-      sorter: true,
-      width: 100,
-      render: (val) => val || '-',
-    },
+   
     {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      width:200,
       sorter: true,
       render: (val, record) => (
         <Space size={10}>
@@ -73,6 +67,7 @@ export default function Contacts(props) {
       dataIndex: 'contact_type',
       key: 'contact_type',
       sorter: true,
+      width:100,
       render: (val) => {
         const colors = { customer: 'green', supplier: 'orange', lead: 'blue' };
         return val ? (
@@ -81,22 +76,24 @@ export default function Contacts(props) {
       },
     },
     {
-      title: 'Tax Reg. No',
-      dataIndex: 'tax_registration_no',
-      key: 'tax_registration_no',
+      title: 'Phone',
+      dataIndex: 'phone',
+      key: 'phone',
+      width:100,
       render: (val) => val || '-',
     },
     {
-      title: 'Tax Reg. Type',
-      dataIndex: 'tax_registration_type',
-      key: 'tax_registration_type',
-      render: (val) => val ? capitalizeFirst(val) : '-',
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      width:150,
+      render: (val) => val || '-',
     },
     {
-      title: 'Address',
-      dataIndex: 'address',
-      key: 'address',
-      ellipsis: true,
+      title: 'Group',
+      dataIndex: 'contact_group_name',
+      key: 'contact_group_name',
+      width:100,
       render: (val) => val || '-',
     },
   ];

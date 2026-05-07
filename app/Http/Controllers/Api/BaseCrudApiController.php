@@ -473,7 +473,7 @@ abstract class BaseCrudApiController extends Controller
     protected function rulesForStore(Request $request): array
     {
         return $this->withNestedRules(
-            $this->storeRules($request),
+            $this->withApprovalRules($this->storeRules($request)),
             false
         );
     }
@@ -481,7 +481,7 @@ abstract class BaseCrudApiController extends Controller
     protected function rulesForUpdate(Request $request, Model $record): array
     {
         return $this->withNestedRules(
-            $this->updateRules($request, $record),
+            $this->withApprovalRules($this->updateRules($request, $record), true),
             true
         );
     }
@@ -1201,6 +1201,7 @@ abstract class BaseCrudApiController extends Controller
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $parentData = $this->assignDocumentNumberIfMissing($parentData);
+        $parentData = $this->normalizeApprovalData($parentData);
 
         foreach ($this->nested as $field => $config) {
             if (
@@ -1246,6 +1247,57 @@ abstract class BaseCrudApiController extends Controller
         array $nestedData,
         Model $record
     ): array {
+        return $this->normalizeApprovalData($parentData, $record);
+    }
+
+    protected function withApprovalRules(array $rules, bool $partial = false): array
+    {
+        $prefix = $partial ? ['sometimes', 'nullable'] : ['nullable'];
+
+        if ($this->tableHasColumn('approved') && !array_key_exists('approved', $rules)) {
+            $rules['approved'] = [...$prefix, 'boolean'];
+        }
+
+        if ($this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $rules)) {
+            $rules['approved_at'] = [...$prefix, 'date'];
+        }
+
+        if ($this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $rules)) {
+            $rules['approved_by_id'] = [...$prefix, 'integer', 'exists:users,id'];
+        }
+
+        if ($this->tableHasColumn('active') && !array_key_exists('active', $rules)) {
+            $rules['active'] = [...$prefix, 'boolean'];
+        }
+
+        if ($this->tableHasColumn('void') && !array_key_exists('void', $rules)) {
+            $rules['void'] = [...$prefix, 'boolean'];
+        }
+
+        return $rules;
+    }
+
+    protected function normalizeApprovalData(array $parentData, ?Model $record = null): array
+    {
+        if (!array_key_exists('approved', $parentData) || !$this->tableHasColumn('approved')) {
+            return $parentData;
+        }
+
+        $approved = $this->toBool($parentData['approved']);
+        $parentData['approved'] = (bool) $approved;
+
+        if ($approved && $this->tableHasColumn('approved_at') && empty($parentData['approved_at']) && empty($record?->approved_at)) {
+            $parentData['approved_at'] = now();
+        }
+
+        if (!$approved && $this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $parentData)) {
+            $parentData['approved_at'] = null;
+        }
+
+        if (!$approved && $this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $parentData)) {
+            $parentData['approved_by_id'] = null;
+        }
+
         return $parentData;
     }
 

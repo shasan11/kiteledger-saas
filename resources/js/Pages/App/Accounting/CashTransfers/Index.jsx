@@ -90,12 +90,12 @@ export default function CashTransfers(props) {
       required: true,
       col: 12,
       placeholder: 'Select source account',
-      fkUrl: api('/api/accounts/'),
+      fkUrl: api('/api/bank-accounts/'),
       fkSearchParam: 'search',
       fkPageSize: 20,
-      fkValueKey: 'id',
-      fkLabelKey: 'name',
-      fkLabel: (row) => row?.name ? `${row.name}${row.code ? ` (${row.code})` : ''}` : '',
+      fkValueKey: 'account_id',
+      fkLabelKey: 'display_name',
+      fkLabel: (row) => row?.display_name ? `${row.display_name}${row.code ? ` (${row.code})` : ''}` : '',
       fkExtraParams: { active: true },
     },
     {
@@ -130,13 +130,13 @@ export default function CashTransfers(props) {
           type: 'fkSelect',
           width: '3fr',
           placeholder: 'Select destination account',
-          fkUrl: api('/api/accounts/'),
+          fkUrl: api('/api/bank-accounts/'),
           fkSearchParam: 'search',
           fkPageSize: 20,
-          fkValueKey: 'id',
-          fkLabelKey: 'name',
+          fkValueKey: 'account_id',
+          fkLabelKey: 'display_name',
           labelField: 'to_account_name',
-          fkLabel: (row) => row?.name ? `${row.name}${row.code ? ` (${row.code})` : ''}` : '',
+          fkLabel: (row) => row?.display_name ? `${row.display_name}${row.code ? ` (${row.code})` : ''}` : '',
           fkExtraParams: { active: true },
         },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr', placeholder: 'Optional description' },
@@ -257,6 +257,12 @@ export default function CashTransfers(props) {
         ]}
         defaultAnchorKey="approved"
         anchorSyncWithHash
+        bulkactions={[
+          { label: 'Approve selected', actions: { approved: true, status: 'posted' } },
+          { label: 'Mark selected as not approved', actions: { approved: false, status: 'draft' } },
+          { label: 'Make active', actions: { active: true } },
+          { label: 'Make inactive', actions: { active: false } },
+        ]}
       />
     </AuthenticatedLayout>
   );

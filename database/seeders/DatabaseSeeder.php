@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             InventorySeeder::class,
             SalesModuleSeeder::class,
             PurchaseModuleSeeder::class,
+            TransactionalRecordSeeder::class,
         ]);
     }
 }

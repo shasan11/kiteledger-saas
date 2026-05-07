@@ -523,7 +523,7 @@ export default function Leads(props) {
 
     lead_source: null,
     industry: null,
-    expected_value: 0,
+    expected_value: 0.00,
     status: "new",
     priority: "medium",
 

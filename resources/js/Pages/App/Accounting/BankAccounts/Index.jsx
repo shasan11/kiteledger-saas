@@ -33,6 +33,7 @@ import {
     Tag,
     Typography,
 } from 'antd';
+import { useMoneyFormatter } from '@/Pages/App/Accounting/Shared/currency';
 
 const { Text, Title } = Typography;
 
@@ -144,6 +145,7 @@ const copyText = async (text) => {
 
 export default function BankAccounts(props) {
     const apiUrl = api('/api/bank-accounts/');
+    const { currency, formatMoney } = useMoneyFormatter();
 
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -172,7 +174,7 @@ export default function BankAccounts(props) {
                     page_size: pageSize ?? pagination.pageSize,
                     search: search ?? searchText,
                     type: type ?? typeFilter,
-                    active: active ?? activeFilter,
+                    active: (active ?? activeFilter) === 'all' ? undefined : active ?? activeFilter,
                     ordering: '-created_at',
                 });
 
@@ -509,6 +511,13 @@ export default function BankAccounts(props) {
                 rows: 1,
                 placeholder: 'Description',
             },
+            {
+                name: 'opening_balance',
+                label: 'Opening Balance',
+                type: 'number',
+                col: 12,
+                placeholder: '0.00',
+            },
         ],
         [],
     );
@@ -542,6 +551,7 @@ export default function BankAccounts(props) {
         account_type: Yup.string().nullable().max(50),
         swift_code: Yup.string().nullable().max(50),
         description: Yup.string().nullable(),
+        opening_balance: Yup.number().nullable().min(0),
         active: Yup.boolean().nullable(),
         is_system_generated: Yup.boolean().nullable(),
     });
@@ -564,6 +574,7 @@ export default function BankAccounts(props) {
 
         active: true,
         is_system_generated: false,
+        opening_balance: 0,
     };
 
     const transformPayload = (values) => {
@@ -585,6 +596,7 @@ export default function BankAccounts(props) {
 
             active: values.active !== false,
             is_system_generated: !!values.is_system_generated,
+            opening_balance: Number(values.opening_balance || 0),
         };
 
         Object.keys(payload).forEach((key) => {
@@ -634,6 +646,21 @@ export default function BankAccounts(props) {
                 label: 'Edit',
                 icon: <EditOutlined />,
                 onClick: () => openEditForm(record),
+            },
+            {
+                key: 'statement',
+                label: 'View Statement',
+                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
+            },
+            {
+                key: 'ledger',
+                label: 'View Ledger',
+                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
+            },
+            {
+                key: 'reconcile',
+                label: 'Reconcile',
+                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
             },
         ];
 
@@ -755,8 +782,9 @@ export default function BankAccounts(props) {
                                 }}
                                 style={{ width: 160 }}
                                 options={[
-                                    { value: 'true', label: 'Active' },
-                                    { value: 'false', label: 'Inactive' },
+                                    { value: 'true', label: 'Active Bank Accounts' },
+                                    { value: 'false', label: 'Inactive Bank Accounts' },
+                                    { value: 'all', label: 'All Bank Accounts' },
                                 ]}
                             />
                         </Space>
@@ -879,15 +907,8 @@ export default function BankAccounts(props) {
                                                     {isBank ? 'Bank' : 'Cash'}
                                                 </Tag>
 
-                                                <Tag color={record.active ? 'green' : 'red'}>
-                                                    {record.active ? 'Active' : 'Inactive'}
-                                                </Tag>
-
-                                                {record.is_system_generated ? (
-                                                    <Tag color="purple">System</Tag>
-                                                ) : (
-                                                    <Tag>Manual</Tag>
-                                                )}
+                                                <Tag>{currency?.code || 'Base'} balance</Tag>
+                                                {record.account_id ? null : <Tag color="warning">Missing linked account</Tag>}
                                             </Space>
 
                                             <div
@@ -902,6 +923,18 @@ export default function BankAccounts(props) {
                                                     <Text type="secondary">Currency</Text>
                                                     <br />
                                                     <Text strong>{currencyLabel}</Text>
+                                                </div>
+
+                                                <div>
+                                                    <Text type="secondary">Opening Balance</Text>
+                                                    <br />
+                                                    <Text strong>{formatMoney(record.opening_balance)}</Text>
+                                                </div>
+
+                                                <div>
+                                                    <Text type="secondary">Current Balance</Text>
+                                                    <br />
+                                                    <Text strong>{formatMoney(record.current_balance ?? record.software_ledger_balance ?? record.opening_balance)}</Text>
                                                 </div>
 
                                                 {isBank ? (
@@ -946,45 +979,20 @@ export default function BankAccounts(props) {
                                                         router.visit(route('accounting.bank-accounts.show', record.id));
                                                     }}
                                                 >
-                                                    View
+                                                    View Details
                                                 </Button>
 
                                                 <Button
                                                     block
-                                                    icon={<EditOutlined />}
                                                     onClick={(event) => {
                                                         event.stopPropagation();
-                                                        openEditForm(record);
+                                                        router.visit(route('accounting.bank-accounts.show', record.id));
                                                     }}
                                                 >
-                                                    Edit
+                                                    Statement
                                                 </Button>
 
-                                                {record.active ? (
-                                                    <Popconfirm
-                                                        title="Deactivate this account?"
-                                                        okText="Deactivate"
-                                                        cancelText="Cancel"
-                                                        onConfirm={(event) => {
-                                                            event?.stopPropagation?.();
-                                                            softDelete(record);
-                                                        }}
-                                                    >
-                                                        <Button danger icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()}>
-                                                            Disable
-                                                        </Button>
-                                                    </Popconfirm>
-                                                ) : (
-                                                    <Button
-                                                        icon={<CreditCardOutlined />}
-                                                        onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            restoreRecord(record);
-                                                        }}
-                                                    >
-                                                        Restore
-                                                    </Button>
-                                                )}
+                                                <Button onClick={(event) => { event.stopPropagation(); router.visit(route('accounting.bank-accounts.show', record.id)); }}>Ledger</Button>
                                             </div>
                                         </Card>
                                     </Col>

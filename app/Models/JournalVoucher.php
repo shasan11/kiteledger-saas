@@ -100,6 +100,11 @@ class JournalVoucher extends Model
         return $this->hasMany(JournalVoucherLine::class);
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(JournalVoucherLine::class);
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(JournalVoucherLine::class);

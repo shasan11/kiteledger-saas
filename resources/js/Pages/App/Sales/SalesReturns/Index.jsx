@@ -41,6 +41,7 @@ export default function SalesReturns({ auth }) {
         { value: 'cancelled', label: 'Cancelled' },
       ],
     },
+    { name: 'approved', label: 'Approved', type: 'switch', col: 6 },
     { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, required: true, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8, fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
@@ -72,6 +73,7 @@ export default function SalesReturns({ auth }) {
     sales_return_no: '',
     sales_return_date: dayjs().format('YYYY-MM-DD'),
     status: 'draft',
+    approved: false,
     contact_id: null,
     warehouse_id: null,
     currency_id: null,
@@ -96,8 +98,8 @@ export default function SalesReturns({ auth }) {
   });
 
   const anchorFilters = [
-    { key: 'draft', label: 'Draft', params: { status: 'draft' } },
-    { key: 'posted', label: 'Posted', params: { status: 'posted' } },
+    { key: 'draft', label: 'Draft', params: { approved: false } },
+    { key: 'approved', label: 'Approved', params: { approved: true } },
     { key: 'all', label: 'All', params: {} },
   ];
 

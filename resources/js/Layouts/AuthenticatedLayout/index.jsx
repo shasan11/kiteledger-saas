@@ -104,7 +104,7 @@ export default function AuthenticatedLayout({ header, children }) {
             {
                 key: 'sales',
                 icon: <FileTextOutlined />,
-                label: 'Sales',
+                label: 'Receivables',
                 children: [
                     { key: 'sales-quotations', label: 'Quotations', onClick: () => visit('sales.quotations.index', '/sales/quotations') },
                     { key: 'sales-sales-orders', label: 'Sales Orders', onClick: () => visit('sales.sales-orders.index', '/sales/sales-orders') },
@@ -119,7 +119,9 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <CreditCardOutlined />,
                 label: 'Payment In',
                 children: [
+                    { key: 'pi-quotations', label: 'Quotations', onClick: () => visit('payment-in.quotations.index', '/payment-in/quotations') },
                     { key: 'pi-bills', label: 'Bills', onClick: () => visit('payment-in.bills.index', '/payment-in/bills') },
+                    { key: 'pi-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('payment-in.proforma-invoices.index', '/payment-in/proforma-invoices') },
                     { key: 'pi-sales-orders', label: 'Sales Order', onClick: () => visit('payment-in.sales-orders.index', '/payment-in/sales-orders') },
                     { key: 'pi-invoices', label: 'Invoices', onClick: () => visit('payment-in.invoices.index', '/payment-in/invoices') },
                     { key: 'pi-payment', label: 'Payment', onClick: () => visit('payment-in.payments.index', '/payment-in/payments') },
@@ -130,13 +132,13 @@ export default function AuthenticatedLayout({ header, children }) {
             {
                 key: 'payment-out',
                 icon: <WalletOutlined />,
-                label: 'Payment Out',
+                label: 'Payables',
                 children: [
-                    { key: 'po-purchase-bills', label: 'Purchase Bills', onClick: () => visit('payment-out.purchase-bills.index', '/payment-out/purchase-bills') },
-                    { key: 'po-payment-out', label: 'Payment Out', onClick: () => visit('payment-out.payments.index', '/payment-out/payments') },
                     { key: 'po-purchase-order', label: 'Purchase Order', onClick: () => visit('payment-out.purchase-orders.index', '/payment-out/purchase-orders') },
+                    { key: 'po-purchase-bills', label: 'Bills', onClick: () => visit('payment-out.purchase-bills.index', '/payment-out/purchase-bills') },
                     { key: 'po-expenses', label: 'Expenses', onClick: () => visit('payment-out.expenses.index', '/payment-out/expenses') },
                     { key: 'po-debit-note', label: 'Debit Note', onClick: () => visit('payment-out.debit-notes.index', '/payment-out/debit-notes') },
+                    { key: 'po-payment-out', label: 'Supplier Payments', onClick: () => visit('payment-out.payments.index', '/payment-out/payments') },
                 ],
             },
             {
@@ -242,7 +244,9 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/sales/customer-payments')) return ['sales-customer-payments'];
         if (isActive('/sales/sales-returns')) return ['sales-sales-returns'];
 
+        if (isActive('/payment-in/quotations')) return ['pi-quotations'];
         if (isActive('/payment-in/bills')) return ['pi-bills'];
+        if (isActive('/payment-in/proforma-invoices')) return ['pi-proforma-invoices'];
         if (isActive('/payment-in/sales-orders')) return ['pi-sales-orders'];
         if (isActive('/payment-in/invoices')) return ['pi-invoices'];
         if (isActive('/payment-in/payments')) return ['pi-payment'];

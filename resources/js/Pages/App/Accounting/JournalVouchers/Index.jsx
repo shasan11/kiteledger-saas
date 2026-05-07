@@ -6,13 +6,13 @@ import * as Yup from 'yup';
 import { Tag, Typography, Button } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useMoneyFormatter } from '@/Pages/App/Accounting/Shared/currency';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const formatDate = (value) => {
   if (!value) return null;
@@ -31,6 +31,7 @@ const statusColor = (s) => {
 const emptyLine = { chart_of_account_id: null, description: '', debit: 0, credit: 0 };
 
 export default function JournalVouchers(props) {
+  const { formatMoney } = useMoneyFormatter();
   const columns = useMemo(() => [
     {
       title: 'Voucher No',
@@ -61,11 +62,18 @@ export default function JournalVouchers(props) {
       key: 'total',
       sorter: true,
       width: 140,
-      render: (val) => <Text strong>{money(val)}</Text>,
+      render: (val, record) => <Text strong>{formatMoney(record?.total_debit ?? val)}</Text>,
+    },
+    {
+      title: 'Approval',
+      dataIndex: 'approved',
+      key: 'approved',
+      width: 130,
+      render: (value) => <Tag color={value ? 'green' : 'orange'}>{value ? 'Approved' : 'Not Approved'}</Tag>,
     },
     { title: 'Reference', dataIndex: 'reference', key: 'reference', width: 140, render: (val) => val || '-' },
     { title: 'Narration', dataIndex: 'narration', key: 'narration', ellipsis: true, render: (val) => val || '-' },
-  ], []);
+  ], [formatMoney]);
 
   const fields = useMemo(() => [
     { name: 'voucher_no', label: 'Voucher No', type: 'text', col: 8, placeholder: 'Auto-generated if blank' },
@@ -157,14 +165,14 @@ export default function JournalVouchers(props) {
             }}
           >
             <span>{balanced ? 'Balanced' : 'Not balanced'}</span>
-            <span>Debit: {money(totalDebit)}</span>
-            <span>Credit: {money(totalCredit)}</span>
-            <span>Difference: {money(difference)}</span>
+            <span>Debit: {formatMoney(totalDebit)}</span>
+            <span>Credit: {formatMoney(totalCredit)}</span>
+            <span>Difference: {formatMoney(difference)}</span>
           </div>
         );
       },
     },
-  ], []);
+  ], [formatMoney]);
 
   const validationSchema = Yup.object().shape({
     voucher_no: Yup.string().nullable(),
@@ -282,6 +290,12 @@ export default function JournalVouchers(props) {
         ]}
          defaultAnchorKey="approved"
         anchorSyncWithHash
+        bulkactions={[
+          { label: 'Approve selected', actions: { approved: true, status: 'posted' } },
+          { label: 'Mark selected as not approved', actions: { approved: false, status: 'draft' } },
+          { label: 'Make active', actions: { active: true } },
+          { label: 'Make inactive', actions: { active: false } },
+        ]}
       />
     </AuthenticatedLayout>
   );

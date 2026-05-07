@@ -39,7 +39,7 @@ class LoanTopUpController extends BaseCrudApiController
         'loan_received_in_account_id',
     ];
 
-    protected array $booleanFilters = ['active', 'is_system_generated'];
+    protected array $booleanFilters = ['active', 'approved', 'is_system_generated'];
 
     protected array $dateRangeFilters = [
         'topup_date' => ['from' => 'date_from', 'to' => 'date_to'],
@@ -63,6 +63,10 @@ class LoanTopUpController extends BaseCrudApiController
         'amount' => ['required', 'numeric', 'min:0.01'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'approved' => ['nullable', 'boolean'],
+        'approved_at' => ['nullable', 'date'],
+        'approved_by_id' => ['nullable', 'integer', 'exists:users,id'],
+        'status' => ['nullable', 'string', 'max:40'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -71,5 +75,20 @@ class LoanTopUpController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return $this->makeRulesPartial($this->storeRules($request));
+    }
+
+    protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
+    {
+        if (array_key_exists('approved', $parentData)) {
+            if ($parentData['approved']) {
+                $parentData['approved_at'] = $parentData['approved_at'] ?? now();
+                $parentData['approved_by_id'] = $parentData['approved_by_id'] ?? request()->user()?->getAuthIdentifier();
+            } else {
+                $parentData['approved_at'] = null;
+                $parentData['approved_by_id'] = null;
+            }
+        }
+
+        return $parentData;
     }
 }
