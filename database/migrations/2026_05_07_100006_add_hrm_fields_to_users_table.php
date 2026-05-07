@@ -58,7 +58,7 @@ return new class extends Migration
                 $table->foreignUuid('department_id')->nullable()->constrained('departments')->nullOnDelete();
             }
             if (!Schema::hasColumn('users', 'role_id')) {
-                $table->foreignUuid('role_id')->nullable()->constrained('roles')->nullOnDelete();
+                $table->uuid('role_id')->nullable();
             }
             if (!Schema::hasColumn('users', 'shift_id')) {
                 $table->foreignUuid('shift_id')->nullable()->constrained('shifts')->nullOnDelete();
