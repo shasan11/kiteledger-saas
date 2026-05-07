@@ -18,11 +18,31 @@ class AppSetting extends Model
      */
     protected $fillable = [
         'company_name',
+        'legal_name',
+        'registration_number',
+        'tax_number',
+        'vat_number',
         'tag_line',
         'address',
         'phone',
         'email',
         'website',
+        'address_line_1',
+        'address_line_2',
+        'city',
+        'state',
+        'postal_code',
+        'country',
+        'default_currency_id',
+        'fiscal_year_id',
+        'timezone',
+        'date_format',
+        'time_format',
+        'number_format',
+        'language',
+        'week_start_day',
+        'financial_year_start_month',
+        'use_nepali_calendar',
         'footer',
         'logo',
         'suggest_selling',
@@ -43,6 +63,8 @@ class AppSetting extends Model
     {
         return [
             'active' => 'boolean',
+            'financial_year_start_month' => 'integer',
+            'use_nepali_calendar' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
@@ -51,5 +73,15 @@ class AppSetting extends Model
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function defaultCurrency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class, 'default_currency_id');
+    }
+
+    public function fiscalYear(): BelongsTo
+    {
+        return $this->belongsTo(FiscalYear::class);
     }
 }

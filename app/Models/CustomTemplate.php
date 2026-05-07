@@ -19,6 +19,7 @@ class CustomTemplate extends Model
     protected $fillable = [
         'name',
         'purpose',
+        'template_key',
         'content',
         'active',
         'is_system_generated',

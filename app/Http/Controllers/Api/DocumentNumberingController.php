@@ -36,7 +36,7 @@ class DocumentNumberingController extends BaseCrudApiController
         'document_type' => [
             'required',
             'string',
-            'in:cash_transfer,credit_note,debit_note,expense,inventory_adjustment,invoice,journal_voucher,payment,production_journal,production_order,purchase_bill,purchase_order,quotation,receipt,sales_order,sales_return,warehouse_transfer,payroll,deduction,increment,contact,lead,deal,product,bank_account,capital,cash,current_asset,current_liability,direct_expense,direct_income,indirect_expense,indirect_income,non_current_asset,non_current_liability,reserve_surplus,loan_account,loan_topup,loan_charge',
+            'in:cash_transfer,credit_note,debit_note,expense,inventory_adjustment,invoice,journal_voucher,payment,production_journal,production_order,purchase_bill,purchase_order,quotation,receipt,sales_order,sales_return,warehouse_transfer,payroll,deduction,increment,contact,lead,deal,product,bank_account,capital,cash,current_asset,current_liability,direct_expense,direct_income,indirect_expense,indirect_income,non_current_asset,non_current_liability,reserve_surplus,loan_account,loan_topup,loan_charge,proforma_invoice,payslip,leave_application',
         ],
         'prefix' => ['nullable', 'string', 'max:20'],
         'next_number' => ['nullable', 'integer', 'min:1'],
@@ -56,7 +56,7 @@ class DocumentNumberingController extends BaseCrudApiController
                 'sometimes',
                 'required',
                 'string',
-                'in:cash_transfer,credit_note,debit_note,expense,inventory_adjustment,invoice,journal_voucher,payment,production_journal,production_order,purchase_bill,purchase_order,quotation,receipt,sales_order,sales_return,warehouse_transfer,payroll,deduction,increment,contact,lead,deal,product,bank_account,capital,cash,current_asset,current_liability,direct_expense,direct_income,indirect_expense,indirect_income,non_current_asset,non_current_liability,reserve_surplus,loan_account,loan_topup,loan_charge',
+                'in:cash_transfer,credit_note,debit_note,expense,inventory_adjustment,invoice,journal_voucher,payment,production_journal,production_order,purchase_bill,purchase_order,quotation,receipt,sales_order,sales_return,warehouse_transfer,payroll,deduction,increment,contact,lead,deal,product,bank_account,capital,cash,current_asset,current_liability,direct_expense,direct_income,indirect_expense,indirect_income,non_current_asset,non_current_liability,reserve_surplus,loan_account,loan_topup,loan_charge,proforma_invoice,payslip,leave_application',
             ],
             'prefix' => ['sometimes', 'nullable', 'string', 'max:20'],
             'next_number' => ['sometimes', 'nullable', 'integer', 'min:1'],

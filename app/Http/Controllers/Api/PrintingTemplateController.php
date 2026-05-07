@@ -16,7 +16,7 @@ class PrintingTemplateController extends BaseCrudApiController
 
     protected bool $branchScoped = false;
 
-    protected array $searchable = ['name', 'document_type'];
+    protected array $searchable = ['name', 'document_type', 'template_key'];
 
     protected array $filterable = ['document_type'];
 
@@ -29,6 +29,7 @@ class PrintingTemplateController extends BaseCrudApiController
     protected array $storeRules = [
         'name' => ['required', 'string', 'max:120'],
         'document_type' => ['required', 'string', 'max:80'],
+        'template_key' => ['nullable', 'string', 'max:120'],
         'template_html' => ['nullable', 'string'],
         'template_css' => ['nullable', 'string'],
         'is_default' => ['nullable', 'boolean'],
@@ -42,6 +43,7 @@ class PrintingTemplateController extends BaseCrudApiController
         return [
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'document_type' => ['sometimes', 'required', 'string', 'max:80'],
+            'template_key' => ['sometimes', 'nullable', 'string', 'max:120'],
             'template_html' => ['sometimes', 'nullable', 'string'],
             'template_css' => ['sometimes', 'nullable', 'string'],
             'is_default' => ['sometimes', 'nullable', 'boolean'],

@@ -11,10 +11,10 @@ import {
     SearchOutlined,
     EditOutlined,
     DeleteOutlined,
-    CreditCardOutlined,
     WalletOutlined,
     MoreOutlined,
     CopyOutlined,
+    EyeOutlined,
 } from '@ant-design/icons';
 import {
     Button,
@@ -24,12 +24,10 @@ import {
     Empty,
     Input,
     message,
-    Pagination,
-    Popconfirm,
     Row,
     Select,
     Space,
-    Spin,
+    Tabs,
     Tag,
     Typography,
 } from 'antd';
@@ -55,7 +53,6 @@ const getLabel = (...values) => {
             return value;
         }
     }
-
     return '-';
 };
 
@@ -74,15 +71,12 @@ const appendQueryParams = (url, params = {}) => {
         .join('&');
 
     if (!qs) return url;
-
     return url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
 };
 
 const isValidCopyValue = (value) => {
     if (value === undefined || value === null) return false;
-
     const text = String(value).trim();
-
     return text !== '' && text !== '-';
 };
 
@@ -94,7 +88,6 @@ const buildBankAccountCopyText = (record, currencyLabel) => {
         ['Display Name', record?.display_name],
         ['Code', record?.code],
         ['Currency', currencyLabel],
-
         ...(isBank
             ? [
                   ['Bank Name', record?.bank_name],
@@ -104,7 +97,6 @@ const buildBankAccountCopyText = (record, currencyLabel) => {
                   ['Swift Code', record?.swift_code],
               ]
             : []),
-
         ['Description', record?.description],
     ];
 
@@ -123,7 +115,7 @@ const copyText = async (text) => {
             return true;
         }
     } catch (error) {
-        console.warn('Clipboard API failed, using fallback.', error);
+        console.warn(error);
     }
 
     const textarea = document.createElement('textarea');
@@ -137,26 +129,25 @@ const copyText = async (text) => {
     textarea.select();
 
     const copied = document.execCommand('copy');
-
     document.body.removeChild(textarea);
 
     return copied;
 };
 
-export default function BankAccounts(props) {
+export default function BankAccounts() {
     const apiUrl = api('/api/bank-accounts/');
-    const { currency, formatMoney } = useMoneyFormatter();
+    const { formatMoney } = useMoneyFormatter();
 
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
 
     const [searchText, setSearchText] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
-    const [activeFilter, setActiveFilter] = useState('true');
+    const [tabKey, setTabKey] = useState('all');
 
     const [pagination, setPagination] = useState({
         current: 1,
-        pageSize: 12,
+        pageSize: 20,
         total: 0,
     });
 
@@ -164,18 +155,25 @@ export default function BankAccounts(props) {
     const [formMode, setFormMode] = useState('add');
     const [editId, setEditId] = useState(null);
 
+    const activeFilter = useMemo(() => {
+        if (tabKey === 'inactive') return 'false';
+        return 'all';
+    }, [tabKey]);
+
     const fetchRows = useCallback(
         async ({ page, pageSize, search, type, active } = {}) => {
             try {
                 setLoading(true);
+
+                const currentActive = active ?? activeFilter;
 
                 const url = appendQueryParams(apiUrl, {
                     page: page ?? pagination.current,
                     page_size: pageSize ?? pagination.pageSize,
                     search: search ?? searchText,
                     type: type ?? typeFilter,
-                    active: (active ?? activeFilter) === 'all' ? undefined : active ?? activeFilter,
-                    ordering: '-created_at',
+                    active: currentActive === 'all' ? undefined : currentActive,
+                    ordering: 'display_name',
                 });
 
                 const res = await axios.get(url, {
@@ -228,7 +226,7 @@ export default function BankAccounts(props) {
     );
 
     useEffect(() => {
-        fetchRows();
+        fetchRows({ page: 1 });
     }, [fetchRows]);
 
     const openAddForm = () => {
@@ -247,19 +245,14 @@ export default function BankAccounts(props) {
         try {
             await axios.put(
                 `${apiUrl.replace(/\/+$/, '')}/${record.id}`,
-                {
-                    active: false,
-                },
-                {
-                    headers: getAuthHeaders(),
-                },
+                { active: false },
+                { headers: getAuthHeaders() },
             );
-
-            message.success('Bank account deactivated.');
+            message.success('Bank account made inactive.');
             fetchRows();
         } catch (error) {
             console.error(error);
-            message.error('Failed to deactivate bank account.');
+            message.error('Failed to update bank account.');
         }
     };
 
@@ -267,19 +260,14 @@ export default function BankAccounts(props) {
         try {
             await axios.put(
                 `${apiUrl.replace(/\/+$/, '')}/${record.id}`,
-                {
-                    active: true,
-                },
-                {
-                    headers: getAuthHeaders(),
-                },
+                { active: true },
+                { headers: getAuthHeaders() },
             );
-
-            message.success('Bank account restored.');
+            message.success('Bank account activated.');
             fetchRows();
         } catch (error) {
             console.error(error);
-            message.error('Failed to restore bank account.');
+            message.error('Failed to update bank account.');
         }
     };
 
@@ -298,16 +286,11 @@ export default function BankAccounts(props) {
             return;
         }
 
-        try {
-            const copied = await copyText(text);
+        const copied = await copyText(text);
 
-            if (copied) {
-                message.success('Bank account details copied.');
-            } else {
-                message.error('Failed to copy bank account details.');
-            }
-        } catch (error) {
-            console.error(error);
+        if (copied) {
+            message.success('Bank account details copied.');
+        } else {
             message.error('Failed to copy bank account details.');
         }
     };
@@ -316,20 +299,12 @@ export default function BankAccounts(props) {
         const selected = values?.type;
 
         const items = [
-            {
-                value: 'bank',
-                label: 'Bank',
-                icon: <BankOutlined />,
-            },
-            {
-                value: 'cash',
-                label: 'Cash',
-                icon: <WalletOutlined />,
-            },
+            { value: 'bank', label: 'Bank', icon: <BankOutlined /> },
+            { value: 'cash', label: 'Cash', icon: <WalletOutlined /> },
         ];
 
         return (
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {items.map((item) => {
                     const active = selected === item.value;
 
@@ -350,32 +325,21 @@ export default function BankAccounts(props) {
                                 }
                             }}
                             style={{
-                                width: 220,
-                                height: 68,
-                                border: active
-                                    ? '1px solid #1d4ed8'
-                                    : '1px solid #d9dee7',
-                                background: active ? '#ffffff' : '#f1f4f8',
-                                color: '#0f172a',
+                                width: 130,
+                                height: 40,
+                                border: active ? '1px solid #1677ff' : '1px solid #d9dee7',
+                                background: active ? '#fff' : '#f8fafc',
+                                borderRadius: 4,
                                 cursor: readOnly ? 'not-allowed' : 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 18,
-                                padding: '0 22px',
-                                fontSize: 16,
-                                fontWeight: 500,
+                                justifyContent: 'center',
+                                gap: 8,
+                                fontSize: 13,
+                                fontWeight: 600,
                             }}
                         >
-                            <span
-                                style={{
-                                    fontSize: 17,
-                                    color: active ? '#334155' : '#94a3b8',
-                                    display: 'inline-flex',
-                                }}
-                            >
-                                {item.icon}
-                            </span>
-
+                            {item.icon}
                             <span>{item.label}</span>
                         </button>
                     );
@@ -387,10 +351,9 @@ export default function BankAccounts(props) {
     const sectionTitle = (title) => () => (
         <div
             style={{
-                fontSize: 16,
+                fontSize: 12,
                 fontWeight: 700,
-                color: '#9ca3af',
-                marginTop: 4,
+                color: '#667085',
                 marginBottom: -8,
             }}
         >
@@ -402,7 +365,7 @@ export default function BankAccounts(props) {
         () => [
             {
                 name: 'type',
-                label: 'Type of Account',
+                label: 'Type',
                 type: 'custom',
                 required: true,
                 col: 24,
@@ -410,11 +373,11 @@ export default function BankAccounts(props) {
             },
             {
                 name: 'bank_name',
-                label: 'Select Bank',
+                label: 'Bank',
                 type: 'text',
                 required: true,
                 col: 24,
-                placeholder: 'Select Bank / Enter Bank Name',
+                placeholder: 'Bank name',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -423,7 +386,7 @@ export default function BankAccounts(props) {
                 type: 'text',
                 required: true,
                 col: 24,
-                placeholder: 'Display Name',
+                placeholder: 'Display name',
             },
             {
                 name: 'code',
@@ -431,11 +394,11 @@ export default function BankAccounts(props) {
                 type: 'text',
                 readOnly: true,
                 col: 12,
-                placeholder: '#Auto-generated by system',
+                placeholder: 'Auto-generated',
             },
             {
                 name: 'currency_id',
-                label: 'Currency Code',
+                label: 'Currency',
                 type: 'fkSelect',
                 required: true,
                 col: 12,
@@ -446,9 +409,7 @@ export default function BankAccounts(props) {
                 fkValueKey: 'id',
                 fkLabelKey: 'name',
                 labelField: 'currency_name',
-                fkExtraParams: {
-                    active: true,
-                },
+                fkExtraParams: { active: true },
                 fkLabel: (row) => {
                     const code = row?.code || '';
                     const name = row?.name || '';
@@ -468,7 +429,7 @@ export default function BankAccounts(props) {
                 label: 'Account Name',
                 type: 'text',
                 col: 12,
-                placeholder: 'Account Name',
+                placeholder: 'Account name',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -476,7 +437,7 @@ export default function BankAccounts(props) {
                 label: 'Account Number',
                 type: 'text',
                 col: 12,
-                placeholder: 'Account Number',
+                placeholder: 'Account number',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -500,7 +461,7 @@ export default function BankAccounts(props) {
                 label: 'Swift Code',
                 type: 'text',
                 col: 12,
-                placeholder: 'Swift Code',
+                placeholder: 'Swift code',
                 condition: (values) => values?.type === 'bank',
             },
             {
@@ -523,29 +484,18 @@ export default function BankAccounts(props) {
     );
 
     const validationSchema = Yup.object().shape({
-        type: Yup.string()
-            .oneOf(['bank', 'cash'])
-            .required('Type of Account is required'),
-
+        type: Yup.string().oneOf(['bank', 'cash']).required('Type is required'),
         display_name: Yup.string()
             .trim()
             .max(150, 'Display name cannot exceed 150 characters')
             .required('Display Name is required'),
-
-        currency_id: Yup.mixed()
-            .nullable()
-            .required('Currency is required'),
-
+        currency_id: Yup.mixed().nullable().required('Currency is required'),
         bank_name: Yup.string().when('type', {
             is: 'bank',
             then: (schema) =>
-                schema
-                    .trim()
-                    .max(150, 'Bank name cannot exceed 150 characters')
-                    .required('Bank is required'),
+                schema.trim().max(150, 'Bank name cannot exceed 150 characters').required('Bank is required'),
             otherwise: (schema) => schema.nullable(),
         }),
-
         account_name: Yup.string().nullable().max(150),
         account_number: Yup.string().nullable().max(80),
         account_type: Yup.string().nullable().max(50),
@@ -559,19 +509,15 @@ export default function BankAccounts(props) {
     const crudInitialValues = {
         type: 'bank',
         display_name: '',
-
         currency_id: null,
         currency_id_detail: null,
         currency_name: '',
-
         description: '',
-
         bank_name: '',
         account_name: '',
         account_number: '',
         account_type: '',
         swift_code: '',
-
         active: true,
         is_system_generated: false,
         opening_balance: 0,
@@ -585,15 +531,12 @@ export default function BankAccounts(props) {
             display_name: values.display_name?.trim() || null,
             code: values.code?.trim() || null,
             currency_id: values.currency_id || null,
-
             description: values.description?.trim() || null,
-
             bank_name: isBank ? values.bank_name?.trim() || null : null,
             account_name: isBank ? values.account_name?.trim() || null : null,
             account_number: isBank ? values.account_number?.trim() || null : null,
             account_type: isBank ? values.account_type || null : null,
             swift_code: isBank ? values.swift_code?.trim() || null : null,
-
             active: values.active !== false,
             is_system_generated: !!values.is_system_generated,
             opening_balance: Number(values.opening_balance || 0),
@@ -607,13 +550,13 @@ export default function BankAccounts(props) {
     };
 
     const handleFormValuesChange = (values, { setFieldValue }) => {
-        const currency = values?.currency_id_detail;
+        const currencyValue = values?.currency_id_detail;
 
-        if (currency) {
+        if (currencyValue) {
             const label =
-                currency.label ||
-                [currency.code, currency.name].filter(Boolean).join(' - ') ||
-                currency.name ||
+                currencyValue.label ||
+                [currencyValue.code, currencyValue.name].filter(Boolean).join(' - ') ||
+                currencyValue.name ||
                 '';
 
             if (label && values.currency_name !== label) {
@@ -633,114 +576,191 @@ export default function BankAccounts(props) {
         [],
     );
 
-    const renderCardActions = (record) => {
-        const items = [
-            {
-                key: 'copy',
-                label: 'Copy Details',
-                icon: <CopyOutlined />,
-                onClick: () => handleCopyBankAccountInfo(record),
-            },
-            {
-                key: 'edit',
-                label: 'Edit',
-                icon: <EditOutlined />,
-                onClick: () => openEditForm(record),
-            },
-            {
-                key: 'statement',
-                label: 'View Statement',
-                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
-            },
-            {
-                key: 'ledger',
-                label: 'View Ledger',
-                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
-            },
-            {
-                key: 'reconcile',
-                label: 'Reconcile',
-                onClick: () => router.visit(route('accounting.bank-accounts.show', record.id)),
-            },
-        ];
+    const headerNode = (
+        <div className="bank-page__layout-header">
+            <div>
+                <Title level={5} className="bank-page__title">
+                    Bank Accounts
+                </Title>
+            </div>
 
-        return (
-            <Dropdown
-                menu={{
-                    items,
-                    onClick: ({ key }) => {
-                        const item = items.find((x) => x.key === key);
-                        item?.onClick?.();
-                    },
-                }}
-                trigger={['click']}
-            >
-                <Button icon={<MoreOutlined />} onClick={(event) => event.stopPropagation()} />
-            </Dropdown>
-        );
-    };
+            <Space size={8}>
+                <Button size="small" icon={<ReloadOutlined />} onClick={() => fetchRows()}>
+                    Reload
+                </Button>
+
+                <Button size="small" type="primary" icon={<PlusOutlined />} onClick={openAddForm}>
+                    Add New
+                </Button>
+            </Space>
+        </div>
+    );
 
     return (
-        <AuthenticatedLayout user={props.auth?.user}>
+        <AuthenticatedLayout header={headerNode}>
             <Head title="Bank Accounts" />
 
-            <div
-                style={{
-                    padding: 16,
-                    background: '#f5f7fb',
-                    minHeight: '100vh',
-                }}
-            >
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 12,
-                        flexWrap: 'wrap',
-                        marginBottom: 16,
-                    }}
-                >
-                    <div>
-                        <Title level={3} style={{ margin: 0 }}>
-                            Bank Accounts
-                        </Title>
+            <style>{`
+                .bank-page {
+                    min-height: calc(100vh - 100px);
+                    background: #f5f7fb;
+                    padding: 8px;
+                }
 
-                        <Text type="secondary">
-                            Manage Bank And Cash Accounts
-                        </Text>
-                    </div>
+                .bank-page__layout-header {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 12px;
+                    min-height: 32px;
+                }
 
-                    <Space wrap>
-                        <Button icon={<ReloadOutlined />} onClick={() => fetchRows()}>
-                            Reload
-                        </Button>
+                .bank-page__title {
+                    margin: 0 !important;
+                    line-height: 1.1 !important;
+                    font-size: 16px !important;
+                }
 
-                        <Button
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={openAddForm}
-                        >
-                            Add Bank Account
-                        </Button>
-                    </Space>
-                </div>
+                .bank-page__toolbar-card {
+                    margin-bottom: 8px;
+                    border-radius: 4px;
+                    border: 1px solid #e5e7eb;
+                }
 
-                <Card
-                    style={{
-                        marginBottom: 16,
-                        borderRadius: 4,
-                    }}
-                    bodyStyle={{
-                        padding: 12,
-                    }}
-                >
-                    <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-                        <Space wrap>
+                .bank-page__toolbar-card .ant-card-body {
+                    padding: 8px;
+                }
+
+                .bank-page__toolbar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+
+                .bank-page__toolbar-left {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+
+                .bank-page__cards {
+                    margin-top: 2px;
+                }
+
+                .bank-page__compact-card.ant-card {
+                    border: 1px solid #dbe1ea;
+                    border-radius: 10px;
+                    box-shadow: none;
+                    height: 100%;
+                    cursor: pointer;
+                }
+
+                .bank-page__compact-card .ant-card-body {
+                    padding: 12px;
+                }
+
+                .bank-page__card-head {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 8px;
+                    margin-bottom: 8px;
+                }
+
+                .bank-page__card-left {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                    min-width: 0;
+                    flex: 1;
+                }
+
+                .bank-page__avatar {
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 999px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex: none;
+                    font-size: 16px;
+                    background: #eef4ff;
+                    color: #1677ff;
+                }
+
+                .bank-page__avatar.cash {
+                    background: #edf9ee;
+                    color: #22c55e;
+                }
+
+                .bank-page__name {
+                    margin: 0 !important;
+                    font-size: 14px !important;
+                    line-height: 1.25 !important;
+                    color: #1d4ed8 !important;
+                }
+
+                .bank-page__subname {
+                    display: block;
+                    margin-top: 2px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #1f2937;
+                    line-height: 1.2;
+                }
+
+                .bank-page__amount {
+                    margin: 8px 0 10px 0;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: #1f2937;
+                }
+
+                .bank-page__tags {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                }
+
+                .bank-page__tags .ant-tag {
+                    margin-inline-end: 0;
+                    margin-bottom: 0;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    line-height: 20px;
+                    padding: 0 8px;
+                }
+
+                .bank-page__empty-card .ant-card-body {
+                    padding: 22px;
+                }
+
+                .bank-page .ant-tabs-nav {
+                    margin-bottom: 0 !important;
+                }
+
+                .bank-page .ant-tabs-tab {
+                    padding-top: 6px !important;
+                    padding-bottom: 10px !important;
+                }
+
+                .bank-page__hidden-crud {
+                    display: none;
+                }
+            `}</style>
+
+            <div className="bank-page">
+                <Card className="bank-page__toolbar-card" bordered={false}>
+                    <div className="bank-page__toolbar">
+                        <div className="bank-page__toolbar-left">
                             <Input
                                 allowClear
+                                size="small"
                                 prefix={<SearchOutlined />}
-                                placeholder="Search bank, code, account number..."
+                                placeholder="Search bank, code, account no..."
                                 value={searchText}
                                 onChange={(event) => setSearchText(event.target.value)}
                                 onPressEnter={() =>
@@ -749,11 +769,12 @@ export default function BankAccounts(props) {
                                         search: searchText,
                                     })
                                 }
-                                style={{ width: 320 }}
+                                style={{ width: 260 }}
                             />
 
                             <Select
                                 allowClear
+                                size="small"
                                 placeholder="Type"
                                 value={typeFilter || undefined}
                                 onChange={(value) => {
@@ -764,274 +785,198 @@ export default function BankAccounts(props) {
                                         type: next,
                                     });
                                 }}
-                                style={{ width: 160 }}
+                                style={{ width: 120 }}
                                 options={[
                                     { value: 'bank', label: 'Bank' },
                                     { value: 'cash', label: 'Cash' },
                                 ]}
                             />
 
-                            <Select
-                                value={activeFilter}
-                                onChange={(value) => {
-                                    setActiveFilter(value);
+                            <Button
+                                size="small"
+                                type="primary"
+                                icon={<SearchOutlined />}
+                                onClick={() =>
                                     fetchRows({
                                         page: 1,
-                                        active: value,
-                                    });
-                                }}
-                                style={{ width: 160 }}
-                                options={[
-                                    { value: 'true', label: 'Active Bank Accounts' },
-                                    { value: 'false', label: 'Inactive Bank Accounts' },
-                                    { value: 'all', label: 'All Bank Accounts' },
-                                ]}
-                            />
-                        </Space>
+                                        search: searchText,
+                                        type: typeFilter,
+                                        active: activeFilter,
+                                    })
+                                }
+                            >
+                                Search
+                            </Button>
+                        </div>
 
-                        <Button
-                            type="primary"
-                            icon={<SearchOutlined />}
-                            onClick={() =>
+                        <Tabs
+                            activeKey={tabKey}
+                            onChange={(key) => {
+                                setTabKey(key);
                                 fetchRows({
                                     page: 1,
-                                    search: searchText,
-                                    type: typeFilter,
-                                    active: activeFilter,
-                                })
-                            }
-                        >
-                            Search
-                        </Button>
-                    </Space>
+                                    active: key === 'inactive' ? 'false' : 'all',
+                                });
+                            }}
+                            items={[
+                                { key: 'all', label: 'All' },
+                                { key: 'inactive', label: 'Inactive' },
+                            ]}
+                        />
+                    </div>
                 </Card>
 
-                <Spin spinning={loading}>
-                    {rows.length < 1 ? (
-                        <Card>
-                            <Empty description="No bank accounts found" />
-                        </Card>
-                    ) : (
-                        <Row gutter={[16, 16]}>
-                            {rows.map((record) => {
-                                const isBank = record.type === 'bank';
+                {rows.length < 1 && !loading ? (
+                    <Card className="bank-page__empty-card">
+                        <Empty description="No bank accounts found" />
+                    </Card>
+                ) : (
+                    <Row gutter={[12, 12]} className="bank-page__cards">
+                        {rows.map((record) => {
+                            const isBank = record?.type === 'bank';
 
-                                const currencyLabel = getLabel(
-                                    record?.currency_name,
-                                    record?.currency?.label,
-                                    record?.currency?.code,
-                                    record?.currency?.name,
-                                );
+                            const currencyLabel = getLabel(
+                                record?.currency_name,
+                                record?.currency?.label,
+                                record?.currency?.code,
+                                record?.currency?.name,
+                            );
 
-                                return (
-                                    <Col xs={24} sm={24} md={12} lg={8} xl={8} key={record.id}>
-                                        <Card
-                                            hoverable
-                                            onClick={() => router.visit(route('accounting.bank-accounts.show', record.id))}
-                                            style={{
-                                                height: '100%',
-                                                borderRadius: 6,
-                                                border: '1px solid #e5e7eb',
-                                            }}
-                                            bodyStyle={{
-                                                padding: 16,
-                                            }}
-                                        >
-                                            <div
-                                                style={{
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    gap: 12,
-                                                    alignItems: 'flex-start',
-                                                    marginBottom: 14,
-                                                }}
-                                            >
-                                                <div
-                                                    style={{
-                                                        display: 'flex',
-                                                        gap: 10,
-                                                        alignItems: 'center',
-                                                        minWidth: 0,
-                                                    }}
-                                                >
-                                                    <div
-                                                        style={{
-                                                            width: 42,
-                                                            height: 42,
-                                                            borderRadius: 6,
-                                                            background: isBank
-                                                                ? '#e6f4ff'
-                                                                : '#f6ffed',
-                                                            color: isBank
-                                                                ? '#1677ff'
-                                                                : '#389e0d',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            fontSize: 20,
-                                                            flexShrink: 0,
-                                                        }}
-                                                    >
-                                                        {isBank ? (
-                                                            <BankOutlined />
-                                                        ) : (
-                                                            <WalletOutlined />
-                                                        )}
-                                                    </div>
+                            const amount = formatMoney(
+                                record?.current_balance ??
+                                    record?.software_ledger_balance ??
+                                    record?.opening_balance ??
+                                    0,
+                            );
 
-                                                    <div style={{ minWidth: 0 }}>
-                                                        <Text
-                                                            strong
-                                                            style={{
-                                                                display: 'block',
-                                                                fontSize: 15,
-                                                                whiteSpace: 'nowrap',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis',
-                                                            }}
-                                                        >
-                                                            {record.display_name}
-                                                        </Text>
+                            const menuItems = [
+                                {
+                                    key: 'view',
+                                    label: 'View Details',
+                                    icon: <EyeOutlined />,
+                                },
+                                {
+                                    key: 'copy',
+                                    label: 'Copy Details',
+                                    icon: <CopyOutlined />,
+                                },
+                                {
+                                    key: 'edit',
+                                    label: 'Edit',
+                                    icon: <EditOutlined />,
+                                },
+                                {
+                                    key: record?.active === false ? 'restore' : 'delete',
+                                    label: record?.active === false ? 'Make Active' : 'Make Inactive',
+                                    icon: <DeleteOutlined />,
+                                    danger: record?.active !== false,
+                                },
+                            ];
 
-                                                        <Text type="secondary">
-                                                            {record.code || '-'}
-                                                        </Text>
-                                                    </div>
+                            return (
+                                <Col xs={24} sm={12} md={12} lg={8} xl={6} key={record.id}>
+                                    <Card
+                                        hoverable
+                                        className="bank-page__compact-card"
+                                        onClick={() =>
+                                            router.visit(route('accounting.bank-accounts.show', record.id))
+                                        }
+                                    >
+                                        <div className="bank-page__card-head">
+                                            <div className="bank-page__card-left">
+                                                <span className={`bank-page__avatar ${isBank ? '' : 'cash'}`}>
+                                                    {isBank ? <BankOutlined /> : <WalletOutlined />}
+                                                </span>
+
+                                                <div style={{ minWidth: 0 }}>
+                                                    <Title level={5} className="bank-page__name">
+                                                        {record?.display_name || '-'}
+                                                    </Title>
+
+                                                    <span className="bank-page__subname">
+                                                        {record?.bank_name || record?.account_name || (isBank ? 'Bank Account' : 'Cash Account')}
+                                                    </span>
                                                 </div>
-
-                                                {renderCardActions(record)}
                                             </div>
 
-                                            <Space wrap style={{ marginBottom: 12 }}>
-                                                <Tag color={isBank ? 'blue' : 'green'}>
-                                                    {isBank ? 'Bank' : 'Cash'}
-                                                </Tag>
+                                            <Dropdown
+                                                menu={{
+                                                    items: menuItems,
+                                                    onClick: ({ key, domEvent }) => {
+                                                        domEvent?.stopPropagation?.();
 
-                                                <Tag>{currency?.code || 'Base'} balance</Tag>
-                                                {record.account_id ? null : <Tag color="warning">Missing linked account</Tag>}
-                                            </Space>
+                                                        if (key === 'view') {
+                                                            router.visit(route('accounting.bank-accounts.show', record.id));
+                                                        }
 
-                                            <div
-                                                style={{
-                                                    borderTop: '1px solid #f0f0f0',
-                                                    paddingTop: 12,
-                                                    display: 'grid',
-                                                    gap: 8,
+                                                        if (key === 'copy') {
+                                                            handleCopyBankAccountInfo(record);
+                                                        }
+
+                                                        if (key === 'edit') {
+                                                            openEditForm(record);
+                                                        }
+
+                                                        if (key === 'delete') {
+                                                            softDelete(record);
+                                                        }
+
+                                                        if (key === 'restore') {
+                                                            restoreRecord(record);
+                                                        }
+                                                    },
                                                 }}
-                                            >
-                                                <div>
-                                                    <Text type="secondary">Currency</Text>
-                                                    <br />
-                                                    <Text strong>{currencyLabel}</Text>
-                                                </div>
-
-                                                <div>
-                                                    <Text type="secondary">Opening Balance</Text>
-                                                    <br />
-                                                    <Text strong>{formatMoney(record.opening_balance)}</Text>
-                                                </div>
-
-                                                <div>
-                                                    <Text type="secondary">Current Balance</Text>
-                                                    <br />
-                                                    <Text strong>{formatMoney(record.current_balance ?? record.software_ledger_balance ?? record.opening_balance)}</Text>
-                                                </div>
-
-                                                {isBank ? (
-                                                    <>
-                                                        <div>
-                                                            <Text type="secondary">Bank Name</Text>
-                                                            <br />
-                                                            <Text>{record.bank_name || '-'}</Text>
-                                                        </div>
-
-                                                        <div>
-                                                            <Text type="secondary">
-                                                                Account Number
-                                                            </Text>
-                                                            <br />
-                                                            <Text copyable={!!record.account_number}>
-                                                                {record.account_number || '-'}
-                                                            </Text>
-                                                        </div>
-
-                                                        <div>
-                                                            <Text type="secondary">Swift Code</Text>
-                                                            <br />
-                                                            <Text>{record.swift_code || '-'}</Text>
-                                                        </div>
-                                                    </>
-                                                ) : null}
-                                            </div>
-
-                                            <div
-                                                style={{
-                                                    marginTop: 16,
-                                                    display: 'flex',
-                                                    justifyContent: 'space-between',
-                                                    gap: 8,
-                                                }}
+                                                trigger={['click']}
                                             >
                                                 <Button
-                                                    block
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        router.visit(route('accounting.bank-accounts.show', record.id));
-                                                    }}
-                                                >
-                                                    View Details
-                                                </Button>
+                                                    type="text"
+                                                    size="small"
+                                                    icon={<MoreOutlined />}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </Dropdown>
+                                        </div>
 
-                                                <Button
-                                                    block
-                                                    onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        router.visit(route('accounting.bank-accounts.show', record.id));
-                                                    }}
-                                                >
-                                                    Statement
-                                                </Button>
+                                        <div className="bank-page__amount">{amount}</div>
 
-                                                <Button onClick={(event) => { event.stopPropagation(); router.visit(route('accounting.bank-accounts.show', record.id)); }}>Ledger</Button>
-                                            </div>
-                                        </Card>
-                                    </Col>
-                                );
-                            })}
-                        </Row>
-                    )}
-                </Spin>
+                                        <div className="bank-page__tags">
+                                            <Tag color={isBank ? 'blue' : 'green'}>
+                                                {isBank ? 'Bank' : 'Cash'}
+                                            </Tag>
 
-                <div
-                    style={{
-                        marginTop: 18,
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                    }}
-                >
-                    <Pagination
-                        current={pagination.current}
-                        pageSize={pagination.pageSize}
-                        total={pagination.total}
-                        showSizeChanger
-                        pageSizeOptions={[8, 12, 24, 48]}
-                        onChange={(page, pageSize) => {
-                            setPagination((prev) => ({
-                                ...prev,
-                                current: page,
-                                pageSize,
-                            }));
+                                            <Tag>{currencyLabel}</Tag>
 
-                            fetchRows({
-                                page,
-                                pageSize,
-                            });
-                        }}
-                    />
-                </div>
+                                            {record?.code ? <Tag>{record.code}</Tag> : null}
+
+                                            <Tag color={record?.active === false ? 'default' : 'success'}>
+                                                {record?.active === false ? 'Inactive' : 'Active'}
+                                            </Tag>
+
+                                            {record?.account_type && isBank ? (
+                                                <Tag>{record.account_type}</Tag>
+                                            ) : null}
+
+                                            {record?.account_number && isBank ? (
+                                                <Tag>Acc: {record.account_number}</Tag>
+                                            ) : null}
+
+                                            {record?.swift_code && isBank ? (
+                                                <Tag>Swift: {record.swift_code}</Tag>
+                                            ) : null}
+
+                                            {record?.description ? (
+                                                <Tag>{record.description}</Tag>
+                                            ) : null}
+                                        </div>
+                                    </Card>
+                                </Col>
+                            );
+                        })}
+                    </Row>
+                )}
             </div>
 
-            <div style={{ display: 'none' }}>
+            <div className="bank-page__hidden-crud">
                 <ReusableCrud
                     key={`bank-account-form-${formKey}`}
                     icon={<BankOutlined />}
@@ -1044,7 +989,7 @@ export default function BankAccounts(props) {
                     transformPayload={transformPayload}
                     onFormValuesChange={handleFormValuesChange}
                     form_ui="modal"
-                    modalWidth={760}
+                    modalWidth={680}
                     openOnMount={formKey > 0}
                     openMode={formMode}
                     openEditId={editId}
@@ -1057,8 +1002,8 @@ export default function BankAccounts(props) {
                     activeParam="active"
                     sortMode="ordering"
                     orderingParam="ordering"
-                    defaultSortField="created_at"
-                    defaultSortOrder="descend"
+                    defaultSortField="display_name"
+                    defaultSortOrder="ascend"
                     showSearch={false}
                     enableInactiveDrawer={false}
                     canAdd

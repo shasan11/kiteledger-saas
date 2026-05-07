@@ -17,11 +17,16 @@ class EmailConfig extends Model
      * @var array
      */
     protected $fillable = [
+        'branch_id',
         'email_config_name',
+        'mailer',
         'email_host',
         'email_port',
+        'encryption',
         'email_user',
         'email_pass',
+        'from_name',
+        'from_address',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -39,6 +44,11 @@ class EmailConfig extends Model
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function userAdd(): BelongsTo

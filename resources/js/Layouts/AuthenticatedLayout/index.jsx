@@ -219,17 +219,19 @@ export default function AuthenticatedLayout({ header, children }) {
                 ],
             },
             {
+                key: 'reports',
+                icon: <AuditOutlined />,
+                label: 'Reports',
+                onClick: () => visit('reports.index', '/reports'),
+            },
+            {
                 key: 'settings',
                 icon: <SettingOutlined />,
                 label: 'Settings',
                 children: [
-                    { key: 'settings-alert-types', label: 'Alert Types', onClick: () => visit('settings.alert-types.index', '/settings/alert-types') },
-                    { key: 'settings-reporting-tags', label: 'Reporting Tags', onClick: () => visit('settings.reporting-tags.index', '/settings/reporting-tags') },
-                    { key: 'settings-document-numberings', label: 'Document Numberings', onClick: () => visit('settings.document-numberings.index', '/settings/document-numberings') },
-                    { key: 'settings-printing-templates', label: 'Printing Templates', onClick: () => visit('settings.printing-templates.index', '/settings/printing-templates') },
-                    { key: 'settings-custom-templates', label: 'Custom Templates', onClick: () => visit('settings.custom-templates.index', '/settings/custom-templates') },
-                    { key: 'settings-application-settings', label: 'Application Settings', onClick: () => visit('settings.application-settings.index', '/settings/application-settings') },
-                    { key: 'settings-general-settings', label: 'General Settings', onClick: () => visit('settings.general-settings.index', '/settings/general-settings') },
+                    { key: 'settings-dashboard', label: 'Application Settings', onClick: () => visit('settings.index', '/settings') },
+                    { key: 'settings-users-permissions', label: 'Users and Permissions', onClick: () => visit('settings.roles.index', '/settings/roles') },
+                    { key: 'settings-master-data', label: 'Master Data', onClick: () => visit('settings.master-data.index', '/settings/master-data') },
                 ],
             },
         ],
@@ -346,6 +348,33 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/configurations/import-export')) return ['config-import-export'];
         if (isActive('/configurations/organization')) return ['config-organization'];
         if (isActive('/configurations/subscription')) return ['config-subscription'];
+
+        if (page.url === '/settings') return ['settings-dashboard'];
+        if (isActive('/settings/company-profile')) return ['settings-company-profile'];
+        if (isActive('/settings/localization')) return ['settings-localization'];
+        if (isActive('/settings/branches')) return ['settings-branches'];
+        if (isActive('/settings/users')) return ['settings-users-permissions'];
+        if (isActive('/settings/roles')) return ['settings-users-permissions'];
+        if (isActive('/settings/permissions')) return ['settings-users-permissions'];
+        if (isActive('/settings/fiscal-years')) return ['settings-fiscal-years'];
+        if (isActive('/settings/currencies')) return ['settings-currencies'];
+        if (isActive('/settings/taxes')) return ['settings-taxes'];
+        if (isActive('/settings/accounting-configuration')) return ['settings-accounting-config'];
+        if (isActive('/settings/document-numberings')) return ['settings-document-numberings'];
+        if (isActive('/settings/approval-workflows')) return ['settings-approval-workflows'];
+        if (isActive('/settings/sales-configuration')) return ['settings-sales-config'];
+        if (isActive('/settings/purchase-configuration')) return ['settings-purchase-config'];
+        if (isActive('/settings/hrm-configuration')) return ['settings-hrm-config'];
+        if (isActive('/settings/inventory-configuration')) return ['settings-inventory-config'];
+        if (isActive('/settings/email-configuration')) return ['settings-email-config'];
+        if (isActive('/settings/email-templates')) return ['settings-email-templates'];
+        if (isActive('/settings/application-settings')) return ['settings-application-settings'];
+        if (isActive('/settings/general-settings')) return ['settings-general-settings'];
+        if (isActive('/settings/alert-types')) return ['settings-alert-types'];
+        if (isActive('/settings/reporting-tags')) return ['settings-reporting-tags'];
+        if (isActive('/settings/printing-templates')) return ['settings-printing-templates'];
+        if (isActive('/settings/custom-templates')) return ['settings-custom-templates'];
+        if (isActive('/settings/master-data')) return ['settings-master-data'];
 
         return ['home'];
     }, [page.url]);

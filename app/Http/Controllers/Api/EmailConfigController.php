@@ -46,10 +46,14 @@ class EmailConfigController extends BaseCrudApiController
     protected array $storeRules = [
         'branch_id'         => ['nullable', 'uuid', 'exists:branches,id'],
         'email_config_name' => ['required', 'string', 'max:120'],
+        'mailer'            => ['nullable', 'string', 'max:40'],
         'email_host'        => ['required', 'string', 'max:180'],
         'email_port'        => ['required', 'integer', 'min:1', 'max:65535'],
+        'encryption'        => ['nullable', 'string', 'max:20'],
         'email_user'        => ['required', 'string', 'max:180'],
         'email_pass'        => ['required', 'string', 'max:255'],
+        'from_name'         => ['nullable', 'string', 'max:120'],
+        'from_address'      => ['nullable', 'email', 'max:180'],
         'active'            => ['nullable', 'boolean'],
         'user_add_id'       => ['nullable', 'integer', 'exists:users,id'],
     ];
@@ -59,10 +63,14 @@ class EmailConfigController extends BaseCrudApiController
         return [
             'branch_id'         => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'email_config_name' => ['sometimes', 'required', 'string', 'max:120'],
+            'mailer'            => ['sometimes', 'nullable', 'string', 'max:40'],
             'email_host'        => ['sometimes', 'required', 'string', 'max:180'],
             'email_port'        => ['sometimes', 'required', 'integer', 'min:1', 'max:65535'],
+            'encryption'        => ['sometimes', 'nullable', 'string', 'max:20'],
             'email_user'        => ['sometimes', 'required', 'string', 'max:180'],
             'email_pass'        => ['sometimes', 'nullable', 'string', 'max:255'],
+            'from_name'         => ['sometimes', 'nullable', 'string', 'max:120'],
+            'from_address'      => ['sometimes', 'nullable', 'email', 'max:180'],
             'active'            => ['sometimes', 'nullable', 'boolean'],
             'user_add_id'       => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];

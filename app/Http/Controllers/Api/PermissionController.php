@@ -56,6 +56,7 @@ class PermissionController extends BaseCrudApiController
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'name' => ['required', 'string', 'max:150', 'unique:permissions,name'],
+        'guard_name' => ['nullable', 'string', 'max:80'],
         'description' => ['nullable', 'string', 'max:255'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -67,6 +68,7 @@ class PermissionController extends BaseCrudApiController
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'name' => ['sometimes', 'required', 'string', 'max:150', 'unique:permissions,name,' . $record->id . ',id'],
+            'guard_name' => ['sometimes', 'nullable', 'string', 'max:80'],
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],

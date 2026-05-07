@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppSettingController;
 use App\Http\Controllers\Api\ApplicationSettingController;
+use App\Http\Controllers\Api\ApprovalWorkflowController;
 use App\Http\Controllers\Api\BankAccountController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CashTransferController;
@@ -82,7 +83,9 @@ use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\AwardHistoryController;
 use App\Http\Controllers\Api\PublicHolidayController;
 use App\Http\Controllers\Api\EmailConfigController;
+use App\Http\Controllers\Api\EmailTemplateController;
 use App\Http\Controllers\Api\EmailController;
+use App\Http\Controllers\Api\FiscalYearController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\MilestoneController;
 use App\Http\Controllers\Api\PriorityController;
@@ -91,6 +94,7 @@ use App\Http\Controllers\Api\TaskController as HrmTaskController;
 use App\Http\Controllers\Api\AssignedTaskController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
+use App\Http\Controllers\Api\SettingsConfigurationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -117,6 +121,23 @@ Route::post('currencies/bulk', [CurrencyController::class, 'bulkStore']);
 Route::patch('currencies/bulk', [CurrencyController::class, 'bulkUpdate']);
 Route::delete('currencies/bulk', [CurrencyController::class, 'bulkDestroy']);
 Route::apiResource('currencies', CurrencyController::class);
+
+Route::get('settings/dashboard', [SettingsConfigurationController::class, 'dashboard']);
+Route::get('settings/configurations/{area}', [SettingsConfigurationController::class, 'show']);
+Route::put('settings/configurations/{area}', [SettingsConfigurationController::class, 'update']);
+Route::patch('settings/configurations/{area}', [SettingsConfigurationController::class, 'update']);
+
+Route::get('app-settings/current', [AppSettingController::class, 'singletonShow']);
+Route::put('app-settings/current', [AppSettingController::class, 'singletonUpsert']);
+Route::patch('app-settings/current', [AppSettingController::class, 'singletonUpsert']);
+Route::apiResource('app-settings', AppSettingController::class);
+
+Route::post('fiscal-years/{id}/mark-current', [FiscalYearController::class, 'markCurrent']);
+Route::post('fiscal-years/{id}/close', [FiscalYearController::class, 'close']);
+Route::apiResource('fiscal-years', FiscalYearController::class);
+
+Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
+Route::apiResource('email-templates', EmailTemplateController::class);
 
 /*
 |--------------------------------------------------------------------------

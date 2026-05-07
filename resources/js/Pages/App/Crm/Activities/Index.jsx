@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ResuableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography } from 'antd';
 import { ScheduleOutlined } from '@ant-design/icons';
@@ -352,7 +352,11 @@ export default function Activities(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <AuthenticatedLayout user={props.auth?.user}
+      header={<div style={{ fontSize: 18, fontWeight: 650, }}>
+       Activities
+      </div>}
+      >
       <Head title="Activities" />
       <ReusableCrud
         icon={<ScheduleOutlined />}
@@ -372,6 +376,14 @@ export default function Activities(props) {
         orderingParam="ordering"
         enableServerPagination={true}
         showSearch={true}
+        canView={true}
+        activeTableRowFunction={(record) => ({
+          onClick: (event) => {
+            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            router.visit(route('crm.activities.show', record.id));
+          },
+          style: { cursor: 'pointer' },
+        })}
         canAdd={true}
         canEdit={true}
         canDelete={true}

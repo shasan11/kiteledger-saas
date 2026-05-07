@@ -3,17 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Permission\Models\Role as SpatieRole;
 
-class Role extends Model
+class Role extends SpatieRole
 {
     use HasUuids;
 
     protected $fillable = [
-        'branch_id', 'name', 'description', 'active', 'is_system_generated', 'user_add_id',
+        'branch_id', 'name', 'guard_name', 'description', 'active', 'is_system_generated', 'user_add_id',
     ];
 
     protected function casts(): array
@@ -27,16 +25,6 @@ class Role extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
-    }
-
-    public function permissions(): BelongsToMany
-    {
-        return $this->belongsToMany(Permission::class, 'role_permissions')->withTimestamps();
-    }
-
-    public function users(): HasMany
-    {
-        return $this->hasMany(User::class);
     }
 
     public function userAdd(): BelongsTo

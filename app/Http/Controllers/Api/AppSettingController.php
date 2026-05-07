@@ -15,9 +15,12 @@ class AppSettingController extends BaseCrudApiController
 
     protected bool $branchScoped = false;
 
-    protected array $relations = [];
+    protected array $relations = ['defaultCurrency', 'fiscalYear'];
 
-    protected array $relationDetails = [];
+    protected array $relationDetails = [
+        'defaultCurrency' => 'default_currency_id',
+        'fiscalYear' => 'fiscal_year_id',
+    ];
 
     protected array $searchable = ['company_name', 'email', 'phone', 'website'];
 
@@ -27,11 +30,31 @@ class AppSettingController extends BaseCrudApiController
 
     protected array $storeRules = [
         'company_name' => ['required', 'string', 'max:180'],
+        'legal_name' => ['nullable', 'string', 'max:180'],
+        'registration_number' => ['nullable', 'string', 'max:80'],
+        'tax_number' => ['nullable', 'string', 'max:80'],
+        'vat_number' => ['nullable', 'string', 'max:80'],
         'tag_line' => ['nullable', 'string', 'max:200'],
         'address' => ['nullable', 'string', 'max:255'],
         'phone' => ['nullable', 'string', 'max:40'],
         'email' => ['nullable', 'email', 'max:120'],
         'website' => ['nullable', 'string', 'max:180'],
+        'address_line_1' => ['nullable', 'string', 'max:255'],
+        'address_line_2' => ['nullable', 'string', 'max:255'],
+        'city' => ['nullable', 'string', 'max:80'],
+        'state' => ['nullable', 'string', 'max:80'],
+        'postal_code' => ['nullable', 'string', 'max:40'],
+        'country' => ['nullable', 'string', 'max:80'],
+        'default_currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
+        'fiscal_year_id' => ['nullable', 'uuid', 'exists:fiscal_years,id'],
+        'timezone' => ['nullable', 'string', 'max:80'],
+        'date_format' => ['nullable', 'string', 'max:30'],
+        'time_format' => ['nullable', 'string', 'max:30'],
+        'number_format' => ['nullable', 'string', 'max:40'],
+        'language' => ['nullable', 'string', 'max:20'],
+        'week_start_day' => ['nullable', 'string', 'max:20'],
+        'financial_year_start_month' => ['nullable', 'integer', 'min:1', 'max:12'],
+        'use_nepali_calendar' => ['nullable', 'boolean'],
         'footer' => ['nullable', 'string'],
         'logo' => ['nullable', 'string', 'max:255'],
         'suggest_selling' => ['nullable', 'in:recent,fixed'],
@@ -67,5 +90,10 @@ class AppSettingController extends BaseCrudApiController
         }
 
         return $this->update($request, $record->getKey());
+    }
+
+    protected function updateRules(Request $request, \Illuminate\Database\Eloquent\Model $record): array
+    {
+        return $this->makeRulesPartial($this->storeRules);
     }
 }

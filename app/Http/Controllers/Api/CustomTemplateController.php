@@ -16,7 +16,7 @@ class CustomTemplateController extends BaseCrudApiController
 
     protected bool $branchScoped = false;
 
-    protected array $searchable = ['name', 'purpose'];
+    protected array $searchable = ['name', 'purpose', 'template_key'];
 
     protected array $filterable = ['purpose'];
 
@@ -29,6 +29,7 @@ class CustomTemplateController extends BaseCrudApiController
     protected array $storeRules = [
         'name' => ['required', 'string', 'max:120'],
         'purpose' => ['nullable', 'string', 'max:80'],
+        'template_key' => ['nullable', 'string', 'max:120'],
         'content' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -40,6 +41,7 @@ class CustomTemplateController extends BaseCrudApiController
         return [
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'purpose' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'template_key' => ['sometimes', 'nullable', 'string', 'max:120'],
             'content' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],

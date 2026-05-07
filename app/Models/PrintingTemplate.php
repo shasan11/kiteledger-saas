@@ -19,6 +19,7 @@ class PrintingTemplate extends Model
     protected $fillable = [
         'name',
         'document_type',
+        'template_key',
         'template_html',
         'template_css',
         'is_default',
