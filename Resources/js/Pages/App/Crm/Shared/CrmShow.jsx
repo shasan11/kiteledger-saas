@@ -29,6 +29,14 @@ import {
   UserSwitchOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ReusableCrud from '@/Components/ResuableCrud';
+import {
+  buildActivityCrud,
+  buildDealCrud,
+  buildLeadCrud,
+  buildPipelineCrud,
+  buildStageCrud,
+} from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -399,6 +407,210 @@ const documentColumns = (numberField, dateField, amountField, statusField = 'sta
     render: (value) => <SmartTag value={value} />,
   },
 ];
+
+function DealsTabContent({ leadId, dealCrud, dealCrudColumns }) {
+  const [view, setView] = useState('list');
+  const { token } = theme.useToken();
+
+  return (
+    <DetailsCard
+      title="Deals"
+      extra={
+        <Space.Compact size="small">
+          <Button type={view === 'list' ? 'primary' : 'default'} onClick={() => setView('list')}>List</Button>
+          <Button type={view === 'kanban' ? 'primary' : 'default'} onClick={() => setView('kanban')}>Kanban</Button>
+        </Space.Compact>
+      }
+    >
+      {view === 'list' ? (
+        <ReusableCrud
+          title="Deals"
+          apiUrl={dealCrud.apiUrl}
+          columns={dealCrudColumns}
+          fields={dealCrud.fields}
+          validationSchema={dealCrud.validationSchema}
+          crudInitialValues={dealCrud.crudInitialValues}
+          transformPayload={dealCrud.transformPayload}
+          baseFilters={{ lead_id: leadId }}
+          form_ui="drawer"
+          drawerWidth={1100}
+          searchParam="search"
+          pageParam="page"
+          pageSizeParam="page_size"
+          sortMode="ordering"
+          orderingParam="ordering"
+          enableServerPagination
+          showSearch
+          canAdd
+          canEdit
+          canDelete
+          hasActions
+          hasActionColumns
+        />
+      ) : (
+        <DealKanban leadId={leadId} tokenColors={token} />
+      )}
+    </DetailsCard>
+  );
+}
+
+function DealKanban({ leadId, tokenColors }) {
+  const [stages, setStages] = useState([]);
+  const [dealsByStage, setDealsByStage] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [stagesRes, dealsRes] = await Promise.all([
+          axios.get(api('/api/deal-stages/'), {
+            headers: authHeaders(),
+            params: { page_size: 100, ordering: 'sort_order' },
+          }),
+          axios.get(api('/api/deals/'), {
+            headers: authHeaders(),
+            params: { lead_id: leadId, page_size: 200 },
+          }),
+        ]);
+        if (!mounted) return;
+        const stageRows = rowsFrom(stagesRes.data);
+        const dealRows = rowsFrom(dealsRes.data);
+        setStages(stageRows);
+        const grouped = stageRows.reduce((acc, s) => {
+          acc[s.id] = [];
+          return acc;
+        }, { __unassigned: [] });
+        dealRows.forEach((d) => {
+          const key = d.deal_stage_id && grouped[d.deal_stage_id] ? d.deal_stage_id : '__unassigned';
+          grouped[key].push(d);
+        });
+        setDealsByStage(grouped);
+      } catch {
+        if (mounted) {
+          setStages([]);
+          setDealsByStage({});
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [leadId]);
+
+  if (loading) return <Skeleton active paragraph={{ rows: 6 }} />;
+
+  const columns = [
+    ...stages,
+    { id: '__unassigned', name: 'Unassigned', color: '#94a3b8' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 6 }}>
+      {columns.map((stage) => {
+        const items = dealsByStage[stage.id] || [];
+        const total = items.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+        return (
+          <div
+            key={stage.id}
+            style={{
+              minWidth: 240,
+              maxWidth: 280,
+              flex: '0 0 260px',
+              background: tokenColors.colorFillAlter,
+              borderRadius: tokenColors.borderRadius,
+              padding: 8,
+              border: `1px solid ${tokenColors.colorBorderSecondary}`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text strong style={{ color: stage.color || tokenColors.colorText }}>{stage.name}</Text>
+              <Text type="secondary">{items.length}</Text>
+            </div>
+            <div style={{ fontSize: 11, color: tokenColors.colorTextSecondary, marginBottom: 8 }}>
+              Total: {formatMoney(total)}
+            </div>
+            <Space direction="vertical" size={6} style={{ width: '100%' }}>
+              {items.length ? items.map((d) => (
+                <Card
+                  key={d.id}
+                  size="small"
+                  hoverable
+                  style={{ width: '100%' }}
+                  onClick={() => router.visit(safeRoute('crm.deals.show', d.id, `/crm/deals/${d.id}`))}
+                >
+                  <Text strong style={{ display: 'block' }}>{d.title || d.deal_no || '-'}</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{formatMoney(d.amount)}</Text>
+                  <div style={{ marginTop: 4 }}>
+                    <SmartTag value={d.status || 'open'} />
+                  </div>
+                </Card>
+              )) : <Text type="secondary" style={{ fontSize: 12 }}>No deals</Text>}
+            </Space>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LeadCommentsTab({ leadId }) {
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get(api('/api/crm-activities/'), {
+          headers: authHeaders(),
+          params: { lead_id: leadId, page_size: 200 },
+        });
+        if (!mounted) return;
+        const acts = rowsFrom(res.data);
+        const all = [];
+        acts.forEach((act) => {
+          const raw = act.crm_activity_comments || act.crmActivityComments || [];
+          raw.forEach((c) => all.push({ ...c, activity_subject: act.subject, activity_id: act.id }));
+        });
+        all.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        setComments(all);
+      } catch {
+        if (mounted) setComments([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [leadId]);
+
+  return (
+    <DetailsCard title="Comments">
+      {loading ? (
+        <Skeleton active paragraph={{ rows: 4 }} />
+      ) : comments.length ? (
+        <Timeline
+          items={comments.map((c) => ({
+            children: (
+              <Space direction="vertical" size={2}>
+                <Text>{c?.comment}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {(c?.user?.name || 'User')} on "{c.activity_subject || 'Activity'}" | {formatDateTime(c?.created_at)}
+                </Text>
+              </Space>
+            ),
+          }))}
+        />
+      ) : (
+        <Empty description="No comments yet. Add comments to activities to see them here." />
+      )}
+    </DetailsCard>
+  );
+}
 
 function ShowShell({ auth, id, endpoint, children, mapRecord }) {
   const { token } = theme.useToken();
@@ -1016,38 +1228,189 @@ export function LeadShow({ auth, id }) {
           </>
         );
 
+        const leadCrud = buildLeadCrud();
+        const activityCrud = buildActivityCrud({ locked: { lead_id: id } });
+        const dealCrud = buildDealCrud({ locked: { lead_id: id } });
+        const pipelineCrud = buildPipelineCrud();
+        const stageCrud = buildStageCrud();
+
+        const leadCrudColumns = [
+          { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
+          { title: 'Company', dataIndex: 'company_name', key: 'company_name', render: (v) => v || '-' },
+          { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <SmartTag value={v || 'new'} /> },
+          { title: 'Email', dataIndex: 'email', key: 'email', render: (v) => v || '-' },
+        ];
+
+        const activityCrudColumns = [
+          { title: 'Subject', dataIndex: 'subject', key: 'subject', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
+          { title: 'Type', dataIndex: 'activity_type', key: 'activity_type', width: 110, render: (v) => v ? <Tag>{labelize(v)}</Tag> : '-' },
+          { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <SmartTag value={v || 'pending'} /> },
+          { title: 'Priority', dataIndex: 'priority', key: 'priority', width: 100, render: (v) => <SmartTag value={v || 'medium'} /> },
+          { title: 'Due', dataIndex: 'due_at', key: 'due_at', width: 160, render: formatDateTime },
+        ];
+
+        const dealCrudColumns = [
+          { title: 'Title', dataIndex: 'title', key: 'title', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
+          { title: 'Status', dataIndex: 'status', key: 'status', width: 110, render: (v) => <SmartTag value={v || 'open'} /> },
+          { title: 'Stage', key: 'stage', width: 140, render: (_, r) => r?.deal_stage?.name || '-' },
+          { title: 'Pipeline', key: 'pipeline', width: 140, render: (_, r) => r?.deal_pipeline?.name || '-' },
+          { title: 'Amount', dataIndex: 'amount', key: 'amount', width: 130, align: 'right', render: formatMoney },
+          { title: 'Expected Close', dataIndex: 'expected_close_date', key: 'expected_close_date', width: 140, render: (v) => v || '-' },
+        ];
+
+        const pipelineCrudColumns = [
+          { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
+          { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true, render: (v) => v || '-' },
+          { title: 'Default', dataIndex: 'is_default', key: 'is_default', width: 100, render: (v) => <Tag color={v ? 'green' : 'default'}>{v ? 'Yes' : 'No'}</Tag> },
+        ];
+
+        const stageCrudColumns = [
+          { title: 'Stage', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
+          { title: 'Pipeline', key: 'pipeline', render: (_, r) => r?.deal_pipeline?.name || '-' },
+          { title: 'Probability %', dataIndex: 'probability', key: 'probability', width: 130, align: 'right', render: (v) => v ?? '-' },
+          { title: 'Order', dataIndex: 'sort_order', key: 'sort_order', width: 90, align: 'right', render: (v) => v ?? '-' },
+          { title: 'Won', dataIndex: 'is_won_stage', key: 'is_won_stage', width: 80, render: (v) => v ? <Tag color="green">Won</Tag> : '-' },
+          { title: 'Lost', dataIndex: 'is_lost_stage', key: 'is_lost_stage', width: 80, render: (v) => v ? <Tag color="red">Lost</Tag> : '-' },
+        ];
+
         const tabs = [
+          { key: 'overview', label: 'Overview', children: overview },
           {
-            key: 'overview',
-            label: 'Overview',
-            children: overview,
+            key: 'lead',
+            label: 'Lead',
+            children: (
+              <DetailsCard title="Lead">
+                <ReusableCrud
+                  title="Lead"
+                  apiUrl={leadCrud.apiUrl}
+                  columns={leadCrudColumns}
+                  fields={leadCrud.fields}
+                  validationSchema={leadCrud.validationSchema}
+                  crudInitialValues={leadCrud.crudInitialValues}
+                  transformPayload={leadCrud.transformPayload}
+                  baseFilters={{ id }}
+                  form_ui="drawer"
+                  drawerWidth={1100}
+                  enableServerPagination={false}
+                  showSearch={false}
+                  canAdd={false}
+                  canEdit
+                  canDelete={false}
+                  hasActions
+                  hasActionColumns
+                />
+              </DetailsCard>
+            ),
           },
           {
             key: 'activities',
             label: 'Activities',
             children: (
-              <RelatedTable
-                title="Activities"
-                endpoint="/api/crm-activities/"
-                params={{ lead_id: id }}
-                columns={activityColumns}
-                rowUrl={(row) =>
-                  safeRoute('crm.activities.show', row.id, `/crm/activities/${row.id}`)
-                }
-              />
+              <DetailsCard title="Activities">
+                <ReusableCrud
+                  title="Activities"
+                  apiUrl={activityCrud.apiUrl}
+                  columns={activityCrudColumns}
+                  fields={activityCrud.fields}
+                  validationSchema={activityCrud.validationSchema}
+                  crudInitialValues={activityCrud.crudInitialValues}
+                  transformPayload={activityCrud.transformPayload}
+                  baseFilters={{ lead_id: id }}
+                  form_ui="drawer"
+                  drawerWidth={1100}
+                  searchParam="search"
+                  pageParam="page"
+                  pageSizeParam="page_size"
+                  sortMode="ordering"
+                  orderingParam="ordering"
+                  enableServerPagination
+                  showSearch
+                  canAdd
+                  canEdit
+                  canDelete
+                  hasActions
+                  hasActionColumns
+                />
+              </DetailsCard>
             ),
           },
           {
             key: 'deals',
             label: 'Deals',
             children: (
-              <RelatedTable
-                title="Deals"
-                endpoint="/api/deals/"
-                params={{ lead_id: id }}
-                columns={dealColumns}
+              <DealsTabContent
+                leadId={id}
+                dealCrud={dealCrud}
+                dealCrudColumns={dealCrudColumns}
               />
             ),
+          },
+          {
+            key: 'pipelines',
+            label: 'Pipelines',
+            children: (
+              <DetailsCard title="Deal Pipelines">
+                <ReusableCrud
+                  title="Pipelines"
+                  apiUrl={pipelineCrud.apiUrl}
+                  columns={pipelineCrudColumns}
+                  fields={pipelineCrud.fields}
+                  validationSchema={pipelineCrud.validationSchema}
+                  crudInitialValues={pipelineCrud.crudInitialValues}
+                  transformPayload={pipelineCrud.transformPayload}
+                  form_ui="drawer"
+                  drawerWidth={1100}
+                  searchParam="search"
+                  pageParam="page"
+                  pageSizeParam="page_size"
+                  sortMode="ordering"
+                  orderingParam="ordering"
+                  enableServerPagination
+                  showSearch
+                  canAdd
+                  canEdit
+                  canDelete
+                  hasActions
+                  hasActionColumns
+                />
+              </DetailsCard>
+            ),
+          },
+          {
+            key: 'stages',
+            label: 'Stages',
+            children: (
+              <DetailsCard title="Deal Stages">
+                <ReusableCrud
+                  title="Stages"
+                  apiUrl={stageCrud.apiUrl}
+                  columns={stageCrudColumns}
+                  fields={stageCrud.fields}
+                  validationSchema={stageCrud.validationSchema}
+                  crudInitialValues={stageCrud.crudInitialValues}
+                  transformPayload={stageCrud.transformPayload}
+                  form_ui="drawer"
+                  drawerWidth={900}
+                  searchParam="search"
+                  pageParam="page"
+                  pageSizeParam="page_size"
+                  sortMode="ordering"
+                  orderingParam="ordering"
+                  enableServerPagination
+                  showSearch
+                  canAdd
+                  canEdit
+                  canDelete
+                  hasActions
+                  hasActionColumns
+                />
+              </DetailsCard>
+            ),
+          },
+          {
+            key: 'comments',
+            label: 'Comments',
+            children: <LeadCommentsTab leadId={id} />,
           },
         ];
 
