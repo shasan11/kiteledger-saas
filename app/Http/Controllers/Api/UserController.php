@@ -6,16 +6,20 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserController extends BaseCrudApiController
 {
     protected string $modelClass = User::class;
 
     protected ?string $permissionPrefix = null;
+
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = true;
+
     protected bool $autoFillBranchOnCreate = true;
+
     protected bool $preventBranchChangeOnUpdate = true;
 
     protected array $relations = [
@@ -39,6 +43,7 @@ class UserController extends BaseCrudApiController
     ];
 
     protected array $searchable = [
+        'name',
         'first_name',
         'last_name',
         'username',
@@ -71,12 +76,19 @@ class UserController extends BaseCrudApiController
     ];
 
     protected array $dateRangeFilters = [
-        'join_date' => ['from' => 'join_date_from', 'to' => 'join_date_to'],
-        'leave_date' => ['from' => 'leave_date_from', 'to' => 'leave_date_to'],
+        'join_date' => [
+            'from' => 'join_date_from',
+            'to' => 'join_date_to',
+        ],
+        'leave_date' => [
+            'from' => 'leave_date_from',
+            'to' => 'leave_date_to',
+        ],
     ];
 
     protected array $sortable = [
         'id',
+        'name',
         'first_name',
         'last_name',
         'username',
@@ -97,28 +109,36 @@ class UserController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+
+        'name' => ['nullable', 'string', 'max:190'],
         'first_name' => ['required', 'string', 'max:80'],
         'last_name' => ['required', 'string', 'max:80'],
+
         'username' => ['required', 'string', 'max:80', 'unique:users,username'],
         'password' => ['required', 'string', 'min:6', 'max:255'],
         'email' => ['required', 'email', 'max:120', 'unique:users,email'],
+
         'phone' => ['nullable', 'string', 'max:40'],
         'street' => ['nullable', 'string', 'max:180'],
         'city' => ['nullable', 'string', 'max:80'],
         'state' => ['nullable', 'string', 'max:80'],
         'zip_code' => ['nullable', 'string', 'max:30'],
         'country' => ['nullable', 'string', 'max:80'],
+
         'join_date' => ['nullable', 'date'],
         'leave_date' => ['nullable', 'date', 'after_or_equal:join_date'],
+
         'employee_id' => ['nullable', 'string', 'max:60'],
         'blood_group' => ['nullable', 'string', 'max:10'],
         'image' => ['nullable', 'string', 'max:255'],
+
         'employment_status_id' => ['nullable', 'uuid', 'exists:employment_statuses,id'],
         'department_id' => ['nullable', 'uuid', 'exists:departments,id'],
         'role_id' => ['nullable', 'uuid', 'exists:roles,id'],
         'shift_id' => ['nullable', 'uuid', 'exists:shifts,id'],
         'leave_policy_id' => ['nullable', 'uuid', 'exists:leave_policies,id'],
         'weekly_holiday_id' => ['nullable', 'uuid', 'exists:weekly_holidays,id'],
+
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
     ];
@@ -127,28 +147,50 @@ class UserController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+
+            'name' => ['sometimes', 'nullable', 'string', 'max:190'],
             'first_name' => ['sometimes', 'required', 'string', 'max:80'],
             'last_name' => ['sometimes', 'required', 'string', 'max:80'],
-            'username' => ['sometimes', 'required', 'string', 'max:80', 'unique:users,username,' . $record->id . ',id'],
+
+            'username' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:80',
+                Rule::unique('users', 'username')->ignore($record->id),
+            ],
+
             'password' => ['sometimes', 'nullable', 'string', 'min:6', 'max:255'],
-            'email' => ['sometimes', 'required', 'email', 'max:120', 'unique:users,email,' . $record->id . ',id'],
+
+            'email' => [
+                'sometimes',
+                'required',
+                'email',
+                'max:120',
+                Rule::unique('users', 'email')->ignore($record->id),
+            ],
+
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'street' => ['sometimes', 'nullable', 'string', 'max:180'],
             'city' => ['sometimes', 'nullable', 'string', 'max:80'],
             'state' => ['sometimes', 'nullable', 'string', 'max:80'],
             'zip_code' => ['sometimes', 'nullable', 'string', 'max:30'],
             'country' => ['sometimes', 'nullable', 'string', 'max:80'],
+
             'join_date' => ['sometimes', 'nullable', 'date'],
             'leave_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:join_date'],
+
             'employee_id' => ['sometimes', 'nullable', 'string', 'max:60'],
             'blood_group' => ['sometimes', 'nullable', 'string', 'max:10'],
             'image' => ['sometimes', 'nullable', 'string', 'max:255'],
+
             'employment_status_id' => ['sometimes', 'nullable', 'uuid', 'exists:employment_statuses,id'],
             'department_id' => ['sometimes', 'nullable', 'uuid', 'exists:departments,id'],
             'role_id' => ['sometimes', 'nullable', 'uuid', 'exists:roles,id'],
             'shift_id' => ['sometimes', 'nullable', 'uuid', 'exists:shifts,id'],
             'leave_policy_id' => ['sometimes', 'nullable', 'uuid', 'exists:leave_policies,id'],
             'weekly_holiday_id' => ['sometimes', 'nullable', 'uuid', 'exists:weekly_holidays,id'],
+
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
         ];
@@ -156,8 +198,14 @@ class UserController extends BaseCrudApiController
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
+        $parentData['name'] = $this->makeName($parentData);
+
         if (!empty($parentData['password'])) {
             $parentData['password'] = Hash::make($parentData['password']);
+        }
+
+        if (!array_key_exists('active', $parentData)) {
+            $parentData['active'] = true;
         }
 
         return $parentData;
@@ -168,8 +216,21 @@ class UserController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
+        if (
+            empty($parentData['name']) &&
+            (
+                array_key_exists('first_name', $parentData) ||
+                array_key_exists('last_name', $parentData)
+            )
+        ) {
+            $parentData['name'] = $this->makeName([
+                'first_name' => $parentData['first_name'] ?? $record->first_name,
+                'last_name' => $parentData['last_name'] ?? $record->last_name,
+            ]);
+        }
+
         if (array_key_exists('password', $parentData)) {
-            if (!$parentData['password']) {
+            if (empty($parentData['password'])) {
                 unset($parentData['password']);
             } else {
                 $parentData['password'] = Hash::make($parentData['password']);
@@ -184,5 +245,18 @@ class UserController extends BaseCrudApiController
         unset($data['password'], $data['remember_token']);
 
         return $data;
+    }
+
+    private function makeName(array $data): string
+    {
+        $name = trim((string) ($data['name'] ?? ''));
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        return trim(
+            ((string) ($data['first_name'] ?? '')) . ' ' . ((string) ($data['last_name'] ?? ''))
+        );
     }
 }

@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
@@ -17,38 +16,85 @@ class User extends Authenticatable
 
     protected $fillable = [
         // Core auth
-        'branch_id', 'username', 'email', 'password', 'active',
+        'name',
+        'branch_id',
+        'username',
+        'email',
+        'password',
+        'active',
+
         // Personal info
-        'first_name', 'last_name', 'phone', 'blood_group', 'image',
-        'street', 'city', 'state', 'zip_code', 'country',
+        'first_name',
+        'last_name',
+        'phone',
+        'blood_group',
+        'image',
+        'street',
+        'city',
+        'state',
+        'zip_code',
+        'country',
+
         // Employment info
-        'employee_id', 'join_date', 'leave_date',
-        'employment_status_id', 'department_id', 'role_id',
-        'shift_id', 'leave_policy_id', 'weekly_holiday_id',
-        // Legacy / system
-        'name', 'is_system_generated', 'user_add_id',
+        'employee_id',
+        'join_date',
+        'leave_date',
+        'employment_status_id',
+        'department_id',
+        'role_id',
+        'shift_id',
+        'leave_policy_id',
+        'weekly_holiday_id',
+
+        // System
+        'is_system_generated',
+        'user_add_id',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $attributes = [
+        'active' => true,
+        'is_system_generated' => false,
+    ];
 
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
-            'active'            => 'boolean',
+            'active' => 'boolean',
             'is_system_generated' => 'boolean',
         ];
     }
 
-    // ── Computed ────────────────────────────────────────────────────────────
-    public function getNameAttribute(): string
+    protected static function booted(): void
     {
-        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''))
-            ?: ($this->username ?? '');
+        static::saving(function (User $user): void {
+            $name = trim((string) $user->getRawOriginal('name'));
+
+            if ($name === '') {
+                $name = trim(
+                    ((string) $user->first_name) . ' ' . ((string) $user->last_name)
+                );
+            }
+
+            if ($name === '') {
+                $name = (string) $user->username;
+            }
+
+            $user->attributes['name'] = $name;
+        });
     }
 
-    // ── Relationships ────────────────────────────────────────────────────────
+    public function getDisplayNameAttribute(): string
+    {
+        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''))
+            ?: ($this->username ?? $this->name ?? '');
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
