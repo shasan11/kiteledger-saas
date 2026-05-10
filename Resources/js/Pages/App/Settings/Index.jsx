@@ -1,118 +1,528 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head, router } from '@inertiajs/react';
-import { Button, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
+import { Head } from '@inertiajs/react';
 import {
-  ApartmentOutlined, AuditOutlined, BankOutlined, CalendarOutlined, DollarOutlined, InboxOutlined,
-  MailOutlined, NumberOutlined, SafetyCertificateOutlined, SettingOutlined,
-  TeamOutlined, TranslationOutlined,
+  Card,
+  Grid,
+  Skeleton,
+  Space,
+  Tabs,
+  Typography,
+  theme,
+} from 'antd';
+import {
+  ApartmentOutlined,
+  AuditOutlined,
+  BankOutlined,
+  CalendarOutlined,
+  DollarOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  MailOutlined,
+  NumberOutlined,
+  SafetyCertificateOutlined,
+  SettingOutlined,
+  TagsOutlined,
+  TeamOutlined,
+  TranslationOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
-import { api } from './settingsApi';
 
 const { Text, Title } = Typography;
+const { useBreakpoint } = Grid;
 
-const go = (path) => router.visit(path);
+/**
+ * These imports point to your existing Inertia page components.
+ * If any of these components contain <AuthenticatedLayout>, then pass embedded
+ * and make the component return only content when embedded=true.
+ */
 
-function SettingCard({ icon, title, description, status, path }) {
+const CompanyProfile = lazy(() => import('./CompanyProfile'));
+const Localization = lazy(() => import('./CompanyProfile'));
+
+const Branches = lazy(() => import('../Master/Branches/Index'));
+const FiscalYears = lazy(() => import('./FiscalYears'));
+const Currencies = lazy(() => import('../Master/Currencies/Index'));
+const Taxes = lazy(() => import('../Tax/TaxRates/Index'));
+
+const ApprovalWorkflows = lazy(() => import('./ApprovalWorkflows'));
+const EmailConfiguration = lazy(() => import('../Hrm/EmailConfigs/Index'));
+const EmailTemplates = lazy(() => import('./EmailTemplates'));
+
+const ConfigurationForm = lazy(() => import('./ConfigurationForm'));
+
+const Users = lazy(() => import('../Hrm/Users/Index'));
+const Roles = lazy(() => import('../Hrm/Roles/Index'));
+const Permissions = lazy(() => import('../Hrm/Permissions/Index'));
+
+const AlertTypes = lazy(() => import('./AlertTypes/Index'));
+const ReportingTags = lazy(() => import('./ReportingTags/Index'));
+const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
+const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
+const CustomTemplates = lazy(() => import('./CustomTemplates/Index'));
+const ApplicationSettings = lazy(() => import('./ApplicationSettings/Index'));
+const GeneralSettings = lazy(() => import('./GeneralSettings/Index'));
+const MasterData = lazy(() => import('./MasterData/Index'));
+
+const SETTINGS_TABS = [
+  {
+    key: 'general-group',
+    label: 'General',
+    disabled: true,
+  },
+  {
+    key: 'company-profile',
+    label: 'Company Profile',
+    description: 'Company details and print identity.',
+    icon: <BankOutlined />,
+    component: CompanyProfile,
+    props: {},
+  },
+  {
+    key: 'localization',
+    label: 'Localization',
+    description: 'Timezone, country and date settings.',
+    icon: <TranslationOutlined />,
+    component: Localization,
+    props: {},
+  },
+  {
+    key: 'general-settings',
+    label: 'General Settings',
+    description: 'Common business rules.',
+    icon: <SettingOutlined />,
+    component: GeneralSettings,
+    props: {},
+  },
+  {
+    key: 'application-settings',
+    label: 'Application Settings',
+    description: 'System-wide key value settings.',
+    icon: <SettingOutlined />,
+    component: ApplicationSettings,
+    props: {},
+  },
+  {
+    key: 'master-data',
+    label: 'Master Data',
+    description: 'Common setup data.',
+    icon: <InboxOutlined />,
+    component: MasterData,
+    props: {},
+  },
+
+  {
+    key: 'organization-group',
+    label: 'Organization',
+    disabled: true,
+  },
+  {
+    key: 'branches',
+    label: 'Branches',
+    description: 'Branch and location setup.',
+    icon: <ApartmentOutlined />,
+    component: Branches,
+    props: {},
+  },
+  {
+    key: 'users',
+    label: 'Users',
+    description: 'User accounts and staff access.',
+    icon: <TeamOutlined />,
+    component: Users,
+    props: {},
+  },
+  {
+    key: 'roles',
+    label: 'Roles',
+    description: 'Role based access control.',
+    icon: <SafetyCertificateOutlined />,
+    component: Roles,
+    props: {},
+  },
+  {
+    key: 'permissions',
+    label: 'Permissions',
+    description: 'Permission rules.',
+    icon: <SafetyCertificateOutlined />,
+    component: Permissions,
+    props: {},
+  },
+
+  {
+    key: 'finance-group',
+    label: 'Finance & Accounting',
+    disabled: true,
+  },
+  {
+    key: 'fiscal-years',
+    label: 'Fiscal Years',
+    description: 'Accounting years and locks.',
+    icon: <CalendarOutlined />,
+    component: FiscalYears,
+    props: {},
+  },
+  {
+    key: 'currencies',
+    label: 'Currencies',
+    description: 'Base and transaction currencies.',
+    icon: <DollarOutlined />,
+    component: Currencies,
+    props: {},
+  },
+  {
+    key: 'taxes',
+    label: 'Taxes',
+    description: 'VAT, GST and withholding setup.',
+    icon: <AuditOutlined />,
+    component: Taxes,
+    props: {},
+  },
+  {
+    key: 'accounting-configuration',
+    label: 'Accounting Configuration',
+    description: 'Default accounting rules.',
+    icon: <BankOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'accounting' },
+  },
+  {
+    key: 'document-numberings',
+    label: 'Document Numbering',
+    description: 'Prefixes and automatic numbering.',
+    icon: <NumberOutlined />,
+    component: DocumentNumberings,
+    props: {},
+  },
+
+  {
+    key: 'operations-group',
+    label: 'Operations',
+    disabled: true,
+  },
+  {
+    key: 'sales-configuration',
+    label: 'Sales Configuration',
+    description: 'Sales defaults and invoice rules.',
+    icon: <AuditOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'sales' },
+  },
+  {
+    key: 'purchase-configuration',
+    label: 'Purchase Configuration',
+    description: 'Purchase defaults and supplier rules.',
+    icon: <AuditOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'purchase' },
+  },
+  {
+    key: 'inventory-configuration',
+    label: 'Inventory Configuration',
+    description: 'Warehouse and stock rules.',
+    icon: <InboxOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'inventory' },
+  },
+  {
+    key: 'hrm-configuration',
+    label: 'HRM Configuration',
+    description: 'Attendance, payroll and HR defaults.',
+    icon: <TeamOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'hrm' },
+  },
+  {
+    key: 'approval-workflows',
+    label: 'Approval Workflows',
+    description: 'Approval rules by module.',
+    icon: <SafetyCertificateOutlined />,
+    component: ApprovalWorkflows,
+    props: {},
+  },
+  {
+    key: 'alert-types',
+    label: 'Alert Types',
+    description: 'System alert types.',
+    icon: <FileTextOutlined />,
+    component: AlertTypes,
+    props: {},
+  },
+  {
+    key: 'reporting-tags',
+    label: 'Reporting Tags',
+    description: 'Tags used for reports.',
+    icon: <TagsOutlined />,
+    component: ReportingTags,
+    props: {},
+  },
+
+  {
+    key: 'templates-group',
+    label: 'Templates & Notifications',
+    disabled: true,
+  },
+  {
+    key: 'email-configuration',
+    label: 'Email Configuration',
+    description: 'SMTP and sender setup.',
+    icon: <MailOutlined />,
+    component: EmailConfiguration,
+    props: {},
+  },
+  {
+    key: 'email-templates',
+    label: 'Email Templates',
+    description: 'Reusable email templates.',
+    icon: <MailOutlined />,
+    component: EmailTemplates,
+    props: {},
+  },
+  {
+    key: 'printing-templates',
+    label: 'Printing Templates',
+    description: 'Print document layouts.',
+    icon: <MailOutlined />,
+    component: PrintingTemplates,
+    props: {},
+  },
+  {
+    key: 'custom-templates',
+    label: 'Custom Templates',
+    description: 'Reusable rich text templates.',
+    icon: <MailOutlined />,
+    component: CustomTemplates,
+    props: {},
+  },
+];
+
+function getRealTabs() {
+  return SETTINGS_TABS.filter((item) => !item.disabled);
+}
+
+function getInitialTab() {
+  if (typeof window === 'undefined') return 'company-profile';
+
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+
+  return getRealTabs().some((item) => item.key === tab)
+    ? tab
+    : 'company-profile';
+}
+
+function updateUrlTab(key) {
+  if (typeof window === 'undefined') return;
+
+  const params = new URLSearchParams(window.location.search);
+  params.set('tab', key);
+
+  window.history.replaceState(
+    {},
+    '',
+    `${window.location.pathname}?${params.toString()}`
+  );
+}
+
+function TabLabel({ item, token }) {
+  if (item.disabled) {
+    return (
+      <div
+        style={{
+          padding: '10px 2px 6px',
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: 0.5,
+          textTransform: 'uppercase',
+          color: token.colorTextTertiary,
+          cursor: 'default',
+        }}
+      >
+        {item.label}
+      </div>
+    );
+  }
+
   return (
-    <Card size="small" style={{ height: '100%', borderRadius: 8 }}>
-      <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
-        <Space align="start">
-          <span style={{ fontSize: 18, color: '#1677ff' }}>{icon}</span>
-          <div>
-            <Text strong>{title}</Text>
-            <div style={{ color: '#64748b', fontSize: 12, marginTop: 4 }}>{description}</div>
-            <div style={{ marginTop: 10 }}>{status}</div>
-          </div>
-        </Space>
-        <Button size="small" onClick={() => go(path)}>Configure</Button>
-      </Space>
-    </Card>
+    <Space size={10} align="start" style={{ width: '100%' }}>
+      <span
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: token.borderRadiusLG,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: token.colorFillTertiary,
+          color: token.colorTextSecondary,
+          flexShrink: 0,
+          marginTop: 2,
+        }}
+      >
+        {item.icon}
+      </span>
+
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: 'block',
+            fontSize: 14,
+            fontWeight: 600,
+            color: token.colorText,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 210,
+          }}
+        >
+          {item.label}
+        </span>
+
+        <span
+          style={{
+            display: 'block',
+            marginTop: 3,
+            fontSize: 12,
+            color: token.colorTextTertiary,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: 230,
+          }}
+        >
+          {item.description}
+        </span>
+      </span>
+    </Space>
+  );
+}
+
+function ActiveComponent({ activeKey, auth }) {
+  const activeTab = SETTINGS_TABS.find((item) => item.key === activeKey);
+
+  if (!activeTab?.component) {
+    return null;
+  }
+
+  const Component = activeTab.component;
+  const props = activeTab.props || {};
+
+  return (
+    <Suspense
+      fallback={
+        <div style={{ padding: 20 }}>
+          <Skeleton active paragraph={{ rows: 10 }} />
+        </div>
+      }
+    >
+      <Component auth={auth} embedded {...props} />
+    </Suspense>
   );
 }
 
 export default function SettingsIndex({ auth }) {
-  const [summary, setSummary] = useState(null);
+  const { token } = theme.useToken();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
-  useEffect(() => {
-    axios.get(api('/api/settings/dashboard')).then(({ data }) => setSummary(data));
-  }, []);
+  const [activeKey, setActiveKey] = useState(getInitialTab);
 
-  const counts = summary?.counts || {};
-  const sections = useMemo(() => [
-    {
-      title: 'General',
-      items: [
-        ['Company Profile', 'Legal identity, contacts, defaults and print identity.', <BankOutlined />, summary?.company?.company_name || 'Not configured', '/settings/company-profile'],
-        ['Localization', 'Timezone, date, time, country and regional preferences.', <TranslationOutlined />, summary?.company?.timezone || 'Asia/Katmandu', '/settings/localization'],
-        ['Application Preferences', 'Operational app-level key/value preferences.', <SettingOutlined />, `${counts.application_settings || 0} settings`, '/settings/application-settings'],
-      ],
-    },
-    {
-      title: 'Organization',
-      items: [
-        ['Branches', 'Head office and branch operating locations.', <ApartmentOutlined />, `${counts.branches || 0} branches`, '/settings/branches'],
-        ['Users', 'Employees and user accounts linked to HRM.', <TeamOutlined />, 'HRM users', '/settings/users'],
-        ['Roles & Permissions', 'Access roles, permissions and settings grants.', <SafetyCertificateOutlined />, `${counts.roles || 0} roles`, '/settings/roles'],
-      ],
-    },
-    {
-      title: 'Finance & Accounting',
-      items: [
-        ['Fiscal Years', 'Accounting periods, current year and locks.', <CalendarOutlined />, summary?.current_fiscal_year?.name || 'No current year', '/settings/fiscal-years'],
-        ['Currencies', 'Base and transaction currencies.', <DollarOutlined />, summary?.base_currency?.code || 'No base currency', '/settings/currencies'],
-        ['Taxes', 'VAT/GST/withholding rates used by sales and purchase lines.', <AuditOutlined />, `${counts.tax_rates || 0} rates`, '/settings/taxes'],
-        ['Accounting Configuration', 'Default accounts for posting, taxes, payroll and inventory.', <BankOutlined />, summary?.configs?.accounting ? <Tag color="green">Ready</Tag> : <Tag>Pending</Tag>, '/settings/accounting-configuration'],
-        ['Document Numbering', 'Prefixes and next numbers used by transaction controllers.', <NumberOutlined />, `${counts.document_numberings || 0} series`, '/settings/document-numberings'],
-        ['Approval Workflows', 'Approval requirements by module and document type.', <SafetyCertificateOutlined />, `${counts.approval_workflows || 0} workflows`, '/settings/approval-workflows'],
-      ],
-    },
-    {
-      title: 'Operations',
-      items: [
-        ['Sales Configuration', 'Invoice due days, quotation validity and receivable controls.', <AuditOutlined />, summary?.configs?.sales ? <Tag color="green">Ready</Tag> : <Tag>Pending</Tag>, '/settings/sales-configuration'],
-        ['Purchase Configuration', 'Bill terms, approvals and payable controls.', <AuditOutlined />, summary?.configs?.purchase ? <Tag color="green">Ready</Tag> : <Tag>Pending</Tag>, '/settings/purchase-configuration'],
-        ['HRM Configuration', 'Attendance, leave, payroll and employment defaults.', <TeamOutlined />, summary?.configs?.hrm ? <Tag color="green">Ready</Tag> : <Tag>Pending</Tag>, '/settings/hrm-configuration'],
-        ['Inventory Configuration', 'Warehouse, stock valuation and product code defaults.', <InboxOutlined />, summary?.configs?.inventory ? <Tag color="green">Ready</Tag> : <Tag>Pending</Tag>, '/settings/inventory-configuration'],
-      ],
-    },
-    {
-      title: 'Notifications',
-      items: [
-        ['Email Configuration', 'SMTP servers and sender identity.', <MailOutlined />, `${counts.email_configs || 0} configs`, '/settings/email-configuration'],
-        ['Email Templates', 'Reusable notification text and merge variables.', <MailOutlined />, `${counts.email_templates || 0} templates`, '/settings/email-templates'],
-        ['Printing Templates', 'HTML/CSS templates for invoices, vouchers, HRM and inventory records.', <MailOutlined />, 'Print layouts', '/settings/printing-templates'],
-        ['Custom Templates', 'Reusable rich text snippets with template keys.', <MailOutlined />, 'Rich text snippets', '/settings/custom-templates'],
-      ],
-    },
-  ], [summary]);
+  const activeTab = useMemo(() => {
+    return SETTINGS_TABS.find((item) => item.key === activeKey);
+  }, [activeKey]);
+
+  const tabItems = useMemo(() => {
+    return SETTINGS_TABS.map((item) => ({
+      key: item.key,
+      disabled: item.disabled,
+      label: <TabLabel item={item} token={token} />,
+      children: item.disabled ? null : (
+        <div
+          style={{
+            padding: isMobile ? 12 : 20,
+            minHeight: 'calc(100vh - 138px)',
+            background: token.colorBgLayout,
+          }}
+        >
+          <Card
+            style={{
+              borderRadius: token.borderRadiusLG,
+              overflow: 'hidden',
+            }}
+            styles={{
+              body: {
+                padding: 0,
+              },
+            }}
+          >
+            <ActiveComponent activeKey={item.key} auth={auth} />
+          </Card>
+        </div>
+      ),
+    }));
+  }, [auth, isMobile, token]);
+
+  const handleChange = (key) => {
+    const tab = SETTINGS_TABS.find((item) => item.key === key);
+
+    if (!tab || tab.disabled) return;
+
+    setActiveKey(key);
+    updateUrlTab(key);
+  };
 
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Settings" />
-      <div style={{ padding: 18 }}>
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Space align="center" style={{ justifyContent: 'space-between', width: '100%' }}>
-            <div>
-              <Title level={3} style={{ margin: 0 }}>Settings</Title>
-              <Text type="secondary">Application configuration, operational defaults and module controls.</Text>
-            </div>
-            <Statistic title="Base Currency" value={summary?.base_currency?.code || '-'} />
-          </Space>
-          {sections.map((section) => (
-            <div key={section.title}>
-              <Title level={5}>{section.title}</Title>
-              <Row gutter={[12, 12]}>
-                {section.items.map(([title, description, icon, status, path]) => (
-                  <Col key={title} xs={24} md={12} xl={8}>
-                    <SettingCard icon={icon} title={title} description={description} status={typeof status === 'string' ? <Tag>{status}</Tag> : status} path={path} />
-                  </Col>
-                ))}
-              </Row>
-            </div>
-          ))}
-        </Space>
+
+      <div
+        style={{
+          minHeight: 'calc(100vh - 64px)',
+          background: token.colorBgLayout,
+        }}
+      >
+        <div
+          style={{
+            height: 72,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 26px',
+            background: token.colorBgContainer,
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          }}
+        >
+          <div>
+            <Title level={3} style={{ margin: 0 }}>
+              Apps
+            </Title>
+
+            <Text type="secondary">
+              {activeTab?.description || 'Manage application settings.'}
+            </Text>
+          </div>
+        </div>
+
+        <Tabs
+          activeKey={activeKey}
+          onChange={handleChange}
+          tabPosition={isMobile ? 'top' : 'left'}
+          items={tabItems}
+          destroyInactiveTabPane
+          style={{
+            minHeight: 'calc(100vh - 136px)',
+            background: token.colorBgContainer,
+          }}
+          tabBarStyle={{
+            width: isMobile ? '100%' : 355,
+            minWidth: isMobile ? undefined : 355,
+            margin: 0,
+            padding: isMobile ? '8px 10px' : '14px',
+            background: token.colorBgContainer,
+            borderRight: isMobile ? 'none' : `1px solid ${token.colorBorderSecondary}`,
+            borderBottom: isMobile ? `1px solid ${token.colorBorderSecondary}` : 'none',
+            maxHeight: isMobile ? undefined : 'calc(100vh - 136px)',
+            overflowY: 'auto',
+          }}
+        />
       </div>
     </AuthenticatedLayout>
   );
