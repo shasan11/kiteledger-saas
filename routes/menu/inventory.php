@@ -8,10 +8,17 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/variant-attributes', fn () => Inertia::render('App/Inventory/VariantAttributes/Index'))->name('variant-attributes.index');
     Route::get('/unit-of-measurements', fn () => Inertia::render('App/Inventory/UnitOfMeasurements/Index'))->name('unit-of-measurements.index');
     Route::get('/unit-of-measurements/{id}', fn ($id) => Inertia::render('App/Inventory/UnitOfMeasurements/Show', ['id' => $id]))->name('unit-of-measurements.show');
+
     Route::get('/warehouse-transfers', fn () => Inertia::render('App/Inventory/WarehouseTransfers/Index'))->name('warehouse-transfers.index');
+    Route::get('/warehouse-transfers/add', fn () => Inertia::render('App/Inventory/WarehouseTransfers/Add'))->name('warehouse-transfers.add');
+    Route::get('/warehouse-transfers/{id}/edit', fn ($id) => Inertia::render('App/Inventory/WarehouseTransfers/Edit', ['id' => $id]))->name('warehouse-transfers.edit');
     Route::get('/warehouse-transfers/{id}', fn ($id) => Inertia::render('App/Inventory/WarehouseTransfers/Show', ['id' => $id]))->name('warehouse-transfers.show');
+
     Route::get('/adjustments', fn () => Inertia::render('App/Inventory/Adjustments/Index'))->name('adjustments.index');
+    Route::get('/adjustments/add', fn () => Inertia::render('App/Inventory/Adjustments/Add'))->name('adjustments.add');
+    Route::get('/adjustments/{id}/edit', fn ($id) => Inertia::render('App/Inventory/Adjustments/Edit', ['id' => $id]))->name('adjustments.edit');
     Route::get('/adjustments/{id}', fn ($id) => Inertia::render('App/Inventory/Adjustments/Show', ['id' => $id]))->name('adjustments.show');
+
     Route::get('/bill-of-materials', fn () => Inertia::render('App/Inventory/BillOfMaterials/Index'))->name('bill-of-materials.index');
     Route::get('/bill-of-materials/{id}', fn ($id) => Inertia::render('App/Inventory/BillOfMaterials/Show', ['id' => $id]))->name('bill-of-materials.show');
     Route::get('/production-orders', fn () => Inertia::render('App/Inventory/ProductionOrders/Index'))->name('production-orders.index');

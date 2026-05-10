@@ -10,6 +10,7 @@ export default function JournalVoucherShow({ id }) {
       backLabel="Back to journal vouchers"
       titleField="voucher_no"
       subtitleField="reference"
+      editRoute="accounting.journal-vouchers.edit"
     />
   );
 }

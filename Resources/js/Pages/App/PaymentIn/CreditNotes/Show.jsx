@@ -9,6 +9,7 @@ export default function CreditNoteShow({ id }) {
             backRoute="payment-in.credit-notes.index"
             backLabel="Back to Credit Notes"
             documentType="credit_note"
+            editRoute="payment-in.credit-notes.edit"
         />
     );
 }

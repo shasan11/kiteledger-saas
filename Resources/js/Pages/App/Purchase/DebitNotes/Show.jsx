@@ -9,6 +9,7 @@ export default function DebitNoteShow({ id }) {
             backRoute="payment-out.debit-notes.index"
             backLabel="Back to Debit Notes"
             documentType="debit_note"
+            editRoute="payment-out.debit-notes.edit"
         />
     );
 }

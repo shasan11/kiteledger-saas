@@ -23,6 +23,7 @@ import {
     UserOutlined,
     CalendarOutlined,
     CheckCircleOutlined,
+    EditOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
@@ -402,6 +403,8 @@ function HeaderBlock({
     record,
     loading,
     onPrint,
+    editRoute,
+    recordId,
 }) {
     return (
         <Card className="payment-record-show__header-card border-none">
@@ -429,6 +432,13 @@ function HeaderBlock({
                 </div>
 
                 <Space>
+                    {editRoute && recordId && (
+                        <Link href={route(editRoute, recordId)}>
+                            <Button icon={<EditOutlined />} disabled={loading || !record}>
+                                Edit
+                            </Button>
+                        </Link>
+                    )}
                     <Button icon={<PrinterOutlined />} onClick={onPrint} disabled={loading || !record}>
                         Print Preview
                     </Button>
@@ -1100,6 +1110,7 @@ export default function PaymentInRecordShow({
     backRoute,
     backLabel,
     documentType,
+    editRoute,
 }) {
     const { token } = useToken();
 
@@ -1194,6 +1205,8 @@ export default function PaymentInRecordShow({
                         record={record}
                         loading={loading}
                         onPrint={() => setPrintOpen(true)}
+                        editRoute={editRoute}
+                        recordId={id}
                     />}>
             <Head title={documentNumber || title} />
 

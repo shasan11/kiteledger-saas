@@ -9,6 +9,7 @@ export default function InventoryAdjustmentShow({ id }) {
             backRoute="inventory.adjustments.index"
             backLabel="Back to Inventory Adjustments"
             documentType="inventory_adjustment"
+            editRoute="inventory.adjustments.edit"
         />
     );
 }

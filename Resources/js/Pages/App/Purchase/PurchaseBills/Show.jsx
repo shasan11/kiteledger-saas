@@ -9,6 +9,7 @@ export default function PurchaseBillShow({ id }) {
             backRoute="payment-out.purchase-bills.index"
             backLabel="Back to Purchase Bills"
             documentType="purchase_bill"
+            editRoute="payment-out.purchase-bills.edit"
         />
     );
 }

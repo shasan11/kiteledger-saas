@@ -15,7 +15,7 @@ import {
   Typography,
   theme,
 } from 'antd';
-import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 const { Text, Title } = Typography;
@@ -750,6 +750,7 @@ export default function InventoryRecordShow({
   backRoute,
   backLabel,
   documentType,
+  editRoute,
 }) {
   const { token } = useToken();
   const [record, setRecord] = useState(null);
@@ -995,9 +996,18 @@ export default function InventoryRecordShow({
             {!loading && record ? approvalTag(record) : null}
           </Space>
 
-          <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
-            Print Preview
-          </Button>
+          <Space size={8}>
+            {editRoute && (
+              <Link href={route(editRoute, id)}>
+                <Button size="small" icon={<EditOutlined />} disabled={loading || !record}>
+                  Edit
+                </Button>
+              </Link>
+            )}
+            <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
+              Print Preview
+            </Button>
+          </Space>
         </div>
 
         {loading ? (

@@ -9,6 +9,7 @@ export default function InvoiceShow({ id }) {
             backRoute="payment-in.invoices.index"
             backLabel="Back to Invoices"
             documentType="invoice"
+            editRoute="payment-in.invoices.edit"
         />
     );
 }

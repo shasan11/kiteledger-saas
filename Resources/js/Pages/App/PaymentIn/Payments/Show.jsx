@@ -9,6 +9,7 @@ export default function PaymentShow({ id }) {
             backRoute="payment-in.payments.index"
             backLabel="Back to Payments"
             documentType="customer_payment"
+            editRoute="payment-in.payments.edit"
         />
     );
 }

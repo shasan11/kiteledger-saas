@@ -30,6 +30,7 @@ import {
   CheckCircleOutlined,
   CloseOutlined,
   DollarOutlined,
+  EditOutlined,
   FileExcelOutlined,
   FileTextOutlined,
   MoreOutlined,
@@ -1404,6 +1405,7 @@ export default function AccountingRecordShow({
   backLabel,
   titleField = 'name',
   subtitleField,
+  editRoute,
 }) {
   const { token } = useToken();
   const { currency, formatMoney } = useMoneyFormatter();
@@ -2006,7 +2008,13 @@ export default function AccountingRecordShow({
                         : null,
                     ].filter(Boolean),
                     onClick: ({ key }) => {
-                      if (key === 'edit') openEdit();
+                      if (key === 'edit') {
+                        if (editRoute) {
+                          router.visit(route(editRoute, id));
+                        } else {
+                          openEdit();
+                        }
+                      }
 
                       if (key === 'active') {
                         updateRecord({ active: true }, `${title} activated`);

@@ -9,6 +9,7 @@ export default function SupplierPaymentShow({ id }) {
             backRoute="payment-out.supplier-payments.index"
             backLabel="Back to Supplier Payments"
             documentType="supplier_payment"
+            editRoute="payment-out.supplier-payments.edit"
         />
     );
 }

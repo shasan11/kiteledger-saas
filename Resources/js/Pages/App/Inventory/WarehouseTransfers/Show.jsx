@@ -9,6 +9,7 @@ export default function WarehouseTransferShow({ id }) {
             backRoute="inventory.warehouse-transfers.index"
             backLabel="Back to Warehouse Transfers"
             documentType="warehouse_transfer"
+            editRoute="inventory.warehouse-transfers.edit"
         />
     );
 }

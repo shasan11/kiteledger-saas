@@ -10,6 +10,7 @@ export default function CashTransferShow({ id }) {
       backLabel="Back to cash transfers"
       titleField="transfer_no"
       subtitleField="reference"
+      editRoute="accounting.cash-transfers.edit"
     />
   );
 }

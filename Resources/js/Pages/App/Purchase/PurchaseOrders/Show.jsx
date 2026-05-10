@@ -9,6 +9,7 @@ export default function PurchaseOrderShow({ id }) {
             backRoute="payment-out.purchase-orders.index"
             backLabel="Back to Purchase Orders"
             documentType="purchase_order"
+            editRoute="payment-out.purchase-orders.edit"
         />
     );
 }

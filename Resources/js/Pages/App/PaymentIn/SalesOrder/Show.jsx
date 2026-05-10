@@ -9,6 +9,7 @@ export default function SalesOrderShow({ id }) {
             backRoute="payment-in.sales-orders.index"
             backLabel="Back to Sales Orders"
             documentType="sales_order"
+            editRoute="payment-in.sales-orders.edit"
         />
     );
 }

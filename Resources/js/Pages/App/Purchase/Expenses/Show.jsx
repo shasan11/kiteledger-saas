@@ -9,6 +9,7 @@ export default function ExpenseShow({ id }) {
             backRoute="payment-out.expenses.index"
             backLabel="Back to Expenses"
             documentType="expense"
+            editRoute="payment-out.expenses.edit"
         />
     );
 }

@@ -8,6 +8,8 @@ export default function BillShow({ id }) {
             endpoint="/api/invoices/"
             backRoute="payment-in.bills.index"
             backLabel="Back to Bills"
+            documentType="invoice"
+            editRoute="payment-in.bills.edit"
         />
     );
 }

@@ -9,6 +9,7 @@ export default function QuotationShow({ id }) {
             backRoute="payment-in.quotations.index"
             backLabel="Back to Quotations"
             documentType="quotation"
+            editRoute="payment-in.quotations.edit"
         />
     );
 }
