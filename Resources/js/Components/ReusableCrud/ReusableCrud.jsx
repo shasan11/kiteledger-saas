@@ -2316,7 +2316,7 @@ export default function ReusableCrud({
                       name={name}
                       style={{ minHeight: 40, padding: "4px 8px", lineHeight: "20px" }}
                       as={Input.TextArea}
-                      size="large"
+                      size="medium"
                       rows={field.rows || 1}
                       placeholder={field.placeholder || ""}
                       disabled={readOnly}
@@ -2326,7 +2326,7 @@ export default function ReusableCrud({
                 case "button":
                   return (
                     <Button
-                      size="large"
+                      size="medium"
                       type={field.buttonType || "default"}
                       block={field.block ?? true}
                       disabled={readOnly || field.disabled}
@@ -2352,7 +2352,7 @@ export default function ReusableCrud({
                       value={values?.[name]}
                       min={field.min}
                       max={field.max}
-                      size="large"
+                      size="medium"
                       disabled={readOnly}
                       onChange={(val) => setFieldValue(name, val)}
                       placeholder={field.placeholder || ""}
@@ -2374,7 +2374,7 @@ export default function ReusableCrud({
                     <Select
                       showSearch
                       value={finalVal}
-                      size="large"
+                      size="medium"
                       disabled={readOnly}
                       placeholder={field.placeholder || "Select..."}
                       onChange={(val, option) => setSelectWithLabel(val, option)}
@@ -2416,7 +2416,7 @@ export default function ReusableCrud({
                   const selectEl = (
                     <Select
                       showSearch
-                      size="large"
+                      size="medium"
                       value={finalVal ?? undefined}
                       placeholder={field.placeholder || "Search and select..."}
                       disabled={readOnly}
@@ -2492,7 +2492,7 @@ export default function ReusableCrud({
 
                       <Button
                         icon={<PlusOutlined />}
-                        size="large"
+                        size="medium"
                         disabled={readOnly}
                         title={`Quick add ${field.quickAdd.title || name}`}
                         onClick={() => setQuickAddState({ mode: "add", fieldName: name, field })}
@@ -2501,7 +2501,7 @@ export default function ReusableCrud({
                       {canQuickEdit && (
                         <Button
                           icon={<EditOutlined />}
-                          size="large"
+                          size="medium"
                           disabled={readOnly}
                           title={`Quick edit ${field.quickAdd.title || name}`}
                           onClick={async () => {
@@ -2573,7 +2573,7 @@ export default function ReusableCrud({
                   return (
                     <Radio.Group
                       block
-                      size="large"
+                      size="medium"
                       optionType="button"
                       buttonStyle="solid"
                       disabled={readOnly}
@@ -2592,7 +2592,7 @@ export default function ReusableCrud({
                   return (
                     <Radio.Group
                       block
-                      size="large"
+                      size="medium"
                       disabled={readOnly}
                       onChange={(e) => setFieldValue(name, e.target.value)}
                       value={values?.[name]}
@@ -2644,7 +2644,7 @@ export default function ReusableCrud({
                 case "date":
                   return (
                     <Input
-                      size="large"
+                      size="medium"
                       type="date"
                       value={values?.[name] || ""}
                       disabled={readOnly}
@@ -2859,7 +2859,7 @@ export default function ReusableCrud({
                               }}
                             >
                               <Input
-                                size="large"
+                                size="medium"
                                 value={item}
                                 disabled={readOnly}
                                 onChange={(e) => setFieldValue(`${name}[${index}]`, e.target.value)}
@@ -2867,7 +2867,7 @@ export default function ReusableCrud({
                               />
 
                               {!readOnly && (
-                                <Button size="large" type="link" danger onClick={() => remove(index)}>
+                                <Button size="medium" type="link" danger onClick={() => remove(index)}>
                                   Remove
                                 </Button>
                               )}
@@ -2972,7 +2972,7 @@ export default function ReusableCrud({
                             return (
                               <Select
                                 showSearch
-                                size="large"
+                                size="medium"
                                 value={finalVal ?? undefined}
                                 placeholder={c.placeholder || "Search and select..."}
                                 disabled={cellReadOnly}
@@ -3071,7 +3071,7 @@ export default function ReusableCrud({
                           if (c.type === "number") {
                             return (
                               <InputNumber
-                                size="large"
+                                size="medium"
                                 style={{ width: "100%" }}
                                 value={val}
                                 min={c.min}
@@ -3088,7 +3088,7 @@ export default function ReusableCrud({
 
                             return (
                               <Select
-                                size="large"
+                                size="medium"
                                 showSearch
                                 value={val ?? undefined}
                                 placeholder={c.placeholder || "Select..."}
@@ -3148,7 +3148,7 @@ export default function ReusableCrud({
 
                           return (
                             <Input
-                              size="large"
+                              size="medium"
                               value={val}
                               placeholder={c.placeholder || ""}
                               disabled={cellReadOnly}
@@ -3206,7 +3206,7 @@ export default function ReusableCrud({
                                           return (
                                             <InputNumber
                                               key={`${fieldKey}.${idx}.${colKey}`}
-                                              size="large"
+                                              size="medium"
                                               style={{ width: "100%" }}
                                               value={computed}
                                               disabled
@@ -3259,7 +3259,7 @@ export default function ReusableCrud({
                                           <Select
                                             key={`${fieldKey}.${idx}.${colKey}`}
                                             showSearch
-                                            size="large"
+                                            size="medium"
                                             value={finalVal}
                                             placeholder={c.placeholder || "Search and select..."}
                                             disabled={cellReadOnly}
@@ -3360,7 +3360,7 @@ export default function ReusableCrud({
                                         return (
                                           <InputNumber
                                             key={`${fieldKey}.${idx}.${colKey}`}
-                                            size="large"
+                                            size="medium"
                                             style={{ width: "100%" }}
                                             value={val}
                                             min={c.min}
@@ -3378,7 +3378,7 @@ export default function ReusableCrud({
                                         return (
                                           <Select
                                             key={`${fieldKey}.${idx}.${colKey}`}
-                                            size="large"
+                                            size="medium"
                                             showSearch
                                             value={val ?? undefined}
                                             placeholder={c.placeholder || "Select..."}
@@ -3405,7 +3405,7 @@ export default function ReusableCrud({
                                       return c.type === "textarea" ? (
                                         <Input.TextArea
                                           key={`${fieldKey}.${idx}.${colKey}`}
-                                          size="large"
+                                          size="medium"
                                           value={val}
                                           rows={c.rows || 1}
                                           placeholder={c.placeholder || ""}
@@ -3415,7 +3415,7 @@ export default function ReusableCrud({
                                       ) : (
                                         <Input
                                           key={`${fieldKey}.${idx}.${colKey}`}
-                                          size="large"
+                                          size="medium"
                                           value={val}
                                           placeholder={c.placeholder || ""}
                                           disabled={cellReadOnly}
@@ -3426,7 +3426,7 @@ export default function ReusableCrud({
 
                                     {showExpand ? (
                                       <Button
-                                        size="large"
+                                        size="medium"
                                         type="text"
                                         icon={<ColumnHeightOutlined rotate={expanded ? 90 : 0} />}
                                         onClick={() => toggleObjectArrayRow(name, idx)}
@@ -3435,7 +3435,7 @@ export default function ReusableCrud({
 
                                     {!readOnly ? (
                                       <Button
-                                        size="large"
+                                        size="medium"
                                         danger
                                         type="text"
                                         icon={<DeleteOutlined />}
@@ -3492,7 +3492,7 @@ export default function ReusableCrud({
                                 }}
                               >
                                 <Button
-                                  size="large"
+                                  size="medium"
                                   type="dashed"
                                   icon={<PlusOutlined />}
                                   onClick={() => push(field.defaultItem || EMPTY_OBJECT)}
@@ -3513,7 +3513,7 @@ export default function ReusableCrud({
                       <Field
                         name={name}
                         as={Input}
-                        size="large"
+                        size="medium"
                         disabled={readOnly}
                         placeholder={field.placeholder || ""}
                         maxLength={field.maxLength}
@@ -4001,7 +4001,7 @@ export default function ReusableCrud({
         />
       ) : button_ui ? (
         <Button
-          size="large"
+          size="medium"
           type="default"
           icon={button_ui_id ? <EditOutlined /> : <PlusOutlined />}
           onClick={handleQuickButtonClick}

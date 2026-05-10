@@ -91,8 +91,7 @@ export default function QuotationEdit({ id, ...props }) {
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 12, rows: 5, placeholder: 'Notes', help: 'This will appear on print' },
         { name: '_quotation_totals', label: '', type: 'custom', col: 24, render: ({ values }) => <QuotationTotals values={values} /> },
-        { name: 'status', label: 'Status', type: 'select', col: 6, hidden: true, options: [{ value: 'draft', label: 'Draft' }, { value: 'sent', label: 'Sent' }, { value: 'accepted', label: 'Accepted' }, { value: 'rejected', label: 'Rejected' }, { value: 'expired', label: 'Expired' }, { value: 'cancelled', label: 'Cancelled' }] },
-        { name: 'approved', label: 'Approved', type: 'switch', col: 6, hidden: true },
+         
     ], []);
 
     const validationSchema = useMemo(() => Yup.object().shape({

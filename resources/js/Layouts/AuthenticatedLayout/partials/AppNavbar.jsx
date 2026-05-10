@@ -15,13 +15,11 @@ import {
     Layout,
     Select,
     Space,
-    Typography,
     theme,
 } from 'antd';
 
 const { Header } = Layout;
 const { useBreakpoint } = Grid;
-const { Text } = Typography;
 
 export default function AppNavbar({
     user,
@@ -42,6 +40,19 @@ export default function AppNavbar({
     const controlHeight = 38;
     const radius = token.borderRadiusLG;
 
+    const dark = {
+        nav: '#0b1220',
+        navSoft: '#111827',
+        navElevated: '#162033',
+        border: 'rgba(148, 163, 184, 0.18)',
+        borderStrong: 'rgba(148, 163, 184, 0.28)',
+        text: '#f8fafc',
+        textSecondary: '#cbd5e1',
+        textMuted: '#94a3b8',
+        primarySoft: 'rgba(59, 130, 246, 0.16)',
+        primaryBorder: 'rgba(59, 130, 246, 0.35)',
+    };
+
     return (
         <>
             <Header
@@ -49,9 +60,9 @@ export default function AppNavbar({
                 style={{
                     height: 72,
                     padding: isMobile ? '0 12px' : '0 18px',
-                    background: token.colorBgContainer,
-                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                    boxShadow: '0 1px 8px rgba(15, 23, 42, 0.04)',
+                    background: dark.nav,
+                    borderBottom: `1px solid ${dark.border}`,
+                    boxShadow: '0 10px 30px rgba(2, 6, 23, 0.28)',
                     display: 'grid',
                     gridTemplateColumns: isMobile
                         ? 'auto 1fr auto'
@@ -68,13 +79,17 @@ export default function AppNavbar({
                 <div className="app-navbar__left">
                     <Link
                         href={getUrl('dashboard', '/dashboard')}
-                        
+                        className="app-navbar__brand-link"
                     >
-                        <div className="w-50">
-                            <ApplicationLogo className="w-50" style={{width:"200px",padding:'3px'}}/>
+                        <div className="app-navbar__logo-wrap">
+                            <ApplicationLogo
+                                className="app-navbar__logo"
+                                style={{
+                                    width: '200px',
+                                    padding: '3px',
+                                }}
+                            />
                         </div>
-
-                         
                     </Link>
 
                     {!isMobile && (
@@ -85,11 +100,11 @@ export default function AppNavbar({
                             options={branchOptions}
                             suffixIcon={
                                 <BranchesOutlined
-                                    style={{ color: token.colorTextTertiary }}
+                                    style={{ color: dark.textMuted }}
                                 />
                             }
-                            className="app-light-select"
-                            popupClassName="app-light-select-dropdown"
+                            className="app-dark-select"
+                            popupClassName="app-dark-select-dropdown"
                             popupMatchSelectWidth={230}
                             style={{
                                 width: 160,
@@ -103,7 +118,7 @@ export default function AppNavbar({
                     {!isMobile ? (
                         <GlobalSearchCommand
                             branchContext={branchContext}
-                            className="global-search-command__trigger"
+                            className="global-search-command__trigger app-navbar__search"
                             style={{
                                 width: '100%',
                                 maxWidth: isTablet ? 380 : 560,
@@ -114,13 +129,13 @@ export default function AppNavbar({
                         <GlobalSearchCommand
                             branchContext={branchContext}
                             compact
-                            className="app-navbar__icon-btn"
+                            className="app-navbar__icon-btn app-navbar__search-compact"
                             style={{
                                 width: controlHeight,
                                 height: controlHeight,
-                                color: token.colorText,
-                                background: token.colorBgContainer,
-                                border: `1px solid ${token.colorBorderSecondary}`,
+                                color: dark.text,
+                                background: dark.navSoft,
+                                border: `1px solid ${dark.border}`,
                                 borderRadius: radius,
                             }}
                         />
@@ -130,6 +145,7 @@ export default function AppNavbar({
                         menu={{ items: quickAddItems }}
                         placement="bottomRight"
                         trigger={['click']}
+                        overlayClassName="app-navbar-dropdown"
                     >
                         <Button
                             type="primary"
@@ -154,6 +170,7 @@ export default function AppNavbar({
                         menu={{ items: profileItems }}
                         placement="bottomRight"
                         trigger={['click']}
+                        overlayClassName="app-navbar-dropdown"
                     >
                         <Button type="text" className="app-navbar__profile-btn">
                             <Space size={10}>
@@ -199,63 +216,26 @@ export default function AppNavbar({
                         gap: 10px;
                     }
 
-                    .app-navbar__brand {
-                        display: flex;
+                    .app-navbar__brand-link {
+                        display: inline-flex;
                         align-items: center;
-                        gap: 11px;
-                        min-width: 0;
                         text-decoration: none;
                         flex-shrink: 0;
+                        min-width: 0;
                     }
 
-                    .app-navbar__logo-box {
-                        width: 42px;
-                        height: 42px;
-                        border-radius: ${radius}px;
-                        background: ${token.colorPrimaryBg};
-                        border: 1px solid ${token.colorPrimaryBorder};
+                    .app-navbar__logo-wrap {
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        flex-shrink: 0;
-                        overflow: hidden;
+                        min-width: 0;
                     }
 
                     .app-navbar__logo {
                         display: block;
-                        height: 28px;
-                        width: auto;
-                        color: ${token.colorPrimary};
-                        fill: currentColor;
-                    }
-
-                    .app-navbar__logo-box svg {
-                        max-width: 30px;
-                        max-height: 30px;
-                        color: ${token.colorPrimary};
-                        fill: currentColor;
-                    }
-
-                    .app-navbar__brand-text {
-                        display: flex;
-                        flex-direction: column;
-                        line-height: 1.1;
-                        min-width: 0;
-                    }
-
-                    .app-navbar__brand-name {
-                        color: ${token.colorText} !important;
-                        font-size: 15px;
-                        line-height: 1.15;
-                        white-space: nowrap;
-                    }
-
-                    .app-navbar__brand-sub {
-                        color: ${token.colorTextTertiary} !important;
-                        font-size: 11px;
-                        margin-top: 2px;
-                        line-height: 1.15;
-                        white-space: nowrap;
+                        height: auto;
+                        max-height: 50px;
+                        object-fit: contain;
                     }
 
                     .app-navbar__soft-btn,
@@ -271,40 +251,53 @@ export default function AppNavbar({
 
                     .app-navbar__soft-btn {
                         width: ${controlHeight}px;
-                        color: ${token.colorTextSecondary};
-                        background: ${token.colorFillQuaternary};
-                        border: 1px solid ${token.colorBorderSecondary};
+                        color: ${dark.textSecondary} !important;
+                        background: ${dark.navSoft} !important;
+                        border: 1px solid ${dark.border} !important;
+                    }
+
+                    .app-navbar__soft-btn:hover {
+                        color: ${dark.text} !important;
+                        background: ${dark.navElevated} !important;
+                        border-color: ${dark.borderStrong} !important;
                     }
 
                     .app-navbar__primary-btn {
                         width: ${controlHeight}px;
                         min-width: ${controlHeight}px;
                         box-shadow: none;
+                        font-weight: 700;
                     }
 
                     .app-navbar__icon-btn {
                         width: ${controlHeight}px;
-                        color: ${token.colorText};
+                        color: ${dark.text};
                     }
 
                     .app-navbar__profile-btn {
                         height: 42px;
                         padding: 0 8px;
-                        color: ${token.colorText};
+                        color: ${dark.textSecondary} !important;
                         border-radius: ${radius}px;
                         display: inline-flex;
                         align-items: center;
+                        background: transparent !important;
+                    }
+
+                    .app-navbar__profile-btn:hover {
+                        background: ${dark.navSoft} !important;
+                        color: ${dark.text} !important;
                     }
 
                     .app-navbar__avatar {
-                        background: ${token.colorPrimaryBg};
-                        color: ${token.colorPrimary};
-                        border: 1px solid ${token.colorPrimaryBorder};
+                        background: ${dark.primarySoft} !important;
+                        color: ${token.colorPrimary} !important;
+                        border: 1px solid ${dark.primaryBorder} !important;
                     }
 
                     .app-navbar__user-name {
                         font-weight: 600;
-                        color: ${token.colorText};
+                        color: ${dark.text};
                         max-width: 135px;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -313,65 +306,108 @@ export default function AppNavbar({
                         line-height: 1;
                     }
 
-                    .app-light-select .ant-select-selector {
+                    .app-dark-select .ant-select-selector {
                         height: ${controlHeight}px !important;
-                        background: ${token.colorBgContainer} !important;
-                        border-color: ${token.colorBorderSecondary} !important;
+                        background: ${dark.navSoft} !important;
+                        border-color: ${dark.border} !important;
                         border-radius: ${radius}px !important;
-                        color: ${token.colorText} !important;
+                        color: ${dark.text} !important;
                         display: flex;
                         align-items: center;
                         box-shadow: none !important;
                     }
 
-                    .app-light-select .ant-select-selection-item {
-                        color: ${token.colorText} !important;
+                    .app-dark-select .ant-select-selection-item {
+                        color: ${dark.text} !important;
                         font-weight: 600;
                         line-height: ${controlHeight}px !important;
                     }
 
-                    .app-light-select:hover .ant-select-selector,
-                    .app-light-select.ant-select-focused .ant-select-selector {
+                    .app-dark-select:hover .ant-select-selector,
+                    .app-dark-select.ant-select-focused .ant-select-selector {
                         border-color: ${token.colorPrimary} !important;
-                        background: ${token.colorPrimaryBg} !important;
+                        background: ${dark.navElevated} !important;
                     }
 
-                    .app-light-select-dropdown {
-                        background: ${token.colorBgElevated} !important;
-                        border: 1px solid ${token.colorBorderSecondary} !important;
+                    .app-dark-select .ant-select-arrow {
+                        color: ${dark.textMuted} !important;
+                    }
+
+                    .app-dark-select-dropdown {
+                        background: ${dark.navSoft} !important;
+                        border: 1px solid ${dark.border} !important;
                         border-radius: ${radius}px !important;
                         padding: 6px !important;
-                        box-shadow: ${token.boxShadowSecondary} !important;
+                        box-shadow: 0 18px 45px rgba(2, 6, 23, 0.45) !important;
                     }
 
-                    .app-light-select-dropdown .ant-select-item {
-                        color: ${token.colorText} !important;
+                    .app-dark-select-dropdown .ant-select-item {
+                        color: ${dark.textSecondary} !important;
                         border-radius: ${token.borderRadiusSM}px !important;
                     }
 
-                    .app-light-select-dropdown .ant-select-item-option-active {
-                        background: ${token.colorFillTertiary} !important;
+                    .app-dark-select-dropdown .ant-select-item-option-active {
+                        background: ${dark.navElevated} !important;
+                        color: ${dark.text} !important;
                     }
 
-                    .app-light-select-dropdown .ant-select-item-option-selected {
-                        background: ${token.colorPrimaryBg} !important;
-                        color: ${token.colorPrimary} !important;
+                    .app-dark-select-dropdown .ant-select-item-option-selected {
+                        background: ${dark.primarySoft} !important;
+                        color: ${dark.text} !important;
                         font-weight: 700 !important;
                     }
 
+                    .app-navbar__search,
+                    .app-navbar__search button,
+                    .app-navbar__search .ant-btn,
+                    .app-navbar__search .ant-input,
+                    .app-navbar__search .ant-input-affix-wrapper {
+                        background: ${dark.navSoft} !important;
+                        color: ${dark.textSecondary} !important;
+                        border-color: ${dark.border} !important;
+                    }
+
+                    .app-navbar__search:hover,
+                    .app-navbar__search button:hover,
+                    .app-navbar__search .ant-btn:hover,
+                    .app-navbar__search .ant-input-affix-wrapper:hover {
+                        background: ${dark.navElevated} !important;
+                        color: ${dark.text} !important;
+                        border-color: ${dark.borderStrong} !important;
+                    }
+
+                    .app-navbar__search input::placeholder,
+                    .app-navbar__search .ant-input::placeholder {
+                        color: ${dark.textMuted} !important;
+                    }
+
                     .app-navbar .ant-btn-text:hover {
-                        background: ${token.colorFillTertiary} !important;
-                        color: ${token.colorText} !important;
+                        background: ${dark.navSoft} !important;
+                        color: ${dark.text} !important;
                     }
 
                     .app-navbar .ant-btn-default:hover {
-                        color: ${token.colorPrimary} !important;
-                        border-color: ${token.colorPrimary} !important;
-                        background: ${token.colorPrimaryBg} !important;
+                        color: ${dark.text} !important;
+                        border-color: ${dark.borderStrong} !important;
+                        background: ${dark.navElevated} !important;
                     }
 
-                    .app-navbar .ant-btn-primary {
-                        font-weight: 700;
+                    .app-navbar-dropdown .ant-dropdown-menu {
+                        background: ${dark.navSoft} !important;
+                        border: 1px solid ${dark.border} !important;
+                        border-radius: ${radius}px !important;
+                        box-shadow: 0 18px 45px rgba(2, 6, 23, 0.45) !important;
+                    }
+
+                    .app-navbar-dropdown .ant-dropdown-menu-item,
+                    .app-navbar-dropdown .ant-dropdown-menu-submenu-title {
+                        color: ${dark.textSecondary} !important;
+                    }
+
+                    .app-navbar-dropdown .ant-dropdown-menu-item:hover,
+                    .app-navbar-dropdown .ant-dropdown-menu-submenu-title:hover {
+                        background: ${dark.navElevated} !important;
+                        color: ${dark.text} !important;
                     }
 
                     @media (max-width: 767px) {
@@ -383,9 +419,8 @@ export default function AppNavbar({
                             gap: 8px;
                         }
 
-                        .app-navbar__logo-box {
-                            width: 40px;
-                            height: 40px;
+                        .app-navbar__logo {
+                            max-width: 150px;
                         }
 
                         .app-navbar__soft-btn,

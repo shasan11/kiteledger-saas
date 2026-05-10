@@ -20,6 +20,8 @@ const toNumber = (value) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+const roundMoney = (value) => Number(toNumber(value).toFixed(2));
+
 const money = (value) =>
   toNumber(value).toLocaleString('en-NP', {
     minimumFractionDigits: 2,
@@ -34,6 +36,24 @@ const asId = (value) => {
   }
 
   return value;
+};
+
+const getTaxPercent = (value) => {
+  if (!value) return 0;
+
+  if (typeof value === 'object') {
+    return toNumber(
+      value.rate ??
+        value.percent ??
+        value.percentage ??
+        value.tax_rate ??
+        value.vat_rate ??
+        value.tax_percent ??
+        value.taxPercent
+    );
+  }
+
+  return 0;
 };
 
 const cleanText = (value) => {
@@ -88,20 +108,36 @@ const emptyLine = {
   unit_price: 0,
   discount_percent: 0,
   tax_rate_id: null,
+  tax_percent: 0,
   tax_amount: 0,
   line_total: 0,
 };
 
-const calculateLineTotal = (line = {}) => {
+const calculateLine = (line = {}) => {
   const qty = toNumber(line.qty);
   const rate = toNumber(line.unit_price);
   const discountPercent = toNumber(line.discount_percent);
-  const taxAmount = toNumber(line.tax_amount);
+
+  const taxPercent =
+    toNumber(line.tax_percent) ||
+    getTaxPercent(line.tax_rate_id) ||
+    getTaxPercent(line.taxRate) ||
+    getTaxPercent(line.tax_rate);
 
   const gross = qty * rate;
-  const discount = gross * (discountPercent / 100);
+  const discountAmount = gross * (discountPercent / 100);
+  const taxableAmount = Math.max(gross - discountAmount, 0);
+  const taxAmount = taxableAmount * (taxPercent / 100);
+  const lineTotal = taxableAmount + taxAmount;
 
-  return Math.max(gross - discount, 0) + taxAmount;
+  return {
+    gross: roundMoney(gross),
+    discount_amount: roundMoney(discountAmount),
+    taxable_amount: roundMoney(taxableAmount),
+    tax_percent: roundMoney(taxPercent),
+    tax_amount: roundMoney(taxAmount),
+    line_total: roundMoney(lineTotal),
+  };
 };
 
 const calculateSummary = (items = []) => {
@@ -112,51 +148,52 @@ const calculateSummary = (items = []) => {
   let vat = 0;
 
   items.forEach((item) => {
-    const gross = toNumber(item.qty) * toNumber(item.unit_price);
-    const discountAmount = gross * (toNumber(item.discount_percent) / 100);
-    const net = Math.max(gross - discountAmount, 0);
-    const tax = toNumber(item.tax_amount);
+    const calculated = calculateLine(item);
 
-    subTotal += gross;
-    discount += discountAmount;
-    vat += tax;
+    subTotal += calculated.gross;
+    discount += calculated.discount_amount;
+    vat += calculated.tax_amount;
 
-    if (asId(item.tax_rate_id) || tax > 0) {
-      taxableTotal += net;
+    if (
+      asId(item.tax_rate_id) ||
+      calculated.tax_percent > 0 ||
+      calculated.tax_amount > 0
+    ) {
+      taxableTotal += calculated.taxable_amount;
     } else {
-      nonTaxableTotal += net;
+      nonTaxableTotal += calculated.taxable_amount;
     }
   });
 
   return {
-    subTotal,
-    discount,
-    nonTaxableTotal,
-    taxableTotal,
-    vat,
-    grandTotal: subTotal - discount + vat,
+    subTotal: roundMoney(subTotal),
+    discount: roundMoney(discount),
+    nonTaxableTotal: roundMoney(nonTaxableTotal),
+    taxableTotal: roundMoney(taxableTotal),
+    vat: roundMoney(vat),
+    grandTotal: roundMoney(subTotal - discount + vat),
   };
 };
 
 const normalizeLine = (line = {}) => {
-  const normalized = {
+  const calculated = calculateLine(line);
+
+  return {
     ...(line.id ? { id: line.id } : {}),
 
     product_id: asId(line.product_id ?? line.product),
     product_name: cleanText(line.product_name),
     description: nullIfEmpty(line.description),
 
-    qty: toNumber(line.qty) || 0,
+    qty: toNumber(line.qty),
     unit_price: toNumber(line.unit_price),
     discount_percent: toNumber(line.discount_percent),
 
     tax_rate_id: asId(line.tax_rate_id ?? line.taxRate ?? line.tax_rate),
-    tax_amount: toNumber(line.tax_amount),
+    tax_percent: calculated.tax_percent,
+    tax_amount: calculated.tax_amount,
+    line_total: calculated.line_total,
   };
-
-  normalized.line_total = Number(calculateLineTotal(normalized).toFixed(2));
-
-  return normalized;
 };
 
 const QuotationTotals = ({ values = {} }) => {
@@ -182,9 +219,7 @@ const QuotationTotals = ({ values = {} }) => {
 
           <div className="quotation-total-row">
             <span>Non-Taxable Total</span>
-            <strong>
-              {summary.nonTaxableTotal > 0 ? money(summary.nonTaxableTotal) : '-'}
-            </strong>
+            <strong>{summary.nonTaxableTotal > 0 ? money(summary.nonTaxableTotal) : '-'}</strong>
           </div>
 
           <div className="quotation-total-row">
@@ -305,7 +340,6 @@ export default function Quotations(props) {
         placeholder: 'DRAFT',
         disabled: true,
       },
-
       {
         name: 'quotation_date',
         label: 'Date',
@@ -334,7 +368,6 @@ export default function Quotations(props) {
         fkValueKey: 'id',
         fkLabelKey: 'name',
       },
-
       {
         name: 'currency_id',
         label: 'Currency',
@@ -356,7 +389,6 @@ export default function Quotations(props) {
         col: 8,
         min: 0,
       },
-
       {
         name: 'items',
         label: '',
@@ -366,13 +398,25 @@ export default function Quotations(props) {
         defaultItem: { ...emptyLine },
         headerBg: '#4b5563',
         headerColor: '#ffffff',
+
+        recalculateRow: (row) => {
+          const calculated = calculateLine(row);
+
+          return {
+            ...row,
+            tax_percent: calculated.tax_percent,
+            tax_amount: calculated.tax_amount,
+            line_total: calculated.line_total,
+          };
+        },
+
         columns: [
           {
             key: 'product_id',
             name: 'product_id',
             label: 'Product / service',
             type: 'fkSelect',
-            width: 'minmax(360px, 3fr)',
+            width: '200px',
             placeholder: 'Add Code or Product',
             fkUrl: api('/api/products/'),
             fkSearchParam: 'search',
@@ -380,21 +424,12 @@ export default function Quotations(props) {
             fkValueKey: 'id',
             fkLabelKey: 'name',
           },
-          
-          {
-            key: 'description',
-            name: 'description',
-            label: 'Description',
-            type: 'text',
-            width: '220px',
-            placeholder: 'Description',
-          },
           {
             key: 'qty',
             name: 'qty',
             label: 'Qty',
             type: 'number',
-            width: '90px',
+            width: '70px',
             min: 0,
           },
           {
@@ -402,15 +437,15 @@ export default function Quotations(props) {
             name: 'unit_price',
             label: 'Rate',
             type: 'number',
-            width: '120px',
+            width: '70px',
             min: 0,
           },
           {
             key: 'discount_percent',
             name: 'discount_percent',
-            label: 'Discount',
+            label: 'Discount %',
             type: 'number',
-            width: '110px',
+            width: '90px',
             min: 0,
             max: 100,
           },
@@ -426,14 +461,26 @@ export default function Quotations(props) {
             fkPageSize: 20,
             fkValueKey: 'id',
             fkLabelKey: 'name',
+            storeFullObject: true,
+            onSelectRecord: (record, row) => {
+              const taxPercent = getTaxPercent(record);
+
+              return {
+                ...row,
+                tax_rate_id: record,
+                tax_percent: taxPercent,
+              };
+            },
           },
           {
             key: 'tax_amount',
             name: 'tax_amount',
-            label: 'Tax Amt',
+            label: 'VAT',
             type: 'number',
-            width: '110px',
+            width: '100px',
             min: 0,
+            disabled: true,
+            formula: (row) => calculateLine(row).tax_amount,
           },
           {
             key: 'line_total',
@@ -443,11 +490,10 @@ export default function Quotations(props) {
             width: '130px',
             min: 0,
             disabled: true,
-            formula: (row) => Number(calculateLineTotal(row).toFixed(2)),
+            formula: (row) => calculateLine(row).line_total,
           },
         ],
       },
-
       {
         name: 'notes',
         label: 'Notes',
@@ -457,36 +503,12 @@ export default function Quotations(props) {
         placeholder: 'Notes',
         help: 'This will appear on print',
       },
-
       {
         name: '_quotation_totals',
         label: '',
         type: 'custom',
         col: 24,
         render: ({ values }) => <QuotationTotals values={values} />,
-      },
-
-      {
-        name: 'status',
-        label: 'Status',
-        type: 'select',
-        col: 6,
-        hidden: true,
-        options: [
-          { value: 'draft', label: 'Draft' },
-          { value: 'sent', label: 'Sent' },
-          { value: 'accepted', label: 'Accepted' },
-          { value: 'rejected', label: 'Rejected' },
-          { value: 'expired', label: 'Expired' },
-          { value: 'cancelled', label: 'Cancelled' },
-        ],
-      },
-      {
-        name: 'approved',
-        label: 'Approved',
-        type: 'switch',
-        col: 6,
-        hidden: true,
       },
     ],
     []
@@ -533,9 +555,16 @@ export default function Quotations(props) {
                   .max(100, 'Discount cannot be more than 100')
                   .nullable(),
 
+                tax_percent: Yup.number().nullable(),
+
                 tax_amount: Yup.number()
                   .typeError('Tax amount must be a number')
                   .min(0, 'Tax amount cannot be negative')
+                  .nullable(),
+
+                line_total: Yup.number()
+                  .typeError('Line total must be a number')
+                  .min(0, 'Line total cannot be negative')
                   .nullable(),
               })
               .test(
@@ -584,6 +613,8 @@ export default function Quotations(props) {
           !!cleanText(line.product_name).trim()
       );
 
+    const summary = calculateSummary(items);
+
     return {
       quotation_no:
         values.quotation_no && values.quotation_no !== 'DRAFT'
@@ -605,6 +636,16 @@ export default function Quotations(props) {
       approved: !!values.approved,
 
       notes: nullIfEmpty(values.notes),
+
+      subtotal: summary.subTotal,
+      sub_total: summary.subTotal,
+      discount_total: summary.discount,
+      non_taxable_total: summary.nonTaxableTotal,
+      taxable_total: summary.taxableTotal,
+      vat_total: summary.vat,
+      tax_total: summary.vat,
+      total: summary.grandTotal,
+      grand_total: summary.grandTotal,
 
       items,
 
