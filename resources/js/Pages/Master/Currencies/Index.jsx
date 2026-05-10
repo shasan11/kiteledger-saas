@@ -1,4 +1,3 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
@@ -43,7 +42,7 @@ export default function Currencies(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Currencies" />
       <ReusableCrud
         icon={<AppstoreOutlined />}
@@ -67,6 +66,6 @@ export default function Currencies(props) {
         backendFilter={{ active: 'active' }}
         backendSort={{ name: 'name', active: 'active' }}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

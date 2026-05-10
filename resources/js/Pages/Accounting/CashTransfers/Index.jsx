@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
@@ -218,10 +217,7 @@ export default function CashTransfers(props) {
   );
 
   return (
-    <AuthenticatedLayout
-      user={props.auth?.user}
-      header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Cash Transfers</h2>}
-    >
+    <>
       <Head title="Cash Transfers" />
       <ReusableCrud
         icon={<SwapOutlined />}
@@ -256,6 +252,6 @@ export default function CashTransfers(props) {
         defaultAnchorKey="draft"
         anchorSyncWithHash
       />
-    </AuthenticatedLayout>
+    </>
   );
 }
