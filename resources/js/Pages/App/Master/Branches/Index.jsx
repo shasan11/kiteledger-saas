@@ -96,7 +96,7 @@ export default function Branches(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Branches" />
       <ReusableCrud
         icon={<BankOutlined />}
@@ -122,6 +122,6 @@ export default function Branches(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

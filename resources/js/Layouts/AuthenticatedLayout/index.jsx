@@ -263,8 +263,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <SettingOutlined />,
                 label: 'Settings',
                 children: [
-                    { key: 'settings-dashboard', label: 'Application Settings', onClick: () => visit('settings.index', '/settings') },
-                    { key: 'settings-users-permissions', label: 'Users and Permissions', onClick: () => visit('settings.roles.index', '/settings/roles') },
+                    { key: 'settings-dashboard', label: 'Configuration', onClick: () => visit('settings.index', '/settings') },
+                    { key: 'settings-users-permissions', label: 'Users & Roles', onClick: () => visit('settings.roles.index', '/settings/roles') },
                     { key: 'settings-master-data', label: 'Master Data', onClick: () => visit('settings.master-data.index', '/settings/master-data') },
                 ],
             },

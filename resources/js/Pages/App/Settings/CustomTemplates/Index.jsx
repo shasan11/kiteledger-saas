@@ -6,7 +6,7 @@ import SimpleSettingsCrud from '../SimpleSettingsCrud';
 
 export default function CustomTemplates(props) {
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Custom Templates" />
       <div style={{ padding: 18 }}>
         <Card title={<><FileTextOutlined /> Custom Templates</>} style={{ borderRadius: 8 }}>
@@ -29,6 +29,6 @@ export default function CustomTemplates(props) {
           />
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

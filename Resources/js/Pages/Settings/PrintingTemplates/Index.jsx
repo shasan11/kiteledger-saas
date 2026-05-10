@@ -43,7 +43,7 @@ export default function PrintingTemplates(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="PrintingTemplates" />
       <ReusableCrud
         icon={<AppstoreOutlined />}
@@ -67,6 +67,6 @@ export default function PrintingTemplates(props) {
         backendFilter={{ active: 'active' }}
         backendSort={{ name: 'name', active: 'active' }}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

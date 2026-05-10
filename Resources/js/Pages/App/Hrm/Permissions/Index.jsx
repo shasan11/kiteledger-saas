@@ -29,13 +29,13 @@ export default function Permissions(props) {
   const initialValues = { name: '', description: '', active: true };
   const transformPayload = (v) => { const p={...v}; p.name=p.name?.trim()||null; p.active=Boolean(p.active); Object.keys(p).forEach(k=>p[k]===''&&(p[k]=null)); return p; };
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Permissions</h2>}>
+    <>
       <Head title="Permissions" />
       <ReusableCrud icon={<KeyOutlined />} title="Permission" apiUrl={api('/api/hrm/permissions')}
         columns={columns} fields={fields} validationSchema={validationSchema} crudInitialValues={initialValues}
         transformPayload={transformPayload} form_ui="modal" modalWidth={600}
         searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
         activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
-    </AuthenticatedLayout>
+    </>
   );
 }

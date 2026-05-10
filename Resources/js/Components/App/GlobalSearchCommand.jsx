@@ -512,7 +512,7 @@ export default function GlobalSearchCommand({
                     justify-content: space-between;
                     gap: 12px;
                     padding: 0 13px;
-                    background: #1f2937;
+                    background: #eaeaea;
                     color: #ffffff;
                     border: 1px solid rgba(255,255,255,0.12);
                     border-radius: 10px;
@@ -521,7 +521,7 @@ export default function GlobalSearchCommand({
 
                 .global-search-command__trigger:hover {
                     border-color: ${token.colorPrimary};
-                    background: #263244;
+                    background: #eaeaea;
                 }
 
                 .global-search-command__trigger-placeholder {

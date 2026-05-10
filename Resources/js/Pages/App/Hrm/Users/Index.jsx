@@ -169,7 +169,7 @@ export default function Users(props) {
   ];
 
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<AccessControlTabs activeKey="users" />}>
+    <>
       <Head title="Users" />
       <ReusableCrud
         icon={<TeamOutlined />}
@@ -197,6 +197,6 @@ export default function Users(props) {
         showViewColumn
         viewPathBuilder={(record) => route('hrm.users.show', record.id)}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

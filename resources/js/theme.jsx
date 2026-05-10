@@ -23,13 +23,14 @@ const text = {
 };
 
 const surface = {
-  body: "#f6f8fb",
-  layout: "#f3f6fb",
-  card: "#ffffff",
-  elevated: "#ffffff",
-  muted: "#f8fafc",
-  muted2: "#f1f5f9",
-  muted3: "#e2e8f0",
+body: "#eef3f8",      
+  layout: "#f4f7fb",    
+  card: "#ffffff",      
+  elevated: "#ffffff",  
+
+  muted: "#f8fafc",     
+  muted2: "#edf2f7",    
+  muted3: "#f6f9fc",    
 };
 
 const border = {
@@ -97,7 +98,7 @@ export const themeMain = {
 
     lineWidth: 1,
 
-    fontSize: 14,
+    fontSize: 13,
     fontSizeSM: 13,
     fontSizeLG: 16,
     fontWeightStrong: 600,

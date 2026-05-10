@@ -40,7 +40,7 @@ export default function ApplicationSettings(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Application Settings" />
       <ReusableCrud
         icon={<SettingOutlined />}
@@ -66,6 +66,6 @@ export default function ApplicationSettings(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

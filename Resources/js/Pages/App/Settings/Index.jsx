@@ -6,7 +6,6 @@ import {
   Grid,
   Skeleton,
   Space,
-  Tabs,
   Typography,
   theme,
 } from 'antd';
@@ -24,20 +23,12 @@ import {
   SettingOutlined,
   TagsOutlined,
   TeamOutlined,
-  TranslationOutlined,
 } from '@ant-design/icons';
 
-const { Text, Title } = Typography;
+const { Title } = Typography;
 const { useBreakpoint } = Grid;
 
-/**
- * These imports point to your existing Inertia page components.
- * If any of these components contain <AuthenticatedLayout>, then pass embedded
- * and make the component return only content when embedded=true.
- */
-
 const CompanyProfile = lazy(() => import('./CompanyProfile'));
-const Localization = lazy(() => import('./CompanyProfile'));
 
 const Branches = lazy(() => import('../Master/Branches/Index'));
 const FiscalYears = lazy(() => import('./FiscalYears'));
@@ -77,30 +68,8 @@ const SETTINGS_TABS = [
     component: CompanyProfile,
     props: {},
   },
-  {
-    key: 'localization',
-    label: 'Localization',
-    description: 'Timezone, country and date settings.',
-    icon: <TranslationOutlined />,
-    component: Localization,
-    props: {},
-  },
-  {
-    key: 'general-settings',
-    label: 'General Settings',
-    description: 'Common business rules.',
-    icon: <SettingOutlined />,
-    component: GeneralSettings,
-    props: {},
-  },
-  {
-    key: 'application-settings',
-    label: 'Application Settings',
-    description: 'System-wide key value settings.',
-    icon: <SettingOutlined />,
-    component: ApplicationSettings,
-    props: {},
-  },
+  
+  
   {
     key: 'master-data',
     label: 'Master Data',
@@ -139,14 +108,7 @@ const SETTINGS_TABS = [
     component: Roles,
     props: {},
   },
-  {
-    key: 'permissions',
-    label: 'Permissions',
-    description: 'Permission rules.',
-    icon: <SafetyCertificateOutlined />,
-    component: Permissions,
-    props: {},
-  },
+   ,
 
   {
     key: 'finance-group',
@@ -156,7 +118,7 @@ const SETTINGS_TABS = [
   {
     key: 'fiscal-years',
     label: 'Fiscal Years',
-    description: 'Accounting years and locks.',
+    description: 'Accounting years and period locks.',
     icon: <CalendarOutlined />,
     component: FiscalYears,
     props: {},
@@ -179,7 +141,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'accounting-configuration',
-    label: 'Accounting Configuration',
+    label: 'Accounting Config',
     description: 'Default accounting rules.',
     icon: <BankOutlined />,
     component: ConfigurationForm,
@@ -201,7 +163,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'sales-configuration',
-    label: 'Sales Configuration',
+    label: 'Sales Config',
     description: 'Sales defaults and invoice rules.',
     icon: <AuditOutlined />,
     component: ConfigurationForm,
@@ -209,7 +171,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'purchase-configuration',
-    label: 'Purchase Configuration',
+    label: 'Purchase Config',
     description: 'Purchase defaults and supplier rules.',
     icon: <AuditOutlined />,
     component: ConfigurationForm,
@@ -217,7 +179,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'inventory-configuration',
-    label: 'Inventory Configuration',
+    label: 'Inventory Config',
     description: 'Warehouse and stock rules.',
     icon: <InboxOutlined />,
     component: ConfigurationForm,
@@ -225,7 +187,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'hrm-configuration',
-    label: 'HRM Configuration',
+    label: 'HRM Config',
     description: 'Attendance, payroll and HR defaults.',
     icon: <TeamOutlined />,
     component: ConfigurationForm,
@@ -263,7 +225,7 @@ const SETTINGS_TABS = [
   },
   {
     key: 'email-configuration',
-    label: 'Email Configuration',
+    label: 'Email Config',
     description: 'SMTP and sender setup.',
     icon: <MailOutlined />,
     component: EmailConfiguration,
@@ -281,7 +243,7 @@ const SETTINGS_TABS = [
     key: 'printing-templates',
     label: 'Printing Templates',
     description: 'Print document layouts.',
-    icon: <MailOutlined />,
+    icon: <FileTextOutlined />,
     component: PrintingTemplates,
     props: {},
   },
@@ -289,7 +251,7 @@ const SETTINGS_TABS = [
     key: 'custom-templates',
     label: 'Custom Templates',
     description: 'Reusable rich text templates.',
-    icon: <MailOutlined />,
+    icon: <FileTextOutlined />,
     component: CustomTemplates,
     props: {},
   },
@@ -323,18 +285,49 @@ function updateUrlTab(key) {
   );
 }
 
-function TabLabel({ item, token }) {
+function LoadingState({ token }) {
+  return (
+    <div
+      style={{
+        padding: token.padding,
+        background: token.colorBgContainer,
+      }}
+    >
+      <Skeleton active paragraph={{ rows: 8 }} />
+    </div>
+  );
+}
+
+function ActiveComponent({ activeKey, auth, token }) {
+  const activeTab = SETTINGS_TABS.find((item) => item.key === activeKey);
+
+  if (!activeTab?.component) return null;
+
+  const Component = activeTab.component;
+  const props = activeTab.props || {};
+
+  return (
+    <Suspense fallback={<LoadingState token={token} />}>
+      <Component auth={auth} embedded {...props} />
+    </Suspense>
+  );
+}
+
+function SiderItem({ item, active, token, onClick }) {
   if (item.disabled) {
     return (
       <div
         style={{
-          padding: '10px 2px 6px',
-          fontSize: 11,
+          padding: '8px 6px 4px',
+          marginTop: 4,
+          fontSize: 10,
           fontWeight: 800,
-          letterSpacing: 0.5,
+          letterSpacing: 0.55,
           textTransform: 'uppercase',
-          color: token.colorTextTertiary,
-          cursor: 'default',
+          color: token.colorTextQuaternary,
+          lineHeight: '12px',
+          userSelect: 'none',
+          flexShrink: 0,
         }}
       >
         {item.label}
@@ -343,79 +336,73 @@ function TabLabel({ item, token }) {
   }
 
   return (
-    <Space size={10} align="start" style={{ width: '100%' }}>
+    <button
+      type="button"
+      onClick={() => onClick(item.key)}
+      title={item.description}
+      style={{
+        width: '100%',
+        height: 32,
+        border: 0,
+        outline: 0,
+        cursor: 'pointer',
+        padding: '3px 6px',
+        borderRadius: token.borderRadiusSM,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        background: active ? token.colorPrimaryBg : 'transparent',
+        color: active ? token.colorText : token.colorTextSecondary,
+        transition: 'all 0.16s ease',
+        textAlign: 'left',
+        flexShrink: 0,
+      }}
+      onMouseEnter={(event) => {
+        if (!active) {
+          event.currentTarget.style.background = token.colorFillTertiary;
+        }
+      }}
+      onMouseLeave={(event) => {
+        if (!active) {
+          event.currentTarget.style.background = 'transparent';
+        }
+      }}
+    >
       <span
         style={{
-          width: 34,
-          height: 34,
-          borderRadius: token.borderRadiusLG,
+          width: 22,
+          height: 22,
+          borderRadius: token.borderRadiusSM,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: token.colorFillTertiary,
-          color: token.colorTextSecondary,
+          background: active ? token.colorPrimaryBg : token.colorFillQuaternary,
+          color: active ? token.colorPrimary : token.colorTextSecondary,
+          border: `1px solid ${
+            active ? token.colorPrimaryBorder : token.colorBorderSecondary
+          }`,
           flexShrink: 0,
-          marginTop: 2,
+          fontSize: 12,
         }}
       >
         {item.icon}
       </span>
 
-      <span style={{ minWidth: 0 }}>
-        <span
-          style={{
-            display: 'block',
-            fontSize: 14,
-            fontWeight: 600,
-            color: token.colorText,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: 210,
-          }}
-        >
-          {item.label}
-        </span>
-
-        <span
-          style={{
-            display: 'block',
-            marginTop: 3,
-            fontSize: 12,
-            color: token.colorTextTertiary,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: 230,
-          }}
-        >
-          {item.description}
-        </span>
+      <span
+        style={{
+          display: 'block',
+          minWidth: 0,
+          fontSize: 13,
+          fontWeight: active ? 700 : 600,
+          lineHeight: '16px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {item.label}
       </span>
-    </Space>
-  );
-}
-
-function ActiveComponent({ activeKey, auth }) {
-  const activeTab = SETTINGS_TABS.find((item) => item.key === activeKey);
-
-  if (!activeTab?.component) {
-    return null;
-  }
-
-  const Component = activeTab.component;
-  const props = activeTab.props || {};
-
-  return (
-    <Suspense
-      fallback={
-        <div style={{ padding: 20 }}>
-          <Skeleton active paragraph={{ rows: 10 }} />
-        </div>
-      }
-    >
-      <Component auth={auth} embedded {...props} />
-    </Suspense>
+    </button>
   );
 }
 
@@ -430,37 +417,6 @@ export default function SettingsIndex({ auth }) {
     return SETTINGS_TABS.find((item) => item.key === activeKey);
   }, [activeKey]);
 
-  const tabItems = useMemo(() => {
-    return SETTINGS_TABS.map((item) => ({
-      key: item.key,
-      disabled: item.disabled,
-      label: <TabLabel item={item} token={token} />,
-      children: item.disabled ? null : (
-        <div
-          style={{
-            padding: isMobile ? 12 : 20,
-            minHeight: 'calc(100vh - 138px)',
-            background: token.colorBgLayout,
-          }}
-        >
-          <Card
-            style={{
-              borderRadius: token.borderRadiusLG,
-              overflow: 'hidden',
-            }}
-            styles={{
-              body: {
-                padding: 0,
-              },
-            }}
-          >
-            <ActiveComponent activeKey={item.key} auth={auth} />
-          </Card>
-        </div>
-      ),
-    }));
-  }, [auth, isMobile, token]);
-
   const handleChange = (key) => {
     const tab = SETTINGS_TABS.find((item) => item.key === key);
 
@@ -472,57 +428,217 @@ export default function SettingsIndex({ auth }) {
 
   return (
     <AuthenticatedLayout auth={auth}>
-      <Head title="Settings" />
+      <Head title="Configuration" />
+
+      <style>
+        {`
+          .settings-sider-scroll {
+            scrollbar-width: none;
+            scrollbar-color: transparent transparent;
+          }
+
+          .settings-sider-scroll:hover {
+            scrollbar-width: thin;
+            scrollbar-color: ${token.colorBorderSecondary} transparent;
+          }
+
+          .settings-sider-scroll::-webkit-scrollbar {
+            width: 0;
+            height: 0;
+          }
+
+          .settings-sider-scroll:hover::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+
+          .settings-sider-scroll::-webkit-scrollbar-track {
+            background: transparent;
+          }
+
+          .settings-sider-scroll::-webkit-scrollbar-thumb {
+            background: transparent;
+            border-radius: 999px;
+          }
+
+          .settings-sider-scroll:hover::-webkit-scrollbar-thumb {
+            background: ${token.colorBorderSecondary};
+            border-radius: 999px;
+          }
+
+          .settings-sider-scroll:hover::-webkit-scrollbar-thumb:hover {
+            background: ${token.colorBorder};
+          }
+
+          .settings-content-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+
+          .settings-content-scroll::-webkit-scrollbar-track {
+            background: transparent;
+          }
+
+          .settings-content-scroll::-webkit-scrollbar-thumb {
+            background: ${token.colorBorderSecondary};
+            border-radius: 999px;
+          }
+
+          .settings-content-scroll::-webkit-scrollbar-thumb:hover {
+            background: ${token.colorBorder};
+          }
+        `}
+      </style>
 
       <div
         style={{
+          height: 'calc(100vh - 64px)',
           minHeight: 'calc(100vh - 64px)',
           background: token.colorBgLayout,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <div
           style={{
-            height: 72,
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 26px',
+            flex: '0 0 auto',
+            padding: isMobile ? '10px 14px' : '10px 18px',
             background: token.colorBgContainer,
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <div>
-            <Title level={3} style={{ margin: 0 }}>
-              Apps
-            </Title>
+          <div
+            style={{
+              minHeight: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: token.marginSM,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <Space size={8} align="center">
+                <span
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: token.borderRadius,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: token.colorPrimaryBg,
+                    color: token.colorPrimary,
+                    border: `1px solid ${token.colorPrimaryBorder}`,
+                    fontSize: 14,
+                  }}
+                >
+                  <SettingOutlined />
+                </span>
 
-            <Text type="secondary">
-              {activeTab?.description || 'Manage application settings.'}
-            </Text>
+                <Title
+                  level={4}
+                  style={{
+                    margin: 0,
+                    color: token.colorText,
+                    fontSize: 17,
+                    lineHeight: '22px',
+                    fontWeight: 750,
+                  }}
+                >
+                  Configuration
+                </Title>
+              </Space>
+            </div>
           </div>
         </div>
 
-        <Tabs
-          activeKey={activeKey}
-          onChange={handleChange}
-          tabPosition={isMobile ? 'top' : 'left'}
-          items={tabItems}
-          destroyInactiveTabPane
+        <div
           style={{
-            minHeight: 'calc(100vh - 136px)',
-            background: token.colorBgContainer,
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            overflow: 'hidden',
           }}
-          tabBarStyle={{
-            width: isMobile ? '100%' : 355,
-            minWidth: isMobile ? undefined : 355,
-            margin: 0,
-            padding: isMobile ? '8px 10px' : '14px',
-            background: token.colorBgContainer,
-            borderRight: isMobile ? 'none' : `1px solid ${token.colorBorderSecondary}`,
-            borderBottom: isMobile ? `1px solid ${token.colorBorderSecondary}` : 'none',
-            maxHeight: isMobile ? undefined : 'calc(100vh - 136px)',
-            overflowY: 'auto',
-          }}
-        />
+        >
+          <aside
+            className="settings-sider-scroll"
+            style={{
+              width: isMobile ? '100%' : 230,
+              minWidth: isMobile ? '100%' : 202,
+              height: isMobile ? 'auto' : '100%',
+              maxHeight: isMobile ? 82 : '100%',
+              overflowY: isMobile ? 'hidden' : 'auto',
+              overflowX: isMobile ? 'auto' : 'hidden',
+              padding: isMobile ? '5px 6px' : 6,
+              background: token.colorBgContainer,
+              borderRight: isMobile
+                ? 'none'
+                : `1px solid ${token.colorBorderSecondary}`,
+              borderBottom: isMobile
+                ? `1px solid ${token.colorBorderSecondary}`
+                : 'none',
+              display: 'flex',
+              flexDirection: isMobile ? 'row' : 'column',
+              gap: 9,
+              flexShrink: 0,
+            }}
+          >
+            {SETTINGS_TABS.map((item) => (
+              <div
+                key={item.key}
+                style={{
+                  width: isMobile ? 190 : '100%',
+                  minWidth: isMobile ? 190 : undefined,
+                  flexShrink: 0,
+                }}
+              >
+                <SiderItem
+                  item={item}
+                  active={item.key === activeKey}
+                  token={token}
+                  onClick={handleChange}
+                />
+              </div>
+            ))}
+          </aside>
+
+          <main
+            className="settings-content-scroll"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              overflow: 'auto',
+              padding: isMobile ? 10 : 12,
+              background: token.colorBgLayout,
+            }}
+          >
+            <Card
+              variant="outlined"
+              style={{
+                minHeight: '100%',
+                borderRadius: token.borderRadiusLG,
+                overflow: 'hidden',
+                borderColor: token.colorBorderSecondary,
+                background: token.colorBgContainer,
+                boxShadow: token.boxShadowTertiary,
+              }}
+              styles={{
+                body: {
+                  padding: 0,
+                },
+              }}
+            >
+              <ActiveComponent
+                activeKey={activeKey}
+                auth={auth}
+                token={token}
+              />
+            </Card>
+          </main>
+        </div>
       </div>
     </AuthenticatedLayout>
   );

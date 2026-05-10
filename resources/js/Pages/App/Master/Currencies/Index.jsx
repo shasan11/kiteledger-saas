@@ -58,7 +58,7 @@ export default function Currencies(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Currencies" />
       <ReusableCrud
         icon={<DollarOutlined />}
@@ -84,6 +84,6 @@ export default function Currencies(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

@@ -88,7 +88,7 @@ export default function Roles(props) {
   ];
 
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<AccessControlTabs activeKey="roles" />}>
+    <>
       <Head title="Roles" />
       <ReusableCrud
         icon={<SafetyCertificateOutlined />}
@@ -117,6 +117,6 @@ export default function Roles(props) {
         hasActions
         hasActionColumns
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

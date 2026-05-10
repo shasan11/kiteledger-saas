@@ -37,6 +37,7 @@ import {
   FilterOutlined,
   InboxOutlined,
   LockOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { Formik, Field, FieldArray } from "formik";
 import * as XLSX from "xlsx";
@@ -268,6 +269,66 @@ export default function ReusableCrud({
         color: token.colorTextTertiary,
         background: token.colorFillAlter,
         borderRadius: token.borderRadiusLG,
+      },
+      formOnlyPage: {
+        minHeight: "100vh",
+        background: token.colorBgLayout,
+        padding: "0 clamp(24px, 8vw, 140px)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "stretch",
+        overflowY: "auto",
+      },
+      formOnlyShell: {
+        width: "100%",
+        maxWidth: 1280,
+        minHeight: "100vh",
+        background: token.colorBgContainer,
+        borderLeft: `1px solid ${token.colorBorderSecondary}`,
+        borderRight: `1px solid ${token.colorBorderSecondary}`,
+        borderTop: "none",
+        borderBottom: "none",
+        borderRadius: 0,
+        boxShadow: token.boxShadowTertiary || "0 8px 28px rgba(15, 23, 42, 0.08)",
+        overflow: "hidden",
+      },
+      formOnlyHeader: {
+        minHeight: 76,
+        padding: `3px ${token.paddingSM}px`,
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: token.marginMD,
+        background: token.colorBgContainer,
+        position: "sticky",
+        top: 0,
+        zIndex: 5,
+      },
+      formOnlyTitleWrap: {
+        minWidth: 0,
+      },
+      formOnlyTitle: {
+        margin: 0,
+        fontSize: token.fontSizeXL,
+        fontWeight: 700,
+        lineHeight: token.lineHeightHeading3,
+        color: token.colorText,
+      },
+      formOnlySubtitle: {
+        marginTop: 2,
+        fontSize: token.fontSizeSM,
+        color: token.colorTextSecondary,
+      },
+      formOnlyActions: {
+        display: "flex",
+        alignItems: "center",
+        gap: token.marginSM,
+        flexShrink: 0,
+      },
+      formOnlyBody: {
+        padding: `${token.paddingLG}px ${token.paddingXL}px ${token.paddingXL}px`,
+        background: token.colorBgContainer,
       },
     }),
     [token]
@@ -3563,7 +3624,17 @@ export default function ReusableCrud({
   const isFormOnlyMode = ui_type === "add form" || ui_type === "edit form";
 
   if (isFormOnlyMode) {
-    const submitLabel = ui_type === "edit form" ? "Update" : "Add";
+    const isEditFormOnly = ui_type === "edit form";
+    const submitLabel = isEditFormOnly ? "Update" : "Save";
+
+    const singularTitle =
+      title && String(title).endsWith("s")
+        ? String(title).slice(0, -1)
+        : title || "Record";
+
+    const formOnlyTitle = isEditFormOnly
+      ? `Edit ${singularTitle}`
+      : `New ${singularTitle}`;
 
     return (
       <div className="reusable-crud-token">
@@ -3587,21 +3658,34 @@ export default function ReusableCrud({
               await refreshAfterSubmit();
 
               if (isEditMode) {
-                if (typeof onEditSuccess === "function") await onEditSuccess(savedRecord, values);
+                if (typeof onEditSuccess === "function") {
+                  await onEditSuccess(savedRecord, values);
+                }
               } else {
-                if (typeof onAddSuccess === "function") await onAddSuccess(savedRecord, values);
-                if (typeof handleAddedData === "function") await handleAddedData(savedRecord, values);
+                if (typeof onAddSuccess === "function") {
+                  await onAddSuccess(savedRecord, values);
+                }
+
+                if (typeof handleAddedData === "function") {
+                  await handleAddedData(savedRecord, values);
+                }
+
                 resetForm();
               }
             } catch (err) {
               const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
 
-              if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
+              if (Object.keys(fieldErrors).length) {
+                setErrors(fieldErrors);
+              }
 
               setSubmitErrors(allErrors);
 
-              if (globalErrors.length) showGlobalErrorsNotification(globalErrors);
-              else message.error("Validation failed");
+              if (globalErrors.length) {
+                showGlobalErrorsNotification(globalErrors);
+              } else {
+                message.error("Validation failed");
+              }
             }
           }}
         >
@@ -3617,35 +3701,85 @@ export default function ReusableCrud({
           }) => {
             formikLiveRef.current = { setFieldValue, values };
 
+            const submitMeta = {
+              values,
+              errors,
+              touched,
+              handleSubmit,
+              submitForm,
+              setFieldValue,
+              isValid,
+              isSubmitting,
+              editingRecord: isEditFormOnly ? formInitialValues : null,
+            };
+
+            const headerSubmitButton = hideSubmitButton
+              ? null
+              : typeof renderSubmitButton === "function"
+                ? renderSubmitButton(submitMeta)
+                : (
+                  <Button
+                    type="primary"
+                    onClick={
+                      typeof onSubmitButtonClick === "function"
+                        ? () => onSubmitButtonClick(submitMeta)
+                        : submitForm
+                    }
+                    disabled={!isValid || isSubmitting}
+                    loading={isSubmitting}
+                    style={{ minWidth: 120 }}
+                  >
+                    {submitLabelOverride || submitLabel}
+                  </Button>
+                );
+
             return (
-              <CrudFormInner
-                fields={fields}
-                values={values}
-                setFieldValue={setFieldValue}
-                errors={errors}
-                touched={touched}
-                ui_type={ui_type}
-                handleSubmit={handleSubmit}
-                onFormValuesChange={onFormValuesChange}
-                submitLabel={submitLabelOverride || submitLabel}
-                renderFormFields={renderFormFields}
-                submitErrors={submitErrors}
-                hideSubmitButton={hideSubmitButton}
-                onSubmitButtonClick={onSubmitButtonClick}
-                renderSubmitButton={renderSubmitButton}
-                hydrateFkLabels={hydrateMissingFkLabel}
-                submitMeta={{
-                  values,
-                  errors,
-                  touched,
-                  handleSubmit,
-                  submitForm,
-                  setFieldValue,
-                  isValid,
-                  isSubmitting,
-                  editingRecord: null,
-                }}
-              />
+              <div style={ui.formOnlyPage}>
+                <div style={ui.formOnlyShell}>
+                  <div style={ui.formOnlyHeader}>
+                    <div style={ui.formOnlyTitleWrap}>
+                      <h2 style={ui.formOnlyTitle}>{formOnlyTitle}</h2>
+                      <div style={ui.formOnlySubtitle}>
+                       </div>
+                    </div>
+
+                    <div style={ui.formOnlyActions}>
+                      {headerSubmitButton}
+
+                      <Button
+                        type="text"
+                        icon={<CloseOutlined style={{ fontSize: 18 }} />}
+                        onClick={() => {
+                          if (typeof window !== "undefined" && window.history.length > 1) {
+                            window.history.back();
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={ui.formOnlyBody}>
+                    <CrudFormInner
+                      fields={fields}
+                      values={values}
+                      setFieldValue={setFieldValue}
+                      errors={errors}
+                      touched={touched}
+                      ui_type={ui_type}
+                      handleSubmit={handleSubmit}
+                      onFormValuesChange={onFormValuesChange}
+                      submitLabel={submitLabelOverride || submitLabel}
+                      renderFormFields={renderFormFields}
+                      submitErrors={submitErrors}
+                      hideSubmitButton={true}
+                      onSubmitButtonClick={onSubmitButtonClick}
+                      renderSubmitButton={renderSubmitButton}
+                      hydrateFkLabels={hydrateMissingFkLabel}
+                      submitMeta={submitMeta}
+                    />
+                  </div>
+                </div>
+              </div>
             );
           }}
         </Formik>
@@ -3812,38 +3946,34 @@ export default function ReusableCrud({
   );
 
   const headerRight = (
-    <Space size={8} wrap>
-      {custom_add && (
-        <Button
-          icon={<PlusOutlined />}
-          type="primary"
-          onClick={() => custom_add_link && router.visit(custom_add_link)}
-        >
-          Add New
-        </Button>
-      )}
+  <Space size={8} wrap>
+    {canAdd && !button_ui && ui_type !== "add_related" && (
+      <Button
+        icon={<PlusOutlined />}
+        type="primary"
+        onClick={() => {
+          setSubmitErrors(EMPTY_ARRAY);
 
-      {canAdd && !button_ui && ui_type !== "add_related" && (
-        <Button
-          icon={<PlusOutlined />}
-          type="primary"
-          onClick={() => {
-            setSubmitErrors(EMPTY_ARRAY);
-            setEditingRecord(null);
-            setVisible(true);
-          }}
-        >
-          Add New
-        </Button>
-      )}
+          if (custom_add && custom_add_link) {
+            router.visit(custom_add_link);
+            return;
+          }
 
-      {hasActions && canView && (
-        <Dropdown menu={{ items: topMenuItems }} placement="bottomRight" trigger={["click"]}>
-          <Button type="default" icon={<MoreOutlined />} />
-        </Dropdown>
-      )}
-    </Space>
-  );
+          setEditingRecord(null);
+          setVisible(true);
+        }}
+      >
+        Add New
+      </Button>
+    )}
+
+    {hasActions && canView && (
+      <Dropdown menu={{ items: topMenuItems }} placement="bottomRight" trigger={["click"]}>
+        <Button type="default" icon={<MoreOutlined />} />
+      </Dropdown>
+    )}
+  </Space>
+);
 
   return (
     <div className="reusable-crud-token">

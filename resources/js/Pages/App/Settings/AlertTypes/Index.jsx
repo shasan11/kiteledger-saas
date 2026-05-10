@@ -71,7 +71,7 @@ export default function AlertTypes(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Alert Types" />
       <ReusableCrud
         icon={<BellOutlined />}
@@ -97,6 +97,6 @@ export default function AlertTypes(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+ </>
   );
 }

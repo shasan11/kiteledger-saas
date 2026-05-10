@@ -8,7 +8,6 @@ import {
     Col,
     DatePicker,
     Drawer,
-    Dropdown,
     Empty,
     Flex,
     Progress,
@@ -29,23 +28,16 @@ import {
     AlertOutlined,
     ArrowDownOutlined,
     ArrowUpOutlined,
-    AuditOutlined,
     BankOutlined,
-    BellOutlined,
     CheckCircleOutlined,
     ClockCircleOutlined,
     CloseOutlined,
-    DollarOutlined,
     ExclamationCircleOutlined,
     FileDoneOutlined,
     FileTextOutlined,
     InboxOutlined,
-    PlusOutlined,
     ReloadOutlined,
     RightOutlined,
-    SafetyCertificateOutlined,
-    TeamOutlined,
-    ThunderboltOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -68,12 +60,9 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 const { RangePicker } = DatePicker;
 const { Text, Title, Paragraph } = Typography;
 
-/* ============================================================================
-   FORMATTERS
-   ============================================================================ */
-
 const money = (value, opts = {}) => {
     const n = Number(value || 0);
+
     if (opts.compact) {
         return new Intl.NumberFormat('en-NP', {
             style: 'currency',
@@ -82,6 +71,7 @@ const money = (value, opts = {}) => {
             maximumFractionDigits: 1,
         }).format(n);
     }
+
     return new Intl.NumberFormat('en-NP', {
         style: 'currency',
         currency: 'NPR',
@@ -92,22 +82,11 @@ const money = (value, opts = {}) => {
 const number = (v) => new Intl.NumberFormat('en-NP').format(Number(v || 0));
 const toNumber = (v) => Number(v || 0);
 
-const routeUrl = (name, fallback) => {
-    try {
-        if (typeof route === 'function' && route().has(name)) return route(name);
-    } catch {
-        return fallback;
-    }
-    return fallback;
-};
-
 const visit = (url) => {
-    if (url && url !== '#') router.visit(url);
+    if (url && url !== '#') {
+        router.visit(url);
+    }
 };
-
-/* ============================================================================
-   STATUS MAPPING — uses Ant Design's preset Tag colors
-   ============================================================================ */
 
 const statusToTone = {
     approved: 'success',
@@ -128,10 +107,6 @@ const statusToTone = {
     part_paid: 'warning',
 };
 
-/* ============================================================================
-   SHARED EYEBROW/HEADER STYLE — used everywhere for consistency
-   ============================================================================ */
-
 const eyebrowStyle = (token) => ({
     fontSize: 11,
     fontWeight: 600,
@@ -141,18 +116,23 @@ const eyebrowStyle = (token) => ({
 });
 
 const PanelHeader = ({ token, eyebrow, title, extra }) => (
-    <Flex justify="space-between" align="center" wrap="wrap" gap={token.marginSM} style={{ width: '100%' }}>
+    <Flex
+        justify="space-between"
+        align="center"
+        wrap="wrap"
+        gap={token.marginSM}
+        style={{ width: '100%' }}
+    >
         <Space direction="vertical" size={2}>
             <Text style={eyebrowStyle(token)}>{eyebrow}</Text>
-            <Text strong style={{ fontSize: 16, color: token.colorTextHeading }}>{title}</Text>
+            <Text strong style={{ fontSize: 16, color: token.colorTextHeading }}>
+                {title}
+            </Text>
         </Space>
+
         {extra}
     </Flex>
 );
-
-/* ============================================================================
-   ROOT
-   ============================================================================ */
 
 export default function Dashboard() {
     const { token } = theme.useToken();
@@ -172,8 +152,12 @@ export default function Dashboard() {
     const fetchDashboard = useCallback(async () => {
         setLoading(true);
         setError(null);
+
         try {
-            const { data: res } = await axios.get('/dashboard-data', { params: filters });
+            const { data: res } = await axios.get('/dashboard-data', {
+                params: filters,
+            });
+
             setData(res || {});
         } catch (e) {
             setError(e?.response?.data?.message || 'Unable to load dashboard data.');
@@ -186,28 +170,6 @@ export default function Dashboard() {
         fetchDashboard();
     }, [fetchDashboard]);
 
-    const quickActions = useMemo(
-        () =>
-            [
-                ['New Invoice', 'payment-in.invoices.create', '/payment-in/invoices/create', <FileTextOutlined />],
-                ['New Purchase Bill', 'payment-out.purchase-bills.create', '/payment-out/purchase-bills/create', <FileDoneOutlined />],
-                ['New Expense', 'payment-out.expenses.create', '/payment-out/expenses/create', <DollarOutlined />],
-                ['New Customer Payment', 'payment-in.payments.create', '/payment-in/payments/create', <BankOutlined />],
-                ['New Supplier Payment', 'payment-out.payments.create', '/payment-out/payments/create', <BankOutlined />],
-                ['New Cash Transfer', 'accounting.cash-transfers.create', '/accounting/cash-transfers/create', <AuditOutlined />],
-                ['New Journal Voucher', 'accounting.journal-vouchers.create', '/accounting/journal-vouchers/create', <SafetyCertificateOutlined />],
-                ['New Contact', 'crm.contacts.create', '/crm/contacts/create', <TeamOutlined />],
-                ['New Lead', 'crm.leads.create', '/crm/leads/create', <ClockCircleOutlined />],
-                ['New Product', 'inventory.products.create', '/inventory/products/create', <InboxOutlined />],
-            ].map(([label, name, fb, icon]) => ({
-                key: label,
-                label,
-                icon,
-                onClick: () => visit(routeUrl(name, fb)),
-            })),
-        [],
-    );
-
     const summary = data.summary || {};
     const cashFlow = data.cash_flow || { summary: {}, chart: [] };
     const inventory = data.inventory || { summary: {}, warnings: [] };
@@ -219,6 +181,7 @@ export default function Dashboard() {
         if (Array.isArray(data.cash_bank_balances) && data.cash_bank_balances.length) {
             return data.cash_bank_balances;
         }
+
         return [
             ...(Array.isArray(data.cash_accounts) ? data.cash_accounts : []),
             ...(Array.isArray(data.bank_accounts) ? data.bank_accounts : []),
@@ -229,27 +192,28 @@ export default function Dashboard() {
         (data.approvals?.length || 0) + (data.accounting_issues?.length || 0);
 
     return (
-        <AuthenticatedLayout>
+        <AuthenticatedLayout
+            header={
+                <TopBar
+                    token={token}
+                    filters={filters}
+                    setFilters={setFilters}
+                    branches={data.branches || []}
+                    refresh={fetchDashboard}
+                    loading={loading}
+                />
+            }
+        >
             <Head title="Dashboard" />
 
             <div
                 style={{
-                    minHeight: '100vh',
+                    minHeight: 'calc(100vh - 110px)',
                     background: token.colorBgLayout,
                     padding: token.paddingLG,
                 }}
             >
                 <Space direction="vertical" size={token.marginLG} style={{ width: '100%' }}>
-                    <TopBar
-                        token={token}
-                        filters={filters}
-                        setFilters={setFilters}
-                        branches={data.branches || []}
-                        refresh={fetchDashboard}
-                        quickActions={quickActions}
-                        loading={loading}
-                    />
-
                     {error && (
                         <Card
                             size="small"
@@ -348,73 +312,71 @@ export default function Dashboard() {
     );
 }
 
-/* ============================================================================
-   TOP BAR
-   ============================================================================ */
+function TopBar({ token, filters, setFilters, branches, refresh, loading }) {
+    const branchOptions = useMemo(() => {
+        if (!Array.isArray(branches)) return [];
 
-function TopBar({ token, filters, setFilters, branches, refresh, quickActions, loading }) {
+        return branches.map((branch) => {
+            if (branch?.value !== undefined && branch?.label !== undefined) {
+                return branch;
+            }
+
+            return {
+                value: branch.id,
+                label: branch.name || branch.title || branch.branch_name || `Branch #${branch.id}`,
+            };
+        });
+    }, [branches]);
+
     return (
-        <Card
-            styles={{ body: { padding: `${token.paddingSM}px ${token.paddingLG}px` } }}
-            style={{ borderRadius: token.borderRadiusLG }}
-        >
-            <Flex align="center" justify="space-between" wrap="wrap" gap={token.marginSM}>
-                <Flex align="center" gap={token.marginMD}>
-                    <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
-                        Dashboard
-                    </Title>
-                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                        {dayjs().format('dddd, MMMM D, YYYY')}
-                    </Text>
-                </Flex>
+        <Flex align="center" justify="space-between" wrap="wrap" gap={token.marginSM}>
+            <Flex align="center" gap={token.marginMD} wrap="wrap">
+                <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
+                    Dashboard
+                </Title>
 
-                <Space wrap size={token.marginXS}>
-                    <Select
-                        allowClear
-                        placeholder="All branches"
-                        style={{ width: 170 }}
-                        options={branches}
-                        value={filters.branch_id}
-                        onChange={(branch_id) => setFilters((c) => ({ ...c, branch_id }))}
-                    />
-
-                    <RangePicker
-                        value={[dayjs(filters.date_from), dayjs(filters.date_to)]}
-                        onChange={(dates) =>
-                            setFilters((c) => ({
-                                ...c,
-                                date_from: dates?.[0]?.format('YYYY-MM-DD'),
-                                date_to: dates?.[1]?.format('YYYY-MM-DD'),
-                            }))
-                        }
-                    />
-
-                    <Tooltip title="Refresh">
-                        <Button icon={<ReloadOutlined />} loading={loading} onClick={refresh} />
-                    </Tooltip>
-
-                    <Tooltip title="Notifications">
-                        <Badge dot color={token.colorPrimary} offset={[-4, 4]}>
-                            <Button icon={<BellOutlined />} />
-                        </Badge>
-                    </Tooltip>
-
-                    <Dropdown menu={{ items: quickActions }} trigger={['click']} placement="bottomRight">
-                        <Button type="primary" icon={<PlusOutlined />}>
-                            Quick Add
-                        </Button>
-                    </Dropdown>
-
-                    <Button icon={<ThunderboltOutlined />}>Assistant</Button>
-                </Space>
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    {dayjs().format('dddd, MMMM D, YYYY')}
+                </Text>
             </Flex>
-        </Card>
+
+            <Space wrap size={token.marginXS}>
+                <Select
+                    allowClear
+                    placeholder="All branches"
+                    style={{ width: 170 }}
+                    options={branchOptions}
+                    value={filters.branch_id}
+                    onChange={(branch_id) => {
+                        setFilters((current) => ({
+                            ...current,
+                            branch_id,
+                        }));
+                    }}
+                />
+
+                <RangePicker
+                    value={
+                        filters.date_from && filters.date_to
+                            ? [dayjs(filters.date_from), dayjs(filters.date_to)]
+                            : null
+                    }
+                    onChange={(dates) => {
+                        setFilters((current) => ({
+                            ...current,
+                            date_from: dates?.[0] ? dates[0].format('YYYY-MM-DD') : undefined,
+                            date_to: dates?.[1] ? dates[1].format('YYYY-MM-DD') : undefined,
+                        }));
+                    }}
+                />
+
+                <Tooltip title="Refresh">
+                    <Button icon={<ReloadOutlined />} loading={loading} onClick={refresh} />
+                </Tooltip>
+            </Space>
+        </Flex>
     );
 }
-
-/* ============================================================================
-   HERO — featured revenue + secondary KPI rail
-   ============================================================================ */
 
 function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }) {
     const sales = toNumber(summary.sales_this_month);
@@ -461,10 +423,15 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             <Tag
                                 icon={<ArrowUpOutlined />}
                                 color="success"
-                                style={{ fontWeight: 500, padding: '2px 8px', borderRadius: token.borderRadiusSM }}
+                                style={{
+                                    fontWeight: 500,
+                                    padding: '2px 8px',
+                                    borderRadius: token.borderRadiusSM,
+                                }}
                             >
                                 {money(today, { compact: true })} today
                             </Tag>
+
                             <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
                                 Net position{' '}
                                 <Text
@@ -487,6 +454,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                                             <stop offset="100%" stopColor={token.colorPrimary} stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
+
                                     <Area
                                         type="monotone"
                                         dataKey="value"
@@ -514,6 +482,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             bg={token.colorWarningBg}
                         />
                     </Col>
+
                     <Col xs={12} md={8}>
                         <KpiTile
                             token={token}
@@ -525,6 +494,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             bg={token.colorErrorBg}
                         />
                     </Col>
+
                     <Col xs={12} md={8}>
                         <KpiTile
                             token={token}
@@ -537,6 +507,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             onClick={onCashClick}
                         />
                     </Col>
+
                     <Col xs={12} md={8}>
                         <KpiTile
                             token={token}
@@ -548,6 +519,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             bg={pending > 0 ? token.colorWarningBg : token.colorSuccessBg}
                         />
                     </Col>
+
                     <Col xs={12} md={8}>
                         <KpiTile
                             token={token}
@@ -559,6 +531,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
                             bg={lowStock > 0 ? token.colorWarningBg : token.colorSuccessBg}
                         />
                     </Col>
+
                     <Col xs={12} md={8}>
                         <KpiTile
                             token={token}
@@ -578,6 +551,7 @@ function HeroSection({ token, summary, cashFlow, accountingHealth, onCashClick }
 
 function KpiTile({ token, label, value, sub, icon, color, bg, onClick }) {
     const clickable = typeof onClick === 'function';
+
     return (
         <Card
             hoverable={clickable}
@@ -592,15 +566,30 @@ function KpiTile({ token, label, value, sub, icon, color, bg, onClick }) {
             <Flex vertical justify="space-between" gap={token.marginXXS} style={{ height: '100%' }}>
                 <Flex justify="space-between" align="flex-start">
                     <Text style={eyebrowStyle(token)}>{label}</Text>
+
                     <Avatar
                         size={26}
-                        style={{ background: bg, color: color, fontSize: 12 }}
+                        style={{
+                            background: bg,
+                            color,
+                            fontSize: 12,
+                        }}
                         icon={icon}
                     />
                 </Flex>
-                <Text strong style={{ fontSize: 22, fontWeight: 700, color: color, lineHeight: 1.1 }}>
+
+                <Text
+                    strong
+                    style={{
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color,
+                        lineHeight: 1.1,
+                    }}
+                >
                     {value}
                 </Text>
+
                 <Text type="secondary" style={{ fontSize: 11 }}>
                     {sub}
                 </Text>
@@ -608,10 +597,6 @@ function KpiTile({ token, label, value, sub, icon, color, bg, onClick }) {
         </Card>
     );
 }
-
-/* ============================================================================
-   OVERVIEW TAB
-   ============================================================================ */
 
 function OverviewTab({ token, cashFlow, salesPurchase, inventory, crm, accountingHealth, summary }) {
     return (
@@ -622,6 +607,7 @@ function OverviewTab({ token, cashFlow, salesPurchase, inventory, crm, accountin
                     <SalesPurchaseCard token={token} data={salesPurchase} summary={summary} />
                 </Space>
             </Col>
+
             <Col xs={24} xl={8}>
                 <Space direction="vertical" size={token.marginLG} style={{ width: '100%' }}>
                     <HealthCard token={token} accountingHealth={accountingHealth} />
@@ -633,10 +619,6 @@ function OverviewTab({ token, cashFlow, salesPurchase, inventory, crm, accountin
         </Row>
     );
 }
-
-/* ============================================================================
-   CASH FLOW CARD
-   ============================================================================ */
 
 function CashFlowCard({ token, cashFlow }) {
     const summary = cashFlow.summary || {};
@@ -656,12 +638,33 @@ function CashFlowCard({ token, cashFlow }) {
                     extra={
                         <Space size={token.marginSM}>
                             <Space size={4}>
-                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: token.colorSuccess, display: 'inline-block' }} />
-                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>In</Text>
+                                <span
+                                    style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        background: token.colorSuccess,
+                                        display: 'inline-block',
+                                    }}
+                                />
+                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                                    In
+                                </Text>
                             </Space>
+
                             <Space size={4}>
-                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: token.colorError, display: 'inline-block' }} />
-                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>Out</Text>
+                                <span
+                                    style={{
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        background: token.colorError,
+                                        display: 'inline-block',
+                                    }}
+                                />
+                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                                    Out
+                                </Text>
                             </Space>
                         </Space>
                     }
@@ -674,19 +677,29 @@ function CashFlowCard({ token, cashFlow }) {
                         title={<Text style={eyebrowStyle(token)}>In Today</Text>}
                         value={inToday}
                         formatter={(v) => money(v, { compact: true })}
-                        valueStyle={{ color: token.colorSuccess, fontSize: 20, fontWeight: 700 }}
+                        valueStyle={{
+                            color: token.colorSuccess,
+                            fontSize: 20,
+                            fontWeight: 700,
+                        }}
                         prefix={<ArrowUpOutlined style={{ fontSize: 14 }} />}
                     />
                 </Col>
+
                 <Col xs={12} sm={6}>
                     <Statistic
                         title={<Text style={eyebrowStyle(token)}>Out Today</Text>}
                         value={outToday}
                         formatter={(v) => money(v, { compact: true })}
-                        valueStyle={{ color: token.colorError, fontSize: 20, fontWeight: 700 }}
+                        valueStyle={{
+                            color: token.colorError,
+                            fontSize: 20,
+                            fontWeight: 700,
+                        }}
                         prefix={<ArrowDownOutlined style={{ fontSize: 14 }} />}
                     />
                 </Col>
+
                 <Col xs={12} sm={6}>
                     <Statistic
                         title={<Text style={eyebrowStyle(token)}>Net</Text>}
@@ -699,12 +712,17 @@ function CashFlowCard({ token, cashFlow }) {
                         }}
                     />
                 </Col>
+
                 <Col xs={12} sm={6}>
                     <Statistic
                         title={<Text style={eyebrowStyle(token)}>Expected</Text>}
                         value={summary.expected_receivables}
                         formatter={(v) => money(v, { compact: true })}
-                        valueStyle={{ color: token.colorTextHeading, fontSize: 20, fontWeight: 700 }}
+                        valueStyle={{
+                            color: token.colorTextHeading,
+                            fontSize: 20,
+                            fontWeight: 700,
+                        }}
                     />
                 </Col>
             </Row>
@@ -716,12 +734,15 @@ function CashFlowCard({ token, cashFlow }) {
                             <stop offset="0%" stopColor={token.colorSuccess} stopOpacity={0.28} />
                             <stop offset="100%" stopColor={token.colorSuccess} stopOpacity={0} />
                         </linearGradient>
+
                         <linearGradient id="cfOut" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor={token.colorError} stopOpacity={0.22} />
                             <stop offset="100%" stopColor={token.colorError} stopOpacity={0} />
                         </linearGradient>
                     </defs>
+
                     <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
+
                     <XAxis
                         dataKey="date"
                         tick={{ fontSize: 10, fill: token.colorTextTertiary }}
@@ -730,6 +751,7 @@ function CashFlowCard({ token, cashFlow }) {
                         tickLine={false}
                         interval="preserveStartEnd"
                     />
+
                     <YAxis
                         tick={{ fontSize: 10, fill: token.colorTextTertiary }}
                         tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
@@ -737,22 +759,36 @@ function CashFlowCard({ token, cashFlow }) {
                         tickLine={false}
                         width={40}
                     />
+
                     <ChartTooltip content={<ThemedTooltip token={token} />} />
-                    <Area type="monotone" dataKey="cash_in" stroke={token.colorSuccess} strokeWidth={2} fill="url(#cfIn)" name="In" />
-                    <Area type="monotone" dataKey="cash_out" stroke={token.colorError} strokeWidth={2} fill="url(#cfOut)" name="Out" />
+
+                    <Area
+                        type="monotone"
+                        dataKey="cash_in"
+                        stroke={token.colorSuccess}
+                        strokeWidth={2}
+                        fill="url(#cfIn)"
+                        name="In"
+                    />
+
+                    <Area
+                        type="monotone"
+                        dataKey="cash_out"
+                        stroke={token.colorError}
+                        strokeWidth={2}
+                        fill="url(#cfOut)"
+                        name="Out"
+                    />
                 </AreaChart>
             </ResponsiveContainer>
         </Card>
     );
 }
 
-/* ============================================================================
-   SALES VS PURCHASE
-   ============================================================================ */
-
 function SalesPurchaseCard({ token, data, summary }) {
     const sales = data.sales || {};
     const purchase = data.purchase || {};
+
     const chartData = data.chart || [
         { name: 'Sales', amount: toNumber(summary.sales_this_month) },
         { name: 'Purchase', amount: 0 },
@@ -766,14 +802,24 @@ function SalesPurchaseCard({ token, data, summary }) {
             <Row gutter={[token.marginLG, token.marginMD]}>
                 <Col xs={24} md={10}>
                     <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barSize={56}>
+                        <BarChart
+                            data={chartData}
+                            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                            barSize={56}
+                        >
                             <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
+
                             <XAxis
                                 dataKey="name"
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fontSize: 12, fill: token.colorText, fontWeight: 500 }}
+                                tick={{
+                                    fontSize: 12,
+                                    fill: token.colorText,
+                                    fontWeight: 500,
+                                }}
                             />
+
                             <YAxis
                                 tick={{ fontSize: 10, fill: token.colorTextTertiary }}
                                 tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
@@ -781,10 +827,15 @@ function SalesPurchaseCard({ token, data, summary }) {
                                 tickLine={false}
                                 width={40}
                             />
+
                             <ChartTooltip content={<ThemedTooltip token={token} />} />
+
                             <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
                                 {chartData.map((entry, i) => (
-                                    <Cell key={i} fill={entry.name === 'Sales' ? token.colorPrimary : token.colorWarning} />
+                                    <Cell
+                                        key={i}
+                                        fill={entry.name === 'Sales' ? token.colorPrimary : token.colorWarning}
+                                    />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -808,6 +859,7 @@ function SalesPurchaseCard({ token, data, summary }) {
                                 ]}
                             />
                         </Col>
+
                         <Col xs={12}>
                             <PartyColumn
                                 token={token}
@@ -841,15 +893,40 @@ function PartyColumn({ token, label, color, items }) {
                     borderBottom: `1px solid ${token.colorBorderSecondary}`,
                 }}
             >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
-                <Text strong style={{ fontSize: token.fontSizeSM, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <span
+                    style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: color,
+                    }}
+                />
+
+                <Text
+                    strong
+                    style={{
+                        fontSize: token.fontSizeSM,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                    }}
+                >
                     {label}
                 </Text>
             </Flex>
+
             {items.map(([k, v]) => (
                 <Flex key={k} justify="space-between" align="center">
-                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>{k}</Text>
-                    <Text strong style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                        {k}
+                    </Text>
+
+                    <Text
+                        strong
+                        style={{
+                            fontSize: token.fontSizeSM,
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
                         {number(v)}
                     </Text>
                 </Flex>
@@ -857,10 +934,6 @@ function PartyColumn({ token, label, color, items }) {
         </Space>
     );
 }
-
-/* ============================================================================
-   ACCOUNTING HEALTH
-   ============================================================================ */
 
 function HealthCard({ token, accountingHealth }) {
     const jvMissing = toNumber(accountingHealth.approved_jv_missing);
@@ -871,10 +944,23 @@ function HealthCard({ token, accountingHealth }) {
     const total = jvMissing + numberMissing + unbalanced;
 
     const status = total === 0 ? 'healthy' : total < 100 ? 'attention' : 'critical';
+
     const statusConfig = {
-        healthy: { tagColor: 'success', label: 'Healthy', icon: <CheckCircleOutlined /> },
-        attention: { tagColor: 'warning', label: 'Needs attention', icon: <ExclamationCircleOutlined /> },
-        critical: { tagColor: 'error', label: 'Critical', icon: <AlertOutlined /> },
+        healthy: {
+            tagColor: 'success',
+            label: 'Healthy',
+            icon: <CheckCircleOutlined />,
+        },
+        attention: {
+            tagColor: 'warning',
+            label: 'Needs attention',
+            icon: <ExclamationCircleOutlined />,
+        },
+        critical: {
+            tagColor: 'error',
+            label: 'Critical',
+            icon: <AlertOutlined />,
+        },
     }[status];
 
     const items = [
@@ -898,7 +984,11 @@ function HealthCard({ token, accountingHealth }) {
                         <Tag
                             icon={statusConfig.icon}
                             color={statusConfig.tagColor}
-                            style={{ borderRadius: token.borderRadiusSM, fontWeight: 500, margin: 0 }}
+                            style={{
+                                borderRadius: token.borderRadiusSM,
+                                fontWeight: 500,
+                                margin: 0,
+                            }}
                         >
                             {statusConfig.label}
                         </Tag>
@@ -914,19 +1004,28 @@ function HealthCard({ token, accountingHealth }) {
                         align="center"
                         style={{
                             padding: `${token.paddingXS}px 0`,
-                            borderBottom: i < items.length - 1 ? `1px solid ${token.colorBorderSecondary}` : 'none',
+                            borderBottom:
+                                i < items.length - 1
+                                    ? `1px solid ${token.colorBorderSecondary}`
+                                    : 'none',
                         }}
                     >
-                        <Text style={{
-                            fontSize: token.fontSizeSM,
-                            color: it.critical ? token.colorError : token.colorText,
-                        }}>
+                        <Text
+                            style={{
+                                fontSize: token.fontSizeSM,
+                                color: it.critical ? token.colorError : token.colorText,
+                            }}
+                        >
                             {it.label}
                         </Text>
-                        <Text strong style={{
-                            color: it.critical ? token.colorError : token.colorTextHeading,
-                            fontVariantNumeric: 'tabular-nums',
-                        }}>
+
+                        <Text
+                            strong
+                            style={{
+                                color: it.critical ? token.colorError : token.colorTextHeading,
+                                fontVariantNumeric: 'tabular-nums',
+                            }}
+                        >
                             {number(it.value)}
                         </Text>
                     </Flex>
@@ -936,12 +1035,9 @@ function HealthCard({ token, accountingHealth }) {
     );
 }
 
-/* ============================================================================
-   TOP PARTIES
-   ============================================================================ */
-
 function TopPartiesCard({ token, data }) {
     const [tab, setTab] = useState('customers');
+
     const list =
         tab === 'customers'
             ? (data.sales?.top_customers || []).slice(0, 5)
@@ -978,6 +1074,7 @@ function TopPartiesCard({ token, data }) {
                 <Space direction="vertical" size={token.marginSM} style={{ width: '100%' }}>
                     {list.map((p, i) => {
                         const pct = (toNumber(p.amount) / max) * 100;
+
                         return (
                             <Flex key={i} align="center" gap={token.marginSM}>
                                 <Text
@@ -991,11 +1088,13 @@ function TopPartiesCard({ token, data }) {
                                 >
                                     {String(i + 1).padStart(2, '0')}
                                 </Text>
+
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <Flex justify="space-between" align="baseline" style={{ marginBottom: 4 }}>
                                         <Text ellipsis style={{ fontSize: token.fontSizeSM, fontWeight: 500 }}>
                                             {p.name}
                                         </Text>
+
                                         <Text
                                             strong
                                             style={{
@@ -1007,6 +1106,7 @@ function TopPartiesCard({ token, data }) {
                                             {money(p.amount, { compact: true })}
                                         </Text>
                                     </Flex>
+
                                     <Progress
                                         percent={pct}
                                         showInfo={false}
@@ -1023,10 +1123,6 @@ function TopPartiesCard({ token, data }) {
         </Card>
     );
 }
-
-/* ============================================================================
-   INVENTORY
-   ============================================================================ */
 
 function InventoryCard({ token, inventory }) {
     const summary = inventory.summary || {};
@@ -1071,7 +1167,14 @@ function InventoryCard({ token, inventory }) {
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No products" />
             ) : (
                 <Flex align="center" gap={token.marginMD}>
-                    <div style={{ position: 'relative', width: 130, height: 130, flexShrink: 0 }}>
+                    <div
+                        style={{
+                            position: 'relative',
+                            width: 130,
+                            height: 130,
+                            flexShrink: 0,
+                        }}
+                    >
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
@@ -1088,28 +1191,64 @@ function InventoryCard({ token, inventory }) {
                                 </Pie>
                             </PieChart>
                         </ResponsiveContainer>
+
                         <Flex
                             vertical
                             align="center"
                             justify="center"
-                            style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                pointerEvents: 'none',
+                            }}
                         >
-                            <Text strong style={{ fontSize: 22, lineHeight: 1, color: token.colorTextHeading }}>
+                            <Text
+                                strong
+                                style={{
+                                    fontSize: 22,
+                                    lineHeight: 1,
+                                    color: token.colorTextHeading,
+                                }}
+                            >
                                 {number(total)}
                             </Text>
+
                             <Text style={{ ...eyebrowStyle(token), fontSize: 10, marginTop: 2 }}>
                                 products
                             </Text>
                         </Flex>
                     </div>
+
                     <Space direction="vertical" size={token.marginXXS} style={{ flex: 1 }}>
                         {data.map((d) => (
-                            <Flex key={d.name} justify="space-between" align="center" style={{ padding: '4px 0' }}>
+                            <Flex
+                                key={d.name}
+                                justify="space-between"
+                                align="center"
+                                style={{ padding: '4px 0' }}
+                            >
                                 <Space size={6}>
-                                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.color }} />
-                                    <Text style={{ fontSize: token.fontSizeSM }}>{d.name}</Text>
+                                    <span
+                                        style={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: '50%',
+                                            background: d.color,
+                                        }}
+                                    />
+
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        {d.name}
+                                    </Text>
                                 </Space>
-                                <Text strong style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+
+                                <Text
+                                    strong
+                                    style={{
+                                        fontSize: token.fontSizeSM,
+                                        fontVariantNumeric: 'tabular-nums',
+                                    }}
+                                >
                                     {number(d.value)}
                                 </Text>
                             </Flex>
@@ -1120,10 +1259,6 @@ function InventoryCard({ token, inventory }) {
         </Card>
     );
 }
-
-/* ============================================================================
-   CRM
-   ============================================================================ */
 
 function CrmCard({ token, crm }) {
     const summary = crm.summary || {};
@@ -1139,15 +1274,24 @@ function CrmCard({ token, crm }) {
                 <Col span={8}>
                     <CrmTile token={token} label="New leads" value={summary.new_leads} />
                 </Col>
+
                 <Col span={8}>
                     <CrmTile token={token} label="Open deals" value={summary.open_deals} />
                 </Col>
+
                 <Col span={8}>
-                    <CrmTile token={token} label="Won (mo.)" value={summary.won_deals_this_month} color={token.colorSuccess} />
+                    <CrmTile
+                        token={token}
+                        label="Won (mo.)"
+                        value={summary.won_deals_this_month}
+                        color={token.colorSuccess}
+                    />
                 </Col>
+
                 <Col span={8}>
                     <CrmTile token={token} label="Due today" value={summary.followups_due_today} />
                 </Col>
+
                 <Col span={8}>
                     <CrmTile
                         token={token}
@@ -1156,6 +1300,7 @@ function CrmCard({ token, crm }) {
                         color={summary.overdue_activities > 0 ? token.colorError : undefined}
                     />
                 </Col>
+
                 <Col span={8}>
                     <CrmTile token={token} label="Lost (mo.)" value={summary.lost_deals_this_month} />
                 </Col>
@@ -1174,8 +1319,17 @@ function CrmCard({ token, crm }) {
                 >
                     {pipeline.map((p, i) => (
                         <Flex key={i} justify="space-between">
-                            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>{p.stage}</Text>
-                            <Text strong style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+                            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                                {p.stage}
+                            </Text>
+
+                            <Text
+                                strong
+                                style={{
+                                    fontSize: token.fontSizeSM,
+                                    fontVariantNumeric: 'tabular-nums',
+                                }}
+                            >
                                 {number(p.count)}
                             </Text>
                         </Flex>
@@ -1195,19 +1349,24 @@ function CrmTile({ token, label, value, color }) {
                 padding: `${token.paddingXS}px ${token.paddingSM}px`,
             }}
         >
-            <Text strong style={{ fontSize: 18, color: color || token.colorTextHeading, lineHeight: 1.1, display: 'block' }}>
+            <Text
+                strong
+                style={{
+                    fontSize: 18,
+                    color: color || token.colorTextHeading,
+                    lineHeight: 1.1,
+                    display: 'block',
+                }}
+            >
                 {number(value)}
             </Text>
+
             <Text style={{ ...eyebrowStyle(token), fontSize: 10 }}>
                 {label}
             </Text>
         </div>
     );
 }
-
-/* ============================================================================
-   APPROVALS TAB
-   ============================================================================ */
 
 function ApprovalsTab({ token, approvals, issues }) {
     const [scope, setScope] = useState('approvals');
@@ -1216,11 +1375,20 @@ function ApprovalsTab({ token, approvals, issues }) {
         <Card
             style={{ borderRadius: token.borderRadiusLG }}
             title={
-                <Flex justify="space-between" align="center" wrap="wrap" gap={token.marginSM} style={{ width: '100%' }}>
+                <Flex
+                    justify="space-between"
+                    align="center"
+                    wrap="wrap"
+                    gap={token.marginSM}
+                    style={{ width: '100%' }}
+                >
                     <Space direction="vertical" size={2}>
                         <Text style={eyebrowStyle(token)}>Action Required</Text>
-                        <Title level={4} style={{ margin: 0 }}>Approval Center</Title>
+                        <Title level={4} style={{ margin: 0 }}>
+                            Approval Center
+                        </Title>
                     </Space>
+
                     <Segmented
                         value={scope}
                         onChange={setScope}
@@ -1263,13 +1431,21 @@ function ApprovalsTable({ token, approvals }) {
             title: 'Type',
             dataIndex: 'type',
             width: 140,
-            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v}</Text>,
+            render: (v) => (
+                <Text strong style={{ fontSize: token.fontSizeSM }}>
+                    {v}
+                </Text>
+            ),
         },
         {
             title: 'Reference',
             dataIndex: 'draft_ref',
             width: 130,
-            render: (v) => <Text code style={{ fontSize: 11 }}>{v}</Text>,
+            render: (v) => (
+                <Text code style={{ fontSize: 11 }}>
+                    {v}
+                </Text>
+            ),
         },
         {
             title: 'Party',
@@ -1281,7 +1457,13 @@ function ApprovalsTable({ token, approvals }) {
             dataIndex: 'date',
             width: 110,
             render: (v) => (
-                <Text type="secondary" style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+                <Text
+                    type="secondary"
+                    style={{
+                        fontSize: token.fontSizeSM,
+                        fontVariantNumeric: 'tabular-nums',
+                    }}
+                >
                     {dayjs(v).format('MMM D, YY')}
                 </Text>
             ),
@@ -1291,7 +1473,11 @@ function ApprovalsTable({ token, approvals }) {
             dataIndex: 'amount',
             align: 'right',
             width: 120,
-            render: (v) => <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>{money(v)}</Text>,
+            render: (v) => (
+                <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {money(v)}
+                </Text>
+            ),
         },
         {
             title: 'Age',
@@ -1299,8 +1485,16 @@ function ApprovalsTable({ token, approvals }) {
             width: 70,
             align: 'right',
             render: (v) =>
-                v == null ? '—' : (
-                    <Text type="secondary" style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+                v == null ? (
+                    '—'
+                ) : (
+                    <Text
+                        type="secondary"
+                        style={{
+                            fontSize: token.fontSizeSM,
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
                         {Math.round(v)}d
                     </Text>
                 ),
@@ -1316,9 +1510,17 @@ function ApprovalsTable({ token, approvals }) {
             width: 200,
             render: (_, row) => (
                 <Space size={4}>
-                    <Button size="small" onClick={() => visit(row.action_url)}>View</Button>
-                    <Button size="small" type="primary">Approve</Button>
-                    <Button size="small" danger>Reject</Button>
+                    <Button size="small" onClick={() => visit(row.action_url)}>
+                        View
+                    </Button>
+
+                    <Button size="small" type="primary">
+                        Approve
+                    </Button>
+
+                    <Button size="small" danger>
+                        Reject
+                    </Button>
                 </Space>
             ),
         },
@@ -1343,21 +1545,39 @@ function IssuesTable({ token, issues }) {
             title: 'Issue',
             dataIndex: 'issue_type',
             width: 200,
-            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v}</Text>,
+            render: (v) => (
+                <Text strong style={{ fontSize: token.fontSizeSM }}>
+                    {v}
+                </Text>
+            ),
         },
-        { title: 'Module', dataIndex: 'module', width: 120 },
+        {
+            title: 'Module',
+            dataIndex: 'module',
+            width: 120,
+        },
         {
             title: 'Record',
             dataIndex: 'record',
             width: 140,
-            render: (v) => <Text code style={{ fontSize: 11 }}>{v}</Text>,
+            render: (v) => (
+                <Text code style={{ fontSize: 11 }}>
+                    {v}
+                </Text>
+            ),
         },
         {
             title: 'Date',
             dataIndex: 'date',
             width: 130,
             render: (v) => (
-                <Text type="secondary" style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+                <Text
+                    type="secondary"
+                    style={{
+                        fontSize: token.fontSizeSM,
+                        fontVariantNumeric: 'tabular-nums',
+                    }}
+                >
                     {dayjs(v).format('MMM D, YY')}
                 </Text>
             ),
@@ -1367,7 +1587,11 @@ function IssuesTable({ token, issues }) {
             dataIndex: 'amount',
             align: 'right',
             width: 120,
-            render: (v) => <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>{money(v)}</Text>,
+            render: (v) => (
+                <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {money(v)}
+                </Text>
+            ),
         },
         {
             title: 'Severity',
@@ -1399,10 +1623,6 @@ function IssuesTable({ token, issues }) {
     );
 }
 
-/* ============================================================================
-   ACTIVITY TAB
-   ============================================================================ */
-
 function ActivityTab({ token, activity, alerts }) {
     return (
         <Row gutter={[token.marginLG, token.marginLG]}>
@@ -1418,11 +1638,19 @@ function ActivityTab({ token, activity, alerts }) {
                     >
                         <Space direction="vertical" size={token.marginSM} style={{ width: '100%' }}>
                             <Space>
-                                <BellOutlined style={{ color: token.colorError }} />
-                                <Text strong style={{ ...eyebrowStyle(token), color: token.colorError }}>
+                                <AlertOutlined style={{ color: token.colorError }} />
+
+                                <Text
+                                    strong
+                                    style={{
+                                        ...eyebrowStyle(token),
+                                        color: token.colorError,
+                                    }}
+                                >
                                     {alerts.length} alert{alerts.length === 1 ? '' : 's'}
                                 </Text>
                             </Space>
+
                             <Row gutter={[token.marginSM, token.marginSM]}>
                                 {alerts.slice(0, 4).map((a, i) => (
                                     <Col key={i} xs={24} md={12}>
@@ -1431,19 +1659,35 @@ function ActivityTab({ token, activity, alerts }) {
                                             style={{ borderRadius: token.borderRadius }}
                                             styles={{ body: { padding: token.paddingSM } }}
                                         >
-                                            <Text strong style={{ fontSize: token.fontSizeSM, display: 'block' }}>{a.title}</Text>
+                                            <Text
+                                                strong
+                                                style={{
+                                                    fontSize: token.fontSizeSM,
+                                                    display: 'block',
+                                                }}
+                                            >
+                                                {a.title}
+                                            </Text>
+
                                             <Paragraph
                                                 type="secondary"
-                                                style={{ fontSize: token.fontSizeSM, margin: 0 }}
+                                                style={{
+                                                    fontSize: token.fontSizeSM,
+                                                    margin: 0,
+                                                }}
                                                 ellipsis={{ rows: 2 }}
                                             >
                                                 {a.description}
                                             </Paragraph>
+
                                             {a.action_url && (
                                                 <Button
                                                     type="link"
                                                     size="small"
-                                                    style={{ paddingLeft: 0, marginTop: 4 }}
+                                                    style={{
+                                                        paddingLeft: 0,
+                                                        marginTop: 4,
+                                                    }}
                                                     onClick={() => visit(a.action_url)}
                                                     icon={<RightOutlined style={{ fontSize: 9 }} />}
                                                     iconPosition="end"
@@ -1466,7 +1710,9 @@ function ActivityTab({ token, activity, alerts }) {
                     title={
                         <Space direction="vertical" size={2}>
                             <Text style={eyebrowStyle(token)}>Live Feed</Text>
-                            <Title level={4} style={{ margin: 0 }}>Recent Activity</Title>
+                            <Title level={4} style={{ margin: 0 }}>
+                                Recent Activity
+                            </Title>
                         </Space>
                     }
                 >
@@ -1479,9 +1725,16 @@ function ActivityTab({ token, activity, alerts }) {
                                 color: getStatusColor(a.status, token),
                                 label: (
                                     <Space direction="vertical" size={0}>
-                                        <Text strong style={{ fontVariantNumeric: 'tabular-nums', fontSize: token.fontSizeSM }}>
+                                        <Text
+                                            strong
+                                            style={{
+                                                fontVariantNumeric: 'tabular-nums',
+                                                fontSize: token.fontSizeSM,
+                                            }}
+                                        >
                                             {dayjs(a.time).format('HH:mm')}
                                         </Text>
+
                                         <Text type="secondary" style={{ fontSize: 11 }}>
                                             {dayjs(a.time).format('MMM D')}
                                         </Text>
@@ -1490,7 +1743,10 @@ function ActivityTab({ token, activity, alerts }) {
                                 children: (
                                     <Card
                                         size="small"
-                                        style={{ borderRadius: token.borderRadius, marginBottom: token.marginXS }}
+                                        style={{
+                                            borderRadius: token.borderRadius,
+                                            marginBottom: token.marginXS,
+                                        }}
                                     >
                                         <Flex justify="space-between" align="flex-start" gap={token.marginSM}>
                                             <Space direction="vertical" size={4} style={{ flex: 1, minWidth: 0 }}>
@@ -1498,13 +1754,19 @@ function ActivityTab({ token, activity, alerts }) {
                                                     <Text style={{ ...eyebrowStyle(token), fontSize: 10 }}>
                                                         {a.module}
                                                     </Text>
+
                                                     <ThemedTag status={a.status} />
                                                 </Space>
-                                                <Text style={{ fontSize: token.fontSize }}>{a.description}</Text>
+
+                                                <Text style={{ fontSize: token.fontSize }}>
+                                                    {a.description}
+                                                </Text>
+
                                                 <Text type="secondary" style={{ fontSize: 11 }}>
                                                     by {a.user || 'System'}
                                                 </Text>
                                             </Space>
+
                                             {a.action_url && (
                                                 <Button
                                                     size="small"
@@ -1529,21 +1791,20 @@ function ActivityTab({ token, activity, alerts }) {
 
 function getStatusColor(status, token) {
     const tone = statusToTone[status];
+
     if (tone === 'success') return token.colorSuccess;
     if (tone === 'error') return token.colorError;
     if (tone === 'warning') return token.colorWarning;
     if (tone === 'processing') return token.colorPrimary;
+
     return token.colorBorder;
 }
-
-/* ============================================================================
-   CASH DRAWER
-   ============================================================================ */
 
 function CashDrawer({ open, onClose, token, cashFlow, balances }) {
     const summary = cashFlow?.summary || {};
     const bank = toNumber(summary.bank_balance);
     const cash = toNumber(summary.cash_in_hand);
+
     const total = balances?.length
         ? balances.reduce((t, r) => t + getBalanceValue(r), 0)
         : bank + cash;
@@ -1558,6 +1819,7 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
                     <Text strong style={{ fontSize: token.fontSizeSM }}>
                         {v || row.account_name || row.title || 'Account'}
                     </Text>
+
                     {(row.account_number || row.code) && (
                         <Text type="secondary" style={{ fontSize: 11 }}>
                             {row.account_number || row.code}
@@ -1571,7 +1833,12 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
             dataIndex: 'type',
             width: 100,
             render: (v, row) => (
-                <Tag style={{ borderRadius: token.borderRadiusSM, fontSize: 10 }}>
+                <Tag
+                    style={{
+                        borderRadius: token.borderRadiusSM,
+                        fontSize: 10,
+                    }}
+                >
                     {v || row.account_type || 'Account'}
                 </Tag>
             ),
@@ -1582,11 +1849,15 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
             width: 130,
             render: (_, row) => {
                 const v = getBalanceValue(row);
+
                 return (
-                    <Text strong style={{
-                        color: v < 0 ? token.colorError : token.colorTextHeading,
-                        fontVariantNumeric: 'tabular-nums',
-                    }}>
+                    <Text
+                        strong
+                        style={{
+                            color: v < 0 ? token.colorError : token.colorTextHeading,
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
                         {money(v)}
                     </Text>
                 );
@@ -1604,8 +1875,11 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
                 <Flex justify="space-between" align="center">
                     <Space direction="vertical" size={2}>
                         <Text style={eyebrowStyle(token)}>Treasury</Text>
-                        <Title level={4} style={{ margin: 0 }}>Cash & Bank</Title>
+                        <Title level={4} style={{ margin: 0 }}>
+                            Cash & Bank
+                        </Title>
                     </Space>
+
                     <Button type="text" icon={<CloseOutlined />} onClick={onClose} />
                 </Flex>
             }
@@ -1621,34 +1895,84 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
                     styles={{ body: { padding: token.paddingLG } }}
                 >
                     <Space direction="vertical" size={token.marginXS} style={{ width: '100%' }}>
-                        <Text style={{ ...eyebrowStyle(token), color: 'rgba(255,255,255,0.6)' }}>
+                        <Text
+                            style={{
+                                ...eyebrowStyle(token),
+                                color: 'rgba(255,255,255,0.6)',
+                            }}
+                        >
                             Total Balance
                         </Text>
-                        <Text style={{ color: token.colorWhite, fontSize: 32, fontWeight: 700, lineHeight: 1.1, display: 'block' }}>
+
+                        <Text
+                            style={{
+                                color: token.colorWhite,
+                                fontSize: 32,
+                                fontWeight: 700,
+                                lineHeight: 1.1,
+                                display: 'block',
+                            }}
+                        >
                             {money(total)}
                         </Text>
+
                         <Flex
                             gap={token.marginMD}
                             style={{
                                 paddingTop: token.marginSM,
                                 marginTop: token.marginSM,
-                                borderTop: `1px solid rgba(255,255,255,0.12)`,
+                                borderTop: '1px solid rgba(255,255,255,0.12)',
                             }}
                         >
                             <div>
-                                <Text style={{ ...eyebrowStyle(token), fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'block' }}>
+                                <Text
+                                    style={{
+                                        ...eyebrowStyle(token),
+                                        fontSize: 10,
+                                        color: 'rgba(255,255,255,0.6)',
+                                        display: 'block',
+                                    }}
+                                >
                                     Bank
                                 </Text>
-                                <Text strong style={{ color: token.colorWhite, fontVariantNumeric: 'tabular-nums' }}>
+
+                                <Text
+                                    strong
+                                    style={{
+                                        color: token.colorWhite,
+                                        fontVariantNumeric: 'tabular-nums',
+                                    }}
+                                >
                                     {money(bank, { compact: true })}
                                 </Text>
                             </div>
-                            <div style={{ width: 1, background: 'rgba(255,255,255,0.12)' }} />
+
+                            <div
+                                style={{
+                                    width: 1,
+                                    background: 'rgba(255,255,255,0.12)',
+                                }}
+                            />
+
                             <div>
-                                <Text style={{ ...eyebrowStyle(token), fontSize: 10, color: 'rgba(255,255,255,0.6)', display: 'block' }}>
+                                <Text
+                                    style={{
+                                        ...eyebrowStyle(token),
+                                        fontSize: 10,
+                                        color: 'rgba(255,255,255,0.6)',
+                                        display: 'block',
+                                    }}
+                                >
                                     Cash
                                 </Text>
-                                <Text strong style={{ color: token.colorWhite, fontVariantNumeric: 'tabular-nums' }}>
+
+                                <Text
+                                    strong
+                                    style={{
+                                        color: token.colorWhite,
+                                        fontVariantNumeric: 'tabular-nums',
+                                    }}
+                                >
                                     {money(cash, { compact: true })}
                                 </Text>
                             </div>
@@ -1686,17 +2010,13 @@ function CashDrawer({ open, onClose, token, cashFlow, balances }) {
 function getBalanceValue(row) {
     return toNumber(
         row?.balance ??
-        row?.current_balance ??
-        row?.closing_balance ??
-        row?.available_balance ??
-        row?.amount ??
-        0
+            row?.current_balance ??
+            row?.closing_balance ??
+            row?.available_balance ??
+            row?.amount ??
+            0,
     );
 }
-
-/* ============================================================================
-   SHARED PRIMITIVES
-   ============================================================================ */
 
 function ThemedTag({ status }) {
     const { token } = theme.useToken();
@@ -1720,6 +2040,7 @@ function ThemedTag({ status }) {
 
 function ThemedTooltip({ active, payload, label, token }) {
     if (!active || !payload?.length) return null;
+
     return (
         <div
             style={{
@@ -1732,17 +2053,49 @@ function ThemedTooltip({ active, payload, label, token }) {
             }}
         >
             {label && (
-                <Text style={{ ...eyebrowStyle(token), fontSize: 10, display: 'block', marginBottom: 4 }}>
+                <Text
+                    style={{
+                        ...eyebrowStyle(token),
+                        fontSize: 10,
+                        display: 'block',
+                        marginBottom: 4,
+                    }}
+                >
                     {dayjs(label).isValid() ? dayjs(label).format('MMM D, YYYY') : label}
                 </Text>
             )}
+
             {payload.map((p, i) => (
-                <Flex key={i} justify="space-between" align="center" gap={token.marginSM} style={{ padding: '2px 0' }}>
+                <Flex
+                    key={i}
+                    justify="space-between"
+                    align="center"
+                    gap={token.marginSM}
+                    style={{ padding: '2px 0' }}
+                >
                     <Space size={6}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
-                        <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>{p.name}</Text>
+                        <span
+                            style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
+                                background: p.color,
+                                display: 'inline-block',
+                            }}
+                        />
+
+                        <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                            {p.name}
+                        </Text>
                     </Space>
-                    <Text strong style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
+
+                    <Text
+                        strong
+                        style={{
+                            fontSize: token.fontSizeSM,
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                    >
                         {money(p.value)}
                     </Text>
                 </Flex>
@@ -1753,6 +2106,7 @@ function ThemedTooltip({ active, payload, label, token }) {
 
 function LoadingState() {
     const { token } = theme.useToken();
+
     return (
         <Space direction="vertical" size={token.marginLG} style={{ width: '100%' }}>
             <Row gutter={[token.marginLG, token.marginLG]}>
@@ -1761,6 +2115,7 @@ function LoadingState() {
                         <Skeleton active paragraph={{ rows: 4 }} />
                     </Card>
                 </Col>
+
                 <Col xs={24} xl={14}>
                     <Row gutter={[token.marginSM, token.marginSM]}>
                         {[...Array(6)].map((_, i) => (
@@ -1773,6 +2128,7 @@ function LoadingState() {
                     </Row>
                 </Col>
             </Row>
+
             <Card style={{ borderRadius: token.borderRadiusLG }}>
                 <Skeleton active paragraph={{ rows: 8 }} />
             </Card>

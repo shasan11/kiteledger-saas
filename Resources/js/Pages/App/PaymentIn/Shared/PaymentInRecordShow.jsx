@@ -404,7 +404,7 @@ function HeaderBlock({
     onPrint,
 }) {
     return (
-        <Card className="payment-record-show__header-card">
+        <Card className="payment-record-show__header-card border-none">
             <div className="payment-record-show__header">
                 <div className="payment-record-show__header-left">
                     <Link href={route(backRoute)}>
@@ -1186,7 +1186,15 @@ export default function PaymentInRecordShow({
     };
 
     return (
-        <AuthenticatedLayout>
+        <AuthenticatedLayout header={<HeaderBlock
+                        title={title}
+                        backRoute={backRoute}
+                        backLabel={backLabel}
+                        documentNumber={documentNumber}
+                        record={record}
+                        loading={loading}
+                        onPrint={() => setPrintOpen(true)}
+                    />}>
             <Head title={documentNumber || title} />
 
             <style>{`
@@ -1605,15 +1613,7 @@ export default function PaymentInRecordShow({
 
             <div className="payment-record-show" style={uiVars}>
                 <div className="payment-record-show__shell">
-                    <HeaderBlock
-                        title={title}
-                        backRoute={backRoute}
-                        backLabel={backLabel}
-                        documentNumber={documentNumber}
-                        record={record}
-                        loading={loading}
-                        onPrint={() => setPrintOpen(true)}
-                    />
+                     
 
                     {loading ? (
                         <div className="payment-record-show__state">

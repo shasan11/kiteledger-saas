@@ -6,7 +6,7 @@ import SimpleSettingsCrud from '../SimpleSettingsCrud';
 
 export default function PrintingTemplates(props) {
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Printing Templates" />
       <div style={{ padding: 18 }}>
         <Card title={<><PrinterOutlined /> Printing Templates</>} style={{ borderRadius: 8 }}>
@@ -31,6 +31,6 @@ export default function PrintingTemplates(props) {
           />
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

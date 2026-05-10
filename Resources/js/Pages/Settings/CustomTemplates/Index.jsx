@@ -43,7 +43,7 @@ export default function CustomTemplates(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="CustomTemplates" />
       <ReusableCrud
         icon={<AppstoreOutlined />}
@@ -67,6 +67,6 @@ export default function CustomTemplates(props) {
         backendFilter={{ active: 'active' }}
         backendSort={{ name: 'name', active: 'active' }}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

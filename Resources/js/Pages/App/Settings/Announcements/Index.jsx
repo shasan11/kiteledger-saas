@@ -36,7 +36,7 @@ export default function Announcements(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Announcements" />
       <ReusableCrud
         icon={<NotificationOutlined />}
@@ -62,6 +62,6 @@ export default function Announcements(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

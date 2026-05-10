@@ -15,6 +15,7 @@ import {
   Typography,
   message,
   theme,
+  Flex,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -233,6 +234,63 @@ function RailGrid({ rows = [] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function PageHeader({
+  token,
+  groupName,
+  parentName,
+  goBack,
+  goEdit,
+  actionItems,
+  onActionClick,
+  saving,
+}) {
+  return (
+    <Flex align="center" justify="space-between" wrap="wrap" gap={token.marginSM}>
+      <Flex align="center" gap={token.marginSM} style={{ minWidth: 0 }}>
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={goBack}>
+          Contact Groups
+        </Button>
+
+        <div style={{ minWidth: 0 }}>
+          <Title
+            level={4}
+            style={{
+              margin: 0,
+              lineHeight: 1.2,
+              color: token.colorTextHeading,
+            }}
+          >
+            {groupName}
+          </Title>
+
+          <Text type="secondary" ellipsis style={{ maxWidth: 640, display: 'block' }}>
+            {parentName ? `Under ${parentName}` : 'Root contact group'}
+          </Text>
+        </div>
+      </Flex>
+
+      <Space size={8} wrap>
+        <Button icon={<EditOutlined />} onClick={goEdit}>
+          Edit
+        </Button>
+
+        <Dropdown
+          menu={{
+            items: actionItems,
+            onClick: onActionClick,
+          }}
+          placement="bottomRight"
+          trigger={['click']}
+        >
+          <Button loading={saving}>
+            Options <MoreOutlined />
+          </Button>
+        </Dropdown>
+      </Space>
+    </Flex>
   );
 }
 
@@ -865,14 +923,31 @@ export default function ContactGroupShow({ auth, id }) {
   };
 
   return (
-    <AuthenticatedLayout user={auth?.user}>
+    <AuthenticatedLayout
+      user={auth?.user}
+      header={
+        <PageHeader
+          token={token}
+          groupName={groupName}
+          parentName={parentName}
+          goBack={goBack}
+          goEdit={goEdit}
+          actionItems={actionItems}
+          saving={saving}
+          onActionClick={({ key }) => {
+            if (key === 'edit') goEdit();
+            if (key === 'toggle-status') updateStatus();
+          }}
+        />
+      }
+    >
       {contextHolder}
 
       <Head title={groupName} />
 
       <style>{`
         .contact-group-show {
-          min-height: calc(100vh - 64px);
+          min-height: calc(100vh - 110px);
           background: var(--cgs-bg);
           color: var(--cgs-text);
           padding: var(--cgs-padding);
@@ -886,7 +961,6 @@ export default function ContactGroupShow({ auth, id }) {
           gap: var(--cgs-padding);
         }
 
-        .contact-group-show__bar-card.ant-card,
         .contact-group-show__rail-card.ant-card,
         .contact-group-show__card.ant-card,
         .contact-group-show__metric.ant-card {
@@ -894,38 +968,6 @@ export default function ContactGroupShow({ auth, id }) {
           border-radius: var(--cgs-radius);
           box-shadow: var(--cgs-shadow);
           overflow: hidden;
-        }
-
-        .contact-group-show__bar-card .ant-card-body {
-          padding: var(--cgs-padding-sm) var(--cgs-padding);
-        }
-
-        .contact-group-show__bar {
-          min-height: 50px;
-          background: var(--cgs-surface);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--cgs-padding);
-        }
-
-        .contact-group-show__crumb {
-          display: flex;
-          align-items: center;
-          gap: var(--cgs-padding-sm);
-          min-width: 0;
-        }
-
-        .contact-group-show__title-wrap {
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .contact-group-show__title-wrap h4 {
-          margin: 0 !important;
-          line-height: 1.2 !important;
         }
 
         .contact-group-show__body {
@@ -1319,15 +1361,6 @@ export default function ContactGroupShow({ auth, id }) {
             padding: var(--cgs-padding-sm);
           }
 
-          .contact-group-show__bar {
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .contact-group-show__crumb {
-            align-items: flex-start;
-          }
-
           .contact-group-show__stats,
           .contact-group-show__info-grid,
           .contact-group-show__rail-summary {
@@ -1369,45 +1402,6 @@ export default function ContactGroupShow({ auth, id }) {
 
       <div className="contact-group-show" style={uiVars}>
         <div className="contact-group-show__shell">
-          <Card className="contact-group-show__bar-card">
-            <div className="contact-group-show__bar">
-              <div className="contact-group-show__crumb">
-                <Button type="text" icon={<ArrowLeftOutlined />} onClick={goBack}>
-                  Contact Groups
-                </Button>
-
-                <div className="contact-group-show__title-wrap">
-                  <Title level={4}>{groupName}</Title>
-                  <Text type="secondary" ellipsis style={{ maxWidth: 640 }}>
-                    {parentName ? `Under ${parentName}` : 'Root contact group'}
-                  </Text>
-                </div>
-              </div>
-
-              <Space size={8} wrap>
-                <Button icon={<EditOutlined />} onClick={goEdit}>
-                  Edit
-                </Button>
-
-                <Dropdown
-                  menu={{
-                    items: actionItems,
-                    onClick: ({ key }) => {
-                      if (key === 'edit') goEdit();
-                      if (key === 'toggle-status') updateStatus();
-                    },
-                  }}
-                  placement="bottomRight"
-                  trigger={['click']}
-                >
-                  <Button loading={saving}>
-                    Options <MoreOutlined />
-                  </Button>
-                </Dropdown>
-              </Space>
-            </div>
-          </Card>
-
           {error ? (
             <div className="contact-group-show__state">
               <Alert

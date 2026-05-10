@@ -40,7 +40,7 @@ export default function GeneralSettings(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="General Settings" />
       <ReusableCrud
         icon={<ControlOutlined />}
@@ -66,6 +66,6 @@ export default function GeneralSettings(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

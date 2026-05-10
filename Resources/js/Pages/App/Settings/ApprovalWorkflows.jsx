@@ -5,7 +5,7 @@ import SimpleSettingsCrud from './SimpleSettingsCrud';
 
 export default function ApprovalWorkflows({ auth }) {
   return (
-    <AuthenticatedLayout auth={auth}>
+    <>
       <Head title="Approval Workflows" />
       <div style={{ padding: 18 }}>
         <Card title="Approval Workflows" style={{ borderRadius: 8 }}>
@@ -31,6 +31,6 @@ export default function ApprovalWorkflows({ auth }) {
           />
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

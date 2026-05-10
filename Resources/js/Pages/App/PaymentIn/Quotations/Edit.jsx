@@ -132,11 +132,11 @@ const visitQuotationShow = (id) => {
   if (!id) return;
 
   if (typeof route === 'function') {
-    router.visit(route('payment-in.quotations.show', id));
+    router.visit(route('sales.quotations.show', id));
     return;
   }
 
-  router.visit(`/payment-in/quotations/${id}`);
+  router.visit(`/sales/quotations/${id}`);
 };
 
 export default function Quotations(props) {
@@ -507,12 +507,11 @@ export default function Quotations(props) {
         apiUrl={api('/api/quotations/')}
         columns={columns}
         fields={fields}
-        custom_add={true}
-        custom_add_link={route('payment-in.quotations.add')}
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="drawer"
+        ui_type={"add form"}
         drawerWidth="calc(100vw - 24px)"
         searchParam="search"
         pageParam="page"
@@ -521,12 +520,11 @@ export default function Quotations(props) {
         orderingParam="ordering"
         enableServerPagination
         showSearch
-        canAdd={true}
+        canAdd
         canEdit
         canDelete
         hasActions
         hasActionColumns
-        
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (
@@ -542,20 +540,23 @@ export default function Quotations(props) {
           style: { cursor: 'pointer' },
         })}
         anchorFilters={[
-           {
-            key: 'approved',
-            label: 'Approved',
-            params: { approved: true },
-          },
           {
             key: 'draft',
             label: 'Draft',
             params: { approved: false },
           },
-          
-         
+          {
+            key: 'approved',
+            label: 'Approved',
+            params: { approved: true },
+          },
+          {
+            key: 'all',
+            label: 'All',
+            params: {},
+          },
         ]}
-        defaultAnchorKey="approved"
+        defaultAnchorKey="draft"
         anchorSyncWithHash
       />
     </AuthenticatedLayout>

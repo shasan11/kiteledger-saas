@@ -129,7 +129,7 @@ export default function ConfigurationForm({ auth, area }) {
   }, [accounts, area, taxes, warehouses]);
 
   return (
-    <AuthenticatedLayout auth={auth}>
+    <>
       <Head title={titles[area] || 'Configuration'} />
       <div style={{ padding: 18 }}>
         <Card title={titles[area] || 'Configuration'} extra={<Button type="primary" loading={saving} onClick={save}>Save</Button>} style={{ borderRadius: 8 }}>
@@ -138,6 +138,6 @@ export default function ConfigurationForm({ auth, area }) {
           </Form>
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

@@ -3,6 +3,7 @@ use Inertia\Inertia;
 
 Route::prefix('payment-in')->name('payment-in.')->group(function () {
     Route::get('/quotations', fn () => Inertia::render('App/PaymentIn/Quotations/Index'))->name('quotations.index');
+    Route::get('/quotations/add', fn () => Inertia::render('App/PaymentIn/Quotations/Add'))->name('quotations.add');
     Route::get('/quotations/{id}', fn ($id) => Inertia::render('App/PaymentIn/Quotations/Show', ['id' => $id]))->name('quotations.show');
     Route::get('/bills', fn () => Inertia::render('App/PaymentIn/Bills/Index'))->name('bills.index');
     Route::get('/bills/{id}', fn ($id) => Inertia::render('App/PaymentIn/Bills/Show', ['id' => $id]))->name('bills.show');

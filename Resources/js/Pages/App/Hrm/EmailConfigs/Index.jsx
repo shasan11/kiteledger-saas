@@ -41,7 +41,7 @@ export default function EmailConfigs(props) {
     return p;
   };
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Email Configurations</h2>}>
+    <>
       <Head title="Email Configs" />
       <ReusableCrud icon={<MailOutlined />} title="Email Config" apiUrl={api('/api/hrm/email-configs')}
         columns={columns} fields={fields} validationSchema={validationSchema}
@@ -49,6 +49,6 @@ export default function EmailConfigs(props) {
         form_ui="drawer" drawerWidth={700}
         searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
         activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
-    </AuthenticatedLayout>
+    </>
   );
 }

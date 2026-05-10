@@ -90,7 +90,7 @@ export default function DocumentNumberings(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Document Numberings" />
       <ReusableCrud
         icon={<OrderedListOutlined />}
@@ -116,6 +116,6 @@ export default function DocumentNumberings(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }

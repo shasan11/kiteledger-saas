@@ -5,7 +5,7 @@ import SimpleSettingsCrud from './SimpleSettingsCrud';
 
 export default function EmailTemplates({ auth }) {
   return (
-    <AuthenticatedLayout auth={auth}>
+    <>
       <Head title="Email Templates" />
       <div style={{ padding: 18 }}>
         <Card title="Email Templates" style={{ borderRadius: 8 }}>
@@ -28,6 +28,6 @@ export default function EmailTemplates({ auth }) {
           />
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

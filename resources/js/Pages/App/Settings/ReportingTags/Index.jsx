@@ -76,7 +76,7 @@ export default function ReportingTags(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <>
       <Head title="Reporting Tags" />
       <ReusableCrud
         icon={<TagsOutlined />}
@@ -102,6 +102,6 @@ export default function ReportingTags(props) {
         hasActions={true}
         hasActionColumns={true}
       />
-    </AuthenticatedLayout>
+    </>
   );
 }
