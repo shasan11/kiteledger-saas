@@ -380,14 +380,7 @@ export default function Quotations(props) {
             fkValueKey: 'id',
             fkLabelKey: 'name',
           },
-          {
-            key: 'product_name',
-            name: 'product_name',
-            label: 'Custom Name',
-            type: 'text',
-            width: '180px',
-            placeholder: 'Optional',
-          },
+          
           {
             key: 'description',
             name: 'description',

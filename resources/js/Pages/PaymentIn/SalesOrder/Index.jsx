@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
-import { Button, Tag, Typography } from 'antd';
+import { Button, Tag, Typography, theme } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ReusableCrud';
@@ -34,12 +34,27 @@ const formatDateForBackend = (value) => {
     return value;
 };
 
+const getRelationLabel = (relation) => {
+    if (!relation) return '';
+
+    return (
+        relation.label ||
+        relation.display_name ||
+        relation.company_name ||
+        relation.person_name ||
+        relation.name ||
+        relation.code ||
+        relation.email ||
+        ''
+    );
+};
+
 const emptyItem = {
     id: null,
 
-    product_variant_id: null,
-    product_variant_id_detail: null,
-    product_variant_name: '',
+    product_id: null,
+    product_id_detail: null,
+    product_name: '',
 
     custom_product_name: '',
     description: '',
@@ -54,6 +69,55 @@ const emptyItem = {
 
     tax_amount: 0,
     line_total: 0,
+};
+
+const normalizeLine = (line = {}) => {
+    const productDetail =
+        line.product_id_detail ||
+        line.product ||
+        line.product_detail ||
+        null;
+
+    const taxDetail =
+        line.tax_rate_id_detail ||
+        line.taxRate ||
+        line.tax_rate ||
+        line.tax_rate_detail ||
+        null;
+
+    return {
+        id: line.id || null,
+
+        product_id:
+            line.product_id ||
+            productDetail?.id ||
+            productDetail?.value ||
+            null,
+        product_id_detail: productDetail,
+        product_name:
+            line.product_name ||
+            getRelationLabel(productDetail),
+
+        custom_product_name: line.custom_product_name || '',
+        description: line.description || '',
+
+        qty: toNumber(line.qty || 1),
+        unit_price: toNumber(line.unit_price),
+        discount_percent: toNumber(line.discount_percent),
+
+        tax_rate_id:
+            line.tax_rate_id ||
+            taxDetail?.id ||
+            taxDetail?.value ||
+            null,
+        tax_rate_id_detail: taxDetail,
+        tax_rate_name:
+            line.tax_rate_name ||
+            getRelationLabel(taxDetail),
+
+        tax_amount: toNumber(line.tax_amount),
+        line_total: toNumber(line.line_total),
+    };
 };
 
 const calculateLine = (row = {}) => {
@@ -133,6 +197,7 @@ const initialValues = {
     discount_total: 0,
     tax_total: 0,
     grand_total: 0,
+    total: 0,
 
     approved: false,
     void: false,
@@ -145,17 +210,20 @@ const initialValues = {
 
 const validationSchema = Yup.object().shape({
     sales_order_no: Yup.string()
-        .required('Sales order number is required')
+        .nullable()
         .max(40, 'Max 40 characters'),
 
-    sales_order_date: Yup.string().required('Sales order date is required'),
+    sales_order_date: Yup.string()
+        .required('Sales order date is required'),
 
-    contact_id: Yup.string().nullable().required('Customer is required'),
+    contact_id: Yup.string()
+        .nullable()
+        .required('Customer is required'),
 
     items: Yup.array()
         .of(
             Yup.object().shape({
-                product_variant_id: Yup.string().nullable(),
+                product_id: Yup.string().nullable(),
                 custom_product_name: Yup.string().nullable(),
 
                 qty: Yup.number()
@@ -188,25 +256,26 @@ const validationSchema = Yup.object().shape({
         .min(1, 'At least one item is required')
         .test(
             'product-or-custom-name',
-            'Each item must have product variant or custom product name',
+            'Each item must have product or custom product name',
             (items = []) =>
                 items.every(
                     (row) =>
-                        !!row?.product_variant_id ||
+                        !!row?.product_id ||
                         !!String(row?.custom_product_name || '').trim(),
                 ),
         ),
 });
 
 export default function Index() {
+    const { token } = theme.useToken();
+
     const fields = useMemo(
         () => [
             {
                 name: 'sales_order_no',
                 label: 'Sales Order No',
-                required: true,
                 col: 8,
-                placeholder: 'SO-00001',
+                placeholder: 'Auto generated if blank',
             },
             {
                 name: 'sales_order_date',
@@ -299,10 +368,9 @@ export default function Index() {
                     active: true,
                 },
                 fkLabel: (row) =>
-                    row?.name ||
-                    row?.display_name ||
-                    row?.code ||
-                    '',
+                    row?.code && row?.name
+                        ? `${row.code} - ${row.name}`
+                        : row?.name || row?.code || '',
             },
 
             {
@@ -310,49 +378,35 @@ export default function Index() {
                 label: '',
                 type: 'objectArray',
                 col: 24,
-                headerBg: '#424b59',
-                headerColor: '#ffffff',
+                headerBg: token.colorText,
+                headerColor: token.colorBgContainer,
                 addButtonLabel: 'Add Item',
                 defaultItem: { ...emptyItem },
                 columns: [
                     {
-                        key: 'product_variant_id',
-                        name: 'product_variant_id',
-                        label: 'Product / Variant',
+                        key: 'product_id',
+                        name: 'product_id',
+                        label: 'Product',
                         type: 'fkSelect',
                         width: '3fr',
-                        placeholder: 'Select product variant',
-                        fkUrl: '/api/product-variants/',
+                        placeholder: 'Select product',
+                        fkUrl: '/api/products/',
                         fkSearchParam: 'search',
                         fkPageSize: 20,
                         fkValueKey: 'id',
                         fkLabelKey: 'name',
-                        labelField: 'product_variant_name',
+                        labelField: 'product_name',
                         fkExtraParams: {
                             active: true,
+                            allow_sale: true,
                         },
                         fkLabel: (row) => {
-                            const sku = row?.sku || row?.code || '';
-                            const variantName = row?.name || '';
-                            const productName =
-                                row?.product?.name ||
-                                row?.product_name ||
-                                row?.display_name ||
-                                '';
-
-                            return [sku, productName, variantName]
-                                .filter(Boolean)
-                                .join(' - ');
+                            const code = row?.sku || row?.code || row?.barcode || '';
+                            const name = row?.name || row?.display_name || '';
+                            return [code, name].filter(Boolean).join(' - ');
                         },
                     },
-                    {
-                        key: 'custom_product_name',
-                        name: 'custom_product_name',
-                        label: 'Custom Name',
-                        type: 'text',
-                        width: '180px',
-                        placeholder: 'Optional',
-                    },
+                     
                     {
                         key: 'qty',
                         name: 'qty',
@@ -410,7 +464,8 @@ export default function Index() {
                         type: 'number',
                         width: '110px',
                         readOnly: true,
-                        formula: (row) => Number(calculateLine(row).taxAmount.toFixed(2)),
+                        formula: (row) =>
+                            Number(calculateLine(row).taxAmount.toFixed(2)),
                     },
                     {
                         key: 'line_total',
@@ -419,7 +474,8 @@ export default function Index() {
                         type: 'number',
                         width: '130px',
                         readOnly: true,
-                        formula: (row) => Number(calculateLine(row).lineTotal.toFixed(2)),
+                        formula: (row) =>
+                            Number(calculateLine(row).lineTotal.toFixed(2)),
                     },
                 ],
                 collapsedFields: [
@@ -456,17 +512,18 @@ export default function Index() {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        gap: 12,
-                        padding: '9px 0',
+                        gap: token.marginSM,
+                        padding: `${token.paddingXS}px 0`,
                     };
 
                     return (
                         <div
                             style={{
-                                border: '1px solid #d8dee8',
-                                background: '#eef2f8',
-                                padding: '8px 12px',
-                                marginTop: 4,
+                                border: `1px solid ${token.colorBorderSecondary}`,
+                                background: token.colorFillAlter,
+                                borderRadius: token.borderRadiusLG,
+                                padding: `${token.paddingSM}px ${token.paddingMD}px`,
+                                marginTop: token.marginXS,
                             }}
                         >
                             <div style={rowStyle}>
@@ -487,13 +544,13 @@ export default function Index() {
                             <div
                                 style={{
                                     ...rowStyle,
-                                    borderTop: '1px solid #d1d8e3',
-                                    marginTop: 8,
-                                    paddingTop: 14,
+                                    borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                    marginTop: token.marginXS,
+                                    paddingTop: token.paddingSM,
                                 }}
                             >
                                 <Text strong>Grand Total</Text>
-                                <Text strong style={{ fontSize: 17 }}>
+                                <Text strong style={{ fontSize: token.fontSizeLG }}>
                                     {money(totals.grandTotal)}
                                 </Text>
                             </div>
@@ -502,7 +559,7 @@ export default function Index() {
                 },
             },
         ],
-        [],
+        [token],
     );
 
     const columns = useMemo(
@@ -523,10 +580,7 @@ export default function Index() {
                 width: 240,
                 render: (_, record) =>
                     record?.contact_name ||
-                    record?.contact?.label ||
-                    record?.contact?.display_name ||
-                    record?.contact?.company_name ||
-                    record?.contact?.name ||
+                    getRelationLabel(record?.contact) ||
                     '-',
             },
             {
@@ -556,9 +610,7 @@ export default function Index() {
                 width: 160,
                 render: (_, record) =>
                     record?.warehouse_name ||
-                    record?.warehouse?.label ||
-                    record?.warehouse?.name ||
-                    record?.warehouse?.code ||
+                    getRelationLabel(record?.warehouse) ||
                     '-',
             },
             {
@@ -568,9 +620,7 @@ export default function Index() {
                 width: 130,
                 render: (_, record) =>
                     record?.currency_name ||
-                    record?.currency?.label ||
-                    record?.currency?.name ||
-                    record?.currency?.code ||
+                    getRelationLabel(record?.currency) ||
                     '-',
             },
             {
@@ -585,7 +635,13 @@ export default function Index() {
                     const total =
                         record?.grand_total ??
                         record?.total ??
-                        calculateTotals(record).grandTotal;
+                        calculateTotals({
+                            items:
+                                record?.items ||
+                                record?.sales_order_lines ||
+                                record?.salesOrderLines ||
+                                [],
+                        }).grandTotal;
 
                     return <Text strong>{money(total)}</Text>;
                 },
@@ -617,11 +673,57 @@ export default function Index() {
         [],
     );
 
+    const transformRecord = (record = {}) => {
+        const rawItems =
+            record.items ||
+            record.sales_order_lines ||
+            record.salesOrderLines ||
+            [];
+
+        const items = Array.isArray(rawItems) && rawItems.length
+            ? rawItems.map(normalizeLine)
+            : [{ ...emptyItem }];
+
+        const contactDetail =
+            record.contact_id_detail ||
+            record.contact ||
+            null;
+
+        const warehouseDetail =
+            record.warehouse_id_detail ||
+            record.warehouse ||
+            null;
+
+        const currencyDetail =
+            record.currency_id_detail ||
+            record.currency ||
+            null;
+
+        return {
+            ...record,
+
+            contact_id: record.contact_id || contactDetail?.id || contactDetail?.value || null,
+            contact_id_detail: contactDetail,
+            contact_name: record.contact_name || getRelationLabel(contactDetail),
+
+            warehouse_id: record.warehouse_id || warehouseDetail?.id || warehouseDetail?.value || null,
+            warehouse_id_detail: warehouseDetail,
+            warehouse_name: record.warehouse_name || getRelationLabel(warehouseDetail),
+
+            currency_id: record.currency_id || currencyDetail?.id || currencyDetail?.value || null,
+            currency_id_detail: currencyDetail,
+            currency_name: record.currency_name || getRelationLabel(currencyDetail),
+
+            items,
+            deleted_item_ids: [],
+        };
+    };
+
     const transformPayload = (values) => {
         const items = (values.items || [])
             .filter(
                 (row) =>
-                    row.product_variant_id ||
+                    row.product_id ||
                     String(row.custom_product_name || '').trim(),
             )
             .map((row) => {
@@ -630,9 +732,9 @@ export default function Index() {
                 return {
                     id: row.id || undefined,
 
-                    product_variant_id: row.product_variant_id || null,
-                    custom_product_name: row.custom_product_name || '',
-                    description: row.description || '',
+                    product_id: row.product_id || null,
+                    custom_product_name: String(row.custom_product_name || '').trim() || null,
+                    description: row.description || null,
 
                     qty: toNumber(row.qty),
                     unit_price: toNumber(row.unit_price),
@@ -649,23 +751,26 @@ export default function Index() {
             items,
         });
 
+        const grandTotal = Number(totals.grandTotal.toFixed(2));
+
         return {
             branch_id: values.branch_id || null,
 
-            sales_order_no: values.sales_order_no || '',
+            sales_order_no: values.sales_order_no || null,
             sales_order_date: formatDateForBackend(values.sales_order_date),
 
             contact_id: values.contact_id,
             warehouse_id: values.warehouse_id || null,
             currency_id: values.currency_id || null,
 
-            reference: values.reference || '',
-            notes: values.notes || '',
+            reference: values.reference || null,
+            notes: values.notes || null,
 
             subtotal: Number(totals.subtotal.toFixed(2)),
             discount_total: Number(totals.discountTotal.toFixed(2)),
             tax_total: Number(totals.taxTotal.toFixed(2)),
-            grand_total: Number(totals.grandTotal.toFixed(2)),
+            grand_total: grandTotal,
+            total: grandTotal,
 
             approved: !!values.approved,
             void: !!values.void,
@@ -681,14 +786,7 @@ export default function Index() {
         const contact = values?.contact_id_detail;
 
         if (contact) {
-            const contactName =
-                contact.label ||
-                contact.display_name ||
-                contact.company_name ||
-                contact.person_name ||
-                contact.name ||
-                contact.email ||
-                '';
+            const contactName = getRelationLabel(contact);
 
             if (contactName && values.contact_name !== contactName) {
                 setFieldValue('contact_name', contactName, false);
@@ -698,12 +796,7 @@ export default function Index() {
         const warehouse = values?.warehouse_id_detail;
 
         if (warehouse) {
-            const warehouseName =
-                warehouse.label ||
-                warehouse.name ||
-                warehouse.display_name ||
-                warehouse.code ||
-                '';
+            const warehouseName = getRelationLabel(warehouse);
 
             if (warehouseName && values.warehouse_name !== warehouseName) {
                 setFieldValue('warehouse_name', warehouseName, false);
@@ -713,12 +806,7 @@ export default function Index() {
         const currency = values?.currency_id_detail;
 
         if (currency) {
-            const currencyName =
-                currency.label ||
-                currency.name ||
-                currency.display_name ||
-                currency.code ||
-                '';
+            const currencyName = getRelationLabel(currency);
 
             if (currencyName && values.currency_name !== currencyName) {
                 setFieldValue('currency_name', currencyName, false);
@@ -726,23 +814,21 @@ export default function Index() {
         }
 
         (values.items || []).forEach((row, index) => {
-            const productVariant = row?.product_variant_id_detail;
+            const product = row?.product_id_detail;
 
-            if (productVariant) {
-                const productName =
-                    productVariant.product?.name ||
-                    productVariant.product_name ||
-                    productVariant.name ||
-                    productVariant.display_name ||
-                    productVariant.sku ||
-                    '';
+            if (product) {
+                const productName = getRelationLabel(product);
 
                 const sellingPrice =
-                    productVariant.selling_price ??
-                    productVariant.sales_rate ??
-                    productVariant.rate ??
-                    productVariant.price ??
+                    product.selling_price ??
+                    product.sales_rate ??
+                    product.rate ??
+                    product.price ??
                     0;
+
+                if (productName && row.product_name !== productName) {
+                    setFieldValue(`items[${index}].product_name`, productName, false);
+                }
 
                 if (!row.custom_product_name && productName) {
                     setFieldValue(
@@ -773,11 +859,7 @@ export default function Index() {
             const taxRate = row?.tax_rate_id_detail;
 
             if (taxRate) {
-                const taxRateName =
-                    taxRate.label ||
-                    taxRate.name ||
-                    taxRate.code ||
-                    '';
+                const taxRateName = getRelationLabel(taxRate);
 
                 if (taxRateName && row.tax_rate_name !== taxRateName) {
                     setFieldValue(`items[${index}].tax_rate_name`, taxRateName, false);
@@ -807,10 +889,8 @@ export default function Index() {
             onClick={submitForm}
             style={{
                 minWidth: 150,
-                height: 46,
-                borderRadius: 2,
-                background: '#18b957',
-                borderColor: '#18b957',
+                height: 44,
+                borderRadius: token.borderRadius,
                 fontWeight: 650,
             }}
         >
@@ -847,6 +927,7 @@ export default function Index() {
                 orderingParam="ordering"
                 defaultSortField="created_at"
                 defaultSortOrder="descend"
+                transformRecord={transformRecord}
                 transformPayload={transformPayload}
                 onFormValuesChange={handleFormValuesChange}
                 renderSubmitButton={renderSaveButton}
