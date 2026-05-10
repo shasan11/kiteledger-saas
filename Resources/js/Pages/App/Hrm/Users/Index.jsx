@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Tag, Tooltip, Space } from 'antd';
 import { UserOutlined, TeamOutlined } from '@ant-design/icons';
+import AccessControlTabs from '../AccessControlTabs';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (p) => `${BACKEND}${p}`;
@@ -38,7 +39,10 @@ export default function Users(props) {
     { title: 'Email', dataIndex: 'email', key: 'email', sorter: true, render: (v) => v || '-' },
     { title: 'Phone', dataIndex: 'phone', key: 'phone', render: (v) => v || '-' },
     { title: 'Department', key: 'department', render: (_, r) => r?.department?.name || r?.department_id_detail?.label || '-' },
-    { title: 'Role', key: 'role', render: (_, r) => r?.role?.name ? <Tag>{r.role.name}</Tag> : '-' },
+    { title: 'Role', key: 'role', render: (_, r) => {
+      const roleName = r?.roles?.[0]?.name || r?.role?.name || r?.role_id_detail?.label;
+      return roleName ? <Tag>{roleName}</Tag> : '-';
+    } },
     {
       title: 'Status', key: 'status',
       render: (_, r) => {
@@ -132,6 +136,11 @@ export default function Users(props) {
     image: null, active: true,
   };
 
+  const transformRecord = (record) => ({
+    ...record,
+    role_id: record.role_id || record.roles?.[0]?.id || null,
+  });
+
   const transformPayload = (v) => {
     const p = { ...v };
     ['first_name','last_name','username','email','phone','employee_id'].forEach(k => { if (p[k]) p[k] = p[k].trim(); });
@@ -160,8 +169,8 @@ export default function Users(props) {
   ];
 
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Employees</h2>}>
-      <Head title="Employees" />
+    <AuthenticatedLayout user={props.auth?.user} header={<AccessControlTabs activeKey="users" />}>
+      <Head title="Users" />
       <ReusableCrud
         icon={<TeamOutlined />}
         title="Employee"
@@ -170,6 +179,7 @@ export default function Users(props) {
         fields={fields}
         validationSchema={validationSchema}
         crudInitialValues={initialValues}
+        transformRecord={transformRecord}
         transformPayload={transformPayload}
         filters={filters}
         form_ui="drawer"

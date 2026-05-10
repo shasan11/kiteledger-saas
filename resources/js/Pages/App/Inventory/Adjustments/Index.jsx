@@ -4,7 +4,7 @@ import { Head, router } from '@inertiajs/react';
 import { Button, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';

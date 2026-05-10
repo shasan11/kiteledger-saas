@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -27,9 +27,16 @@ import {
   PhoneOutlined,
   ScheduleOutlined,
   UserSwitchOutlined,
+  DollarCircleOutlined,
+  ClockCircleOutlined,
+  ApartmentOutlined,
+  NumberOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
+import SendEmail from '@/Components/SendEmail';
 import {
   buildActivityCrud,
   buildDealCrud,
@@ -67,9 +74,11 @@ const unwrap = (payload) => payload?.data ?? payload;
 
 const rowsFrom = (payload) => {
   const data = unwrap(payload);
+
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.results)) return data.results;
   if (Array.isArray(data)) return data;
+
   return [];
 };
 
@@ -131,8 +140,10 @@ const displayName = (record) =>
 
 const initials = (value = '') => {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
+
   if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 };
 
@@ -156,6 +167,8 @@ const statusColor = {
   customer: 'green',
   supplier: 'purple',
   lead: 'gold',
+  open: 'blue',
+  won: 'green',
 };
 
 function Value({ value }) {
@@ -171,7 +184,11 @@ function SmartTag({ value }) {
     return <Text type="secondary">-</Text>;
   }
 
-  return <Tag color={statusColor[value] || 'default'}>{labelize(value)}</Tag>;
+  return (
+    <Tag color={statusColor[value] || 'default'} className="crm-show__tag">
+      {labelize(value)}
+    </Tag>
+  );
 }
 
 function InfoTable({ rows = [], columns = 2 }) {
@@ -180,6 +197,10 @@ function InfoTable({ rows = [], columns = 2 }) {
 
   for (let i = 0; i < validRows.length; i += columns) {
     groupedRows.push(validRows.slice(i, i + columns));
+  }
+
+  if (!validRows.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No details available" />;
   }
 
   return (
@@ -205,28 +226,25 @@ function InfoTable({ rows = [], columns = 2 }) {
 }
 
 function RailTable({ rows = [] }) {
+  const validRows = rows.filter(Boolean);
+
+  if (!validRows.length) return null;
+
   return (
-    <table className="crm-show__rail-table">
-      <tbody>
-        {rows.filter(Boolean).map((row) => (
-          <tr key={row.label}>
-            <th>{row.label}</th>
-            <td>{row.value ?? '-'}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="crm-show__rail-table-wrap">
+      {validRows.map((row) => (
+        <div className="crm-show__rail-row" key={row.label}>
+          <Text type="secondary">{row.label}</Text>
+          <div>{row.value ?? '-'}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
 function DetailsCard({ title, extra, children }) {
   return (
-    <Card
-      className="crm-show__card"
-      title={title}
-      extra={extra}
-      bordered={false}
-    >
+    <Card className="crm-show__card" title={title} extra={extra}>
       {children}
     </Card>
   );
@@ -283,7 +301,10 @@ function RelatedTable({
         columns={columns}
         pagination={{ pageSize: 10, hideOnSinglePage: true }}
         scroll={{ x: 900 }}
-        locale={{ emptyText }}
+        rowClassName={(_, index) => (index % 2 === 0 ? 'crm-show__table-row' : 'crm-show__table-row is-alt')}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />,
+        }}
         onRow={(record) => ({
           onClick: () => {
             const url = rowUrl?.(record);
@@ -408,6 +429,126 @@ const documentColumns = (numberField, dateField, amountField, statusField = 'sta
   },
 ];
 
+const transactionRouteBySource = {
+  CustomerPayment: ['sales.customer-payments.show', '/sales/customer-payments'],
+  DebitNote: ['payment-out.debit-notes.show', '/payment-out/debit-notes'],
+  Expense: ['payment-out.expenses.show', '/payment-out/expenses'],
+  Invoice: ['sales.invoices.show', '/sales/invoices'],
+  JournalVoucher: ['accounting.journal-vouchers.show', '/accounting/journal-vouchers'],
+  PurchaseBill: ['payment-out.purchase-bills.show', '/payment-out/purchase-bills'],
+  SalesReturn: ['sales.sales-returns.show', '/sales/sales-returns'],
+  SupplierPayment: ['payment-out.supplier-payments.show', '/payment-out/supplier-payments'],
+};
+
+const transactionUrl = (row) => {
+  const source =
+    row?.source_type && row?.source_id
+      ? transactionRouteBySource[row.source_type]
+      : null;
+
+  if (source) {
+    return safeRoute(source[0], row.source_id, `${source[1]}/${row.source_id}`);
+  }
+
+  if (row?.journal_voucher_id) {
+    return safeRoute(
+      'accounting.journal-vouchers.show',
+      row.journal_voucher_id,
+      `/accounting/journal-vouchers/${row.journal_voucher_id}`
+    );
+  }
+
+  return null;
+};
+
+function RecentTransactions({ rows = [] }) {
+  const data = Array.isArray(rows) ? rows : [];
+
+  return (
+    <DetailsCard title="Recent Transactions">
+      <Table
+        size="small"
+        scroll={{ x: 980 }}
+        dataSource={data}
+        rowKey={(row, index) => row?.id || index}
+        pagination={{ pageSize: 10, hideOnSinglePage: true }}
+        rowClassName={(_, index) => (index % 2 === 0 ? 'crm-show__table-row' : 'crm-show__table-row is-alt')}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No recent transactions" />,
+        }}
+        onRow={(record) => {
+          const url = transactionUrl(record);
+
+          return {
+            onClick: () => {
+              if (url) router.visit(url);
+            },
+            style: { cursor: url ? 'pointer' : 'default' },
+          };
+        }}
+        columns={[
+          {
+            title: 'Transaction',
+            dataIndex: 'voucher_no',
+            key: 'voucher_no',
+            width: 220,
+            render: (value, row) => (
+              <Space direction="vertical" size={0}>
+                <Text strong className="crm-show__link-text">
+                  {row?.source_no || value || '-'}
+                </Text>
+                <Text type="secondary">
+                  {labelize(row?.source_type || 'journal_voucher')}
+                </Text>
+              </Space>
+            ),
+          },
+          {
+            title: 'Date',
+            dataIndex: 'voucher_date',
+            key: 'voucher_date',
+            width: 140,
+            render: formatDate,
+          },
+          {
+            title: 'Description',
+            dataIndex: 'description',
+            key: 'description',
+            render: (value) => value || '-',
+          },
+          {
+            title: 'Debit',
+            dataIndex: 'debit',
+            key: 'debit',
+            width: 120,
+            align: 'right',
+            render: formatMoney,
+          },
+          {
+            title: 'Credit',
+            dataIndex: 'credit',
+            key: 'credit',
+            width: 120,
+            align: 'right',
+            render: formatMoney,
+          },
+          {
+            title: 'Status',
+            dataIndex: 'approval_status',
+            key: 'approval_status',
+            width: 140,
+            render: (value) => (
+              <Tag color={value === 'Approved' ? 'success' : 'warning'} className="crm-show__tag">
+                {value || 'Not Approved'}
+              </Tag>
+            ),
+          },
+        ]}
+      />
+    </DetailsCard>
+  );
+}
+
 function DealsTabContent({ leadId, dealCrud, dealCrudColumns }) {
   const [view, setView] = useState('list');
   const { token } = theme.useToken();
@@ -417,8 +558,20 @@ function DealsTabContent({ leadId, dealCrud, dealCrudColumns }) {
       title="Deals"
       extra={
         <Space.Compact size="small">
-          <Button type={view === 'list' ? 'primary' : 'default'} onClick={() => setView('list')}>List</Button>
-          <Button type={view === 'kanban' ? 'primary' : 'default'} onClick={() => setView('kanban')}>Kanban</Button>
+          <Button
+            icon={<UnorderedListOutlined />}
+            type={view === 'list' ? 'primary' : 'default'}
+            onClick={() => setView('list')}
+          >
+            List
+          </Button>
+          <Button
+            icon={<AppstoreOutlined />}
+            type={view === 'kanban' ? 'primary' : 'default'}
+            onClick={() => setView('kanban')}
+          >
+            Kanban
+          </Button>
         </Space.Compact>
       }
     >
@@ -461,8 +614,10 @@ function DealKanban({ leadId, tokenColors }) {
 
   useEffect(() => {
     let mounted = true;
+
     const load = async () => {
       setLoading(true);
+
       try {
         const [stagesRes, dealsRes] = await Promise.all([
           axios.get(api('/api/deal-stages/'), {
@@ -474,18 +629,28 @@ function DealKanban({ leadId, tokenColors }) {
             params: { lead_id: leadId, page_size: 200 },
           }),
         ]);
+
         if (!mounted) return;
+
         const stageRows = rowsFrom(stagesRes.data);
         const dealRows = rowsFrom(dealsRes.data);
+
         setStages(stageRows);
-        const grouped = stageRows.reduce((acc, s) => {
-          acc[s.id] = [];
+
+        const grouped = stageRows.reduce((acc, stage) => {
+          acc[stage.id] = [];
           return acc;
         }, { __unassigned: [] });
-        dealRows.forEach((d) => {
-          const key = d.deal_stage_id && grouped[d.deal_stage_id] ? d.deal_stage_id : '__unassigned';
-          grouped[key].push(d);
+
+        dealRows.forEach((deal) => {
+          const key =
+            deal.deal_stage_id && grouped[deal.deal_stage_id]
+              ? deal.deal_stage_id
+              : '__unassigned';
+
+          grouped[key].push(deal);
         });
+
         setDealsByStage(grouped);
       } catch {
         if (mounted) {
@@ -496,58 +661,75 @@ function DealKanban({ leadId, tokenColors }) {
         if (mounted) setLoading(false);
       }
     };
+
     load();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [leadId]);
 
   if (loading) return <Skeleton active paragraph={{ rows: 6 }} />;
 
   const columns = [
     ...stages,
-    { id: '__unassigned', name: 'Unassigned', color: '#94a3b8' },
+    { id: '__unassigned', name: 'Unassigned', color: tokenColors.colorTextSecondary },
   ];
 
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 6 }}>
+    <div className="crm-show__kanban">
       {columns.map((stage) => {
         const items = dealsByStage[stage.id] || [];
-        const total = items.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+        const total = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+
         return (
-          <div
-            key={stage.id}
-            style={{
-              minWidth: 240,
-              maxWidth: 280,
-              flex: '0 0 260px',
-              background: tokenColors.colorFillAlter,
-              borderRadius: tokenColors.borderRadius,
-              padding: 8,
-              border: `1px solid ${tokenColors.colorBorderSecondary}`,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text strong style={{ color: stage.color || tokenColors.colorText }}>{stage.name}</Text>
-              <Text type="secondary">{items.length}</Text>
+          <div className="crm-show__kanban-column" key={stage.id}>
+            <div className="crm-show__kanban-head">
+              <Space size={8}>
+                <span
+                  className="crm-show__kanban-dot"
+                  style={{ background: stage.color || tokenColors.colorPrimary }}
+                />
+                <Text strong>{stage.name}</Text>
+              </Space>
+
+              <Tag className="crm-show__tag">{items.length}</Tag>
             </div>
-            <div style={{ fontSize: 11, color: tokenColors.colorTextSecondary, marginBottom: 8 }}>
-              Total: {formatMoney(total)}
+
+            <div className="crm-show__kanban-total">
+              Total: <strong>{formatMoney(total)}</strong>
             </div>
-            <Space direction="vertical" size={6} style={{ width: '100%' }}>
-              {items.length ? items.map((d) => (
-                <Card
-                  key={d.id}
-                  size="small"
-                  hoverable
-                  style={{ width: '100%' }}
-                  onClick={() => router.visit(safeRoute('crm.deals.show', d.id, `/crm/deals/${d.id}`))}
-                >
-                  <Text strong style={{ display: 'block' }}>{d.title || d.deal_no || '-'}</Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>{formatMoney(d.amount)}</Text>
-                  <div style={{ marginTop: 4 }}>
-                    <SmartTag value={d.status || 'open'} />
-                  </div>
-                </Card>
-              )) : <Text type="secondary" style={{ fontSize: 12 }}>No deals</Text>}
+
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              {items.length ? (
+                items.map((deal) => (
+                  <Card
+                    key={deal.id}
+                    size="small"
+                    hoverable
+                    className="crm-show__kanban-card"
+                    onClick={() =>
+                      router.visit(safeRoute('crm.deals.show', deal.id, `/crm/deals/${deal.id}`))
+                    }
+                  >
+                    <Text strong className="crm-show__kanban-title">
+                      {deal.title || deal.deal_no || '-'}
+                    </Text>
+
+                    <Text type="secondary" className="crm-show__kanban-money">
+                      {formatMoney(deal.amount)}
+                    </Text>
+
+                    <div style={{ marginTop: 6 }}>
+                      <SmartTag value={deal.status || 'open'} />
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <div className="crm-show__kanban-empty">
+                  <Text type="secondary">No deals</Text>
+                </div>
+              )}
             </Space>
           </div>
         );
@@ -562,21 +744,34 @@ function LeadCommentsTab({ leadId }) {
 
   useEffect(() => {
     let mounted = true;
+
     const load = async () => {
       setLoading(true);
+
       try {
         const res = await axios.get(api('/api/crm-activities/'), {
           headers: authHeaders(),
           params: { lead_id: leadId, page_size: 200 },
         });
+
         if (!mounted) return;
+
         const acts = rowsFrom(res.data);
         const all = [];
+
         acts.forEach((act) => {
           const raw = act.crm_activity_comments || act.crmActivityComments || [];
-          raw.forEach((c) => all.push({ ...c, activity_subject: act.subject, activity_id: act.id }));
+          raw.forEach((comment) =>
+            all.push({
+              ...comment,
+              activity_subject: act.subject,
+              activity_id: act.id,
+            })
+          );
         });
+
         all.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
         setComments(all);
       } catch {
         if (mounted) setComments([]);
@@ -584,8 +779,12 @@ function LeadCommentsTab({ leadId }) {
         if (mounted) setLoading(false);
       }
     };
+
     load();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [leadId]);
 
   return (
@@ -594,19 +793,24 @@ function LeadCommentsTab({ leadId }) {
         <Skeleton active paragraph={{ rows: 4 }} />
       ) : comments.length ? (
         <Timeline
-          items={comments.map((c) => ({
+          className="crm-show__timeline"
+          items={comments.map((comment) => ({
             children: (
               <Space direction="vertical" size={2}>
-                <Text>{c?.comment}</Text>
+                <Text>{comment?.comment}</Text>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  {(c?.user?.name || 'User')} on "{c.activity_subject || 'Activity'}" | {formatDateTime(c?.created_at)}
+                  {(comment?.user?.name || 'User')} on "{comment.activity_subject || 'Activity'}" |{' '}
+                  {formatDateTime(comment?.created_at)}
                 </Text>
               </Space>
             ),
           }))}
         />
       ) : (
-        <Empty description="No comments yet. Add comments to activities to see them here." />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="No comments yet. Add comments to activities to see them here."
+        />
       )}
     </DetailsCard>
   );
@@ -644,6 +848,37 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
 
   const title = mapRecord(record)?.title || 'CRM Record';
 
+  const uiVars = {
+    '--crm-bg': token.colorBgLayout,
+    '--crm-surface': token.colorBgContainer,
+    '--crm-elevated': token.colorBgElevated,
+    '--crm-soft': token.colorFillAlter,
+    '--crm-muted': token.colorFillQuaternary,
+    '--crm-border': token.colorBorderSecondary,
+    '--crm-border-strong': token.colorBorder,
+    '--crm-text': token.colorText,
+    '--crm-text-secondary': token.colorTextSecondary,
+    '--crm-text-tertiary': token.colorTextTertiary,
+    '--crm-primary': token.colorPrimary,
+    '--crm-primary-bg': token.colorPrimaryBg,
+    '--crm-primary-border': token.colorPrimaryBorder,
+    '--crm-success': token.colorSuccess,
+    '--crm-success-bg': token.colorSuccessBg,
+    '--crm-warning': token.colorWarning,
+    '--crm-warning-bg': token.colorWarningBg,
+    '--crm-error': token.colorError,
+    '--crm-radius': `${token.borderRadiusLG}px`,
+    '--crm-radius-sm': `${token.borderRadius}px`,
+    '--crm-padding': `${token.padding}px`,
+    '--crm-padding-lg': `${token.paddingLG}px`,
+    '--crm-padding-sm': `${token.paddingSM}px`,
+    '--crm-padding-xs': `${token.paddingXS}px`,
+    '--crm-font-sm': `${token.fontSizeSM}px`,
+    '--crm-font': `${token.fontSize}px`,
+    '--crm-font-lg': `${token.fontSizeLG}px`,
+    '--crm-shadow': token.boxShadowTertiary,
+  };
+
   return (
     <AuthenticatedLayout user={auth?.user}>
       {contextHolder}
@@ -652,192 +887,284 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
       <style>{`
         .crm-show {
           min-height: calc(100vh - 64px);
-          background: ${token.colorBgLayout};
+          background: var(--crm-bg);
+          color: var(--crm-text);
+          padding: var(--crm-padding);
+        }
+
+        .crm-show__shell {
+          max-width: 1600px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding);
+        }
+
+        .crm-show__bar-card.ant-card,
+        .crm-show__rail-card.ant-card,
+        .crm-show__card.ant-card,
+        .crm-show__metric-card.ant-card {
+          border-color: var(--crm-border);
+          border-radius: var(--crm-radius);
+          box-shadow: var(--crm-shadow);
+          overflow: hidden;
+        }
+
+        .crm-show__bar-card .ant-card-body {
+          padding: var(--crm-padding-sm) var(--crm-padding);
         }
 
         .crm-show__bar {
-          height: 44px;
+          min-height: 48px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 12px;
-          background: ${token.colorBgContainer};
-          border-bottom: 1px solid ${token.colorBorderSecondary};
+          gap: var(--crm-padding);
         }
 
         .crm-show__crumb {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--crm-padding-sm);
           min-width: 0;
+        }
+
+        .crm-show__crumb-title {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .crm-show__crumb-title h4 {
+          margin: 0 !important;
+          line-height: 1.2 !important;
         }
 
         .crm-show__body {
           display: grid;
-          grid-template-columns: 250px minmax(0, 1fr);
-          gap: 8px;
+          grid-template-columns: 310px minmax(0, 1fr);
+          gap: var(--crm-padding);
+          align-items: start;
         }
 
         .crm-show__rail {
-          background: ${token.colorBgContainer};
-          border-right: 1px solid ${token.colorBorderSecondary};
-          min-height: calc(100vh - 108px);
-          padding: 12px;
+          position: sticky;
+          top: var(--crm-padding);
+          min-width: 0;
+        }
+
+        .crm-show__rail-card .ant-card-body {
+          padding: var(--crm-padding);
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding-sm);
         }
 
         .crm-show__entity {
           display: flex;
           align-items: flex-start;
-          gap: 10px;
-          padding-bottom: 12px;
-          border-bottom: 1px solid ${token.colorBorderSecondary};
+          gap: var(--crm-padding-sm);
+          padding-bottom: var(--crm-padding-sm);
+          border-bottom: 1px solid var(--crm-border);
         }
 
         .crm-show__entity-title {
           margin: 0 !important;
-          font-size: 15px !important;
+          font-size: 18px !important;
           line-height: 1.25 !important;
-          color: ${token.colorText};
+          color: var(--crm-text);
+          word-break: break-word;
         }
 
         .crm-show__entity-subtitle {
           display: block;
-          font-size: 12px;
-          margin-top: 2px;
+          font-size: var(--crm-font-sm);
+          margin-top: 3px;
         }
 
         .crm-show__tags {
           display: flex;
           flex-wrap: wrap;
-          gap: 4px;
-          margin-top: 6px;
+          gap: 5px;
+          margin-top: 8px;
         }
 
-        .crm-show__rail-section {
-          padding: 10px 0;
-          border-bottom: 1px solid ${token.colorBorderSecondary};
+        .crm-show__tag {
+          margin-inline-end: 0 !important;
+          font-size: 11px;
+          line-height: 18px;
+          padding-inline: 7px;
+          border-radius: 999px;
         }
 
-        .crm-show__rail-label {
-          display: block;
-          font-size: 12px;
-          color: ${token.colorTextSecondary};
-          margin-bottom: 2px;
+        .crm-show__metric-card .ant-card-body {
+          padding: var(--crm-padding-sm);
         }
 
-        .crm-show__rail-amount {
-          font-size: 16px;
-          font-weight: 700;
-          color: ${token.colorText};
+        .crm-show__metric {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
         }
 
-        .crm-show__rail-table {
-          width: 100%;
-          margin-top: 10px;
-          border-collapse: collapse;
-          table-layout: fixed;
-          font-size: 12px;
+        .crm-show__metric-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--crm-primary);
+          background: var(--crm-primary-bg);
+          flex: none;
+          font-size: 17px;
         }
 
-        .crm-show__rail-table th {
-          width: 76px;
-          padding: 6px;
-          background: ${token.colorFillAlter};
-          border: 1px solid ${token.colorBorderSecondary};
-          color: ${token.colorTextSecondary};
-          font-weight: 600;
-          text-align: left;
-          vertical-align: top;
+        .crm-show__metric-content {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
         }
 
-        .crm-show__rail-table td {
-          padding: 6px;
-          border: 1px solid ${token.colorBorderSecondary};
-          color: ${token.colorText};
-          vertical-align: top;
+        .crm-show__metric-content strong {
+          font-size: 20px;
+          line-height: 1.2;
+          color: var(--crm-text);
           word-break: break-word;
         }
 
+        .crm-show__rail-table-wrap {
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          overflow: hidden;
+          background: var(--crm-surface);
+        }
+
+        .crm-show__rail-row {
+          display: grid;
+          grid-template-columns: 96px minmax(0, 1fr);
+          border-bottom: 1px solid var(--crm-border);
+        }
+
+        .crm-show__rail-row:last-child {
+          border-bottom: 0;
+        }
+
+        .crm-show__rail-row > span,
+        .crm-show__rail-row > div {
+          padding: 8px 10px;
+          font-size: var(--crm-font-sm);
+          line-height: 1.35;
+          word-break: break-word;
+        }
+
+        .crm-show__rail-row > span {
+          background: var(--crm-muted);
+          border-right: 1px solid var(--crm-border);
+          font-weight: 600;
+        }
+
         .crm-show__tabs {
-          padding-top: 10px;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 6px;
+          padding-top: 2px;
         }
 
         .crm-show__tab {
           width: 100%;
-          height: 34px;
-          border: 0;
-          border-radius: ${token.borderRadius}px;
+          min-height: 38px;
+          border: 1px solid transparent;
+          border-radius: var(--crm-radius-sm);
           background: transparent;
-          color: ${token.colorTextSecondary};
+          color: var(--crm-text-secondary);
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 9px;
+          gap: 10px;
+          padding: 0 11px;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: 600;
+          font-size: var(--crm-font-sm);
+          font-weight: 700;
           text-align: left;
+          transition: 0.16s ease;
         }
 
         .crm-show__tab:hover {
-          background: ${token.colorFillAlter};
-          color: ${token.colorText};
+          background: var(--crm-muted);
+          color: var(--crm-text);
         }
 
         .crm-show__tab--active {
-          background: ${token.colorPrimaryBg};
-          color: ${token.colorPrimary};
+          background: var(--crm-primary-bg);
+          color: var(--crm-primary);
+          border-color: var(--crm-primary-border);
+        }
+
+        .crm-show__tab-count {
+          min-width: 22px;
+          height: 20px;
+          padding: 0 7px;
+          border-radius: 999px;
+          background: var(--crm-surface);
+          border: 1px solid var(--crm-border);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
         }
 
         .crm-show__main {
-          padding: 8px;
+          min-width: 0;
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          min-width: 0;
+          gap: var(--crm-padding);
           overflow: hidden;
         }
 
         .crm-show__card.ant-card {
-          border-radius: ${token.borderRadius}px;
-          box-shadow: none;
+          background: var(--crm-surface);
         }
 
         .crm-show__card .ant-card-head {
-          min-height: 38px;
-          padding: 0 10px;
-          border-bottom: 1px solid ${token.colorBorderSecondary};
+          min-height: 46px;
+          padding: 0 var(--crm-padding);
+          border-bottom: 1px solid var(--crm-border);
+          background: var(--crm-elevated);
         }
 
         .crm-show__card .ant-card-head-title {
-          font-size: 13px;
-          font-weight: 700;
-          color: ${token.colorText};
+          font-size: var(--crm-font);
+          font-weight: 800;
+          color: var(--crm-text);
         }
 
         .crm-show__card .ant-card-body {
-          padding: 10px;
+          padding: var(--crm-padding);
           min-width: 0;
         }
 
         .crm-show__info-table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           table-layout: fixed;
-          font-size: 12px;
-          border: 1px solid ${token.colorBorderSecondary};
+          font-size: var(--crm-font-sm);
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          overflow: hidden;
         }
 
         .crm-show__info-table th {
           width: 15%;
-          padding: 7px 8px;
-          background: ${token.colorFillAlter};
-          border: 1px solid ${token.colorBorderSecondary};
-          color: ${token.colorTextSecondary};
-          font-weight: 600;
+          padding: 9px 11px;
+          background: var(--crm-muted);
+          border-right: 1px solid var(--crm-border);
+          border-bottom: 1px solid var(--crm-border);
+          color: var(--crm-text-secondary);
+          font-weight: 700;
           text-align: left;
           vertical-align: top;
           white-space: nowrap;
@@ -845,47 +1172,197 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
 
         .crm-show__info-table td {
           width: 35%;
-          padding: 7px 8px;
-          background: ${token.colorBgContainer};
-          border: 1px solid ${token.colorBorderSecondary};
-          color: ${token.colorText};
+          padding: 9px 11px;
+          background: var(--crm-surface);
+          border-right: 1px solid var(--crm-border);
+          border-bottom: 1px solid var(--crm-border);
+          color: var(--crm-text);
           vertical-align: top;
           word-break: break-word;
         }
 
+        .crm-show__info-table tr:last-child th,
+        .crm-show__info-table tr:last-child td {
+          border-bottom: 0;
+        }
+
+        .crm-show__info-table th:last-child,
+        .crm-show__info-table td:last-child {
+          border-right: 0;
+        }
+
         .crm-show .ant-table {
-          font-size: 12px;
+          font-size: var(--crm-font-sm);
+        }
+
+        .crm-show .ant-table-wrapper .ant-table-container {
+          border-radius: var(--crm-radius-sm);
+          overflow: hidden;
         }
 
         .crm-show .ant-table-thead > tr > th {
-          padding: 7px 8px !important;
-          background: ${token.colorFillAlter} !important;
-          font-weight: 700;
-          color: ${token.colorTextSecondary};
+          padding: 9px 11px !important;
+          background: var(--crm-muted) !important;
+          font-weight: 800;
+          color: var(--crm-text-secondary) !important;
+          border-color: var(--crm-border) !important;
           white-space: nowrap;
         }
 
         .crm-show .ant-table-tbody > tr > td {
-          padding: 6px 8px !important;
+          padding: 8px 11px !important;
           vertical-align: middle;
+          border-color: var(--crm-border) !important;
         }
 
-        .crm-show .ant-tag {
-          margin-inline-end: 0;
-          font-size: 11px;
-          line-height: 18px;
-          padding-inline: 6px;
+        .crm-show__table-row.is-alt > td {
+          background: var(--crm-muted);
         }
 
-        @media (max-width: 992px) {
+        .crm-show__link-text {
+          color: var(--crm-primary);
+        }
+
+        .crm-show__contact-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__contact-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 11px 12px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+          min-width: 0;
+        }
+
+        .crm-show__contact-icon {
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--crm-primary);
+          background: var(--crm-primary-bg);
+          flex: none;
+        }
+
+        .crm-show__contact-content {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .crm-show__contact-content span:last-child {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .crm-show__kanban {
+          display: flex;
+          gap: var(--crm-padding-sm);
+          overflow-x: auto;
+          padding-bottom: 6px;
+        }
+
+        .crm-show__kanban-column {
+          min-width: 260px;
+          max-width: 290px;
+          flex: 0 0 270px;
+          background: var(--crm-muted);
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius);
+          padding: var(--crm-padding-sm);
+        }
+
+        .crm-show__kanban-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 6px;
+        }
+
+        .crm-show__kanban-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 999px;
+          display: inline-block;
+        }
+
+        .crm-show__kanban-total {
+          font-size: 12px;
+          color: var(--crm-text-secondary);
+          margin-bottom: 10px;
+        }
+
+        .crm-show__kanban-card.ant-card {
+          border-color: var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+        }
+
+        .crm-show__kanban-card .ant-card-body {
+          padding: 10px;
+        }
+
+        .crm-show__kanban-title {
+          display: block;
+          margin-bottom: 2px;
+        }
+
+        .crm-show__kanban-money {
+          font-size: 12px;
+        }
+
+        .crm-show__kanban-empty {
+          min-height: 74px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px dashed var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-surface);
+        }
+
+        .crm-show__timeline {
+          padding-top: 6px;
+        }
+
+        .crm-show__state {
+          padding: var(--crm-padding-lg);
+          background: var(--crm-surface);
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius);
+          box-shadow: var(--crm-shadow);
+        }
+
+        @media (max-width: 1180px) {
           .crm-show__body {
             grid-template-columns: 1fr;
           }
 
           .crm-show__rail {
-            min-height: auto;
-            border-right: 0;
-            border-bottom: 1px solid ${token.colorBorderSecondary};
+            position: static;
+          }
+
+          .crm-show__rail-card .ant-card-body {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: start;
+          }
+
+          .crm-show__entity,
+          .crm-show__metric-card,
+          .crm-show__rail-table-wrap,
+          .crm-show__tabs {
+            grid-column: 1 / -1;
           }
 
           .crm-show__tabs {
@@ -895,8 +1372,28 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
 
           .crm-show__tab {
             width: auto;
+            min-width: 128px;
             white-space: nowrap;
             flex: none;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .crm-show {
+            padding: var(--crm-padding-sm);
+          }
+
+          .crm-show__bar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .crm-show__crumb {
+            align-items: flex-start;
+          }
+
+          .crm-show__contact-grid {
+            grid-template-columns: 1fr;
           }
 
           .crm-show__info-table {
@@ -906,29 +1403,40 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           .crm-show__card .ant-card-body {
             overflow-x: auto;
           }
+
+          .crm-show__rail-row {
+            grid-template-columns: 1fr;
+          }
+
+          .crm-show__rail-row > span {
+            border-right: 0;
+            border-bottom: 1px solid var(--crm-border);
+          }
         }
       `}</style>
 
-      <div className="crm-show">
-        {error ? (
-          <div style={{ padding: 12 }}>
-            <Alert type="error" message={error} showIcon />
-          </div>
-        ) : null}
+      <div className="crm-show" style={uiVars}>
+        <div className="crm-show__shell">
+          {error ? (
+            <div className="crm-show__state">
+              <Alert type="error" message={error} showIcon />
+            </div>
+          ) : null}
 
-        {loading ? (
-          <div style={{ padding: 18 }}>
-            <Skeleton active paragraph={{ rows: 8 }} />
-          </div>
-        ) : null}
+          {loading ? (
+            <div className="crm-show__state">
+              <Skeleton active paragraph={{ rows: 8 }} />
+            </div>
+          ) : null}
 
-        {!loading && !record && !error ? (
-          <div style={{ padding: 18 }}>
-            <Empty description="Record not found" />
-          </div>
-        ) : null}
+          {!loading && !record && !error ? (
+            <div className="crm-show__state">
+              <Empty description="Record not found" />
+            </div>
+          ) : null}
 
-        {!loading && record ? children(record) : null}
+          {!loading && record ? children(record) : null}
+        </div>
       </div>
     </AuthenticatedLayout>
   );
@@ -944,6 +1452,7 @@ function RecordLayout({
   backUrl,
   amountLabel,
   amount,
+  amountIcon,
   railRows,
   tabs,
 }) {
@@ -954,81 +1463,183 @@ function RecordLayout({
 
   return (
     <>
-      <div className="crm-show__bar">
-        <div className="crm-show__crumb">
-          <Button
-            type="text"
-            size="small"
-            icon={<ArrowLeftOutlined />}
-            onClick={() => router.visit(backUrl)}
-          >
-            {backLabel}
-          </Button>
+      <Card className="crm-show__bar-card">
+        <div className="crm-show__bar">
+          <div className="crm-show__crumb">
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
+              onClick={() => router.visit(backUrl)}
+            >
+              {backLabel}
+            </Button>
 
-          <Text ellipsis style={{ maxWidth: 460 }}>
-            {title}
-          </Text>
+            <div className="crm-show__crumb-title">
+              <Title level={4}>{title}</Title>
+              <Text type="secondary" ellipsis style={{ maxWidth: 720 }}>
+                {subtitle || 'CRM record'}
+              </Text>
+            </div>
+          </div>
+
+          <Space wrap>{tags}</Space>
         </div>
-      </div>
+      </Card>
 
       <div className="crm-show__body">
         <aside className="crm-show__rail">
-          <div className="crm-show__entity">
-            <Avatar
-              size={42}
-              icon={icon}
-              style={{
-                background: token.colorPrimaryBg,
-                color: token.colorPrimary,
-                fontWeight: 700,
-                flex: 'none',
-              }}
-            >
-              {icon ? null : initials(title)}
-            </Avatar>
-
-            <div style={{ minWidth: 0 }}>
-              <Title level={4} className="crm-show__entity-title">
-                {title}
-              </Title>
-
-              <Text type="secondary" className="crm-show__entity-subtitle">
-                {subtitle || 'CRM record'}
-              </Text>
-
-              <div className="crm-show__tags">{tags}</div>
-            </div>
-          </div>
-
-          {amountLabel ? (
-            <div className="crm-show__rail-section">
-              <Text className="crm-show__rail-label">{amountLabel}</Text>
-              <div className="crm-show__rail-amount">{amount}</div>
-            </div>
-          ) : null}
-
-          <RailTable rows={railRows} />
-
-          <div className="crm-show__tabs">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                className={`crm-show__tab ${
-                  activeTab === tab.key ? 'crm-show__tab--active' : ''
-                }`}
-                onClick={() => setActiveTab(tab.key)}
+          <Card className="crm-show__rail-card">
+            <div className="crm-show__entity">
+              <Avatar
+                size={48}
+                icon={icon}
+                style={{
+                  background: token.colorPrimaryBg,
+                  color: token.colorPrimary,
+                  fontWeight: 800,
+                  flex: 'none',
+                }}
               >
-                <span>{tab.label}</span>
-                {tab.count !== undefined ? <span>{tab.count}</span> : null}
-              </button>
-            ))}
-          </div>
+                {icon ? null : initials(title)}
+              </Avatar>
+
+              <div style={{ minWidth: 0 }}>
+                <Title level={4} className="crm-show__entity-title">
+                  {title}
+                </Title>
+
+                <Text type="secondary" className="crm-show__entity-subtitle">
+                  {subtitle || 'CRM record'}
+                </Text>
+
+                <div className="crm-show__tags">{tags}</div>
+              </div>
+            </div>
+
+            {amountLabel ? (
+              <Card className="crm-show__metric-card">
+                <div className="crm-show__metric">
+                  <div className="crm-show__metric-icon">
+                    {amountIcon || <DollarCircleOutlined />}
+                  </div>
+
+                  <div className="crm-show__metric-content">
+                    <Text type="secondary">{amountLabel}</Text>
+                    <strong>{amount}</strong>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <RailTable rows={railRows} />
+
+            <div className="crm-show__tabs">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className={`crm-show__tab ${
+                    activeTab === tab.key ? 'crm-show__tab--active' : ''
+                  }`}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  <span>{tab.label}</span>
+                  {tab.count !== undefined ? (
+                    <span className="crm-show__tab-count">{tab.count}</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </Card>
         </aside>
 
         <main className="crm-show__main">{active?.children}</main>
       </div>
     </>
+  );
+}
+
+function ContactBlocks({ contact }) {
+  return (
+    <div className="crm-show__contact-grid">
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <PhoneOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Phone</Text>
+          <Text strong>
+            <Value value={contact?.phone} />
+          </Text>
+        </div>
+      </div>
+
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <MailOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Email</Text>
+          <Text strong>
+            <Value value={contact?.email} />
+          </Text>
+        </div>
+      </div>
+
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <NumberOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Code</Text>
+          <Text strong>
+            <Value value={contact?.code} />
+          </Text>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeadContactBlocks({ lead }) {
+  return (
+    <div className="crm-show__contact-grid">
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <MailOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Email</Text>
+          <Text strong>
+            <Value value={lead?.email} />
+          </Text>
+        </div>
+      </div>
+
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <PhoneOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Phone</Text>
+          <Text strong>
+            <Value value={lead?.phone || lead?.mobile} />
+          </Text>
+        </div>
+      </div>
+
+      <div className="crm-show__contact-item">
+        <div className="crm-show__contact-icon">
+          <ApartmentOutlined />
+        </div>
+        <div className="crm-show__contact-content">
+          <Text type="secondary">Website</Text>
+          <Text strong>
+            <Value value={lead?.website} />
+          </Text>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1045,26 +1656,45 @@ export function ContactShow({ auth, id }) {
 
         const overview = (
           <>
-            <DetailsCard title="Overview">
-              <InfoTable
-                rows={[
-                  { label: 'Name', value: contact?.name },
-                  { label: 'Code', value: contact?.code },
-                  { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
-                  {
-                    label: 'Group',
-                    value: contact?.contact_group?.name || contact?.contactGroup?.name,
-                  },
-                  { label: 'Phone', value: contact?.phone },
-                  { label: 'Email', value: contact?.email },
-                  { label: 'PAN', value: contact?.pan },
-                  { label: 'Tax Reg No', value: contact?.tax_registration_no },
-                  { label: 'Credit Term', value: contact?.credit_term?.name || contact?.creditTerm?.name },
-                  { label: 'Credit Limit', value: formatMoney(contact?.credit_limit) },
-                  { label: 'Accept Purchase', value: contact?.accept_purchase ? 'Yes' : 'No' },
-                  { label: 'Account', value: contact?.account?.name || contact?.account?.code },
-                ]}
-              />
+            <DetailsCard
+              title="Overview"
+              extra={
+                <SendEmail
+                  defaultValues={{
+                    sender_email: auth?.user?.email || '',
+                    receiver_email: contact?.email || '',
+                    subject: contact?.name ? `Message for ${contact.name}` : '',
+                  }}
+                  disabled={!contact?.email}
+                />
+              }
+            >
+              <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                <ContactBlocks contact={contact} />
+
+                <InfoTable
+                  rows={[
+                    { label: 'Name', value: contact?.name },
+                    { label: 'Code', value: contact?.code },
+                    { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
+                    {
+                      label: 'Group',
+                      value: contact?.contact_group?.name || contact?.contactGroup?.name,
+                    },
+                    { label: 'Phone', value: contact?.phone },
+                    { label: 'Email', value: contact?.email },
+                    { label: 'PAN', value: contact?.pan },
+                    { label: 'Tax Reg No', value: contact?.tax_registration_no },
+                    {
+                      label: 'Credit Term',
+                      value: contact?.credit_term?.name || contact?.creditTerm?.name,
+                    },
+                    { label: 'Credit Limit', value: formatMoney(contact?.credit_limit) },
+                    { label: 'Accept Purchase', value: contact?.accept_purchase ? 'Yes' : 'No' },
+                    { label: 'Account', value: contact?.account?.name || contact?.account?.code },
+                  ]}
+                />
+              </Space>
             </DetailsCard>
 
             <DetailsCard title="Address">
@@ -1072,6 +1702,8 @@ export function ContactShow({ auth, id }) {
                 <Value value={contact?.address} />
               </Paragraph>
             </DetailsCard>
+
+            <RecentTransactions rows={contact?.recent_transactions} />
           </>
         );
 
@@ -1153,6 +1785,7 @@ export function ContactShow({ auth, id }) {
             backUrl={safeRoute('crm.contacts.index', null, '/crm/contacts')}
             amountLabel="Credit Limit"
             amount={formatMoney(contact?.credit_limit)}
+            amountIcon={<DollarCircleOutlined />}
             railRows={[
               { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
               { label: 'Phone', value: contact?.phone },
@@ -1182,28 +1815,35 @@ export function LeadShow({ auth, id }) {
         const overview = (
           <>
             <DetailsCard title="Overview">
-              <InfoTable
-                rows={[
-                  { label: 'Lead No', value: lead?.lead_no },
-                  { label: 'Name', value: lead?.name },
-                  { label: 'Company', value: lead?.company_name },
-                  { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
-                  { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
-                  { label: 'Source', value: lead?.lead_source },
-                  { label: 'Industry', value: lead?.industry },
-                  { label: 'Expected Value', value: formatMoney(lead?.expected_value) },
-                  { label: 'Assigned To', value: lead?.assigned_to?.name || lead?.assignedTo?.name },
-                  { label: 'Contact', value: lead?.contact?.name },
-                  { label: 'Next Follow Up', value: formatDateTime(lead?.next_follow_up_date) },
-                  { label: 'Last Contacted', value: formatDateTime(lead?.last_contacted_at) },
-                ]}
-              />
+              <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                <LeadContactBlocks lead={lead} />
+
+                <InfoTable
+                  rows={[
+                    { label: 'Lead No', value: lead?.lead_no },
+                    { label: 'Name', value: lead?.name },
+                    { label: 'Company', value: lead?.company_name },
+                    { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
+                    { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
+                    { label: 'Source', value: lead?.lead_source },
+                    { label: 'Industry', value: lead?.industry },
+                    { label: 'Expected Value', value: formatMoney(lead?.expected_value) },
+                    {
+                      label: 'Assigned To',
+                      value: lead?.assigned_to?.name || lead?.assignedTo?.name,
+                    },
+                    { label: 'Contact', value: lead?.contact?.name },
+                    { label: 'Next Follow Up', value: formatDateTime(lead?.next_follow_up_date) },
+                    { label: 'Last Contacted', value: formatDateTime(lead?.last_contacted_at) },
+                  ]}
+                />
+              </Space>
             </DetailsCard>
 
-            <Row gutter={[10, 10]}>
+            <Row gutter={[14, 14]}>
               <Col xs={24} lg={12}>
                 <DetailsCard title="Communication">
-                  <Space direction="vertical" size={6}>
+                  <Space direction="vertical" size={8}>
                     <Text>
                       <MailOutlined /> <Value value={lead?.email} />
                     </Text>
@@ -1235,42 +1875,201 @@ export function LeadShow({ auth, id }) {
         const stageCrud = buildStageCrud();
 
         const leadCrudColumns = [
-          { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
-          { title: 'Company', dataIndex: 'company_name', key: 'company_name', render: (v) => v || '-' },
-          { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <SmartTag value={v || 'new'} /> },
-          { title: 'Email', dataIndex: 'email', key: 'email', render: (v) => v || '-' },
+          {
+            title: 'Name',
+            dataIndex: 'name',
+            key: 'name',
+            sorter: true,
+            render: (value) => <Text strong>{value || '-'}</Text>,
+          },
+          {
+            title: 'Company',
+            dataIndex: 'company_name',
+            key: 'company_name',
+            render: (value) => value || '-',
+          },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            width: 120,
+            render: (value) => <SmartTag value={value || 'new'} />,
+          },
+          {
+            title: 'Email',
+            dataIndex: 'email',
+            key: 'email',
+            render: (value) => value || '-',
+          },
         ];
 
         const activityCrudColumns = [
-          { title: 'Subject', dataIndex: 'subject', key: 'subject', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
-          { title: 'Type', dataIndex: 'activity_type', key: 'activity_type', width: 110, render: (v) => v ? <Tag>{labelize(v)}</Tag> : '-' },
-          { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <SmartTag value={v || 'pending'} /> },
-          { title: 'Priority', dataIndex: 'priority', key: 'priority', width: 100, render: (v) => <SmartTag value={v || 'medium'} /> },
-          { title: 'Due', dataIndex: 'due_at', key: 'due_at', width: 160, render: formatDateTime },
+          {
+            title: 'Subject',
+            dataIndex: 'subject',
+            key: 'subject',
+            sorter: true,
+            render: (value) => <Text strong>{value || '-'}</Text>,
+          },
+          {
+            title: 'Type',
+            dataIndex: 'activity_type',
+            key: 'activity_type',
+            width: 110,
+            render: (value) => (value ? <Tag className="crm-show__tag">{labelize(value)}</Tag> : '-'),
+          },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            width: 120,
+            render: (value) => <SmartTag value={value || 'pending'} />,
+          },
+          {
+            title: 'Priority',
+            dataIndex: 'priority',
+            key: 'priority',
+            width: 100,
+            render: (value) => <SmartTag value={value || 'medium'} />,
+          },
+          {
+            title: 'Due',
+            dataIndex: 'due_at',
+            key: 'due_at',
+            width: 160,
+            render: formatDateTime,
+          },
         ];
 
         const dealCrudColumns = [
-          { title: 'Title', dataIndex: 'title', key: 'title', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
-          { title: 'Status', dataIndex: 'status', key: 'status', width: 110, render: (v) => <SmartTag value={v || 'open'} /> },
-          { title: 'Stage', key: 'stage', width: 140, render: (_, r) => r?.deal_stage?.name || '-' },
-          { title: 'Pipeline', key: 'pipeline', width: 140, render: (_, r) => r?.deal_pipeline?.name || '-' },
-          { title: 'Amount', dataIndex: 'amount', key: 'amount', width: 130, align: 'right', render: formatMoney },
-          { title: 'Expected Close', dataIndex: 'expected_close_date', key: 'expected_close_date', width: 140, render: (v) => v || '-' },
+          {
+            title: 'Title',
+            dataIndex: 'title',
+            key: 'title',
+            sorter: true,
+            render: (value) => <Text strong>{value || '-'}</Text>,
+          },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            key: 'status',
+            width: 110,
+            render: (value) => <SmartTag value={value || 'open'} />,
+          },
+          {
+            title: 'Stage',
+            key: 'stage',
+            width: 140,
+            render: (_, record) => record?.deal_stage?.name || '-',
+          },
+          {
+            title: 'Pipeline',
+            key: 'pipeline',
+            width: 140,
+            render: (_, record) => record?.deal_pipeline?.name || '-',
+          },
+          {
+            title: 'Amount',
+            dataIndex: 'amount',
+            key: 'amount',
+            width: 130,
+            align: 'right',
+            render: formatMoney,
+          },
+          {
+            title: 'Expected Close',
+            dataIndex: 'expected_close_date',
+            key: 'expected_close_date',
+            width: 140,
+            render: (value) => value || '-',
+          },
         ];
 
         const pipelineCrudColumns = [
-          { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
-          { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true, render: (v) => v || '-' },
-          { title: 'Default', dataIndex: 'is_default', key: 'is_default', width: 100, render: (v) => <Tag color={v ? 'green' : 'default'}>{v ? 'Yes' : 'No'}</Tag> },
+          {
+            title: 'Name',
+            dataIndex: 'name',
+            key: 'name',
+            sorter: true,
+            render: (value) => <Text strong>{value || '-'}</Text>,
+          },
+          {
+            title: 'Description',
+            dataIndex: 'description',
+            key: 'description',
+            ellipsis: true,
+            render: (value) => value || '-',
+          },
+          {
+            title: 'Default',
+            dataIndex: 'is_default',
+            key: 'is_default',
+            width: 100,
+            render: (value) => (
+              <Tag color={value ? 'green' : 'default'} className="crm-show__tag">
+                {value ? 'Yes' : 'No'}
+              </Tag>
+            ),
+          },
         ];
 
         const stageCrudColumns = [
-          { title: 'Stage', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <Text strong>{v || '-'}</Text> },
-          { title: 'Pipeline', key: 'pipeline', render: (_, r) => r?.deal_pipeline?.name || '-' },
-          { title: 'Probability %', dataIndex: 'probability', key: 'probability', width: 130, align: 'right', render: (v) => v ?? '-' },
-          { title: 'Order', dataIndex: 'sort_order', key: 'sort_order', width: 90, align: 'right', render: (v) => v ?? '-' },
-          { title: 'Won', dataIndex: 'is_won_stage', key: 'is_won_stage', width: 80, render: (v) => v ? <Tag color="green">Won</Tag> : '-' },
-          { title: 'Lost', dataIndex: 'is_lost_stage', key: 'is_lost_stage', width: 80, render: (v) => v ? <Tag color="red">Lost</Tag> : '-' },
+          {
+            title: 'Stage',
+            dataIndex: 'name',
+            key: 'name',
+            sorter: true,
+            render: (value) => <Text strong>{value || '-'}</Text>,
+          },
+          {
+            title: 'Pipeline',
+            key: 'pipeline',
+            render: (_, record) => record?.deal_pipeline?.name || '-',
+          },
+          {
+            title: 'Probability %',
+            dataIndex: 'probability',
+            key: 'probability',
+            width: 130,
+            align: 'right',
+            render: (value) => value ?? '-',
+          },
+          {
+            title: 'Order',
+            dataIndex: 'sort_order',
+            key: 'sort_order',
+            width: 90,
+            align: 'right',
+            render: (value) => value ?? '-',
+          },
+          {
+            title: 'Won',
+            dataIndex: 'is_won_stage',
+            key: 'is_won_stage',
+            width: 80,
+            render: (value) =>
+              value ? (
+                <Tag color="green" className="crm-show__tag">
+                  Won
+                </Tag>
+              ) : (
+                '-'
+              ),
+          },
+          {
+            title: 'Lost',
+            dataIndex: 'is_lost_stage',
+            key: 'is_lost_stage',
+            width: 80,
+            render: (value) =>
+              value ? (
+                <Tag color="red" className="crm-show__tag">
+                  Lost
+                </Tag>
+              ) : (
+                '-'
+              ),
+          },
         ];
 
         const tabs = [
@@ -1431,6 +2230,7 @@ export function LeadShow({ auth, id }) {
             backUrl={safeRoute('crm.leads.index', null, '/crm/leads')}
             amountLabel="Expected Value"
             amount={formatMoney(lead?.expected_value)}
+            amountIcon={<DollarCircleOutlined />}
             railRows={[
               { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
               { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
@@ -1469,7 +2269,10 @@ export function ActivityShow({ auth, id }) {
                   { label: 'Type', value: <SmartTag value={activity?.activity_type} /> },
                   { label: 'Status', value: <SmartTag value={activity?.status || 'pending'} /> },
                   { label: 'Priority', value: <SmartTag value={activity?.priority || 'medium'} /> },
-                  { label: 'Assigned To', value: activity?.assigned_to?.name || activity?.assignedTo?.name },
+                  {
+                    label: 'Assigned To',
+                    value: activity?.assigned_to?.name || activity?.assignedTo?.name,
+                  },
                   { label: 'Lead', value: activity?.lead?.name },
                   { label: 'Contact', value: activity?.contact?.name },
                   { label: 'Deal', value: activity?.deal?.title || activity?.deal?.name },
@@ -1494,11 +2297,12 @@ export function ActivityShow({ auth, id }) {
           <DetailsCard title="Comments">
             {comments.length ? (
               <Timeline
+                className="crm-show__timeline"
                 items={comments.map((comment) => ({
                   children: (
                     <Space direction="vertical" size={2}>
                       <Text>{comment?.comment}</Text>
-                      <Text type="secondary">
+                      <Text type="secondary" style={{ fontSize: 12 }}>
                         {comment?.user?.name || 'User'} | {formatDateTime(comment?.created_at)}
                       </Text>
                     </Space>
@@ -1506,13 +2310,13 @@ export function ActivityShow({ auth, id }) {
                 }))}
               />
             ) : (
-              <Empty description="No comments yet" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No comments yet" />
             )}
           </DetailsCard>
         );
 
         const linkedContent = (
-          <Row gutter={[10, 10]}>
+          <Row gutter={[14, 14]}>
             {activity?.lead?.id ? (
               <Col xs={24} lg={12}>
                 <DetailsCard
@@ -1578,7 +2382,7 @@ export function ActivityShow({ auth, id }) {
             {!activity?.lead?.id && !activity?.contact?.id ? (
               <Col span={24}>
                 <DetailsCard title="Linked Records">
-                  <Empty description="No linked records" />
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No linked records" />
                 </DetailsCard>
               </Col>
             ) : null}
@@ -1625,6 +2429,7 @@ export function ActivityShow({ auth, id }) {
             backUrl={safeRoute('crm.activities.index', null, '/crm/activities')}
             amountLabel="Due Date"
             amount={formatDateTime(activity?.due_at)}
+            amountIcon={<ClockCircleOutlined />}
             railRows={[
               { label: 'Type', value: <SmartTag value={activity?.activity_type} /> },
               { label: 'Status', value: <SmartTag value={activity?.status || 'pending'} /> },

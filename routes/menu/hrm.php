@@ -33,6 +33,8 @@ Route::prefix('hrm')->name('hrm.')->group(function () {
     // ── Access Control ────────────────────────────────────────────────────────
     Route::get('/permissions',       fn () => Inertia::render('App/Hrm/Permissions/Index'))->name('permissions.index');
     Route::get('/roles',             fn () => Inertia::render('App/Hrm/Roles/Index'))->name('roles.index');
+    Route::get('/roles/create',      fn () => Inertia::render('App/Hrm/Roles/Form'))->name('roles.create');
+    Route::get('/roles/{id}/edit',   fn ($id) => Inertia::render('App/Hrm/Roles/Form', ['id' => $id]))->name('roles.edit');
     Route::get('/role-permissions',  fn () => Inertia::render('App/Hrm/RolePermissions/Index'))->name('role-permissions.index');
 
     // ── Projects ──────────────────────────────────────────────────────────────

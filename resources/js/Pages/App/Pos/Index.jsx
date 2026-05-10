@@ -21,6 +21,7 @@ import {
     Spin,
     Table,
     Tag,
+    theme,
     Typography,
 } from 'antd';
 import {
@@ -56,7 +57,9 @@ const emptyPayment = { payment_method: 'cash', amount: 0, reference: '', transac
 
 export default function PosIndex() {
     const { message } = App.useApp();
+    const { token } = theme.useToken();
     const barcodeRef = useRef(null);
+    const beepContextRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [terminals, setTerminals] = useState([]);
@@ -137,13 +140,11 @@ export default function PosIndex() {
 
             const terminalRows = terminalPayload.results || [];
             const defaultTerminal = terminalRows.find((terminal) => terminal.is_default) || terminalRows[0] || null;
-            const walkIn = contactPayload.results?.[0] || defaultTerminal?.default_customer || null;
-
             setTerminals(terminalRows);
             setContacts(contactPayload.results || []);
             setDashboard(dashboardPayload.data || null);
             setTerminalId(defaultTerminal?.id ?? null);
-            setCustomerId(walkIn?.id ?? null);
+            setCustomerId(null);
         } catch (error) {
             message.error(error?.response?.data?.message || 'Failed to load POS screen.');
         } finally {
@@ -163,9 +164,17 @@ export default function PosIndex() {
         setProducts(response.data || []);
     }
 
-    async function loadCurrentShift() {
+    async function loadCurrentShift(targetTerminalId = terminalId) {
+        if (!targetTerminalId) {
+            setCurrentShift(null);
+            return null;
+        }
+
         const response = await axios.get(api('/api/pos-shifts/current'), {
-            params: { pos_terminal_id: terminalId },
+            params: {
+                pos_terminal_id: targetTerminalId,
+                branch_id: terminals.find((terminal) => terminal.id === targetTerminalId)?.branch_id,
+            },
         });
 
         setCurrentShift(response.data || null);
@@ -173,6 +182,8 @@ export default function PosIndex() {
         if (!response.data) {
             setOpenShiftOpen(true);
         }
+
+        return response.data || null;
     }
 
     async function loadHeldSales() {
@@ -216,6 +227,7 @@ export default function PosIndex() {
     }
 
     function addProduct(product) {
+        playPosBeep();
         setCart((current) => {
             const existing = current.find((item) => item.product_id === product.id);
 
@@ -245,6 +257,32 @@ export default function PosIndex() {
         barcodeRef.current?.focus();
     }
 
+    function playPosBeep() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+
+            const audioContext = beepContextRef.current || new AudioContext();
+            beepContextRef.current = audioContext;
+
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            const start = audioContext.currentTime;
+
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(880, start);
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.08, start + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.08);
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            oscillator.start(start);
+            oscillator.stop(start + 0.09);
+        } catch (error) {
+            // Sound is best-effort; blocked audio should not interrupt selling.
+        }
+    }
+
     function updateCartLine(index, key, value) {
         setCart((current) =>
             current.map((item, itemIndex) => (itemIndex === index ? { ...item, [key]: value } : item)),
@@ -271,6 +309,7 @@ export default function PosIndex() {
         try {
             const response = await axios.post(api('/api/pos-shifts/open'), {
                 pos_terminal_id: terminalId,
+                branch_id: selectedTerminal?.branch_id || null,
                 opening_cash: values.opening_cash || 0,
                 notes: values.notes || null,
             });
@@ -286,9 +325,35 @@ export default function PosIndex() {
         }
     }
 
+    async function ensureActiveShift() {
+        if (!terminalId) {
+            message.warning('Select a terminal before continuing.');
+            return null;
+        }
+
+        if (currentShift?.id) {
+            return currentShift;
+        }
+
+        try {
+            const shift = await loadCurrentShift(terminalId);
+
+            if (shift?.id) {
+                return shift;
+            }
+        } catch (error) {
+            message.error(error?.response?.data?.message || 'Failed to load the current shift.');
+            return null;
+        }
+
+        message.warning('Open a shift before continuing.');
+        return null;
+    }
+
     async function holdSale() {
-        if (!currentShift) {
-            setOpenShiftOpen(true);
+        const shift = await ensureActiveShift();
+
+        if (!shift?.id) {
             return;
         }
 
@@ -301,15 +366,16 @@ export default function PosIndex() {
 
         try {
             let saleId = activeSaleId;
+            const payload = buildSalePayload('draft', shift.id);
 
             if (saleId) {
-                await axios.patch(api(`/api/pos-sales/${saleId}`), buildSalePayload('draft'));
+                await axios.patch(api(`/api/pos-sales/${saleId}`), payload);
             } else {
-                const draftResponse = await axios.post(api('/api/pos-sales'), buildSalePayload('draft'));
+                const draftResponse = await axios.post(api('/api/pos-sales'), payload);
                 saleId = draftResponse.data?.id;
             }
 
-            await axios.post(api(`/api/pos-sales/${saleId}/hold`), buildSalePayload('held'));
+            await axios.post(api(`/api/pos-sales/${saleId}/hold`), buildSalePayload('held', shift.id));
             await loadHeldSales();
             clearSale();
             message.success('Sale held successfully.');
@@ -321,8 +387,9 @@ export default function PosIndex() {
     }
 
     async function completeSale() {
-        if (!currentShift) {
-            setOpenShiftOpen(true);
+        const shift = await ensureActiveShift();
+
+        if (!shift?.id) {
             return;
         }
 
@@ -335,16 +402,17 @@ export default function PosIndex() {
 
         try {
             let saleId = activeSaleId;
+            const payload = buildSalePayload('draft', shift.id);
 
             if (saleId) {
-                await axios.patch(api(`/api/pos-sales/${saleId}`), buildSalePayload('draft'));
+                await axios.patch(api(`/api/pos-sales/${saleId}`), payload);
             } else {
-                const draftResponse = await axios.post(api('/api/pos-sales'), buildSalePayload('draft'));
+                const draftResponse = await axios.post(api('/api/pos-sales'), payload);
                 saleId = draftResponse.data?.id;
             }
 
             const response = await axios.post(api(`/api/pos-sales/${saleId}/complete`), {
-                ...buildSalePayload('draft'),
+                ...payload,
                 approved: true,
                 allow_credit_sale: payments.every((payment) => payment.payment_method === 'credit'),
             });
@@ -363,10 +431,10 @@ export default function PosIndex() {
         }
     }
 
-    function buildSalePayload(status = 'draft') {
+    function buildSalePayload(status = 'draft', shiftId = currentShift?.id) {
         return {
             pos_terminal_id: terminalId,
-            pos_shift_id: currentShift?.id,
+            pos_shift_id: shiftId || null,
             warehouse_id: selectedTerminal?.warehouse_id,
             contact_id: customerId || null,
             status,
@@ -396,7 +464,7 @@ export default function PosIndex() {
 
     function resumeHeldSale(sale) {
         setActiveSaleId(sale.id);
-        setCustomerId(sale.contact_id || selectedTerminal?.default_customer_id || null);
+        setCustomerId(sale.contact_id || null);
         setCart((sale.pos_sale_lines || []).map((line) => ({
             product_id: line.product_id,
             product_name: line.product_name,
@@ -442,61 +510,62 @@ export default function PosIndex() {
         {
             title: 'Item',
             key: 'item',
+            width: 170,
             render: (_, record) => (
-                <div>
-                    <Text strong>{record.product_name}</Text>
+                <div style={{ minWidth: 0 }}>
+                    <Text strong ellipsis style={{ display: 'block', maxWidth: 150, fontSize: 12 }}>{record.product_name}</Text>
                     <br />
-                    <Text type="secondary">{record.product_code || record.barcode || 'POS Item'}</Text>
+                    <Text type="secondary" style={{ fontSize: 11 }}>{record.product_code || record.barcode || 'POS Item'}</Text>
                 </div>
             ),
         },
         {
             title: 'Qty',
             key: 'qty',
-            width: 140,
+            width: 104,
             render: (_, record, index) => (
-                <Space.Compact>
-                    <Button icon={<MinusOutlined />} onClick={() => updateCartLine(index, 'qty', Math.max(Number(record.qty || 1) - 1, 1))} />
-                    <InputNumber min={1} value={record.qty} onChange={(value) => updateCartLine(index, 'qty', value || 1)} />
-                    <Button icon={<PlusOutlined />} onClick={() => updateCartLine(index, 'qty', Number(record.qty || 0) + 1)} />
+                <Space.Compact size="small">
+                    <Button size="small" icon={<MinusOutlined />} onClick={() => updateCartLine(index, 'qty', Math.max(Number(record.qty || 1) - 1, 1))} />
+                    <InputNumber size="small" controls={false} min={1} value={record.qty} style={{ width: 42 }} onChange={(value) => updateCartLine(index, 'qty', value || 1)} />
+                    <Button size="small" icon={<PlusOutlined />} onClick={() => updateCartLine(index, 'qty', Number(record.qty || 0) + 1)} />
                 </Space.Compact>
             ),
         },
         {
             title: 'Price',
             key: 'price',
-            width: 120,
+            width: 76,
             render: (_, record, index) => (
-                <InputNumber min={0} value={record.unit_price} onChange={(value) => updateCartLine(index, 'unit_price', value || 0)} />
+                <InputNumber size="small" controls={false} min={0} value={record.unit_price} style={{ width: 68 }} onChange={(value) => updateCartLine(index, 'unit_price', value || 0)} />
             ),
         },
         {
             title: 'Disc %',
             key: 'discount',
-            width: 110,
+            width: 62,
             render: (_, record, index) => (
-                <InputNumber min={0} max={100} value={record.discount_percent} onChange={(value) => updateCartLine(index, 'discount_percent', value || 0)} />
+                <InputNumber size="small" controls={false} min={0} max={100} value={record.discount_percent} style={{ width: 54 }} onChange={(value) => updateCartLine(index, 'discount_percent', value || 0)} />
             ),
         },
         {
             title: 'Total',
             key: 'line_total',
-            width: 120,
+            width: 88,
             align: 'right',
             render: (_, record) => {
                 const base = Number(record.qty || 0) * Number(record.unit_price || 0);
                 const discount = base * (Number(record.discount_percent || 0) / 100);
                 const taxRate = Number(record.tax_rate?.rate_percent || 0);
                 const tax = Math.max(base - discount, 0) * (taxRate / 100);
-                return <Text strong>{money(base - discount + tax)}</Text>;
+                return <Text strong style={{ fontSize: 12 }}>{money(base - discount + tax)}</Text>;
             },
         },
         {
             title: '',
             key: 'actions',
-            width: 54,
+            width: 38,
             render: (_, __, index) => (
-                <Button danger type="text" icon={<DeleteOutlined />} onClick={() => removeLine(index)} />
+                <Button danger size="small" type="text" icon={<DeleteOutlined />} onClick={() => removeLine(index)} />
             ),
         },
     ];
@@ -590,13 +659,14 @@ export default function PosIndex() {
                                     />
 
                                     <Table
+                                        className="pos-cart-table"
                                         size="small"
                                         rowKey={(record, index) => `${record.product_id}-${index}`}
                                         columns={cartColumns}
                                         dataSource={cart}
                                         pagination={false}
                                         locale={{ emptyText: 'No items in cart' }}
-                                        scroll={{ y: 320 }}
+                                        scroll={{ x: 540, y: 320 }}
                                     />
 
                                     <Descriptions
@@ -779,6 +849,33 @@ export default function PosIndex() {
                     </Form.Item>
                 </Form>
             </Modal>
+
+            <style>
+                {`
+                    .pos-cart-table .ant-table-thead > tr > th {
+                        background: ${token.colorFillAlter};
+                        color: ${token.colorTextSecondary};
+                        font-size: 11px;
+                        padding: 6px 4px;
+                        white-space: nowrap;
+                    }
+
+                    .pos-cart-table .ant-table-tbody > tr > td {
+                        padding: 5px 4px;
+                        vertical-align: middle;
+                    }
+
+                    .pos-cart-table .ant-input-number-input {
+                        padding-inline: 5px;
+                        text-align: center;
+                    }
+
+                    .pos-cart-table .ant-btn-sm {
+                        width: 24px;
+                        padding-inline: 0;
+                    }
+                `}
+            </style>
         </AuthenticatedLayout>
     );
 }

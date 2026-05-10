@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Contact;
+use App\Models\ChartOfAccount;
+use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -126,5 +128,57 @@ class ContactController extends BaseCrudApiController
         Model $record
     ): array {
         return $parentData;
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $data['recent_transactions'] = [];
+
+        if (!$record->account_id) {
+            return $data;
+        }
+
+        $chartAccountIds = ChartOfAccount::query()
+            ->where('account_id', $record->account_id)
+            ->pluck('id');
+
+        if ($chartAccountIds->isEmpty()) {
+            return $data;
+        }
+
+        $lines = JournalVoucherLine::query()
+            ->with(['journalVoucher.branch'])
+            ->whereIn('chart_of_account_id', $chartAccountIds)
+            ->whereHas('journalVoucher')
+            ->latest('created_at')
+            ->limit(25)
+            ->get();
+
+        $data['recent_transactions'] = $lines->map(function (JournalVoucherLine $line) {
+            $voucher = $line->journalVoucher;
+            $debit = (float) $line->debit;
+            $credit = (float) $line->credit;
+
+            return [
+                'id' => $line->getKey(),
+                'journal_voucher_id' => $voucher?->getKey(),
+                'voucher_no' => $voucher?->voucher_no,
+                'voucher_date' => optional($voucher?->voucher_date)->toDateString(),
+                'description' => $line->description ?: $voucher?->narration,
+                'debit' => $debit,
+                'credit' => $credit,
+                'net_movement' => round($debit - $credit, 2),
+                'status' => $voucher?->status,
+                'approved' => (bool) ($voucher?->approved ?? false),
+                'approval_status' => ($voucher?->approved ?? false) ? 'Approved' : 'Not Approved',
+                'source_type' => $voucher?->source_type,
+                'source_id' => $voucher?->source_id,
+                'source_no' => $voucher?->source_no,
+                'source_module' => $voucher?->source_module,
+                'branch' => $this->serializeRelated($voucher?->branch),
+            ];
+        })->values()->all();
+
+        return $data;
     }
 }

@@ -104,7 +104,7 @@ use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
 use App\Http\Controllers\Api\SettingsConfigurationController;
 
-Route::middleware('auth')->get('global-search', GlobalSearchController::class)
+Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearchController::class)
     ->name('api.global-search');
 
 /*
@@ -150,8 +150,10 @@ Route::apiResource('fiscal-years', FiscalYearController::class);
 Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
 Route::apiResource('email-templates', EmailTemplateController::class);
 
-Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
-Route::get('reports/{category}/{report_key}/export', [ReportController::class, 'export']);
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
+    Route::get('reports/{category}/{report_key}/export', [ReportController::class, 'export']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -419,39 +421,41 @@ Route::delete('variants/bulk', [VariantController::class, 'bulkDestroy']);
 Route::apiResource('variants', VariantController::class);
 Route::apiResource('product-variants', ProductVariantItemController::class);
 
-Route::get('pos/dashboard', [PosSaleController::class, 'dashboard']);
-Route::get('pos/products/search', [PosSaleController::class, 'productSearch']);
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('pos/dashboard', [PosSaleController::class, 'dashboard']);
+    Route::get('pos/products/search', [PosSaleController::class, 'productSearch']);
 
-Route::apiResource('pos-terminals', PosTerminalController::class);
+    Route::apiResource('pos-terminals', PosTerminalController::class);
 
-Route::get('pos-shifts/current', [PosShiftController::class, 'current']);
-Route::post('pos-shifts/open', [PosShiftController::class, 'open']);
-Route::post('pos-shifts/{id}/close', [PosShiftController::class, 'close']);
-Route::get('pos-shifts', [PosShiftController::class, 'index']);
-Route::get('pos-shifts/{id}', [PosShiftController::class, 'show']);
+    Route::get('pos-shifts/current', [PosShiftController::class, 'current']);
+    Route::post('pos-shifts/open', [PosShiftController::class, 'open']);
+    Route::post('pos-shifts/{id}/close', [PosShiftController::class, 'close']);
+    Route::get('pos-shifts', [PosShiftController::class, 'index']);
+    Route::get('pos-shifts/{id}', [PosShiftController::class, 'show']);
 
-Route::get('pos-sales', [PosSaleController::class, 'index']);
-Route::post('pos-sales', [PosSaleController::class, 'store']);
-Route::get('pos-sales/{id}', [PosSaleController::class, 'show']);
-Route::patch('pos-sales/{id}', [PosSaleController::class, 'update']);
-Route::post('pos-sales/{id}/hold', [PosSaleController::class, 'hold']);
-Route::post('pos-sales/{id}/complete', [PosSaleController::class, 'complete']);
-Route::post('pos-sales/{id}/cancel', [PosSaleController::class, 'cancel']);
-Route::post('pos-sales/{id}/void', [PosSaleController::class, 'void']);
+    Route::get('pos-sales', [PosSaleController::class, 'index']);
+    Route::post('pos-sales', [PosSaleController::class, 'store']);
+    Route::get('pos-sales/{id}', [PosSaleController::class, 'show']);
+    Route::patch('pos-sales/{id}', [PosSaleController::class, 'update']);
+    Route::post('pos-sales/{id}/hold', [PosSaleController::class, 'hold']);
+    Route::post('pos-sales/{id}/complete', [PosSaleController::class, 'complete']);
+    Route::post('pos-sales/{id}/cancel', [PosSaleController::class, 'cancel']);
+    Route::post('pos-sales/{id}/void', [PosSaleController::class, 'void']);
 
-Route::get('pos-payments', [PosPaymentController::class, 'index']);
-Route::get('pos-payments/{pos_payment}', [PosPaymentController::class, 'show']);
+    Route::get('pos-payments', [PosPaymentController::class, 'index']);
+    Route::get('pos-payments/{pos_payment}', [PosPaymentController::class, 'show']);
 
-Route::get('pos-cash-movements', [PosCashMovementController::class, 'index']);
-Route::post('pos-cash-movements', [PosCashMovementController::class, 'store']);
-Route::get('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'show']);
-Route::patch('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'update']);
+    Route::get('pos-cash-movements', [PosCashMovementController::class, 'index']);
+    Route::post('pos-cash-movements', [PosCashMovementController::class, 'store']);
+    Route::get('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'show']);
+    Route::patch('pos-cash-movements/{pos_cash_movement}', [PosCashMovementController::class, 'update']);
 
-Route::get('pos-returns', [PosReturnController::class, 'index']);
-Route::post('pos-returns', [PosReturnController::class, 'store']);
-Route::get('pos-returns/{id}', [PosReturnController::class, 'show']);
-Route::post('pos-returns/{id}/complete', [PosReturnController::class, 'complete']);
-Route::post('pos-returns/{id}/cancel', [PosReturnController::class, 'cancel']);
+    Route::get('pos-returns', [PosReturnController::class, 'index']);
+    Route::post('pos-returns', [PosReturnController::class, 'store']);
+    Route::get('pos-returns/{id}', [PosReturnController::class, 'show']);
+    Route::post('pos-returns/{id}/complete', [PosReturnController::class, 'complete']);
+    Route::post('pos-returns/{id}/cancel', [PosReturnController::class, 'cancel']);
+});
 
 /*
 |--------------------------------------------------------------------------

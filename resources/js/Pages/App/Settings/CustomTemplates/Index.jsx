@@ -15,16 +15,17 @@ export default function CustomTemplates(props) {
             columns={[
               { title: 'Name', dataIndex: 'name' },
               { title: 'Purpose', dataIndex: 'purpose' },
-              { title: 'Key', dataIndex: 'template_key' },
             ]}
             fields={[
               { name: 'name', label: 'Name', rules: [{ required: true }] },
               { name: 'purpose', label: 'Purpose' },
-              { name: 'template_key', label: 'Template Key' },
+              { name: 'template_key', label: 'Template Key', hidden: true },
               { name: 'content', label: 'Content', type: 'richtext' },
               { name: 'active', label: 'Active', type: 'switch' },
             ]}
             initialValues={{ name: '', purpose: '', template_key: '', content: '', active: true }}
+            formMode="drawer"
+            drawerWidth={1100}
           />
         </Card>
       </div>

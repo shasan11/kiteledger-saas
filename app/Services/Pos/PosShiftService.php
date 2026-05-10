@@ -14,12 +14,22 @@ class PosShiftService
     {
         return DB::transaction(function () use ($payload) {
             $terminal = PosTerminal::query()->findOrFail($payload['pos_terminal_id']);
-            $cashierId = $payload['cashier_id'] ?? auth()->id();
+            $actorId = $this->currentUserId();
+            $cashierId = $payload['cashier_id'] ?? $actorId;
+            $branchId = $payload['branch_id'] ?? $terminal->branch_id;
+
+            if (!$cashierId) {
+                throw new InvalidArgumentException('Unable to determine the logged-in cashier for this shift.');
+            }
+
+            if ($branchId && $terminal->branch_id && (string) $branchId !== (string) $terminal->branch_id) {
+                throw new InvalidArgumentException('The selected terminal does not belong to this branch.');
+            }
 
             $this->validateOpenShift($terminal->id, $cashierId);
 
             $shift = PosShift::create([
-                'branch_id' => $payload['branch_id'] ?? $terminal->branch_id,
+                'branch_id' => $branchId,
                 'pos_terminal_id' => $terminal->id,
                 'cashier_id' => $cashierId,
                 'opened_at' => $payload['opened_at'] ?? now(),
@@ -27,7 +37,7 @@ class PosShiftService
                 'notes' => $payload['notes'] ?? null,
                 'status' => 'open',
                 'active' => true,
-                'user_add_id' => auth()->id(),
+                'user_add_id' => $actorId,
             ]);
 
             return $this->recalculate($shift->fresh());
@@ -106,5 +116,12 @@ class PosShiftService
         ])->saveQuietly();
 
         return $shift->refresh();
+    }
+
+    private function currentUserId(): ?int
+    {
+        return request()->user()?->getAuthIdentifier()
+            ?? auth('web')->id()
+            ?? auth()->id();
     }
 }

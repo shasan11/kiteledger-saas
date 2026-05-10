@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from "@/Components/ReusableCrud";
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import axios from 'axios';

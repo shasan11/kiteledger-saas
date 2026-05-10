@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\User;
+use App\Models\Role;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Spatie\Permission\PermissionRegistrar;
 
 class UserController extends BaseCrudApiController
 {
@@ -30,6 +32,7 @@ class UserController extends BaseCrudApiController
         'shift',
         'leavePolicy',
         'weeklyHoliday',
+        'roles',
     ];
 
     protected array $relationDetails = [
@@ -198,6 +201,7 @@ class UserController extends BaseCrudApiController
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
+        $this->pendingRoleId = $parentData['role_id'] ?? null;
         $parentData['name'] = $this->makeName($parentData);
 
         if (!empty($parentData['password'])) {
@@ -216,6 +220,10 @@ class UserController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
+        $this->pendingRoleId = array_key_exists('role_id', $parentData)
+            ? $parentData['role_id']
+            : false;
+
         if (
             empty($parentData['name']) &&
             (
@@ -240,6 +248,22 @@ class UserController extends BaseCrudApiController
         return $parentData;
     }
 
+    protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
+    {
+        if ($this->pendingRoleId !== false) {
+            if ($this->pendingRoleId) {
+                $role = Role::query()->find($this->pendingRoleId);
+                $record->syncRoles($role ? [$role] : []);
+            } else {
+                $record->syncRoles([]);
+            }
+
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        }
+
+        return $record;
+    }
+
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         unset($data['password'], $data['remember_token']);
@@ -259,4 +283,6 @@ class UserController extends BaseCrudApiController
             ((string) ($data['first_name'] ?? '')) . ' ' . ((string) ($data['last_name'] ?? ''))
         );
     }
+
+    private mixed $pendingRoleId = false;
 }

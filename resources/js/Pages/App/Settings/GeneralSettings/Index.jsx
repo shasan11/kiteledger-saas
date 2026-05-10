@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { ControlOutlined } from '@ant-design/icons';

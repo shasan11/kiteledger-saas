@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text, Title } = Typography;
 const STORAGE_KEY = 'kiteledger.global-search.branch';
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 
 const GROUP_ICONS = {
     master: <BankOutlined />,
@@ -59,6 +60,25 @@ const shortcutLabel = () =>
     typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)
         ? 'Cmd K'
         : 'Ctrl K';
+
+const api = (path) => `${BACKEND_BASE}${path}`;
+
+const authHeaders = () => {
+    if (typeof window === 'undefined') {
+        return {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+        };
+    }
+
+    const token = window.localStorage.getItem('accessToken');
+
+    return {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+};
 
 export default function GlobalSearchCommand({
     branchContext = {},
@@ -191,7 +211,8 @@ export default function GlobalSearchCommand({
                     params.branch_id = selectedBranchId;
                 }
 
-                const response = await axios.get('/api/global-search', {
+                const response = await axios.get(api('/api/global-search'), {
+                    headers: authHeaders(),
                     params,
                     signal: controller.signal,
                 });

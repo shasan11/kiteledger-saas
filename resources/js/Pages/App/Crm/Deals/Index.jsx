@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Typography } from 'antd';
@@ -10,7 +10,15 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (v) => (v == null || v === '')
+  ? '-'
+  : toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const optionalNumber = (value) => {
+  if (value == null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 const formatDate = (value) => {
   if (!value) return null;
@@ -305,8 +313,8 @@ export default function Deals(props) {
     p.deal_pipeline_id = p.deal_pipeline_id || null;
     p.deal_stage_id = p.deal_stage_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
-    p.amount = p.amount != null ? Number(p.amount) : null;
-    p.probability = p.probability != null ? Number(p.probability) : null;
+    p.amount = optionalNumber(p.amount);
+    p.probability = optionalNumber(p.probability);
     p.expected_close_date = formatDate(p.expected_close_date);
     p.closed_date = formatDate(p.closed_date);
     Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));

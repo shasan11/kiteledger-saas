@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 import * as Yup from 'yup';
@@ -13,6 +13,7 @@ import {
   Space,
   Tree,
   Typography,
+  theme,
 } from 'antd';
 import {
   ApartmentOutlined,
@@ -26,6 +27,16 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || 'http://localhost:8000';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const getId = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+
+  if (typeof value === 'object') {
+    return value.id ?? value.value ?? null;
+  }
+
+  return value;
+};
+
 const extractRows = (payload) => {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.results)) return payload.results;
@@ -34,7 +45,7 @@ const extractRows = (payload) => {
   return [];
 };
 
-function buildTree(rows = []) {
+function buildTree(rows = [], token) {
   const map = new Map();
   const roots = [];
 
@@ -44,7 +55,7 @@ function buildTree(rows = []) {
       record: item,
       title: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Text strong style={{ color: '#0f172a' }}>
+          <Text strong style={{ color: token.colorText }}>
             {item.name || 'Unnamed Group'}
           </Text>
 
@@ -74,6 +85,8 @@ function buildTree(rows = []) {
 }
 
 function ContactGroupTreeView() {
+  const { token } = theme.useToken();
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState(null);
@@ -83,14 +96,14 @@ function ContactGroupTreeView() {
     setError(null);
 
     try {
-      const token = localStorage.getItem('accessToken');
+      const accessToken = localStorage.getItem('accessToken');
 
       const response = await fetch(api('/api/contact-groups/?page_size=500'), {
         method: 'GET',
         credentials: 'include',
         headers: {
           Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
       });
 
@@ -111,7 +124,7 @@ function ContactGroupTreeView() {
     fetchGroups();
   }, []);
 
-  const treeData = useMemo(() => buildTree(rows), [rows]);
+  const treeData = useMemo(() => buildTree(rows, token), [rows, token]);
 
   const openRecord = (id) => {
     router.visit(route('crm.contact-groups.show', id));
@@ -120,18 +133,20 @@ function ContactGroupTreeView() {
   return (
     <Card
       style={{
-         
-         boxShadow: 'none',
+        boxShadow: 'none',
+        borderRadius: token.borderRadiusLG,
+        borderColor: token.colorBorderSecondary,
+        background: token.colorBgContainer,
       }}
       styles={{
         body: {
-          padding: 18,
+          padding: token.paddingLG,
         },
       }}
       title={
         <Space size={10}>
-          <ApartmentOutlined style={{ color: '#0f172a' }} />
-          <span style={{ fontWeight: 650, color: '#0f172a' }}>Group Hierarchy</span>
+          <ApartmentOutlined style={{ color: token.colorText }} />
+          <span style={{ fontWeight: 650, color: token.colorText }}>Group Hierarchy</span>
         </Space>
       }
       extra={
@@ -146,7 +161,7 @@ function ContactGroupTreeView() {
           showIcon
           message="Unable to load tree view"
           description={error}
-          style={{ marginBottom: 14 }}
+          style={{ marginBottom: token.marginMD }}
         />
       ) : null}
 
@@ -175,6 +190,8 @@ function ContactGroupTreeView() {
 }
 
 export default function ContactGroups(props) {
+  const { token } = theme.useToken();
+
   const [viewMode, setViewMode] = useState('list');
 
   const columns = [
@@ -225,15 +242,50 @@ export default function ContactGroups(props) {
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required').max(120),
-    parent_id: Yup.string().nullable(),
+    id: Yup.mixed().nullable(),
+
+    name: Yup.string()
+      .trim()
+      .required('Name is required')
+      .max(120, 'Name cannot exceed 120 characters'),
+
+    parent_id: Yup.mixed()
+      .nullable()
+      .test(
+        'parent-not-self',
+        'Parent group cannot be the same as this group',
+        function (value) {
+          const currentRecordId = getId(this.parent?.id);
+          const selectedParentId = getId(value);
+
+          if (!currentRecordId || !selectedParentId) return true;
+
+          return String(currentRecordId) !== String(selectedParentId);
+        }
+      ),
+
     description: Yup.string().nullable(),
   });
 
   const crudInitialValues = {
+    id: null,
     name: '',
     parent_id: null,
+    parent_id_detail: null,
     description: '',
+  };
+
+  const transformRecord = (record) => {
+    if (!record) return record;
+
+    return {
+      ...record,
+      id: record.id ?? null,
+      name: record.name ?? '',
+      parent_id: record.parent_id ?? record.parent?.id ?? null,
+      parent_id_detail: record.parent ?? record.parent_id_detail ?? null,
+      description: record.description ?? '',
+    };
   };
 
   const transformPayload = (values) => {
@@ -241,10 +293,23 @@ export default function ContactGroups(props) {
 
     p.name = p.name?.trim() || null;
     p.description = p.description?.trim() || null;
-    p.parent_id = p.parent_id || null;
+    p.parent_id = getId(p.parent_id);
 
-    Object.keys(p).forEach((k) => {
-      if (p[k] === '') p[k] = null;
+    delete p.id;
+    delete p.parent;
+    delete p.parent_id_detail;
+    delete p.children;
+    delete p.created;
+    delete p.updated;
+    delete p.created_at;
+    delete p.updated_at;
+    delete p.user_add;
+    delete p.user_add_id;
+    delete p.contacts_count;
+    delete p.sub_groups_count;
+
+    Object.keys(p).forEach((key) => {
+      if (p[key] === '') p[key] = null;
     });
 
     return p;
@@ -257,20 +322,36 @@ export default function ContactGroups(props) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: 16,
+        gap: token.marginMD,
       }}
     >
       <Space size={10}>
-        <TeamOutlined style={{ color: '#0f172a', fontSize: 17 }} />
+        <div
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: token.borderRadiusLG,
+            background: token.colorFillSecondary,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: token.colorText,
+          }}
+        >
+          <TeamOutlined />
+        </div>
 
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', lineHeight: 1.15 }}>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: token.colorText,
+              lineHeight: 1.15,
+            }}
+          >
             Contact Groups
           </div>
-
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Manage customer, supplier, vendor and internal contact classifications
-          </Text>
         </div>
       </Space>
 
@@ -306,7 +387,7 @@ export default function ContactGroups(props) {
     <AuthenticatedLayout user={props.auth?.user} header={headerNode}>
       <Head title="Contact Groups" />
 
-      <div className='border-0'>
+      <div className="border-0">
         {viewMode === 'list' ? (
           <ReusableCrud
             icon={<TeamOutlined />}
@@ -316,9 +397,10 @@ export default function ContactGroups(props) {
             fields={fields}
             validationSchema={validationSchema}
             crudInitialValues={crudInitialValues}
+            transformRecord={transformRecord}
             transformPayload={transformPayload}
-            form_ui="drawer"
-            drawerWidth={600}
+            form_ui="modal"
+            modalWidth={600}
             searchParam="search"
             pageParam="page"
             pageSizeParam="page_size"

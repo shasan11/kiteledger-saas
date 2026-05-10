@@ -2,72 +2,64 @@
 
 namespace App\Services\Reports;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Csv;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportExportService
 {
-    public function export(array $report, string $format): Response
+    public function export(array $report, string $format): Response|StreamedResponse
     {
         return match ($format) {
             'csv' => $this->csv($report),
             'xlsx' => $this->xlsx($report),
-            'pdf' => $this->pdfLikeHtml($report),
+            'pdf' => $this->pdf($report),
             default => abort(422, 'Unsupported export format.'),
         };
     }
 
-    protected function csv(array $report): Response
+    protected function csv(array $report): StreamedResponse
     {
         $filename = $this->filename($report, 'csv');
-        $handle = fopen('php://temp', 'r+');
+        $spreadsheet = $this->spreadsheet($report);
+        $writer = new Csv($spreadsheet);
 
-        fputcsv($handle, [$report['company_name'] ?? config('app.name')]);
-        fputcsv($handle, [$report['title'] ?? 'Report']);
-        fputcsv($handle, ['Generated At', $report['generated_at'] ?? now()->format('Y-m-d H:i:s')]);
-        fputcsv($handle, []);
-        fputcsv($handle, array_map(fn ($column) => $column['title'] ?? $column['label'] ?? $column['key'], $report['columns'] ?? []));
-
-        foreach ($report['rows'] ?? [] as $row) {
-            fputcsv($handle, array_map(fn ($column) => data_get($row, $column['key'] ?? '', ''), $report['columns'] ?? []));
-        }
-
-        if (!empty($report['totals'])) {
-            fputcsv($handle, []);
-            foreach ($report['totals'] as $label => $value) {
-                fputcsv($handle, [Str::headline((string) $label), $value]);
-            }
-        }
-
-        rewind($handle);
-        $content = stream_get_contents($handle) ?: '';
-        fclose($handle);
-
-        return response($content, 200, [
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
 
-    protected function xlsx(array $report): Response
+    protected function xlsx(array $report): StreamedResponse
     {
         $filename = $this->filename($report, 'xlsx');
-        $html = $this->tableHtml($report);
+        $spreadsheet = $this->spreadsheet($report);
+        $writer = new Xlsx($spreadsheet);
 
-        return response($html, 200, [
-            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 
-    protected function pdfLikeHtml(array $report): Response
+    protected function pdf(array $report): Response
     {
         $filename = $this->filename($report, 'pdf');
-        $html = $this->tableHtml($report, true);
+        $pdf = Pdf::loadView('reports.export', [
+            'report' => $report,
+            'headers' => $this->headers($report),
+        ])->setPaper('a4', 'landscape');
 
-        return response($html, 200, [
-            'Content-Type' => 'text/html; charset=UTF-8',
-            'Content-Disposition' => "inline; filename=\"{$filename}\"",
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
 
@@ -80,30 +72,69 @@ class ReportExportService
         return "{$key}_{$from}_{$to}.{$extension}";
     }
 
-    protected function tableHtml(array $report, bool $print = false): string
+    protected function headers(array $report): array
     {
-        $headers = array_map(fn ($column) => $column['title'] ?? $column['label'] ?? $column['key'], $report['columns'] ?? []);
-        $rows = '';
+        return array_map(fn ($column) => $column['title'] ?? $column['label'] ?? $column['key'], $report['columns'] ?? []);
+    }
 
-        foreach ($report['rows'] ?? [] as $row) {
-            $cells = '';
-            foreach ($report['columns'] ?? [] as $column) {
-                $value = e((string) data_get($row, $column['key'] ?? '', ''));
-                $cells .= "<td>{$value}</td>";
-            }
-            $rows .= "<tr>{$cells}</tr>";
+    protected function spreadsheet(array $report): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $headers = $this->headers($report);
+        $rowIndex = 1;
+
+        $sheet->setCellValue("A{$rowIndex}", $report['company_name'] ?? config('app.name'));
+        $rowIndex++;
+        $sheet->setCellValue("A{$rowIndex}", $report['title'] ?? 'Report');
+        $rowIndex++;
+        $sheet->setCellValue("A{$rowIndex}", 'Generated At');
+        $sheet->setCellValue("B{$rowIndex}", $report['generated_at'] ?? now()->format('Y-m-d H:i:s'));
+        $rowIndex += 2;
+
+        foreach ($headers as $index => $header) {
+            $sheet->setCellValue($this->cellReference($index + 1, $rowIndex), $header);
         }
 
-        return '<!doctype html><html><head><meta charset="utf-8"><title>'
-            . e($report['title'] ?? 'Report')
-            . '</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#111827}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d1d5db;padding:8px;font-size:12px;text-align:left}h1{font-size:20px;margin:0 0 8px}p{margin:4px 0}'
-            . ($print ? '@media print{body{padding:0}}' : '')
-            . '</style></head><body>'
-            . '<h1>' . e($report['title'] ?? 'Report') . '</h1>'
-            . '<p>' . e($report['company_name'] ?? config('app.name')) . '</p>'
-            . '<p>Generated: ' . e($report['generated_at'] ?? now()->format('Y-m-d H:i:s')) . '</p>'
-            . '<table><thead><tr>'
-            . collect($headers)->map(fn ($header) => '<th>' . e($header) . '</th>')->implode('')
-            . '</tr></thead><tbody>' . $rows . '</tbody></table></body></html>';
+        $rowIndex++;
+
+        foreach ($report['rows'] ?? [] as $row) {
+            foreach ($report['columns'] ?? [] as $index => $column) {
+                $sheet->setCellValue(
+                    $this->cellReference($index + 1, $rowIndex),
+                    $this->cellValue(data_get($row, $column['key'] ?? '', ''))
+                );
+            }
+            $rowIndex++;
+        }
+
+        if (!empty($report['totals'])) {
+            $rowIndex++;
+            foreach ($report['totals'] as $label => $value) {
+                $sheet->setCellValue("A{$rowIndex}", Str::headline((string) $label));
+                $sheet->setCellValue("B{$rowIndex}", $this->cellValue($value));
+                $rowIndex++;
+            }
+        }
+
+        foreach (range(1, max(count($headers), 2)) as $column) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($column))->setAutoSize(true);
+        }
+
+        return $spreadsheet;
+    }
+
+    protected function cellReference(int $columnIndex, int $rowIndex): string
+    {
+        return Coordinate::stringFromColumnIndex($columnIndex) . $rowIndex;
+    }
+
+    protected function cellValue(mixed $value): mixed
+    {
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        return $value;
     }
 }

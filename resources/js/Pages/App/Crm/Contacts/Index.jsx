@@ -1,10 +1,15 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ResuableCrud';
+import {
+  ContactsOutlined,
+  UserOutlined,
+  ShopOutlined,
+  BulbOutlined,
+} from '@ant-design/icons';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Space, Tag, Typography } from 'antd';
-import { ContactsOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
+ import dayjs from 'dayjs';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -100,58 +105,76 @@ export default function Contacts(props) {
 
   const fields = [
     {
+  name: 'contact_type',
+  label: 'Contact Type',
+  type: 'radio',
+  col: 24,
+  placeholder: 'Select type',
+  options: [
+    {
+      value: 'customer',
+      label: (
+        <Space size={6}>
+          <UserOutlined />
+          <span>Customer</span>
+        </Space>
+      ),
+    },
+    {
+      value: 'supplier',
+      label: (
+        <Space size={6}>
+          <ShopOutlined />
+          <span>Supplier</span>
+        </Space>
+      ),
+    },
+    {
+      value: 'lead',
+      label: (
+        <Space size={6}>
+          <BulbOutlined />
+          <span>Lead</span>
+        </Space>
+      ),
+    },
+  ],
+},
+    {
       name: 'name',
       label: 'Contact Name',
       type: 'text',
       required: true,
-      col: 12,
+      col: 16,
       placeholder: 'e.g. John Doe',
     },
     {
       name: 'code',
       label: 'Code',
       type: 'text',
-      col: 6,
-      placeholder: 'Auto or manual',
+      col: 8,
+      placeholder: 'Blank to auto-generate',
     },
-    {
-      name: 'contact_type',
-      label: 'Contact Type',
-      type: 'select',
-      col: 6,
-      placeholder: 'Select type',
-      options: [
-        { value: 'customer', label: 'Customer' },
-        { value: 'supplier', label: 'Supplier' },
-        { value: 'lead', label: 'Lead' },
-      ],
-    },
-    {
-      name: 'pan',
-      label: 'PAN',
-      type: 'text',
-      col: 6,
-      placeholder: 'PAN number',
-    },
+   
     {
       name: 'phone',
       label: 'Phone',
       type: 'text',
-      col: 6,
+      col: 8,
       placeholder: '+977 9800000000',
     },
     {
       name: 'email',
       label: 'Email',
       type: 'text',
-      col: 6,
+      col: 8,
       placeholder: 'email@example.com',
     },
     {
       name: 'contact_group_id',
       label: 'Contact Group',
       type: 'fkSelect',
-      col: 6,
+      col: 8,
       placeholder: 'Select group',
       fkUrl: api('/api/contact-groups/'),
       fkSearchParam: 'search',
@@ -159,30 +182,19 @@ export default function Contacts(props) {
       fkValueKey: 'id',
       fkLabelKey: 'name',
     },
-    {
-      name: 'account_id',
-      label: 'Account',
-      type: 'fkSelect',
-      col: 8,
-      placeholder: 'Select account',
-      fkUrl: api('/api/accounts/'),
-      fkSearchParam: 'search',
-      fkPageSize: 20,
-      fkValueKey: 'id',
-      fkLabelKey: 'name',
-    },
+    
     {
       name: 'tax_registration_no',
       label: 'Tax Registration No',
       type: 'text',
-      col: 8,
+      col: 12,
       placeholder: 'Tax reg. number',
     },
     {
       name: 'tax_registration_type',
       label: 'Tax Registration Type',
       type: 'select',
-      col: 8,
+      col: 12,
       placeholder: 'Select type',
       options: [
         { value: 'pan', label: 'PAN' },
@@ -290,8 +302,8 @@ export default function Contacts(props) {
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={1000}
+        form_ui="modal"
+        modalWidth={700}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

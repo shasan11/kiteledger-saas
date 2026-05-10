@@ -1,5 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag, Tooltip } from 'antd';

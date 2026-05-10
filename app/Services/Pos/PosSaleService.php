@@ -30,13 +30,13 @@ class PosSaleService
     public function createOrUpdateDraft(?PosSale $sale, array $payload): PosSale
     {
         return DB::transaction(function () use ($sale, $payload) {
-            $shift = PosShift::query()->findOrFail($payload['pos_shift_id']);
+            $terminal = PosTerminal::query()->findOrFail($payload['pos_terminal_id']);
+            $shift = $this->resolveOpenShift($payload, $sale, $terminal);
 
             if ($shift->status !== 'open') {
                 throw new InvalidArgumentException('An open shift is required before saving a POS sale.');
             }
 
-            $terminal = PosTerminal::query()->findOrFail($payload['pos_terminal_id']);
             $calculated = $this->calculator->calculate(
                 $payload['items'],
                 $payload['payments'] ?? [],
@@ -387,5 +387,28 @@ class PosSaleService
         }
 
         $sale->forceFill(['customer_payment_id' => $payment->id])->saveQuietly();
+    }
+
+    private function resolveOpenShift(array $payload, ?PosSale $sale, PosTerminal $terminal): PosShift
+    {
+        $shiftId = $payload['pos_shift_id'] ?? $sale?->pos_shift_id;
+
+        $shift = $shiftId
+            ? PosShift::query()->find($shiftId)
+            : PosShift::query()
+                ->where('pos_terminal_id', $terminal->id)
+                ->where('status', 'open')
+                ->latest('opened_at')
+                ->first();
+
+        if (!$shift) {
+            throw new InvalidArgumentException('An open shift is required before saving a POS sale.');
+        }
+
+        if ($shift->pos_terminal_id !== $terminal->id) {
+            throw new InvalidArgumentException('The selected shift does not belong to the selected terminal.');
+        }
+
+        return $shift;
     }
 }

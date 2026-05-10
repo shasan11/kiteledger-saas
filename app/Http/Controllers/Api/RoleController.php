@@ -6,6 +6,8 @@ use App\Models\Role;
 use App\Models\Permission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Spatie\Permission\PermissionRegistrar;
 
 class RoleController extends BaseCrudApiController
 {
@@ -14,9 +16,9 @@ class RoleController extends BaseCrudApiController
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
-    protected bool $autoFillBranchOnCreate = true;
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $branchScoped = false;
+    protected bool $autoFillBranchOnCreate = false;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
         'branch',
@@ -54,23 +56,43 @@ class RoleController extends BaseCrudApiController
 
     protected string $defaultSort = 'name';
 
-    protected array $storeRules = [
-        'branch_id'          => ['nullable', 'uuid', 'exists:branches,id'],
-        'name'               => ['required', 'string', 'max:150', 'unique:roles,name'],
-        'guard_name'         => ['nullable', 'string', 'max:80'],
-        'description'        => ['nullable', 'string', 'max:255'],
-        'active'             => ['nullable', 'boolean'],
-        'is_system_generated'=> ['nullable', 'boolean'],
-        'user_add_id'        => ['nullable', 'integer', 'exists:users,id'],
-        'permissions'        => ['nullable', 'array'],
-        'permissions.*'      => ['uuid', 'exists:permissions,id'],
-    ];
+    protected function storeRules(Request $request): array
+    {
+        $guardName = $request->input('guard_name', 'web');
+
+        return [
+            'branch_id'          => ['nullable', 'uuid', 'exists:branches,id'],
+            'name'               => [
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('roles', 'name')->where(fn ($query) => $query->where('guard_name', $guardName)),
+            ],
+            'guard_name'         => ['nullable', 'string', 'max:80'],
+            'description'        => ['nullable', 'string', 'max:255'],
+            'active'             => ['nullable', 'boolean'],
+            'is_system_generated'=> ['nullable', 'boolean'],
+            'user_add_id'        => ['nullable', 'integer', 'exists:users,id'],
+            'permissions'        => ['nullable', 'array'],
+            'permissions.*'      => ['uuid', 'exists:permissions,id'],
+        ];
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {
+        $guardName = $request->input('guard_name', $record->guard_name ?: 'web');
+
         return [
             'branch_id'          => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'name'               => ['sometimes', 'required', 'string', 'max:150', 'unique:roles,name,' . $record->id . ',id'],
+            'name'               => [
+                'sometimes',
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('roles', 'name')
+                    ->where(fn ($query) => $query->where('guard_name', $guardName))
+                    ->ignore($record->id),
+            ],
             'guard_name'         => ['sometimes', 'nullable', 'string', 'max:80'],
             'description'        => ['sometimes', 'nullable', 'string', 'max:255'],
             'active'             => ['sometimes', 'nullable', 'boolean'],
@@ -85,6 +107,9 @@ class RoleController extends BaseCrudApiController
     {
         $this->pendingPermissions = $parentData['permissions'] ?? null;
         unset($parentData['permissions']);
+
+        $parentData['guard_name'] = empty($parentData['guard_name']) ? 'web' : $parentData['guard_name'];
+
         return $parentData;
     }
 
@@ -94,6 +119,11 @@ class RoleController extends BaseCrudApiController
             ? $parentData['permissions']
             : false;
         unset($parentData['permissions']);
+
+        if (array_key_exists('guard_name', $parentData)) {
+            $parentData['guard_name'] = $parentData['guard_name'] ?: 'web';
+        }
+
         return $parentData;
     }
 
@@ -102,10 +132,12 @@ class RoleController extends BaseCrudApiController
         if (isset($this->pendingPermissions) && $this->pendingPermissions !== false) {
             if (method_exists($record, 'permissions')) {
                 $permissions = Permission::query()
+                    ->where('guard_name', $record->guard_name ?: 'web')
                     ->whereIn('id', $this->pendingPermissions ?? [])
                     ->get();
 
                 $record->syncPermissions($permissions);
+                app(PermissionRegistrar::class)->forgetCachedPermissions();
             }
         }
         return $record;

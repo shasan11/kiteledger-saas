@@ -36,6 +36,8 @@ class DatabaseSeeder extends Seeder
             MasterTaxJurisdictionSeeder::class,
             TaxRateSeeder::class,
             SettingsPermissionSeeder::class,
+            PermissionSeeder::class,
+            AdminAccessSeeder::class,
             ApprovalWorkflowSeeder::class,
             EmailConfigSeeder::class,
             EmailTemplateSeeder::class,
@@ -51,6 +53,7 @@ class DatabaseSeeder extends Seeder
             PurchaseModuleSeeder::class,
             PurchaseConfigurationSeeder::class,
             TransactionalRecordSeeder::class,
+            RolesAndPermissionsSeeder::class,
         ]);
     }
 }

@@ -20,7 +20,7 @@ class UpdatePosTerminalRequest extends FormRequest
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'warehouse_id' => ['sometimes', 'nullable', 'uuid', 'exists:warehouses,id'],
             'name' => ['sometimes', 'required', 'string', 'max:150'],
-            'code' => ['sometimes', 'required', 'string', 'max:40', Rule::unique('pos_terminals', 'code')->ignore($terminalId)],
+            'code' => ['sometimes', 'nullable', 'string', 'max:40', Rule::unique('pos_terminals', 'code')->ignore($terminalId)],
             'location' => ['sometimes', 'nullable', 'string', 'max:150'],
             'receipt_printer_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'cash_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],

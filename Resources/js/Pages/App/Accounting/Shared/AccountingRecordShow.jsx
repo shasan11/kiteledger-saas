@@ -45,6 +45,28 @@ const { useToken } = theme;
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
 
+const authHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+const safeRoute = (name, params = null, fallback = '#') => {
+  try {
+    if (typeof route === 'function') {
+      return params !== null && params !== undefined ? route(name, params) : route(name);
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+};
+
 const humanize = (key = '') =>
   String(key)
     .replace(/_/g, ' ')
@@ -108,12 +130,7 @@ const moduleIcon = (module) =>
 
 function DetailsCard({ title, extra, children }) {
   return (
-    <Card
-      className="accounting-show__card"
-      title={title}
-      extra={extra}
-      bordered
-    >
+    <Card className="accounting-show__card" title={title} extra={extra}>
       {children}
     </Card>
   );
@@ -122,13 +139,12 @@ function DetailsCard({ title, extra, children }) {
 function Metric({ label, value, action, tone = 'primary' }) {
   return (
     <Card
-      className="accounting-show__metric"
-      bordered
+      className={`accounting-show__metric accounting-show__metric--${tone}`}
       style={{ '--metric-color': `var(--accounting-show-${tone})` }}
     >
       <Text type="secondary">{label}</Text>
       <strong>{value}</strong>
-      {action}
+      {action ? <div className="accounting-show__metric-action">{action}</div> : null}
     </Card>
   );
 }
@@ -139,6 +155,10 @@ function InfoTable({ rows = [], columns = 2 }) {
 
   for (let i = 0; i < filteredRows.length; i += columns) {
     tableRows.push(filteredRows.slice(i, i + columns));
+  }
+
+  if (!filteredRows.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No details available" />;
   }
 
   return (
@@ -165,23 +185,21 @@ function InfoTable({ rows = [], columns = 2 }) {
 
 function RailInfoTable({ rows = [] }) {
   return (
-    <table className="accounting-show__rail-table">
-      <tbody>
-        {rows.filter(Boolean).map((row) => (
-          <tr key={row.label}>
-            <th>{row.label}</th>
-            <td>{cleanValue(row.value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="accounting-show__rail-table">
+      {rows.filter(Boolean).map((row) => (
+        <div className="accounting-show__rail-row" key={row.label}>
+          <div className="accounting-show__rail-label">{row.label}</div>
+          <div className="accounting-show__rail-value">{cleanValue(row.value)}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
 function StatusTag({ record }) {
+  if (record?.active === false) return <Tag>Inactive</Tag>;
   if (record?.approved === true) return <Tag color="success">Approved</Tag>;
   if (record?.approved === false) return <Tag color="warning">Not Approved</Tag>;
-  if (record?.active === false) return <Tag>Inactive</Tag>;
 
   if (record?.status) {
     return (
@@ -207,32 +225,31 @@ function SummaryRail({ module, record, recordTitle, subtitle, title, formatMoney
     0;
 
   return (
-    <aside
-      className="accounting-show__rail"
-      style={{ '--module-color': color }}
-    >
-      <div className="accounting-show__entity">
-        <div className="accounting-show__icon">{moduleIcon(module)}</div>
+    <aside className="accounting-show__rail">
+      <Card className="accounting-show__rail-card" style={{ '--module-color': color }}>
+        <div className="accounting-show__entity">
+          <div className="accounting-show__icon">{moduleIcon(module)}</div>
 
-        <div className="accounting-show__entity-text">
-          <Title level={4}>{recordTitle}</Title>
-          <Text type="secondary">{subtitle || title}</Text>
+          <div className="accounting-show__entity-text">
+            <Title level={4}>{recordTitle}</Title>
+            <Text type="secondary">{subtitle || title}</Text>
+          </div>
         </div>
-      </div>
 
-      <div className="accounting-show__amount">
-        <Text type="secondary">Amount</Text>
-        <strong>{formatMoney(amount)}</strong>
-      </div>
+        <div className="accounting-show__amount">
+          <Text type="secondary">Amount</Text>
+          <strong>{formatMoney(amount)}</strong>
+        </div>
 
-      <RailInfoTable
-        rows={[
-          { label: 'Status', value: <StatusTag record={record} /> },
-          { label: 'Branch', value: relationLabel(record?.branch) },
-          { label: 'Created', value: formatDate(record?.created_at, true) },
-          { label: 'Updated', value: formatDate(record?.updated_at, true) },
-        ]}
-      />
+        <RailInfoTable
+          rows={[
+            { label: 'Status', value: <StatusTag record={record} /> },
+            { label: 'Branch', value: relationLabel(record?.branch) },
+            { label: 'Created', value: formatDate(record?.created_at, true) },
+            { label: 'Updated', value: formatDate(record?.updated_at, true) },
+          ]}
+        />
+      </Card>
     </aside>
   );
 }
@@ -319,7 +336,13 @@ function ChartOfAccountDetails({ record, formatMoney }) {
             {
               label: 'Parent Account',
               value: record?.parent ? (
-                <Link href={route('accounting.chart-of-accounts.show', record.parent.id)}>
+                <Link
+                  href={safeRoute(
+                    'accounting.chart-of-accounts.show',
+                    record.parent.id,
+                    `/accounting/chart-of-accounts/${record.parent.id}`
+                  )}
+                >
                   {relationLabel(record.parent)}
                 </Link>
               ) : (
@@ -343,7 +366,7 @@ function ChartOfAccountDetails({ record, formatMoney }) {
         title="Recent Transactions"
         extra={
           <Button size="small" icon={<FileExcelOutlined />} onClick={exportRows}>
-            Export Excel
+            Export CSV
           </Button>
         }
       >
@@ -397,6 +420,9 @@ function ChartOfAccountDetails({ record, formatMoney }) {
         <Table
           size="small"
           scroll={{ x: 1100 }}
+          rowClassName={(_, index) =>
+            index % 2 === 0 ? 'accounting-show__table-row' : 'accounting-show__table-row is-alt'
+          }
           columns={[
             {
               title: 'Voucher Number',
@@ -404,7 +430,13 @@ function ChartOfAccountDetails({ record, formatMoney }) {
               width: 150,
               render: (value, row) =>
                 row.journal_voucher_id ? (
-                  <Link href={route('accounting.journal-vouchers.show', row.journal_voucher_id)}>
+                  <Link
+                    href={safeRoute(
+                      'accounting.journal-vouchers.show',
+                      row.journal_voucher_id,
+                      `/accounting/journal-vouchers/${row.journal_voucher_id}`
+                    )}
+                  >
                     {value || '-'}
                   </Link>
                 ) : (
@@ -558,10 +590,14 @@ function BankAccountDetails({ record, formatMoney, currency }) {
                   type="primary"
                   onClick={() =>
                     router.visit(
-                      route('accounting.bank-accounts.index', {
-                        bank_account_id: record.id,
-                        view: 'reconcile',
-                      })
+                      safeRoute(
+                        'accounting.bank-accounts.index',
+                        {
+                          bank_account_id: record.id,
+                          view: 'reconcile',
+                        },
+                        `/accounting/bank-accounts?bank_account_id=${record.id}&view=reconcile`
+                      )
                     )
                   }
                 >
@@ -746,11 +782,7 @@ function CashTransferDetails({ record, formatMoney }) {
   return (
     <>
       {record?.approved === false ? (
-        <Alert
-          showIcon
-          type="warning"
-          message="This cash transfer is not approved yet."
-        />
+        <Alert showIcon type="warning" message="This cash transfer is not approved yet." />
       ) : null}
 
       <DetailsCard title="Details">
@@ -844,8 +876,7 @@ function JournalVoucherDetails({ record, formatMoney }) {
         columns={[
           {
             title: 'Chart of Account',
-            render: (_, row) =>
-              relationLabel(row?.chart_of_account || row?.chartOfAccount),
+            render: (_, row) => relationLabel(row?.chart_of_account || row?.chartOfAccount),
           },
           {
             title: 'Description',
@@ -930,10 +961,18 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
     let mounted = true;
 
     axios
-      .get(api('/api/accounts/?active=true&page_size=100&ordering=code'))
+      .get(api('/api/accounts/'), {
+        headers: authHeaders(),
+        params: {
+          active: true,
+          page_size: 100,
+          ordering: 'code',
+        },
+      })
       .then((response) => {
         const rows =
           response.data?.results ||
+          response.data?.data ||
           (Array.isArray(response.data) ? response.data : []);
 
         if (mounted) {
@@ -1016,19 +1055,18 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
       const base = endpointFor(type);
 
       if (editingRow?.id) {
-        await axios.patch(api(`${base}/${editingRow.id}`), payload);
+        await axios.patch(api(`${base}/${editingRow.id}/`), payload, {
+          headers: authHeaders(),
+        });
       } else {
-        await axios.post(api(`${base}/`), payload);
+        await axios.post(api(`${base}/`), payload, {
+          headers: authHeaders(),
+        });
       }
 
       await onRefresh?.();
 
-      message.success(
-        `${isCharge ? 'Charge' : 'Top-up'} ${
-          editingRow?.id ? 'updated' : 'created'
-        }`
-      );
-
+      message.success(`${isCharge ? 'Charge' : 'Top-up'} ${editingRow?.id ? 'updated' : 'created'}`);
       setModalOpen(false);
     } catch (error) {
       message.error(
@@ -1042,7 +1080,11 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
 
   const updateLineApproval = async (type, row, approved) => {
     try {
-      await axios.patch(api(`${endpointFor(type)}/${row.id}`), { approved });
+      await axios.patch(
+        api(`${endpointFor(type)}/${row.id}/`),
+        { approved },
+        { headers: authHeaders() }
+      );
 
       await onRefresh?.();
 
@@ -1058,7 +1100,9 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
       okText: 'Delete',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await axios.delete(api(`${endpointFor(type)}/${row.id}`));
+        await axios.delete(api(`${endpointFor(type)}/${row.id}/`), {
+          headers: authHeaders(),
+        });
         await onRefresh?.();
         message.success(type === 'charge' ? 'Charge deleted' : 'Top-up deleted');
       },
@@ -1148,6 +1192,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
           dataSource={topUps}
           rowKey={(row, index) => row?.id || index}
           pagination={false}
+          scroll={{ x: 900 }}
           columns={[
             {
               title: 'Date',
@@ -1156,8 +1201,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
             },
             {
               title: 'Received In',
-              render: (_, row) =>
-                relationLabel(row?.loan_received_in_account || row?.loanReceivedInAccount),
+              render: (_, row) => relationLabel(row?.loan_received_in_account || row?.loanReceivedInAccount),
             },
             {
               title: 'Reference',
@@ -1197,6 +1241,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
           dataSource={charges}
           rowKey={(row, index) => row?.id || index}
           pagination={false}
+          scroll={{ x: 900 }}
           columns={[
             {
               title: 'Date',
@@ -1210,8 +1255,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
             },
             {
               title: 'Paid From',
-              render: (_, row) =>
-                relationLabel(row?.charges_paid_from_account || row?.chargesPaidFromAccount),
+              render: (_, row) => relationLabel(row?.charges_paid_from_account || row?.chargesPaidFromAccount),
             },
             {
               title: 'Amount',
@@ -1234,9 +1278,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
       </DetailsCard>
 
       <Modal
-        title={`${editingRow?.id ? 'Edit' : 'Add'} ${
-          modalType === 'charge' ? 'Loan Charge' : 'Loan Top-up'
-        }`}
+        title={`${editingRow?.id ? 'Edit' : 'Add'} ${modalType === 'charge' ? 'Loan Charge' : 'Loan Top-up'}`}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={saveLine}
@@ -1268,12 +1310,7 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
                 label="Paid From Account"
                 rules={[{ required: true, message: 'Paid from account is required' }]}
               >
-                <Select
-                  showSearch
-                  placeholder="Select account"
-                  options={accountOptions}
-                  optionFilterProp="label"
-                />
+                <Select showSearch placeholder="Select account" options={accountOptions} optionFilterProp="label" />
               </Form.Item>
             </>
           ) : (
@@ -1291,21 +1328,12 @@ function LoanAccountDetails({ record, formatMoney, onRefresh }) {
                 label="Received In Account"
                 rules={[{ required: true, message: 'Received in account is required' }]}
               >
-                <Select
-                  showSearch
-                  placeholder="Select account"
-                  options={accountOptions}
-                  optionFilterProp="label"
-                />
+                <Select showSearch placeholder="Select account" options={accountOptions} optionFilterProp="label" />
               </Form.Item>
             </>
           )}
 
-          <Form.Item
-            name="amount"
-            label="Amount"
-            rules={[{ required: true, message: 'Amount is required' }]}
-          >
+          <Form.Item name="amount" label="Amount" rules={[{ required: true, message: 'Amount is required' }]}>
             <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
           </Form.Item>
 
@@ -1384,6 +1412,7 @@ export default function AccountingRecordShow({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [error, setError] = useState('');
   const [form] = Form.useForm();
 
   const module = moduleFromTitle(title);
@@ -1393,6 +1422,7 @@ export default function AccountingRecordShow({
     () => ({
       '--accounting-show-bg': token.colorBgLayout,
       '--accounting-show-surface': token.colorBgContainer,
+      '--accounting-show-elevated': token.colorBgElevated,
       '--accounting-show-surface-soft': token.colorFillQuaternary,
       '--accounting-show-surface-muted': token.colorFillTertiary,
       '--accounting-show-border': token.colorBorderSecondary,
@@ -1401,8 +1431,11 @@ export default function AccountingRecordShow({
       '--accounting-show-text-secondary': token.colorTextSecondary,
       '--accounting-show-text-tertiary': token.colorTextTertiary,
       '--accounting-show-primary': token.colorPrimary,
+      '--accounting-show-primary-bg': token.colorPrimaryBg,
       '--accounting-show-success': token.colorSuccess,
+      '--accounting-show-success-bg': token.colorSuccessBg,
       '--accounting-show-warning': token.colorWarning,
+      '--accounting-show-warning-bg': token.colorWarningBg,
       '--accounting-show-error': token.colorError,
       '--accounting-show-info': token.colorInfo,
       '--accounting-show-radius': `${token.borderRadius}px`,
@@ -1411,23 +1444,30 @@ export default function AccountingRecordShow({
       '--accounting-show-padding-xs': `${token.paddingXS}px`,
       '--accounting-show-padding-sm': `${token.paddingSM}px`,
       '--accounting-show-padding': `${token.padding}px`,
+      '--accounting-show-padding-lg': `${token.paddingLG}px`,
       '--accounting-show-font-size-sm': `${token.fontSizeSM}px`,
       '--accounting-show-font-size': `${token.fontSize}px`,
       '--accounting-show-font-size-lg': `${token.fontSizeLG}px`,
       '--accounting-show-shadow': token.boxShadowTertiary || 'none',
-      '--accounting-show-control-height-sm': `${token.controlHeightSM}px`,
     }),
     [token]
   );
 
   const loadRecord = async () => {
     setLoading(true);
+    setError('');
 
     try {
-      const response = await axios.get(api(`${baseEndpoint}/${id}/`));
+      const response = await axios.get(api(`${baseEndpoint}/${id}/`), {
+        headers: authHeaders(),
+      });
+
       setRecord(response.data?.data ?? response.data);
-    } catch (error) {
-      message.error(error?.response?.data?.message || `Failed to load ${title}`);
+    } catch (err) {
+      const msg = err?.response?.data?.message || `Failed to load ${title}`;
+      setError(msg);
+      setRecord(null);
+      message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -1462,14 +1502,16 @@ export default function AccountingRecordShow({
     setSaving(true);
 
     try {
-      await axios.patch(api(`${baseEndpoint}/${id}/`), payload);
+      await axios.patch(api(`${baseEndpoint}/${id}/`), payload, {
+        headers: authHeaders(),
+      });
 
       message.success(success);
       setEditOpen(false);
 
       await loadRecord();
-    } catch (error) {
-      message.error(error?.response?.data?.message || 'Update failed');
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -1525,43 +1567,83 @@ export default function AccountingRecordShow({
           min-height: calc(100vh - 64px);
           background: var(--accounting-show-bg);
           color: var(--accounting-show-text);
+          padding: var(--accounting-show-padding);
+        }
+
+        .accounting-show__shell {
+          max-width: 1600px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: var(--accounting-show-padding);
+        }
+
+        .accounting-show__bar-card.ant-card,
+        .accounting-show__rail-card.ant-card,
+        .accounting-show__card.ant-card,
+        .accounting-show__metric.ant-card {
+          border-color: var(--accounting-show-border);
+          border-radius: var(--accounting-show-radius-lg);
+          box-shadow: var(--accounting-show-shadow);
+          overflow: hidden;
+        }
+
+        .accounting-show__bar-card .ant-card-body {
+          padding: var(--accounting-show-padding-sm) var(--accounting-show-padding);
         }
 
         .accounting-show__bar {
-          min-height: 44px;
+          min-height: 50px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: var(--accounting-show-padding-sm);
-          padding: 0 var(--accounting-show-padding-sm);
+          gap: var(--accounting-show-padding);
           background: var(--accounting-show-surface);
-          border-bottom: 1px solid var(--accounting-show-border);
         }
 
         .accounting-show__crumb {
           display: flex;
           align-items: center;
-          gap: var(--accounting-show-padding-xs);
+          gap: var(--accounting-show-padding-sm);
           min-width: 0;
+        }
+
+        .accounting-show__title-wrap {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .accounting-show__title-wrap h4 {
+          margin: 0 !important;
+          line-height: 1.2 !important;
         }
 
         .accounting-show__body {
           display: grid;
-          grid-template-columns: 232px minmax(0, 1fr);
-          gap: var(--accounting-show-padding-xs);
+          grid-template-columns: 320px minmax(0, 1fr);
+          gap: var(--accounting-show-padding);
+          align-items: start;
         }
 
         .accounting-show__rail {
-          background: var(--accounting-show-surface);
-          border-right: 1px solid var(--accounting-show-border);
-          min-height: calc(100vh - 108px);
-          padding: var(--accounting-show-padding-sm);
+          position: sticky;
+          top: var(--accounting-show-padding);
+          min-width: 0;
+        }
+
+        .accounting-show__rail-card .ant-card-body {
+          padding: var(--accounting-show-padding);
+          display: flex;
+          flex-direction: column;
+          gap: var(--accounting-show-padding-sm);
         }
 
         .accounting-show__entity {
           display: flex;
           align-items: flex-start;
-          gap: var(--accounting-show-padding-xs);
+          gap: var(--accounting-show-padding-sm);
           padding-bottom: var(--accounting-show-padding-sm);
           border-bottom: 1px solid var(--accounting-show-border);
         }
@@ -1572,7 +1654,7 @@ export default function AccountingRecordShow({
 
         .accounting-show__entity-text h4 {
           margin: 0 !important;
-          font-size: var(--accounting-show-font-size) !important;
+          font-size: 18px !important;
           line-height: 1.25 !important;
           color: var(--accounting-show-text) !important;
           word-break: break-word;
@@ -1583,24 +1665,26 @@ export default function AccountingRecordShow({
         }
 
         .accounting-show__icon {
-          width: 34px;
-          height: 34px;
-          border: 1px solid color-mix(in srgb, var(--module-color) 32%, var(--accounting-show-border));
-          border-radius: var(--accounting-show-radius);
+          width: 44px;
+          height: 44px;
+          border-radius: 999px;
           display: grid;
           place-items: center;
-          font-size: var(--accounting-show-font-size-lg);
+          font-size: 20px;
           flex: none;
           color: var(--module-color);
-          background: color-mix(in srgb, var(--module-color) 10%, var(--accounting-show-surface));
+          background: color-mix(in srgb, var(--module-color) 12%, var(--accounting-show-surface));
+          border: 1px solid color-mix(in srgb, var(--module-color) 28%, var(--accounting-show-border));
         }
 
         .accounting-show__amount {
-          padding: var(--accounting-show-padding-sm) 0;
-          border-bottom: 1px solid var(--accounting-show-border);
+          padding: var(--accounting-show-padding-sm);
+          border-radius: var(--accounting-show-radius);
+          background: color-mix(in srgb, var(--module-color) 10%, var(--accounting-show-surface));
+          border: 1px solid color-mix(in srgb, var(--module-color) 22%, var(--accounting-show-border));
           display: flex;
           flex-direction: column;
-          gap: var(--accounting-show-padding-xxs);
+          gap: 3px;
         }
 
         .accounting-show__amount .ant-typography {
@@ -1608,65 +1692,71 @@ export default function AccountingRecordShow({
         }
 
         .accounting-show__amount strong {
-          font-size: var(--accounting-show-font-size-lg);
-          color: var(--accounting-show-text);
+          font-size: 22px;
+          line-height: 1.15;
+          color: var(--module-color);
           word-break: break-word;
         }
 
         .accounting-show__rail-table {
-          width: 100%;
-          margin-top: var(--accounting-show-padding-sm);
-          border-collapse: collapse;
-          table-layout: fixed;
+          border: 1px solid var(--accounting-show-border);
+          border-radius: var(--accounting-show-radius);
+          overflow: hidden;
+          background: var(--accounting-show-surface);
+        }
+
+        .accounting-show__rail-row {
+          display: grid;
+          grid-template-columns: 96px minmax(0, 1fr);
+          border-bottom: 1px solid var(--accounting-show-border);
+        }
+
+        .accounting-show__rail-row:last-child {
+          border-bottom: 0;
+        }
+
+        .accounting-show__rail-label,
+        .accounting-show__rail-value {
+          padding: 8px 10px;
           font-size: var(--accounting-show-font-size-sm);
-        }
-
-        .accounting-show__rail-table th {
-          width: 74px;
-          padding: var(--accounting-show-padding-xs);
-          background: var(--accounting-show-surface-soft);
-          border: 1px solid var(--accounting-show-border);
-          color: var(--accounting-show-text-secondary);
-          font-weight: 600;
-          text-align: left;
-          vertical-align: top;
-        }
-
-        .accounting-show__rail-table td {
-          padding: var(--accounting-show-padding-xs);
-          border: 1px solid var(--accounting-show-border);
-          color: var(--accounting-show-text);
-          vertical-align: top;
+          line-height: 1.35;
           word-break: break-word;
         }
 
+        .accounting-show__rail-label {
+          background: var(--accounting-show-surface-soft);
+          color: var(--accounting-show-text-secondary);
+          font-weight: 700;
+          border-right: 1px solid var(--accounting-show-border);
+        }
+
+        .accounting-show__rail-value {
+          color: var(--accounting-show-text);
+        }
+
         .accounting-show__main {
-          padding: var(--accounting-show-padding-xs);
           display: flex;
           flex-direction: column;
-          gap: var(--accounting-show-padding-sm);
+          gap: var(--accounting-show-padding);
           min-width: 0;
           overflow: hidden;
         }
 
         .accounting-show__card.ant-card,
         .accounting-show__metric.ant-card {
-          border-radius: var(--accounting-show-radius);
-          border-color: var(--accounting-show-border);
-          box-shadow: none;
           background: var(--accounting-show-surface);
         }
 
         .accounting-show__card .ant-card-head {
-          min-height: 40px;
-          padding: 0 var(--accounting-show-padding-sm);
+          min-height: 46px;
+          padding: 0 var(--accounting-show-padding);
           border-bottom: 1px solid var(--accounting-show-border);
-          background: var(--accounting-show-surface);
+          background: var(--accounting-show-elevated);
         }
 
         .accounting-show__card .ant-card-head-title {
-          font-size: var(--accounting-show-font-size-sm);
-          font-weight: 700;
+          font-size: var(--accounting-show-font-size);
+          font-weight: 800;
           color: var(--accounting-show-text);
         }
 
@@ -1675,39 +1765,62 @@ export default function AccountingRecordShow({
         }
 
         .accounting-show__card .ant-card-body {
-          padding: var(--accounting-show-padding-sm);
+          padding: var(--accounting-show-padding);
           min-width: 0;
         }
 
+        .accounting-show__metric {
+          position: relative;
+        }
+
+        .accounting-show__metric::before {
+          content: '';
+          position: absolute;
+          inset-inline: 0;
+          top: 0;
+          height: 3px;
+          background: var(--metric-color);
+        }
+
         .accounting-show__metric .ant-card-body {
-          min-height: 86px;
-          padding: var(--accounting-show-padding-sm);
+          min-height: 96px;
+          padding: var(--accounting-show-padding);
           display: flex;
           flex-direction: column;
-          gap: var(--accounting-show-padding-xxs);
+          gap: 4px;
         }
 
         .accounting-show__metric strong {
-          font-size: var(--accounting-show-font-size-lg);
-          font-weight: 650;
+          font-size: 20px;
+          font-weight: 800;
+          line-height: 1.2;
           color: var(--metric-color);
+          word-break: break-word;
+        }
+
+        .accounting-show__metric-action {
+          margin-top: 4px;
         }
 
         .accounting-show__info-table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           table-layout: fixed;
           font-size: var(--accounting-show-font-size-sm);
           border: 1px solid var(--accounting-show-border);
+          border-radius: var(--accounting-show-radius);
+          overflow: hidden;
         }
 
         .accounting-show__info-table th {
           width: 15%;
-          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm);
+          padding: 9px 11px;
           background: var(--accounting-show-surface-soft);
-          border: 1px solid var(--accounting-show-border);
+          border-right: 1px solid var(--accounting-show-border);
+          border-bottom: 1px solid var(--accounting-show-border);
           color: var(--accounting-show-text-secondary);
-          font-weight: 600;
+          font-weight: 700;
           text-align: left;
           vertical-align: top;
           white-space: nowrap;
@@ -1715,50 +1828,66 @@ export default function AccountingRecordShow({
 
         .accounting-show__info-table td {
           width: 35%;
-          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm);
+          padding: 9px 11px;
           background: var(--accounting-show-surface);
-          border: 1px solid var(--accounting-show-border);
+          border-right: 1px solid var(--accounting-show-border);
+          border-bottom: 1px solid var(--accounting-show-border);
           color: var(--accounting-show-text);
           vertical-align: top;
           word-break: break-word;
+        }
+
+        .accounting-show__info-table tr:last-child th,
+        .accounting-show__info-table tr:last-child td {
+          border-bottom: 0;
+        }
+
+        .accounting-show__info-table th:last-child,
+        .accounting-show__info-table td:last-child {
+          border-right: 0;
         }
 
         .accounting-show .ant-table {
           font-size: var(--accounting-show-font-size-sm);
         }
 
+        .accounting-show .ant-table-wrapper .ant-table-container {
+          border-radius: var(--accounting-show-radius);
+          overflow: hidden;
+        }
+
         .accounting-show .ant-table-wrapper .ant-table-thead > tr > th {
-          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
+          padding: 9px 11px !important;
           background: var(--accounting-show-surface-muted) !important;
-          font-weight: 700;
-          color: var(--accounting-show-text);
+          font-weight: 800;
+          color: var(--accounting-show-text-secondary) !important;
           white-space: nowrap;
           border-color: var(--accounting-show-border) !important;
         }
 
         .accounting-show .ant-table-wrapper .ant-table-tbody > tr > td {
-          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
+          padding: 8px 11px !important;
           vertical-align: middle;
           border-color: var(--accounting-show-border) !important;
         }
 
-        .accounting-show .ant-table-wrapper .ant-table-summary > tr > td {
-          padding: var(--accounting-show-padding-xs) var(--accounting-show-padding-sm) !important;
+        .accounting-show__table-row.is-alt > td {
           background: var(--accounting-show-surface-soft);
-          font-weight: 700;
-          border-color: var(--accounting-show-border) !important;
         }
 
-        .accounting-show .ant-table-wrapper .ant-table-container {
-          border-color: var(--accounting-show-border);
+        .accounting-show .ant-table-wrapper .ant-table-summary > tr > td {
+          padding: 9px 11px !important;
+          background: var(--accounting-show-surface-soft);
+          font-weight: 800;
+          border-color: var(--accounting-show-border) !important;
         }
 
         .accounting-show .ant-tag {
           margin-inline-end: 0;
-          font-size: var(--accounting-show-font-size-sm);
+          font-size: 11px;
           line-height: 18px;
-          padding-inline: var(--accounting-show-padding-xs);
-          border-radius: var(--accounting-show-radius);
+          padding-inline: 7px;
+          border-radius: 999px;
         }
 
         .accounting-show .ant-tabs-nav {
@@ -1779,18 +1908,47 @@ export default function AccountingRecordShow({
         }
 
         .accounting-show__state {
-          padding: var(--accounting-show-padding);
+          padding: var(--accounting-show-padding-lg);
+          background: var(--accounting-show-surface);
+          border: 1px solid var(--accounting-show-border);
+          border-radius: var(--accounting-show-radius-lg);
+          box-shadow: var(--accounting-show-shadow);
         }
 
-        @media (max-width: 992px) {
+        @media (max-width: 1100px) {
           .accounting-show__body {
             grid-template-columns: 1fr;
           }
 
           .accounting-show__rail {
-            min-height: auto;
-            border-right: 0;
-            border-bottom: 1px solid var(--accounting-show-border);
+            position: static;
+          }
+
+          .accounting-show__rail-card .ant-card-body {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            align-items: start;
+          }
+
+          .accounting-show__entity,
+          .accounting-show__amount,
+          .accounting-show__rail-table {
+            grid-column: 1 / -1;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .accounting-show {
+            padding: var(--accounting-show-padding-sm);
+          }
+
+          .accounting-show__bar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .accounting-show__crumb {
+            align-items: flex-start;
           }
 
           .accounting-show__info-table {
@@ -1800,143 +1958,161 @@ export default function AccountingRecordShow({
           .accounting-show__card .ant-card-body {
             overflow-x: auto;
           }
+
+          .accounting-show__rail-row {
+            grid-template-columns: 1fr;
+          }
+
+          .accounting-show__rail-label {
+            border-right: 0;
+            border-bottom: 1px solid var(--accounting-show-border);
+          }
         }
       `}</style>
 
       <div className="accounting-show" style={uiVars}>
-        <div className="accounting-show__bar">
-          <div className="accounting-show__crumb">
-            <Link href={route(backRoute)}>
-              <Button type="text" size="small" icon={<ArrowLeftOutlined />}>
-                {backLabel}
-              </Button>
-            </Link>
+        <div className="accounting-show__shell">
+          <Card className="accounting-show__bar-card">
+            <div className="accounting-show__bar">
+              <div className="accounting-show__crumb">
+                <Link href={safeRoute(backRoute, null, '#')}>
+                  <Button type="text" icon={<ArrowLeftOutlined />}>
+                    {backLabel}
+                  </Button>
+                </Link>
 
-            <Text ellipsis style={{ maxWidth: 420 }}>
-              {loading ? title : recordTitle}
-            </Text>
-          </div>
+                <div className="accounting-show__title-wrap">
+                  <Title level={4}>{loading ? title : recordTitle}</Title>
+                  <Text type="secondary" ellipsis style={{ maxWidth: 640 }}>
+                    {subtitle || title}
+                  </Text>
+                </div>
+              </div>
 
-          <Space size={6}>
-            <Dropdown
-              menu={{
-                items: [
-                  { key: 'edit', label: `Edit ${title}` },
-                  record?.active === false
-                    ? { key: 'active', label: 'Make Active' }
-                    : { key: 'inactive', label: 'Make Inactive' },
-                  canApprove
-                    ? {
-                        key: 'approve',
-                        label: 'Approve',
-                        icon: <CheckCircleOutlined />,
+              <Space size={8} wrap>
+                <Dropdown
+                  menu={{
+                    items: [
+                      { key: 'edit', label: `Edit ${title}` },
+                      record?.active === false
+                        ? { key: 'active', label: 'Make Active' }
+                        : { key: 'inactive', label: 'Make Inactive' },
+                      canApprove
+                        ? {
+                            key: 'approve',
+                            label: 'Approve',
+                            icon: <CheckCircleOutlined />,
+                          }
+                        : null,
+                    ].filter(Boolean),
+                    onClick: ({ key }) => {
+                      if (key === 'edit') openEdit();
+
+                      if (key === 'active') {
+                        updateRecord({ active: true }, `${title} activated`);
                       }
-                    : null,
-                ].filter(Boolean),
-                onClick: ({ key }) => {
-                  if (key === 'edit') openEdit();
 
-                  if (key === 'active') {
-                    updateRecord({ active: true }, `${title} activated`);
-                  }
+                      if (key === 'inactive') {
+                        updateRecord({ active: false }, `${title} inactivated`);
+                      }
 
-                  if (key === 'inactive') {
-                    updateRecord({ active: false }, `${title} inactivated`);
-                  }
+                      if (key === 'approve') {
+                        updateRecord(
+                          {
+                            approved: true,
+                            status: record?.status === 'draft' ? 'posted' : record?.status,
+                          },
+                          `${title} approved`
+                        );
+                      }
+                    },
+                  }}
+                  trigger={['click']}
+                >
+                  <Button loading={saving}>
+                    Options <MoreOutlined />
+                  </Button>
+                </Dropdown>
 
-                  if (key === 'approve') {
-                    updateRecord(
-                      {
-                        approved: true,
-                        status:
-                          record?.status === 'draft'
-                            ? 'posted'
-                            : record?.status,
-                      },
-                      `${title} approved`
-                    );
-                  }
-                },
-              }}
-              trigger={['click']}
-            >
-              <Button size="small">
-                Options <MoreOutlined />
-              </Button>
-            </Dropdown>
+                <Button
+                  type="text"
+                  icon={<CloseOutlined />}
+                  onClick={() => router.visit(safeRoute(backRoute, null, '#'))}
+                />
+              </Space>
+            </div>
+          </Card>
 
-            <Button
-              size="small"
-              type="text"
-              icon={<CloseOutlined />}
-              onClick={() => router.visit(route(backRoute))}
-            />
-          </Space>
+          {error ? (
+            <div className="accounting-show__state">
+              <Alert type="error" showIcon message={error} closable onClose={() => setError('')} />
+            </div>
+          ) : null}
+
+          {loading ? (
+            <div className="accounting-show__state">
+              <Skeleton active paragraph={{ rows: 8 }} />
+            </div>
+          ) : !record ? (
+            <div className="accounting-show__state">
+              <Empty description={`${title} not found`} />
+            </div>
+          ) : (
+            <div className="accounting-show__body">
+              <SummaryRail
+                module={module}
+                record={record}
+                recordTitle={recordTitle}
+                subtitle={subtitle}
+                title={title}
+                formatMoney={formatMoney}
+                token={token}
+              />
+
+              <main className="accounting-show__main">
+                {canApprove && module !== 'cash' ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    message={`${title} is not approved yet.`}
+                    action={
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() =>
+                          updateRecord({ approved: true }, `${title} approved`)
+                        }
+                      >
+                        Approve
+                      </Button>
+                    }
+                  />
+                ) : null}
+
+                {record?.active === false && module === 'bank' ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    message="This bank account is inactive."
+                    action={
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() =>
+                          updateRecord({ active: true }, 'Bank account activated')
+                        }
+                      >
+                        Make Active
+                      </Button>
+                    }
+                  />
+                ) : null}
+
+                {renderDetails()}
+              </main>
+            </div>
+          )}
         </div>
-
-        {loading ? (
-          <div className="accounting-show__state">
-            <Skeleton active paragraph={{ rows: 8 }} />
-          </div>
-        ) : !record ? (
-          <div className="accounting-show__state">
-            <Empty description={`${title} not found`} />
-          </div>
-        ) : (
-          <div className="accounting-show__body">
-            <SummaryRail
-              module={module}
-              record={record}
-              recordTitle={recordTitle}
-              subtitle={subtitle}
-              title={title}
-              formatMoney={formatMoney}
-              token={token}
-            />
-
-            <main className="accounting-show__main">
-              {canApprove && module !== 'cash' ? (
-                <Alert
-                  showIcon
-                  type="warning"
-                  message={`${title} is not approved yet.`}
-                  action={
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={() =>
-                        updateRecord({ approved: true }, `${title} approved`)
-                      }
-                    >
-                      Approve
-                    </Button>
-                  }
-                />
-              ) : null}
-
-              {record?.active === false && module === 'bank' ? (
-                <Alert
-                  showIcon
-                  type="warning"
-                  message="This bank account is inactive."
-                  action={
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={() =>
-                        updateRecord({ active: true }, 'Bank account activated')
-                      }
-                    >
-                      Make Active
-                    </Button>
-                  }
-                />
-              ) : null}
-
-              {renderDetails()}
-            </main>
-          </div>
-        )}
       </div>
 
       <Modal
@@ -1975,11 +2151,7 @@ export default function AccountingRecordShow({
 
           {module === 'bank' ? (
             <>
-              <Form.Item
-                name="display_name"
-                label="Display Name"
-                rules={[{ required: true }]}
-              >
+              <Form.Item name="display_name" label="Display Name" rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
 
@@ -2055,11 +2227,7 @@ export default function AccountingRecordShow({
 
           {module === 'loan' ? (
             <>
-              <Form.Item
-                name="name"
-                label="Loan Account Name"
-                rules={[{ required: true }]}
-              >
+              <Form.Item name="name" label="Loan Account Name" rules={[{ required: true }]}>
                 <Input />
               </Form.Item>
 

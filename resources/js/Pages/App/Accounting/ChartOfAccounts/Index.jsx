@@ -1,12 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Radio, Tag, Typography, Space } from 'antd';
 import {
-    AppstoreOutlined,
-    BarsOutlined,
     ApartmentOutlined,
     BankOutlined,
     WalletOutlined,
@@ -14,7 +12,6 @@ import {
     FallOutlined,
     DollarCircleOutlined,
     NodeIndexOutlined,
-    UnorderedListOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -60,6 +57,11 @@ const accountTypeMeta = {
     },
 };
 
+const accountTypeOptions = Object.entries(accountTypeMeta).map(([value, meta]) => ({
+    value,
+    label: meta.label,
+}));
+
 const renderAccountType = (type) => {
     const normalized = String(type || 'asset').toLowerCase();
 
@@ -90,8 +92,6 @@ const renderAccountType = (type) => {
 };
 
 const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
-    const isTree = viewMode === 'tree';
-
     return (
         <div
             style={{
@@ -107,44 +107,17 @@ const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
                 flexWrap: 'wrap',
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div
-                    style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 6,
-                        background: '#f6f8fb',
-                        border: '1px solid #e8edf3',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 20,
-                        color: '#1677ff',
-                    }}
-                >
-                    {isTree ? <NodeIndexOutlined /> : <UnorderedListOutlined />}
-                </div>
-
-                <div>
-                    <Title
-                        level={4}
-                        style={{
-                            margin: 0,
-                            fontSize: 18,
-                            fontWeight: 700,
-                            color: '#0f172a',
-                        }}
-                    >
-                        Chart of Accounts
-                    </Title>
-
-                    <Text style={{ color: '#64748b', fontSize: 13 }}>
-                        {isTree
-                            ? 'Tree view'
-                            : 'Default list view'}
-                    </Text>
-                </div>
-            </div>
+            <Title
+                level={4}
+                style={{
+                    margin: 0,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: '#0f172a',
+                }}
+            >
+                Chart of Accounts
+            </Title>
 
             <Space size={12} wrap>
                 <Tag
@@ -165,11 +138,11 @@ const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
                     buttonStyle="solid"
                 >
                     <Radio.Button value="list">
-                        <BarsOutlined /> Default List View
+                        Default List View
                     </Radio.Button>
 
                     <Radio.Button value="tree">
-                        <AppstoreOutlined /> Tree View
+                        Tree View
                     </Radio.Button>
                 </Radio.Group>
             </Space>
@@ -326,6 +299,15 @@ export default function ChartOfAccounts(props) {
                 placeholder: '#Auto Generated Code',
             },
             {
+                name: 'type',
+                label: 'Account Type',
+                type: 'select',
+                required: true,
+                col: 24,
+                options: accountTypeOptions,
+                placeholder: 'Select account type',
+            },
+            {
                 name: 'parent_id',
                 label: 'Parent Chart Account',
                 type: 'fkSelect',
@@ -365,6 +347,10 @@ export default function ChartOfAccounts(props) {
             .max(150, 'Name cannot exceed 150 characters')
             .required('Name is required'),
 
+        type: Yup.string()
+            .oneOf(accountTypeOptions.map((option) => option.value))
+            .required('Account type is required'),
+
         parent_id: Yup.string().nullable(),
 
         branch_id: Yup.string().nullable(),
@@ -381,6 +367,7 @@ export default function ChartOfAccounts(props) {
 
         code: '',
         name: '',
+        type: 'asset',
         description: '',
 
         active: true,
@@ -391,6 +378,7 @@ export default function ChartOfAccounts(props) {
             parent_id: values.parent_id || null,
             code: values.code?.trim() || null,
             name: values.name?.trim() || null,
+            type: values.type || 'asset',
             description: values.description?.trim() || null,
             active: values.active !== false,
         };
@@ -417,6 +405,10 @@ export default function ChartOfAccounts(props) {
             if (label && values.parent_name !== label) {
                 setFieldValue('parent_name', label, false);
             }
+
+            if (parent.type && values.type !== parent.type) {
+                setFieldValue('type', parent.type, false);
+            }
         }
     };
 
@@ -440,7 +432,6 @@ export default function ChartOfAccounts(props) {
                 <div style={{ marginTop: 12 }}>
                     <ReusableCrud
                         key={`chart-of-accounts-${viewMode}-${activeAnchor}`}
-                        icon={isTreeView ? <NodeIndexOutlined /> : <AppstoreOutlined />}
                         title="Chart of Accounts"
                         apiUrl={api('/api/chart-of-accounts/')}
                         columns={columns}

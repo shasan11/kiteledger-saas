@@ -16,7 +16,7 @@ class StorePosSaleRequest extends FormRequest
         return [
             'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
             'pos_terminal_id' => ['required', 'uuid', 'exists:pos_terminals,id'],
-            'pos_shift_id' => ['required', 'uuid', 'exists:pos_shifts,id'],
+            'pos_shift_id' => ['nullable', 'uuid', 'exists:pos_shifts,id'],
             'warehouse_id' => ['nullable', 'uuid', 'exists:warehouses,id'],
             'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
             'sale_date' => ['nullable', 'date'],

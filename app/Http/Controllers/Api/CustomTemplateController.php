@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\CustomTemplate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class CustomTemplateController extends BaseCrudApiController
 {
@@ -47,5 +48,29 @@ class CustomTemplateController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+
+        $parentData['template_key'] = $parentData['template_key'] ?: $this->templateKeyFromName($parentData['name'] ?? 'template');
+        $parentData['active'] = $parentData['active'] ?? true;
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
+    {
+        if (array_key_exists('template_key', $parentData) && !$parentData['template_key']) {
+            $parentData['template_key'] = $record->template_key ?: $this->templateKeyFromName($parentData['name'] ?? $record->name ?? 'template');
+        }
+
+        return $parentData;
+    }
+
+    protected function templateKeyFromName(string $name): string
+    {
+        return Str::slug($name, '_') ?: 'template';
     }
 }

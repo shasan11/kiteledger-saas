@@ -17,7 +17,7 @@ class StorePosTerminalRequest extends FormRequest
             'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
             'warehouse_id' => ['nullable', 'uuid', 'exists:warehouses,id'],
             'name' => ['required', 'string', 'max:150'],
-            'code' => ['required', 'string', 'max:40', 'unique:pos_terminals,code'],
+            'code' => ['nullable', 'string', 'max:40', 'unique:pos_terminals,code'],
             'location' => ['nullable', 'string', 'max:150'],
             'receipt_printer_name' => ['nullable', 'string', 'max:120'],
             'cash_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],

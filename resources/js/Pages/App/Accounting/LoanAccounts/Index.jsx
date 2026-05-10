@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, router } from '@inertiajs/react';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import * as Yup from 'yup';
 import {
     BankOutlined,

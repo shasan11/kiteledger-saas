@@ -4,7 +4,7 @@ import { Head } from '@inertiajs/react';
 import { Switch, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
-import ReusableCrud from '@/Components/ResuableCrud';
+import ReusableCrud from '@/Components/ReusableCrud';
 import { STATUS_TABS_BY_MODULE, buildStandardFilters, formatMoney, renderApprovedTag, renderOverdueTag, renderStatusTag } from '@/Pages/App/FinanceConfigs';
 
 const { Text } = Typography;

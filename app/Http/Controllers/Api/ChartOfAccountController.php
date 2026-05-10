@@ -209,7 +209,7 @@ class ChartOfAccountController extends BaseCrudApiController
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
 
-        $parentData['type'] = $parentData['type'] ?? 'asset';
+        $parentData['type'] = $this->typeForParent($parentData['parent_id'] ?? null, $parentData['type'] ?? 'asset');
         $parentData['active'] = $parentData['active'] ?? true;
         $parentData['is_system_generated'] = false;
 
@@ -234,7 +234,26 @@ class ChartOfAccountController extends BaseCrudApiController
             $parentData['is_system_generated']
         );
 
+        $effectiveParentId = array_key_exists('parent_id', $parentData)
+            ? $parentData['parent_id']
+            : $record->parent_id;
+
+        if ($effectiveParentId) {
+            $parentData['type'] = $this->typeForParent($effectiveParentId, $parentData['type'] ?? $record->type ?? 'asset');
+        }
+
         return $parentData;
+    }
+
+    protected function typeForParent(?string $parentId, ?string $fallback = 'asset'): string
+    {
+        if (!$parentId) {
+            return $fallback ?: 'asset';
+        }
+
+        return ChartOfAccount::query()
+            ->whereKey($parentId)
+            ->value('type') ?: ($fallback ?: 'asset');
     }
 
     protected function afterSave(

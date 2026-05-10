@@ -13,9 +13,9 @@ class PermissionController extends BaseCrudApiController
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
-    protected bool $autoFillBranchOnCreate = true;
-    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $branchScoped = false;
+    protected bool $autoFillBranchOnCreate = false;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
         'branch',

@@ -1,5 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
-import ReusableCrud from "@/Components/ResuableCrud";
+import ReusableCrud from "@/Components/ReusableCrud";
 import { Head } from "@inertiajs/react";
 import { Tag, Typography } from "antd";
 import {

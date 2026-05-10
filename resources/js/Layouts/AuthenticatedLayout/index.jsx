@@ -123,19 +123,19 @@ export default function AuthenticatedLayout({ header, children }) {
                     },
                 ],
             },
-            {
-                key: 'sales',
-                icon: <FileTextOutlined />,
-                label: 'Receivables',
-                children: [
-                    { key: 'sales-quotations', label: 'Quotations', onClick: () => visit('sales.quotations.index', '/sales/quotations') },
-                    { key: 'sales-sales-orders', label: 'Sales Orders', onClick: () => visit('sales.sales-orders.index', '/sales/sales-orders') },
-                    { key: 'sales-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('sales.proforma-invoices.index', '/sales/proforma-invoices') },
-                    { key: 'sales-invoices', label: 'Invoices', onClick: () => visit('sales.invoices.index', '/sales/invoices') },
-                    { key: 'sales-customer-payments', label: 'Customer Payments', onClick: () => visit('sales.customer-payments.index', '/sales/customer-payments') },
-                    { key: 'sales-sales-returns', label: 'Sales Returns', onClick: () => visit('sales.sales-returns.index', '/sales/sales-returns') },
-                ],
-            },
+            // {
+            //     key: 'sales',
+            //     icon: <FileTextOutlined />,
+            //     label: 'Receivables',
+            //     children: [
+            //         { key: 'sales-quotations', label: 'Quotations', onClick: () => visit('sales.quotations.index', '/sales/quotations') },
+            //         { key: 'sales-sales-orders', label: 'Sales Orders', onClick: () => visit('sales.sales-orders.index', '/sales/sales-orders') },
+            //         { key: 'sales-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('sales.proforma-invoices.index', '/sales/proforma-invoices') },
+            //         { key: 'sales-invoices', label: 'Invoices', onClick: () => visit('sales.invoices.index', '/sales/invoices') },
+            //         { key: 'sales-customer-payments', label: 'Customer Payments', onClick: () => visit('sales.customer-payments.index', '/sales/customer-payments') },
+            //         { key: 'sales-sales-returns', label: 'Sales Returns', onClick: () => visit('sales.sales-returns.index', '/sales/sales-returns') },
+            //     ],
+            // },
             {
                 key: 'payment-in',
                 icon: <CreditCardOutlined />,
