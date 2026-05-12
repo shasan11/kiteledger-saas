@@ -15,10 +15,11 @@
         }
     ],
     "env": {
-        "APP_NAME": "Vercel Laravel",
-        "APP_ENV": "development",
-        "APP_DEBUG": "false",
+        "APP_NAME": "KiteLedger",
+        "APP_ENV": "local",
+        "APP_DEBUG": "true",
         "APP_URL": "https://kiteledger-saas.vercel.app/",
+        "DB_CONNECTION": "sqlite",
         "VERCEL_DEMO_MODE": "true",
         "APP_CONFIG_CACHE": "/tmp/config.php",
         "APP_EVENTS_CACHE": "/tmp/events.php",
