@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class TransactionalRecordSeeder extends Seeder
@@ -15,84 +16,229 @@ class TransactionalRecordSeeder extends Seeder
     {
         DB::transaction(function () {
             $now = now();
+
             $branchId = $this->ensureBranch($now);
             $currencyId = $this->ensureCurrency($now);
             $cashAccountId = $this->ensureAccount($currencyId, $now);
             $warehouseId = $this->ensureWarehouse($branchId, $now);
-            [$arCoaId, $apCoaId, $incomeCoaId, $expenseCoaId, $bankCoaId] = $this->ensureChartOfAccounts($cashAccountId, $branchId, $now);
+
+            [$arCoaId, $apCoaId, $incomeCoaId, $expenseCoaId, $bankCoaId] = $this->ensureChartOfAccounts(
+                $cashAccountId,
+                $branchId,
+                $now
+            );
+
             $productId = $this->ensureProduct($cashAccountId, $now);
             $customerIds = $this->ensureContacts('customer', 40, $cashAccountId, $now);
             $supplierIds = $this->ensureContacts('supplier', 40, $cashAccountId, $now);
 
             $this->deletePreviousSeedData();
 
-            $quotationIds = $this->seedQuotations($branchId, $currencyId, $productId, $customerIds, $now, $this->perTypeCount);
-            $salesOrderIds = $this->seedSalesOrders($branchId, $currencyId, $warehouseId, $productId, $customerIds, $now, $this->perTypeCount);
-            $proformaIds = $this->seedProformaInvoices($branchId, $currencyId, $productId, $customerIds, $now, $this->perTypeCount);
-            $invoiceIds = $this->seedInvoices($branchId, $currencyId, $warehouseId, $productId, $customerIds, $now, $this->perTypeCount);
-            $this->seedCustomerPayments($branchId, $currencyId, $cashAccountId, $customerIds, $invoiceIds, $now, $this->perTypeCount);
-            $this->seedSalesReturns($branchId, $currencyId, $warehouseId, $productId, $customerIds, $now, $this->perTypeCount);
+            $quotationIds = $this->seedQuotations(
+                $branchId,
+                $currencyId,
+                $productId,
+                $customerIds,
+                $now,
+                $this->perTypeCount
+            );
 
-            $purchaseOrderIds = $this->seedPurchaseOrders($branchId, $currencyId, $productId, $supplierIds, $now, $this->perTypeCount);
-            $billIds = $this->seedPurchaseBills($branchId, $currencyId, $warehouseId, $productId, $supplierIds, $now, $this->perTypeCount);
-            $this->seedExpenses($branchId, $currencyId, $expenseCoaId, $supplierIds, $now, $this->perTypeCount);
-            $this->seedDebitNotes($branchId, $currencyId, $warehouseId, $productId, $supplierIds, $now, $this->perTypeCount);
-            $this->seedSupplierPayments($branchId, $currencyId, $cashAccountId, $supplierIds, $billIds, $now, $this->perTypeCount);
+            $salesOrderIds = $this->seedSalesOrders(
+                $branchId,
+                $currencyId,
+                $warehouseId,
+                $productId,
+                $customerIds,
+                $now,
+                $this->perTypeCount
+            );
 
-            $this->seedJournalVouchers($branchId, $currencyId, [$arCoaId, $apCoaId, $incomeCoaId, $expenseCoaId, $bankCoaId], $now, $this->perTypeCount);
+            $proformaIds = $this->seedProformaInvoices(
+                $branchId,
+                $currencyId,
+                $productId,
+                $customerIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $invoiceIds = $this->seedInvoices(
+                $branchId,
+                $currencyId,
+                $warehouseId,
+                $productId,
+                $customerIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedCustomerPayments(
+                $branchId,
+                $currencyId,
+                $cashAccountId,
+                $customerIds,
+                $invoiceIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedSalesReturns(
+                $branchId,
+                $currencyId,
+                $warehouseId,
+                $productId,
+                $customerIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $purchaseOrderIds = $this->seedPurchaseOrders(
+                $branchId,
+                $currencyId,
+                $productId,
+                $supplierIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $billIds = $this->seedPurchaseBills(
+                $branchId,
+                $currencyId,
+                $warehouseId,
+                $productId,
+                $supplierIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedExpenses(
+                $branchId,
+                $currencyId,
+                $expenseCoaId,
+                $supplierIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedDebitNotes(
+                $branchId,
+                $currencyId,
+                $warehouseId,
+                $productId,
+                $supplierIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedSupplierPayments(
+                $branchId,
+                $currencyId,
+                $cashAccountId,
+                $supplierIds,
+                $billIds,
+                $now,
+                $this->perTypeCount
+            );
+
+            $this->seedJournalVouchers(
+                $branchId,
+                $currencyId,
+                [$arCoaId, $apCoaId, $incomeCoaId, $expenseCoaId, $bankCoaId],
+                $now,
+                $this->perTypeCount
+            );
         });
 
-        $this->command?->info('Seeded 1000 records for each transactional type: quotations, sales orders, proforma invoices, invoices, customer payments, sales returns, purchase orders, bills, expenses, debit notes, supplier payments, and journal vouchers.');
+        $this->command?->info(
+            'Seeded 1000 records for each transactional type: quotations, sales orders, proforma invoices, invoices, customer payments, sales returns, purchase orders, bills, expenses, debit notes, supplier payments, and journal vouchers.'
+        );
     }
 
     protected function deletePreviousSeedData(): void
     {
         $this->deleteChildrenFor('customer_payment_lines', 'customer_payment_id', 'customer_payments', 'payment_no', 'TRX-CP-%');
-        DB::table('customer_payments')->where('payment_no', 'like', 'TRX-CP-%')->delete();
+        $this->deleteRowsByPattern('customer_payments', 'payment_no', 'TRX-CP-%');
 
         $this->deleteChildrenFor('supplier_payment_lines', 'supplier_payment_id', 'supplier_payments', 'payment_no', 'TRX-SP-%');
-        DB::table('supplier_payments')->where('payment_no', 'like', 'TRX-SP-%')->delete();
+        $this->deleteRowsByPattern('supplier_payments', 'payment_no', 'TRX-SP-%');
 
         $this->deleteChildrenFor('quotation_lines', 'quotation_id', 'quotations', 'quotation_no', 'TRX-QT-%');
-        DB::table('quotations')->where('quotation_no', 'like', 'TRX-QT-%')->delete();
+        $this->deleteRowsByPattern('quotations', 'quotation_no', 'TRX-QT-%');
 
         $this->deleteChildrenFor('sales_order_lines', 'sales_order_id', 'sales_orders', 'sales_order_no', 'TRX-SO-%');
-        DB::table('sales_orders')->where('sales_order_no', 'like', 'TRX-SO-%')->delete();
+        $this->deleteRowsByPattern('sales_orders', 'sales_order_no', 'TRX-SO-%');
 
         $this->deleteChildrenFor('proforma_invoice_lines', 'proforma_invoice_id', 'proforma_invoices', 'proforma_no', 'TRX-PF-%');
-        DB::table('proforma_invoices')->where('proforma_no', 'like', 'TRX-PF-%')->delete();
+        $this->deleteRowsByPattern('proforma_invoices', 'proforma_no', 'TRX-PF-%');
 
         $this->deleteChildrenFor('invoice_lines', 'invoice_id', 'invoices', 'invoice_no', 'TRX-INV-%');
-        DB::table('invoices')->where('invoice_no', 'like', 'TRX-INV-%')->delete();
+        $this->deleteRowsByPattern('invoices', 'invoice_no', 'TRX-INV-%');
 
         $this->deleteChildrenFor('sales_return_lines', 'sales_return_id', 'sales_returns', 'sales_return_no', 'TRX-SR-%');
-        DB::table('sales_returns')->where('sales_return_no', 'like', 'TRX-SR-%')->delete();
+        $this->deleteRowsByPattern('sales_returns', 'sales_return_no', 'TRX-SR-%');
 
         $this->deleteChildrenFor('purchase_order_lines', 'purchase_order_id', 'purchase_orders', 'purchase_order_no', 'TRX-PO-%');
-        DB::table('purchase_orders')->where('purchase_order_no', 'like', 'TRX-PO-%')->delete();
+        $this->deleteRowsByPattern('purchase_orders', 'purchase_order_no', 'TRX-PO-%');
 
         $this->deleteChildrenFor('purchase_bill_lines', 'purchase_bill_id', 'purchase_bills', 'bill_no', 'TRX-BILL-%');
-        DB::table('purchase_bills')->where('bill_no', 'like', 'TRX-BILL-%')->delete();
+        $this->deleteRowsByPattern('purchase_bills', 'bill_no', 'TRX-BILL-%');
 
         $this->deleteChildrenFor('expense_lines', 'expense_id', 'expenses', 'expense_no', 'TRX-EXP-%');
-        DB::table('expenses')->where('expense_no', 'like', 'TRX-EXP-%')->delete();
+        $this->deleteRowsByPattern('expenses', 'expense_no', 'TRX-EXP-%');
 
         $this->deleteChildrenFor('debit_note_lines', 'debit_note_id', 'debit_notes', 'debit_note_no', 'TRX-DN-%');
-        DB::table('debit_notes')->where('debit_note_no', 'like', 'TRX-DN-%')->delete();
+        $this->deleteRowsByPattern('debit_notes', 'debit_note_no', 'TRX-DN-%');
 
         $this->deleteChildrenFor('journal_voucher_lines', 'journal_voucher_id', 'journal_vouchers', 'voucher_no', 'TRX-JV-%');
-        DB::table('journal_vouchers')->where('voucher_no', 'like', 'TRX-JV-%')->delete();
+        $this->deleteRowsByPattern('journal_vouchers', 'voucher_no', 'TRX-JV-%');
     }
 
-    protected function deleteChildrenFor(string $childTable, string $foreignKey, string $parentTable, string $numberColumn, string $pattern): void
+    protected function deleteRowsByPattern(string $table, string $numberColumn, string $pattern): void
     {
-        DB::table($childTable)
-            ->whereIn($foreignKey, DB::table($parentTable)->select('id')->where($numberColumn, 'like', $pattern))
+        if (!Schema::hasTable($table) || !Schema::hasColumn($table, $numberColumn)) {
+            return;
+        }
+
+        DB::table($table)
+            ->where($numberColumn, 'like', $pattern)
             ->delete();
     }
 
-    protected function seedQuotations(string $branchId, string $currencyId, string $productId, array $customerIds, Carbon $now, int $count): array
-    {
+    protected function deleteChildrenFor(
+        string $childTable,
+        string $foreignKey,
+        string $parentTable,
+        string $numberColumn,
+        string $pattern
+    ): void {
+        if (
+            !Schema::hasTable($childTable) ||
+            !Schema::hasTable($parentTable) ||
+            !Schema::hasColumn($childTable, $foreignKey) ||
+            !Schema::hasColumn($parentTable, 'id') ||
+            !Schema::hasColumn($parentTable, $numberColumn)
+        ) {
+            return;
+        }
+
+        DB::table($childTable)
+            ->whereIn(
+                $foreignKey,
+                DB::table($parentTable)
+                    ->select('id')
+                    ->where($numberColumn, 'like', $pattern)
+            )
+            ->delete();
+    }
+
+    protected function seedQuotations(
+        string $branchId,
+        string $currencyId,
+        string $productId,
+        array $customerIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -100,9 +246,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i);
             $approved = $this->isApproved($i);
             $contactId = $customerIds[$i % count($customerIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('quotations')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('quotations', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'quotation_no' => sprintf('TRX-QT-%04d', $i),
                 'quotation_date' => $this->pastDate($now, $i, 90),
                 'expiry_date' => $now->copy()->addDays(15 + ($i % 30))->toDateString(),
@@ -111,14 +262,30 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('quotation_lines', 'quotation_id', $id, $productId, $i, $total, $now, 'product_name');
+            $this->insertProductLine(
+                table: 'quotation_lines',
+                foreignKey: 'quotation_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedSalesOrders(string $branchId, string $currencyId, string $warehouseId, string $productId, array $customerIds, Carbon $now, int $count): array
-    {
+    protected function seedSalesOrders(
+        string $branchId,
+        string $currencyId,
+        string $warehouseId,
+        string $productId,
+        array $customerIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -126,9 +293,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 1000);
             $approved = $this->isApproved($i);
             $contactId = $customerIds[$i % count($customerIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('sales_orders')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('sales_orders', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'sales_order_no' => sprintf('TRX-SO-%04d', $i),
                 'sales_order_date' => $this->pastDate($now, $i, 90),
                 'warehouse_id' => $warehouseId,
@@ -142,14 +314,29 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('sales_order_lines', 'sales_order_id', $id, $productId, $i, $total, $now);
+            $this->insertProductLine(
+                table: 'sales_order_lines',
+                foreignKey: 'sales_order_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedProformaInvoices(string $branchId, string $currencyId, string $productId, array $customerIds, Carbon $now, int $count): array
-    {
+    protected function seedProformaInvoices(
+        string $branchId,
+        string $currencyId,
+        string $productId,
+        array $customerIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -157,9 +344,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 2000);
             $approved = $this->isApproved($i);
             $contactId = $customerIds[$i % count($customerIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('proforma_invoices')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('proforma_invoices', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'proforma_no' => sprintf('TRX-PF-%04d', $i),
                 'reference' => sprintf('TRX-SO-%04d', $i),
                 'proforma_date' => $this->pastDate($now, $i, 90),
@@ -168,14 +360,30 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('proforma_invoice_lines', 'proforma_invoice_id', $id, $productId, $i, $total, $now);
+            $this->insertProductLine(
+                table: 'proforma_invoice_lines',
+                foreignKey: 'proforma_invoice_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'custom_product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedInvoices(string $branchId, string $currencyId, string $warehouseId, string $productId, array $customerIds, Carbon $now, int $count): array
-    {
+    protected function seedInvoices(
+        string $branchId,
+        string $currencyId,
+        string $warehouseId,
+        string $productId,
+        array $customerIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -184,9 +392,14 @@ class TransactionalRecordSeeder extends Seeder
             $approved = $this->isApproved($i);
             $paid = $approved ? round($total * 0.35, 2) : 0;
             $contactId = $customerIds[$i % count($customerIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('invoices')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('invoices', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'invoice_no' => sprintf('TRX-INV-%04d', $i),
                 'invoice_date' => $this->pastDate($now, $i, 90),
                 'due_date' => $now->copy()->addDays(30 - ($i % 15))->toDateString(),
@@ -199,21 +412,50 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('invoice_lines', 'invoice_id', $id, $productId, $i, $total, $now);
+            $this->insertProductLine(
+                table: 'invoice_lines',
+                foreignKey: 'invoice_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'custom_product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedCustomerPayments(string $branchId, string $currencyId, string $accountId, array $customerIds, array $invoiceIds, Carbon $now, int $count): void
-    {
+    protected function seedCustomerPayments(
+        string $branchId,
+        string $currencyId,
+        string $accountId,
+        array $customerIds,
+        array $invoiceIds,
+        Carbon $now,
+        int $count
+    ): void {
+        if (empty($invoiceIds)) {
+            return;
+        }
+
         for ($i = 1; $i <= $count; $i++) {
             $invoice = $invoiceIds[($i - 1) % count($invoiceIds)];
             $amount = round($invoice['total'] * 0.3, 2);
             $id = (string) Str::uuid();
             $approved = $this->isApproved($i);
 
-            DB::table('customer_payments')->insert($this->basePaymentRow($id, $branchId, $currencyId, $invoice['contact_id'] ?: $customerIds[$i % count($customerIds)], $accountId, $amount, $approved, $now) + [
+            $this->insertSafe('customer_payments', $this->basePaymentRow(
+                $id,
+                $branchId,
+                $currencyId,
+                $invoice['contact_id'] ?: $customerIds[$i % count($customerIds)],
+                $accountId,
+                $amount,
+                $approved,
+                $now
+            ) + [
                 'payment_no' => sprintf('TRX-CP-%04d', $i),
                 'payment_date' => $this->pastDate($now, $i, 60),
                 'payment_method' => 'bank',
@@ -221,7 +463,7 @@ class TransactionalRecordSeeder extends Seeder
                 'notes' => 'Bulk receivable payment seed.',
             ]);
 
-            DB::table('customer_payment_lines')->insert([
+            $this->insertSafe('customer_payment_lines', [
                 'id' => (string) Str::uuid(),
                 'customer_payment_id' => $id,
                 'invoice_id' => $invoice['id'],
@@ -232,8 +474,15 @@ class TransactionalRecordSeeder extends Seeder
         }
     }
 
-    protected function seedSalesReturns(string $branchId, string $currencyId, string $warehouseId, string $productId, array $customerIds, Carbon $now, int $count): array
-    {
+    protected function seedSalesReturns(
+        string $branchId,
+        string $currencyId,
+        string $warehouseId,
+        string $productId,
+        array $customerIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -241,9 +490,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 4000);
             $approved = $this->isApproved($i);
             $contactId = $customerIds[$i % count($customerIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('sales_returns')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('sales_returns', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'sales_return_no' => sprintf('TRX-SR-%04d', $i),
                 'sales_return_date' => $this->pastDate($now, $i, 90),
                 'warehouse_id' => $warehouseId,
@@ -253,14 +507,30 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('sales_return_lines', 'sales_return_id', $id, $productId, $i, $total, $now, null, false);
+            $this->insertProductLine(
+                table: 'sales_return_lines',
+                foreignKey: 'sales_return_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: null,
+                includeDiscount: false
+            );
         }
 
         return $ids;
     }
 
-    protected function seedPurchaseOrders(string $branchId, string $currencyId, string $productId, array $supplierIds, Carbon $now, int $count): array
-    {
+    protected function seedPurchaseOrders(
+        string $branchId,
+        string $currencyId,
+        string $productId,
+        array $supplierIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -268,9 +538,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 5000);
             $approved = $this->isApproved($i);
             $contactId = $supplierIds[$i % count($supplierIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('purchase_orders')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('purchase_orders', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'purchase_order_no' => sprintf('TRX-PO-%04d', $i),
                 'purchase_order_date' => $this->pastDate($now, $i, 90),
                 'notes' => 'Bulk payable seed purchase order.',
@@ -278,14 +553,30 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('purchase_order_lines', 'purchase_order_id', $id, $productId, $i, $total, $now);
+            $this->insertProductLine(
+                table: 'purchase_order_lines',
+                foreignKey: 'purchase_order_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedPurchaseBills(string $branchId, string $currencyId, string $warehouseId, string $productId, array $supplierIds, Carbon $now, int $count): array
-    {
+    protected function seedPurchaseBills(
+        string $branchId,
+        string $currencyId,
+        string $warehouseId,
+        string $productId,
+        array $supplierIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -294,9 +585,14 @@ class TransactionalRecordSeeder extends Seeder
             $approved = $this->isApproved($i);
             $paid = $approved ? round($total * 0.4, 2) : 0;
             $contactId = $supplierIds[$i % count($supplierIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('purchase_bills')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('purchase_bills', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'bill_no' => sprintf('TRX-BILL-%04d', $i),
                 'bill_date' => $this->pastDate($now, $i, 90),
                 'due_date' => $now->copy()->addDays(25 - ($i % 10))->toDateString(),
@@ -309,14 +605,29 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('purchase_bill_lines', 'purchase_bill_id', $id, $productId, $i, $total, $now);
+            $this->insertProductLine(
+                table: 'purchase_bill_lines',
+                foreignKey: 'purchase_bill_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: 'product_name'
+            );
         }
 
         return $ids;
     }
 
-    protected function seedExpenses(string $branchId, string $currencyId, string $expenseCoaId, array $supplierIds, Carbon $now, int $count): array
-    {
+    protected function seedExpenses(
+        string $branchId,
+        string $currencyId,
+        string $expenseCoaId,
+        array $supplierIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -324,9 +635,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 7000);
             $approved = $this->isApproved($i);
             $contactId = $supplierIds[$i % count($supplierIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('expenses')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('expenses', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'expense_no' => sprintf('TRX-EXP-%04d', $i),
                 'expense_date' => $this->pastDate($now, $i, 90),
                 'due_date' => $now->copy()->addDays(15 - ($i % 10))->toDateString(),
@@ -342,8 +658,15 @@ class TransactionalRecordSeeder extends Seeder
         return $ids;
     }
 
-    protected function seedDebitNotes(string $branchId, string $currencyId, string $warehouseId, string $productId, array $supplierIds, Carbon $now, int $count): array
-    {
+    protected function seedDebitNotes(
+        string $branchId,
+        string $currencyId,
+        string $warehouseId,
+        string $productId,
+        array $supplierIds,
+        Carbon $now,
+        int $count
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
@@ -351,9 +674,14 @@ class TransactionalRecordSeeder extends Seeder
             $total = $this->amount($i + 8000);
             $approved = $this->isApproved($i);
             $contactId = $supplierIds[$i % count($supplierIds)];
-            $ids[] = ['id' => $id, 'contact_id' => $contactId, 'total' => $total];
 
-            DB::table('debit_notes')->insert($this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
+            $ids[] = [
+                'id' => $id,
+                'contact_id' => $contactId,
+                'total' => $total,
+            ];
+
+            $this->insertSafe('debit_notes', $this->baseDocumentRow($id, $branchId, $currencyId, $contactId, $approved, $now) + [
                 'debit_note_no' => sprintf('TRX-DN-%04d', $i),
                 'debit_note_date' => $this->pastDate($now, $i, 90),
                 'warehouse_id' => $warehouseId,
@@ -363,21 +691,51 @@ class TransactionalRecordSeeder extends Seeder
                 'total' => $total,
             ]);
 
-            $this->insertProductLine('debit_note_lines', 'debit_note_id', $id, $productId, $i, $total, $now, null, false);
+            $this->insertProductLine(
+                table: 'debit_note_lines',
+                foreignKey: 'debit_note_id',
+                parentId: $id,
+                productId: $productId,
+                index: $i,
+                total: $total,
+                now: $now,
+                nameColumn: null,
+                includeDiscount: false
+            );
         }
 
         return $ids;
     }
 
-    protected function seedSupplierPayments(string $branchId, string $currencyId, string $accountId, array $supplierIds, array $billIds, Carbon $now, int $count): void
-    {
+    protected function seedSupplierPayments(
+        string $branchId,
+        string $currencyId,
+        string $accountId,
+        array $supplierIds,
+        array $billIds,
+        Carbon $now,
+        int $count
+    ): void {
+        if (empty($billIds)) {
+            return;
+        }
+
         for ($i = 1; $i <= $count; $i++) {
             $bill = $billIds[($i - 1) % count($billIds)];
             $amount = round($bill['total'] * 0.32, 2);
             $id = (string) Str::uuid();
             $approved = $this->isApproved($i);
 
-            DB::table('supplier_payments')->insert($this->basePaymentRow($id, $branchId, $currencyId, $bill['contact_id'] ?: $supplierIds[$i % count($supplierIds)], $accountId, $amount, $approved, $now) + [
+            $this->insertSafe('supplier_payments', $this->basePaymentRow(
+                $id,
+                $branchId,
+                $currencyId,
+                $bill['contact_id'] ?: $supplierIds[$i % count($supplierIds)],
+                $accountId,
+                $amount,
+                $approved,
+                $now
+            ) + [
                 'payment_no' => sprintf('TRX-SP-%04d', $i),
                 'payment_date' => $this->pastDate($now, $i, 60),
                 'method' => 'bank',
@@ -385,7 +743,7 @@ class TransactionalRecordSeeder extends Seeder
                 'notes' => 'Bulk payable payment seed.',
             ]);
 
-            DB::table('supplier_payment_lines')->insert([
+            $this->insertSafe('supplier_payment_lines', [
                 'id' => (string) Str::uuid(),
                 'supplier_payment_id' => $id,
                 'purchase_bill_id' => $bill['id'],
@@ -396,14 +754,23 @@ class TransactionalRecordSeeder extends Seeder
         }
     }
 
-    protected function seedJournalVouchers(string $branchId, string $currencyId, array $coaIds, Carbon $now, int $count): void
-    {
+    protected function seedJournalVouchers(
+        string $branchId,
+        string $currencyId,
+        array $coaIds,
+        Carbon $now,
+        int $count
+    ): void {
+        if (empty($coaIds)) {
+            return;
+        }
+
         for ($i = 1; $i <= $count; $i++) {
             $id = (string) Str::uuid();
             $amount = $this->amount($i + 9000);
             $approved = $this->isApproved($i);
 
-            DB::table('journal_vouchers')->insert([
+            $this->insertSafe('journal_vouchers', [
                 'id' => $id,
                 'branch_id' => $branchId,
                 'voucher_no' => sprintf('TRX-JV-%04d', $i),
@@ -423,33 +790,38 @@ class TransactionalRecordSeeder extends Seeder
                 'updated_at' => $now,
             ]);
 
-            DB::table('journal_voucher_lines')->insert([
-                [
-                    'id' => (string) Str::uuid(),
-                    'journal_voucher_id' => $id,
-                    'chart_of_account_id' => $coaIds[$i % count($coaIds)],
-                    'description' => 'Seed debit line',
-                    'debit' => $amount,
-                    'credit' => 0,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ],
-                [
-                    'id' => (string) Str::uuid(),
-                    'journal_voucher_id' => $id,
-                    'chart_of_account_id' => $coaIds[($i + 1) % count($coaIds)],
-                    'description' => 'Seed credit line',
-                    'debit' => 0,
-                    'credit' => $amount,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ],
+            $this->insertSafe('journal_voucher_lines', [
+                'id' => (string) Str::uuid(),
+                'journal_voucher_id' => $id,
+                'chart_of_account_id' => $coaIds[$i % count($coaIds)],
+                'description' => 'Seed debit line',
+                'debit' => $amount,
+                'credit' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $this->insertSafe('journal_voucher_lines', [
+                'id' => (string) Str::uuid(),
+                'journal_voucher_id' => $id,
+                'chart_of_account_id' => $coaIds[($i + 1) % count($coaIds)],
+                'description' => 'Seed credit line',
+                'debit' => 0,
+                'credit' => $amount,
+                'created_at' => $now,
+                'updated_at' => $now,
             ]);
         }
     }
 
-    protected function baseDocumentRow(string $id, string $branchId, string $currencyId, string $contactId, bool $approved, Carbon $now): array
-    {
+    protected function baseDocumentRow(
+        string $id,
+        string $branchId,
+        string $currencyId,
+        string $contactId,
+        bool $approved,
+        Carbon $now
+    ): array {
         return [
             'id' => $id,
             'branch_id' => $branchId,
@@ -466,8 +838,16 @@ class TransactionalRecordSeeder extends Seeder
         ];
     }
 
-    protected function basePaymentRow(string $id, string $branchId, string $currencyId, string $contactId, string $accountId, float $amount, bool $approved, Carbon $now): array
-    {
+    protected function basePaymentRow(
+        string $id,
+        string $branchId,
+        string $currencyId,
+        string $contactId,
+        string $accountId,
+        float $amount,
+        bool $approved,
+        Carbon $now
+    ): array {
         return [
             'id' => $id,
             'branch_id' => $branchId,
@@ -499,33 +879,57 @@ class TransactionalRecordSeeder extends Seeder
         ?string $nameColumn = 'custom_product_name',
         bool $includeDiscount = true
     ): void {
+        if (!Schema::hasTable($table)) {
+            return;
+        }
+
+        $qty = 1 + ($index % 5);
+        $unitPrice = round($total / $qty, 2);
+
         $row = [
             'id' => (string) Str::uuid(),
             $foreignKey => $parentId,
-            'product_id' => $productId,
-            'description' => 'Inline transactional seed line item.',
-            'qty' => 1 + ($index % 5),
-            'unit_price' => round($total / (1 + ($index % 5)), 2),
-            'tax_amount' => 0,
-            'line_total' => $total,
             'created_at' => $now,
             'updated_at' => $now,
         ];
 
+        $this->addIfColumn($row, $table, 'product_id', $productId);
+
         if ($nameColumn) {
-            $row[$nameColumn] = 'Transactional Seed Item';
+            $this->addProductNameColumn($row, $table, $nameColumn, 'Transactional Seed Item');
         }
+
+        $this->addIfColumn($row, $table, 'description', 'Inline transactional seed line item.');
+
+        $this->addIfColumn($row, $table, 'qty', $qty);
+        $this->addIfColumn($row, $table, 'quantity', $qty);
+
+        $this->addIfColumn($row, $table, 'unit_price', $unitPrice);
+        $this->addIfColumn($row, $table, 'rate', $unitPrice);
+        $this->addIfColumn($row, $table, 'price', $unitPrice);
+
+        $this->addIfColumn($row, $table, 'tax_amount', 0);
+
+        $this->addIfColumn($row, $table, 'line_total', $total);
+        $this->addIfColumn($row, $table, 'total', $total);
+        $this->addIfColumn($row, $table, 'amount', $total);
 
         if ($includeDiscount) {
-            $row['discount_percent'] = 0;
+            $this->addIfColumn($row, $table, 'discount_percent', 0);
+            $this->addIfColumn($row, $table, 'discount_amount', 0);
         }
 
-        DB::table($table)->insert($row);
+        $this->insertSafe($table, $row);
     }
 
-    protected function insertExpenseLine(string $expenseId, string $expenseCoaId, int $index, float $total, Carbon $now): void
-    {
-        DB::table('expense_lines')->insert([
+    protected function insertExpenseLine(
+        string $expenseId,
+        string $expenseCoaId,
+        int $index,
+        float $total,
+        Carbon $now
+    ): void {
+        $this->insertSafe('expense_lines', [
             'id' => (string) Str::uuid(),
             'expense_id' => $expenseId,
             'chart_of_account_id' => $expenseCoaId,
@@ -536,6 +940,62 @@ class TransactionalRecordSeeder extends Seeder
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+    }
+
+    protected function addProductNameColumn(
+        array &$row,
+        string $table,
+        string $preferredColumn,
+        string $value
+    ): void {
+        if (Schema::hasColumn($table, $preferredColumn)) {
+            $row[$preferredColumn] = $value;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'product_name')) {
+            $row['product_name'] = $value;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'custom_product_name')) {
+            $row['custom_product_name'] = $value;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'name')) {
+            $row['name'] = $value;
+        }
+    }
+
+    protected function addIfColumn(
+        array &$row,
+        string $table,
+        string $column,
+        mixed $value
+    ): void {
+        if (Schema::hasColumn($table, $column)) {
+            $row[$column] = $value;
+        }
+    }
+
+    protected function insertSafe(string $table, array $row): void
+    {
+        if (!Schema::hasTable($table)) {
+            return;
+        }
+
+        $columns = Schema::getColumnListing($table);
+
+        $safeRow = array_filter(
+            $row,
+            fn ($key) => in_array($key, $columns, true),
+            ARRAY_FILTER_USE_KEY
+        );
+
+        if (!empty($safeRow)) {
+            DB::table($table)->insert($safeRow);
+        }
     }
 
     protected function amount(int $index): float
@@ -555,45 +1015,109 @@ class TransactionalRecordSeeder extends Seeder
 
     protected function ensureBranch(Carbon $now): string
     {
-        return DB::table('branches')->where('code', 'MAIN')->value('id')
-            ?: tap((string) Str::uuid(), fn ($id) => DB::table('branches')->insert([
-                'id' => $id, 'code' => 'MAIN', 'name' => 'Main Branch', 'is_head_office' => true,
-                'is_transaction_enabled' => true, 'active' => true, 'is_system_generated' => true,
-                'created_at' => $now, 'updated_at' => $now,
-            ]));
+        $existingId = DB::table('branches')->where('code', 'MAIN')->value('id');
+
+        if ($existingId) {
+            return $existingId;
+        }
+
+        $id = (string) Str::uuid();
+
+        $this->insertSafe('branches', [
+            'id' => $id,
+            'code' => 'MAIN',
+            'name' => 'Main Branch',
+            'is_head_office' => true,
+            'is_transaction_enabled' => true,
+            'active' => true,
+            'is_system_generated' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $id;
     }
 
     protected function ensureCurrency(Carbon $now): string
     {
-        return DB::table('currencies')->where('code', 'NPR')->value('id')
-            ?: tap((string) Str::uuid(), fn ($id) => DB::table('currencies')->insert([
-                'id' => $id, 'code' => 'NPR', 'name' => 'Nepalese Rupee', 'symbol' => 'Rs',
-                'decimal_places' => 2, 'is_base' => true, 'active' => true, 'is_system_generated' => true,
-                'created_at' => $now, 'updated_at' => $now,
-            ]));
+        $existingId = DB::table('currencies')->where('code', 'NPR')->value('id');
+
+        if ($existingId) {
+            return $existingId;
+        }
+
+        $id = (string) Str::uuid();
+
+        $this->insertSafe('currencies', [
+            'id' => $id,
+            'code' => 'NPR',
+            'name' => 'Nepalese Rupee',
+            'symbol' => 'Rs',
+            'decimal_places' => 2,
+            'is_base' => true,
+            'active' => true,
+            'is_system_generated' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $id;
     }
 
     protected function ensureAccount(string $currencyId, Carbon $now): string
     {
-        return DB::table('accounts')->where('code', 'TRX-CASH')->value('id')
-            ?: tap((string) Str::uuid(), fn ($id) => DB::table('accounts')->insert([
-                'id' => $id, 'name' => 'Transactional Seed Cash', 'code' => 'TRX-CASH',
-                'nature' => 'cash', 'currency_id' => $currencyId, 'active' => true,
-                'is_system_generated' => true, 'created_at' => $now, 'updated_at' => $now,
-            ]));
+        $existingId = DB::table('accounts')->where('code', 'TRX-CASH')->value('id');
+
+        if ($existingId) {
+            return $existingId;
+        }
+
+        $id = (string) Str::uuid();
+
+        $this->insertSafe('accounts', [
+            'id' => $id,
+            'name' => 'Transactional Seed Cash',
+            'code' => 'TRX-CASH',
+            'nature' => 'cash',
+            'currency_id' => $currencyId,
+            'active' => true,
+            'is_system_generated' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $id;
     }
 
     protected function ensureWarehouse(string $branchId, Carbon $now): string
     {
-        return DB::table('warehouses')->where('code', 'TRX-WH')->value('id')
-            ?: tap((string) Str::uuid(), fn ($id) => DB::table('warehouses')->insert([
-                'id' => $id, 'branch_id' => $branchId, 'code' => 'TRX-WH', 'name' => 'Transactional Seed Warehouse',
-                'active' => true, 'is_system_generated' => true, 'created_at' => $now, 'updated_at' => $now,
-            ]));
+        $existingId = DB::table('warehouses')->where('code', 'TRX-WH')->value('id');
+
+        if ($existingId) {
+            return $existingId;
+        }
+
+        $id = (string) Str::uuid();
+
+        $this->insertSafe('warehouses', [
+            'id' => $id,
+            'branch_id' => $branchId,
+            'code' => 'TRX-WH',
+            'name' => 'Transactional Seed Warehouse',
+            'active' => true,
+            'is_system_generated' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $id;
     }
 
-    protected function ensureChartOfAccounts(string $accountId, string $branchId, Carbon $now): array
-    {
+    protected function ensureChartOfAccounts(
+        string $accountId,
+        string $branchId,
+        Carbon $now
+    ): array {
         $rows = [
             ['TRX-AR', 'Seed Accounts Receivable', 'asset'],
             ['TRX-AP', 'Seed Accounts Payable', 'liability'],
@@ -603,44 +1127,100 @@ class TransactionalRecordSeeder extends Seeder
         ];
 
         return collect($rows)->map(function ($row) use ($accountId, $branchId, $now) {
-            return DB::table('chart_of_accounts')->where('code', $row[0])->value('id')
-                ?: tap((string) Str::uuid(), fn ($id) => DB::table('chart_of_accounts')->insert([
-                    'id' => $id, 'account_id' => $accountId, 'branch_id' => $branchId,
-                    'type' => $row[2], 'code' => $row[0], 'name' => $row[1],
-                    'active' => true, 'is_system_generated' => true,
-                    'created_at' => $now, 'updated_at' => $now,
-                ]));
+            $existingId = DB::table('chart_of_accounts')->where('code', $row[0])->value('id');
+
+            if ($existingId) {
+                return $existingId;
+            }
+
+            $id = (string) Str::uuid();
+
+            $this->insertSafe('chart_of_accounts', [
+                'id' => $id,
+                'account_id' => $accountId,
+                'branch_id' => $branchId,
+                'type' => $row[2],
+                'code' => $row[0],
+                'name' => $row[1],
+                'active' => true,
+                'is_system_generated' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            return $id;
         })->all();
     }
 
     protected function ensureProduct(string $accountId, Carbon $now): string
     {
-        return DB::table('products')->where('code', 'TRX-ITEM')->value('id')
-            ?: tap((string) Str::uuid(), fn ($id) => DB::table('products')->insert([
-                'id' => $id, 'name' => 'Transactional Seed Item', 'code' => 'TRX-ITEM', 'sku' => 'TRX-ITEM',
-                'description' => 'Reusable line item for bulk transaction seeding.', 'product_type' => 'simple',
-                'sales_account_id' => $accountId, 'purchase_account_id' => $accountId,
-                'sales_return_account_id' => $accountId, 'purchase_return_account_id' => $accountId,
-                'purchase_price' => 800, 'selling_price' => 1200, 'track_inventory' => false,
-                'allow_sale' => true, 'allow_purchase' => true, 'active' => true, 'is_system_generated' => true,
-                'created_at' => $now, 'updated_at' => $now,
-            ]));
+        $existingId = DB::table('products')->where('code', 'TRX-ITEM')->value('id');
+
+        if ($existingId) {
+            return $existingId;
+        }
+
+        $id = (string) Str::uuid();
+
+        $this->insertSafe('products', [
+            'id' => $id,
+            'name' => 'Transactional Seed Item',
+            'code' => 'TRX-ITEM',
+            'sku' => 'TRX-ITEM',
+            'description' => 'Reusable line item for bulk transaction seeding.',
+            'product_type' => 'simple',
+            'sales_account_id' => $accountId,
+            'purchase_account_id' => $accountId,
+            'sales_return_account_id' => $accountId,
+            'purchase_return_account_id' => $accountId,
+            'purchase_price' => 800,
+            'selling_price' => 1200,
+            'track_inventory' => false,
+            'allow_sale' => true,
+            'allow_purchase' => true,
+            'active' => true,
+            'is_system_generated' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return $id;
     }
 
-    protected function ensureContacts(string $type, int $count, string $accountId, Carbon $now): array
-    {
+    protected function ensureContacts(
+        string $type,
+        int $count,
+        string $accountId,
+        Carbon $now
+    ): array {
         $ids = [];
 
         for ($i = 1; $i <= $count; $i++) {
             $code = sprintf('TRX-%s-%03d', strtoupper(substr($type, 0, 3)), $i);
-            $ids[] = DB::table('contacts')->where('code', $code)->value('id')
-                ?: tap((string) Str::uuid(), fn ($id) => DB::table('contacts')->insert([
-                    'id' => $id, 'account_id' => $accountId, 'contact_type' => $type,
-                    'name' => sprintf('Transactional Seed %s %03d', ucfirst($type), $i),
-                    'code' => $code, 'email' => strtolower($code) . '@example.test',
-                    'accept_purchase' => $type === 'supplier', 'active' => true, 'is_system_generated' => true,
-                    'created_at' => $now, 'updated_at' => $now,
-                ]));
+            $existingId = DB::table('contacts')->where('code', $code)->value('id');
+
+            if ($existingId) {
+                $ids[] = $existingId;
+                continue;
+            }
+
+            $id = (string) Str::uuid();
+
+            $this->insertSafe('contacts', [
+                'id' => $id,
+                'account_id' => $accountId,
+                'contact_type' => $type,
+                'name' => sprintf('Transactional Seed %s %03d', ucfirst($type), $i),
+                'code' => $code,
+                'email' => strtolower($code) . '@example.test',
+                'accept_purchase' => $type === 'supplier',
+                'active' => true,
+                'is_system_generated' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $ids[] = $id;
         }
 
         return $ids;

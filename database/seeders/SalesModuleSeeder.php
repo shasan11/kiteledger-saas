@@ -19,6 +19,7 @@ use App\Models\TaxRate;
 use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class SalesModuleSeeder extends Seeder
 {
@@ -79,7 +80,11 @@ class SalesModuleSeeder extends Seeder
             ]));
 
         $taxRate = $this->ensureTaxRate();
-        $products = Product::query()->where('allow_sale', true)->take(3)->get();
+
+        $products = Product::query()
+            ->where('allow_sale', true)
+            ->take(3)
+            ->get();
 
         if ($products->isEmpty()) {
             Product::withoutEvents(function () use ($account) {
@@ -106,10 +111,14 @@ class SalesModuleSeeder extends Seeder
                 }
             });
 
-            $products = Product::query()->where('allow_sale', true)->take(3)->get();
+            $products = Product::query()
+                ->where('allow_sale', true)
+                ->take(3)
+                ->get();
         }
 
         $today = Carbon::today();
+
         $quotation = Quotation::query()->updateOrCreate(
             ['quotation_no' => 'QT-SEED-0001'],
             [
@@ -117,13 +126,20 @@ class SalesModuleSeeder extends Seeder
                 'contact_id' => $contact->id,
                 'quotation_date' => $today->copy()->subDays(6)->toDateString(),
                 'expiry_date' => $today->copy()->addDays(24)->toDateString(),
-                'currency_id' => $currency?->id,
+                'currency_id' => $currency->id,
                 'exchange_rate' => 1,
                 'notes' => 'Seed quotation for the sales module.',
                 'status' => 'sent',
             ]
         );
-        $this->syncLines($quotation, 'quotationLines', $products, $taxRate, 'product_name');
+
+        $this->syncLines(
+            parent: $quotation,
+            relation: 'quotationLines',
+            products: $products,
+            taxRate: $taxRate,
+            preferredNameField: 'product_name'
+        );
 
         $salesOrder = SalesOrder::query()->updateOrCreate(
             ['sales_order_no' => 'SO-SEED-0001'],
@@ -131,15 +147,22 @@ class SalesModuleSeeder extends Seeder
                 'branch_id' => $branch->id,
                 'sales_order_date' => $today->copy()->subDays(5)->toDateString(),
                 'contact_id' => $contact->id,
-                'warehouse_id' => $warehouse?->id,
-                'currency_id' => $currency?->id,
+                'warehouse_id' => $warehouse->id,
+                'currency_id' => $currency->id,
                 'reference' => $quotation->quotation_no,
                 'notes' => 'Seed sales order converted from quotation.',
                 'exchange_rate' => 1,
                 'status' => 'confirmed',
             ]
         );
-        $this->syncLines($salesOrder, 'salesOrderLines', $products, $taxRate, 'custom_product_name');
+
+        $this->syncLines(
+            parent: $salesOrder,
+            relation: 'salesOrderLines',
+            products: $products,
+            taxRate: $taxRate,
+            preferredNameField: 'product_name'
+        );
 
         $proforma = ProformaInvoice::query()->updateOrCreate(
             ['proforma_no' => 'PF-SEED-0001'],
@@ -148,13 +171,20 @@ class SalesModuleSeeder extends Seeder
                 'reference' => $salesOrder->sales_order_no,
                 'proforma_date' => $today->copy()->subDays(4)->toDateString(),
                 'contact_id' => $contact->id,
-                'currency_id' => $currency?->id,
+                'currency_id' => $currency->id,
                 'notes' => 'Seed proforma invoice for the sales module.',
                 'exchange_rate' => 1,
                 'status' => 'issued',
             ]
         );
-        $this->syncLines($proforma, 'proformaInvoiceLines', $products, $taxRate, 'custom_product_name');
+
+        $this->syncLines(
+            parent: $proforma,
+            relation: 'proformaInvoiceLines',
+            products: $products,
+            taxRate: $taxRate,
+            preferredNameField: 'custom_product_name'
+        );
 
         $invoice = Invoice::query()->updateOrCreate(
             ['invoice_no' => 'INV-SEED-0001'],
@@ -163,15 +193,22 @@ class SalesModuleSeeder extends Seeder
                 'invoice_date' => $today->copy()->subDays(3)->toDateString(),
                 'due_date' => $today->copy()->addDays(27)->toDateString(),
                 'contact_id' => $contact->id,
-                'warehouse_id' => $warehouse?->id,
-                'currency_id' => $currency?->id,
+                'warehouse_id' => $warehouse->id,
+                'currency_id' => $currency->id,
                 'reference' => $salesOrder->sales_order_no,
                 'notes' => 'Seed invoice for the sales module.',
                 'exchange_rate' => 1,
                 'status' => 'posted',
             ]
         );
-        $invoiceTotal = $this->syncLines($invoice, 'invoiceLines', $products, $taxRate, 'custom_product_name');
+
+        $invoiceTotal = $this->syncLines(
+            parent: $invoice,
+            relation: 'invoiceLines',
+            products: $products,
+            taxRate: $taxRate,
+            preferredNameField: 'custom_product_name'
+        );
 
         $payment = CustomerPayment::query()->updateOrCreate(
             ['payment_no' => 'RCPT-SEED-0001'],
@@ -180,7 +217,7 @@ class SalesModuleSeeder extends Seeder
                 'payment_date' => $today->copy()->subDays(2)->toDateString(),
                 'contact_id' => $contact->id,
                 'account_id' => $account->id,
-                'currency_id' => $currency?->id,
+                'currency_id' => $currency->id,
                 'amount' => round($invoiceTotal / 2, 2),
                 'payment_method' => 'cash',
                 'reference' => $invoice->invoice_no,
@@ -190,17 +227,19 @@ class SalesModuleSeeder extends Seeder
                 'status' => 'posted',
             ]
         );
+
         $payment->customerPaymentLines()->delete();
+
         $payment->customerPaymentLines()->create([
             'invoice_id' => $invoice->id,
             'allocated_amount' => round($invoiceTotal / 2, 2),
         ]);
 
-        $invoice->forceFill([
+        $this->safeForceFill($invoice, [
             'paid_total' => round($invoiceTotal / 2, 2),
             'balance_due' => round($invoiceTotal / 2, 2),
             'status' => 'part_paid',
-        ])->save();
+        ]);
 
         $salesReturn = SalesReturn::query()->updateOrCreate(
             ['sales_return_no' => 'SR-SEED-0001'],
@@ -208,20 +247,36 @@ class SalesModuleSeeder extends Seeder
                 'branch_id' => $branch->id,
                 'sales_return_date' => $today->copy()->subDay()->toDateString(),
                 'contact_id' => $contact->id,
-                'warehouse_id' => $warehouse?->id,
-                'currency_id' => $currency?->id,
+                'warehouse_id' => $warehouse->id,
+                'currency_id' => $currency->id,
                 'reference' => $invoice->invoice_no,
                 'notes' => 'Seed sales return for the sales module.',
                 'exchange_rate' => 1,
                 'status' => 'posted',
             ]
         );
-        $this->syncLines($salesReturn, 'salesReturnLines', $products->take(1), $taxRate, 'custom_product_name');
+
+        $this->syncLines(
+            parent: $salesReturn,
+            relation: 'salesReturnLines',
+            products: $products->take(1),
+            taxRate: $taxRate,
+            preferredNameField: 'custom_product_name'
+        );
     }
 
-    protected function syncLines($parent, string $relation, $products, ?TaxRate $taxRate, string $nameField): float
-    {
+    protected function syncLines(
+        $parent,
+        string $relation,
+        $products,
+        ?TaxRate $taxRate,
+        string $preferredNameField = 'product_name'
+    ): float {
+        $lineModel = $parent->{$relation}()->getRelated();
+        $lineTable = $lineModel->getTable();
+
         $parent->{$relation}()->delete();
+
         $total = 0;
         $subtotal = 0;
         $discountTotal = 0;
@@ -230,52 +285,115 @@ class SalesModuleSeeder extends Seeder
         foreach ($products->values() as $index => $product) {
             $qty = $index + 1;
             $unitPrice = (float) ($product->selling_price ?: 1000 + ($index * 250));
-            $discountPercent = $relation === 'salesReturnLines' ? 0 : ($index === 0 ? 5 : 0);
+
+            $discountPercent = $relation === 'salesReturnLines'
+                ? 0
+                : ($index === 0 ? 5 : 0);
+
             $baseAmount = $qty * $unitPrice;
             $discountAmount = $baseAmount * ($discountPercent / 100);
             $taxableAmount = max($baseAmount - $discountAmount, 0);
-            $taxAmount = $taxRate ? $taxableAmount * ((float) $taxRate->rate_percent / 100) : 0;
+            $taxAmount = $taxRate
+                ? $taxableAmount * ((float) $taxRate->rate_percent / 100)
+                : 0;
+
             $lineTotal = round($taxableAmount + $taxAmount, 2);
+
             $subtotal += $baseAmount;
             $discountTotal += $discountAmount;
             $taxTotal += $taxAmount;
+            $total += $lineTotal;
 
-            $payload = [
-                'product_id' => $product->id,
-                $nameField => $product->name,
-                'description' => $product->description ?: $product->name,
-                'qty' => $qty,
-                'unit_price' => $unitPrice,
-                'tax_rate_id' => $taxRate?->id,
-                'tax_amount' => round($taxAmount, 2),
-                'line_total' => $lineTotal,
-            ];
+            $payload = [];
 
-            if ($relation !== 'salesReturnLines') {
-                $payload['discount_percent'] = $discountPercent;
-            }
+            $this->addIfColumn($payload, $lineTable, 'product_id', $product->id);
+
+            $this->addProductNameField(
+                payload: $payload,
+                table: $lineTable,
+                preferredNameField: $preferredNameField,
+                productName: $product->name
+            );
+
+            $this->addIfColumn($payload, $lineTable, 'description', $product->description ?: $product->name);
+            $this->addIfColumn($payload, $lineTable, 'qty', $qty);
+            $this->addIfColumn($payload, $lineTable, 'quantity', $qty);
+            $this->addIfColumn($payload, $lineTable, 'unit_price', $unitPrice);
+            $this->addIfColumn($payload, $lineTable, 'rate', $unitPrice);
+
+            $this->addIfColumn($payload, $lineTable, 'discount_percent', $discountPercent);
+            $this->addIfColumn($payload, $lineTable, 'discount_amount', round($discountAmount, 2));
+
+            $this->addIfColumn($payload, $lineTable, 'tax_rate_id', $taxRate?->id);
+            $this->addIfColumn($payload, $lineTable, 'tax_amount', round($taxAmount, 2));
+
+            $this->addIfColumn($payload, $lineTable, 'line_total', $lineTotal);
+            $this->addIfColumn($payload, $lineTable, 'total', $lineTotal);
 
             $parent->{$relation}()->create($payload);
-            $total += $lineTotal;
         }
 
-        $parent->forceFill(['total' => round($total, 2)])->save();
-
-        if ($parent instanceof SalesOrder) {
-            $parent->forceFill([
-                'subtotal' => round($subtotal, 2),
-                'discount_total' => round($discountTotal, 2),
-                'tax_total' => round($taxTotal, 2),
-                'grand_total' => round($total, 2),
-            ])->save();
-        }
+        $this->safeForceFill($parent, [
+            'subtotal' => round($subtotal, 2),
+            'discount_total' => round($discountTotal, 2),
+            'tax_total' => round($taxTotal, 2),
+            'total' => round($total, 2),
+            'grand_total' => round($total, 2),
+        ]);
 
         return round($total, 2);
     }
 
+    protected function addProductNameField(
+        array &$payload,
+        string $table,
+        string $preferredNameField,
+        string $productName
+    ): void {
+        if (Schema::hasColumn($table, $preferredNameField)) {
+            $payload[$preferredNameField] = $productName;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'product_name')) {
+            $payload['product_name'] = $productName;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'custom_product_name')) {
+            $payload['custom_product_name'] = $productName;
+        }
+    }
+
+    protected function addIfColumn(array &$payload, string $table, string $column, mixed $value): void
+    {
+        if (Schema::hasColumn($table, $column)) {
+            $payload[$column] = $value;
+        }
+    }
+
+    protected function safeForceFill($model, array $attributes): void
+    {
+        $table = $model->getTable();
+        $safeAttributes = [];
+
+        foreach ($attributes as $column => $value) {
+            if (Schema::hasColumn($table, $column)) {
+                $safeAttributes[$column] = $value;
+            }
+        }
+
+        if (! empty($safeAttributes)) {
+            $model->forceFill($safeAttributes)->save();
+        }
+    }
+
     protected function ensureTaxRate(): ?TaxRate
     {
-        $taxRate = TaxRate::query()->where('active', true)->first() ?: TaxRate::query()->first();
+        $taxRate = TaxRate::query()
+            ->where('active', true)
+            ->first()
+            ?: TaxRate::query()->first();
 
         if ($taxRate) {
             return $taxRate;
@@ -291,7 +409,10 @@ class SalesModuleSeeder extends Seeder
                 'is_system_generated' => true,
             ]);
 
-        $taxClass = TaxClass::query()->where('country_code', 'NP')->where('code', 'VAT13')->first()
+        $taxClass = TaxClass::query()
+            ->where('country_code', 'NP')
+            ->where('code', 'VAT13')
+            ->first()
             ?: TaxClass::query()->create([
                 'tax_jurisdiction_id' => $jurisdiction->id,
                 'country_code' => 'NP',

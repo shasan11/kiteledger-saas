@@ -14,6 +14,7 @@ use App\Models\TaxRate;
 use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class PurchaseModuleSeeder extends Seeder
 {
@@ -82,10 +83,10 @@ class PurchaseModuleSeeder extends Seeder
         );
 
         $this->syncPurchaseLines(
-            $purchaseOrder,
-            'purchaseOrderLines',
-            $products->take(3),
-            $taxRate
+            parent: $purchaseOrder,
+            relation: 'purchaseOrderLines',
+            products: $products->take(3),
+            taxRate: $taxRate
         );
 
         $purchaseBill = PurchaseBill::query()->updateOrCreate(
@@ -108,10 +109,10 @@ class PurchaseModuleSeeder extends Seeder
         );
 
         $billTotal = $this->syncPurchaseLines(
-            $purchaseBill,
-            'purchaseBillLines',
-            $products->take(3),
-            $taxRate
+            parent: $purchaseBill,
+            relation: 'purchaseBillLines',
+            products: $products->take(3),
+            taxRate: $taxRate
         );
 
         $paymentAmount = round($billTotal / 2, 2);
@@ -136,25 +137,26 @@ class PurchaseModuleSeeder extends Seeder
         );
 
         $payment->supplierPaymentLines()->delete();
+
         $payment->supplierPaymentLines()->create([
             'purchase_bill_id' => $purchaseBill->id,
             'allocated_amount' => $paymentAmount,
         ]);
 
-        $purchaseBill->forceFill([
+        $this->safeForceFill($purchaseBill, [
             'paid_total' => $paymentAmount,
             'balance_due' => round($billTotal - $paymentAmount, 2),
             'status' => 'part_paid',
-        ])->save();
+        ]);
 
         $this->seedOpenPurchaseBill(
-            $branch,
-            $warehouse,
-            $currency,
-            $suppliers->get(1) ?: $supplier,
-            $products->slice(1, 2),
-            $taxRate,
-            $today
+            branch: $branch,
+            warehouse: $warehouse,
+            currency: $currency,
+            supplier: $suppliers->get(1) ?: $supplier,
+            products: $products->slice(1, 2),
+            taxRate: $taxRate,
+            today: $today
         );
     }
 
@@ -179,64 +181,109 @@ class PurchaseModuleSeeder extends Seeder
             ],
         ];
 
-        return collect($rows)->map(fn ($row) => Contact::query()->updateOrCreate(
-            ['code' => $row['code']],
-            [
-                'contact_type' => 'supplier',
-                'name' => $row['name'],
-                'address' => $row['address'],
-                'phone' => $row['phone'],
-                'email' => $row['email'],
-                'pan' => $row['pan'],
-                'tax_registration_no' => $row['pan'],
-                'tax_registration_type' => 'pan',
-                'accept_purchase' => true,
-                'credit_limit' => 250000,
-                'active' => true,
-                'is_system_generated' => true,
-            ]
-        ));
+        return collect($rows)->map(function ($row) {
+            return Contact::query()->updateOrCreate(
+                ['code' => $row['code']],
+                [
+                    'contact_type' => 'supplier',
+                    'name' => $row['name'],
+                    'address' => $row['address'],
+                    'phone' => $row['phone'],
+                    'email' => $row['email'],
+                    'pan' => $row['pan'],
+                    'tax_registration_no' => $row['pan'],
+                    'tax_registration_type' => 'pan',
+                    'accept_purchase' => true,
+                    'credit_limit' => 250000,
+                    'active' => true,
+                    'is_system_generated' => true,
+                ]
+            );
+        });
     }
 
-    protected function syncPurchaseLines($parent, string $relation, $products, ?TaxRate $taxRate): float
-    {
+    protected function syncPurchaseLines(
+        $parent,
+        string $relation,
+        $products,
+        ?TaxRate $taxRate
+    ): float {
+        $lineModel = $parent->{$relation}()->getRelated();
+        $lineTable = $lineModel->getTable();
+
         $parent->{$relation}()->delete();
 
         $total = 0;
+        $subtotal = 0;
+        $discountTotal = 0;
+        $taxTotal = 0;
 
         foreach ($products->values() as $index => $product) {
             $qty = $index + 2;
             $unitPrice = (float) ($product->purchase_price ?: 1000 + ($index * 500));
+
             $discountPercent = $index === 0 ? 3 : 0;
             $baseAmount = $qty * $unitPrice;
             $discountAmount = $baseAmount * ($discountPercent / 100);
             $taxableAmount = max($baseAmount - $discountAmount, 0);
-            $taxAmount = $taxRate ? $taxableAmount * ((float) $taxRate->rate_percent / 100) : 0;
+
+            $taxAmount = $taxRate
+                ? $taxableAmount * ((float) $taxRate->rate_percent / 100)
+                : 0;
+
             $lineTotal = round($taxableAmount + $taxAmount, 2);
 
-            $parent->{$relation}()->create([
-                'product_id' => $product->id,
-                'custom_product_name' => $product->name,
-                'description' => $product->description ?: $product->name,
-                'qty' => $qty,
-                'unit_price' => $unitPrice,
-                'discount_percent' => $discountPercent,
-                'tax_rate_id' => $taxRate?->id,
-                'tax_amount' => round($taxAmount, 2),
-                'line_total' => $lineTotal,
-            ]);
-
+            $subtotal += $baseAmount;
+            $discountTotal += $discountAmount;
+            $taxTotal += $taxAmount;
             $total += $lineTotal;
+
+            $payload = [];
+
+            $this->addIfColumn($payload, $lineTable, 'product_id', $product->id);
+
+            $this->addProductNameField(
+                payload: $payload,
+                table: $lineTable,
+                productName: $product->name
+            );
+
+            $this->addIfColumn($payload, $lineTable, 'description', $product->description ?: $product->name);
+
+            $this->addIfColumn($payload, $lineTable, 'qty', $qty);
+            $this->addIfColumn($payload, $lineTable, 'quantity', $qty);
+
+            $this->addIfColumn($payload, $lineTable, 'unit_price', $unitPrice);
+            $this->addIfColumn($payload, $lineTable, 'rate', $unitPrice);
+            $this->addIfColumn($payload, $lineTable, 'price', $unitPrice);
+
+            $this->addIfColumn($payload, $lineTable, 'discount_percent', $discountPercent);
+            $this->addIfColumn($payload, $lineTable, 'discount_amount', round($discountAmount, 2));
+
+            $this->addIfColumn($payload, $lineTable, 'tax_rate_id', $taxRate?->id);
+            $this->addIfColumn($payload, $lineTable, 'tax_amount', round($taxAmount, 2));
+
+            $this->addIfColumn($payload, $lineTable, 'line_total', $lineTotal);
+            $this->addIfColumn($payload, $lineTable, 'total', $lineTotal);
+            $this->addIfColumn($payload, $lineTable, 'amount', $lineTotal);
+
+            $parent->{$relation}()->create($payload);
         }
 
-        $parent->forceFill(['total' => round($total, 2)])->save();
+        $this->safeForceFill($parent, [
+            'subtotal' => round($subtotal, 2),
+            'discount_total' => round($discountTotal, 2),
+            'tax_total' => round($taxTotal, 2),
+            'total' => round($total, 2),
+            'grand_total' => round($total, 2),
+        ]);
 
         if ($parent instanceof PurchaseBill) {
             $paidTotal = (float) ($parent->paid_total ?? 0);
 
-            $parent->forceFill([
+            $this->safeForceFill($parent, [
                 'balance_due' => round($total - $paidTotal, 2),
-            ])->save();
+            ]);
         }
 
         return round($total, 2);
@@ -274,12 +321,64 @@ class PurchaseModuleSeeder extends Seeder
             ]
         );
 
-        $total = $this->syncPurchaseLines($bill, 'purchaseBillLines', $products, $taxRate);
+        $total = $this->syncPurchaseLines(
+            parent: $bill,
+            relation: 'purchaseBillLines',
+            products: $products,
+            taxRate: $taxRate
+        );
 
-        $bill->forceFill([
+        $this->safeForceFill($bill, [
             'paid_total' => 0,
             'balance_due' => $total,
             'status' => 'posted',
-        ])->save();
+        ]);
+    }
+
+    protected function addProductNameField(
+        array &$payload,
+        string $table,
+        string $productName
+    ): void {
+        if (Schema::hasColumn($table, 'product_name')) {
+            $payload['product_name'] = $productName;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'custom_product_name')) {
+            $payload['custom_product_name'] = $productName;
+            return;
+        }
+
+        if (Schema::hasColumn($table, 'name')) {
+            $payload['name'] = $productName;
+        }
+    }
+
+    protected function addIfColumn(
+        array &$payload,
+        string $table,
+        string $column,
+        mixed $value
+    ): void {
+        if (Schema::hasColumn($table, $column)) {
+            $payload[$column] = $value;
+        }
+    }
+
+    protected function safeForceFill($model, array $attributes): void
+    {
+        $table = $model->getTable();
+        $safeAttributes = [];
+
+        foreach ($attributes as $column => $value) {
+            if (Schema::hasColumn($table, $column)) {
+                $safeAttributes[$column] = $value;
+            }
+        }
+
+        if (!empty($safeAttributes)) {
+            $model->forceFill($safeAttributes)->save();
+        }
     }
 }
