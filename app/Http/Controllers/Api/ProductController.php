@@ -284,6 +284,16 @@ class ProductController extends BaseCrudApiController
 
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
+        if ($record->tax_class_id) {
+            $taxRate = \App\Models\TaxRate::where('tax_class_id', $record->tax_class_id)
+                ->where('active', true)
+                ->orderBy('name')
+                ->first();
+            $data['default_tax_rate'] = $taxRate ? $taxRate->toArray() : null;
+        } else {
+            $data['default_tax_rate'] = null;
+        }
+
         $items = $record->productVariantItems ?? collect();
 
         $variantOptions = $items

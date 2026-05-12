@@ -22,12 +22,30 @@ const formatDate = (v) => {
     const f = dayjs(v);
     return f.isValid() ? f.format('YYYY-MM-DD') : null;
 };
-const calcLine = (l) => Math.max(toNumber(l.qty) * toNumber(l.unit_price) - toNumber(l.qty) * toNumber(l.unit_price) * (toNumber(l.discount_percent) / 100) + toNumber(l.tax_amount), 0);
-const emptyLine = { id: undefined, product_id: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_amount: 0, line_total: 0 };
+const roundMoney = (v) => Number(toNumber(v).toFixed(2));
+const getTaxPercent = (v) => { if (!v || typeof v !== 'object') return 0; return toNumber(v.rate_percent ?? v.ratePercent ?? v.rate ?? 0); };
+const getTaxJurisdictionId = (v) => { if (!v || typeof v !== 'object') return null; return v.tax_jurisdiction_id ?? v.taxJurisdiction?.id ?? v.tax_jurisdiction?.id ?? null; };
+const isTaxInclusive = (v) => { if (!v || typeof v !== 'object') return false; return v.inclusive === true || v.inclusive === 1 || v.inclusive === '1'; };
+const getTaxLabel = (v) => { if (!v || typeof v !== 'object') return null; return v.name || v.code || null; };
+const calculateLine = (l = {}) => {
+    const gross = roundMoney(toNumber(l.qty) * toNumber(l.unit_price));
+    const discPercent = Math.min(Math.max(toNumber(l.discount_percent), 0), 100);
+    const discAmount = roundMoney(gross * discPercent / 100);
+    const amountAfterDiscount = Math.max(gross - discAmount, 0);
+    const taxObj = typeof l.tax_rate_id === 'object' ? l.tax_rate_id : (l.taxRate || l.tax_rate || null);
+    const taxPercent = getTaxPercent(taxObj);
+    let taxAmount = 0, lineTotal = amountAfterDiscount;
+    if (taxPercent > 0) {
+        if (isTaxInclusive(taxObj)) { taxAmount = roundMoney(amountAfterDiscount - amountAfterDiscount / (1 + taxPercent / 100)); lineTotal = amountAfterDiscount; }
+        else { taxAmount = roundMoney(amountAfterDiscount * taxPercent / 100); lineTotal = amountAfterDiscount + taxAmount; }
+    }
+    const taxableAmount = (isTaxInclusive(taxObj) && taxPercent > 0) ? roundMoney(amountAfterDiscount - taxAmount) : amountAfterDiscount;
+    return { discount_amount: discAmount, tax_jurisdiction_id: getTaxJurisdictionId(taxObj), tax_amount: taxAmount, tax_breakup: taxPercent > 0 ? JSON.stringify({ tax_rate_id: asId(taxObj), tax_name: getTaxLabel(taxObj), rate_percent: roundMoney(taxPercent), inclusive: isTaxInclusive(taxObj), taxable_amount: taxableAmount, tax_amount: taxAmount }) : null, line_total: roundMoney(lineTotal) };
+};
+const emptyLine = { id: undefined, product_id: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, discount_amount: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, tax_breakup: null, line_total: 0 };
 const normalizeLine = (l = {}) => {
-    const n = { ...(l.id ? { id: l.id } : {}), product_id: asId(l.product_id ?? l.product), product_name: cleanText(l.product_name ?? l.custom_product_name), description: nullIfEmpty(l.description), qty: toNumber(l.qty) || 0, unit_price: toNumber(l.unit_price), discount_percent: toNumber(l.discount_percent), tax_rate_id: asId(l.tax_rate_id ?? l.taxRate ?? l.tax_rate), tax_amount: toNumber(l.tax_amount) };
-    n.line_total = calcLine(n);
-    return n;
+    const calc = calculateLine(l);
+    return { ...(l.id ? { id: l.id } : {}), product_id: asId(l.product_id ?? l.product), product_name: cleanText(l.product_name ?? l.custom_product_name ?? ''), description: nullIfEmpty(l.description), qty: toNumber(l.qty) || 0, unit_price: toNumber(l.unit_price), discount_percent: toNumber(l.discount_percent), discount_amount: calc.discount_amount, tax_rate_id: asId(l.tax_rate_id ?? l.taxRate ?? l.tax_rate), tax_jurisdiction_id: calc.tax_jurisdiction_id || asId(l.tax_jurisdiction_id ?? l.taxJurisdiction), tax_amount: calc.tax_amount, tax_breakup: calc.tax_breakup, line_total: calc.line_total };
 };
 
 export default function InvoiceEdit({ id, ...props }) {
@@ -43,15 +61,16 @@ export default function InvoiceEdit({ id, ...props }) {
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         {
             name: 'items', label: '', type: 'objectArray', col: 24, addButtonLabel: 'Add Product', defaultItem: { ...emptyLine }, headerBg: '#4b5563', headerColor: '#ffffff',
+            recalculateRow: (row) => { const calc = calculateLine(row); return { ...row, discount_amount: calc.discount_amount, tax_jurisdiction_id: calc.tax_jurisdiction_id, tax_amount: calc.tax_amount, tax_breakup: calc.tax_breakup, line_total: calc.line_total }; },
             columns: [
-                { key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', onSelectRecord: (record, row) => { const unitPrice = toNumber(record?.selling_price ?? record?.sale_price ?? record?.price ?? row?.unit_price); const defaultTaxRate = record?.default_tax_rate ?? null; const baseRow = { ...row, product_id: record?.id ?? null, product_name: record?.name || '', description: row?.description || record?.description || '', unit_price: unitPrice, tax_rate_id: defaultTaxRate ?? row.tax_rate_id ?? null, tax_jurisdiction_id: defaultTaxRate ? getTaxJurisdictionId(defaultTaxRate) : (row.tax_jurisdiction_id ?? null) }; const calc = calculateLine(baseRow); return { ...baseRow, tax_amount: calc.tax_amount, tax_breakup: calc.tax_breakup, line_total: calc.line_total }; } },
                 { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
                 { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '90px', min: 0 },
                 { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '120px', min: 0 },
                 { key: 'discount_percent', name: 'discount_percent', label: 'Disc%', type: 'number', width: '90px', min: 0, max: 100 },
-                { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '130px', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
-                { key: 'line_total', name: 'line_total', label: 'Amount', type: 'number', width: '130px', min: 0, disabled: true },
+                { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '150px', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', storeFullObject: true, allowClear: true, fkLabel: (r) => [r?.name, r?.rate_percent ? `${toNumber(r.rate_percent)}%` : null].filter(Boolean).join(' - '), onSelectRecord: (record, row) => { const calc = calculateLine({ ...row, tax_rate_id: record, tax_jurisdiction_id: getTaxJurisdictionId(record) }); return { ...row, tax_rate_id: record, tax_jurisdiction_id: calc.tax_jurisdiction_id, tax_amount: calc.tax_amount, tax_breakup: calc.tax_breakup, line_total: calc.line_total }; } },
+                { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0, disabled: true, formula: (row) => calculateLine(row).tax_amount },
+                { key: 'line_total', name: 'line_total', label: 'Amount', type: 'number', width: '130px', min: 0, disabled: true, formula: (row) => calculateLine(row).line_total },
             ],
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes (appears on print)' },

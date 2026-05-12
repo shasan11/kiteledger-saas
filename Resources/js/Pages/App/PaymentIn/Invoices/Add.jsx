@@ -884,17 +884,21 @@ export default function InvoiceAdd(props) {
               );
             },
 
-            onSelectRecord: (record, row) => ({
-              product_id: record?.id ?? null,
-              product_name: record?.name || '',
-              description: row?.description || record?.description || '',
-              unit_price: toNumber(
-                record?.selling_price ??
-                  record?.sale_price ??
-                  record?.price ??
-                  row?.unit_price
-              ),
-            }),
+            onSelectRecord: (record, row) => {
+              const unitPrice = toNumber(record?.selling_price ?? record?.sale_price ?? record?.price ?? row?.unit_price);
+              const defaultTaxRate = record?.default_tax_rate ?? null;
+              const baseRow = {
+                ...row,
+                product_id: record?.id ?? null,
+                product_name: record?.name || '',
+                description: row?.description || record?.description || '',
+                unit_price: unitPrice,
+                tax_rate_id: defaultTaxRate ?? row.tax_rate_id ?? null,
+                tax_jurisdiction_id: defaultTaxRate ? getTaxJurisdictionId(defaultTaxRate) : (row.tax_jurisdiction_id ?? null),
+              };
+              const calc = calculateLine(baseRow);
+              return { ...baseRow, tax_amount: calc.tax_amount, tax_breakup: calc.tax_breakup, line_total: calc.line_total };
+            },
           },
           {
             key: 'qty',
