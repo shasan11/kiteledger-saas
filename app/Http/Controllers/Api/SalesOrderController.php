@@ -110,13 +110,13 @@ class SalesOrderController extends BaseCrudApiController
                     'nullable',
                     'uuid',
                     'exists:products,id',
-                    'required_without:custom_product_name',
+                     
                 ],
                 'custom_product_name' => [
                     'nullable',
                     'string',
                     'max:180',
-                    'required_without:product_id',
+                     
                 ],
                 'description' => [
                     'nullable',
@@ -161,13 +161,13 @@ class SalesOrderController extends BaseCrudApiController
                     'nullable',
                     'uuid',
                     'exists:products,id',
-                    'required_without:custom_product_name',
+                     
                 ],
                 'custom_product_name' => [
                     'nullable',
                     'string',
                     'max:180',
-                    'required_without:product_id',
+                     
                 ],
                 'description' => [
                     'nullable',
