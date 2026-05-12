@@ -25,7 +25,7 @@
         "APP_URL": "https://kiteledger-saas.vercel.app",
         "APP_KEY":"base64:XFWHmJDwNShLWf9R5MbEq8MWAYlECp+yk89V0QadltU=",
         "DB_CONNECTION": "sqlite",
-        "DB_DATABASE": "/database/database.sqlite",
+        "DB_DATABASE": "database/database.sqlite",
 
         "VERCEL_DEMO_MODE": "true",
 
