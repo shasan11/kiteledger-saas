@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Col, Row } from 'antd';
+import { Col, InputNumber, Row, Select, Space } from 'antd';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -310,31 +310,17 @@ const normalizeLine = (line = {}) => {
 
   return {
     ...(line.id ? { id: line.id } : {}),
-
     product_id: asId(line.product_id ?? line.product),
     product_name: cleanText(line.product_name),
     description: nullIfEmpty(line.description),
-
     qty: toNumber(line.qty),
     unit_price: toNumber(line.unit_price),
-
-    discount_type: calculated.discount_type,
-    discount_value: calculated.discount_value,
     discount_percent: calculated.discount_percent,
     discount_amount: calculated.discount_amount,
-
     tax_rate_id: asId(line.tax_rate_id ?? line.taxRate ?? line.tax_rate),
-    tax_jurisdiction_id:
-      calculated.tax_jurisdiction_id ||
-      asId(
-        line.tax_jurisdiction_id ??
-          line.taxJurisdiction ??
-          line.tax_jurisdiction
-      ),
-    tax_percent: calculated.tax_percent,
+    tax_jurisdiction_id: calculated.tax_jurisdiction_id || asId(line.tax_jurisdiction_id ?? line.taxJurisdiction ?? line.tax_jurisdiction),
     tax_amount: calculated.tax_amount,
     tax_breakup: calculated.tax_breakup,
-
     line_total: calculated.line_total,
   };
 };
@@ -566,6 +552,69 @@ const productQuickAdd = {
   },
 };
 
+const warehouseQuickAdd = {
+  title: 'Warehouse', buttonLabel: 'Add New Warehouse', apiUrl: api('/api/warehouses/'),
+  initialValues: { name: '', code: '', address: '', active: true },
+  validationSchema: Yup.object({ name: Yup.string().required('Warehouse name is required') }),
+  fields: [
+    { name: 'name', label: 'Name', type: 'text', col: 24, required: true },
+    { name: 'code', label: 'Code', type: 'text', col: 12 },
+    { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2 },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+  ],
+  transformPayload: (v) => ({ name: nullIfEmpty(v.name), code: nullIfEmpty(v.code), address: nullIfEmpty(v.address), active: v.active !== false }),
+};
+
+const getDiscountType = (line = {}) => {
+  if (line.discount_type === 'amount' || line.discount_type === 'percent') return line.discount_type;
+  if (toNumber(line.discount_amount) > 0 && toNumber(line.discount_percent) <= 0) return 'amount';
+  return 'percent';
+};
+
+const getDiscountValue = (line = {}) => {
+  const dt = getDiscountType(line);
+  const hasRV = line.discount_value !== undefined && line.discount_value !== null && line.discount_value !== '' && !(toNumber(line.discount_value) === 0 && (toNumber(line.discount_percent) > 0 || toNumber(line.discount_amount) > 0));
+  if (hasRV) return toNumber(line.discount_value);
+  return dt === 'amount' ? toNumber(line.discount_amount) : toNumber(line.discount_percent);
+};
+
+const getLineGross = (line = {}) => roundMoney(toNumber(line.qty) * toNumber(line.unit_price));
+
+function LineDiscountInput({ rowValue, readOnly, recomputeRow }) {
+  const row = rowValue || {};
+  const discountType = getDiscountType(row);
+  const gross = getLineGross(row);
+  const value = getDiscountValue(row);
+
+  const handleTypeChange = (nextType) => {
+    const currentAmt = calculateLine(row).discount_amount;
+    if (nextType === 'amount') {
+      recomputeRow({ discount_type: 'amount', discount_value: currentAmt, discount_amount: currentAmt, discount_percent: gross > 0 ? roundMoney((currentAmt / gross) * 100) : 0 });
+    } else {
+      const pct = gross > 0 ? roundMoney((currentAmt / gross) * 100) : 0;
+      recomputeRow({ discount_type: 'percent', discount_value: pct, discount_percent: pct, discount_amount: currentAmt });
+    }
+  };
+
+  const handleValueChange = (nextValue) => {
+    const cv = toNumber(nextValue);
+    if (discountType === 'amount') {
+      const amt = Math.min(cv, gross);
+      recomputeRow({ discount_type: 'amount', discount_value: amt, discount_amount: amt, discount_percent: gross > 0 ? roundMoney((amt / gross) * 100) : 0 });
+    } else {
+      const pct = Math.min(cv, 100);
+      recomputeRow({ discount_type: 'percent', discount_value: pct, discount_percent: pct, discount_amount: roundMoney(gross * (pct / 100)) });
+    }
+  };
+
+  return (
+    <Space.Compact style={{ width: '100%' }}>
+      <Select value={discountType} disabled={readOnly} style={{ width: 76 }} onChange={handleTypeChange} options={[{ value: 'percent', label: '%' }, { value: 'amount', label: 'Amt' }]} />
+      <InputNumber value={value} min={0} max={discountType === 'percent' ? 100 : gross} disabled={readOnly} style={{ width: '100%' }} onChange={handleValueChange} />
+    </Space.Compact>
+  );
+}
+
 const SalesOrderTotals = ({ values = {} }) => {
   const summary = calculateSummary(values.items || []);
   const symbol = getCurrencySymbol(values);
@@ -755,6 +804,7 @@ export default function SalesOrderAdd(props) {
         fkValueKey: 'id',
         fkLabelKey: 'name',
         allowClear: true,
+        quickAdd: warehouseQuickAdd,
       },
       {
         name: 'currency_id',
@@ -909,20 +959,9 @@ export default function SalesOrderAdd(props) {
             key: 'discount_value',
             name: 'discount_value',
             label: 'Discount',
-            type: 'number',
-            width: '80px',
-            min: 0,
-          },
-          {
-            key: 'discount_type',
-            name: 'discount_type',
-            label: '',
-            type: 'select',
-            width: '75px',
-            options: [
-              { value: 'percent', label: '%' },
-              { value: 'amount', label: 'Amt' },
-            ],
+            type: 'custom',
+            width: '170px',
+            component: LineDiscountInput,
           },
           {
             key: 'tax_rate_id',

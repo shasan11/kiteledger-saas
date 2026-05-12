@@ -11,20 +11,16 @@ class SalesReturnLine extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'sales_return_id',
         'product_id',
-        'custom_product_name',
-        'discount_percent',
-        'discount_amount',
+        'product_name',
         'description',
         'qty',
         'unit_price',
+        'discount_type',
+        'discount_percent',
+        'discount_amount',
         'tax_rate_id',
         'tax_jurisdiction_id',
         'tax_amount',
@@ -32,16 +28,14 @@ class SalesReturnLine extends Model
         'line_total',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'qty' => 'decimal:4',
             'unit_price' => 'decimal:2',
+            'discount_type' => 'string',
+            'discount_percent' => 'decimal:4',
+            'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
             'tax_breakup' => 'array',
             'line_total' => 'decimal:2',

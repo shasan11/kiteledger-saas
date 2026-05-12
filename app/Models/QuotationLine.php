@@ -23,6 +23,7 @@ class QuotationLine extends Model
         'description',
         'qty',
         'unit_price',
+        'discount_type',
         'discount_percent',
         'discount_amount',
         'tax_rate_id',
@@ -42,7 +43,9 @@ class QuotationLine extends Model
         return [
             'qty' => 'decimal:4',
             'unit_price' => 'decimal:2',
+            'discount_type' => 'string',
             'discount_percent' => 'decimal:4',
+            'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
             'tax_breakup' => 'array',
             'line_total' => 'decimal:2',

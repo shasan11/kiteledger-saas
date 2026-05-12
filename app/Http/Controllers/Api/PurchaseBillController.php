@@ -38,24 +38,32 @@ class PurchaseBillController extends BaseCrudApiController
             'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
-                'discount_percent' => ['nullable', 'numeric', 'min:0'],
+                'discount_type' => ['nullable', 'string', 'in:percent,amount'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                'discount_amount' => ['nullable', 'numeric', 'min:0'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_breakup' => ['nullable'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
-                'custom_product_name' => ['nullable', 'string', 'max:180'],
+                'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'qty' => ['required', 'numeric', 'min:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
-                'discount_percent' => ['nullable', 'numeric', 'min:0'],
+                'discount_type' => ['nullable', 'string', 'in:percent,amount'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                'discount_amount' => ['nullable', 'numeric', 'min:0'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_breakup' => ['nullable'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
         ],
@@ -131,8 +139,11 @@ class PurchaseBillController extends BaseCrudApiController
     protected function calculateLineTotal(array $row): float
     {
         $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
-        $discount = ($gross * (float) ($row['discount_percent'] ?? 0)) / 100;
+        $discountType = $row['discount_type'] ?? 'percent';
+        $discountAmount = $discountType === 'amount'
+            ? min((float) ($row['discount_amount'] ?? 0), $gross)
+            : round($gross * ((float) ($row['discount_percent'] ?? 0) / 100), 2);
 
-        return round(max($gross - $discount, 0) + (float) ($row['tax_amount'] ?? 0), 2);
+        return round(max($gross - $discountAmount, 0) + (float) ($row['tax_amount'] ?? 0), 2);
     }
 }

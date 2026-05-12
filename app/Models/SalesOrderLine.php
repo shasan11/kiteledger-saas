@@ -11,18 +11,14 @@ class SalesOrderLine extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
         'sales_order_id',
         'product_id',
-        'custom_product_name',
+        'product_name',
         'description',
         'qty',
         'unit_price',
+        'discount_type',
         'discount_percent',
         'discount_amount',
         'tax_rate_id',
@@ -32,17 +28,14 @@ class SalesOrderLine extends Model
         'line_total',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'qty' => 'decimal:4',
             'unit_price' => 'decimal:2',
+            'discount_type' => 'string',
             'discount_percent' => 'decimal:4',
+            'discount_amount' => 'decimal:2',
             'tax_amount' => 'decimal:2',
             'tax_breakup' => 'array',
             'line_total' => 'decimal:2',

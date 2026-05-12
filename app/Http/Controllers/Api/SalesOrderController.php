@@ -98,113 +98,45 @@ class SalesOrderController extends BaseCrudApiController
             'relations' => [
                 'product',
                 'taxRate',
+                'taxJurisdiction',
             ],
 
             'relation_details' => [
                 'product' => 'product_id',
                 'taxRate' => 'tax_rate_id',
+                'taxJurisdiction' => 'tax_jurisdiction_id',
             ],
 
             'rules' => [
-                'product_id' => [
-                    'nullable',
-                    'uuid',
-                    'exists:products,id',
-                     
-                ],
-                'custom_product_name' => [
-                    'nullable',
-                    'string',
-                    'max:180',
-                     
-                ],
-                'description' => [
-                    'nullable',
-                    'string',
-                    'max:200',
-                ],
-                'qty' => [
-                    'required',
-                    'numeric',
-                    'gt:0',
-                ],
-                'unit_price' => [
-                    'required',
-                    'numeric',
-                    'min:0',
-                ],
-                'discount_percent' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                    'max:100',
-                ],
-                'tax_rate_id' => [
-                    'nullable',
-                    'uuid',
-                    'exists:tax_rates,id',
-                ],
-                'tax_amount' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                ],
-                'line_total' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                ],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
+                'product_name' => ['nullable', 'string', 'max:255'],
+                'description' => ['nullable', 'string', 'max:200'],
+                'qty' => ['required', 'numeric', 'gt:0'],
+                'unit_price' => ['required', 'numeric', 'min:0'],
+                'discount_type' => ['nullable', 'string', 'in:percent,amount'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                'discount_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
+                'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_breakup' => ['nullable'],
+                'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
 
             'update_rules' => [
-                'product_id' => [
-                    'nullable',
-                    'uuid',
-                    'exists:products,id',
-                     
-                ],
-                'custom_product_name' => [
-                    'nullable',
-                    'string',
-                    'max:180',
-                     
-                ],
-                'description' => [
-                    'nullable',
-                    'string',
-                    'max:200',
-                ],
-                'qty' => [
-                    'required',
-                    'numeric',
-                    'gt:0',
-                ],
-                'unit_price' => [
-                    'required',
-                    'numeric',
-                    'min:0',
-                ],
-                'discount_percent' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                    'max:100',
-                ],
-                'tax_rate_id' => [
-                    'nullable',
-                    'uuid',
-                    'exists:tax_rates,id',
-                ],
-                'tax_amount' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                ],
-                'line_total' => [
-                    'nullable',
-                    'numeric',
-                    'min:0',
-                ],
+                'product_id' => ['nullable', 'uuid', 'exists:products,id'],
+                'product_name' => ['nullable', 'string', 'max:255'],
+                'description' => ['nullable', 'string', 'max:200'],
+                'qty' => ['required', 'numeric', 'gt:0'],
+                'unit_price' => ['required', 'numeric', 'min:0'],
+                'discount_type' => ['nullable', 'string', 'in:percent,amount'],
+                'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                'discount_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+                'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
+                'tax_amount' => ['nullable', 'numeric', 'min:0'],
+                'tax_breakup' => ['nullable'],
+                'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
         ],
     ];
@@ -419,21 +351,35 @@ class SalesOrderController extends BaseCrudApiController
         foreach ($lines as $line) {
             $qty = (float) $line->qty;
             $unitPrice = (float) $line->unit_price;
+            $gross = round($qty * $unitPrice, 2);
+
+            $discountType = $line->discount_type ?: 'percent';
+            $discountAmount = (float) ($line->discount_amount ?? 0);
             $discountPercent = (float) ($line->discount_percent ?? 0);
 
-            $baseAmount = $qty * $unitPrice;
-            $discountAmount = $baseAmount * ($discountPercent / 100);
-            $taxableAmount = max($baseAmount - $discountAmount, 0);
+            if ($discountType === 'amount') {
+                $discountAmount = max(0, min($discountAmount, $gross));
+                $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 4) : 0;
+            } else {
+                $discountPercent = max(0, min($discountPercent, 100));
+                $discountAmount = round($gross * ($discountPercent / 100), 2);
+            }
+
+            $baseAmount = $gross;
+            $taxableAmount = max($gross - $discountAmount, 0);
 
             $taxAmount = $this->calculateTaxAmount($line, $taxableAmount);
             $lineTotal = $taxableAmount + $taxAmount;
 
             $line->forceFill([
+                'discount_type' => $discountType,
+                'discount_percent' => $discountPercent,
+                'discount_amount' => round($discountAmount, 2),
                 'tax_amount' => round($taxAmount, 2),
                 'line_total' => round($lineTotal, 2),
             ])->save();
 
-            $subtotal += $baseAmount;
+            $subtotal += $gross;
             $discountTotal += $discountAmount;
             $taxTotal += $taxAmount;
             $grandTotal += $lineTotal;
