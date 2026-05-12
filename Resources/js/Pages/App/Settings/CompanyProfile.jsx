@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
   Button,
   Card,
@@ -377,6 +377,11 @@ export default function CompanyProfile() {
       });
 
       message.success('Company settings saved');
+
+      router.reload({
+        preserveScroll: true,
+        preserveState: false,
+      });
     } catch (error) {
       if (error?.errorFields) return;
 

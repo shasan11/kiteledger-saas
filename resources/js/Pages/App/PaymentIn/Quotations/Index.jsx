@@ -70,14 +70,14 @@ const displayDate = (value) => {
 };
 
 const statusColor = (status) =>
-  ({
-    draft: 'default',
-    sent: 'blue',
-    accepted: 'green',
-    rejected: 'red',
-    expired: 'orange',
-    cancelled: 'volcano',
-  }[status] || 'default');
+({
+  draft: 'default',
+  sent: 'blue',
+  accepted: 'green',
+  rejected: 'red',
+  expired: 'orange',
+  cancelled: 'volcano',
+}[status] || 'default');
 
 const calculateLineTotal = (line) => {
   const qty = toNumber(line.qty);
@@ -154,7 +154,7 @@ export default function Quotations(props) {
         title: 'Customer',
         dataIndex: 'contact',
         key: 'contact',
-        width:"250px",
+        width: "250px",
         render: (_, record) => getContactName(record),
       },
       {
@@ -190,8 +190,13 @@ export default function Quotations(props) {
         sorter: true,
         align: 'right',
         width: 140,
-        render: (value) => <Text strong>{money(value)}</Text>,
-      },
+        render: (total, record) => (
+          <Text strong>
+            {record?.currency_id_detail?.symbol || record?.currency_id_detail?.code || ''}{" "}
+            {money(total)}
+          </Text>
+        ),
+      }
     ],
     []
   );
@@ -528,7 +533,7 @@ export default function Quotations(props) {
         canDelete
         hasActions
         hasActionColumns
-        
+
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (
@@ -544,7 +549,7 @@ export default function Quotations(props) {
           style: { cursor: 'pointer' },
         })}
         anchorFilters={[
-           {
+          {
             key: 'approved',
             label: 'Approved',
             params: { approved: true },
@@ -554,10 +559,30 @@ export default function Quotations(props) {
             label: 'Draft',
             params: { approved: false },
           },
-          
-         
+
+
         ]}
         defaultAnchorKey="approved"
+        bulkactions={[
+          {
+            label: "Approve",
+            actions: {
+              approved: true,
+             },
+          },
+          {
+            label: "Move to Draft",
+            actions: {
+              approved: false,
+             },
+          },
+          {
+            label: "Void",
+            actions: {
+              approved: false,
+             },
+          },
+        ]}
         anchorSyncWithHash
       />
     </AuthenticatedLayout>

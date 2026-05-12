@@ -241,7 +241,7 @@ export default function ReusableCrud({
       },
       objectArrayRow: {
         display: "grid",
-        gap:  "6px",
+        gap: "6px",
         padding: `${token.paddingSM}px ${token.paddingSM}px`,
         alignItems: "center",
       },
@@ -2891,32 +2891,49 @@ export default function ReusableCrud({
                           .map((c) => c.width || "1fr")
                           .join(" ")}${showExpand ? " 52px" : ""}${!readOnly ? " 52px" : ""}`;
 
-                        const renderExpandedField = (c, rowValue, idx) => {
+                        const applyFullRowPatch = (rowValue, idx, patch = EMPTY_OBJECT) => {
+                          const patchedRow = {
+                            ...(rowValue || EMPTY_OBJECT),
+                            ...(patch || EMPTY_OBJECT),
+                          };
+
+                          const recalculatedRow =
+                            typeof field.recalculateRow === "function"
+                              ? field.recalculateRow(patchedRow, values, idx)
+                              : patchedRow;
+
+                          Object.entries(recalculatedRow || EMPTY_OBJECT).forEach(([key, value]) => {
+                            setFieldValue(`${name}[${idx}].${key}`, value, false);
+                          });
+
+                          [...(cols || EMPTY_ARRAY), ...(collapsedFields || EMPTY_ARRAY)].forEach(
+                            (formulaCol) => {
+                              const formulaKey = formulaCol?.key ?? formulaCol?.name;
+
+                              if (!formulaKey || typeof formulaCol?.formula !== "function") return;
+
+                              const computed = formulaCol.formula(recalculatedRow, values, idx);
+
+                              setFieldValue(`${name}[${idx}].${formulaKey}`, computed, false);
+                            }
+                          );
+                        };
+
+                        const renderObjectArrayCell = (c, rowValue, idx, colIdx, isCollapsed = false) => {
                           const colKey = c.key ?? c.name;
-                          if (!colKey) return null;
+
+                          if (!colKey) {
+                            return <div key={`${fieldKey}.${idx}.${colIdx}`} />;
+                          }
 
                           const path = `${name}[${idx}].${colKey}`;
                           const detailPath = `${name}[${idx}].${colKey}_detail`;
                           const val = rowValue?.[colKey];
                           const detailVal = rowValue?.[`${colKey}_detail`];
-                          const cellReadOnly = readOnly || !!c.readOnly;
+                          const cellReadOnly = readOnly || !!c.readOnly || !!c.disabled;
 
-                          const applyRowPatch = (patch = EMPTY_OBJECT) => {
-                            const nextRow = { ...(rowValue || EMPTY_OBJECT), ...(patch || EMPTY_OBJECT) };
-
-                            Object.entries(patch || EMPTY_OBJECT).forEach(([key, value]) => {
-                              setFieldValue(`${name}[${idx}].${key}`, value, false);
-                            });
-
-                            (cols || EMPTY_ARRAY).forEach((formulaCol) => {
-                              const formulaKey = formulaCol?.key ?? formulaCol?.name;
-
-                              if (!formulaKey || typeof formulaCol?.formula !== "function") return;
-
-                              const computed = formulaCol.formula(nextRow, values, idx);
-                              nextRow[formulaKey] = computed;
-                              setFieldValue(`${name}[${idx}].${formulaKey}`, computed, false);
-                            });
+                          const rowApplyPatch = (patch = EMPTY_OBJECT) => {
+                            applyFullRowPatch(rowValue, idx, patch);
                           };
 
                           if (typeof c.formula === "function") {
@@ -2924,75 +2941,92 @@ export default function ReusableCrud({
 
                             if (c.type === "number") {
                               return (
-                                <Input
+                                <InputNumber
+                                  key={`${fieldKey}.${idx}.${colKey}`}
+                                  size="medium"
                                   variant="underlined"
                                   style={{ width: "100%" }}
-                                  //value={computed}
+                                  value={computed}
                                   disabled
                                   readOnly
+                                  addonBefore={
+                                    typeof c.addonBefore === "function"
+                                      ? c.addonBefore({ values, row: rowValue, rowIndex: idx })
+                                      : c.addonBefore
+                                  }
+                                  prefix={
+                                    typeof c.prefix === "function"
+                                      ? c.prefix({ values, row: rowValue, rowIndex: idx })
+                                      : c.prefix
+                                  }
                                 />
                               );
                             }
 
-                            return <Input value={computed} disabled readOnly />;
-                          }
-
-                          if (c.type === "textarea") {
                             return (
-                              <Input.TextArea
-                              
-                                rows={c.rows || 3}
-                                value={val}
-                                placeholder={c.placeholder || ""}
-                                disabled={cellReadOnly}
-                                onChange={(e) => setFieldValue(path, e.target.value)}
+                              <Input
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                value={computed}
+                                disabled
+                                variant="underlined"
+                                readOnly
                               />
                             );
                           }
+
                           if (c.type === "custom") {
                             if (typeof c.render === "function") {
-                              return c.render({
-                                field: c,
-                                value: val,
-                                row: rowValue,
-                                rowValue,
-                                rowIndex: idx,
-                                arrayName: name,
-                                path,
-                                values,
-                                setFieldValue,
-                                readOnly: cellReadOnly,
-                                message,
-                                recomputeRow: applyRowPatch,
-                              });
+                              return (
+                                <div key={`${fieldKey}.${idx}.${colKey}`}>
+                                  {c.render({
+                                    field: c,
+                                    value: val,
+                                    row: rowValue,
+                                    rowValue,
+                                    rowIndex: idx,
+                                    arrayName: name,
+                                    path,
+                                    values,
+                                    setFieldValue,
+                                    readOnly: cellReadOnly,
+                                    message,
+                                    recomputeRow: rowApplyPatch,
+                                    setRowValue: rowApplyPatch,
+                                  })}
+                                </div>
+                              );
                             }
 
                             if (c.component) {
                               const CustomComponent = c.component;
 
                               return (
-                                <CustomComponent
-                                  field={c}
-                                  value={val}
-                                  row={rowValue}
-                                  rowValue={rowValue}
-                                  rowIndex={idx}
-                                  arrayName={name}
-                                  path={path}
-                                  values={values}
-                                  setFieldValue={setFieldValue}
-                                  readOnly={cellReadOnly}
-                                  message={message}
-                                  recomputeRow={applyRowPatch}
-                                />
+                                <div key={`${fieldKey}.${idx}.${colKey}`}>
+                                  <CustomComponent
+                                    field={c}
+                                    value={val}
+                                    row={rowValue}
+                                    rowValue={rowValue}
+                                    rowIndex={idx}
+                                    arrayName={name}
+                                    path={path}
+                                    values={values}
+                                    setFieldValue={setFieldValue}
+                                    readOnly={cellReadOnly}
+                                    message={message}
+                                    recomputeRow={rowApplyPatch}
+                                    setRowValue={rowApplyPatch}
+                                  />
+                                </div>
                               );
                             }
 
-                            return null;
+                            return <div key={`${fieldKey}.${idx}.${colKey}`} />;
                           }
 
                           if (c.type === "fkSelect") {
                             const storeKey = `inline:${name}.${idx}.${colKey}`;
+
                             const store = fkStore[storeKey] || {
                               options: EMPTY_ARRAY,
                               loading: false,
@@ -3022,41 +3056,85 @@ export default function ReusableCrud({
 
                             return (
                               <Select
+                                key={`${fieldKey}.${idx}.${colKey}`}
                                 showSearch
-                                variant="underlined"
                                 size="medium"
                                 value={finalVal ?? undefined}
-                                placeholder={c.placeholder || "Search and select..."}
+                                variant="underlined"
+                                placeholder={c.placeholder || "Search and select"}
                                 disabled={cellReadOnly}
                                 filterOption={false}
                                 loading={store.loading}
                                 allowClear
                                 optionLabelProp="label"
+                                dropdownRender={(menu) => (
+                                  <>
+                                    {menu}
+
+                                    {c.quickAdd && !cellReadOnly ? (
+                                      <div
+                                        style={{
+                                          padding: 8,
+                                          borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                          background: token.colorBgContainer,
+                                        }}
+                                      >
+                                        <Button
+                                          type="link"
+                                          icon={<PlusOutlined />}
+                                          style={{ padding: 0, fontWeight: 600 }}
+                                          onMouseDown={(event) => event.preventDefault()}
+                                          onClick={() => {
+                                            setQuickAddState({
+                                              quickAdd: c.quickAdd,
+                                              field: c,
+                                              fieldName: colKey,
+                                              inline: true,
+                                              parentFieldName: name,
+                                              rowIndex: idx,
+                                              path,
+                                              detailPath,
+                                              storeKey,
+                                              arrayColumns: cols,
+                                              collapsedFields,
+                                            });
+                                          }}
+                                        >
+                                          {c.quickAdd.buttonLabel || "Add New"}
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </>
+                                )}
                                 onClear={() => {
-                                  applyRowPatch({
+                                  rowApplyPatch({
                                     [colKey]: null,
                                     [`${colKey}_detail`]: null,
                                     ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
                                   });
                                 }}
                                 onOpenChange={(open) => {
-                                  if (!open) return;
-
-                                  fetchFkOptionsInline(storeKey, c, {
-                                    search: "",
-                                    ensureOption:
-                                      finalVal != null
-                                        ? {
-                                          value: finalVal,
-                                          label: currentLabel || String(finalVal),
-                                          raw: detailVal || val,
-                                        }
-                                        : null,
-                                    rowValue,
-                                    rowIndex: idx,
-                                    parentFieldName: name,
-                                    valuesOverride: values,
-                                  });
+                                  if (
+                                    open &&
+                                    (!fkStore[storeKey]?.options ||
+                                      fkStore[storeKey]?.options.length === 0)
+                                  ) {
+                                    fetchFkOptionsInline(storeKey, c, {
+                                      search: "",
+                                      ensureOption:
+                                        finalVal != null
+                                          ? {
+                                            value: finalVal,
+                                            label: currentLabel || String(finalVal),
+                                            raw: detailVal || val,
+                                          }
+                                          : null,
+                                      rowValue,
+                                      rowIndex: idx,
+                                      parentFieldName: name,
+                                      valuesOverride: values,
+                                    });
+                                  }
                                 }}
                                 onSearch={(txt) => {
                                   if (fkTimersRef.current[storeKey]) {
@@ -3081,72 +3159,38 @@ export default function ReusableCrud({
                                     });
                                   }, 350);
                                 }}
-                                onChange={(v, option) => {
-                                  const opt = Array.isArray(option) ? option?.[0] : option;
-                                  const raw = opt?.raw || null;
-                                  const labelText = opt?.label ?? opt?.children ?? "";
+                                onChange={(selectedValue, option) => {
+                                  const selectedOption = Array.isArray(option) ? option?.[0] : option;
+                                  const selectedRecord = selectedOption?.raw || null;
 
-                                  const patch = {
-                                    [colKey]: v,
-                                    [`${colKey}_detail`]: raw,
-                                    ...(c.labelField ? { [c.labelField]: labelText } : EMPTY_OBJECT),
+                                  let patch = {
+                                    [colKey]: c.storeFullObject ? selectedRecord : selectedValue,
+                                    [`${colKey}_detail`]: selectedRecord,
+                                    ...(c.labelField
+                                      ? {
+                                        [c.labelField]:
+                                          selectedOption?.label ||
+                                          getFkLabel(selectedRecord, c) ||
+                                          "",
+                                      }
+                                      : EMPTY_OBJECT),
                                   };
 
-                                  if (typeof c.onSelectRecord === "function") {
-                                    Object.assign(patch, c.onSelectRecord(raw, rowValue, values) || EMPTY_OBJECT);
+                                  if (typeof c.onSelectRecord === "function" && selectedRecord) {
+                                    patch = {
+                                      ...patch,
+                                      ...(c.onSelectRecord(selectedRecord, rowValue, values, idx) ||
+                                        EMPTY_OBJECT),
+                                    };
                                   }
 
-                                  applyRowPatch(patch);
+                                  rowApplyPatch(patch);
                                 }}
-                                popupRender={(menu) => (
-                                  <>
-                                    {menu}
-
-                                    {c.quickAdd && !cellReadOnly && (
-                                      <div
-                                        style={{
-                                          position: "sticky",
-                                          bottom: 0,
-                                          zIndex: 2,
-                                          background: token.colorBgElevated,
-                                          borderTop: `1px solid ${token.colorBorderSecondary}`,
-                                          padding: token.paddingXS,
-                                          textAlign: "center",
-                                        }}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                      >
-                                        <Button
-                                          type="link"
-                                          block
-                                          icon={<PlusOutlined />}
-                                          onClick={() => {
-                                            setQuickAddState({
-                                              inline: true,
-                                              mode: "add",
-                                              fieldName: c.name || colKey,
-                                              field: c,
-                                              path,
-                                              detailPath,
-                                              storeKey,
-                                              rowIndex: idx,
-                                              parentFieldName: name,
-                                              arrayColumns: cols,
-                                              collapsedFields,
-                                            });
-                                          }}
-                                        >
-                                          {c.quickAdd.buttonLabel || "Add New"}
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                                optionRender={
-                                  typeof c.fkOptionRender === "function"
-                                    ? (option) => c.fkOptionRender(option.data?.raw || option.data)
-                                    : undefined
-                                }
-                                options={mergedOptions}
+                                options={mergedOptions.map((opt) => ({
+                                  value: opt.value,
+                                  label: opt.label,
+                                  raw: opt.raw,
+                                }))}
                               />
                             );
                           }
@@ -3154,9 +3198,9 @@ export default function ReusableCrud({
                           if (c.type === "autocomplete") {
                             return (
                               <BackendAutocomplete
+                                key={`${fieldKey}.${idx}.${colKey}`}
                                 field={c}
                                 value={val}
-                                variant="underlined"
                                 detailValue={detailVal}
                                 disabled={cellReadOnly}
                                 authHeaders={authHeaders}
@@ -3165,8 +3209,60 @@ export default function ReusableCrud({
                                 rowContext={rowValue}
                                 rowIndex={idx}
                                 parentFieldName={name}
-                                onValueChange={(v) => setFieldValue(path, v)}
-                                onDetailChange={(d) => setFieldValue(detailPath, d, false)}
+                                onValueChange={(v) => {
+                                  rowApplyPatch({ [colKey]: v });
+                                }}
+                                onDetailChange={(d) => {
+                                  rowApplyPatch({ [`${colKey}_detail`]: d });
+                                }}
+                              />
+                            );
+                          }
+
+                          if (c.type === "transfer") {
+                            return (
+                              <CrudTransfer
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                field={c}
+                                value={val}
+                                disabled={cellReadOnly}
+                                authHeaders={authHeaders}
+                                onChange={(nextValues) => rowApplyPatch({ [colKey]: nextValues })}
+                                onDetailChange={(details) =>
+                                  rowApplyPatch({ [`${colKey}_detail`]: details })
+                                }
+                              />
+                            );
+                          }
+
+                          if (c.type === "select") {
+                            const options = (c.options || EMPTY_ARRAY).map(normalizeOption);
+
+                            return (
+                              <Select
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                showSearch
+                                allowClear={c.allowClear ?? true}
+                                size="medium"
+                                variant="underlined"
+                                value={val ?? undefined}
+                                placeholder={c.placeholder || "Select"}
+                                disabled={cellReadOnly}
+                                options={options}
+                                filterOption={(input, opt) =>
+                                  String(opt?.label ?? "")
+                                    .toLowerCase()
+                                    .includes(input.toLowerCase())
+                                }
+                                onChange={(selectedValue, option) => {
+                                  const patch = { [colKey]: selectedValue };
+
+                                  if (c.labelField) {
+                                    patch[c.labelField] = option?.label || "";
+                                  }
+
+                                  rowApplyPatch(patch);
+                                }}
                               />
                             );
                           }
@@ -3174,67 +3270,45 @@ export default function ReusableCrud({
                           if (c.type === "number") {
                             return (
                               <InputNumber
+                                key={`${fieldKey}.${idx}.${colKey}`}
                                 size="medium"
                                 variant="underlined"
                                 style={{ width: "100%" }}
                                 value={val}
                                 min={c.min}
                                 max={c.max}
-                                placeholder={c.placeholder || ""}
                                 disabled={cellReadOnly}
-                                onChange={(v) => setFieldValue(path, v)}
+                                placeholder={c.placeholder || ""}
+                                addonBefore={
+                                  typeof c.addonBefore === "function"
+                                    ? c.addonBefore({ values, row: rowValue, rowIndex: idx })
+                                    : c.addonBefore
+                                }
+                                prefix={
+                                  typeof c.prefix === "function"
+                                    ? c.prefix({ values, row: rowValue, rowIndex: idx })
+                                    : c.prefix
+                                }
+                                onChange={(nextValue) => {
+                                  rowApplyPatch({ [colKey]: nextValue });
+                                }}
                               />
                             );
                           }
 
-                          if (c.type === "select") {
-                            const opts = (c.options || EMPTY_ARRAY).map(normalizeOption);
-
+                          if (c.type === "textarea") {
                             return (
-                              <Select
+                              <Input.TextArea
+                                key={`${fieldKey}.${idx}.${colKey}`}
                                 size="medium"
                                 variant="underlined"
-                                showSearch
-                                value={val ?? undefined}
-                                placeholder={c.placeholder || "Select..."}
-                                disabled={cellReadOnly}
-                                onChange={(v, option) => {
-                                  setFieldValue(path, v);
-
-                                  if (c.labelField) {
-                                    const opt = Array.isArray(option) ? option?.[0] : option;
-                                    const lbl = opt?.children ?? opt?.label ?? "";
-                                    setFieldValue(`${name}[${idx}].${c.labelField}`, lbl);
-                                  }
-                                }}
-                              >
-                                {opts.map((o) => (
-                                  <Select.Option key={o.value} value={o.value}>
-                                    {o.label}
-                                  </Select.Option>
-                                ))}
-                              </Select>
-                            );
-                          }
-
-                          if (c.type === "date") {
-                            return (
-                              <StableDatePicker
                                 value={val}
+                                rows={c.rows || 2}
+                                placeholder={c.placeholder || ""}
                                 disabled={cellReadOnly}
-                                format={c.format || "YYYY-MM-DD"}
-                                placeholder={c.placeholder}
-                                onChange={(v) => setFieldValue(path, v)}
-                              />
-                            );
-                          }
-
-                          if (c.type === "switch") {
-                            return (
-                              <Switch
-                                checked={!!val}
-                                disabled={cellReadOnly}
-                                onChange={(checked) => setFieldValue(path, checked)}
+                                onChange={(e) => {
+                                  rowApplyPatch({ [colKey]: e.target.value });
+                                }}
                               />
                             );
                           }
@@ -3242,23 +3316,74 @@ export default function ReusableCrud({
                           if (c.type === "checkbox") {
                             return (
                               <Checkbox
+                                key={`${fieldKey}.${idx}.${colKey}`}
                                 checked={!!val}
                                 disabled={cellReadOnly}
-                                onChange={(e) => setFieldValue(path, e.target.checked)}
+                                onChange={(e) => {
+                                  rowApplyPatch({ [colKey]: e.target.checked });
+                                }}
                               >
                                 {c.inlineLabel || c.label}
                               </Checkbox>
                             );
                           }
 
+                          if (c.type === "switch") {
+                            return (
+                              <Switch
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                checked={!!val}
+                                disabled={cellReadOnly}
+                                onChange={(checked) => {
+                                  rowApplyPatch({ [colKey]: checked });
+                                }}
+                              />
+                            );
+                          }
+
+                          if (c.type === "date") {
+                            return (
+                              <Input
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                size="medium"
+                                type="date"
+                                variant="underlined"
+                                value={val || ""}
+                                disabled={cellReadOnly}
+                                onChange={(e) => {
+                                  rowApplyPatch({ [colKey]: e.target.value });
+                                }}
+                              />
+                            );
+                          }
+
+                          if (c.type === "datePicker") {
+                            return (
+                              <StableDatePicker
+                                key={`${fieldKey}.${idx}.${colKey}`}
+                                value={val}
+                                format={c.format || "YYYY-MM-DD"}
+                                placeholder={c.placeholder || "Select date"}
+                                disabled={cellReadOnly}
+                                onChange={(dateValue) => {
+                                  rowApplyPatch({ [colKey]: dateValue });
+                                }}
+                                allowClear={c.allowClear ?? true}
+                              />
+                            );
+                          }
+
                           return (
                             <Input
+                              key={`${fieldKey}.${idx}.${colKey}`}
                               size="medium"
                               variant="underlined"
                               value={val}
                               placeholder={c.placeholder || ""}
                               disabled={cellReadOnly}
-                              onChange={(e) => setFieldValue(path, e.target.value)}
+                              onChange={(e) => {
+                                rowApplyPatch({ [colKey]: e.target.value });
+                              }}
                             />
                           );
                         };
@@ -3269,6 +3394,8 @@ export default function ReusableCrud({
                               style={{
                                 ...ui.objectArrayHead,
                                 gridTemplateColumns,
+                                background: field.headerBg || ui.objectArrayHead.background,
+                                color: field.headerColor || ui.objectArrayHead.color,
                               }}
                             >
                               {cols.map((c) => {
@@ -3280,7 +3407,7 @@ export default function ReusableCrud({
                               {!readOnly ? <div /> : null}
                             </div>
 
-                            {rows.map((r, idx) => {
+                            {rows.map((rowValue, idx) => {
                               const expanded = isObjectArrayRowExpanded(name, idx, field);
 
                               return (
@@ -3294,398 +3421,99 @@ export default function ReusableCrud({
                                       gridTemplateColumns,
                                     }}
                                   >
-                                    {cols.map((c, colIdx) => {
-                                      const colKey = c.key ?? c.name;
+                                    {cols.map((c, colIdx) =>
+                                      renderObjectArrayCell(c, rowValue, idx, colIdx, false)
+                                    )}
 
-                                      if (!colKey) return <div key={`${fieldKey}.${idx}.${colIdx}`} />;
-
-                                      const path = `${name}[${idx}].${colKey}`;
-                                      const val = r?.[colKey];
-                                      const detailPath = `${name}[${idx}].${colKey}_detail`;
-                                      const detailVal = r?.[`${colKey}_detail`];
-                                      const cellReadOnly = readOnly || !!c.readOnly;
-
-                                      const rowApplyPatch = (patch = EMPTY_OBJECT) => {
-                                        const nextRow = { ...(r || EMPTY_OBJECT), ...(patch || EMPTY_OBJECT) };
-
-                                        Object.entries(patch || EMPTY_OBJECT).forEach(([key, value]) => {
-                                          setFieldValue(`${name}[${idx}].${key}`, value, false);
-                                        });
-
-                                        [...(cols || EMPTY_ARRAY), ...(collapsedFields || EMPTY_ARRAY)].forEach((formulaCol) => {
-                                          const formulaKey = formulaCol?.key ?? formulaCol?.name;
-
-                                          if (!formulaKey || typeof formulaCol?.formula !== "function") return;
-
-                                          const computed = formulaCol.formula(nextRow, values, idx);
-                                          nextRow[formulaKey] = computed;
-                                          setFieldValue(`${name}[${idx}].${formulaKey}`, computed, false);
-                                        });
-                                      };
-
-                                      if (typeof c.formula === "function") {
-                                        const computed = c.formula(r, values, idx);
-
-                                        if (c.type === "number") {
-                                          return (
-                                            <InputNumber
-                                              key={`${fieldKey}.${idx}.${colKey}`}
-                                              size="medium"
-                                              variant="underlined"
-                                              style={{ width: "100%" }}
-                                              value={computed}
-                                              disabled
-                                              readOnly
-                                            />
-                                          );
-                                        }
-
-                                        return (
-                                          <Input
-                                            key={`${fieldKey}.${idx}.${colKey}`}
-                                            value={computed}
-                                            disabled
-                                            variant="underlined"
-                                            readOnly
-                                          />
-                                        );
-                                      }
-
-                                      if (c.type === "fkSelect") {
-                                        const storeKey = `inline:${name}.${idx}.${colKey}`;
-
-                                        const store = fkStore[storeKey] || {
-                                          options: EMPTY_ARRAY,
-                                          loading: false,
-                                        };
-
-                                        const options = store.options || EMPTY_ARRAY;
-                                        const finalVal = getFkValue(val, c);
-
-                                        const currentLabel =
-                                          r?.[c.labelField] ||
-                                          getFkLabel(detailVal, c) ||
-                                          getFkLabel(val, c) ||
-                                          null;
-
-                                        const mergedOptions =
-                                          finalVal != null &&
-                                            !options.some((o) => String(o.value) === String(finalVal))
-                                            ? [
-                                              {
-                                                value: finalVal,
-                                                label: currentLabel || String(finalVal),
-                                                raw: detailVal || val,
-                                              },
-                                              ...options,
-                                            ]
-                                            : options;
-
-                                        return (
-                                          <Select
-                                            key={`${fieldKey}.${idx}.${colKey}`}
-                                            showSearch
-                                            size="medium"
-                                            value={finalVal}
-                                            variant="underlined"
-                                            placeholder={c.placeholder || "Search and select..."}
-                                            disabled={cellReadOnly}
-                                            filterOption={false}
-                                            loading={store.loading}
-                                            allowClear
-                                            optionLabelProp="label"
-                                            onClear={() => {
-                                              rowApplyPatch({
-                                                [colKey]: null,
-                                                [`${colKey}_detail`]: null,
-                                                ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
-                                              });
-                                            }}
-                                            onOpenChange={(open) => {
-                                              if (
-                                                open &&
-                                                (!fkStore[storeKey]?.options ||
-                                                  fkStore[storeKey]?.options.length === 0)
-                                              ) {
-                                                fetchFkOptionsInline(storeKey, c, {
-                                                  search: "",
-                                                  ensureOption:
-                                                    finalVal != null
-                                                      ? {
-                                                        value: finalVal,
-                                                        label: currentLabel || String(finalVal),
-                                                        raw: detailVal || val,
-                                                      }
-                                                      : null,
-                                                  rowValue: r,
-                                                  rowIndex: idx,
-                                                  parentFieldName: name,
-                                                  valuesOverride: values,
-                                                });
-                                              }
-                                            }}
-                                            onSearch={(txt) => {
-                                              if (fkTimersRef.current[storeKey]) {
-                                                clearTimeout(fkTimersRef.current[storeKey]);
-                                              }
-
-                                              fkTimersRef.current[storeKey] = setTimeout(() => {
-                                                fetchFkOptionsInline(storeKey, c, {
-                                                  search: txt || "",
-                                                  ensureOption:
-                                                    finalVal != null
-                                                      ? {
-                                                        value: finalVal,
-                                                        label: currentLabel || String(finalVal),
-                                                        raw: detailVal || val,
-                                                      }
-                                                      : null,
-                                                  rowValue: r,
-                                                  rowIndex: idx,
-                                                  parentFieldName: name,
-                                                  valuesOverride: values,
-                                                });
-                                              }, 350);
-                                            }}
-                                            onChange={(v, option) => {
-                                              const opt = Array.isArray(option) ? option?.[0] : option;
-                                              const raw = opt?.raw || null;
-                                              const labelText = opt?.label ?? opt?.children ?? "";
-
-                                              const patch = {
-                                                [colKey]: v,
-                                                [`${colKey}_detail`]: raw,
-                                                ...(c.labelField ? { [c.labelField]: labelText } : EMPTY_OBJECT),
-                                              };
-
-                                              if (typeof c.onSelectRecord === "function") {
-                                                Object.assign(patch, c.onSelectRecord(raw, r, values, idx) || EMPTY_OBJECT);
-                                              }
-
-                                              rowApplyPatch(patch);
-                                            }}
-                                            popupRender={(menu) => (
-                                              <>
-                                                {menu}
-
-                                                {c.quickAdd && !cellReadOnly && (
-                                                  <div
-                                                    style={{
-                                                      position: "sticky",
-                                                      bottom: 0,
-                                                      zIndex: 2,
-                                                      background: token.colorBgElevated,
-                                                      borderTop: `1px solid ${token.colorBorderSecondary}`,
-                                                      padding: token.paddingXS,
-                                                      textAlign: "center",
-                                                    }}
-                                                    onMouseDown={(e) => e.preventDefault()}
-                                                  >
-                                                    <Button
-                                                      type="link"
-                                                      block
-                                                      icon={<PlusOutlined />}
-                                                      onClick={() => {
-                                                        setQuickAddState({
-                                                          inline: true,
-                                                          mode: "add",
-                                                          fieldName: c.name || colKey,
-                                                          field: c,
-                                                          path,
-                                                          detailPath,
-                                                          storeKey,
-                                                          rowIndex: idx,
-                                                          parentFieldName: name,
-                                                          arrayColumns: cols,
-                                                          collapsedFields,
-                                                        });
-                                                      }}
-                                                    >
-                                                      {c.quickAdd.buttonLabel || "Add New"}
-                                                    </Button>
-                                                  </div>
-                                                )}
-                                              </>
-                                            )}
-                                            optionRender={
-                                              typeof c.fkOptionRender === "function"
-                                                ? (option) => c.fkOptionRender(option.data?.raw || option.data)
-                                                : undefined
-                                            }
-                                            options={mergedOptions}
-                                          />
-                                        );
-                                      }
-
-                                      if (c.type === "autocomplete") {
-                                        return (
-                                          <BackendAutocomplete
-                                            key={`${fieldKey}.${idx}.${colKey}`}
-                                            field={c}
-                                            variant="underlined"
-                                            value={val}
-                                            detailValue={detailVal}
-                                            disabled={cellReadOnly}
-                                            authHeaders={authHeaders}
-                                            placeholder={c.placeholder}
-                                            valuesContext={values}
-                                            rowContext={r}
-                                            rowIndex={idx}
-                                            parentFieldName={name}
-                                            onValueChange={(v) => setFieldValue(path, v)}
-                                            onDetailChange={(d) => setFieldValue(detailPath, d, false)}
-                                          />
-                                        );
-                                      }
-
-                                      if (c.type === "number") {
-                                        return (
-                                          <InputNumber
-                                            key={`${fieldKey}.${idx}.${colKey}`}
-                                            size="medium"
-                                            style={{ width: "100%" }}
-                                            value={val}
-                                            min={c.min}
-                                            variant="underlined"
-                                            max={c.max}
-                                            placeholder={c.placeholder || ""}
-                                            disabled={cellReadOnly}
-                                            onChange={(v) => setFieldValue(path, v)}
-                                          />
-                                        );
-                                      }
-
-                                      if (c.type === "select") {
-                                        const opts = (c.options || EMPTY_ARRAY).map(normalizeOption);
-
-                                        return (
-                                          <Select
-                                            key={`${fieldKey}.${idx}.${colKey}`}
-                                            size="medium"
-                                            showSearch
-                                            variant="underlined"
-                                            value={val ?? undefined}
-                                            placeholder={c.placeholder || "Select..."}
-                                            disabled={cellReadOnly}
-                                            onChange={(v, option) => {
-                                              setFieldValue(path, v);
-
-                                              if (c.labelField) {
-                                                const opt = Array.isArray(option) ? option?.[0] : option;
-                                                const lbl = opt?.children ?? opt?.label ?? "";
-                                                setFieldValue(`${name}[${idx}].${c.labelField}`, lbl);
-                                              }
-                                            }}
-                                          >
-                                            {opts.map((o) => (
-                                              <Select.Option key={o.value} value={o.value}>
-                                                {o.label}
-                                              </Select.Option>
-                                            ))}
-                                          </Select>
-                                        );
-                                      }
-
-                                      return c.type === "textarea" ? (
-                                        <Input.TextArea
-                                          key={`${fieldKey}.${idx}.${colKey}`}
-                                          size="medium"
-                                          value={val}
-                                          rows={c.rows || 1}
-                                          placeholder={c.placeholder || ""}
-                                          disabled={cellReadOnly}
-                                          onChange={(e) => setFieldValue(path, e.target.value)}
-                                        />
-                                      ) : (
-                                        <Input
-                                          key={`${fieldKey}.${idx}.${colKey}`}
-                                          size="medium"
-                                          value={val}
-                                          placeholder={c.placeholder || ""}
-                                          disabled={cellReadOnly}
-                                          onChange={(e) => setFieldValue(path, e.target.value)}
-                                        />
-                                      );
-                                    })}
-                                     
                                     {showExpand ? (
                                       <Button
-                                        size="medium"
                                         type="text"
-                                        icon={<DownOutlined rotate={expanded ? 270 : 0} />}
+                                        size="small"
+                                        icon={
+                                          <DownOutlined
+                                            rotate={expanded ? 180 : 0}
+                                            style={{ fontSize: 12 }}
+                                          />
+                                        }
                                         onClick={() => toggleObjectArrayRow(name, idx)}
                                       />
                                     ) : null}
 
                                     {!readOnly ? (
                                       <Button
-                                        size="medium"
-                                        danger
                                         type="text"
-                                        icon={<DeleteOutlined />}
-                                        onClick={() => remove(idx)}
+                                        danger
+                                        size="small"
+                                        icon={<CloseOutlined />}
+                                        onClick={() => {
+                                          const deletedId = rowValue?.id;
+
+                                          if (deletedId) {
+                                            const deletedFieldName =
+                                              field.deletedFieldName || "deleted_item_ids";
+
+                                            const currentDeleted = Array.isArray(values?.[deletedFieldName])
+                                              ? values[deletedFieldName]
+                                              : EMPTY_ARRAY;
+
+                                            setFieldValue(
+                                              deletedFieldName,
+                                              [...currentDeleted, deletedId],
+                                              false
+                                            );
+                                          }
+
+                                          remove(idx);
+                                        }}
                                       />
                                     ) : null}
-                                    
                                   </div>
 
-                                  {showExpand && expanded && (
+                                  {showExpand && expanded ? (
                                     <div style={ui.objectArrayExpanded}>
-                                      <Row gutter={[16, 16]}>
-                                        {collapsedFields.map((c, extraIdx) => {
-                                          const colKey = c.key ?? c.name ?? `extra-${extraIdx}`;
-
-                                          return (
-                                            <Col
-                                              key={`${fieldKey}.${idx}.collapsed.${String(colKey)}`}
-                                              {...getResponsiveColProps(c)}
+                                      <Row gutter={[16, 12]}>
+                                        {collapsedFields.map((c, colIdx) => (
+                                          <Col
+                                            key={`${fieldKey}.${idx}.collapsed.${c.key ?? c.name ?? colIdx}`}
+                                            {...getResponsiveColProps(c)}
+                                          >
+                                            <Form.Item
+                                              layout="vertical"
+                                              label={c.label}
+                                              required={c.required}
                                             >
-                                              <div style={{ marginBottom: 0 }}>
-                                                {c.label ? (
-                                                  <div
-                                                    style={{
-                                                      fontSize: 13,
-                                                      fontWeight: 600,
-                                                      color: token.colorTextSecondary,
-                                                      marginBottom: 8,
-                                                      lineHeight: 1.2,
-                                                    }}
-                                                  >
-                                                    {c.label}
-                                                  </div>
-                                                ) : null}
-
-                                                <div style={{ display: "block", width: "100%" }}>
-                                                  {renderExpandedField(c, r, idx)}
-                                                </div>
-                                              </div>
-                                            </Col>
-                                          );
-                                        })}
+                                              {renderObjectArrayCell(c, rowValue, idx, colIdx, true)}
+                                            </Form.Item>
+                                          </Col>
+                                        ))}
                                       </Row>
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               );
                             })}
 
-                            {!readOnly && (
+                            {!readOnly ? (
                               <div
                                 style={{
-                                  padding: token.paddingMD,
+                                  padding: token.paddingSM,
                                   borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                  background: token.colorFillQuaternary,
                                 }}
                               >
                                 <Button
-                                  size="medium"
                                   type="dashed"
                                   icon={<PlusOutlined />}
-                                  onClick={() => push(field.defaultItem || EMPTY_OBJECT)}
+                                  onClick={() => {
+                                    push({
+                                      ...(field.defaultItem || EMPTY_OBJECT),
+                                    });
+                                  }}
                                 >
-                                  {field.addButtonLabel || "Add Row"}
+                                  {field.addButtonLabel || "Add row"}
                                 </Button>
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         );
                       }}
@@ -3763,10 +3591,10 @@ export default function ReusableCrud({
           const savedLabel = field.fkLabel
             ? field.fkLabel(savedRecord)
             : savedRecord?.name ||
-              savedRecord?.display_name ||
-              savedRecord?.code ||
-              savedRecord?.title ||
-              String(savedId ?? "");
+            savedRecord?.display_name ||
+            savedRecord?.code ||
+            savedRecord?.title ||
+            String(savedId ?? "");
 
           const savedOption = {
             value: savedId,
@@ -4215,58 +4043,58 @@ export default function ReusableCrud({
     </Formik>
   );
 
-   const headerRight = (
-  <Space size={8} wrap>
-    {(custom_add || custom_add_link) && (
-      <Button
-        icon={<PlusOutlined />}
-        type="primary"
-        onClick={() => {
-          setSubmitErrors(EMPTY_ARRAY);
-
-          if (custom_add_link) {
-            router.visit(custom_add_link);
-            return;
-          }
-
-          if (typeof custom_add === 'function') {
-            custom_add();
-          }
-        }}
-      >
-        Add New
-      </Button>
-    )}
-
-    {canAdd &&
-      !custom_add &&
-      !custom_add_link &&
-      !button_ui &&
-      ui_type !== 'add_related' && (
+  const headerRight = (
+    <Space size={8} wrap>
+      {(custom_add || custom_add_link) && (
         <Button
           icon={<PlusOutlined />}
           type="primary"
           onClick={() => {
             setSubmitErrors(EMPTY_ARRAY);
-            setEditingRecord(null);
-            setVisible(true);
+
+            if (custom_add_link) {
+              router.visit(custom_add_link);
+              return;
+            }
+
+            if (typeof custom_add === 'function') {
+              custom_add();
+            }
           }}
         >
           Add New
         </Button>
       )}
 
-    {hasActions && canView && (
-      <Dropdown
-        menu={{ items: topMenuItems }}
-        placement="bottomRight"
-        trigger={['click']}
-      >
-        <Button type="default" icon={<MoreOutlined />} />
-      </Dropdown>
-    )}
-  </Space>
-);
+      {canAdd &&
+        !custom_add &&
+        !custom_add_link &&
+        !button_ui &&
+        ui_type !== 'add_related' && (
+          <Button
+            icon={<PlusOutlined />}
+            type="primary"
+            onClick={() => {
+              setSubmitErrors(EMPTY_ARRAY);
+              setEditingRecord(null);
+              setVisible(true);
+            }}
+          >
+            Add New
+          </Button>
+        )}
+
+      {hasActions && canView && (
+        <Dropdown
+          menu={{ items: topMenuItems }}
+          placement="bottomRight"
+          trigger={['click']}
+        >
+          <Button type="default" icon={<MoreOutlined />} />
+        </Dropdown>
+      )}
+    </Space>
+  );
 
   return (
     <div className="reusable-crud-token">

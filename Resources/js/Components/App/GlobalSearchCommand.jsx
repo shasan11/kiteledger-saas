@@ -549,6 +549,7 @@ export default function GlobalSearchCommand({
                 .global-search-command__trigger-shortcut {
                     padding: 2px 8px;
                     border-radius: 999px;
+                    height:100%,
                     background: rgba(255,255,255,0.08);
                     color: #9ca3af;
                     font-size: 12px;

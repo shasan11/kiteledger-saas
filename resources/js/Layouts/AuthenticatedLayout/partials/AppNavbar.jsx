@@ -84,6 +84,7 @@ export default function AppNavbar({
                         <div className="app-navbar__logo-wrap">
                             <ApplicationLogo
                                 className="app-navbar__logo"
+                                dark
                                 style={{
                                     width: '200px',
                                     padding: '3px',

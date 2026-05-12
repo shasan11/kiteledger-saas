@@ -92,6 +92,27 @@ export default function SalesOrderIndex(props) {
                 canDelete
                 hasActions
                 hasActionColumns
+                bulkactions={[
+                    {
+                        label: "Approve",
+                        actions: {
+                            approved: true,
+                        },
+                    },
+                    {
+                        label: "Move to Draft",
+                        actions: {
+                            approved: false,
+                        },
+                    },
+                    {
+                        label: "Void",
+                        actions: {
+                            approved: false,
+                            voided:true
+                        },
+                    },
+                ]}
                 canView
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
