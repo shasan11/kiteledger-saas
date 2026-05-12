@@ -62,7 +62,7 @@ export default function AppNavbar({
                     padding: isMobile ? '0 12px' : '0 18px',
                     background: dark.nav,
                     borderBottom: `1px solid ${dark.border}`,
-                    boxShadow: '0 10px 30px rgba(2, 6, 23, 0.28)',
+                    
                     display: 'grid',
                     gridTemplateColumns: isMobile
                         ? 'auto 1fr auto'

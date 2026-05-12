@@ -154,6 +154,7 @@ export default function Quotations(props) {
         title: 'Customer',
         dataIndex: 'contact',
         key: 'contact',
+        width:"250px",
         render: (_, record) => getContactName(record),
       },
       {
@@ -519,6 +520,7 @@ export default function Quotations(props) {
         pageSizeParam="page_size"
         sortMode="ordering"
         orderingParam="ordering"
+        showRowActionMenu={false}
         enableServerPagination
         showSearch
         canAdd={true}

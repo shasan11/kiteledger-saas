@@ -33,11 +33,11 @@ import {
   SearchOutlined,
   ReloadOutlined,
   EllipsisOutlined,
-  ColumnHeightOutlined,
   FilterOutlined,
   InboxOutlined,
   LockOutlined,
   CloseOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import { Formik, Field, FieldArray } from "formik";
 import * as XLSX from "xlsx";
@@ -241,8 +241,8 @@ export default function ReusableCrud({
       },
       objectArrayRow: {
         display: "grid",
-        gap: token.marginXS,
-        padding: `${token.paddingSM}px ${token.paddingMD}px`,
+        gap:  "6px",
+        padding: `${token.paddingSM}px ${token.paddingSM}px`,
         alignItems: "center",
       },
       objectArrayExpanded: {
@@ -271,30 +271,20 @@ export default function ReusableCrud({
         borderRadius: token.borderRadiusLG,
       },
       formOnlyPage: {
-        minHeight: "100vh",
+        minHeight: "100%",
         background: token.colorBgLayout,
-        padding: "0 clamp(24px, 8vw, 140px)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "stretch",
-        overflowY: "auto",
+        padding: token.paddingLG,
       },
       formOnlyShell: {
-        width: "100%",
-        maxWidth: 1280,
-        minHeight: "100vh",
         background: token.colorBgContainer,
-        borderLeft: `1px solid ${token.colorBorderSecondary}`,
-        borderRight: `1px solid ${token.colorBorderSecondary}`,
-        borderTop: "none",
-        borderBottom: "none",
-        borderRadius: 0,
-        boxShadow: token.boxShadowTertiary || "0 8px 28px rgba(15, 23, 42, 0.08)",
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadiusLG,
+        boxShadow: token.boxShadowTertiary || token.boxShadowSecondary,
         overflow: "hidden",
       },
       formOnlyHeader: {
-        minHeight: 76,
-        padding: `3px ${token.paddingSM}px`,
+        minHeight: 64,
+        padding: `${token.paddingSM}px ${token.paddingLG}px`,
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
         display: "flex",
         alignItems: "center",
@@ -303,7 +293,7 @@ export default function ReusableCrud({
         background: token.colorBgContainer,
         position: "sticky",
         top: 0,
-        zIndex: 5,
+        zIndex: 2,
       },
       formOnlyTitleWrap: {
         minWidth: 0,
@@ -327,7 +317,7 @@ export default function ReusableCrud({
         flexShrink: 0,
       },
       formOnlyBody: {
-        padding: `${token.paddingLG}px ${token.paddingXL}px ${token.paddingXL}px`,
+        padding: token.paddingLG,
         background: token.colorBgContainer,
       },
     }),
@@ -583,14 +573,14 @@ export default function ReusableCrud({
       typeof field?.fkLabel === "function"
         ? field.fkLabel(row)
         : row?.[labelKey] ??
-          row?.name ??
-          row?.company_name ??
-          row?.person_name ??
-          row?.display_name ??
-          row?.code ??
-          row?.label ??
-          row?.title ??
-          String(value ?? "");
+        row?.name ??
+        row?.company_name ??
+        row?.person_name ??
+        row?.display_name ??
+        row?.code ??
+        row?.label ??
+        row?.title ??
+        String(value ?? "");
 
     return { value, label, raw: row };
   };
@@ -830,14 +820,14 @@ export default function ReusableCrud({
       let ensureOption =
         optionOrId && typeof optionOrId === "object"
           ? {
-              value: optionOrId.value ?? optionOrId.id ?? getFkValue(optionOrId, field),
-              label:
-                optionOrId.label ??
-                getFkLabel(optionOrId.raw ?? optionOrId, field) ??
-                optionOrId.name ??
-                String(optionOrId.value ?? optionOrId.id ?? ""),
-              raw: optionOrId.raw ?? optionOrId,
-            }
+            value: optionOrId.value ?? optionOrId.id ?? getFkValue(optionOrId, field),
+            label:
+              optionOrId.label ??
+              getFkLabel(optionOrId.raw ?? optionOrId, field) ??
+              optionOrId.name ??
+              String(optionOrId.value ?? optionOrId.id ?? ""),
+            raw: optionOrId.raw ?? optionOrId,
+          }
           : null;
 
       if (!ensureOption && id != null) {
@@ -898,19 +888,19 @@ export default function ReusableCrud({
 
         const finalUrl = enableServerPagination
           ? appendQueryParams(baseUrl, {
-              [pageParam]: page ?? pagination.current,
-              [pageSizeParam]: pageSize ?? pagination.pageSize,
-              ...(searchParam ? { [searchParam]: search ?? searchText } : EMPTY_OBJECT),
-              ...(activeParam ? { [activeParam]: viewActive } : EMPTY_OBJECT),
-              ...(mergedBaseFilters || EMPTY_OBJECT),
-              ...(sortQueryParams || EMPTY_OBJECT),
-            })
+            [pageParam]: page ?? pagination.current,
+            [pageSizeParam]: pageSize ?? pagination.pageSize,
+            ...(searchParam ? { [searchParam]: search ?? searchText } : EMPTY_OBJECT),
+            ...(activeParam ? { [activeParam]: viewActive } : EMPTY_OBJECT),
+            ...(mergedBaseFilters || EMPTY_OBJECT),
+            ...(sortQueryParams || EMPTY_OBJECT),
+          })
           : appendQueryParams(baseUrl, {
-              ...(searchParam ? { [searchParam]: search ?? searchText } : EMPTY_OBJECT),
-              ...(activeParam ? { [activeParam]: viewActive } : EMPTY_OBJECT),
-              ...(mergedBaseFilters || EMPTY_OBJECT),
-              ...(sortQueryParams || EMPTY_OBJECT),
-            });
+            ...(searchParam ? { [searchParam]: search ?? searchText } : EMPTY_OBJECT),
+            ...(activeParam ? { [activeParam]: viewActive } : EMPTY_OBJECT),
+            ...(mergedBaseFilters || EMPTY_OBJECT),
+            ...(sortQueryParams || EMPTY_OBJECT),
+          });
 
         const res = await axios.get(finalUrl, { headers: authHeaders });
 
@@ -971,19 +961,19 @@ export default function ReusableCrud({
 
         const finalUrl = enableServerPagination
           ? appendQueryParams(baseUrl, {
-              [pageParam]: page ?? inactivePagination.current,
-              [pageSizeParam]: pageSize ?? inactivePagination.pageSize,
-              ...(searchParam ? { [searchParam]: search ?? inactiveSearchText } : EMPTY_OBJECT),
-              ...(activeParam ? { [activeParam]: false } : EMPTY_OBJECT),
-              ...(mergedBaseFilters || EMPTY_OBJECT),
-              ...(sortQueryParams || EMPTY_OBJECT),
-            })
+            [pageParam]: page ?? inactivePagination.current,
+            [pageSizeParam]: pageSize ?? inactivePagination.pageSize,
+            ...(searchParam ? { [searchParam]: search ?? inactiveSearchText } : EMPTY_OBJECT),
+            ...(activeParam ? { [activeParam]: false } : EMPTY_OBJECT),
+            ...(mergedBaseFilters || EMPTY_OBJECT),
+            ...(sortQueryParams || EMPTY_OBJECT),
+          })
           : appendQueryParams(baseUrl, {
-              ...(searchParam ? { [searchParam]: search ?? inactiveSearchText } : EMPTY_OBJECT),
-              ...(activeParam ? { [activeParam]: false } : EMPTY_OBJECT),
-              ...(mergedBaseFilters || EMPTY_OBJECT),
-              ...(sortQueryParams || EMPTY_OBJECT),
-            });
+            ...(searchParam ? { [searchParam]: search ?? inactiveSearchText } : EMPTY_OBJECT),
+            ...(activeParam ? { [activeParam]: false } : EMPTY_OBJECT),
+            ...(mergedBaseFilters || EMPTY_OBJECT),
+            ...(sortQueryParams || EMPTY_OBJECT),
+          });
 
         const res = await axios.get(finalUrl, { headers: authHeaders });
 
@@ -1343,9 +1333,9 @@ export default function ReusableCrud({
       const finalUrl = appendQueryParams(baseUrl, {
         ...(enableServerPagination
           ? {
-              [pageParam]: page,
-              [pageSizeParam]: limitPerPage,
-            }
+            [pageParam]: page,
+            [pageSizeParam]: limitPerPage,
+          }
           : EMPTY_OBJECT),
         ...(searchParam ? { [searchParam]: searchText } : EMPTY_OBJECT),
         ...(activeParam ? { [activeParam]: viewActive } : EMPTY_OBJECT),
@@ -1589,10 +1579,10 @@ export default function ReusableCrud({
 
     return Array.isArray(data)
       ? data.filter((d) => {
-          if (d.hasOwnProperty("active")) return d.active === viewActive;
-          if (d.hasOwnProperty("is_active")) return d.is_active === viewActive;
-          return viewActive === true;
-        })
+        if (d.hasOwnProperty("active")) return d.active === viewActive;
+        if (d.hasOwnProperty("is_active")) return d.is_active === viewActive;
+        return viewActive === true;
+      })
       : EMPTY_ARRAY;
   }, [data, serverPaginated, viewActive]);
 
@@ -1601,8 +1591,8 @@ export default function ReusableCrud({
 
     return Array.isArray(data)
       ? data.filter((d) =>
-          d.hasOwnProperty("active") ? d.active === false : d.is_active === false
-        )
+        d.hasOwnProperty("active") ? d.active === false : d.is_active === false
+      )
       : EMPTY_ARRAY;
   }, [data, serverPaginated, inactiveRows]);
 
@@ -1648,7 +1638,7 @@ export default function ReusableCrud({
 
       const currentValue = columnFilters?.[paramName] ?? "";
 
-      const loadFilterAutocomplete = async (search = "", setter = () => {}) => {
+      const loadFilterAutocomplete = async (search = "", setter = () => { }) => {
         if (!fkUrl) return;
 
         try {
@@ -1675,10 +1665,10 @@ export default function ReusableCrud({
                 typeof fkLabel === "function"
                   ? fkLabel(row)
                   : row?.[fkLabelKey] ??
-                    row?.name ??
-                    row?.display_name ??
-                    row?.code ??
-                    String(row?.[fkValueKey] ?? row?.id ?? ""),
+                  row?.name ??
+                  row?.display_name ??
+                  row?.code ??
+                  String(row?.[fkValueKey] ?? row?.id ?? ""),
               raw: row,
             }))
           );
@@ -1950,14 +1940,14 @@ export default function ReusableCrud({
           label: "Export this page",
           onClick: handleExport,
         },
-        
+
         {
           key: "export-all",
           icon: <DownloadOutlined />,
           label: "Export all records",
           onClick: handleExportAll,
         },
-        
+
       );
 
       if (enableInactiveDrawer) {
@@ -2079,35 +2069,83 @@ export default function ReusableCrud({
   const viewColumn =
     showViewColumn && typeof viewPathBuilder === "function"
       ? {
-          title: "View",
-          key: "view",
-          width: 100,
-          render: (_, record) => {
-            const path = viewPathBuilder(record);
+        title: "View",
+        key: "view",
+        width: 100,
+        render: (_, record) => {
+          const path = viewPathBuilder(record);
 
-            if (!path) return "-";
+          if (!path) return "-";
 
-            return (
-              <Button
-                type="link"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.visit(path);
-                }}
-                style={{ padding: 0 }}
-              >
-                View
-              </Button>
-            );
-          },
-        }
+          return (
+            <Button
+              type="link"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.visit(path);
+              }}
+              style={{ padding: 0 }}
+            >
+              View
+            </Button>
+          );
+        },
+      }
       : null;
 
   const actionColumn = hasActionColumns
     ? {
-        key: "__actions",
+      key: "__actions",
+      title: "",
+      fixed: "right",
+      width: 48,
+      align: "center",
+      render: (_, record) => {
+        if (isSystemGeneratedRecord(record)) {
+          return (
+            <span
+              title="System generated record"
+              style={ui.lockedCell}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <LockOutlined style={{ fontSize: 15 }} />
+            </span>
+          );
+        }
+
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Dropdown
+              menu={{ items: getRowActionItems(record, false) }}
+              trigger={["click"]}
+              placement="bottomRight"
+            >
+              <Button
+                type="text"
+                shape="circle"
+                icon={<MoreOutlined style={{ fontSize: 18 }} />}
+                onClick={(e) => e.stopPropagation()}
+                style={ui.actionBtn}
+              />
+            </Dropdown>
+          </div>
+        );
+      },
+    }
+    : null;
+
+  const mainColumns = canRowActionsExist
+    ? [...processedColumns, ...(viewColumn ? [viewColumn] : []), ...(actionColumn ? [actionColumn] : [])]
+    : [...processedColumns, ...(viewColumn ? [viewColumn] : [])];
+
+  const inactiveColumns = canRowActionsExist
+    ? [
+      ...processedColumns,
+      ...(viewColumn ? [viewColumn] : []),
+      {
         title: "",
+        key: "__inactive_actions",
         fixed: "right",
         width: 48,
         align: "center",
@@ -2125,71 +2163,23 @@ export default function ReusableCrud({
           }
 
           return (
-            <div onClick={(e) => e.stopPropagation()}>
-              <Dropdown
-                menu={{ items: getRowActionItems(record, false) }}
-                trigger={["click"]}
-                placement="bottomRight"
-              >
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<MoreOutlined style={{ fontSize: 18 }} />}
-                  onClick={(e) => e.stopPropagation()}
-                  style={ui.actionBtn}
-                />
-              </Dropdown>
-            </div>
+            <Dropdown
+              menu={{ items: getRowActionItems(record, true) }}
+              trigger={["click"]}
+              placement="bottomRight"
+            >
+              <Button
+                type="text"
+                shape="circle"
+                icon={<EllipsisOutlined />}
+                style={ui.actionBtn}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </Dropdown>
           );
         },
-      }
-    : null;
-
-  const mainColumns = canRowActionsExist
-    ? [...processedColumns, ...(viewColumn ? [viewColumn] : []), ...(actionColumn ? [actionColumn] : [])]
-    : [...processedColumns, ...(viewColumn ? [viewColumn] : [])];
-
-  const inactiveColumns = canRowActionsExist
-    ? [
-        ...processedColumns,
-        ...(viewColumn ? [viewColumn] : []),
-        {
-          title: "",
-          key: "__inactive_actions",
-          fixed: "right",
-          width: 48,
-          align: "center",
-          render: (_, record) => {
-            if (isSystemGeneratedRecord(record)) {
-              return (
-                <span
-                  title="System generated record"
-                  style={ui.lockedCell}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <LockOutlined style={{ fontSize: 15 }} />
-                </span>
-              );
-            }
-
-            return (
-              <Dropdown
-                menu={{ items: getRowActionItems(record, true) }}
-                trigger={["click"]}
-                placement="bottomRight"
-              >
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<EllipsisOutlined />}
-                  style={ui.actionBtn}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </Dropdown>
-            );
-          },
-        },
-      ]
+      },
+    ]
     : [...processedColumns, ...(viewColumn ? [viewColumn] : [])];
 
   const handleQuickButtonClick = () => {
@@ -2404,13 +2394,13 @@ export default function ReusableCrud({
                   const mergedOptions =
                     finalVal != null && !options.some((o) => String(o.value) === String(finalVal))
                       ? [
-                          {
-                            value: finalVal,
-                            label: currentLabel || String(finalVal),
-                            raw: detailCurrent || rawCurrent,
-                          },
-                          ...options,
-                        ]
+                        {
+                          value: finalVal,
+                          label: currentLabel || String(finalVal),
+                          raw: detailCurrent || rawCurrent,
+                        },
+                        ...options,
+                      ]
                       : options;
 
                   const selectEl = (
@@ -2437,10 +2427,10 @@ export default function ReusableCrud({
                           ensureOption:
                             finalVal != null
                               ? {
-                                  value: finalVal,
-                                  label: currentLabel || String(finalVal),
-                                  raw: detailCurrent || rawCurrent,
-                                }
+                                value: finalVal,
+                                label: currentLabel || String(finalVal),
+                                raw: detailCurrent || rawCurrent,
+                              }
                               : null,
                           valuesOverride: values,
                         });
@@ -2454,10 +2444,10 @@ export default function ReusableCrud({
                             ensureOption:
                               finalVal != null
                                 ? {
-                                    value: finalVal,
-                                    label: currentLabel || String(finalVal),
-                                    raw: detailCurrent || rawCurrent,
-                                  }
+                                  value: finalVal,
+                                  label: currentLabel || String(finalVal),
+                                  raw: detailCurrent || rawCurrent,
+                                }
                                 : null,
                             valuesOverride: values,
                           });
@@ -2911,14 +2901,33 @@ export default function ReusableCrud({
                           const detailVal = rowValue?.[`${colKey}_detail`];
                           const cellReadOnly = readOnly || !!c.readOnly;
 
+                          const applyRowPatch = (patch = EMPTY_OBJECT) => {
+                            const nextRow = { ...(rowValue || EMPTY_OBJECT), ...(patch || EMPTY_OBJECT) };
+
+                            Object.entries(patch || EMPTY_OBJECT).forEach(([key, value]) => {
+                              setFieldValue(`${name}[${idx}].${key}`, value, false);
+                            });
+
+                            (cols || EMPTY_ARRAY).forEach((formulaCol) => {
+                              const formulaKey = formulaCol?.key ?? formulaCol?.name;
+
+                              if (!formulaKey || typeof formulaCol?.formula !== "function") return;
+
+                              const computed = formulaCol.formula(nextRow, values, idx);
+                              nextRow[formulaKey] = computed;
+                              setFieldValue(`${name}[${idx}].${formulaKey}`, computed, false);
+                            });
+                          };
+
                           if (typeof c.formula === "function") {
                             const computed = c.formula(rowValue, values, idx);
 
                             if (c.type === "number") {
                               return (
-                                <InputNumber
+                                <Input
+                                  variant="underlined"
                                   style={{ width: "100%" }}
-                                  value={computed}
+                                  //value={computed}
                                   disabled
                                   readOnly
                                 />
@@ -2931,6 +2940,7 @@ export default function ReusableCrud({
                           if (c.type === "textarea") {
                             return (
                               <Input.TextArea
+                              
                                 rows={c.rows || 3}
                                 value={val}
                                 placeholder={c.placeholder || ""}
@@ -2938,6 +2948,47 @@ export default function ReusableCrud({
                                 onChange={(e) => setFieldValue(path, e.target.value)}
                               />
                             );
+                          }
+                          if (c.type === "custom") {
+                            if (typeof c.render === "function") {
+                              return c.render({
+                                field: c,
+                                value: val,
+                                row: rowValue,
+                                rowValue,
+                                rowIndex: idx,
+                                arrayName: name,
+                                path,
+                                values,
+                                setFieldValue,
+                                readOnly: cellReadOnly,
+                                message,
+                                recomputeRow: applyRowPatch,
+                              });
+                            }
+
+                            if (c.component) {
+                              const CustomComponent = c.component;
+
+                              return (
+                                <CustomComponent
+                                  field={c}
+                                  value={val}
+                                  row={rowValue}
+                                  rowValue={rowValue}
+                                  rowIndex={idx}
+                                  arrayName={name}
+                                  path={path}
+                                  values={values}
+                                  setFieldValue={setFieldValue}
+                                  readOnly={cellReadOnly}
+                                  message={message}
+                                  recomputeRow={applyRowPatch}
+                                />
+                              );
+                            }
+
+                            return null;
                           }
 
                           if (c.type === "fkSelect") {
@@ -2958,20 +3009,21 @@ export default function ReusableCrud({
 
                             const mergedOptions =
                               finalVal != null &&
-                              !options.some((o) => String(o.value) === String(finalVal))
+                                !options.some((o) => String(o.value) === String(finalVal))
                                 ? [
-                                    {
-                                      value: finalVal,
-                                      label: currentLabel || String(finalVal),
-                                      raw: detailVal || val,
-                                    },
-                                    ...options,
-                                  ]
+                                  {
+                                    value: finalVal,
+                                    label: currentLabel || String(finalVal),
+                                    raw: detailVal || val,
+                                  },
+                                  ...options,
+                                ]
                                 : options;
 
                             return (
                               <Select
                                 showSearch
+                                variant="underlined"
                                 size="medium"
                                 value={finalVal ?? undefined}
                                 placeholder={c.placeholder || "Search and select..."}
@@ -2979,36 +3031,32 @@ export default function ReusableCrud({
                                 filterOption={false}
                                 loading={store.loading}
                                 allowClear
+                                optionLabelProp="label"
                                 onClear={() => {
-                                  setFieldValue(path, null);
-                                  setFieldValue(detailPath, null, false);
-
-                                  if (c.labelField) {
-                                    setFieldValue(`${name}[${idx}].${c.labelField}`, "", false);
-                                  }
+                                  applyRowPatch({
+                                    [colKey]: null,
+                                    [`${colKey}_detail`]: null,
+                                    ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
+                                  });
                                 }}
                                 onOpenChange={(open) => {
-                                  if (
-                                    open &&
-                                    (!fkStore[storeKey]?.options ||
-                                      fkStore[storeKey]?.options.length === 0)
-                                  ) {
-                                    fetchFkOptionsInline(storeKey, c, {
-                                      search: "",
-                                      ensureOption:
-                                        finalVal != null
-                                          ? {
-                                              value: finalVal,
-                                              label: currentLabel || String(finalVal),
-                                              raw: detailVal || val,
-                                            }
-                                          : null,
-                                      rowValue,
-                                      rowIndex: idx,
-                                      parentFieldName: name,
-                                      valuesOverride: values,
-                                    });
-                                  }
+                                  if (!open) return;
+
+                                  fetchFkOptionsInline(storeKey, c, {
+                                    search: "",
+                                    ensureOption:
+                                      finalVal != null
+                                        ? {
+                                          value: finalVal,
+                                          label: currentLabel || String(finalVal),
+                                          raw: detailVal || val,
+                                        }
+                                        : null,
+                                    rowValue,
+                                    rowIndex: idx,
+                                    parentFieldName: name,
+                                    valuesOverride: values,
+                                  });
                                 }}
                                 onSearch={(txt) => {
                                   if (fkTimersRef.current[storeKey]) {
@@ -3021,10 +3069,10 @@ export default function ReusableCrud({
                                       ensureOption:
                                         finalVal != null
                                           ? {
-                                              value: finalVal,
-                                              label: currentLabel || String(finalVal),
-                                              raw: detailVal || val,
-                                            }
+                                            value: finalVal,
+                                            label: currentLabel || String(finalVal),
+                                            raw: detailVal || val,
+                                          }
                                           : null,
                                       rowValue,
                                       rowIndex: idx,
@@ -3035,15 +3083,69 @@ export default function ReusableCrud({
                                 }}
                                 onChange={(v, option) => {
                                   const opt = Array.isArray(option) ? option?.[0] : option;
+                                  const raw = opt?.raw || null;
+                                  const labelText = opt?.label ?? opt?.children ?? "";
 
-                                  setFieldValue(path, v);
-                                  setFieldValue(detailPath, opt?.raw || null, false);
+                                  const patch = {
+                                    [colKey]: v,
+                                    [`${colKey}_detail`]: raw,
+                                    ...(c.labelField ? { [c.labelField]: labelText } : EMPTY_OBJECT),
+                                  };
 
-                                  if (c.labelField) {
-                                    const lbl = opt?.children ?? opt?.label ?? "";
-                                    setFieldValue(`${name}[${idx}].${c.labelField}`, lbl);
+                                  if (typeof c.onSelectRecord === "function") {
+                                    Object.assign(patch, c.onSelectRecord(raw, rowValue, values) || EMPTY_OBJECT);
                                   }
+
+                                  applyRowPatch(patch);
                                 }}
+                                popupRender={(menu) => (
+                                  <>
+                                    {menu}
+
+                                    {c.quickAdd && !cellReadOnly && (
+                                      <div
+                                        style={{
+                                          position: "sticky",
+                                          bottom: 0,
+                                          zIndex: 2,
+                                          background: token.colorBgElevated,
+                                          borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                          padding: token.paddingXS,
+                                          textAlign: "center",
+                                        }}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                      >
+                                        <Button
+                                          type="link"
+                                          block
+                                          icon={<PlusOutlined />}
+                                          onClick={() => {
+                                            setQuickAddState({
+                                              inline: true,
+                                              mode: "add",
+                                              fieldName: c.name || colKey,
+                                              field: c,
+                                              path,
+                                              detailPath,
+                                              storeKey,
+                                              rowIndex: idx,
+                                              parentFieldName: name,
+                                              arrayColumns: cols,
+                                              collapsedFields,
+                                            });
+                                          }}
+                                        >
+                                          {c.quickAdd.buttonLabel || "Add New"}
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                optionRender={
+                                  typeof c.fkOptionRender === "function"
+                                    ? (option) => c.fkOptionRender(option.data?.raw || option.data)
+                                    : undefined
+                                }
                                 options={mergedOptions}
                               />
                             );
@@ -3054,6 +3156,7 @@ export default function ReusableCrud({
                               <BackendAutocomplete
                                 field={c}
                                 value={val}
+                                variant="underlined"
                                 detailValue={detailVal}
                                 disabled={cellReadOnly}
                                 authHeaders={authHeaders}
@@ -3072,6 +3175,7 @@ export default function ReusableCrud({
                             return (
                               <InputNumber
                                 size="medium"
+                                variant="underlined"
                                 style={{ width: "100%" }}
                                 value={val}
                                 min={c.min}
@@ -3089,6 +3193,7 @@ export default function ReusableCrud({
                             return (
                               <Select
                                 size="medium"
+                                variant="underlined"
                                 showSearch
                                 value={val ?? undefined}
                                 placeholder={c.placeholder || "Select..."}
@@ -3149,6 +3254,7 @@ export default function ReusableCrud({
                           return (
                             <Input
                               size="medium"
+                              variant="underlined"
                               value={val}
                               placeholder={c.placeholder || ""}
                               disabled={cellReadOnly}
@@ -3199,6 +3305,24 @@ export default function ReusableCrud({
                                       const detailVal = r?.[`${colKey}_detail`];
                                       const cellReadOnly = readOnly || !!c.readOnly;
 
+                                      const rowApplyPatch = (patch = EMPTY_OBJECT) => {
+                                        const nextRow = { ...(r || EMPTY_OBJECT), ...(patch || EMPTY_OBJECT) };
+
+                                        Object.entries(patch || EMPTY_OBJECT).forEach(([key, value]) => {
+                                          setFieldValue(`${name}[${idx}].${key}`, value, false);
+                                        });
+
+                                        [...(cols || EMPTY_ARRAY), ...(collapsedFields || EMPTY_ARRAY)].forEach((formulaCol) => {
+                                          const formulaKey = formulaCol?.key ?? formulaCol?.name;
+
+                                          if (!formulaKey || typeof formulaCol?.formula !== "function") return;
+
+                                          const computed = formulaCol.formula(nextRow, values, idx);
+                                          nextRow[formulaKey] = computed;
+                                          setFieldValue(`${name}[${idx}].${formulaKey}`, computed, false);
+                                        });
+                                      };
+
                                       if (typeof c.formula === "function") {
                                         const computed = c.formula(r, values, idx);
 
@@ -3207,6 +3331,7 @@ export default function ReusableCrud({
                                             <InputNumber
                                               key={`${fieldKey}.${idx}.${colKey}`}
                                               size="medium"
+                                              variant="underlined"
                                               style={{ width: "100%" }}
                                               value={computed}
                                               disabled
@@ -3220,6 +3345,7 @@ export default function ReusableCrud({
                                             key={`${fieldKey}.${idx}.${colKey}`}
                                             value={computed}
                                             disabled
+                                            variant="underlined"
                                             readOnly
                                           />
                                         );
@@ -3244,15 +3370,15 @@ export default function ReusableCrud({
 
                                         const mergedOptions =
                                           finalVal != null &&
-                                          !options.some((o) => String(o.value) === String(finalVal))
+                                            !options.some((o) => String(o.value) === String(finalVal))
                                             ? [
-                                                {
-                                                  value: finalVal,
-                                                  label: currentLabel || String(finalVal),
-                                                  raw: detailVal || val,
-                                                },
-                                                ...options,
-                                              ]
+                                              {
+                                                value: finalVal,
+                                                label: currentLabel || String(finalVal),
+                                                raw: detailVal || val,
+                                              },
+                                              ...options,
+                                            ]
                                             : options;
 
                                         return (
@@ -3261,18 +3387,19 @@ export default function ReusableCrud({
                                             showSearch
                                             size="medium"
                                             value={finalVal}
+                                            variant="underlined"
                                             placeholder={c.placeholder || "Search and select..."}
                                             disabled={cellReadOnly}
                                             filterOption={false}
                                             loading={store.loading}
                                             allowClear
+                                            optionLabelProp="label"
                                             onClear={() => {
-                                              setFieldValue(path, null);
-                                              setFieldValue(detailPath, null, false);
-
-                                              if (c.labelField) {
-                                                setFieldValue(`${name}[${idx}].${c.labelField}`, "", false);
-                                              }
+                                              rowApplyPatch({
+                                                [colKey]: null,
+                                                [`${colKey}_detail`]: null,
+                                                ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
+                                              });
                                             }}
                                             onOpenChange={(open) => {
                                               if (
@@ -3285,10 +3412,10 @@ export default function ReusableCrud({
                                                   ensureOption:
                                                     finalVal != null
                                                       ? {
-                                                          value: finalVal,
-                                                          label: currentLabel || String(finalVal),
-                                                          raw: detailVal || val,
-                                                        }
+                                                        value: finalVal,
+                                                        label: currentLabel || String(finalVal),
+                                                        raw: detailVal || val,
+                                                      }
                                                       : null,
                                                   rowValue: r,
                                                   rowIndex: idx,
@@ -3308,10 +3435,10 @@ export default function ReusableCrud({
                                                   ensureOption:
                                                     finalVal != null
                                                       ? {
-                                                          value: finalVal,
-                                                          label: currentLabel || String(finalVal),
-                                                          raw: detailVal || val,
-                                                        }
+                                                        value: finalVal,
+                                                        label: currentLabel || String(finalVal),
+                                                        raw: detailVal || val,
+                                                      }
                                                       : null,
                                                   rowValue: r,
                                                   rowIndex: idx,
@@ -3322,15 +3449,69 @@ export default function ReusableCrud({
                                             }}
                                             onChange={(v, option) => {
                                               const opt = Array.isArray(option) ? option?.[0] : option;
+                                              const raw = opt?.raw || null;
+                                              const labelText = opt?.label ?? opt?.children ?? "";
 
-                                              setFieldValue(path, v);
-                                              setFieldValue(detailPath, opt?.raw || null, false);
+                                              const patch = {
+                                                [colKey]: v,
+                                                [`${colKey}_detail`]: raw,
+                                                ...(c.labelField ? { [c.labelField]: labelText } : EMPTY_OBJECT),
+                                              };
 
-                                              if (c.labelField) {
-                                                const lbl = opt?.children ?? opt?.label ?? "";
-                                                setFieldValue(`${name}[${idx}].${c.labelField}`, lbl);
+                                              if (typeof c.onSelectRecord === "function") {
+                                                Object.assign(patch, c.onSelectRecord(raw, r, values, idx) || EMPTY_OBJECT);
                                               }
+
+                                              rowApplyPatch(patch);
                                             }}
+                                            popupRender={(menu) => (
+                                              <>
+                                                {menu}
+
+                                                {c.quickAdd && !cellReadOnly && (
+                                                  <div
+                                                    style={{
+                                                      position: "sticky",
+                                                      bottom: 0,
+                                                      zIndex: 2,
+                                                      background: token.colorBgElevated,
+                                                      borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                                      padding: token.paddingXS,
+                                                      textAlign: "center",
+                                                    }}
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                  >
+                                                    <Button
+                                                      type="link"
+                                                      block
+                                                      icon={<PlusOutlined />}
+                                                      onClick={() => {
+                                                        setQuickAddState({
+                                                          inline: true,
+                                                          mode: "add",
+                                                          fieldName: c.name || colKey,
+                                                          field: c,
+                                                          path,
+                                                          detailPath,
+                                                          storeKey,
+                                                          rowIndex: idx,
+                                                          parentFieldName: name,
+                                                          arrayColumns: cols,
+                                                          collapsedFields,
+                                                        });
+                                                      }}
+                                                    >
+                                                      {c.quickAdd.buttonLabel || "Add New"}
+                                                    </Button>
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                            optionRender={
+                                              typeof c.fkOptionRender === "function"
+                                                ? (option) => c.fkOptionRender(option.data?.raw || option.data)
+                                                : undefined
+                                            }
                                             options={mergedOptions}
                                           />
                                         );
@@ -3341,6 +3522,7 @@ export default function ReusableCrud({
                                           <BackendAutocomplete
                                             key={`${fieldKey}.${idx}.${colKey}`}
                                             field={c}
+                                            variant="underlined"
                                             value={val}
                                             detailValue={detailVal}
                                             disabled={cellReadOnly}
@@ -3364,6 +3546,7 @@ export default function ReusableCrud({
                                             style={{ width: "100%" }}
                                             value={val}
                                             min={c.min}
+                                            variant="underlined"
                                             max={c.max}
                                             placeholder={c.placeholder || ""}
                                             disabled={cellReadOnly}
@@ -3380,6 +3563,7 @@ export default function ReusableCrud({
                                             key={`${fieldKey}.${idx}.${colKey}`}
                                             size="medium"
                                             showSearch
+                                            variant="underlined"
                                             value={val ?? undefined}
                                             placeholder={c.placeholder || "Select..."}
                                             disabled={cellReadOnly}
@@ -3423,12 +3607,12 @@ export default function ReusableCrud({
                                         />
                                       );
                                     })}
-
+                                     
                                     {showExpand ? (
                                       <Button
                                         size="medium"
                                         type="text"
-                                        icon={<ColumnHeightOutlined rotate={expanded ? 90 : 0} />}
+                                        icon={<DownOutlined rotate={expanded ? 270 : 0} />}
                                         onClick={() => toggleObjectArrayRow(name, idx)}
                                       />
                                     ) : null}
@@ -3442,6 +3626,7 @@ export default function ReusableCrud({
                                         onClick={() => remove(idx)}
                                       />
                                     ) : null}
+                                    
                                   </div>
 
                                   {showExpand && expanded && (
@@ -3538,7 +3723,22 @@ export default function ReusableCrud({
   const renderQuickAddModal = () => {
     if (!quickAddState?.field?.quickAdd) return null;
 
-    const { fieldName, field, mode = "add", recordId, record } = quickAddState;
+    const {
+      fieldName,
+      field,
+      mode = "add",
+      recordId,
+      record,
+      inline = false,
+      path,
+      detailPath,
+      storeKey,
+      rowIndex,
+      parentFieldName,
+      arrayColumns = EMPTY_ARRAY,
+      collapsedFields = EMPTY_ARRAY,
+    } = quickAddState;
+
     const quickAdd = field.quickAdd;
     const isQuickEdit = mode === "edit";
     const quickValueKey = field.fkValueKey || "id";
@@ -3560,14 +3760,83 @@ export default function ReusableCrud({
         onSuccess={(savedRecord) => {
           const savedId = savedRecord?.[quickValueKey] ?? savedRecord?.id;
 
-          refreshFkAndSelect(fieldName, {
-            value: savedId,
-            label: field.fkLabel
-              ? field.fkLabel(savedRecord)
-              : savedRecord?.name || savedRecord?.display_name || savedRecord?.code || String(savedId ?? ""),
-            raw: savedRecord,
-          });
+          const savedLabel = field.fkLabel
+            ? field.fkLabel(savedRecord)
+            : savedRecord?.name ||
+              savedRecord?.display_name ||
+              savedRecord?.code ||
+              savedRecord?.title ||
+              String(savedId ?? "");
 
+          const savedOption = {
+            value: savedId,
+            label: savedLabel,
+            raw: savedRecord,
+          };
+
+          if (inline) {
+            const setField = formikLiveRef.current?.setFieldValue;
+            const liveValues = formikLiveRef.current?.values || EMPTY_OBJECT;
+            const canPatchRow =
+              !!setField &&
+              !!parentFieldName &&
+              rowIndex !== undefined &&
+              rowIndex !== null;
+
+            if (canPatchRow) {
+              const rowValue = liveValues?.[parentFieldName]?.[rowIndex] || EMPTY_OBJECT;
+              const selectedKey = path ? String(path).split(".").pop() : fieldName;
+              const detailKey = selectedKey ? `${selectedKey}_detail` : null;
+
+              const patch = {
+                ...(selectedKey ? { [selectedKey]: savedId } : EMPTY_OBJECT),
+                ...(detailKey ? { [detailKey]: savedRecord } : EMPTY_OBJECT),
+                ...(field.labelField ? { [field.labelField]: savedLabel } : EMPTY_OBJECT),
+              };
+
+              if (typeof field.onSelectRecord === "function") {
+                Object.assign(
+                  patch,
+                  field.onSelectRecord(savedRecord, rowValue, liveValues, rowIndex) || EMPTY_OBJECT
+                );
+              }
+
+              const nextRow = { ...rowValue, ...patch };
+
+              Object.entries(patch).forEach(([key, value]) => {
+                setField(`${parentFieldName}[${rowIndex}].${key}`, value, false);
+              });
+
+              [...(arrayColumns || EMPTY_ARRAY), ...(collapsedFields || EMPTY_ARRAY)].forEach((formulaCol) => {
+                const formulaKey = formulaCol?.key ?? formulaCol?.name;
+
+                if (!formulaKey || typeof formulaCol?.formula !== "function") return;
+
+                const computed = formulaCol.formula(nextRow, liveValues, rowIndex);
+                nextRow[formulaKey] = computed;
+                setField(`${parentFieldName}[${rowIndex}].${formulaKey}`, computed, false);
+              });
+            } else {
+              if (setField && path) setField(path, savedId, false);
+              if (setField && detailPath) setField(detailPath, savedRecord, false);
+            }
+
+            if (storeKey) {
+              setFkStore((prev) => ({
+                ...prev,
+                [storeKey]: {
+                  ...(prev[storeKey] || EMPTY_OBJECT),
+                  options: upsertOption(prev[storeKey]?.options || EMPTY_ARRAY, savedOption),
+                  loading: false,
+                },
+              }));
+            }
+
+            setQuickAddState(null);
+            return;
+          }
+
+          refreshFkAndSelect(fieldName, savedOption);
           setQuickAddState(null);
         }}
       />
@@ -3634,7 +3903,7 @@ export default function ReusableCrud({
 
     const formOnlyTitle = isEditFormOnly
       ? `Edit ${singularTitle}`
-      : `New ${singularTitle}`;
+      : `Add New ${singularTitle}`;
 
     return (
       <div className="reusable-crud-token">
@@ -3740,7 +4009,8 @@ export default function ReusableCrud({
                     <div style={ui.formOnlyTitleWrap}>
                       <h2 style={ui.formOnlyTitle}>{formOnlyTitle}</h2>
                       <div style={ui.formOnlySubtitle}>
-                       </div>
+                        Complete the details below and save the record.
+                      </div>
                     </div>
 
                     <div style={ui.formOnlyActions}>
@@ -3945,30 +4215,53 @@ export default function ReusableCrud({
     </Formik>
   );
 
-  const headerRight = (
+   const headerRight = (
   <Space size={8} wrap>
-    {canAdd && !button_ui && ui_type !== "add_related" && (
+    {(custom_add || custom_add_link) && (
       <Button
         icon={<PlusOutlined />}
         type="primary"
         onClick={() => {
           setSubmitErrors(EMPTY_ARRAY);
 
-          if (custom_add && custom_add_link) {
+          if (custom_add_link) {
             router.visit(custom_add_link);
             return;
           }
 
-          setEditingRecord(null);
-          setVisible(true);
+          if (typeof custom_add === 'function') {
+            custom_add();
+          }
         }}
       >
         Add New
       </Button>
     )}
 
+    {canAdd &&
+      !custom_add &&
+      !custom_add_link &&
+      !button_ui &&
+      ui_type !== 'add_related' && (
+        <Button
+          icon={<PlusOutlined />}
+          type="primary"
+          onClick={() => {
+            setSubmitErrors(EMPTY_ARRAY);
+            setEditingRecord(null);
+            setVisible(true);
+          }}
+        >
+          Add New
+        </Button>
+      )}
+
     {hasActions && canView && (
-      <Dropdown menu={{ items: topMenuItems }} placement="bottomRight" trigger={["click"]}>
+      <Dropdown
+        menu={{ items: topMenuItems }}
+        placement="bottomRight"
+        trigger={['click']}
+      >
         <Button type="default" icon={<MoreOutlined />} />
       </Dropdown>
     )}
@@ -4116,27 +4409,26 @@ export default function ReusableCrud({
             <div style={ui.tableWrap}>
               <Table
                 rowKey="id"
-               
+
                 columns={mainColumns}
                 size="medium"
                 dataSource={filteredData}
                 onRow={activeTableRowFunction}
                 loading={loading}
-                bordered={true}
                 scroll={{ x: "max-content" }}
                 rowSelection={
                   canView
                     ? {
-                        selectedRowKeys,
-                        onChange: setSelectedRowKeys,
-                        columnWidth: 44,
-                        getCheckboxProps: (record) => ({
-                          disabled: isSystemGeneratedRecord(record),
-                          title: isSystemGeneratedRecord(record)
-                            ? "System generated record cannot be selected"
-                            : undefined,
-                        }),
-                      }
+                      selectedRowKeys,
+                      onChange: setSelectedRowKeys,
+                      columnWidth: 44,
+                      getCheckboxProps: (record) => ({
+                        disabled: isSystemGeneratedRecord(record),
+                        title: isSystemGeneratedRecord(record)
+                          ? "System generated record cannot be selected"
+                          : undefined,
+                      }),
+                    }
                     : null
                 }
                 pagination={{
@@ -4237,16 +4529,16 @@ export default function ReusableCrud({
               rowSelection={
                 canView
                   ? {
-                      selectedRowKeys: selectedInactiveRowKeys,
-                      onChange: setSelectedInactiveRowKeys,
-                      columnWidth: 44,
-                      getCheckboxProps: (record) => ({
-                        disabled: isSystemGeneratedRecord(record),
-                        title: isSystemGeneratedRecord(record)
-                          ? "System generated record cannot be selected"
-                          : undefined,
-                      }),
-                    }
+                    selectedRowKeys: selectedInactiveRowKeys,
+                    onChange: setSelectedInactiveRowKeys,
+                    columnWidth: 44,
+                    getCheckboxProps: (record) => ({
+                      disabled: isSystemGeneratedRecord(record),
+                      title: isSystemGeneratedRecord(record)
+                        ? "System generated record cannot be selected"
+                        : undefined,
+                    }),
+                  }
                   : null
               }
               pagination={{

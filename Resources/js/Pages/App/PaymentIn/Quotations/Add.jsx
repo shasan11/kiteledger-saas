@@ -1,9 +1,17 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Col, Row, Tag, Typography } from 'antd';
+import {
+  Col,
+  InputNumber,
+  Row,
+  Select,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -28,6 +36,55 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
+const currencySymbolFromCode = {
+  NPR: 'रू',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  INR: '₹',
+  AUD: 'A$',
+  CAD: 'C$',
+  JPY: '¥',
+};
+
+const normalizeCurrencyResponse = (payload) => {
+  if (!payload) return null;
+
+  if (Array.isArray(payload)) return payload[0] || null;
+
+  if (Array.isArray(payload.results)) return payload.results[0] || null;
+
+  if (typeof payload === 'object') {
+    const values = Object.values(payload);
+    return values.find((item) => item && typeof item === 'object') || null;
+  }
+
+  return null;
+};
+
+const getCurrencySymbol = (values = {}) => {
+  const currency =
+    values?.currency_id ??
+    values?.currency ??
+    values?.currency_id_detail ??
+    values?.currency_detail;
+
+  if (currency && typeof currency === 'object') {
+    return (
+      currency.symbol ||
+      currency.currency_symbol ||
+      currencySymbolFromCode[currency.code] ||
+      currency.code ||
+      'रू'
+    );
+  }
+
+  return 'रू';
+};
+
+const moneyWithSymbol = (value, symbol = 'रू') =>
+  `${symbol ? `${symbol} ` : ''}${money(value)}`;
+
 const asId = (value) => {
   if (value === undefined || value === null || value === '') return null;
 
@@ -36,24 +93,6 @@ const asId = (value) => {
   }
 
   return value;
-};
-
-const getTaxPercent = (value) => {
-  if (!value) return 0;
-
-  if (typeof value === 'object') {
-    return toNumber(
-      value.rate ??
-        value.percent ??
-        value.percentage ??
-        value.tax_rate ??
-        value.vat_rate ??
-        value.tax_percent ??
-        value.taxPercent
-    );
-  }
-
-  return 0;
 };
 
 const cleanText = (value) => {
@@ -99,43 +138,205 @@ const statusColor = (status) =>
     cancelled: 'volcano',
   }[status] || 'default');
 
+const getTaxPercent = (value) => {
+  if (!value) return 0;
+
+  if (typeof value === 'object') {
+    return toNumber(
+      value.rate_percent ??
+        value.ratePercent ??
+        value.rate ??
+        value.percent ??
+        value.percentage ??
+        value.tax_rate ??
+        value.vat_rate ??
+        value.tax_percent ??
+        value.taxPercent ??
+        value.taxClass?.rate_percent ??
+        value.tax_class?.rate_percent
+    );
+  }
+
+  return 0;
+};
+
+const getTaxJurisdictionId = (value) => {
+  if (!value || typeof value !== 'object') return null;
+
+  return (
+    value.tax_jurisdiction_id ??
+    value.taxJurisdiction?.id ??
+    value.tax_jurisdiction?.id ??
+    value.tax_jurisdiction_id_detail?.id ??
+    null
+  );
+};
+
+const isTaxInclusive = (value) => {
+  if (!value || typeof value !== 'object') return false;
+
+  return (
+    value.inclusive === true ||
+    value.inclusive === 1 ||
+    value.inclusive === '1' ||
+    value.inclusive === 'true'
+  );
+};
+
+const getTaxLabel = (value) => {
+  if (!value || typeof value !== 'object') return null;
+
+  return (
+    value.name ||
+    value.code ||
+    value.label ||
+    value.tax_class_name ||
+    value.taxClass?.name ||
+    value.tax_class?.name ||
+    null
+  );
+};
+
 const emptyLine = {
   id: undefined,
+
   product_id: null,
   product_name: '',
   description: '',
+
   qty: 1,
   unit_price: 0,
+
+  // UI-only helpers
+  discount_type: 'percent',
+  discount_value: 0,
+
+  // Backend fields
   discount_percent: 0,
+  discount_amount: 0,
+
   tax_rate_id: null,
-  tax_percent: 0,
+  tax_jurisdiction_id: null,
   tax_amount: 0,
+  tax_breakup: null,
+
   line_total: 0,
 };
 
-const calculateLine = (line = {}) => {
-  const qty = toNumber(line.qty);
-  const rate = toNumber(line.unit_price);
+const getLineGross = (line = {}) =>
+  roundMoney(toNumber(line.qty) * toNumber(line.unit_price));
+
+const getDiscountType = (line = {}) => {
+  if (line.discount_type === 'amount' || line.discount_type === 'percent') {
+    return line.discount_type;
+  }
+
+  const discountAmount = toNumber(line.discount_amount);
   const discountPercent = toNumber(line.discount_percent);
 
-  const taxPercent =
-    toNumber(line.tax_percent) ||
-    getTaxPercent(line.tax_rate_id) ||
-    getTaxPercent(line.taxRate) ||
-    getTaxPercent(line.tax_rate);
+  if (discountAmount > 0 && discountPercent <= 0) {
+    return 'amount';
+  }
 
-  const gross = qty * rate;
-  const discountAmount = gross * (discountPercent / 100);
-  const taxableAmount = Math.max(gross - discountAmount, 0);
-  const taxAmount = taxableAmount * (taxPercent / 100);
-  const lineTotal = taxableAmount + taxAmount;
+  return 'percent';
+};
+
+const getDiscountValue = (line = {}) => {
+  const discountType = getDiscountType(line);
+
+  const hasRealDiscountValue =
+    line.discount_value !== undefined &&
+    line.discount_value !== null &&
+    line.discount_value !== '' &&
+    !(
+      toNumber(line.discount_value) === 0 &&
+      (toNumber(line.discount_percent) > 0 || toNumber(line.discount_amount) > 0)
+    );
+
+  if (hasRealDiscountValue) {
+    return toNumber(line.discount_value);
+  }
+
+  if (discountType === 'amount') {
+    return toNumber(line.discount_amount);
+  }
+
+  return toNumber(line.discount_percent);
+};
+
+const calculateLine = (line = {}) => {
+  const gross = getLineGross(line);
+
+  const discountType = getDiscountType(line);
+  const rawDiscountValue = getDiscountValue(line);
+
+  let discountAmount =
+    discountType === 'amount'
+      ? rawDiscountValue
+      : gross * (rawDiscountValue / 100);
+
+  discountAmount = Math.max(0, Math.min(discountAmount, gross));
+
+  const discountPercent = gross > 0 ? (discountAmount / gross) * 100 : 0;
+
+  const taxObject =
+    typeof line.tax_rate_id === 'object'
+      ? line.tax_rate_id
+      : line.taxRate || line.tax_rate || null;
+
+  const taxPercent = getTaxPercent(taxObject);
+
+  const amountAfterDiscount = Math.max(gross - discountAmount, 0);
+
+  let taxableAmount = amountAfterDiscount;
+  let taxAmount = 0;
+  let lineTotal = amountAfterDiscount;
+
+  if (taxPercent > 0) {
+    if (isTaxInclusive(taxObject)) {
+      taxAmount =
+        amountAfterDiscount - amountAfterDiscount / (1 + taxPercent / 100);
+      taxableAmount = amountAfterDiscount - taxAmount;
+      lineTotal = amountAfterDiscount;
+    } else {
+      taxAmount = amountAfterDiscount * (taxPercent / 100);
+      taxableAmount = amountAfterDiscount;
+      lineTotal = amountAfterDiscount + taxAmount;
+    }
+  } else {
+    taxAmount = toNumber(line.tax_amount);
+    lineTotal = amountAfterDiscount + taxAmount;
+  }
+
+  const roundedTaxableAmount = roundMoney(taxableAmount);
+  const roundedTaxAmount = roundMoney(taxAmount);
+  const roundedTaxPercent = roundMoney(taxPercent);
 
   return {
     gross: roundMoney(gross),
+
+    // UI-only
+    discount_type: discountType,
+    discount_value: roundMoney(rawDiscountValue),
+
+    // Backend-safe
+    discount_percent: roundMoney(discountPercent),
     discount_amount: roundMoney(discountAmount),
-    taxable_amount: roundMoney(taxableAmount),
-    tax_percent: roundMoney(taxPercent),
-    tax_amount: roundMoney(taxAmount),
+
+    taxable_amount: roundedTaxableAmount,
+    tax_percent: roundedTaxPercent,
+    tax_amount: roundedTaxAmount,
+    tax_jurisdiction_id: getTaxJurisdictionId(taxObject),
+    tax_breakup: taxPercent
+      ? JSON.stringify({
+          tax_rate_id: asId(taxObject),
+          tax_name: getTaxLabel(taxObject),
+          rate_percent: roundedTaxPercent,
+          inclusive: isTaxInclusive(taxObject),
+          taxable_amount: roundedTaxableAmount,
+          tax_amount: roundedTaxAmount,
+        })
+      : null,
     line_total: roundMoney(lineTotal),
   };
 };
@@ -187,54 +388,383 @@ const normalizeLine = (line = {}) => {
 
     qty: toNumber(line.qty),
     unit_price: toNumber(line.unit_price),
-    discount_percent: toNumber(line.discount_percent),
+
+    discount_percent: calculated.discount_percent,
+    discount_amount: calculated.discount_amount,
 
     tax_rate_id: asId(line.tax_rate_id ?? line.taxRate ?? line.tax_rate),
-    tax_percent: calculated.tax_percent,
+    tax_jurisdiction_id:
+      calculated.tax_jurisdiction_id ||
+      asId(
+        line.tax_jurisdiction_id ??
+          line.taxJurisdiction ??
+          line.tax_jurisdiction
+      ),
     tax_amount: calculated.tax_amount,
+    tax_breakup: calculated.tax_breakup,
+
     line_total: calculated.line_total,
   };
 };
 
-const QuotationTotals = ({ values = {} }) => {
-  const summary = calculateSummary(values.items || []);
+const categoryQuickAdd = {
+  title: 'Category',
+  buttonLabel: 'Add New Category',
+  apiUrl: api('/api/product-categories/'),
+  initialValues: {
+    name: '',
+    parent_id: null,
+    description: '',
+    active: true,
+  },
+  validationSchema: Yup.object({
+    name: Yup.string().required('Category name is required'),
+  }),
+  fields: [
+    {
+      name: 'name',
+      label: 'Category Name',
+      type: 'text',
+      col: 24,
+      required: true,
+      placeholder: 'Category Name',
+    },
+    {
+      name: 'parent_id',
+      label: 'Parent Category',
+      type: 'fkSelect',
+      col: 24,
+      placeholder: 'Parent Category',
+      fkUrl: api('/api/product-categories/'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      allowClear: true,
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      col: 24,
+      rows: 2,
+    },
+  ],
+  transformPayload: (values) => ({
+    name: nullIfEmpty(values.name),
+    parent_id: asId(values.parent_id),
+    description: nullIfEmpty(values.description),
+    active: true,
+  }),
+};
+
+const productQuickAdd = {
+  title: 'Product',
+  buttonLabel: 'Add New Product',
+  apiUrl: api('/api/products/'),
+
+  initialValues: {
+    type_of_product: 'goods',
+    name: '',
+    code: '',
+    product_category_id: null,
+    tax_class_id: null,
+    product_unit_id: null,
+    purchase_price: 0,
+    selling_price: 0,
+    allow_sale: true,
+    parent_id: null,
+    sku: '',
+    barcode: '',
+    product_tax_category_id: null,
+    reorder_level: 0,
+    product_type: 'simple',
+    valuation_method: 'standard',
+    track_inventory: true,
+    allow_purchase: true,
+    sales_account_id: null,
+    purchase_account_id: null,
+    sales_return_account_id: null,
+    purchase_return_account_id: null,
+    description: '',
+  },
+
+  validationSchema: Yup.object({
+    type_of_product: Yup.string().required('Type of product is required'),
+    name: Yup.string().required('Product name is required'),
+    product_category_id: Yup.mixed().required('Category is required'),
+    product_unit_id: Yup.mixed().required('Primary unit is required'),
+  }),
+
+  fields: [
+    {
+      type: 'group',
+      label: '',
+      col: 24,
+      accordion: false,
+      children: [
+        {
+          name: 'type_of_product',
+          label: 'Type of Product',
+          type: 'radio',
+          col: 24,
+          required: true,
+          options: [
+            { value: 'goods', label: 'Goods' },
+            { value: 'services', label: 'Services' },
+          ],
+        },
+        {
+          name: 'name',
+          label: 'Name',
+          type: 'text',
+          col: 24,
+          required: true,
+          placeholder: 'Name',
+        },
+        {
+          name: 'code',
+          label: 'Code',
+          type: 'text',
+          col: 12,
+          placeholder: 'Code',
+        },
+        {
+          name: 'product_category_id',
+          label: 'Category',
+          type: 'fkSelect',
+          col: 12,
+          required: true,
+          placeholder: 'Category Name',
+          fkUrl: api('/api/product-categories/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+          allowClear: true,
+          quickAdd: categoryQuickAdd,
+        },
+        {
+          name: 'tax_class_id',
+          label: 'Tax',
+          type: 'fkSelect',
+          col: 12,
+          placeholder: 'No Vat',
+          fkUrl: api('/api/tax-classes/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+          allowClear: true,
+        },
+        {
+          name: 'product_unit_id',
+          label: 'Primary Unit',
+          type: 'fkSelect',
+          col: 12,
+          required: true,
+          placeholder: 'Primary Unit',
+          fkUrl: api('/api/product-units/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+          allowClear: true,
+        },
+        {
+          name: 'purchase_price',
+          label: 'Purchase Price',
+          type: 'number',
+          col: 12,
+          min: 0,
+          placeholder: 'Purchase Price',
+        },
+        {
+          name: 'selling_price',
+          label: 'Selling Price',
+          type: 'number',
+          col: 12,
+          min: 0,
+          placeholder: 'Selling Price',
+        },
+        {
+          name: 'allow_sale',
+          label: 'Available For Sale',
+          type: 'switch',
+          col: 12,
+        },
+      ],
+    },
+  ],
+
+  transformPayload: (values) => {
+    const isService = values.type_of_product === 'services';
+
+    return {
+      name: nullIfEmpty(values.name),
+      code: nullIfEmpty(values.code),
+      sku: nullIfEmpty(values.sku),
+      barcode: nullIfEmpty(values.barcode),
+
+      parent_id: asId(values.parent_id),
+      product_category_id: asId(values.product_category_id),
+      product_unit_id: asId(values.product_unit_id),
+      product_tax_category_id: asId(values.product_tax_category_id),
+      tax_class_id: asId(values.tax_class_id),
+
+      sales_account_id: asId(values.sales_account_id),
+      purchase_account_id: asId(values.purchase_account_id),
+      sales_return_account_id: asId(values.sales_return_account_id),
+      purchase_return_account_id: asId(values.purchase_return_account_id),
+
+      product_type: values.product_type || 'simple',
+      valuation_method: isService ? 'standard' : values.valuation_method || 'standard',
+
+      reorder_level: isService ? 0 : toNumber(values.reorder_level),
+      purchase_price: toNumber(values.purchase_price),
+      selling_price: toNumber(values.selling_price),
+
+      track_inventory: isService ? false : !!values.track_inventory,
+      allow_sale: values.allow_sale !== false,
+      allow_purchase: isService ? false : values.allow_purchase !== false,
+
+      active: true,
+      description: nullIfEmpty(values.description),
+    };
+  },
+};
+
+function LineDiscountInput({ rowValue, readOnly, recomputeRow }) {
+  const row = rowValue || {};
+  const discountType = getDiscountType(row);
+  const gross = getLineGross(row);
+  const value = getDiscountValue(row);
+
+  const handleTypeChange = (nextType) => {
+    const currentDiscountAmount = calculateLine(row).discount_amount;
+
+    if (nextType === 'amount') {
+      recomputeRow({
+        discount_type: 'amount',
+        discount_value: currentDiscountAmount,
+        discount_amount: currentDiscountAmount,
+        discount_percent:
+          gross > 0 ? roundMoney((currentDiscountAmount / gross) * 100) : 0,
+      });
+
+      return;
+    }
+
+    const percent =
+      gross > 0 ? roundMoney((currentDiscountAmount / gross) * 100) : 0;
+
+    recomputeRow({
+      discount_type: 'percent',
+      discount_value: percent,
+      discount_percent: percent,
+      discount_amount: currentDiscountAmount,
+    });
+  };
+
+  const handleValueChange = (nextValue) => {
+    const cleanValue = toNumber(nextValue);
+
+    if (discountType === 'amount') {
+      const amount = Math.min(cleanValue, gross);
+      const percent = gross > 0 ? roundMoney((amount / gross) * 100) : 0;
+
+      recomputeRow({
+        discount_type: 'amount',
+        discount_value: amount,
+        discount_amount: amount,
+        discount_percent: percent,
+      });
+
+      return;
+    }
+
+    const percent = Math.min(cleanValue, 100);
+    const amount = roundMoney(gross * (percent / 100));
+
+    recomputeRow({
+      discount_type: 'percent',
+      discount_value: percent,
+      discount_percent: percent,
+      discount_amount: amount,
+    });
+  };
 
   return (
-    <Row gutter={[16, 16]} style={{ marginTop: 0 }}>
-      <Col xs={24} lg={12}>
-        <div />
-      </Col>
+    <Space.Compact style={{ width: '100%' }}>
+      <Select
+        value={discountType}
+        disabled={readOnly}
+        style={{ width: 76 }}
+        onChange={handleTypeChange}
+        options={[
+          { value: 'percent', label: '%' },
+          { value: 'amount', label: 'Amt' },
+        ]}
+      />
 
-      <Col xs={24} lg={12}>
+      <InputNumber
+        value={value}
+        min={0}
+        max={discountType === 'percent' ? 100 : gross}
+        disabled={readOnly}
+        style={{ width: '100%' }}
+        onChange={handleValueChange}
+      />
+    </Space.Compact>
+  );
+}
+
+const QuotationTotals = ({ values = {} }) => {
+  const summary = calculateSummary(values.items || []);
+  const symbol = getCurrencySymbol(values);
+
+  return (
+    <Row style={{ marginTop: 0 }}>
+      <Col xs={24} lg={24}>
         <div className="quotation-total-card">
           <div className="quotation-total-row">
             <span>Sub Total</span>
-            <strong>{money(summary.subTotal)}</strong>
+            <strong>{moneyWithSymbol(summary.subTotal, symbol)}</strong>
           </div>
 
           <div className="quotation-total-row">
             <span>Discount</span>
-            <strong>{summary.discount > 0 ? money(summary.discount) : '-'}</strong>
+            <strong>
+              {summary.discount > 0 ? moneyWithSymbol(summary.discount, symbol) : '-'}
+            </strong>
           </div>
 
           <div className="quotation-total-row">
             <span>Non-Taxable Total</span>
-            <strong>{summary.nonTaxableTotal > 0 ? money(summary.nonTaxableTotal) : '-'}</strong>
+            <strong>
+              {summary.nonTaxableTotal > 0
+                ? moneyWithSymbol(summary.nonTaxableTotal, symbol)
+                : '-'}
+            </strong>
           </div>
 
           <div className="quotation-total-row">
             <span>Taxable Total</span>
-            <strong>{summary.taxableTotal > 0 ? money(summary.taxableTotal) : '-'}</strong>
+            <strong>
+              {summary.taxableTotal > 0
+                ? moneyWithSymbol(summary.taxableTotal, symbol)
+                : '-'}
+            </strong>
           </div>
 
           <div className="quotation-total-row">
             <span>VAT</span>
-            <strong>{summary.vat > 0 ? money(summary.vat) : '-'}</strong>
+            <strong>{summary.vat > 0 ? moneyWithSymbol(summary.vat, symbol) : '-'}</strong>
           </div>
 
           <div className="quotation-total-row quotation-total-grand">
             <span>Grand Total</span>
-            <strong>{money(summary.grandTotal)}</strong>
+            <strong>{moneyWithSymbol(summary.grandTotal, symbol)}</strong>
           </div>
         </div>
       </Col>
@@ -260,6 +790,28 @@ const visitQuotationShow = (id) => {
 };
 
 export default function Quotations(props) {
+  const [baseCurrency, setBaseCurrency] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+
+    fetch(api('/api/currencies/?is_base=true&active=true&page_size=1'), {
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        const currency = normalizeCurrencyResponse(payload);
+
+        if (currency?.id) {
+          setBaseCurrency(currency);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const columns = useMemo(
     () => [
       {
@@ -311,7 +863,9 @@ export default function Quotations(props) {
         sorter: true,
         align: 'right',
         width: 150,
-        render: (value) => <Text strong>{money(value)}</Text>,
+        render: (value, record) => (
+          <Text strong>{moneyWithSymbol(value, getCurrencySymbol(record))}</Text>
+        ),
       },
     ],
     []
@@ -331,6 +885,58 @@ export default function Quotations(props) {
         fkPageSize: 20,
         fkValueKey: 'id',
         fkLabelKey: 'name',
+
+        quickAdd: {
+          title: 'Customer',
+          buttonLabel: 'Add New Customer',
+          apiUrl: api('/api/contacts/'),
+          initialValues: {
+            contact_type: 'customer',
+            type: 'customer',
+            name: '',
+            phone: '',
+            email: '',
+            address: '',
+            active: true,
+          },
+          validationSchema: Yup.object({
+            name: Yup.string().required('Customer name is required'),
+          }),
+          fields: [
+            {
+              name: 'name',
+              label: 'Customer Name',
+              type: 'text',
+              col: 24,
+              required: true,
+            },
+            {
+              name: 'phone',
+              label: 'Phone',
+              type: 'text',
+              col: 12,
+            },
+            {
+              name: 'email',
+              label: 'Email',
+              type: 'text',
+              col: 12,
+            },
+            {
+              name: 'address',
+              label: 'Address',
+              type: 'textarea',
+              col: 24,
+              rows: 2,
+            },
+          ],
+          transformPayload: (values) => ({
+            ...values,
+            contact_type: values.contact_type || 'customer',
+            type: values.type || 'customer',
+            active: true,
+          }),
+        },
       },
       {
         name: 'quotation_no',
@@ -379,7 +985,17 @@ export default function Quotations(props) {
         fkPageSize: 20,
         fkValueKey: 'id',
         fkLabelKey: 'name',
-        fkLabel: (record) => record?.name || record?.code || '',
+        storeFullObject: true,
+        fkLabel: (record) =>
+          [record?.code, record?.symbol, record?.name].filter(Boolean).join(' - '),
+        onSelectRecord: (record, values) => ({
+          ...values,
+          currency_id: record,
+          exchange_rate:
+            toNumber(record?.exchange_rate) ||
+            toNumber(values?.exchange_rate) ||
+            1,
+        }),
       },
       {
         name: 'exchange_rate',
@@ -394,18 +1010,29 @@ export default function Quotations(props) {
         label: '',
         type: 'objectArray',
         col: 24,
-        addButtonLabel: 'Add Code or Product',
+        addButtonLabel: 'Add Product / Service',
         defaultItem: { ...emptyLine },
         headerBg: '#4b5563',
         headerColor: '#ffffff',
+        rowStartExpanded: false,
 
         recalculateRow: (row) => {
           const calculated = calculateLine(row);
 
           return {
             ...row,
-            tax_percent: calculated.tax_percent,
+
+            // UI-only
+            discount_type: calculated.discount_type,
+            discount_value: calculated.discount_value,
+
+            // Backend fields
+            discount_percent: calculated.discount_percent,
+            discount_amount: calculated.discount_amount,
+
+            tax_jurisdiction_id: calculated.tax_jurisdiction_id,
             tax_amount: calculated.tax_amount,
+            tax_breakup: calculated.tax_breakup,
             line_total: calculated.line_total,
           };
         },
@@ -416,13 +1043,27 @@ export default function Quotations(props) {
             name: 'product_id',
             label: 'Product / service',
             type: 'fkSelect',
-            width: '200px',
+            width: '250px',
             placeholder: 'Add Code or Product',
             fkUrl: api('/api/products/'),
             fkSearchParam: 'search',
             fkPageSize: 20,
             fkValueKey: 'id',
             fkLabelKey: 'name',
+            labelField: 'product_name',
+            quickAdd: productQuickAdd,
+
+            onSelectRecord: (record, row) => ({
+              product_id: record?.id ?? null,
+              product_name: record?.name || '',
+              description: row?.description || record?.description || '',
+              unit_price: toNumber(
+                record?.selling_price ??
+                  record?.sale_price ??
+                  record?.price ??
+                  row?.unit_price
+              ),
+            }),
           },
           {
             key: 'qty',
@@ -437,24 +1078,25 @@ export default function Quotations(props) {
             name: 'unit_price',
             label: 'Rate',
             type: 'number',
-            width: '70px',
-            min: 0,
-          },
-          {
-            key: 'discount_percent',
-            name: 'discount_percent',
-            label: 'Discount %',
-            type: 'number',
             width: '90px',
             min: 0,
-            max: 100,
+            addonBefore: ({ values }) => getCurrencySymbol(values),
+            prefix: ({ values }) => getCurrencySymbol(values),
+          },
+          {
+            key: 'discount_value',
+            name: 'discount_value',
+            label: 'Discount',
+            type: 'custom',
+            width: '170px',
+            component: LineDiscountInput,
           },
           {
             key: 'tax_rate_id',
             name: 'tax_rate_id',
             label: 'Tax',
             type: 'fkSelect',
-            width: '140px',
+            width: '120px',
             placeholder: 'No VAT',
             fkUrl: api('/api/tax-rates/'),
             fkSearchParam: 'search',
@@ -462,25 +1104,29 @@ export default function Quotations(props) {
             fkValueKey: 'id',
             fkLabelKey: 'name',
             storeFullObject: true,
+            fkLabel: (record) =>
+              [
+                record?.name,
+                record?.rate_percent ? `${toNumber(record.rate_percent)}%` : null,
+              ]
+                .filter(Boolean)
+                .join(' - '),
             onSelectRecord: (record, row) => {
-              const taxPercent = getTaxPercent(record);
+              const calculated = calculateLine({
+                ...row,
+                tax_rate_id: record,
+                tax_jurisdiction_id: getTaxJurisdictionId(record),
+              });
 
               return {
                 ...row,
                 tax_rate_id: record,
-                tax_percent: taxPercent,
+                tax_jurisdiction_id: calculated.tax_jurisdiction_id,
+                tax_amount: calculated.tax_amount,
+                tax_breakup: calculated.tax_breakup,
+                line_total: calculated.line_total,
               };
             },
-          },
-          {
-            key: 'tax_amount',
-            name: 'tax_amount',
-            label: 'VAT',
-            type: 'number',
-            width: '100px',
-            min: 0,
-            disabled: true,
-            formula: (row) => calculateLine(row).tax_amount,
           },
           {
             key: 'line_total',
@@ -490,7 +1136,21 @@ export default function Quotations(props) {
             width: '130px',
             min: 0,
             disabled: true,
+            addonBefore: ({ values }) => getCurrencySymbol(values),
+            prefix: ({ values }) => getCurrencySymbol(values),
             formula: (row) => calculateLine(row).line_total,
+          },
+        ],
+
+        collapsedFields: [
+          {
+            key: 'description',
+            name: 'description',
+            label: 'Description',
+            type: 'textarea',
+            col: 24,
+            rows: 2,
+            placeholder: 'Line description',
           },
         ],
       },
@@ -507,11 +1167,11 @@ export default function Quotations(props) {
         name: '_quotation_totals',
         label: '',
         type: 'custom',
-        col: 24,
+        col: 12,
         render: ({ values }) => <QuotationTotals values={values} />,
       },
     ],
-    []
+    [baseCurrency]
   );
 
   const validationSchema = useMemo(
@@ -549,18 +1209,39 @@ export default function Quotations(props) {
                   .min(0, 'Rate cannot be negative')
                   .required('Rate is required'),
 
-                discount_percent: Yup.number()
+                discount_type: Yup.string()
+                  .oneOf(['percent', 'amount'])
+                  .default('percent'),
+
+                discount_value: Yup.number()
                   .typeError('Discount must be a number')
                   .min(0, 'Discount cannot be negative')
-                  .max(100, 'Discount cannot be more than 100')
+                  .test(
+                    'discount-percent-max',
+                    'Discount percent cannot be more than 100',
+                    function (value) {
+                      const line = this.parent;
+
+                      if ((line?.discount_type || 'percent') !== 'percent') {
+                        return true;
+                      }
+
+                      return toNumber(value) <= 100;
+                    }
+                  )
                   .nullable(),
 
-                tax_percent: Yup.number().nullable(),
+                discount_percent: Yup.number().nullable(),
+                discount_amount: Yup.number().nullable(),
+
+                tax_jurisdiction_id: Yup.mixed().nullable(),
 
                 tax_amount: Yup.number()
                   .typeError('Tax amount must be a number')
                   .min(0, 'Tax amount cannot be negative')
                   .nullable(),
+
+                tax_breakup: Yup.mixed().nullable(),
 
                 line_total: Yup.number()
                   .typeError('Line total must be a number')
@@ -589,8 +1270,8 @@ export default function Quotations(props) {
 
       contact_id: null,
       credit_term_id: null,
-      currency_id: null,
-      exchange_rate: 1,
+      currency_id: baseCurrency,
+      exchange_rate: toNumber(baseCurrency?.exchange_rate) || 1,
 
       status: 'draft',
       approved: false,
@@ -599,7 +1280,7 @@ export default function Quotations(props) {
       items: [{ ...emptyLine }],
       deleted_item_ids: [],
     }),
-    []
+    [baseCurrency]
   );
 
   const transformPayload = (values = {}) => {
@@ -637,15 +1318,7 @@ export default function Quotations(props) {
 
       notes: nullIfEmpty(values.notes),
 
-      subtotal: summary.subTotal,
-      sub_total: summary.subTotal,
-      discount_total: summary.discount,
-      non_taxable_total: summary.nonTaxableTotal,
-      taxable_total: summary.taxableTotal,
-      vat_total: summary.vat,
-      tax_total: summary.vat,
       total: summary.grandTotal,
-      grand_total: summary.grandTotal,
 
       items,
 
@@ -656,7 +1329,7 @@ export default function Quotations(props) {
   };
 
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <AuthenticatedLayout auth={props.auth} user={props.auth?.user}>
       <Head title="Quotations" />
 
       <style>
@@ -822,6 +1495,7 @@ export default function Quotations(props) {
       </style>
 
       <ReusableCrud
+        key={baseCurrency?.id || 'quotation-crud'}
         className="quotation-crud"
         drawerClassName="quotation-form-drawer"
         icon={<FileTextOutlined />}

@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Radio, Tag, Typography, Space } from 'antd';
+import { Radio, Tag, Typography, Space, theme } from 'antd';
 import {
     ApartmentOutlined,
     BankOutlined,
@@ -12,6 +12,7 @@ import {
     FallOutlined,
     DollarCircleOutlined,
     NodeIndexOutlined,
+    UnorderedListOutlined,
 } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
@@ -91,70 +92,133 @@ const renderAccountType = (type) => {
     );
 };
 
-const ViewModeHeader = ({ viewMode, setViewMode, activeAnchor }) => {
+const PageHeader = ({
+    viewMode,
+    setViewMode,
+    activeAnchor,
+    setActiveAnchor,
+}) => {
+    const { token } = theme.useToken();
+
+    const anchorTabs = [
+        {
+            key: 'non_system',
+            label: 'Accounts',
+        },
+        {
+            key: 'system',
+            label: 'Groups',
+        },
+    ];
+
     return (
         <div
             style={{
-                background: '#fff',
-                border: '1px solid #eef0f4',
-                borderRadius: 6,
-                
-                padding: '14px 16px',
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                borderRadius: token.borderRadius,
+                padding: `0 ${token.paddingSM}px`,
+                minHeight: 42,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                gap: 16,
+                gap: token.marginSM,
                 flexWrap: 'wrap',
             }}
         >
-            <Title
-                level={4}
+            <div
                 style={{
-                    margin: 0,
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: '#0f172a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: token.marginSM,
+                     
+                    height: 42,
                 }}
             >
-                Chart of Accounts
-            </Title>
-
-            <Space size={12} wrap>
-                <Tag
-                    color={activeAnchor === 'system' ? 'gold' : 'green'}
+                <Text
+                    strong
                     style={{
-                        borderRadius: 999,
-                        padding: '4px 12px',
-                        fontWeight: 600,
+                        fontSize: "18px",
+                        color: token.colorText,
+                        whiteSpace: 'nowrap',
+                        minWidth: "33%",
+                        lineHeight: '42px',
+                        fontWeight:700
                     }}
                 >
-                    {activeAnchor === 'system' ? 'Groups' : 'Accounts'}
-                </Tag>
+                    Chart of Accounts
+                </Text>
 
-                <Radio.Group
-                    value={viewMode}
-                    onChange={(event) => setViewMode(event.target.value)}
-                    optionType="button"
-                    buttonStyle="solid"
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        height: 42,
+                        gap: 2,
+                    }}
                 >
-                    <Radio.Button value="list">
-                        Default List View
-                    </Radio.Button>
+                    {anchorTabs.map((tab) => {
+                        const active = activeAnchor === tab.key;
 
-                    <Radio.Button value="tree">
-                        Tree View
-                    </Radio.Button>
-                </Radio.Group>
-            </Space>
+                        return (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => setActiveAnchor(tab.key)}
+                                style={{
+                                    height: 42,
+                                    padding: `0 ${token.paddingSM}px`,
+                                    border: 0,
+                                    borderBottom: active
+                                        ? `2px solid ${token.colorPrimary}`
+                                        : '2px solid transparent',
+                                    background: 'transparent',
+                                    color: active
+                                        ? token.colorPrimary
+                                        : token.colorTextSecondary,
+                                    fontWeight: active ? 700 : 500,
+                                    cursor: 'pointer',
+                                    fontSize: token.fontSizeSM,
+                                    lineHeight: '40px',
+                                }}
+                            >
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <Radio.Group
+                size="small"
+                value={viewMode}
+                onChange={(event) => setViewMode(event.target.value)}
+                optionType="button"
+                buttonStyle="solid"
+                style={{
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                <Radio.Button value="list">
+                    <UnorderedListOutlined /> List
+                </Radio.Button>
+
+                <Radio.Button value="tree">
+                    <ApartmentOutlined /> Tree
+                </Radio.Button>
+            </Radio.Group>
         </div>
     );
 };
 
 export default function ChartOfAccounts(props) {
+    const { token } = theme.useToken();
+
     const [viewMode, setViewMode] = useState('list');
     const [activeAnchor, setActiveAnchor] = useState('non_system');
 
     const isTreeView = viewMode === 'tree';
+    const isSystemView = activeAnchor === 'system';
 
     const columns = useMemo(
         () => [
@@ -169,8 +233,8 @@ export default function ChartOfAccounts(props) {
                     <Text
                         strong
                         style={{
-                            color: '#0f172a',
-                            fontSize: 13,
+                            color: token.colorText,
+                            fontSize: token.fontSizeSM,
                         }}
                     >
                         {value || '-'}
@@ -192,7 +256,7 @@ export default function ChartOfAccounts(props) {
                             style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: 8,
+                                gap: token.marginXS,
                             }}
                         >
                             {isTreeView ? (
@@ -200,13 +264,17 @@ export default function ChartOfAccounts(props) {
                                     style={{
                                         width: 26,
                                         height: 26,
-                                        borderRadius: 6,
-                                        background: isParent ? '#f0f7ff' : '#f8fafc',
-                                        border: '1px solid #e5eaf1',
+                                        borderRadius: token.borderRadius,
+                                        background: isParent
+                                            ? token.colorPrimaryBg
+                                            : token.colorFillQuaternary,
+                                        border: `1px solid ${token.colorBorderSecondary}`,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        color: isParent ? '#1677ff' : '#64748b',
+                                        color: isParent
+                                            ? token.colorPrimary
+                                            : token.colorTextSecondary,
                                     }}
                                 >
                                     {isParent ? <ApartmentOutlined /> : <NodeIndexOutlined />}
@@ -222,8 +290,8 @@ export default function ChartOfAccounts(props) {
                                     <Text
                                         style={{
                                             display: 'block',
-                                            fontSize: 12,
-                                            color: '#94a3b8',
+                                            fontSize: token.fontSizeSM,
+                                            color: token.colorTextTertiary,
                                             lineHeight: '16px',
                                         }}
                                     >
@@ -241,6 +309,14 @@ export default function ChartOfAccounts(props) {
                 key: 'account_type',
                 width: 160,
                 align: 'center',
+                backendFilter: {
+                    title: 'Account Type',
+                    paramName: 'type',
+                    type: 'select',
+                    options: accountTypeOptions,
+                },
+                backendSort: true,
+                sortField: 'type',
                 render: (_, record) =>
                     renderAccountType(
                         record?.type ||
@@ -253,6 +329,25 @@ export default function ChartOfAccounts(props) {
                 dataIndex: 'parent_name',
                 key: 'parent_name',
                 width: 220,
+                backendFilter: {
+                    title: 'Parent',
+                    paramName: 'parent_id',
+                    type: 'autocomplete',
+                    fkUrl: '/api/chart-of-accounts/',
+                    fkSearchParam: 'search',
+                    fkPageSize: 20,
+                    fkValueKey: 'id',
+                    fkLabelKey: 'name',
+                    fkExtraParams: {
+                        active: true,
+                    },
+                    fkLabel: (row) => {
+                        const code = row?.code || '';
+                        const name = row?.name || '';
+
+                        return [code, name].filter(Boolean).join(' - ');
+                    },
+                },
                 render: (_, record) => {
                     const parent = getLabel(
                         record?.parent_name,
@@ -266,18 +361,20 @@ export default function ChartOfAccounts(props) {
                             style={{
                                 borderRadius: 999,
                                 marginInlineEnd: 0,
-                                color: '#475569',
+                                color: token.colorTextSecondary,
                             }}
                         >
                             Root Account
                         </Tag>
                     ) : (
-                        <Text style={{ color: '#475569' }}>{parent}</Text>
+                        <Text style={{ color: token.colorTextSecondary }}>
+                            {parent}
+                        </Text>
                     );
                 },
             },
         ],
-        [isTreeView],
+        [isTreeView, token],
     );
 
     const fields = useMemo(
@@ -306,6 +403,7 @@ export default function ChartOfAccounts(props) {
                 col: 24,
                 options: accountTypeOptions,
                 placeholder: 'Select account type',
+                readOnly: (values) => !!values?.parent_id,
             },
             {
                 name: 'parent_id',
@@ -395,22 +493,40 @@ export default function ChartOfAccounts(props) {
     const handleFormValuesChange = (values, { setFieldValue }) => {
         const parent = values?.parent_id_detail;
 
-        if (parent) {
-            const label =
-                parent.label ||
-                [parent.code, parent.name].filter(Boolean).join(' - ') ||
-                parent.name ||
-                '';
-
-            if (label && values.parent_name !== label) {
-                setFieldValue('parent_name', label, false);
+        if (!values?.parent_id) {
+            if (values?.parent_name) {
+                setFieldValue('parent_name', '', false);
             }
 
-            if (parent.type && values.type !== parent.type) {
-                setFieldValue('type', parent.type, false);
-            }
+            return;
+        }
+
+        if (!parent) {
+            return;
+        }
+
+        const label =
+            parent.label ||
+            [parent.code, parent.name].filter(Boolean).join(' - ') ||
+            parent.name ||
+            '';
+
+        if (label && values.parent_name !== label) {
+            setFieldValue('parent_name', label, false);
+        }
+
+        if (parent.type && values.type !== parent.type) {
+            setFieldValue('type', parent.type, false);
         }
     };
+
+    const baseFilters = useMemo(
+        () => ({
+            is_system_generated: isSystemView,
+            ...(isTreeView ? { tree: true } : {}),
+        }),
+        [isSystemView, isTreeView],
+    );
 
     return (
         <AuthenticatedLayout user={props.auth?.user}>
@@ -418,18 +534,19 @@ export default function ChartOfAccounts(props) {
 
             <div
                 style={{
-                    background: '#f6f8fb',
+                    background: token.colorBgLayout,
                     minHeight: '100vh',
-                    paddingBottom: 16,
+                    
                 }}
             >
-                <ViewModeHeader
+                <PageHeader
                     viewMode={viewMode}
                     setViewMode={setViewMode}
                     activeAnchor={activeAnchor}
+                    setActiveAnchor={setActiveAnchor}
                 />
 
-                <div style={{ marginTop: 12 }}>
+                <div>
                     <ReusableCrud
                         key={`chart-of-accounts-${viewMode}-${activeAnchor}`}
                         title="Chart of Accounts"
@@ -439,15 +556,22 @@ export default function ChartOfAccounts(props) {
                         validationSchema={validationSchema}
                         crudInitialValues={crudInitialValues}
                         transformPayload={transformPayload}
-                onFormValuesChange={handleFormValuesChange}
-                activeTableRowFunction={(record) => ({
-                    onClick: (event) => {
-                        if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
-                        router.visit(route('accounting.chart-of-accounts.show', record.id));
-                    },
-                    style: { cursor: 'pointer' },
-                })}
-                form_ui="modal"
+                        onFormValuesChange={handleFormValuesChange}
+                        activeTableRowFunction={(record) => ({
+                            onClick: (event) => {
+                                if (
+                                    event.target.closest(
+                                        'button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger',
+                                    )
+                                ) {
+                                    return;
+                                }
+
+                                router.visit(route('accounting.chart-of-accounts.show', record.id));
+                            },
+                            style: { cursor: 'pointer' },
+                        })}
+                        form_ui="modal"
                         modalWidth={500}
                         enableServerPagination
                         pageParam="page"
@@ -458,39 +582,12 @@ export default function ChartOfAccounts(props) {
                         orderingParam="ordering"
                         defaultSortField={isTreeView ? 'code' : 'created_at'}
                         defaultSortOrder={isTreeView ? 'ascend' : 'descend'}
-                        baseFilters={
-                            isTreeView
-                                ? {
-                                      tree: true,
-                                  }
-                                : {}
-                        }
-                        anchorFilters={[
-                            {
-                                key: 'non_system',
-                                label: 'Accounts',
-                                title: 'Chart of Accounts',
-                                params: {
-                                    is_system_generated: false,
-                                },
-                            },
-                            {
-                                key: 'system',
-                                label: 'Groups',
-                                title: 'Chart of Accounts',
-                                params: {
-                                    is_system_generated: true,
-                                },
-                            },
-                        ]}
-                        defaultAnchorKey="non_system"
-                        anchorSyncWithHash
-                        onAnchorChange={(key) => setActiveAnchor(key)}
-                        enableInactiveDrawer={!isTreeView}
+                        baseFilters={baseFilters}
+                        enableInactiveDrawer={!isTreeView && !isSystemView}
                         showSearch
-                        canAdd={activeAnchor === 'non_system'}
-                        canEdit={activeAnchor === 'non_system'}
-                        canDelete={activeAnchor === 'non_system'}
+                        canAdd={!isSystemView}
+                        canEdit={!isSystemView}
+                        canDelete={!isSystemView}
                         canView
                         hasActions
                         hasActionColumns

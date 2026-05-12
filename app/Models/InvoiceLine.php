@@ -24,6 +24,7 @@ class InvoiceLine extends Model
         'qty',
         'unit_price',
         'discount_percent',
+        'discount_amount',
         'tax_rate_id',
         'tax_jurisdiction_id',
         'tax_amount',

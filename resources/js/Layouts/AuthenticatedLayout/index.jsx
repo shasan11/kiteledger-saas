@@ -142,8 +142,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Payment In',
                 children: [
                     { key: 'pi-quotations', label: 'Quotations', onClick: () => visit('payment-in.quotations.index', '/payment-in/quotations') },
-                    { key: 'pi-bills', label: 'Bills', onClick: () => visit('payment-in.bills.index', '/payment-in/bills') },
-                    { key: 'pi-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('payment-in.proforma-invoices.index', '/payment-in/proforma-invoices') },
                     { key: 'pi-sales-orders', label: 'Sales Order', onClick: () => visit('payment-in.sales-orders.index', '/payment-in/sales-orders') },
                     { key: 'pi-invoices', label: 'Invoices', onClick: () => visit('payment-in.invoices.index', '/payment-in/invoices') },
                     { key: 'pi-payment', label: 'Payment', onClick: () => visit('payment-in.payments.index', '/payment-in/payments') },
@@ -157,7 +155,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Payables',
                 children: [
                     { key: 'po-purchase-order', label: 'Purchase Order', onClick: () => visit('payment-out.purchase-orders.index', '/payment-out/purchase-orders') },
-                    { key: 'po-purchase-bills', label: 'Bills', onClick: () => visit('payment-out.purchase-bills.index', '/payment-out/purchase-bills') },
+                    { key: 'po-purchase-bills', label: 'Purchase Bills', onClick: () => visit('payment-out.purchase-bills.index', '/payment-out/purchase-bills') },
                     { key: 'po-expenses', label: 'Expenses', onClick: () => visit('payment-out.expenses.index', '/payment-out/expenses') },
                     { key: 'po-debit-note', label: 'Debit Note', onClick: () => visit('payment-out.debit-notes.index', '/payment-out/debit-notes') },
                     { key: 'po-payment-out', label: 'Supplier Payments', onClick: () => visit('payment-out.payments.index', '/payment-out/payments') },
@@ -207,7 +205,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <TeamOutlined />,
                 label: 'HRM',
                 children: [
-                    { key: 'hrm-users',      label: 'Employees',           onClick: () => visit('hrm.users.index', '/hrm/users') },
                     { key: 'hrm-attendance', label: 'Attendance',          onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
                     { key: 'hrm-leaves',     label: 'Leave Applications',  onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
                     { key: 'hrm-payslips',   label: 'Payslips',            onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
@@ -225,8 +222,6 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'hrm-award-hist',    label: 'Award Histories',       onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
                     { key: 'hrm-education',     label: 'Education',             onClick: () => visit('hrm.educations.index', '/hrm/educations') },
                     { key: 'hrm-awards',        label: 'Awards',                onClick: () => visit('hrm.awards.index', '/hrm/awards') },
-                    { key: 'hrm-roles',         label: 'Roles',                 onClick: () => visit('hrm.roles.index', '/hrm/roles') },
-                    { key: 'hrm-permissions',   label: 'Permissions',           onClick: () => visit('hrm.permissions.index', '/hrm/permissions') },
                 ],
             },
             {

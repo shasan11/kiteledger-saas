@@ -86,11 +86,13 @@ class QuotationController extends BaseCrudApiController
             'relations' => [
                 'product',
                 'taxRate',
+                'taxJurisdiction',
             ],
 
             'relation_details' => [
                 'product' => 'product_id',
                 'taxRate' => 'tax_rate_id',
+                'taxJurisdiction' => 'tax_jurisdiction_id',
             ],
 
             'rules' => [
@@ -98,8 +100,12 @@ class QuotationController extends BaseCrudApiController
                     'nullable',
                     'uuid',
                     'exists:products,id',
-                 ],
-                 
+                ],
+                'product_name' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                ],
                 'description' => [
                     'nullable',
                     'string',
@@ -121,15 +127,28 @@ class QuotationController extends BaseCrudApiController
                     'min:0',
                     'max:100',
                 ],
+                'discount_amount' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                ],
                 'tax_rate_id' => [
                     'nullable',
                     'uuid',
                     'exists:tax_rates,id',
                 ],
+                'tax_jurisdiction_id' => [
+                    'nullable',
+                    'uuid',
+                    'exists:tax_jurisdictions,id',
+                ],
                 'tax_amount' => [
                     'nullable',
                     'numeric',
                     'min:0',
+                ],
+                'tax_breakup' => [
+                    'nullable',
                 ],
                 'line_total' => [
                     'nullable',
@@ -143,9 +162,12 @@ class QuotationController extends BaseCrudApiController
                     'nullable',
                     'uuid',
                     'exists:products,id',
-                    
                 ],
-                
+                'product_name' => [
+                    'nullable',
+                    'string',
+                    'max:255',
+                ],
                 'description' => [
                     'nullable',
                     'string',
@@ -167,15 +189,28 @@ class QuotationController extends BaseCrudApiController
                     'min:0',
                     'max:100',
                 ],
+                'discount_amount' => [
+                    'nullable',
+                    'numeric',
+                    'min:0',
+                ],
                 'tax_rate_id' => [
                     'nullable',
                     'uuid',
                     'exists:tax_rates,id',
                 ],
+                'tax_jurisdiction_id' => [
+                    'nullable',
+                    'uuid',
+                    'exists:tax_jurisdictions,id',
+                ],
                 'tax_amount' => [
                     'nullable',
                     'numeric',
                     'min:0',
+                ],
+                'tax_breakup' => [
+                    'nullable',
                 ],
                 'line_total' => [
                     'nullable',
@@ -305,19 +340,40 @@ class QuotationController extends BaseCrudApiController
         array $nestedData,
         bool $isUpdate
     ): Model {
+        $record->load('quotationLines');
+
         $total = 0;
 
         foreach ($record->quotationLines as $line) {
             $qty = (float) $line->qty;
             $unitPrice = (float) $line->unit_price;
-            $discountPercent = (float) ($line->discount_percent ?? 0);
-            $taxAmount = (float) ($line->tax_amount ?? 0);
 
-            $subtotal = $qty * $unitPrice;
-            $discount = $subtotal * ($discountPercent / 100);
-            $lineTotal = $subtotal - $discount + $taxAmount;
+            $gross = round($qty * $unitPrice, 2);
+
+            $discountPercent = (float) ($line->discount_percent ?? 0);
+            $discountAmount = (float) ($line->discount_amount ?? 0);
+
+            if ($discountAmount <= 0 && $discountPercent > 0) {
+                $discountAmount = round($gross * ($discountPercent / 100), 2);
+            }
+
+            $discountAmount = max(0, min($discountAmount, $gross));
+
+            if ($gross > 0 && $discountAmount > 0) {
+                $discountPercent = round(($discountAmount / $gross) * 100, 2);
+            } else {
+                $discountPercent = 0;
+            }
+
+            $taxableAmount = max($gross - $discountAmount, 0);
+            $taxAmount = max((float) ($line->tax_amount ?? 0), 0);
+
+            $lineTotal = round($taxableAmount + $taxAmount, 2);
 
             $line->forceFill([
+                'discount_percent' => $discountPercent,
+                'discount_amount' => $discountAmount,
+                'tax_amount' => round($taxAmount, 2),
                 'line_total' => $lineTotal,
             ])->save();
 
@@ -325,9 +381,17 @@ class QuotationController extends BaseCrudApiController
         }
 
         $record->forceFill([
-            'total' => $total,
+            'total' => round($total, 2),
         ])->save();
 
-        return $record;
+        return $record->fresh([
+            'branch',
+            'contact',
+            'creditTerm',
+            'currency',
+            'quotationLines.product',
+            'quotationLines.taxRate',
+            'quotationLines.taxJurisdiction',
+        ]);
     }
 }

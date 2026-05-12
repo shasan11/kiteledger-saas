@@ -17,12 +17,12 @@ const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY'
 export default function ProductCategories({ auth }) {
   const columns = useMemo(() => [
     { title: 'Name', dataIndex: 'name', key: 'name' },
-    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
+    { title: 'Parent', dataIndex: 'parent', key: 'parent',render: (_, record) =>record.parent_name },
   ], []);
 
   const fields = useMemo(() => [
-    { name: 'name', label: 'Name', type: 'text', col: 16, required: true },
-    { name: 'parent_id', label: 'Parent Category', type: 'fkSelect', col: 8, fkUrl: api('/api/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'name', label: 'Name', type: 'text', col: 25, required: true },
+    { name: 'parent_id', label: 'Parent Category', type: 'fkSelect', col: 24, fkUrl: api('/api/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'description', label: 'Description', type: 'textarea', col: 24 },
   ], []);
 
@@ -50,7 +50,8 @@ export default function ProductCategories({ auth }) {
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
+        form_ui="modal"
+        modalWidth={500}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

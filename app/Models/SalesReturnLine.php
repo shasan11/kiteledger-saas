@@ -20,6 +20,8 @@ class SalesReturnLine extends Model
         'sales_return_id',
         'product_id',
         'custom_product_name',
+        'discount_percent',
+        'discount_amount',
         'description',
         'qty',
         'unit_price',
