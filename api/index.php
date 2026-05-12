@@ -1,6 +1,6 @@
 <?php
 
-$source = __DIR__ . '/../database/database.sqlite';
+$source = __DIR__ . '../database/database.sqlite';
 $target = '/tmp/database.sqlite';
 
 if (! file_exists($target)) {
