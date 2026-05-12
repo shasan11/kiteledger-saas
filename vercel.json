@@ -6,8 +6,12 @@
     ],
     "routes": [
         {
+            "src": "/build/(.*)",
+            "dest": "/public/build/$1"
+        },
+        {
             "src": "/(css|js)/(.*)",
-            "dest": "public/$1/$2"
+            "dest": "/public/$1/$2"
         },
         {
             "src": "/(.*)",
@@ -17,20 +21,26 @@
     "env": {
         "APP_NAME": "KiteLedger",
         "APP_ENV": "production",
-        "APP_KEY":"base64:XFWHmJDwNShLWf9R5MbEq8MWAYlECp+yk89V0QadltU=",
         "APP_DEBUG": "true",
-        "APP_URL": "https://kiteledger-saas.vercel.app/",
+        "APP_URL": "https://kiteledger-saas.vercel.app",
+        "APP_KEY":"base64:XFWHmJDwNShLWf9R5MbEq8MWAYlECp+yk89V0QadltU=",
         "DB_CONNECTION": "sqlite",
+        "DB_DATABASE": "/database/database.sqlite",
+
         "VERCEL_DEMO_MODE": "true",
+
         "APP_CONFIG_CACHE": "/tmp/config.php",
         "APP_EVENTS_CACHE": "/tmp/events.php",
         "APP_PACKAGES_CACHE": "/tmp/packages.php",
         "APP_ROUTES_CACHE": "/tmp/routes.php",
         "APP_SERVICES_CACHE": "/tmp/services.php",
+        "VIEW_COMPILED_PATH": "/tmp/views",
+
         "CACHE_DRIVER": "array",
         "LOG_CHANNEL": "stderr",
-        "SESSION_DRIVER": "array",
-        "VIEW_COMPILED_PATH": "/tmp/views",
+        "SESSION_DRIVER": "cookie",
+        "QUEUE_CONNECTION": "sync",
+
         "SSR_TEMP_PATH": "/tmp/ssr",
         "NODE_PATH": "node"
     }
