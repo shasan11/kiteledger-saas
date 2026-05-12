@@ -26,7 +26,7 @@ import {
     EditOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import PrintablePdfEmailWrapper from '@/Components/PrintablePdfEmailWrapper';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
