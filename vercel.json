@@ -16,7 +16,7 @@
     ],
     "env": {
         "APP_NAME": "KiteLedger",
-        "APP_ENV": "local",
+        "APP_ENV": "production",
         "APP_DEBUG": "true",
         "APP_URL": "https://kiteledger-saas.vercel.app/",
         "DB_CONNECTION": "sqlite",
