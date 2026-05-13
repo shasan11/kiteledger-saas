@@ -205,23 +205,21 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <TeamOutlined />,
                 label: 'HRM',
                 children: [
+                    { key: 'hrm-users',      label: 'Employees',           onClick: () => visit('hrm.users.index', '/hrm/users') },
                     { key: 'hrm-attendance', label: 'Attendance',          onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
                     { key: 'hrm-leaves',     label: 'Leave Applications',  onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
                     { key: 'hrm-payslips',   label: 'Payslips',            onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
                     { key: 'hrm-emp-docs',   label: 'Employee Documents',  onClick: () => visit('hrm.employee-documents.index', '/hrm/employee-documents') },
                     { key: 'hrm-onboarding', label: 'Onboarding',          onClick: () => visit('hrm.onboarding.index', '/hrm/onboarding') },
-                    { key: 'hrm-departments',  label: 'Departments',         onClick: () => visit('hrm.departments.index', '/hrm/departments') },
-                    { key: 'hrm-designations', label: 'Designations',        onClick: () => visit('hrm.designations.index', '/hrm/designations') },
-                    { key: 'hrm-emp-statuses', label: 'Employment Statuses', onClick: () => visit('hrm.employment-statuses.index', '/hrm/employment-statuses') },
-                    { key: 'hrm-leave-policies', label: 'Leave Policies',  onClick: () => visit('hrm.leave-policies.index', '/hrm/leave-policies') },
-                    { key: 'hrm-shifts',       label: 'Shifts',             onClick: () => visit('hrm.shifts.index', '/hrm/shifts') },
-                    { key: 'hrm-weekly-holidays', label: 'Weekly Holidays', onClick: () => visit('hrm.weekly-holidays.index', '/hrm/weekly-holidays') },
-                    { key: 'hrm-public-holidays', label: 'Public Holidays', onClick: () => visit('hrm.public-holidays.index', '/hrm/public-holidays') },
-                    { key: 'hrm-salary-hist',   label: 'Salary Histories',      onClick: () => visit('hrm.salary-histories.index', '/hrm/salary-histories') },
-                    { key: 'hrm-desig-hist',    label: 'Designation Histories', onClick: () => visit('hrm.designation-histories.index', '/hrm/designation-histories') },
-                    { key: 'hrm-award-hist',    label: 'Award Histories',       onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
-                    { key: 'hrm-education',     label: 'Education',             onClick: () => visit('hrm.educations.index', '/hrm/educations') },
-                    { key: 'hrm-awards',        label: 'Awards',                onClick: () => visit('hrm.awards.index', '/hrm/awards') },
+                    {
+                        key: 'hrm-histories',
+                        label: 'Histories',
+                        children: [
+                            { key: 'hrm-salary-hist', label: 'Salary History', onClick: () => visit('hrm.salary-histories.index', '/hrm/salary-histories') },
+                            { key: 'hrm-desig-hist', label: 'Designation History', onClick: () => visit('hrm.designation-histories.index', '/hrm/designation-histories') },
+                            { key: 'hrm-award-hist', label: 'Award History', onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
+                        ],
+                    },
                 ],
             },
             {
@@ -259,6 +257,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Settings',
                 children: [
                     { key: 'settings-dashboard', label: 'Configuration', onClick: () => visit('settings.index', '/settings') },
+                    { key: 'settings-hrm-setup', label: 'HRM Configuration', onClick: () => router.visit('/settings?tab=hrm-setup') },
+                    { key: 'settings-hrm-defaults', label: 'HRM Defaults', onClick: () => router.visit('/settings?tab=hrm-configuration') },
                     { key: 'settings-users-permissions', label: 'Users & Roles', onClick: () => visit('settings.roles.index', '/settings/roles') },
                     { key: 'settings-master-data', label: 'Master Data', onClick: () => visit('settings.master-data.index', '/settings/master-data') },
                 ],
@@ -343,19 +343,20 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/hrm/payslips'))                return ['hrm-payslips'];
         if (isActive('/hrm/employee-documents'))      return ['hrm-emp-docs'];
         if (isActive('/hrm/onboarding'))              return ['hrm-onboarding'];
-        if (isActive('/hrm/departments'))             return ['hrm-departments'];
-        if (isActive('/hrm/designations'))            return ['hrm-designations'];
-        if (isActive('/hrm/employment-statuses'))     return ['hrm-emp-statuses'];
-        if (isActive('/hrm/leave-policies'))          return ['hrm-leave-policies'];
-        if (isActive('/hrm/weekly-holidays'))         return ['hrm-weekly-holidays'];
-        if (isActive('/hrm/shifts'))                  return ['hrm-shifts'];
-        if (isActive('/hrm/public-holidays'))         return ['hrm-public-holidays'];
-        if (isActive('/hrm/awards'))                  return ['hrm-awards'];
-        if (isActive('/hrm/priorities'))              return ['hrm-priorities'];
+        if (isActive('/hrm/departments'))             return ['settings-hrm-setup'];
+        if (isActive('/hrm/designations'))            return ['settings-hrm-setup'];
+        if (isActive('/hrm/employment-statuses'))     return ['settings-hrm-setup'];
+        if (isActive('/hrm/leave-policies'))          return ['settings-hrm-setup'];
+        if (isActive('/hrm/leave-types'))             return ['settings-hrm-setup'];
+        if (isActive('/hrm/weekly-holidays'))         return ['settings-hrm-setup'];
+        if (isActive('/hrm/shifts'))                  return ['settings-hrm-setup'];
+        if (isActive('/hrm/public-holidays'))         return ['settings-hrm-setup'];
+        if (isActive('/hrm/awards'))                  return ['settings-hrm-setup'];
+        if (isActive('/hrm/priorities'))              return ['settings-hrm-setup'];
         if (isActive('/hrm/salary-histories'))        return ['hrm-salary-hist'];
         if (isActive('/hrm/designation-histories'))   return ['hrm-desig-hist'];
         if (isActive('/hrm/award-histories'))         return ['hrm-award-hist'];
-        if (isActive('/hrm/educations'))              return ['hrm-education'];
+        if (isActive('/hrm/educations'))              return ['settings-hrm-setup'];
         if (isActive('/hrm/roles'))                   return ['hrm-roles'];
         if (isActive('/hrm/permissions'))             return ['hrm-permissions'];
         if (isActive('/hrm/role-permissions'))        return ['hrm-role-perms'];
@@ -383,7 +384,9 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/configurations/organization')) return ['config-organization'];
         if (isActive('/configurations/subscription')) return ['config-subscription'];
 
-        if (page.url === '/settings') return ['settings-dashboard'];
+        if (page.url === '/settings?tab=hrm-setup') return ['settings-hrm-setup'];
+        if (page.url === '/settings?tab=hrm-configuration') return ['settings-hrm-defaults'];
+        if (page.url.startsWith('/settings')) return ['settings-dashboard'];
         if (isActive('/settings/company-profile')) return ['settings-company-profile'];
         if (isActive('/settings/localization')) return ['settings-localization'];
         if (isActive('/settings/branches')) return ['settings-branches'];

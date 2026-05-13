@@ -4,8 +4,10 @@ import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { CheckCircleOutlined } from '@ant-design/icons';
-import { Tag } from 'antd';
+import { Card, Space, Tag, Typography, theme } from 'antd';
 import dayjs from 'dayjs';
+
+const { Text, Title } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -14,6 +16,7 @@ const formatDate = (v) => { if (!v) return null; const d = dayjs(v, 'DD-MM-YYYY'
 const emptyAssignee = { user_id: null };
 
 export default function Tasks({ auth }) {
+  const { token } = theme.useToken();
   const columns = useMemo(() => [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, ellipsis: true },
     { title: 'Project', dataIndex: ['project', 'name'], key: 'project_name', render: (v) => v || '-' },
@@ -72,21 +75,36 @@ export default function Tasks({ auth }) {
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Tasks" />
-      <ReusableCrud
-        title="Tasks"
-        icon={<CheckCircleOutlined />}
-        apiUrl={api('/api/hrm/tasks/')}
-        columns={columns}
-        fields={fields}
-        validationSchema={validationSchema}
-        crudInitialValues={crudInitialValues}
-        transformPayload={transformPayload}
-        form_ui="drawer" drawerWidth="calc(100vw - 32px)"
-        searchParam="search" pageParam="page" pageSizeParam="page_size"
-        sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
-        showSearch={true} canAdd={true} canEdit={true} canDelete={true}
-        hasActions={true} hasActionColumns={true}
-      />
+      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
+        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+          <Card bordered={false} style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(22,119,255,0.09) 0%, rgba(82,196,26,0.05) 100%)', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }} styles={{ body: { padding: '20px 24px' } }}>
+            <Space size={14} align="center">
+              <span style={{ width: 44, height: 44, borderRadius: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#1677ff', color: '#ffffff', fontSize: 20, flexShrink: 0 }}>
+                <CheckCircleOutlined />
+              </span>
+              <div>
+                <Title level={4} style={{ margin: 0, color: '#10233f' }}>Tasks</Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>Create and manage tasks across projects with priorities and deadlines.</Text>
+              </div>
+            </Space>
+          </Card>
+          <ReusableCrud
+            title="Tasks"
+            icon={<CheckCircleOutlined />}
+            apiUrl={api('/api/hrm/tasks/')}
+            columns={columns}
+            fields={fields}
+            validationSchema={validationSchema}
+            crudInitialValues={crudInitialValues}
+            transformPayload={transformPayload}
+            form_ui="drawer" drawerWidth="calc(100vw - 32px)"
+            searchParam="search" pageParam="page" pageSizeParam="page_size"
+            sortMode="ordering" orderingParam="ordering" enableServerPagination={true}
+            showSearch={true} canAdd={true} canEdit={true} canDelete={true}
+            hasActions={true} hasActionColumns={true}
+          />
+        </Space>
+      </div>
     </AuthenticatedLayout>
   );
 }
