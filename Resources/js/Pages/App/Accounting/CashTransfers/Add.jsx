@@ -27,6 +27,8 @@ export default function CashTransferAdd(props) {
         { name: 'from_account_id', label: 'From Account', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'transfer_no', label: 'Transfer No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
         { name: 'transfer_date', label: 'Transfer Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
+        { name: 'currency_id', label: 'Currency', type: 'fkSelect', required: true, col: 8, placeholder: 'Select Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
+        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0 },
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         {
             name: 'items', label: 'Transfer Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { to_account_id: null, amount: 0, description: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
@@ -42,11 +44,12 @@ export default function CashTransferAdd(props) {
     const validationSchema = useMemo(() => Yup.object().shape({
         from_account_id: Yup.mixed().test('req', 'From Account is required', (v) => !!asId(v)).required(),
         transfer_date: Yup.mixed().required('Date is required'),
+        currency_id: Yup.mixed().test('req', 'Currency is required', (v) => !!asId(v)).required(),
         items: Yup.array().min(1, 'At least one transfer line is required').required(),
     }), []);
 
     const crudInitialValues = useMemo(() => ({
-        transfer_no: '', transfer_date: dayjs(), from_account_id: null, reference: '', notes: '', items: [{ to_account_id: null, amount: 0, description: '' }], deleted_item_ids: [],
+        transfer_no: '', transfer_date: dayjs(), from_account_id: null, currency_id: null, exchange_rate: 1, reference: '', notes: '', items: [{ to_account_id: null, amount: 0, description: '' }], deleted_item_ids: [],
     }), []);
 
     const transformPayload = (values = {}) => {
@@ -55,6 +58,8 @@ export default function CashTransferAdd(props) {
             transfer_no: nullIfEmpty(values.transfer_no),
             transfer_date: formatDate(values.transfer_date),
             from_account_id: asId(values.from_account_id ?? values.fromAccount),
+            currency_id: asId(values.currency_id ?? values.currency),
+            exchange_rate: toNumber(values.exchange_rate) || 1,
             reference: nullIfEmpty(values.reference),
             notes: nullIfEmpty(values.notes),
             items,
