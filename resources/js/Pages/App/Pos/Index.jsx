@@ -25,6 +25,8 @@ import {
     Typography,
 } from 'antd';
 import {
+    ArrowDownOutlined,
+    ArrowUpOutlined,
     ClockCircleOutlined,
     CreditCardOutlined,
     DeleteOutlined,
@@ -95,6 +97,14 @@ export default function PosIndex() {
     const [processing, setProcessing] = useState(false);
 
     const [shiftForm] = Form.useForm();
+    const [addTerminalOpen, setAddTerminalOpen] = useState(false);
+    const [addTerminalForm] = Form.useForm();
+    const [addTerminalLoading, setAddTerminalLoading] = useState(false);
+    const [branches, setBranches] = useState([]);
+    const [cashMovementOpen, setCashMovementOpen] = useState(false);
+    const [cashMovementType, setCashMovementType] = useState('cash_in');
+    const [cashMovementForm] = Form.useForm();
+    const [cashMovementLoading, setCashMovementLoading] = useState(false);
 
     const terminalOptions = useMemo(
         () =>
@@ -202,7 +212,7 @@ export default function PosIndex() {
         setLoading(true);
 
         try {
-            const [terminalPayload, contactPayload, dashboardPayload] = await Promise.all([
+            const [terminalPayload, contactPayload, dashboardPayload, branchPayload] = await Promise.all([
                 fetchList('/api/pos-terminals', {
                     page_size: 100,
                     active: true,
@@ -211,7 +221,10 @@ export default function PosIndex() {
                     page_size: 100,
                 }),
                 axios.get(api('/api/pos/dashboard')),
+                fetchList('/api/branches', { page_size: 100, active: true }),
             ]);
+
+            setBranches(branchPayload.results || []);
 
             const terminalRows = terminalPayload.results || [];
             const defaultTerminal = terminalRows.find((terminal) => terminal.is_default) || terminalRows[0] || null;
@@ -613,6 +626,63 @@ export default function PosIndex() {
         message.success(`Resumed ${sale.sale_no}.`);
     }
 
+    async function submitAddTerminal(values) {
+        setAddTerminalLoading(true);
+        try {
+            const response = await axios.post(api('/api/pos-terminals/'), {
+                name: values.name,
+                branch_id: values.branch_id || null,
+                warehouse_id: values.warehouse_id || null,
+                active: true,
+            });
+            const newTerminal = response.data;
+            setTerminals((current) => [...current, newTerminal]);
+            setTerminalId(newTerminal.id);
+            setAddTerminalOpen(false);
+            addTerminalForm.resetFields();
+            message.success(`Terminal "${newTerminal.name}" created and selected.`);
+        } catch (error) {
+            message.error(error?.response?.data?.message || 'Failed to create terminal.');
+        } finally {
+            setAddTerminalLoading(false);
+        }
+    }
+
+    function openCashMovement(type) {
+        if (!currentShift?.id) {
+            message.warning('Open a shift before recording cash movement.');
+            return;
+        }
+        setCashMovementType(type);
+        cashMovementForm.setFieldsValue({ type, amount: 0, reason: '', notes: '' });
+        setCashMovementOpen(true);
+    }
+
+    async function submitCashMovement(values) {
+        if (!currentShift?.id) return;
+        setCashMovementLoading(true);
+        try {
+            await axios.post(api('/api/pos-cash-movements/'), {
+                pos_terminal_id: terminalId,
+                pos_shift_id: currentShift.id,
+                branch_id: selectedTerminal?.branch_id || null,
+                type: values.type,
+                amount: values.amount,
+                reason: values.reason || null,
+                notes: values.notes || null,
+                approved: true,
+            });
+            setCashMovementOpen(false);
+            cashMovementForm.resetFields();
+            await loadCurrentShift();
+            message.success('Cash movement recorded.');
+        } catch (error) {
+            message.error(error?.response?.data?.message || 'Failed to record cash movement.');
+        } finally {
+            setCashMovementLoading(false);
+        }
+    }
+
     async function closeShift() {
         if (!currentShift) return;
 
@@ -766,6 +836,7 @@ export default function PosIndex() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 gap: 12,
+                flexWrap: 'wrap',
             }}
         >
             <Space size={12} wrap>
@@ -773,18 +844,25 @@ export default function PosIndex() {
                     Point of Sale
                 </Title>
 
-                <Select
-                    style={{ width: 240 }}
-                    value={terminalId}
-                    options={terminalOptions}
-                    onChange={(value) => {
-                        setTerminalId(value);
-                        setCurrentShift(null);
-                        setProducts([]);
-                        clearSale();
-                    }}
-                    placeholder="Select terminal"
-                />
+                <Space.Compact>
+                    <Select
+                        style={{ width: 220 }}
+                        value={terminalId}
+                        options={terminalOptions}
+                        onChange={(value) => {
+                            setTerminalId(value);
+                            setCurrentShift(null);
+                            setProducts([]);
+                            clearSale();
+                        }}
+                        placeholder="Select terminal"
+                    />
+                    <Button
+                        icon={<PlusOutlined />}
+                        title="Create new terminal"
+                        onClick={() => setAddTerminalOpen(true)}
+                    />
+                </Space.Compact>
 
                 <Tag icon={<ClockCircleOutlined />} color={currentShift ? 'green' : 'red'}>
                     {currentShift ? currentShift.shift_no : 'No open shift'}
@@ -797,8 +875,25 @@ export default function PosIndex() {
 
             <Space wrap>
                 {currentShift && (
+                    <>
+                        <Button
+                            icon={<ArrowUpOutlined />}
+                            onClick={() => openCashMovement('cash_in')}
+                        >
+                            Cash In
+                        </Button>
+                        <Button
+                            icon={<ArrowDownOutlined />}
+                            onClick={() => openCashMovement('cash_out')}
+                        >
+                            Cash Out
+                        </Button>
+                    </>
+                )}
+
+                {currentShift && (
                     <Button onClick={() => setHeldOpen(true)} icon={<PauseCircleOutlined />}>
-                        Held Sales
+                        Held
                     </Button>
                 )}
 
@@ -872,6 +967,27 @@ export default function PosIndex() {
                             opening_cash: 0,
                         }}
                     >
+                        <Form.Item label="Terminal">
+                            <Space.Compact style={{ width: '100%' }}>
+                                <Select
+                                    style={{ flex: 1 }}
+                                    value={terminalId}
+                                    options={terminalOptions}
+                                    onChange={(value) => {
+                                        setTerminalId(value);
+                                        setCurrentShift(null);
+                                        setProducts([]);
+                                    }}
+                                    placeholder="Select terminal"
+                                />
+                                <Button
+                                    icon={<PlusOutlined />}
+                                    title="Create new terminal"
+                                    onClick={() => setAddTerminalOpen(true)}
+                                />
+                            </Space.Compact>
+                        </Form.Item>
+
                         <Form.Item
                             name="opening_cash"
                             label="Opening Cash"
@@ -1359,6 +1475,94 @@ export default function PosIndex() {
                     <Empty description="No receipt loaded" />
                 )}
             </Drawer>
+
+            {/* Quick-add Terminal Modal */}
+            <Modal
+                title="Create POS Terminal"
+                open={addTerminalOpen}
+                onCancel={() => { setAddTerminalOpen(false); addTerminalForm.resetFields(); }}
+                onOk={() => addTerminalForm.submit()}
+                confirmLoading={addTerminalLoading}
+                destroyOnClose
+            >
+                <Form form={addTerminalForm} layout="vertical" onFinish={submitAddTerminal}>
+                    <Form.Item
+                        name="name"
+                        label="Terminal Name"
+                        rules={[{ required: true, message: 'Terminal name is required.' }]}
+                    >
+                        <Input placeholder="e.g. Counter 1" />
+                    </Form.Item>
+                    <Form.Item name="branch_id" label="Branch">
+                        <Select
+                            allowClear
+                            placeholder="Select branch"
+                            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        />
+                    </Form.Item>
+                </Form>
+            </Modal>
+
+            {/* Cash In / Cash Out Modal */}
+            <Modal
+                title={cashMovementType === 'cash_in' ? 'Cash In' : 'Cash Out'}
+                open={cashMovementOpen}
+                onCancel={() => { setCashMovementOpen(false); cashMovementForm.resetFields(); }}
+                onOk={() => cashMovementForm.submit()}
+                confirmLoading={cashMovementLoading}
+                destroyOnClose
+            >
+                <Form
+                    form={cashMovementForm}
+                    layout="vertical"
+                    onFinish={submitCashMovement}
+                    initialValues={{ type: cashMovementType, amount: 0 }}
+                >
+                    <Form.Item name="type" label="Movement Type" rules={[{ required: true }]}>
+                        <Select
+                            options={[
+                                { value: 'cash_in', label: 'Cash In' },
+                                { value: 'cash_out', label: 'Cash Out' },
+                                { value: 'expense', label: 'Expense' },
+                                { value: 'drop', label: 'Cash Drop' },
+                            ]}
+                        />
+                    </Form.Item>
+                    <Form.Item
+                        name="amount"
+                        label="Amount"
+                        rules={[{ required: true, message: 'Amount is required.' }, { type: 'number', min: 0.01, message: 'Amount must be greater than 0.' }]}
+                    >
+                        <InputNumber style={{ width: '100%' }} min={0} prefix="Rs." placeholder="0.00" />
+                    </Form.Item>
+                    <Form.Item name="reason" label="Reason / Category">
+                        <Input placeholder="e.g. Opening float, Petty cash expense" />
+                    </Form.Item>
+                    <Form.Item name="notes" label="Notes">
+                        <Input.TextArea rows={2} placeholder="Optional notes" />
+                    </Form.Item>
+
+                    {currentShift && (
+                        <div
+                            style={{
+                                padding: 10,
+                                background: token.colorFillAlter,
+                                borderRadius: token.borderRadius,
+                                border: `1px solid ${token.colorBorderSecondary}`,
+                                fontSize: 12,
+                            }}
+                        >
+                            <Space>
+                                <ClockCircleOutlined />
+                                <span>
+                                    Shift: <strong>{currentShift.shift_no}</strong>
+                                    {' · '}Terminal: <strong>{selectedTerminal?.name || '-'}</strong>
+                                </span>
+                            </Space>
+                        </div>
+                    )}
+                </Form>
+            </Modal>
 
             <style>
                 {`

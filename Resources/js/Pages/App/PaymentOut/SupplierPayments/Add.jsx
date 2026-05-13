@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -23,6 +23,18 @@ const formatDate = (v) => {
 };
 
 export default function SupplierPaymentAdd(props) {
+    const [prefillData, setPrefillData] = useState(null);
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem('kiteledger_supplier_payment_prefill');
+            if (raw) {
+                sessionStorage.removeItem('kiteledger_supplier_payment_prefill');
+                setPrefillData(JSON.parse(raw));
+            }
+        } catch {}
+    }, []);
+
     const fields = useMemo(() => [
         { name: 'contact_id', label: 'Supplier', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Supplier', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'payment_no', label: 'Payment No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
@@ -53,9 +65,30 @@ export default function SupplierPaymentAdd(props) {
         amount: Yup.number().typeError('Amount required').min(0).required('Amount is required'),
     }), []);
 
-    const crudInitialValues = useMemo(() => ({
-        payment_no: '', payment_date: dayjs(), contact_id: null, account_id: null, currency_id: null, exchange_rate: 1, amount: 0, method: null, bank_charges_account_id: null, bank_charges: 0, tds_charges_account_id: null, tds_charges: 0, reference: '', notes: '', items: [], deleted_item_ids: [],
-    }), []);
+    const crudInitialValues = useMemo(() => {
+        const base = {
+            payment_no: '', payment_date: dayjs(), contact_id: null, account_id: null,
+            currency_id: null, exchange_rate: 1, amount: 0, method: null,
+            bank_charges_account_id: null, bank_charges: 0,
+            tds_charges_account_id: null, tds_charges: 0,
+            reference: '', notes: '', items: [], deleted_item_ids: [],
+        };
+        if (!prefillData) return base;
+        const items = Array.isArray(prefillData.items) && prefillData.items.length > 0
+            ? prefillData.items.map((alloc) => ({
+                purchase_bill_id: alloc.purchase_bill_id_detail ?? alloc.purchase_bill_id ?? null,
+                allocated_amount: toNumber(alloc.allocated_amount ?? 0),
+            }))
+            : [];
+        return {
+            ...base,
+            contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
+            currency_id: prefillData.currency_id_detail ?? prefillData.currency_id ?? null,
+            exchange_rate: toNumber(prefillData.exchange_rate) || 1,
+            amount: toNumber(prefillData.amount ?? 0),
+            items,
+        };
+    }, [prefillData]);
 
     const transformPayload = (values = {}) => {
         const items = (Array.isArray(values.items) ? values.items : []).filter((l) => !!asId(l?.purchase_bill_id)).map((l) => ({ ...(l.id ? { id: l.id } : {}), purchase_bill_id: asId(l.purchase_bill_id), allocated_amount: toNumber(l.allocated_amount) }));
@@ -83,6 +116,7 @@ export default function SupplierPaymentAdd(props) {
         <AuthenticatedLayout user={props.auth?.user}>
             <Head title="New Supplier Payment" />
             <ReusableCrud
+                key={prefillData?._source_id ?? 'supplier-payment-add'}
                 title="Supplier Payments"
                 addTitle="New Supplier Payment"
                 apiUrl={api('/api/supplier-payments/')}

@@ -632,6 +632,20 @@ const visitInvoiceShow = (id) => {
 
 export default function InvoiceAdd(props) {
   const [baseCurrency, setBaseCurrency] = useState(null);
+  const [prefillData, setPrefillData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('kiteledger_invoice_prefill');
+      if (stored) {
+        sessionStorage.removeItem('kiteledger_invoice_prefill');
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          setPrefillData(parsed);
+        }
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -1110,27 +1124,54 @@ export default function InvoiceAdd(props) {
     []
   );
 
-  const crudInitialValues = useMemo(
-    () => ({
+  const crudInitialValues = useMemo(() => {
+    const defaults = {
       invoice_no: '',
       invoice_date: dayjs(),
       due_date: null,
-
       contact_id: null,
       warehouse_id: null,
       credit_term_id: null,
-
       currency_id: baseCurrency,
       exchange_rate: toNumber(baseCurrency?.exchange_rate) || 1,
-
       reference: '',
       notes: '',
-
       items: [{ ...emptyLine }],
       deleted_item_ids: [],
-    }),
-    [baseCurrency]
-  );
+    };
+
+    if (!prefillData) return defaults;
+
+    const prefillItems = Array.isArray(prefillData.items) && prefillData.items.length
+      ? prefillData.items.map((line) => ({
+          ...emptyLine,
+          product_id: line.product_id_detail ?? line.product_id ?? null,
+          product_name: line.product_name || '',
+          description: line.description || '',
+          qty: toNumber(line.qty) || 1,
+          unit_price: toNumber(line.unit_price) || 0,
+          discount_type: 'percent',
+          discount_value: toNumber(line.discount_percent) || 0,
+          discount_percent: toNumber(line.discount_percent) || 0,
+          discount_amount: toNumber(line.discount_amount) || 0,
+          tax_rate_id: line.tax_rate_id_detail ?? line.tax_rate_id ?? null,
+          tax_amount: toNumber(line.tax_amount) || 0,
+          line_total: toNumber(line.line_total) || 0,
+        }))
+      : [{ ...emptyLine }];
+
+    return {
+      ...defaults,
+      contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
+      currency_id: prefillData.currency_id_detail ?? prefillData.currency_id ?? baseCurrency,
+      exchange_rate: toNumber(prefillData.exchange_rate) || toNumber(baseCurrency?.exchange_rate) || 1,
+      credit_term_id: prefillData.credit_term_id_detail ?? prefillData.credit_term_id ?? null,
+      reference: prefillData.reference || prefillData._source_no || '',
+      notes: prefillData.notes || '',
+      items: prefillItems,
+      deleted_item_ids: [],
+    };
+  }, [baseCurrency, prefillData]);
 
   const transformPayload = (values = {}) => {
     const rawItems = Array.isArray(values.items) ? values.items : [];

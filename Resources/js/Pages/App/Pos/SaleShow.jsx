@@ -1,7 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
-import { App, Button, Card, Descriptions, Drawer, Empty, List, Space, Table, Tag, Typography } from 'antd';
-import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
+import {
+    Alert,
+    App,
+    Button,
+    Card,
+    Descriptions,
+    Drawer,
+    Empty,
+    Form,
+    InputNumber,
+    List,
+    Select,
+    Space,
+    Table,
+    Tag,
+    Typography,
+} from 'antd';
+import { ArrowLeftOutlined, PrinterOutlined, RollbackOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
@@ -14,6 +30,10 @@ export default function PosSaleShow({ id }) {
     const [record, setRecord] = useState(null);
     const [loading, setLoading] = useState(true);
     const [printOpen, setPrintOpen] = useState(false);
+    const [returnOpen, setReturnOpen] = useState(false);
+    const [returnLines, setReturnLines] = useState([]);
+    const [refundMethod, setRefundMethod] = useState('cash');
+    const [returning, setReturning] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -32,6 +52,110 @@ export default function PosSaleShow({ id }) {
         };
     }, [id]);
 
+    function openReturn() {
+        if (!record?.pos_sale_lines?.length) {
+            message.warning('No sale lines available for return.');
+            return;
+        }
+        setReturnLines(
+            record.pos_sale_lines.map((line) => ({
+                ...line,
+                return_qty: 0,
+                max_qty: Number(line.qty || 0),
+            })),
+        );
+        setRefundMethod('cash');
+        setReturnOpen(true);
+    }
+
+    function updateReturnQty(lineId, value) {
+        setReturnLines((current) =>
+            current.map((line) =>
+                line.id === lineId
+                    ? { ...line, return_qty: Math.min(value || 0, line.max_qty) }
+                    : line,
+            ),
+        );
+    }
+
+    async function submitReturn() {
+        const items = returnLines
+            .filter((line) => Number(line.return_qty || 0) > 0)
+            .map((line) => ({ pos_sale_line_id: line.id, qty: Number(line.return_qty) }));
+
+        if (!items.length) {
+            message.warning('Enter at least one return quantity greater than zero.');
+            return;
+        }
+
+        setReturning(true);
+        try {
+            const draftResponse = await axios.post(api('/api/pos-returns/'), {
+                pos_sale_id: record.id,
+                refund_method: refundMethod,
+                items,
+            });
+
+            await axios.post(api(`/api/pos-returns/${draftResponse.data.id}/complete`), {
+                approved: true,
+            });
+
+            setReturnOpen(false);
+
+            const refreshed = await axios.get(api(`/api/pos-sales/${id}`));
+            setRecord(refreshed.data);
+
+            message.success('Return processed successfully.');
+        } catch (error) {
+            message.error(error?.response?.data?.message || 'Failed to process return.');
+        } finally {
+            setReturning(false);
+        }
+    }
+
+    const returnLineColumns = useMemo(
+        () => [
+            {
+                title: 'Product',
+                dataIndex: 'product_name',
+                key: 'product_name',
+                render: (value) => <Text strong>{value}</Text>,
+            },
+            {
+                title: 'Sold Qty',
+                dataIndex: 'qty',
+                key: 'qty',
+                align: 'right',
+                width: 90,
+            },
+            {
+                title: 'Unit Price',
+                dataIndex: 'unit_price',
+                key: 'unit_price',
+                align: 'right',
+                width: 110,
+                render: (value) => `Rs. ${money(value)}`,
+            },
+            {
+                title: 'Return Qty',
+                key: 'return_qty',
+                align: 'right',
+                width: 130,
+                render: (_, line) => (
+                    <InputNumber
+                        size="small"
+                        min={0}
+                        max={line.max_qty}
+                        value={line.return_qty}
+                        style={{ width: 90 }}
+                        onChange={(value) => updateReturnQty(line.id, value)}
+                    />
+                ),
+            },
+        ],
+        [returnLines],
+    );
+
     const lineColumns = useMemo(() => [
         { title: 'Product', dataIndex: 'product_name', key: 'product_name' },
         { title: 'Qty', dataIndex: 'qty', key: 'qty', align: 'right' },
@@ -48,6 +172,8 @@ export default function PosSaleShow({ id }) {
         { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', render: (value) => <Text strong>Rs. {money(value)}</Text> },
     ], []);
 
+    const canReturn = record?.status === 'completed' || record?.status === 'part_refunded';
+
     return (
         <AuthenticatedLayout
             header={
@@ -58,7 +184,18 @@ export default function PosSaleShow({ id }) {
                         </Link>
                         <Title level={4} style={{ margin: 0 }}>POS Sale</Title>
                     </Space>
-                    <Button icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>Print Preview</Button>
+                    <Space>
+                        {canReturn && (
+                            <Button
+                                icon={<RollbackOutlined />}
+                                onClick={openReturn}
+                                disabled={loading || !record}
+                            >
+                                Return
+                            </Button>
+                        )}
+                        <Button icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>Print Preview</Button>
+                    </Space>
                 </Space>
             }
         >
@@ -121,6 +258,77 @@ export default function PosSaleShow({ id }) {
                     </div>
                 )}
             </div>
+
+            {/* Return Drawer */}
+            <Drawer
+                title={`Process Return — ${record?.sale_no || ''}`}
+                open={returnOpen}
+                onClose={() => setReturnOpen(false)}
+                width={680}
+                destroyOnClose
+                footer={
+                    <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+                        <Button onClick={() => setReturnOpen(false)}>Cancel</Button>
+                        <Button
+                            type="primary"
+                            danger
+                            icon={<RollbackOutlined />}
+                            loading={returning}
+                            onClick={submitReturn}
+                        >
+                            Process Return
+                        </Button>
+                    </Space>
+                }
+            >
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="Set the return quantity for each item. Only items with quantity greater than zero will be returned."
+                    />
+
+                    <Table
+                        rowKey="id"
+                        size="small"
+                        columns={returnLineColumns}
+                        dataSource={returnLines}
+                        pagination={false}
+                        summary={() => {
+                            const totalReturnAmt = returnLines.reduce((sum, line) => {
+                                const base = Number(line.return_qty || 0) * Number(line.unit_price || 0);
+                                return sum + base;
+                            }, 0);
+                            return (
+                                <Table.Summary.Row>
+                                    <Table.Summary.Cell index={0} colSpan={3}>
+                                        <Text strong>Return Total</Text>
+                                    </Table.Summary.Cell>
+                                    <Table.Summary.Cell index={3} align="right">
+                                        <Text strong>Rs. {money(totalReturnAmt)}</Text>
+                                    </Table.Summary.Cell>
+                                </Table.Summary.Row>
+                            );
+                        }}
+                    />
+
+                    <Form layout="vertical">
+                        <Form.Item label="Refund Method" required>
+                            <Select
+                                value={refundMethod}
+                                onChange={setRefundMethod}
+                                options={[
+                                    { value: 'cash', label: 'Cash' },
+                                    { value: 'card', label: 'Card' },
+                                    { value: 'online', label: 'Online' },
+                                    { value: 'wallet', label: 'Wallet' },
+                                    { value: 'store_credit', label: 'Store Credit' },
+                                ]}
+                            />
+                        </Form.Item>
+                    </Form>
+                </Space>
+            </Drawer>
 
             <Drawer open={printOpen} onClose={() => setPrintOpen(false)} title="Receipt Preview" width={480}>
                 {record ? (

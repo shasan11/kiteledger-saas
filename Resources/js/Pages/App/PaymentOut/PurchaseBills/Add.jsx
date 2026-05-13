@@ -236,6 +236,17 @@ const visitPurchaseBillShow = (id) => {
 
 export default function PurchaseBillAdd(props) {
   const [baseCurrency, setBaseCurrency] = useState(null);
+  const [prefillData, setPrefillData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('kiteledger_bill_prefill');
+      if (raw) {
+        sessionStorage.removeItem('kiteledger_bill_prefill');
+        setPrefillData(JSON.parse(raw));
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -346,13 +357,43 @@ export default function PurchaseBillAdd(props) {
     ).min(1, 'At least one item is required').required('Required'),
   }), []);
 
-  const crudInitialValues = useMemo(() => ({
-    bill_no: null, bill_date: dayjs(), due_date: null,
-    contact_id: null, warehouse_id: null,
-    currency_id: baseCurrency, exchange_rate: toNumber(baseCurrency?.exchange_rate) || 1,
-    reference: '', notes: '',
-    items: [{ ...emptyLine }], deleted_item_ids: [],
-  }), [baseCurrency]);
+  const crudInitialValues = useMemo(() => {
+    const base = {
+      bill_no: null, bill_date: dayjs(), due_date: null,
+      contact_id: null, warehouse_id: null,
+      currency_id: baseCurrency, exchange_rate: toNumber(baseCurrency?.exchange_rate) || 1,
+      reference: '', notes: '',
+      items: [{ ...emptyLine }], deleted_item_ids: [],
+    };
+    if (!prefillData) return base;
+    const items = Array.isArray(prefillData.items) && prefillData.items.length > 0
+      ? prefillData.items.map((line) => ({
+          ...emptyLine,
+          product_id: line.product_id_detail ?? line.product_id ?? null,
+          product_name: line.product_name ?? '',
+          description: line.description ?? '',
+          qty: toNumber(line.qty) || 1,
+          unit_price: toNumber(line.unit_price),
+          discount_type: 'percent',
+          discount_value: toNumber(line.discount_percent ?? 0),
+          discount_percent: toNumber(line.discount_percent ?? 0),
+          discount_amount: toNumber(line.discount_amount ?? 0),
+          tax_rate_id: line.tax_rate_id_detail ?? line.tax_rate_id ?? null,
+          tax_amount: toNumber(line.tax_amount ?? 0),
+          line_total: toNumber(line.line_total ?? 0),
+        }))
+      : [{ ...emptyLine }];
+    const prefillCurrency = prefillData.currency_id_detail ?? null;
+    return {
+      ...base,
+      contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
+      currency_id: prefillCurrency ?? baseCurrency,
+      exchange_rate: toNumber(prefillData.exchange_rate) || toNumber(baseCurrency?.exchange_rate) || 1,
+      reference: prefillData.reference ?? '',
+      notes: prefillData.notes ?? '',
+      items,
+    };
+  }, [baseCurrency, prefillData]);
 
   const transformPayload = (values = {}) => {
     const rawItems = Array.isArray(values.items) ? values.items : [];
@@ -404,7 +445,7 @@ export default function PurchaseBillAdd(props) {
         .purchase-bill-total-grand strong { font-size: 18px; }
       `}</style>
       <ReusableCrud
-        key={baseCurrency?.id || 'purchase-bill-add'}
+        key={prefillData?._source_id ?? baseCurrency?.id ?? 'purchase-bill-add'}
         className="purchase-bill-crud"
         drawerClassName="purchase-bill-form-drawer"
         title="Purchase Bills"

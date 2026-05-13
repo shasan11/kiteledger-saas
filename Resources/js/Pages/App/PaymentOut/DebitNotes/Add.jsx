@@ -238,6 +238,47 @@ export default function DebitNoteAdd(props) {
     { name: 'debit_note_no', label: 'Debit Note No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
     { name: 'debit_note_date', label: 'Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     {
+      name: 'purchase_bill_id',
+      label: 'From Purchase Bill',
+      type: 'fkSelect',
+      col: 8,
+      placeholder: 'Search bill to auto-fill',
+      fkUrl: api('/api/purchase-bills/'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'bill_no',
+      allowClear: true,
+      storeFullObject: true,
+      fkLabel: (r) => [r?.bill_no, r?.contact?.name].filter(Boolean).join(' — '),
+      onSelectRecord: (record, values) => {
+        if (!record) return { ...values, purchase_bill_id: null };
+        const lineSource = record?.purchaseBillLines ?? record?.purchase_bill_lines ?? record?.items ?? [];
+        const items = lineSource.length > 0
+          ? lineSource.map((line) => {
+              const baseRow = {
+                ...emptyLine,
+                product_id: line?.product ?? null,
+                product_name: line?.product?.name ?? line?.product_name ?? '',
+                description: line?.description ?? '',
+                qty: toNumber(line?.qty ?? line?.quantity ?? 1),
+                unit_price: toNumber(line?.unit_price ?? line?.rate ?? 0),
+                tax_rate_id: line?.taxRate ?? line?.tax_rate ?? null,
+              };
+              const calc = calculateLine(baseRow);
+              return { ...baseRow, ...calc };
+            })
+          : values.items;
+        return {
+          ...values,
+          purchase_bill_id: record,
+          contact_id: record?.contact ?? values.contact_id,
+          warehouse_id: record?.warehouse ?? values.warehouse_id,
+          items,
+        };
+      },
+    },
+    {
       name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8,
       placeholder: 'Select Warehouse', fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true,
       quickAdd: warehouseQuickAdd,
@@ -312,6 +353,7 @@ export default function DebitNoteAdd(props) {
   const crudInitialValues = useMemo(() => ({
     debit_note_no: null, debit_note_date: dayjs(),
     contact_id: null, warehouse_id: null,
+    purchase_bill_id: null,
     notes: '',
     items: [{ ...emptyLine }], deleted_item_ids: [],
   }), []);
@@ -325,6 +367,7 @@ export default function DebitNoteAdd(props) {
       debit_note_date: formatDate(values.debit_note_date),
       contact_id: asId(values.contact_id ?? values.contact),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
+      purchase_bill_id: asId(values.purchase_bill_id) || null,
       notes: nullIfEmpty(values.notes),
       total: summary.grandTotal,
       items,

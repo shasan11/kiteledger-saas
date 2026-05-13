@@ -23,7 +23,6 @@ import {
     EditOutlined,
     FileTextOutlined,
     PrinterOutlined,
-    RollbackOutlined,
     UserOutlined,
     CalendarOutlined,
     CheckCircleOutlined,
@@ -49,26 +48,26 @@ const APPROVED_STATUSES = new Set([
     'received',
 ]);
 
-const SUPPORTED_PAYMENT_IN_DOCUMENT_TYPES = new Set([
-    'quotation',
-    'sales_order',
-    'invoice',
-    'customer_payment',
-    'credit_note',
+const SUPPORTED_PAYMENT_OUT_DOCUMENT_TYPES = new Set([
+    'purchase_order',
+    'purchase_bill',
+    'supplier_payment',
+    'debit_note',
 ]);
 
 const normalizeDocumentType = (value) => {
     const normalized = String(value || '').toLowerCase();
-
     const map = {
-        payment: 'customer_payment',
-        payment_in: 'customer_payment',
-        customer_receipt: 'customer_payment',
-        receipt: 'customer_payment',
-        sales_return: 'credit_note',
-        credit_note_sales_return: 'credit_note',
+        po: 'purchase_order',
+        purchase_order: 'purchase_order',
+        bill: 'purchase_bill',
+        purchase_bill: 'purchase_bill',
+        payment_out: 'supplier_payment',
+        supplier_payment: 'supplier_payment',
+        supplier_receipt: 'supplier_payment',
+        debit_note: 'debit_note',
+        purchase_return: 'debit_note',
     };
-
     return map[normalized] || normalized;
 };
 
@@ -84,16 +83,13 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 
 export const formatDate = (value) => {
     if (!value) return '-';
-
     const parsed = dayjs(value);
-
     return parsed.isValid() ? parsed.format('DD MMM YYYY') : value;
 };
 
 export const getRelationName = (value) => {
     if (!value) return '-';
     if (typeof value === 'string' || typeof value === 'number') return String(value);
-
     return (
         value.display_name ||
         value.company_name ||
@@ -103,15 +99,10 @@ export const getRelationName = (value) => {
         value.account_name ||
         value.bank_name ||
         value.title ||
-        value.invoice_no ||
         value.bill_no ||
-        value.quotation_no ||
-        value.sales_order_no ||
-        value.proforma_no ||
-        value.sales_return_no ||
+        value.invoice_no ||
         value.purchase_order_no ||
         value.payment_no ||
-        value.expense_no ||
         value.debit_note_no ||
         value.code ||
         '-'
@@ -125,12 +116,10 @@ const numeric = (value) => {
 
 export const formatMoney = (amount, currency) => {
     const prefix = currency?.symbol || currency?.code || currency?.name || '';
-
     const formatted = numeric(amount).toLocaleString('en-NP', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
-
     return prefix ? `${prefix} ${formatted}` : formatted;
 };
 
@@ -142,7 +131,6 @@ const formatQty = (value) =>
 
 const formatPercent = (value) => {
     if (value === null || value === undefined || value === '') return '-';
-
     return `${numeric(value).toLocaleString('en-NP', {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
@@ -153,18 +141,14 @@ const isShort = (value) => typeof value === 'string' && value.trim() && value.tr
 
 export const cleanStatusTag = (status) => {
     const normalized = String(status || 'draft').toLowerCase();
-
     const color =
         normalized === 'draft'
             ? 'default'
-            : normalized === 'cancelled' ||
-                normalized === 'void' ||
-                normalized === 'rejected'
+            : normalized === 'cancelled' || normalized === 'void' || normalized === 'rejected'
               ? 'error'
               : APPROVED_STATUSES.has(normalized)
                 ? 'success'
                 : 'processing';
-
     return (
         <Tag color={color} style={{ marginInlineEnd: 0 }}>
             {humanize(normalized)}
@@ -174,7 +158,6 @@ export const cleanStatusTag = (status) => {
 
 export const approvalTag = (record) => {
     const approved = record?.approved;
-
     if (approved === true) {
         return (
             <Tag color="success" style={{ marginInlineEnd: 0 }}>
@@ -182,7 +165,6 @@ export const approvalTag = (record) => {
             </Tag>
         );
     }
-
     if (approved === false) {
         return (
             <Tag color="warning" style={{ marginInlineEnd: 0 }}>
@@ -190,7 +172,6 @@ export const approvalTag = (record) => {
             </Tag>
         );
     }
-
     return APPROVED_STATUSES.has(String(record?.status || '').toLowerCase()) ? (
         <Tag color="success" style={{ marginInlineEnd: 0 }}>
             Approved
@@ -201,79 +182,59 @@ export const approvalTag = (record) => {
 };
 
 const documentTypeConfig = {
-    quotation: {
-        numberLabel: 'Quotation No',
-        numberKeys: ['quotation_no', 'code'],
-        dateLabel: 'Quotation Date',
-        dateKeys: ['quotation_date', 'date'],
-        dueLabel: 'Expiry Date',
-        dueKeys: ['expiry_date'],
-        linesKeys: ['quotationLines', 'quotation_lines', 'items'],
+    purchase_order: {
+        numberLabel: 'PO No',
+        numberKeys: ['purchase_order_no', 'code'],
+        dateLabel: 'PO Date',
+        dateKeys: ['purchase_order_date', 'date'],
+        dueLabel: 'Expected Date',
+        dueKeys: ['expected_date', 'due_date'],
+        linesKeys: ['purchaseOrderLines', 'purchase_order_lines', 'items'],
     },
-    proforma_invoice: {
-        numberLabel: 'Proforma No',
-        numberKeys: ['proforma_no', 'code'],
-        dateLabel: 'Proforma Date',
-        dateKeys: ['proforma_date', 'date'],
-        dueLabel: 'Expiry Date',
-        dueKeys: ['expiry_date', 'due_date'],
-        linesKeys: ['proformaInvoiceLines', 'proforma_invoice_lines', 'items'],
-    },
-    sales_order: {
-        numberLabel: 'Sales Order No',
-        numberKeys: ['sales_order_no', 'code'],
-        dateLabel: 'Sales Order Date',
-        dateKeys: ['sales_order_date', 'date'],
+    purchase_bill: {
+        numberLabel: 'Bill No',
+        numberKeys: ['bill_no', 'code'],
+        dateLabel: 'Bill Date',
+        dateKeys: ['bill_date', 'date'],
         dueLabel: 'Due Date',
         dueKeys: ['due_date'],
-        linesKeys: ['salesOrderLines', 'sales_order_lines', 'items'],
+        linesKeys: ['purchaseBillLines', 'purchase_bill_lines', 'items'],
     },
-    invoice: {
-        numberLabel: 'Invoice No',
-        numberKeys: ['invoice_no', 'code'],
-        dateLabel: 'Invoice Date',
-        dateKeys: ['invoice_date', 'date'],
-        dueLabel: 'Due Date',
-        dueKeys: ['due_date'],
-        linesKeys: ['invoiceLines', 'invoice_lines', 'items'],
-    },
-    customer_payment: {
+    supplier_payment: {
         numberLabel: 'Payment No',
         numberKeys: ['payment_no', 'code'],
         dateLabel: 'Payment Date',
         dateKeys: ['payment_date', 'date'],
         dueLabel: 'Reference',
         dueKeys: ['reference'],
-        linesKeys: ['customerPaymentLines', 'customer_payment_lines', 'items'],
+        linesKeys: ['supplierPaymentLines', 'supplier_payment_lines', 'items'],
     },
-    credit_note: {
-        numberLabel: 'Credit Note No',
-        numberKeys: ['sales_return_no', 'note_number', 'code'],
-        dateLabel: 'Credit Note Date',
-        dateKeys: ['sales_return_date', 'date'],
+    debit_note: {
+        numberLabel: 'Debit Note No',
+        numberKeys: ['debit_note_no', 'code'],
+        dateLabel: 'Debit Note Date',
+        dateKeys: ['debit_note_date', 'date'],
         dueLabel: 'Reference',
         dueKeys: ['reference', 'reference_no'],
-        linesKeys: ['salesReturnLines', 'sales_return_lines', 'items'],
+        linesKeys: ['debitNoteLines', 'debit_note_lines', 'items'],
     },
 };
 
 const getDocumentConfig = (documentType) => {
     const normalized = normalizeDocumentType(documentType);
-    return documentTypeConfig[normalized] || documentTypeConfig.invoice;
+    return documentTypeConfig[normalized] || documentTypeConfig.purchase_bill;
 };
 
 const getLines = (record, documentType) => {
     const keys = getDocumentConfig(documentType).linesKeys;
-
     for (const key of keys) {
         if (Array.isArray(record?.[key])) return record[key];
     }
-
     return [];
 };
 
-const getInvoicePaymentAllocations = (record) =>
-    firstPresent(record?.customerPaymentLines, record?.customer_payment_lines, []) || [];
+const getBillPaymentAllocations = (record) =>
+    firstPresent(record?.supplierPaymentLines, record?.supplier_payment_lines, []) || [];
 
 const getDocumentNumber = (record, documentType, title) =>
     firstPresent(...getDocumentConfig(documentType).numberKeys.map((key) => record?.[key])) || title;
@@ -286,17 +247,13 @@ const getDueLikeValue = (record, documentType) =>
 
 const taxLabel = (row) => {
     const relation = row?.taxRate || row?.tax_rate;
-
     if (relation) {
         const label = getRelationName(relation);
-
         if (label !== '-') return label;
-
         if (relation?.rate_percent !== undefined && relation?.rate_percent !== null) {
             return formatPercent(relation.rate_percent);
         }
     }
-
     return row?.tax_code ? humanize(row.tax_code) : '-';
 };
 
@@ -307,15 +264,12 @@ const lineProductName = (row) =>
 
 const getPrintDocumentTitle = (documentType, fallbackTitle) => {
     const normalized = normalizeDocumentType(documentType);
-
     const map = {
-        quotation: 'Quotation',
-        sales_order: 'Sales Order',
-        invoice: 'Invoice',
-        customer_payment: 'Payment Receipt',
-        credit_note: 'Credit Note',
+        purchase_order: 'Purchase Order',
+        purchase_bill: 'Purchase Bill',
+        supplier_payment: 'Payment Voucher',
+        debit_note: 'Debit Note',
     };
-
     return map[normalized] || fallbackTitle || 'Document';
 };
 
@@ -334,7 +288,6 @@ const escapeHtml = (value) =>
 
 const getPath = (object, path, fallback = '') => {
     if (!path) return fallback;
-
     return String(path)
         .split('.')
         .reduce((current, key) => {
@@ -344,18 +297,13 @@ const getPath = (object, path, fallback = '') => {
 };
 
 const getPartyEmail = (record) =>
-    firstPresent(
-        record?.contact?.email,
-        record?.customer?.email,
-        record?.party?.email,
-        ''
-    );
+    firstPresent(record?.contact?.email, record?.supplier?.email, record?.party?.email, '');
 
 const getPartyPhone = (record) =>
     firstPresent(
         record?.contact?.phone,
         record?.contact?.mobile,
-        record?.customer?.phone,
+        record?.supplier?.phone,
         record?.party?.phone,
         ''
     );
@@ -364,7 +312,7 @@ const getPartyAddress = (record) =>
     firstPresent(
         record?.contact?.address,
         record?.contact?.billing_address,
-        record?.customer?.address,
+        record?.supplier?.address,
         record?.party?.address,
         ''
     );
@@ -376,34 +324,25 @@ const normalizePrintLine = (row, currency) => {
     const discountPercent = firstPresent(row?.discount_percent, '');
     const taxAmount = firstPresent(row?.tax_amount, 0);
     const lineTotal = firstPresent(row?.line_total, row?.total, row?.amount, 0);
-
     return {
         ...row,
-
         product_name: lineProductName(row),
         item_name: lineProductName(row),
         description: row?.description || '-',
-
         qty: formatQty(qty),
         quantity: formatQty(qty),
-
         unit_price: formatMoney(unitPrice, currency),
         rate: formatMoney(unitPrice, currency),
         price: formatMoney(unitPrice, currency),
-
         discount_percent:
             discountPercent === null || discountPercent === undefined || discountPercent === ''
                 ? '-'
                 : formatPercent(discountPercent),
-
         discount_amount: formatMoney(discountAmount, currency),
-
         tax: taxLabel(row),
         tax_amount: formatMoney(taxAmount, currency),
-
         line_total: formatMoney(lineTotal, currency),
         amount: formatMoney(firstPresent(row?.amount, lineTotal), currency),
-
         raw_qty: numeric(qty),
         raw_unit_price: numeric(unitPrice),
         raw_discount_amount: numeric(discountAmount),
@@ -417,34 +356,26 @@ const buildPrintContext = (record, documentType, title) => {
     const currency = record?.currency;
     const lines = getLines(record, normalizedDocumentType);
     const documentTitle = getPrintDocumentTitle(normalizedDocumentType, title);
-
     const subtotal = firstPresent(
         record?.subtotal,
         record?.sub_total,
-        lines.reduce((sum, row) => {
-            return sum + numeric(firstPresent(row?.amount, row?.subtotal, row?.line_total));
-        }, 0)
+        lines.reduce((sum, row) => sum + numeric(firstPresent(row?.amount, row?.subtotal, row?.line_total)), 0)
     );
-
     const discount = firstPresent(
         record?.discount_total,
         record?.total_discount,
         lines.reduce((sum, row) => sum + numeric(row?.discount_amount), 0)
     );
-
     const tax = firstPresent(
         record?.tax_total,
         record?.total_tax,
         lines.reduce((sum, row) => sum + numeric(row?.tax_amount), 0)
     );
-
     const total = firstPresent(record?.grand_total, record?.total, record?.amount, 0);
     const paid = firstPresent(record?.paid_total, record?.paid_amount, 0);
     const balance = firstPresent(record?.balance_due, Math.max(numeric(total) - numeric(paid), 0));
-
     return {
         record,
-
         document: {
             type: normalizedDocumentType,
             title: documentTitle,
@@ -455,7 +386,6 @@ const buildPrintContext = (record, documentType, title) => {
             status: humanize(record?.status || 'draft'),
             notes: record?.notes || '',
         },
-
         party: {
             name: getRelationName(record?.contact),
             phone: getPartyPhone(record),
@@ -464,13 +394,11 @@ const buildPrintContext = (record, documentType, title) => {
             pan_no: firstPresent(record?.contact?.pan_no, record?.contact?.vat_no, ''),
             vat_no: firstPresent(record?.contact?.vat_no, record?.contact?.pan_no, ''),
         },
-
         currency: {
             code: currency?.code || '',
             symbol: currency?.symbol || '',
             name: currency?.name || '',
         },
-
         totals: {
             subtotal: formatMoney(subtotal, currency),
             discount: formatMoney(discount, currency),
@@ -480,7 +408,6 @@ const buildPrintContext = (record, documentType, title) => {
             paid: formatMoney(paid, currency),
             balance: formatMoney(balance, currency),
         },
-
         payment: {
             amount: formatMoney(total, currency),
             allocated_amount: formatMoney(
@@ -490,25 +417,22 @@ const buildPrintContext = (record, documentType, title) => {
             method: firstPresent(record?.payment_method, record?.method, '-'),
             account: getRelationName(record?.account),
         },
-
         lines: lines.map((row) => normalizePrintLine(row, currency)),
     };
 };
 
-const buildSalesOrderPrefillFromQuotation = (record) => ({
-    _source: 'quotation',
+const buildBillPrefillFromPO = (record) => ({
+    _source: 'purchase_order',
     _source_id: record?.id,
-    _source_no: record?.quotation_no,
+    _source_no: record?.purchase_order_no,
     contact_id: record?.contact?.id ?? record?.contact_id ?? null,
     contact_id_detail: record?.contact ?? null,
     currency_id: record?.currency?.id ?? record?.currency_id ?? null,
     currency_id_detail: record?.currency ?? null,
     exchange_rate: record?.exchange_rate ?? 1,
-    credit_term_id: record?.creditTerm?.id ?? record?.credit_term?.id ?? record?.credit_term_id ?? null,
-    credit_term_id_detail: record?.creditTerm ?? record?.credit_term ?? null,
+    reference: record?.purchase_order_no ?? '',
     notes: record?.notes ?? '',
-    reference: record?.quotation_no ?? '',
-    items: asArray(getLines(record, 'quotation')).map((line) => ({
+    items: asArray(getLines(record, 'purchase_order')).map((line) => ({
         product_id: line?.product?.id ?? line?.product_id ?? null,
         product_id_detail: line?.product ?? null,
         product_name: lineProductName(line),
@@ -524,43 +448,13 @@ const buildSalesOrderPrefillFromQuotation = (record) => ({
     })),
 });
 
-const buildInvoicePrefillFromSalesOrder = (record) => ({
-    _source: 'sales_order',
-    _source_id: record?.id,
-    _source_no: record?.sales_order_no,
-    contact_id: record?.contact?.id ?? record?.contact_id ?? null,
-    contact_id_detail: record?.contact ?? null,
-    currency_id: record?.currency?.id ?? record?.currency_id ?? null,
-    currency_id_detail: record?.currency ?? null,
-    exchange_rate: record?.exchange_rate ?? 1,
-    credit_term_id: record?.creditTerm?.id ?? record?.credit_term?.id ?? record?.credit_term_id ?? null,
-    credit_term_id_detail: record?.creditTerm ?? record?.credit_term ?? null,
-    notes: record?.notes ?? '',
-    reference: record?.sales_order_no ?? '',
-    items: asArray(getLines(record, 'sales_order')).map((line) => ({
-        product_id: line?.product?.id ?? line?.product_id ?? null,
-        product_id_detail: line?.product ?? null,
-        product_name: lineProductName(line),
-        description: line?.description ?? '',
-        qty: numeric(firstPresent(line?.qty, line?.quantity, 1)),
-        unit_price: numeric(firstPresent(line?.unit_price, line?.rate, 0)),
-        discount_percent: numeric(line?.discount_percent ?? 0),
-        discount_amount: numeric(line?.discount_amount ?? 0),
-        tax_rate_id: line?.taxRate?.id ?? line?.tax_rate?.id ?? line?.tax_rate_id ?? null,
-        tax_rate_id_detail: line?.taxRate ?? line?.tax_rate ?? null,
-        tax_amount: numeric(line?.tax_amount ?? 0),
-        line_total: numeric(firstPresent(line?.line_total, line?.amount, 0)),
-    })),
-});
-
-const buildPaymentPrefillFromInvoice = (record) => {
+const buildSupplierPaymentPrefillFromBill = (record) => {
     const total = numeric(firstPresent(record?.grand_total, record?.total, 0));
     const balanceDue = numeric(firstPresent(record?.balance_due, total));
-
     return {
-        _source: 'invoice',
+        _source: 'purchase_bill',
         _source_id: record?.id,
-        _source_no: record?.invoice_no,
+        _source_no: record?.bill_no,
         contact_id: record?.contact?.id ?? record?.contact_id ?? null,
         contact_id_detail: record?.contact ?? null,
         currency_id: record?.currency?.id ?? record?.currency_id ?? null,
@@ -569,10 +463,10 @@ const buildPaymentPrefillFromInvoice = (record) => {
         amount: balanceDue,
         items: [
             {
-                invoice_id: record?.id,
-                invoice_id_detail: { id: record?.id, invoice_no: record?.invoice_no },
-                invoice_no: record?.invoice_no ?? '',
-                invoice_total: total,
+                purchase_bill_id: record?.id,
+                purchase_bill_id_detail: { id: record?.id, bill_no: record?.bill_no },
+                bill_no: record?.bill_no ?? '',
+                bill_total: total,
                 outstanding_amount: balanceDue,
                 allocated_amount: balanceDue,
             },
@@ -582,29 +476,22 @@ const buildPaymentPrefillFromInvoice = (record) => {
 
 const renderPrintTemplate = (templateHtml, context) => {
     let output = templateHtml || '';
-
     output = output.replace(/{{#([\w.]+)}}([\s\S]*?){{\/\1}}/g, (_, path, block) => {
         const value = getPath(context, path);
-
         if (!Array.isArray(value)) return '';
-
         return value
             .map((item, index) =>
-                block.replace(/{{\s*([^}]+)\s*}}/g, (_, key) => {
+                block.replace(/{{\s*([^}]+)\s*}}/g, (__, key) => {
                     const cleanKey = key.trim();
-
                     if (cleanKey === '@index') return index + 1;
-
                     return escapeHtml(getPath(item, cleanKey, getPath(context, cleanKey, '')));
                 })
             )
             .join('');
     });
-
     output = output.replace(/{{\s*([^}]+)\s*}}/g, (_, path) => {
         return escapeHtml(getPath(context, path.trim(), ''));
     });
-
     return output;
 };
 
@@ -615,22 +502,19 @@ const defaultPrintTemplateHtml = `
             <h1>{{document.title}}</h1>
             <p class="muted">{{document.number}}</p>
         </div>
-
         <div class="print-meta">
             <p><strong>Date:</strong> {{document.date}}</p>
             <p><strong>Due / Ref:</strong> {{document.due_date}}</p>
             <p><strong>Status:</strong> {{document.status}}</p>
         </div>
     </div>
-
     <div class="party-box">
-        <h3>Customer Details</h3>
+        <h3>Supplier Details</h3>
         <p><strong>Name:</strong> {{party.name}}</p>
         <p><strong>Phone:</strong> {{party.phone}}</p>
         <p><strong>Email:</strong> {{party.email}}</p>
         <p><strong>Address:</strong> {{party.address}}</p>
     </div>
-
     <table class="print-table">
         <thead>
             <tr>
@@ -643,7 +527,6 @@ const defaultPrintTemplateHtml = `
                 <th class="right">Total</th>
             </tr>
         </thead>
-
         <tbody>
             {{#lines}}
             <tr>
@@ -658,14 +541,12 @@ const defaultPrintTemplateHtml = `
             {{/lines}}
         </tbody>
     </table>
-
     <div class="summary-box">
         <div><span>Subtotal</span><strong>{{totals.subtotal}}</strong></div>
         <div><span>Discount</span><strong>{{totals.discount}}</strong></div>
         <div><span>Tax</span><strong>{{totals.tax}}</strong></div>
         <div class="grand-total"><span>Grand Total</span><strong>{{totals.grand_total}}</strong></div>
     </div>
-
     <div class="notes">
         <strong>Notes:</strong>
         <p>{{document.notes}}</p>
@@ -674,150 +555,45 @@ const defaultPrintTemplateHtml = `
 `.trim();
 
 const defaultPrintTemplateCss = `
-.print-document {
-    font-family: Arial, sans-serif;
-    color: #111827;
-    font-size: 12px;
-    line-height: 1.45;
-    padding: 24px;
-}
-
-.print-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 24px;
-    border-bottom: 2px solid #111827;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-}
-
-.print-header h1 {
-    margin: 0;
-    font-size: 26px;
-    font-weight: 800;
-}
-
-.print-header p {
-    margin: 4px 0;
-}
-
-.muted {
-    color: #6b7280;
-}
-
-.print-meta {
-    text-align: right;
-}
-
-.party-box {
-    border: 1px solid #d1d5db;
-    padding: 12px;
-    margin-bottom: 18px;
-    border-radius: 6px;
-}
-
-.party-box h3 {
-    margin: 0 0 8px;
-    font-size: 14px;
-}
-
-.party-box p {
-    margin: 3px 0;
-}
-
-.print-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 12px;
-}
-
-.print-table th,
-.print-table td {
-    border: 1px solid #d1d5db;
-    padding: 8px;
-    vertical-align: top;
-}
-
-.print-table th {
-    background: #f3f4f6;
-    font-weight: 700;
-    text-align: left;
-}
-
-.right {
-    text-align: right;
-}
-
-.summary-box {
-    width: 280px;
-    margin-left: auto;
-    margin-top: 18px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    overflow: hidden;
-}
-
-.summary-box div {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 10px;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.summary-box div:last-child {
-    border-bottom: 0;
-}
-
-.summary-box .grand-total {
-    background: #f3f4f6;
-    font-size: 14px;
-}
-
-.notes {
-    margin-top: 24px;
-    border-top: 1px solid #e5e7eb;
-    padding-top: 12px;
-}
-
-.notes p {
-    margin: 4px 0 0;
-}
-
-@media print {
-    .print-document {
-        padding: 18px;
-    }
-}
+.print-document { font-family: Arial, sans-serif; color: #111827; font-size: 12px; line-height: 1.45; padding: 24px; }
+.print-header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #111827; padding-bottom: 14px; margin-bottom: 18px; }
+.print-header h1 { margin: 0; font-size: 26px; font-weight: 800; }
+.print-header p { margin: 4px 0; }
+.muted { color: #6b7280; }
+.print-meta { text-align: right; }
+.party-box { border: 1px solid #d1d5db; padding: 12px; margin-bottom: 18px; border-radius: 6px; }
+.party-box h3 { margin: 0 0 8px; font-size: 14px; }
+.party-box p { margin: 3px 0; }
+.print-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.print-table th, .print-table td { border: 1px solid #d1d5db; padding: 8px; vertical-align: top; }
+.print-table th { background: #f3f4f6; font-weight: 700; text-align: left; }
+.right { text-align: right; }
+.summary-box { width: 280px; margin-left: auto; margin-top: 18px; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
+.summary-box div { display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+.summary-box div:last-child { border-bottom: 0; }
+.summary-box .grand-total { background: #f3f4f6; font-size: 14px; }
+.notes { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+.notes p { margin: 4px 0 0; }
+@media print { .print-document { padding: 18px; } }
 `.trim();
 
-function DynamicPrintTemplatePreview({
-    record,
-    documentType,
-    title,
-    template,
-    templateError,
-}) {
+function DynamicPrintTemplatePreview({ record, documentType, title, template, templateError }) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
-
     const context = useMemo(
         () => buildPrintContext(record, normalizedDocumentType, title),
         [record, normalizedDocumentType, title]
     );
-
     const resolvedTemplate = template || {
         name: 'Fallback Template',
         template_key: `${normalizedDocumentType}.fallback`,
         template_html: defaultPrintTemplateHtml,
         template_css: defaultPrintTemplateCss,
     };
-
     const html = useMemo(
         () => renderPrintTemplate(resolvedTemplate.template_html, context),
         [resolvedTemplate.template_html, context]
     );
-
     const fileName = getPrintFileName(record, normalizedDocumentType, title);
-
     return (
         <PrintablePdfEmailWrapper
             title={context.document.title}
@@ -831,7 +607,7 @@ function DynamicPrintTemplatePreview({
             defaultEmailValues={{
                 to: context.party.email,
                 subject: `${context.document.title} ${context.document.number}`,
-                body: `Dear ${context.party.name || 'Customer'},\n\nPlease find attached ${context.document.title} ${context.document.number}.\n\nThank you.`,
+                body: `Dear ${context.party.name || 'Supplier'},\n\nPlease find attached ${context.document.title} ${context.document.number}.\n\nThank you.`,
             }}
             emailExtraPayload={{
                 document_type: normalizedDocumentType,
@@ -845,10 +621,7 @@ function DynamicPrintTemplatePreview({
                     <Tag color="success">{resolvedTemplate.template_key || 'default'}</Tag>
                 )
             }
-            contentStyle={{
-                width: '210mm',
-                minHeight: '297mm',
-            }}
+            contentStyle={{ width: '210mm', minHeight: '297mm' }}
         >
             <style>{resolvedTemplate.template_css || ''}</style>
             <div dangerouslySetInnerHTML={{ __html: html }} />
@@ -858,11 +631,9 @@ function DynamicPrintTemplatePreview({
 
 function InfoTable({ rows = [], compact = false }) {
     const filteredRows = rows.filter(Boolean);
-
     if (!filteredRows.length) {
         return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No details available" />;
     }
-
     return (
         <div className={compact ? 'payment-record-show__info is-compact' : 'payment-record-show__info'}>
             {filteredRows.map((row) => (
@@ -882,22 +653,18 @@ function SummaryRail({ title, documentNumber, total, rows, party }) {
                 <div className="payment-record-show__doc-icon">
                     <FileTextOutlined />
                 </div>
-
                 <div className="payment-record-show__rail-heading">
                     <Text type="secondary">{title}</Text>
                     <Title level={4}>{documentNumber}</Title>
                 </div>
-
                 <div className="payment-record-show__rail-party">
                     <UserOutlined />
                     <Text ellipsis>{party || '-'}</Text>
                 </div>
-
                 <div className="payment-record-show__amount-box">
                     <Text type="secondary">Document Total</Text>
                     <strong>{total}</strong>
                 </div>
-
                 <InfoTable rows={rows} compact />
             </Card>
         </aside>
@@ -912,7 +679,6 @@ function SummaryCards({ items = [] }) {
                     <div className="payment-record-show__summary-icon">
                         {item.icon || <DollarCircleOutlined />}
                     </div>
-
                     <div className="payment-record-show__summary-content">
                         <Text type="secondary">{item.label}</Text>
                         <strong>{item.value}</strong>
@@ -934,13 +700,11 @@ function HeaderBlock({
     editRoute,
     recordId,
     documentType,
-    onConvertToSalesOrder,
-    onConvertToInvoice,
-    onCollectPayment,
+    onConvertToBill,
+    onProcessPayment,
 }) {
     const normalizedType = normalizeDocumentType(documentType);
     const isApproved = record?.approved === true;
-
     return (
         <Card className="payment-record-show__header-card border-none">
             <div className="payment-record-show__header">
@@ -950,10 +714,8 @@ function HeaderBlock({
                             {backLabel}
                         </Button>
                     </Link>
-
                     <div className="payment-record-show__title-wrap">
                         <Title level={4}>{title}</Title>
-
                         {!loading && record ? (
                             <Space size={8} wrap>
                                 <Text type="secondary">{documentNumber}</Text>
@@ -965,49 +727,32 @@ function HeaderBlock({
                         )}
                     </div>
                 </div>
-
                 <Space wrap>
-                    {normalizedType === 'quotation' && isApproved && (
-                        <Tooltip title="Create a Sales Order from this Quotation">
+                    {normalizedType === 'purchase_order' && isApproved && (
+                        <Tooltip title="Create a Purchase Bill from this Purchase Order">
                             <Button
                                 type="primary"
                                 ghost
                                 icon={<ArrowRightOutlined />}
                                 disabled={loading || !record}
-                                onClick={onConvertToSalesOrder}
+                                onClick={onConvertToBill}
                             >
-                                Convert to Sales Order
+                                Convert to Bill
                             </Button>
                         </Tooltip>
                     )}
-
-                    {normalizedType === 'sales_order' && isApproved && (
-                        <Tooltip title="Create an Invoice from this Sales Order">
-                            <Button
-                                type="primary"
-                                ghost
-                                icon={<ArrowRightOutlined />}
-                                disabled={loading || !record}
-                                onClick={onConvertToInvoice}
-                            >
-                                Convert to Invoice
-                            </Button>
-                        </Tooltip>
-                    )}
-
-                    {normalizedType === 'invoice' && isApproved && (
-                        <Tooltip title="Collect payment for this Invoice">
+                    {normalizedType === 'purchase_bill' && isApproved && (
+                        <Tooltip title="Process payment for this Purchase Bill">
                             <Button
                                 type="primary"
                                 icon={<DollarCircleOutlined />}
                                 disabled={loading || !record}
-                                onClick={onCollectPayment}
+                                onClick={onProcessPayment}
                             >
-                                Collect Payment
+                                Process Payment
                             </Button>
                         </Tooltip>
                     )}
-
                     {editRoute && recordId && (
                         <Link href={route(editRoute, recordId)}>
                             <Button icon={<EditOutlined />} disabled={loading || !record}>
@@ -1015,7 +760,6 @@ function HeaderBlock({
                             </Button>
                         </Link>
                     )}
-
                     <Button icon={<PrinterOutlined />} onClick={onPrint} disabled={loading || !record}>
                         Print Preview
                     </Button>
@@ -1028,20 +772,14 @@ function HeaderBlock({
 function buildRailRows(record, documentType) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
     const config = getDocumentConfig(normalizedDocumentType);
-
     return [
         { label: config.numberLabel, value: getDocumentNumber(record, normalizedDocumentType, config.numberLabel) },
         { label: config.dateLabel, value: formatDate(getDocumentDate(record, normalizedDocumentType)) },
-        { label: 'Customer', value: getRelationName(record?.contact) },
+        { label: 'Supplier', value: getRelationName(record?.contact) },
         record?.warehouse ? { label: 'Warehouse', value: getRelationName(record.warehouse) } : null,
         {
             label: 'Currency',
-            value:
-                firstPresent(
-                    record?.currency?.code,
-                    record?.currency?.symbol,
-                    getRelationName(record?.currency)
-                ) || '-',
+            value: firstPresent(record?.currency?.code, record?.currency?.symbol, getRelationName(record?.currency)) || '-',
         },
         { label: 'Status', value: cleanStatusTag(record?.status) },
         { label: 'Approval', value: approvalTag(record) },
@@ -1052,11 +790,10 @@ function buildRailRows(record, documentType) {
 function buildOverviewRows(record, documentType) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
     const config = getDocumentConfig(normalizedDocumentType);
-
     return [
         { label: config.numberLabel, value: getDocumentNumber(record, normalizedDocumentType, config.numberLabel) },
         { label: config.dateLabel, value: formatDate(getDocumentDate(record, normalizedDocumentType)) },
-        { label: 'Customer', value: getRelationName(record?.contact) },
+        { label: 'Supplier', value: getRelationName(record?.contact) },
         {
             label: config.dueLabel,
             value:
@@ -1068,37 +805,23 @@ function buildOverviewRows(record, documentType) {
             ? { label: 'Reference', value: firstPresent(record?.reference, record?.reference_no) || '-' }
             : null,
         record?.warehouse ? { label: 'Warehouse', value: getRelationName(record.warehouse) } : null,
-        record?.creditTerm || record?.credit_term
-            ? { label: 'Credit Term', value: getRelationName(record?.creditTerm || record?.credit_term) }
-            : null,
         {
             label: 'Currency',
-            value:
-                firstPresent(
-                    record?.currency?.code,
-                    record?.currency?.symbol,
-                    getRelationName(record?.currency)
-                ) || '-',
+            value: firstPresent(record?.currency?.code, record?.currency?.symbol, getRelationName(record?.currency)) || '-',
         },
         { label: 'Status', value: cleanStatusTag(record?.status) },
         { label: 'Approval Status', value: approvalTag(record) },
-        normalizedDocumentType === 'customer_payment'
+        normalizedDocumentType === 'supplier_payment'
             ? { label: 'Payment Account', value: getRelationName(record?.account) }
             : null,
-        normalizedDocumentType === 'customer_payment'
+        normalizedDocumentType === 'supplier_payment'
             ? { label: 'Payment Method', value: firstPresent(record?.payment_method, record?.method) || '-' }
             : null,
-        normalizedDocumentType === 'customer_payment'
-            ? {
-                  label: 'Bank Charges Account',
-                  value: getRelationName(record?.bankChargesAccount || record?.bank_charges_account),
-              }
+        normalizedDocumentType === 'supplier_payment'
+            ? { label: 'Bank Charges Account', value: getRelationName(record?.bankChargesAccount || record?.bank_charges_account) }
             : null,
-        normalizedDocumentType === 'customer_payment'
-            ? {
-                  label: 'TDS Account',
-                  value: getRelationName(record?.tdsChargesAccount || record?.tds_charges_account),
-              }
+        normalizedDocumentType === 'supplier_payment'
+            ? { label: 'TDS Account', value: getRelationName(record?.tdsChargesAccount || record?.tds_charges_account) }
             : null,
         isShort(record?.notes) ? { label: 'Notes', value: record.notes } : null,
     ].filter(Boolean);
@@ -1111,20 +834,10 @@ function buildSummaryCards(record, documentType) {
     const paid = numeric(firstPresent(record?.paid_total, record?.paid_amount));
     const balance = numeric(firstPresent(record?.balance_due, Math.max(total - paid, 0)));
 
-    if (normalizedDocumentType === 'invoice') {
+    if (normalizedDocumentType === 'purchase_bill') {
         return [
-            {
-                label: 'Total Amount',
-                value: formatMoney(total, currency),
-                icon: <DollarCircleOutlined />,
-                tone: 'is-primary',
-            },
-            {
-                label: 'Paid Total',
-                value: formatMoney(paid, currency),
-                icon: <CheckCircleOutlined />,
-                tone: 'is-success',
-            },
+            { label: 'Total Amount', value: formatMoney(total, currency), icon: <DollarCircleOutlined />, tone: 'is-primary' },
+            { label: 'Paid Total', value: formatMoney(paid, currency), icon: <CheckCircleOutlined />, tone: 'is-success' },
             {
                 label: 'Balance Due',
                 value: formatMoney(balance, currency),
@@ -1134,55 +847,27 @@ function buildSummaryCards(record, documentType) {
         ];
     }
 
-    if (normalizedDocumentType === 'customer_payment') {
+    if (normalizedDocumentType === 'supplier_payment') {
         const lines = getLines(record, normalizedDocumentType);
         const allocated = lines.reduce((sum, row) => sum + numeric(row?.allocated_amount), 0);
         const bankCharges = numeric(record?.bank_charges);
         const tdsCharges = numeric(record?.tds_charges);
-
         return [
-            {
-                label: 'Payment Amount',
-                value: formatMoney(total, currency),
-                icon: <DollarCircleOutlined />,
-                tone: 'is-primary',
-            },
-            {
-                label: 'Allocated Amount',
-                value: formatMoney(allocated, currency),
-                icon: <CheckCircleOutlined />,
-                tone: 'is-success',
-            },
+            { label: 'Payment Amount', value: formatMoney(total, currency), icon: <DollarCircleOutlined />, tone: 'is-primary' },
+            { label: 'Allocated Amount', value: formatMoney(allocated, currency), icon: <CheckCircleOutlined />, tone: 'is-success' },
             {
                 label: 'Unallocated Amount',
                 value: formatMoney(Math.max(total - allocated, 0), currency),
                 icon: <CalendarOutlined />,
                 tone: Math.max(total - allocated, 0) > 0 ? 'is-warning' : 'is-success',
             },
-            bankCharges
-                ? {
-                      label: 'Bank Charges',
-                      value: formatMoney(bankCharges, currency),
-                      tone: 'is-muted',
-                  }
-                : null,
-            tdsCharges
-                ? {
-                      label: 'TDS Charges',
-                      value: formatMoney(tdsCharges, currency),
-                      tone: 'is-muted',
-                  }
-                : null,
+            bankCharges ? { label: 'Bank Charges', value: formatMoney(bankCharges, currency), tone: 'is-muted' } : null,
+            tdsCharges ? { label: 'TDS Charges', value: formatMoney(tdsCharges, currency), tone: 'is-muted' } : null,
         ];
     }
 
     return [
-        {
-            label: 'Total Amount',
-            value: formatMoney(total, currency),
-            icon: <DollarCircleOutlined />,
-            tone: 'is-primary',
-        },
+        { label: 'Total Amount', value: formatMoney(total, currency), icon: <DollarCircleOutlined />, tone: 'is-primary' },
     ];
 }
 
@@ -1216,7 +901,7 @@ function buildMainCards(record, documentType) {
     const lines = getLines(record, normalizedDocumentType);
     const cards = [];
 
-    const salesLikeColumns = [
+    const purchaseLikeColumns = [
         {
             title: 'Product / Item',
             key: 'product',
@@ -1275,47 +960,27 @@ function buildMainCards(record, documentType) {
         },
     ];
 
-    if (
-        [
-            'quotation',
-            'sales_order',
-            'invoice',
-            'credit_note',
-        ].includes(normalizedDocumentType)
-    ) {
+    if (['purchase_order', 'purchase_bill', 'debit_note'].includes(normalizedDocumentType)) {
         const titleMap = {
-            quotation: 'Quotation Lines',
-            sales_order: 'Sales Order Lines',
-            invoice: 'Invoice Lines',
-            credit_note: 'Credit Note Lines',
+            purchase_order: 'Purchase Order Lines',
+            purchase_bill: 'Purchase Bill Lines',
+            debit_note: 'Debit Note Lines',
         };
-
-        const effectiveColumns = salesLikeColumns
-            .map((column) =>
-                normalizedDocumentType === 'credit_note'
-                    ? column.key === 'discount_percent'
-                        ? null
-                        : column
-                    : column
-            )
-            .filter(Boolean);
-
         cards.push(
             lineTable(
                 titleMap[normalizedDocumentType],
-                effectiveColumns,
+                purchaseLikeColumns,
                 lines,
                 'No line items',
                 () => (
                     <Table.Summary.Row>
-                        <Table.Summary.Cell index={0} colSpan={effectiveColumns.length - 1}>
+                        <Table.Summary.Cell index={0} colSpan={purchaseLikeColumns.length - 1}>
                             Total
                         </Table.Summary.Cell>
-                        <Table.Summary.Cell index={effectiveColumns.length - 1} align="right">
+                        <Table.Summary.Cell index={purchaseLikeColumns.length - 1} align="right">
                             {formatMoney(
                                 lines.reduce(
-                                    (sum, row) =>
-                                        sum + numeric(firstPresent(row?.line_total, row?.amount)),
+                                    (sum, row) => sum + numeric(firstPresent(row?.line_total, row?.amount)),
                                     0
                                 ),
                                 currency
@@ -1327,9 +992,8 @@ function buildMainCards(record, documentType) {
         );
     }
 
-    if (normalizedDocumentType === 'invoice') {
-        const allocations = asArray(getInvoicePaymentAllocations(record));
-
+    if (normalizedDocumentType === 'purchase_bill') {
+        const allocations = asArray(getBillPaymentAllocations(record));
         cards.push(
             lineTable(
                 'Payment Allocations',
@@ -1337,7 +1001,7 @@ function buildMainCards(record, documentType) {
                     {
                         title: 'Payment No',
                         key: 'payment_no',
-                        render: (_, row) => getRelationName(row?.customerPayment || row?.customer_payment),
+                        render: (_, row) => getRelationName(row?.supplierPayment || row?.supplier_payment),
                     },
                     {
                         title: 'Payment Date',
@@ -1345,8 +1009,8 @@ function buildMainCards(record, documentType) {
                         render: (_, row) =>
                             formatDate(
                                 firstPresent(
-                                    row?.customerPayment?.payment_date,
-                                    row?.customer_payment?.payment_date
+                                    row?.supplierPayment?.payment_date,
+                                    row?.supplier_payment?.payment_date
                                 )
                             ),
                     },
@@ -1362,7 +1026,7 @@ function buildMainCards(record, documentType) {
                         align: 'right',
                         render: (_, row) =>
                             formatMoney(
-                                firstPresent(row?.customerPayment?.amount, row?.customer_payment?.amount),
+                                firstPresent(row?.supplierPayment?.amount, row?.supplier_payment?.amount),
                                 currency
                             ),
                     },
@@ -1371,7 +1035,7 @@ function buildMainCards(record, documentType) {
                         key: 'status',
                         render: (_, row) =>
                             cleanStatusTag(
-                                firstPresent(row?.customerPayment?.status, row?.customer_payment?.status)
+                                firstPresent(row?.supplierPayment?.status, row?.supplier_payment?.status)
                             ),
                     },
                 ],
@@ -1381,20 +1045,26 @@ function buildMainCards(record, documentType) {
         );
     }
 
-    if (normalizedDocumentType === 'customer_payment') {
+    if (normalizedDocumentType === 'supplier_payment') {
         cards.push(
             lineTable(
-                'Payment Allocation Lines',
+                'Bill Allocation Lines',
                 [
                     {
-                        title: 'Invoice No',
-                        key: 'invoice',
-                        render: (_, row) => getRelationName(row?.invoice),
+                        title: 'Bill No',
+                        key: 'bill',
+                        render: (_, row) => getRelationName(row?.purchaseBill || row?.purchase_bill),
                     },
                     {
-                        title: 'Invoice Date',
-                        key: 'invoice_date',
-                        render: (_, row) => formatDate(row?.invoice?.invoice_date),
+                        title: 'Bill Date',
+                        key: 'bill_date',
+                        render: (_, row) =>
+                            formatDate(
+                                firstPresent(
+                                    row?.purchaseBill?.bill_date,
+                                    row?.purchase_bill?.bill_date
+                                )
+                            ),
                     },
                     {
                         title: 'Allocated Amount',
@@ -1403,20 +1073,28 @@ function buildMainCards(record, documentType) {
                         render: (_, row) => formatMoney(row?.allocated_amount, currency),
                     },
                     {
-                        title: 'Invoice Total',
-                        key: 'invoice_total',
+                        title: 'Bill Total',
+                        key: 'bill_total',
                         align: 'right',
-                        render: (_, row) => formatMoney(row?.invoice?.total, currency),
+                        render: (_, row) =>
+                            formatMoney(
+                                firstPresent(row?.purchaseBill?.total, row?.purchase_bill?.total),
+                                currency
+                            ),
                     },
                     {
                         title: 'Balance Due',
                         key: 'balance_due',
                         align: 'right',
-                        render: (_, row) => formatMoney(row?.invoice?.balance_due, currency),
+                        render: (_, row) =>
+                            formatMoney(
+                                firstPresent(row?.purchaseBill?.balance_due, row?.purchase_bill?.balance_due),
+                                currency
+                            ),
                     },
                 ],
                 lines,
-                'No invoice allocations',
+                'No bill allocations',
                 () => (
                     <Table.Summary.Row>
                         <Table.Summary.Cell index={0} colSpan={2}>
@@ -1438,7 +1116,7 @@ function buildMainCards(record, documentType) {
     return cards;
 }
 
-export default function PaymentInRecordShow({
+export default function PaymentOutRecordShow({
     id,
     title,
     endpoint,
@@ -1448,106 +1126,80 @@ export default function PaymentInRecordShow({
     editRoute,
 }) {
     const { token } = useToken();
-
     const normalizedDocumentType = normalizeDocumentType(documentType);
 
     const [record, setRecord] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [printOpen, setPrintOpen] = useState(false);
-
     const [printTemplate, setPrintTemplate] = useState(null);
     const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
     const [printTemplateError, setPrintTemplateError] = useState('');
 
-    const handleConvertToSalesOrder = () => {
+    const handleConvertToBill = () => {
         if (!record) return;
         try {
-            sessionStorage.setItem('kiteledger_so_prefill', JSON.stringify(buildSalesOrderPrefillFromQuotation(record)));
+            sessionStorage.setItem('kiteledger_bill_prefill', JSON.stringify(buildBillPrefillFromPO(record)));
         } catch {}
         if (typeof route === 'function') {
-            router.visit(route('payment-in.sales-orders.add'));
+            router.visit(route('payment-out.purchase-bills.add'));
         } else {
-            router.visit('/payment-in/sales-orders/add');
+            router.visit('/payment-out/purchase-bills/add');
         }
     };
 
-    const handleConvertToInvoice = () => {
+    const handleProcessPayment = () => {
         if (!record) return;
         try {
-            sessionStorage.setItem('kiteledger_invoice_prefill', JSON.stringify(buildInvoicePrefillFromSalesOrder(record)));
+            sessionStorage.setItem(
+                'kiteledger_supplier_payment_prefill',
+                JSON.stringify(buildSupplierPaymentPrefillFromBill(record))
+            );
         } catch {}
         if (typeof route === 'function') {
-            router.visit(route('payment-in.invoices.add'));
+            router.visit(route('payment-out.supplier-payments.add'));
         } else {
-            router.visit('/payment-in/invoices/add');
-        }
-    };
-
-    const handleCollectPayment = () => {
-        if (!record) return;
-        try {
-            sessionStorage.setItem('kiteledger_payment_prefill', JSON.stringify(buildPaymentPrefillFromInvoice(record)));
-        } catch {}
-        if (typeof route === 'function') {
-            router.visit(route('payment-in.payments.add'));
-        } else {
-            router.visit('/payment-in/payments/add');
+            router.visit('/payment-out/supplier-payments/add');
         }
     };
 
     useEffect(() => {
         let active = true;
         const baseEndpoint = endpoint.replace(/\/+$/, '');
-
         const load = async () => {
             setLoading(true);
             setError('');
-
             try {
                 const response = await axios.get(api(`${baseEndpoint}/${id}`));
-
                 if (!active) return;
-
                 setRecord(response.data?.data ?? response.data);
             } catch (err) {
                 if (!active) return;
-
                 setRecord(null);
                 setError(err?.response?.data?.message || `Failed to load ${title}.`);
             } finally {
                 if (active) setLoading(false);
             }
         };
-
         load();
-
-        return () => {
-            active = false;
-        };
+        return () => { active = false; };
     }, [endpoint, id, title]);
 
     useEffect(() => {
         if (!printOpen || !record || !normalizedDocumentType) return;
-
         let active = true;
-
         const loadPrintTemplate = async () => {
             setPrintTemplateLoading(true);
             setPrintTemplateError('');
             setPrintTemplate(null);
-
             try {
                 const response = await axios.get(
                     api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(normalizedDocumentType)}`)
                 );
-
                 if (!active) return;
-
                 setPrintTemplate(response.data?.data ?? response.data ?? null);
             } catch (err) {
                 if (!active) return;
-
                 setPrintTemplate(null);
                 setPrintTemplateError(
                     err?.response?.data?.message ||
@@ -1557,12 +1209,8 @@ export default function PaymentInRecordShow({
                 if (active) setPrintTemplateLoading(false);
             }
         };
-
         loadPrintTemplate();
-
-        return () => {
-            active = false;
-        };
+        return () => { active = false; };
     }, [printOpen, record, normalizedDocumentType]);
 
     const documentNumber = useMemo(
@@ -1575,26 +1223,10 @@ export default function PaymentInRecordShow({
         [record]
     );
 
-    const railRows = useMemo(
-        () => buildRailRows(record, normalizedDocumentType),
-        [record, normalizedDocumentType]
-    );
-
-    const overviewRows = useMemo(
-        () => buildOverviewRows(record, normalizedDocumentType),
-        [record, normalizedDocumentType]
-    );
-
-    const summaryItems = useMemo(
-        () => buildSummaryCards(record, normalizedDocumentType),
-        [record, normalizedDocumentType]
-    );
-
-    const mainCards = useMemo(
-        () => buildMainCards(record, normalizedDocumentType),
-        [record, normalizedDocumentType]
-    );
-
+    const railRows = useMemo(() => buildRailRows(record, normalizedDocumentType), [record, normalizedDocumentType]);
+    const overviewRows = useMemo(() => buildOverviewRows(record, normalizedDocumentType), [record, normalizedDocumentType]);
+    const summaryItems = useMemo(() => buildSummaryCards(record, normalizedDocumentType), [record, normalizedDocumentType]);
+    const mainCards = useMemo(() => buildMainCards(record, normalizedDocumentType), [record, normalizedDocumentType]);
     const partyName = useMemo(() => getRelationName(record?.contact), [record]);
 
     const uiVars = {
@@ -1640,413 +1272,82 @@ export default function PaymentInRecordShow({
                     editRoute={editRoute}
                     recordId={id}
                     documentType={normalizedDocumentType}
-                    onConvertToSalesOrder={handleConvertToSalesOrder}
-                    onConvertToInvoice={handleConvertToInvoice}
-                    onCollectPayment={handleCollectPayment}
+                    onConvertToBill={handleConvertToBill}
+                    onProcessPayment={handleProcessPayment}
                 />
             }
         >
             <Head title={documentNumber || title} />
 
             <style>{`
-                .payment-record-show {
-                    min-height: calc(100vh - 64px);
-                    background: var(--payment-record-show-bg);
-                    color: var(--payment-record-show-text);
-                    padding: var(--payment-record-show-padding);
-                }
-
-                .payment-record-show__shell {
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--payment-record-show-padding);
-                    max-width: 1600px;
-                    margin: 0 auto;
-                }
-
-                .payment-record-show__header-card.ant-card,
-                .payment-record-show__rail-card.ant-card,
-                .payment-record-show__card.ant-card,
-                .payment-record-show__summary-card.ant-card {
-                    border-color: var(--payment-record-show-border);
-                    border-radius: var(--payment-record-show-radius);
-                    box-shadow: var(--payment-record-show-box-shadow);
-                    overflow: hidden;
-                }
-
-                .payment-record-show__header-card .ant-card-body {
-                    padding: var(--payment-record-show-padding-sm) var(--payment-record-show-padding);
-                }
-
-                .payment-record-show__header {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: var(--payment-record-show-padding);
-                }
-
-                .payment-record-show__header-left {
-                    min-width: 0;
-                    display: flex;
-                    align-items: center;
-                    gap: var(--payment-record-show-padding-sm);
-                }
-
-                .payment-record-show__title-wrap {
-                    min-width: 0;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-
-                .payment-record-show__title-wrap h4 {
-                    margin: 0 !important;
-                    line-height: 1.2 !important;
-                }
-
-                .payment-record-show__body {
-                    display: grid;
-                    grid-template-columns: 300px minmax(0, 1fr);
-                    gap: var(--payment-record-show-padding);
-                    align-items: start;
-                }
-
-                .payment-record-show__rail {
-                    position: sticky;
-                    top: var(--payment-record-show-padding);
-                    min-width: 0;
-                }
-
-                .payment-record-show__rail-card .ant-card-body {
-                    padding: var(--payment-record-show-padding);
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--payment-record-show-padding-sm);
-                }
-
-                .payment-record-show__doc-icon {
-                    width: 44px;
-                    height: 44px;
-                    border-radius: 999px;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: var(--payment-record-show-primary-bg);
-                    color: var(--payment-record-show-primary);
-                    font-size: 20px;
-                }
-
-                .payment-record-show__rail-heading {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                    padding-bottom: var(--payment-record-show-padding-sm);
-                    border-bottom: 1px solid var(--payment-record-show-border);
-                }
-
-                .payment-record-show__rail-heading h4 {
-                    margin: 0 !important;
-                    font-size: 18px !important;
-                    line-height: 1.25 !important;
-                    word-break: break-word;
-                }
-
-                .payment-record-show__rail-party {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    min-width: 0;
-                    padding: 10px 12px;
-                    border: 1px solid var(--payment-record-show-border);
-                    border-radius: var(--payment-record-show-radius-sm);
-                    background: var(--payment-record-show-surface-muted);
-                }
-
-                .payment-record-show__amount-box {
-                    padding: var(--payment-record-show-padding-sm);
-                    border-radius: var(--payment-record-show-radius-sm);
-                    background: var(--payment-record-show-primary-bg);
-                    border: 1px solid color-mix(in srgb, var(--payment-record-show-primary) 20%, transparent);
-                    display: flex;
-                    flex-direction: column;
-                    gap: 2px;
-                }
-
-                .payment-record-show__amount-box strong {
-                    font-size: 22px;
-                    line-height: 1.15;
-                    color: var(--payment-record-show-primary);
-                }
-
-                .payment-record-show__main {
-                    min-width: 0;
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--payment-record-show-padding);
-                }
-
-                .payment-record-show__summary {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                    gap: var(--payment-record-show-padding-sm);
-                }
-
-                .payment-record-show__summary-card .ant-card-body {
-                    min-height: 96px;
-                    padding: var(--payment-record-show-padding);
-                    display: flex;
-                    align-items: flex-start;
-                    gap: var(--payment-record-show-padding-sm);
-                }
-
-                .payment-record-show__summary-card {
-                    position: relative;
-                }
-
-                .payment-record-show__summary-card::before {
-                    content: '';
-                    position: absolute;
-                    inset-inline: 0;
-                    top: 0;
-                    height: 3px;
-                    background: var(--payment-record-show-primary);
-                }
-
-                .payment-record-show__summary-card.is-success::before {
-                    background: var(--payment-record-show-success);
-                }
-
-                .payment-record-show__summary-card.is-warning::before {
-                    background: var(--payment-record-show-warning);
-                }
-
-                .payment-record-show__summary-card.is-muted::before {
-                    background: var(--payment-record-show-border-strong);
-                }
-
-                .payment-record-show__summary-icon {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 999px;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: var(--payment-record-show-primary);
-                    background: var(--payment-record-show-primary-bg);
-                    flex: 0 0 auto;
-                    font-size: 17px;
-                }
-
-                .payment-record-show__summary-card.is-success .payment-record-show__summary-icon {
-                    color: var(--payment-record-show-success);
-                    background: var(--payment-record-show-success-bg);
-                }
-
-                .payment-record-show__summary-card.is-warning .payment-record-show__summary-icon {
-                    color: var(--payment-record-show-warning);
-                    background: var(--payment-record-show-warning-bg);
-                }
-
-                .payment-record-show__summary-card.is-muted .payment-record-show__summary-icon {
-                    color: var(--payment-record-show-text-secondary);
-                    background: var(--payment-record-show-surface-soft);
-                }
-
-                .payment-record-show__summary-content {
-                    min-width: 0;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-
-                .payment-record-show__summary-content strong {
-                    font-size: 20px;
-                    line-height: 1.2;
-                    color: var(--payment-record-show-text);
-                }
-
-                .payment-record-show__card .ant-card-head {
-                    min-height: 44px;
-                    padding: 0 var(--payment-record-show-padding);
-                    border-bottom: 1px solid var(--payment-record-show-border);
-                    background: var(--payment-record-show-surface-elevated);
-                }
-
-                .payment-record-show__card .ant-card-head-title {
-                    font-size: var(--payment-record-show-font-size);
-                    font-weight: 700;
-                }
-
-                .payment-record-show__card .ant-card-body {
-                    padding: var(--payment-record-show-padding);
-                    min-width: 0;
-                }
-
-                .payment-record-show__info {
-                    display: grid;
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                    border: 1px solid var(--payment-record-show-border);
-                    border-radius: var(--payment-record-show-radius-sm);
-                    overflow: hidden;
-                    background: var(--payment-record-show-surface);
-                }
-
-                .payment-record-show__info.is-compact {
-                    grid-template-columns: 1fr;
-                }
-
-                .payment-record-show__info-row {
-                    min-width: 0;
-                    display: grid;
-                    grid-template-columns: 140px minmax(0, 1fr);
-                    border-bottom: 1px solid var(--payment-record-show-border);
-                }
-
-                .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:nth-last-child(-n + 2) {
-                    border-bottom: 0;
-                }
-
-                .payment-record-show__info.is-compact .payment-record-show__info-row:last-child {
-                    border-bottom: 0;
-                }
-
-                .payment-record-show__info-row:nth-child(odd) {
-                    border-right: 1px solid var(--payment-record-show-border);
-                }
-
-                .payment-record-show__info.is-compact .payment-record-show__info-row {
-                    grid-template-columns: 112px minmax(0, 1fr);
-                    border-right: 0;
-                }
-
-                .payment-record-show__info-label,
-                .payment-record-show__info-value {
-                    min-width: 0;
-                    padding: 9px 11px;
-                    font-size: var(--payment-record-show-font-size-sm);
-                    line-height: 1.35;
-                    word-break: break-word;
-                }
-
-                .payment-record-show__info-label {
-                    color: var(--payment-record-show-text-secondary);
-                    background: var(--payment-record-show-surface-muted);
-                    font-weight: 600;
-                    border-right: 1px solid var(--payment-record-show-border);
-                }
-
-                .payment-record-show__info-value {
-                    color: var(--payment-record-show-text);
-                    background: var(--payment-record-show-surface);
-                }
-
-                .payment-record-show .ant-table {
-                    font-size: var(--payment-record-show-font-size-sm);
-                }
-
-                .payment-record-show .ant-table-wrapper .ant-table-container {
-                    border-radius: var(--payment-record-show-radius-sm);
-                    overflow: hidden;
-                }
-
-                .payment-record-show .ant-table-wrapper .ant-table-thead > tr > th {
-                    padding: 9px 11px !important;
-                    background: var(--payment-record-show-surface-muted) !important;
-                    border-color: var(--payment-record-show-border) !important;
-                    color: var(--payment-record-show-text-secondary) !important;
-                    font-weight: 700;
-                    white-space: nowrap;
-                }
-
-                .payment-record-show .ant-table-wrapper .ant-table-tbody > tr > td,
-                .payment-record-show .ant-table-wrapper .ant-table-summary > tr > td {
-                    padding: 9px 11px !important;
-                    border-color: var(--payment-record-show-border) !important;
-                }
-
-                .payment-record-show__table-row.is-alt > td {
-                    background: var(--payment-record-show-surface-muted);
-                }
-
-                .payment-record-show .ant-table-wrapper .ant-table-summary > tr > td {
-                    background: var(--payment-record-show-surface-soft);
-                    font-weight: 700;
-                }
-
-                .payment-record-show__state {
-                    padding: var(--payment-record-show-padding-lg);
-                    background: var(--payment-record-show-surface);
-                    border: 1px solid var(--payment-record-show-border);
-                    border-radius: var(--payment-record-show-radius);
-                    box-shadow: var(--payment-record-show-box-shadow);
-                }
-
+                .payment-record-show { min-height: calc(100vh - 64px); background: var(--payment-record-show-bg); color: var(--payment-record-show-text); padding: var(--payment-record-show-padding); }
+                .payment-record-show__shell { display: flex; flex-direction: column; gap: var(--payment-record-show-padding); max-width: 1600px; margin: 0 auto; }
+                .payment-record-show__header-card.ant-card, .payment-record-show__rail-card.ant-card, .payment-record-show__card.ant-card, .payment-record-show__summary-card.ant-card { border-color: var(--payment-record-show-border); border-radius: var(--payment-record-show-radius); box-shadow: var(--payment-record-show-box-shadow); overflow: hidden; }
+                .payment-record-show__header-card .ant-card-body { padding: var(--payment-record-show-padding-sm) var(--payment-record-show-padding); }
+                .payment-record-show__header { display: flex; align-items: center; justify-content: space-between; gap: var(--payment-record-show-padding); }
+                .payment-record-show__header-left { min-width: 0; display: flex; align-items: center; gap: var(--payment-record-show-padding-sm); }
+                .payment-record-show__title-wrap { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+                .payment-record-show__title-wrap h4 { margin: 0 !important; line-height: 1.2 !important; }
+                .payment-record-show__body { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--payment-record-show-padding); align-items: start; }
+                .payment-record-show__rail { position: sticky; top: var(--payment-record-show-padding); min-width: 0; }
+                .payment-record-show__rail-card .ant-card-body { padding: var(--payment-record-show-padding); display: flex; flex-direction: column; gap: var(--payment-record-show-padding-sm); }
+                .payment-record-show__doc-icon { width: 44px; height: 44px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--payment-record-show-primary-bg); color: var(--payment-record-show-primary); font-size: 20px; }
+                .payment-record-show__rail-heading { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--payment-record-show-padding-sm); border-bottom: 1px solid var(--payment-record-show-border); }
+                .payment-record-show__rail-heading h4 { margin: 0 !important; font-size: 18px !important; line-height: 1.25 !important; word-break: break-word; }
+                .payment-record-show__rail-party { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px; border: 1px solid var(--payment-record-show-border); border-radius: var(--payment-record-show-radius-sm); background: var(--payment-record-show-surface-muted); }
+                .payment-record-show__amount-box { padding: var(--payment-record-show-padding-sm); border-radius: var(--payment-record-show-radius-sm); background: var(--payment-record-show-primary-bg); border: 1px solid color-mix(in srgb, var(--payment-record-show-primary) 20%, transparent); display: flex; flex-direction: column; gap: 2px; }
+                .payment-record-show__amount-box strong { font-size: 22px; line-height: 1.15; color: var(--payment-record-show-primary); }
+                .payment-record-show__main { min-width: 0; display: flex; flex-direction: column; gap: var(--payment-record-show-padding); }
+                .payment-record-show__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--payment-record-show-padding-sm); }
+                .payment-record-show__summary-card .ant-card-body { min-height: 96px; padding: var(--payment-record-show-padding); display: flex; align-items: flex-start; gap: var(--payment-record-show-padding-sm); }
+                .payment-record-show__summary-card { position: relative; }
+                .payment-record-show__summary-card::before { content: ''; position: absolute; inset-inline: 0; top: 0; height: 3px; background: var(--payment-record-show-primary); }
+                .payment-record-show__summary-card.is-success::before { background: var(--payment-record-show-success); }
+                .payment-record-show__summary-card.is-warning::before { background: var(--payment-record-show-warning); }
+                .payment-record-show__summary-card.is-muted::before { background: var(--payment-record-show-border-strong); }
+                .payment-record-show__summary-icon { width: 36px; height: 36px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: var(--payment-record-show-primary); background: var(--payment-record-show-primary-bg); flex: 0 0 auto; font-size: 17px; }
+                .payment-record-show__summary-card.is-success .payment-record-show__summary-icon { color: var(--payment-record-show-success); background: var(--payment-record-show-success-bg); }
+                .payment-record-show__summary-card.is-warning .payment-record-show__summary-icon { color: var(--payment-record-show-warning); background: var(--payment-record-show-warning-bg); }
+                .payment-record-show__summary-card.is-muted .payment-record-show__summary-icon { color: var(--payment-record-show-text-secondary); background: var(--payment-record-show-surface-soft); }
+                .payment-record-show__summary-content { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+                .payment-record-show__summary-content strong { font-size: 20px; line-height: 1.2; color: var(--payment-record-show-text); }
+                .payment-record-show__card .ant-card-head { min-height: 44px; padding: 0 var(--payment-record-show-padding); border-bottom: 1px solid var(--payment-record-show-border); background: var(--payment-record-show-surface-elevated); }
+                .payment-record-show__card .ant-card-head-title { font-size: var(--payment-record-show-font-size); font-weight: 700; }
+                .payment-record-show__card .ant-card-body { padding: var(--payment-record-show-padding); min-width: 0; }
+                .payment-record-show__info { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--payment-record-show-border); border-radius: var(--payment-record-show-radius-sm); overflow: hidden; background: var(--payment-record-show-surface); }
+                .payment-record-show__info.is-compact { grid-template-columns: 1fr; }
+                .payment-record-show__info-row { min-width: 0; display: grid; grid-template-columns: 140px minmax(0, 1fr); border-bottom: 1px solid var(--payment-record-show-border); }
+                .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:nth-last-child(-n + 2) { border-bottom: 0; }
+                .payment-record-show__info.is-compact .payment-record-show__info-row:last-child { border-bottom: 0; }
+                .payment-record-show__info-row:nth-child(odd) { border-right: 1px solid var(--payment-record-show-border); }
+                .payment-record-show__info.is-compact .payment-record-show__info-row { grid-template-columns: 112px minmax(0, 1fr); border-right: 0; }
+                .payment-record-show__info-label, .payment-record-show__info-value { min-width: 0; padding: 9px 11px; font-size: var(--payment-record-show-font-size-sm); line-height: 1.35; word-break: break-word; }
+                .payment-record-show__info-label { color: var(--payment-record-show-text-secondary); background: var(--payment-record-show-surface-muted); font-weight: 600; border-right: 1px solid var(--payment-record-show-border); }
+                .payment-record-show__info-value { color: var(--payment-record-show-text); background: var(--payment-record-show-surface); }
+                .payment-record-show .ant-table { font-size: var(--payment-record-show-font-size-sm); }
+                .payment-record-show .ant-table-wrapper .ant-table-container { border-radius: var(--payment-record-show-radius-sm); overflow: hidden; }
+                .payment-record-show .ant-table-wrapper .ant-table-thead > tr > th { padding: 9px 11px !important; background: var(--payment-record-show-surface-muted) !important; border-color: var(--payment-record-show-border) !important; color: var(--payment-record-show-text-secondary) !important; font-weight: 700; white-space: nowrap; }
+                .payment-record-show .ant-table-wrapper .ant-table-tbody > tr > td, .payment-record-show .ant-table-wrapper .ant-table-summary > tr > td { padding: 9px 11px !important; border-color: var(--payment-record-show-border) !important; }
+                .payment-record-show__table-row.is-alt > td { background: var(--payment-record-show-surface-muted); }
+                .payment-record-show .ant-table-wrapper .ant-table-summary > tr > td { background: var(--payment-record-show-surface-soft); font-weight: 700; }
+                .payment-record-show__state { padding: var(--payment-record-show-padding-lg); background: var(--payment-record-show-surface); border: 1px solid var(--payment-record-show-border); border-radius: var(--payment-record-show-radius); box-shadow: var(--payment-record-show-box-shadow); }
                 @media (max-width: 1100px) {
-                    .payment-record-show__body {
-                        grid-template-columns: 1fr;
-                    }
-
-                    .payment-record-show__rail {
-                        position: static;
-                    }
-
-                    .payment-record-show__rail-card .ant-card-body {
-                        display: grid;
-                        grid-template-columns: auto minmax(0, 1fr);
-                        align-items: start;
-                    }
-
-                    .payment-record-show__rail-heading,
-                    .payment-record-show__rail-party,
-                    .payment-record-show__amount-box,
-                    .payment-record-show__info {
-                        grid-column: 1 / -1;
-                    }
+                    .payment-record-show__body { grid-template-columns: 1fr; }
+                    .payment-record-show__rail { position: static; }
+                    .payment-record-show__rail-card .ant-card-body { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+                    .payment-record-show__rail-heading, .payment-record-show__rail-party, .payment-record-show__amount-box, .payment-record-show__info { grid-column: 1 / -1; }
                 }
-
                 @media (max-width: 768px) {
-                    .payment-record-show {
-                        padding: var(--payment-record-show-padding-sm);
-                    }
-
-                    .payment-record-show__header {
-                        align-items: stretch;
-                        flex-direction: column;
-                    }
-
-                    .payment-record-show__header-left {
-                        align-items: flex-start;
-                    }
-
-                    .payment-record-show__summary {
-                        grid-template-columns: 1fr;
-                    }
-
-                    .payment-record-show__info {
-                        grid-template-columns: 1fr;
-                    }
-
-                    .payment-record-show__info-row,
-                    .payment-record-show__info.is-compact .payment-record-show__info-row {
-                        grid-template-columns: 1fr;
-                    }
-
-                    .payment-record-show__info-row:nth-child(odd) {
-                        border-right: 0;
-                    }
-
-                    .payment-record-show__info-label {
-                        border-right: 0;
-                        border-bottom: 1px solid var(--payment-record-show-border);
-                    }
-
-                    .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:nth-last-child(-n + 2) {
-                        border-bottom: 1px solid var(--payment-record-show-border);
-                    }
-
-                    .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:last-child {
-                        border-bottom: 0;
-                    }
+                    .payment-record-show { padding: var(--payment-record-show-padding-sm); }
+                    .payment-record-show__header { align-items: stretch; flex-direction: column; }
+                    .payment-record-show__header-left { align-items: flex-start; }
+                    .payment-record-show__summary { grid-template-columns: 1fr; }
+                    .payment-record-show__info { grid-template-columns: 1fr; }
+                    .payment-record-show__info-row, .payment-record-show__info.is-compact .payment-record-show__info-row { grid-template-columns: 1fr; }
+                    .payment-record-show__info-row:nth-child(odd) { border-right: 0; }
+                    .payment-record-show__info-label { border-right: 0; border-bottom: 1px solid var(--payment-record-show-border); }
+                    .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:nth-last-child(-n + 2) { border-bottom: 1px solid var(--payment-record-show-border); }
+                    .payment-record-show__info:not(.is-compact) .payment-record-show__info-row:last-child { border-bottom: 0; }
                 }
             `}</style>
 
@@ -2078,14 +1379,11 @@ export default function PaymentInRecordShow({
                                 rows={railRows}
                                 party={partyName}
                             />
-
                             <main className="payment-record-show__main">
                                 <SummaryCards items={summaryItems} />
-
                                 <Card title={`${title} Details`} className="payment-record-show__card">
                                     <InfoTable rows={overviewRows} />
                                 </Card>
-
                                 {mainCards}
                             </main>
                         </div>
@@ -2099,19 +1397,14 @@ export default function PaymentInRecordShow({
                 onClose={() => setPrintOpen(false)}
                 width={1180}
                 destroyOnClose={false}
-                styles={{
-                    body: {
-                        background: token.colorBgLayout,
-                        padding: 16,
-                    },
-                }}
+                styles={{ body: { background: token.colorBgLayout, padding: 16 } }}
             >
-                {!SUPPORTED_PAYMENT_IN_DOCUMENT_TYPES.has(normalizedDocumentType) ? (
+                {!SUPPORTED_PAYMENT_OUT_DOCUMENT_TYPES.has(normalizedDocumentType) ? (
                     <Alert
                         type="warning"
                         showIcon
                         message="Unsupported document type"
-                        description={`Printing is configured only for Quotation, Sales Order, Invoice, Payment, and Credit Note. Current type: ${documentType}`}
+                        description={`Printing is configured for Purchase Order, Purchase Bill, Supplier Payment, and Debit Note. Current type: ${documentType}`}
                     />
                 ) : printTemplateLoading ? (
                     <Skeleton active paragraph={{ rows: 12 }} />

@@ -822,6 +822,48 @@ export default function CreditNoteAdd(props) {
         placeholder: 'Reference',
       },
       {
+        name: 'invoice_id',
+        label: 'From Invoice',
+        type: 'fkSelect',
+        col: 8,
+        placeholder: 'Search invoice to auto-fill',
+        fkUrl: api('/api/invoices/'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'invoice_no',
+        allowClear: true,
+        storeFullObject: true,
+        fkLabel: (r) => [r?.invoice_no, r?.contact?.name].filter(Boolean).join(' — '),
+        onSelectRecord: (record, values) => {
+          if (!record) return { ...values, invoice_id: null };
+          const lineSource = record?.invoiceLines ?? record?.invoice_lines ?? record?.items ?? [];
+          const items = lineSource.length > 0
+            ? lineSource.map((line) => {
+                const baseRow = {
+                  ...emptyLine,
+                  product_id: line?.product ?? null,
+                  product_name: line?.product?.name ?? line?.product_name ?? '',
+                  description: line?.description ?? '',
+                  qty: toNumber(line?.qty ?? line?.quantity ?? 1),
+                  unit_price: toNumber(line?.unit_price ?? line?.rate ?? 0),
+                  tax_rate_id: line?.taxRate ?? line?.tax_rate ?? null,
+                };
+                const calc = calculateLine(baseRow);
+                return { ...baseRow, ...calc };
+              })
+            : values.items;
+          return {
+            ...values,
+            invoice_id: record,
+            reference: values.reference || record?.invoice_no || '',
+            contact_id: record?.contact ?? values.contact_id,
+            currency_id: record?.currency ?? values.currency_id,
+            items,
+          };
+        },
+      },
+      {
         name: 'items',
         label: '',
         type: 'objectArray',
@@ -1117,6 +1159,7 @@ export default function CreditNoteAdd(props) {
 
       currency_id: baseCurrency,
 
+      invoice_id: null,
       reference: '',
       notes: '',
 
@@ -1147,6 +1190,7 @@ export default function CreditNoteAdd(props) {
       contact_id: asId(values.contact_id ?? values.contact),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
       currency_id: asId(values.currency_id ?? values.currency),
+      invoice_id: asId(values.invoice_id) || null,
 
       reference: nullIfEmpty(values.reference),
       notes: nullIfEmpty(values.notes),

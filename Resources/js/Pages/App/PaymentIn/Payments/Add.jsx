@@ -261,6 +261,20 @@ const visitPaymentShow = (id) => {
 
 export default function PaymentAdd(props) {
   const [baseCurrency, setBaseCurrency] = useState(null);
+  const [prefillData, setPrefillData] = useState(null);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('kiteledger_payment_prefill');
+      if (stored) {
+        sessionStorage.removeItem('kiteledger_payment_prefill');
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          setPrefillData(parsed);
+        }
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -638,33 +652,48 @@ export default function PaymentAdd(props) {
     []
   );
 
-  const crudInitialValues = useMemo(
-    () => ({
+  const crudInitialValues = useMemo(() => {
+    const defaults = {
       payment_no: '',
       payment_date: dayjs(),
-
       contact_id: null,
       account_id: null,
-
       currency_id: baseCurrency,
-
       amount: 0,
       payment_method: 'cash',
-
       bank_charges_account_id: null,
       bank_charges: 0,
-
       tds_charges_account_id: null,
       tds_charges: 0,
-
       reference: '',
       notes: '',
-
       items: [],
       deleted_item_ids: [],
-    }),
-    [baseCurrency]
-  );
+    };
+
+    if (!prefillData) return defaults;
+
+    const prefillItems = Array.isArray(prefillData.items) && prefillData.items.length
+      ? prefillData.items.map((line) => ({
+          ...emptyAllocation,
+          invoice_id: line.invoice_id_detail ?? line.invoice_id ?? null,
+          invoice_no: line.invoice_no || '',
+          invoice_total: toNumber(line.invoice_total) || 0,
+          outstanding_amount: toNumber(line.outstanding_amount) || 0,
+          allocated_amount: toNumber(line.allocated_amount) || 0,
+        }))
+      : [];
+
+    return {
+      ...defaults,
+      contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
+      currency_id: prefillData.currency_id_detail ?? prefillData.currency_id ?? baseCurrency,
+      amount: toNumber(prefillData.amount) || 0,
+      reference: prefillData._source_no || prefillData.reference || '',
+      items: prefillItems,
+      deleted_item_ids: [],
+    };
+  }, [baseCurrency, prefillData]);
 
   const transformPayload = (values = {}) => {
     const items = (Array.isArray(values.items) ? values.items : [])

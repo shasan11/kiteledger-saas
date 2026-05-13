@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
-import { Modal, Input, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { Alert, Button, Modal, Input, Space, Table, Tag, Typography } from 'antd';
+import { CheckCircleOutlined, StopOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 
@@ -17,6 +17,53 @@ const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red'
 
 export default function PaymentsIndex(props) {
     const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
+    const [unapprovedCount, setUnapprovedCount] = useState(0);
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const [unapprovedRows, setUnapprovedRows] = useState([]);
+    const [reviewLoading, setReviewLoading] = useState(false);
+    const [approvingIds, setApprovingIds] = useState(new Set());
+
+    const fetchUnapprovedCount = useCallback(async () => {
+        try {
+            const response = await axios.get(api('/api/customer-payments/'), {
+                params: { approved: false, page_size: 1 },
+            });
+            const payload = response.data;
+            const count = payload?.count ?? payload?.total ?? (Array.isArray(payload?.results) ? payload.results.length : 0);
+            setUnapprovedCount(Number(count) || 0);
+        } catch {}
+    }, []);
+
+    useEffect(() => {
+        void fetchUnapprovedCount();
+    }, [fetchUnapprovedCount]);
+
+    const openReview = async () => {
+        setReviewOpen(true);
+        setReviewLoading(true);
+        try {
+            const response = await axios.get(api('/api/customer-payments/'), {
+                params: { approved: false, page_size: 50, ordering: '-payment_date' },
+            });
+            const payload = response.data;
+            setUnapprovedRows(payload?.results ?? payload?.data ?? []);
+        } catch {}
+        finally {
+            setReviewLoading(false);
+        }
+    };
+
+    const approveRecord = async (record) => {
+        setApprovingIds((prev) => new Set([...prev, record.id]));
+        try {
+            await axios.patch(api(`/api/customer-payments/${record.id}/`), { approved: true });
+            setUnapprovedRows((prev) => prev.filter((r) => r.id !== record.id));
+            setUnapprovedCount((prev) => Math.max(prev - 1, 0));
+        } catch {}
+        finally {
+            setApprovingIds((prev) => { const next = new Set(prev); next.delete(record.id); return next; });
+        }
+    };
 
     const columns = useMemo(() => [
         { title: 'Payment No', dataIndex: 'payment_no', key: 'payment_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
@@ -26,6 +73,29 @@ export default function PaymentsIndex(props) {
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
         { title: 'Amount', dataIndex: 'amount', key: 'amount', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text> },
     ], []);
+
+    const reviewColumns = useMemo(() => [
+        { title: 'Payment No', dataIndex: 'payment_no', key: 'payment_no', render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        { title: 'Customer', key: 'customer', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
+        { title: 'Date', dataIndex: 'payment_date', key: 'payment_date', width: 110, render: displayDate },
+        { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', width: 120, render: (v) => <Text strong>{money(v)}</Text> },
+        {
+            title: 'Action',
+            key: 'action',
+            width: 100,
+            render: (_, record) => (
+                <Button
+                    size="small"
+                    type="primary"
+                    icon={<CheckCircleOutlined />}
+                    loading={approvingIds.has(record.id)}
+                    onClick={() => approveRecord(record)}
+                >
+                    Approve
+                </Button>
+            ),
+        },
+    ], [approvingIds]);
 
     const rowMenu = useMemo(() => [
         {
@@ -38,6 +108,7 @@ export default function PaymentsIndex(props) {
                     message.success('Records approved');
                     clearSelection();
                     fetchData();
+                    void fetchUnapprovedCount();
                 } catch { message.error('Failed to approve records'); }
             },
         },
@@ -50,7 +121,7 @@ export default function PaymentsIndex(props) {
                 setVoidState({ open: true, reason: '', loading: false, ctx: { selectedRowKeys, fetchData, clearSelection, message } });
             },
         },
-    ], []);
+    ], [fetchUnapprovedCount]);
 
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
@@ -71,42 +142,71 @@ export default function PaymentsIndex(props) {
     return (
         <AuthenticatedLayout user={props.auth?.user}>
             <Head title="Customer Payments" />
-            <ReusableCrud
-                title="Customer Payments"
-                apiUrl={api('/api/customer-payments/')}
-                columns={columns}
-                rowMenu={rowMenu}
-                custom_add={true}
-                custom_add_link={route('payment-in.payments.add')}
-                form_ui="drawer"
-                drawerWidth="calc(100vw - 24px)"
-                searchParam="search"
-                pageParam="page"
-                pageSizeParam="page_size"
-                sortMode="ordering"
-                orderingParam="ordering"
-                enableServerPagination
-                showSearch
-                canAdd={true}
-                canEdit
-                canDelete
-                hasActions
-                hasActionColumns
-                canView
-                activeTableRowFunction={(record) => ({
-                    onClick: (event) => {
-                        if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-picker')) return;
-                        router.visit(route('payment-in.payments.show', record.id));
-                    },
-                    style: { cursor: 'pointer' },
-                })}
-                anchorFilters={[
-                    { key: 'approved', label: 'Approved', params: { approved: true } },
-                    { key: 'draft', label: 'Draft', params: { approved: false } },
-                ]}
-                defaultAnchorKey="approved"
-                anchorSyncWithHash
-            />
+
+            <div>
+                {unapprovedCount > 0 && (
+                    <div style={{ padding: '12px 16px 0' }}>
+                        <Alert
+                            type="warning"
+                            showIcon
+                            icon={<ExclamationCircleOutlined />}
+                            message={
+                                <Space>
+                                    <span>
+                                        {unapprovedCount} payment{unapprovedCount !== 1 ? 's' : ''} not yet approved.
+                                    </span>
+                                    <Button
+                                        size="small"
+                                        type="primary"
+                                        onClick={openReview}
+                                    >
+                                        Review &amp; Approve
+                                    </Button>
+                                </Space>
+                            }
+                        />
+                    </div>
+                )}
+
+                <ReusableCrud
+                    title="Customer Payments"
+                    apiUrl={api('/api/customer-payments/')}
+                    columns={columns}
+                    rowMenu={rowMenu}
+                    custom_add={true}
+                    custom_add_link={route('payment-in.payments.add')}
+                    form_ui="drawer"
+                    drawerWidth="calc(100vw - 24px)"
+                    searchParam="search"
+                    pageParam="page"
+                    pageSizeParam="page_size"
+                    sortMode="ordering"
+                    orderingParam="ordering"
+                    enableServerPagination
+                    showSearch
+                    canAdd={true}
+                    canEdit
+                    canDelete
+                    hasActions
+                    hasActionColumns
+                    canView
+                    activeTableRowFunction={(record) => ({
+                        onClick: (event) => {
+                            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-picker')) return;
+                            router.visit(route('payment-in.payments.show', record.id));
+                        },
+                        style: { cursor: 'pointer' },
+                    })}
+                    anchorFilters={[
+                        { key: 'approved', label: 'Approved', params: { approved: true } },
+                        { key: 'draft', label: 'Draft', params: { approved: false } },
+                    ]}
+                    defaultAnchorKey="approved"
+                    anchorSyncWithHash
+                />
+            </div>
+
+            {/* Void Modal */}
             <Modal
                 title="Void Records"
                 open={voidState.open}
@@ -117,7 +217,39 @@ export default function PaymentsIndex(props) {
                 okButtonProps={{ danger: true }}
             >
                 <p>Please provide a reason for voiding the selected records.</p>
-                <Input.TextArea rows={3} value={voidState.reason} onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))} placeholder="Void reason..." />
+                <Input.TextArea
+                    rows={3}
+                    value={voidState.reason}
+                    onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))}
+                    placeholder="Void reason..."
+                />
+            </Modal>
+
+            {/* Review & Approve Modal */}
+            <Modal
+                title={
+                    <Space>
+                        <ExclamationCircleOutlined style={{ color: '#faad14' }} />
+                        Review Unapproved Payments
+                    </Space>
+                }
+                open={reviewOpen}
+                onCancel={() => setReviewOpen(false)}
+                footer={
+                    <Button onClick={() => setReviewOpen(false)}>Close</Button>
+                }
+                width={820}
+                destroyOnClose
+            >
+                <Table
+                    rowKey="id"
+                    size="small"
+                    loading={reviewLoading}
+                    columns={reviewColumns}
+                    dataSource={unapprovedRows}
+                    pagination={false}
+                    locale={{ emptyText: 'All payments are approved.' }}
+                />
             </Modal>
         </AuthenticatedLayout>
     );
