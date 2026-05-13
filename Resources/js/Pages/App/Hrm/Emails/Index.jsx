@@ -2,8 +2,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Tooltip } from 'antd';
+import { Card, Space, Tag, Tooltip, Typography, theme } from 'antd';
 import { MailOutlined } from '@ant-design/icons';
+
+const { Text, Title } = Typography;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (p) => `${BACKEND}${p}`;
@@ -11,6 +13,7 @@ const api = (p) => `${BACKEND}${p}`;
 const STATUS_COLORS = { SENT: 'green', FAILED: 'red', PENDING: 'orange' };
 
 export default function Emails(props) {
+  const { token } = theme.useToken();
   const columns = [
     { title: 'From', dataIndex: 'sender_email', key: 'sender_email', sorter: true, render: (v) => v || '-' },
     { title: 'To', dataIndex: 'receiver_email', key: 'receiver_email', sorter: true, render: (v) => v || '-' },
@@ -42,14 +45,29 @@ export default function Emails(props) {
     { name: 'email_status', label: 'Status', type: 'select', options: ['PENDING','SENT','FAILED'].map(v => ({ label: v, value: v })) },
   ];
   return (
-    <AuthenticatedLayout user={props.auth?.user} header={<h2 className="text-xl font-semibold">Email Logs</h2>}>
+    <AuthenticatedLayout auth={props.auth}>
       <Head title="Email Logs" />
-      <ReusableCrud icon={<MailOutlined />} title="Email Log" apiUrl={api('/api/hrm/emails')}
-        columns={columns} fields={fields} filters={filters} validationSchema={validationSchema}
-        crudInitialValues={initialValues} transformPayload={transformPayload}
-        form_ui="drawer" drawerWidth={720}
-        searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
-        activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
+      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
+        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
+          <Card bordered={false} style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(22,119,255,0.09) 0%, rgba(82,196,26,0.05) 100%)', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }} styles={{ body: { padding: '20px 24px' } }}>
+            <Space size={14} align="center">
+              <span style={{ width: 44, height: 44, borderRadius: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#1677ff', color: '#ffffff', fontSize: 20, flexShrink: 0 }}>
+                <MailOutlined />
+              </span>
+              <div>
+                <Title level={4} style={{ margin: 0, color: '#10233f' }}>Email Logs</Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>Monitor sent, pending, and failed email communications.</Text>
+              </div>
+            </Space>
+          </Card>
+          <ReusableCrud icon={<MailOutlined />} title="Email Log" apiUrl={api('/api/hrm/emails')}
+            columns={columns} fields={fields} filters={filters} validationSchema={validationSchema}
+            crudInitialValues={initialValues} transformPayload={transformPayload}
+            form_ui="drawer" drawerWidth={720}
+            searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
+            activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
+        </Space>
+      </div>
     </AuthenticatedLayout>
   );
 }

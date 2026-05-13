@@ -19,6 +19,7 @@ Route::prefix('hrm')->name('hrm.')->group(function () {
     Route::get('/designations',        fn () => Inertia::render('App/Hrm/Designations/Index'))->name('designations.index');
     Route::get('/shifts',              fn () => Inertia::render('App/Hrm/Shifts/Index'))->name('shifts.index');
     Route::get('/leave-policies',      fn () => Inertia::render('App/Hrm/LeavePolicies/Index'))->name('leave-policies.index');
+    Route::get('/leave-types',         fn () => Inertia::render('App/Hrm/LeaveTypes/Index'))->name('leave-types.index');
     Route::get('/weekly-holidays',     fn () => Inertia::render('App/Hrm/WeeklyHolidays/Index'))->name('weekly-holidays.index');
     Route::get('/public-holidays',     fn () => Inertia::render('App/Hrm/PublicHolidays/Index'))->name('public-holidays.index');
     Route::get('/awards',              fn () => Inertia::render('App/Hrm/Awards/Index'))->name('awards.index');

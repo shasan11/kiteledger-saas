@@ -12,6 +12,7 @@ import {
 import {
   ApartmentOutlined,
   AuditOutlined,
+  AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
   DollarOutlined,
@@ -40,6 +41,7 @@ const EmailConfiguration = lazy(() => import('../Hrm/EmailConfigs/Index'));
 const EmailTemplates = lazy(() => import('./EmailTemplates'));
 
 const ConfigurationForm = lazy(() => import('./ConfigurationForm'));
+const HrmSetup = lazy(() => import('./HrmSetup/Index'));
 
 const Users = lazy(() => import('../Hrm/Users/Index'));
 const Roles = lazy(() => import('../Hrm/Roles/Index'));
@@ -187,11 +189,19 @@ const SETTINGS_TABS = [
   },
   {
     key: 'hrm-configuration',
-    label: 'HRM Config',
+    label: 'HRM Defaults',
     description: 'Attendance, payroll and HR defaults.',
     icon: <TeamOutlined />,
     component: ConfigurationForm,
     props: { area: 'hrm' },
+  },
+  {
+    key: 'hrm-setup',
+    label: 'HRM Setup',
+    description: 'Departments, leave, holidays, awards and other HRM setup data.',
+    icon: <AppstoreOutlined />,
+    component: HrmSetup,
+    props: {},
   },
   {
     key: 'approval-workflows',
