@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Deal;
+use App\Models\CrmDealStageHistory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -19,14 +20,17 @@ class DealController extends BaseCrudApiController
     protected array $relations = [
         'lead',
         'contact',
+        'crmAccount',
         'dealPipeline',
         'dealStage',
         'assignedTo',
+        'stageHistories',
     ];
 
     protected array $relationDetails = [
         'lead' => 'lead_id',
         'contact' => 'contact_id',
+        'crmAccount' => 'crm_account_id',
         'dealPipeline' => 'deal_pipeline_id',
         'dealStage' => 'deal_stage_id',
         'assignedTo' => 'assigned_to_id',
@@ -43,6 +47,7 @@ class DealController extends BaseCrudApiController
     protected array $filterable = [
         'lead_id',
         'contact_id',
+        'crm_account_id',
         'deal_pipeline_id',
         'deal_stage_id',
         'assigned_to_id',
@@ -78,6 +83,7 @@ class DealController extends BaseCrudApiController
         'deal_no' => ['nullable', 'string', 'max:40', 'unique:deals,deal_no'],
         'lead_id' => ['nullable', 'uuid', 'exists:leads,id'],
         'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
+        'crm_account_id' => ['nullable', 'uuid', 'exists:crm_accounts,id'],
         'deal_pipeline_id' => ['nullable', 'uuid', 'exists:deal_pipelines,id'],
         'deal_stage_id' => ['nullable', 'uuid', 'exists:deal_stages,id'],
         'assigned_to_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -86,10 +92,11 @@ class DealController extends BaseCrudApiController
         'expected_close_date' => ['nullable', 'date'],
         'closed_date' => ['nullable', 'date'],
         'probability' => ['nullable', 'integer', 'min:0', 'max:100'],
+        'committed' => ['nullable', 'boolean'],
         'source' => ['nullable', 'string', 'max:80'],
         'priority' => ['nullable', 'in:low,medium,high,urgent'],
         'status' => ['nullable', 'in:open,won,lost,cancelled'],
-        'lost_reason' => ['nullable', 'string', 'max:255'],
+        'lost_reason' => ['nullable', 'required_if:status,lost', 'string', 'max:255'],
         'description' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -102,6 +109,7 @@ class DealController extends BaseCrudApiController
             'deal_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:deals,deal_no,' . $record->id . ',id'],
             'lead_id' => ['sometimes', 'nullable', 'uuid', 'exists:leads,id'],
             'contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
+            'crm_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:crm_accounts,id'],
             'deal_pipeline_id' => ['sometimes', 'nullable', 'uuid', 'exists:deal_pipelines,id'],
             'deal_stage_id' => ['sometimes', 'nullable', 'uuid', 'exists:deal_stages,id'],
             'assigned_to_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
@@ -110,14 +118,44 @@ class DealController extends BaseCrudApiController
             'expected_close_date' => ['sometimes', 'nullable', 'date'],
             'closed_date' => ['sometimes', 'nullable', 'date'],
             'probability' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100'],
+            'committed' => ['sometimes', 'nullable', 'boolean'],
             'source' => ['sometimes', 'nullable', 'string', 'max:80'],
             'priority' => ['sometimes', 'nullable', 'in:low,medium,high,urgent'],
             'status' => ['sometimes', 'nullable', 'in:open,won,lost,cancelled'],
-            'lost_reason' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'lost_reason' => ['sometimes', 'nullable', 'required_if:status,lost', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
+    {
+        if ($isUpdate && array_key_exists('deal_stage_id', $parentData) && $record->wasChanged('deal_stage_id')) {
+            $fromStageId = $record->getOriginal('deal_stage_id');
+            $lastChange = CrmDealStageHistory::query()
+                ->where('deal_id', $record->getKey())
+                ->latest('changed_at')
+                ->first();
+
+            $enteredAt = $lastChange?->changed_at ?? $record->created_at;
+
+            CrmDealStageHistory::query()->create([
+                'deal_id' => $record->getKey(),
+                'from_stage_id' => $fromStageId,
+                'to_stage_id' => $record->deal_stage_id,
+                'changed_by' => request()->user()?->id,
+                'changed_at' => now(),
+                'days_in_previous_stage' => $enteredAt ? $enteredAt->diffInDays(now()) : null,
+                'remarks' => request()->input('stage_change_remarks'),
+            ]);
+        }
+
+        if (($parentData['status'] ?? null) === 'won' && !$record->closed_date) {
+            $record->forceFill(['closed_date' => now()->toDateString()])->save();
+        }
+
+        return $record;
     }
 }

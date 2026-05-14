@@ -21,6 +21,7 @@ class CrmActivity extends Model
         'lead_id',
         'deal_id',
         'contact_id',
+        'crm_account_id',
         'assigned_to_id',
         'activity_type',
         'subject',
@@ -32,6 +33,9 @@ class CrmActivity extends Model
         'outcome',
         'next_follow_up_at',
         'reminder_at',
+        'escalated_at',
+        'escalated_to',
+        'escalation_reason',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -50,6 +54,8 @@ class CrmActivity extends Model
             'completed_at' => 'datetime',
             'next_follow_up_at' => 'datetime',
             'reminder_at' => 'datetime',
+            'escalated_at' => 'datetime',
+            'escalated_to' => 'integer',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
@@ -71,6 +77,11 @@ class CrmActivity extends Model
         return $this->belongsTo(Contact::class);
     }
 
+    public function crmAccount(): BelongsTo
+    {
+        return $this->belongsTo(CrmAccount::class, 'crm_account_id');
+    }
+
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -84,5 +95,10 @@ class CrmActivity extends Model
     public function crmActivityComments(): HasMany
     {
         return $this->hasMany(CrmActivityComment::class);
+    }
+
+    public function escalations(): HasMany
+    {
+        return $this->hasMany(CrmActivityEscalation::class, 'activity_id');
     }
 }

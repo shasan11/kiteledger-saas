@@ -24,6 +24,7 @@ class QuotationController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'contact',
+        'deal',
         'creditTerm',
         'currency',
     ];
@@ -31,6 +32,7 @@ class QuotationController extends BaseCrudApiController
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'contact' => 'contact_id',
+        'deal' => 'deal_id',
         'creditTerm' => 'credit_term_id',
         'currency' => 'currency_id',
     ];
@@ -44,6 +46,7 @@ class QuotationController extends BaseCrudApiController
     protected array $filterable = [
         'branch_id',
         'contact_id',
+        'deal_id',
         'currency_id',
         'status',
     ];
@@ -232,6 +235,11 @@ class QuotationController extends BaseCrudApiController
             'uuid',
             'exists:contacts,id',
         ],
+        'deal_id' => [
+            'nullable',
+            'uuid',
+            'exists:deals,id',
+        ],
         'quotation_no' => [
             'nullable',
             'string',
@@ -285,6 +293,12 @@ class QuotationController extends BaseCrudApiController
                 'required',
                 'uuid',
                 'exists:contacts,id',
+            ],
+            'deal_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                'exists:deals,id',
             ],
             'quotation_no' => [
                 'sometimes',

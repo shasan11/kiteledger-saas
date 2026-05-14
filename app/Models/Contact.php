@@ -20,6 +20,7 @@ class Contact extends Model
     protected $fillable = [
         'contact_group_id',
         'account_id',
+        'crm_account_id',
         'contact_type',
         'tax_registration_no',
         'tax_registration_type',
@@ -63,6 +64,11 @@ class Contact extends Model
         return $this->belongsTo(Account::class);
     }
 
+    public function crmAccount(): BelongsTo
+    {
+        return $this->belongsTo(CrmAccount::class, 'crm_account_id');
+    }
+
     public function creditTerm(): BelongsTo
     {
         return $this->belongsTo(CreditTerm::class);
@@ -86,6 +92,16 @@ class Contact extends Model
     public function crmActivities(): HasMany
     {
         return $this->hasMany(CrmActivity::class);
+    }
+
+    public function crmContactRoles(): HasMany
+    {
+        return $this->hasMany(CrmContactRole::class);
+    }
+
+    public function crmCommunications(): HasMany
+    {
+        return $this->hasMany(CrmCommunication::class);
     }
 
     public function taxExemptions(): HasMany

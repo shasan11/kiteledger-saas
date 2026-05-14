@@ -280,11 +280,35 @@ class DashboardService
                 'expected_deal_value' => $this->sumWhere('deals', 'amount', 'status', 'open'),
                 'followups_due_today' => $this->dateDueCount('crm_activities', 'due_at', $todayStart, $todayEnd),
                 'overdue_activities' => $this->overdueActivities(),
+                'deals_at_risk' => $this->dealsAtRiskCount(14),
+                'forecast_this_month' => $this->weightedForecastThisMonth(),
                 'won_deals_this_month' => $this->monthlyDealCount('won'),
                 'lost_deals_this_month' => $this->monthlyDealCount('lost'),
+                'win_rate' => $this->winRateThisMonth(),
             ],
             'pipeline' => $this->pipeline(),
             'followups' => $this->crmFollowups(),
+            'widgets' => [
+                'leads_created_this_week_vs_target' => [
+                    'actual' => $this->weeklyLeadCount(),
+                    'target' => 25,
+                    'action_url' => '/crm/leads',
+                ],
+                'followups_due_today' => [
+                    'actual' => $this->dateDueCount('crm_activities', 'due_at', $todayStart, $todayEnd),
+                    'action_url' => '/crm/activity-inbox?bucket=today',
+                ],
+                'deals_at_risk' => [
+                    'actual' => $this->dealsAtRiskCount(14),
+                    'action_url' => '/crm/deals?stuck=1',
+                ],
+                'forecast_this_month' => [
+                    'actual' => $this->weightedForecastThisMonth(),
+                    'action_url' => '/crm/forecast',
+                ],
+                'win_rate_by_source' => $this->winRateBySource(),
+                'top_overdue_customer_responses' => $this->crmFollowups(),
+            ],
         ];
     }
 
@@ -764,6 +788,82 @@ class DashboardService
                 'next_follow_up' => $row->due_at,
                 'action_url' => '/crm/activities/' . $row->id,
             ])
+            ->all();
+    }
+
+    protected function weeklyLeadCount(): int
+    {
+        return $this->tableExists('leads')
+            ? DB::table('leads')->where('created_at', '>=', now()->startOfWeek())->count()
+            : 0;
+    }
+
+    protected function weightedForecastThisMonth(): float
+    {
+        if (!$this->tableExists('deals')) {
+            return 0;
+        }
+
+        $row = DB::table('deals')
+            ->where('status', 'open')
+            ->whereBetween('expected_close_date', [now()->startOfMonth(), now()->endOfMonth()])
+            ->selectRaw('COALESCE(SUM(amount * probability / 100), 0) as total')
+            ->first();
+
+        return (float) ($row->total ?? 0);
+    }
+
+    protected function dealsAtRiskCount(int $days): int
+    {
+        if (!$this->tableExists('deals')) {
+            return 0;
+        }
+
+        return DB::table('deals')
+            ->where('status', 'open')
+            ->where(function (Builder $query) use ($days) {
+                $query->where('expected_close_date', '<', now()->toDateString())
+                    ->orWhere('updated_at', '<', now()->subDays($days));
+            })
+            ->count();
+    }
+
+    protected function winRateThisMonth(): float
+    {
+        if (!$this->tableExists('deals')) {
+            return 0;
+        }
+
+        $won = DB::table('deals')->where('status', 'won')->whereBetween('closed_date', [now()->startOfMonth(), now()->endOfMonth()])->count();
+        $lost = DB::table('deals')->where('status', 'lost')->whereBetween('closed_date', [now()->startOfMonth(), now()->endOfMonth()])->count();
+        $closed = $won + $lost;
+
+        return $closed > 0 ? round(($won / $closed) * 100, 1) : 0;
+    }
+
+    protected function winRateBySource(): array
+    {
+        if (!$this->tableExists('deals')) {
+            return [];
+        }
+
+        return DB::table('deals')
+            ->select('source', DB::raw("SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won"), DB::raw("SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost"))
+            ->whereIn('status', ['won', 'lost'])
+            ->groupBy('source')
+            ->orderByDesc('won')
+            ->limit(8)
+            ->get()
+            ->map(function ($row) {
+                $closed = (int) $row->won + (int) $row->lost;
+
+                return [
+                    'source' => $row->source ?: 'Unspecified',
+                    'win_rate' => $closed > 0 ? round(((int) $row->won / $closed) * 100, 1) : 0,
+                    'won' => (int) $row->won,
+                    'lost' => (int) $row->lost,
+                ];
+            })
             ->all();
     }
 

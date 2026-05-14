@@ -20,6 +20,7 @@ class Quotation extends Model
     protected $fillable = [
         'branch_id',
         'contact_id',
+        'deal_id',
         'quotation_no',
         'quotation_date',
         'expiry_date',
@@ -71,6 +72,11 @@ class Quotation extends Model
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function deal(): BelongsTo
+    {
+        return $this->belongsTo(Deal::class);
     }
 
     public function creditTerm(): BelongsTo

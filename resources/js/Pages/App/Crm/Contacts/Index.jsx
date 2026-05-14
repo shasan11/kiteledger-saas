@@ -182,6 +182,18 @@ export default function Contacts(props) {
       fkValueKey: 'id',
       fkLabelKey: 'name',
     },
+    {
+      name: 'crm_account_id',
+      label: 'CRM Account',
+      type: 'fkSelect',
+      col: 8,
+      placeholder: 'Select CRM account',
+      fkUrl: api('/api/crm-accounts/'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+    },
     
     {
       name: 'tax_registration_no',
@@ -246,6 +258,7 @@ export default function Contacts(props) {
     email: Yup.string().nullable().email('Invalid email').max(120),
     contact_group_id: Yup.string().nullable(),
     account_id: Yup.string().nullable(),
+    crm_account_id: Yup.string().nullable(),
     tax_registration_no: Yup.string().nullable().max(80),
     tax_registration_type: Yup.string().nullable().oneOf(['pan', 'vat', 'none', null]),
     credit_term_id: Yup.string().nullable(),
@@ -263,6 +276,7 @@ export default function Contacts(props) {
     email: '',
     contact_group_id: null,
     account_id: null,
+    crm_account_id: null,
     tax_registration_no: '',
     tax_registration_type: null,
     credit_term_id: null,
@@ -283,6 +297,7 @@ export default function Contacts(props) {
     p.tax_registration_no = p.tax_registration_no?.trim() || null;
     p.contact_group_id = p.contact_group_id || null;
     p.account_id = p.account_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.credit_term_id = p.credit_term_id || null;
     p.credit_limit = p.credit_limit != null ? Number(p.credit_limit) : null;
     p.accept_purchase = Boolean(p.accept_purchase);

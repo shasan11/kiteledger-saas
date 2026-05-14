@@ -20,6 +20,7 @@ class Lead extends Model
     protected $fillable = [
         'lead_no',
         'contact_id',
+        'crm_account_id',
         'assigned_to_id',
         'converted_contact_id',
         'converted_deal_id',
@@ -37,6 +38,7 @@ class Lead extends Model
         'industry',
         'expected_value',
         'status',
+        'lost_reason',
         'priority',
         'next_follow_up_date',
         'last_contacted_at',
@@ -71,6 +73,11 @@ class Lead extends Model
         return $this->belongsTo(Contact::class);
     }
 
+    public function crmAccount(): BelongsTo
+    {
+        return $this->belongsTo(CrmAccount::class, 'crm_account_id');
+    }
+
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -99,5 +106,10 @@ class Lead extends Model
     public function crmActivities(): HasMany
     {
         return $this->hasMany(CrmActivity::class);
+    }
+
+    public function crmCommunications(): HasMany
+    {
+        return $this->hasMany(CrmCommunication::class);
     }
 }

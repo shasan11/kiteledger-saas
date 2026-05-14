@@ -102,9 +102,19 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'CRM',
                 children: [
                     {
+                        key: 'crm-home',
+                        label: 'CRM Home',
+                        onClick: () => visit('crm.home', '/crm'),
+                    },
+                    {
                         key: 'contact-groups',
                         label: 'Contact Group',
                         onClick: () => visit('crm.contact-groups.index', '/crm/contact-groups'),
+                    },
+                    {
+                        key: 'crm-accounts',
+                        label: 'Accounts',
+                        onClick: () => visit('crm.accounts.index', '/crm/accounts'),
                     },
                     {
                         key: 'contacts',
@@ -117,9 +127,39 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () => visit('crm.leads.index', '/crm/leads'),
                     },
                     {
+                        key: 'deals',
+                        label: 'Deals',
+                        onClick: () => visit('crm.deals.index', '/crm/deals'),
+                    },
+                    {
+                        key: 'activity-inbox',
+                        label: 'Activity Inbox',
+                        onClick: () => visit('crm.activity-inbox.index', '/crm/activity-inbox'),
+                    },
+                    {
                         key: 'activities',
                         label: 'Activities',
                         onClick: () => visit('crm.activities.index', '/crm/activities'),
+                    },
+                    {
+                        key: 'forecast',
+                        label: 'Forecast',
+                        onClick: () => visit('crm.forecast.index', '/crm/forecast'),
+                    },
+                    {
+                        key: 'campaigns',
+                        label: 'Campaigns',
+                        onClick: () => visit('crm.campaigns.index', '/crm/campaigns'),
+                    },
+                    {
+                        key: 'communications',
+                        label: 'Communications',
+                        onClick: () => visit('crm.communications.index', '/crm/communications'),
+                    },
+                    {
+                        key: 'crm-configuration',
+                        label: 'Configuration',
+                        onClick: () => visit('crm.configuration.index', '/crm/configuration'),
                     },
                 ],
             },
@@ -276,10 +316,17 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/pos/sales')) return ['pos-sales'];
         if (isActive('/pos')) return ['pos-screen'];
 
+        if (page.url === '/crm') return ['crm-home'];
         if (isActive('/crm/contact-groups')) return ['contact-groups'];
+        if (isActive('/crm/accounts')) return ['crm-accounts'];
         if (isActive('/crm/contacts')) return ['contacts'];
+        if (isActive('/crm/leads')) return ['leads'];
         if (isActive('/crm/deals')) return ['deals'];
+        if (isActive('/crm/activity-inbox')) return ['activity-inbox'];
+        if (isActive('/crm/forecast')) return ['forecast'];
         if (isActive('/crm/campaigns')) return ['campaigns'];
+        if (isActive('/crm/communications')) return ['communications'];
+        if (isActive('/crm/configuration')) return ['crm-configuration'];
         if (isActive('/crm/activities')) return ['activities'];
 
         if (isActive('/workflow')) return ['workflow'];

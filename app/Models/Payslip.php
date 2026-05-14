@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payslip extends Model
 {
@@ -18,6 +19,24 @@ class Payslip extends Model
      */
     protected $fillable = [
         'branch_id',
+        'payroll_run_id',
+        'employee_id',
+        'payslip_number',
+        'status',
+        'gross_earnings',
+        'total_deductions',
+        'employer_contributions',
+        'net_payable',
+        'currency_id',
+        'exchange_rate',
+        'base_currency_amount',
+        'payable_days',
+        'total_working_days',
+        'unpaid_leave_days',
+        'overtime_hours',
+        'journal_voucher_id',
+        'payment_reference',
+        'remarks',
         'user_id',
         'salary_month',
         'salary_year',
@@ -52,6 +71,17 @@ class Payslip extends Model
     {
         return [
             'user_id' => 'integer',
+            'employee_id' => 'integer',
+            'gross_earnings' => 'decimal:2',
+            'total_deductions' => 'decimal:2',
+            'employer_contributions' => 'decimal:2',
+            'net_payable' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
+            'base_currency_amount' => 'decimal:2',
+            'payable_days' => 'decimal:2',
+            'total_working_days' => 'decimal:2',
+            'unpaid_leave_days' => 'decimal:2',
+            'overtime_hours' => 'decimal:2',
             'salary' => 'decimal:2',
             'shift_wise_work_hour' => 'decimal:2',
             'monthly_work_hour' => 'decimal:2',
@@ -70,6 +100,31 @@ class Payslip extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function payrollRun(): BelongsTo
+    {
+        return $this->belongsTo(PayrollRun::class);
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'employee_id');
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
+    }
+
+    public function journalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class);
+    }
+
+    public function lines(): HasMany
+    {
+        return $this->hasMany(PayslipLine::class);
     }
 
     public function user(): BelongsTo
