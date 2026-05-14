@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -34,11 +35,13 @@ import {
   FileExcelOutlined,
   FileTextOutlined,
   MoreOutlined,
+  PrinterOutlined,
   SafetyCertificateOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { relationLabel, toNumber, useMoneyFormatter } from './currency';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -73,6 +76,45 @@ const humanize = (key = '') =>
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+const getPath = (object, path, fallback = '') => {
+  if (!path) return fallback;
+  return String(path)
+    .split('.')
+    .reduce((current, key) => {
+      if (current === null || current === undefined) return fallback;
+      return current[key];
+    }, object) ?? fallback;
+};
+
+const renderPrintTemplate = (templateHtml, context) => {
+  let output = templateHtml || '';
+
+  output = output.replace(/{{#([\w.]+)}}([\s\S]*?){{\/\1}}/g, (_, path, block) => {
+    const value = getPath(context, path);
+    if (!Array.isArray(value)) return '';
+
+    return value
+      .map((item, index) =>
+        block.replace(/{{\s*([^}]+)\s*}}/g, (__, key) => {
+          const cleanKey = key.trim();
+          if (cleanKey === '@index') return index + 1;
+          return escapeHtml(getPath(item, cleanKey, getPath(context, cleanKey, '')));
+        })
+      )
+      .join('');
+  });
+
+  return output.replace(/{{\s*([^}]+)\s*}}/g, (_, path) => escapeHtml(getPath(context, path.trim(), '')));
+};
 
 const formatDate = (value, withTime = false) => {
   if (!value) return '-';
@@ -1415,10 +1457,19 @@ export default function AccountingRecordShow({
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [error, setError] = useState('');
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printTemplate, setPrintTemplate] = useState(null);
+  const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
+  const [printTemplateError, setPrintTemplateError] = useState('');
   const [form] = Form.useForm();
 
   const module = moduleFromTitle(title);
   const baseEndpoint = endpoint.replace(/\/+$/, '');
+  const printDocumentType = module === 'cash'
+    ? 'cash_transfer'
+    : module === 'journal'
+      ? 'journal_voucher'
+      : null;
 
   const uiVars = useMemo(
     () => ({
@@ -1479,6 +1530,42 @@ export default function AccountingRecordShow({
     loadRecord();
   }, [baseEndpoint, id]);
 
+  useEffect(() => {
+    if (!printOpen || !record || !printDocumentType) return;
+
+    let active = true;
+
+    const loadPrintTemplate = async () => {
+      setPrintTemplateLoading(true);
+      setPrintTemplateError('');
+      setPrintTemplate(null);
+
+      try {
+        const response = await axios.get(
+          api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(printDocumentType)}`),
+          { headers: authHeaders() }
+        );
+
+        if (active) {
+          setPrintTemplate(response.data?.data ?? response.data ?? null);
+        }
+      } catch (err) {
+        if (active) {
+          setPrintTemplate(null);
+          setPrintTemplateError(err?.response?.data?.message || 'No active print template found. Fallback template is being used.');
+        }
+      } finally {
+        if (active) setPrintTemplateLoading(false);
+      }
+    };
+
+    loadPrintTemplate();
+
+    return () => {
+      active = false;
+    };
+  }, [printOpen, record, printDocumentType]);
+
   const recordTitle = useMemo(
     () =>
       record?.[titleField] ||
@@ -1499,6 +1586,72 @@ export default function AccountingRecordShow({
     record &&
     Object.prototype.hasOwnProperty.call(record, 'approved') &&
     !record.approved;
+
+  const printContext = useMemo(() => {
+    const lines = module === 'journal'
+      ? (record?.journalVoucherLines || record?.journal_voucher_lines || record?.items || [])
+      : (record?.cashTransferLines || record?.cash_transfer_lines || record?.items || []);
+
+    const total = toNumber(record?.total_debit ?? record?.total_amount ?? record?.amount ?? record?.total);
+
+    return {
+      record,
+      company: {
+        name: record?.company?.name || record?.branch?.name || 'KiteLedger',
+        address: record?.company?.address || record?.branch?.address || '',
+        phone: record?.company?.phone || record?.branch?.phone || '',
+        email: record?.company?.email || record?.branch?.email || '',
+        website: record?.company?.website || '',
+        tax_id: record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
+      },
+      document: {
+        type: printDocumentType || '',
+        title,
+        number: recordTitle,
+        date: formatDate(record?.voucher_date || record?.transfer_date || record?.date),
+        reference: record?.reference || '-',
+        status: humanize(record?.status || (record?.approved ? 'approved' : 'draft')),
+        notes: record?.notes || record?.narration || '',
+        terms: '',
+      },
+      party: {
+        name: relationLabel(record?.contact || record?.fromAccount || record?.from_account || record?.account),
+        address: '',
+        phone: '',
+        email: '',
+        tax_id: '',
+      },
+      totals: {
+        subtotal: formatMoney(total),
+        discount: formatMoney(0),
+        tax: formatMoney(0),
+        grand_total: formatMoney(total),
+        total: formatMoney(total),
+      },
+      lines: lines.map((line) => ({
+        product_name: relationLabel(line?.chartOfAccount || line?.chart_of_account || line?.account || line?.toAccount || line?.to_account) || '-',
+        description: line?.description || line?.narration || '-',
+        qty: '1.00',
+        unit_price: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        tax_amount: formatMoney(0),
+        line_total: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+      })),
+    };
+  }, [formatMoney, module, printDocumentType, record, recordTitle, title]);
+
+  const resolvedPrintTemplate = printTemplate || {
+    template_html: `
+<section class="print-document">
+  <header class="doc-header">
+    <div><h1>{{company.name}}</h1><p>{{company.address}}</p><p>{{company.phone}} {{company.email}}</p></div>
+    <div class="doc-meta"><h2>{{document.title}}</h2><p><strong>No:</strong> {{document.number}}</p><p><strong>Date:</strong> {{document.date}}</p><p><strong>Status:</strong> {{document.status}}</p></div>
+  </header>
+  <table class="lines"><thead><tr><th>#</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>{{#lines}}<tr><td>{{@index}}</td><td>{{product_name}}<br><span>{{description}}</span></td><td class="num">{{line_total}}</td></tr>{{/lines}}</tbody></table>
+  <section class="totals"><p class="grand"><span>Total</span><strong>{{totals.grand_total}}</strong></p></section>
+  <footer class="signatures"><div><span>Prepared By</span></div><div><span>Approved By</span></div><div><span>Received By</span></div></footer>
+</section>`,
+    template_css: `.print-document{font-family:Arial,sans-serif;color:#111827;font-size:12px}.doc-header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #111827;padding-bottom:14px;margin-bottom:18px}.doc-meta{text-align:right}.lines{width:100%;border-collapse:collapse}.lines th,.lines td{border:1px solid #d1d5db;padding:8px}.lines th{background:#f3f4f6;text-align:left}.lines span{color:#6b7280;font-size:11px}.num{text-align:right}.totals{width:300px;margin-left:auto;margin-top:16px}.totals p{display:flex;justify-content:space-between;border-bottom:2px solid #111827;padding:8px 0}.signatures{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}.signatures div{border-top:1px solid #111827;padding-top:8px;text-align:center;font-weight:700}`,
+  };
 
   const updateRecord = async (payload, success) => {
     setSaving(true);
@@ -1992,6 +2145,12 @@ export default function AccountingRecordShow({
               </div>
 
               <Space size={8} wrap>
+                {printDocumentType ? (
+                  <Button icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)} disabled={loading || !record}>
+                    Print Preview
+                  </Button>
+                ) : null}
+
                 <Dropdown
                   menu={{
                     items: [
@@ -2122,6 +2281,46 @@ export default function AccountingRecordShow({
           )}
         </div>
       </div>
+
+      <Drawer
+        title="Print Preview"
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        width={1180}
+        destroyOnClose={false}
+        styles={{ body: { background: token.colorBgLayout, padding: 16 } }}
+      >
+        {!printDocumentType ? (
+          <Alert type="warning" showIcon message="Unsupported document type" />
+        ) : printTemplateLoading ? (
+          <Skeleton active paragraph={{ rows: 12 }} />
+        ) : !record ? (
+          <Empty description="No record found for printing" />
+        ) : (
+          <PrintablePdfEmailWrapper
+            fileName={`${String(recordTitle || title || 'document').replace(/[^\w.-]+/g, '_')}.pdf`}
+            documentTitle={recordTitle || title}
+            printLabel="Print"
+            downloadLabel="Download PDF"
+            emailLabel="Email"
+          >
+            {printTemplateError ? (
+              <Alert
+                type="info"
+                showIcon
+                message={printTemplateError}
+                style={{ marginBottom: 12 }}
+              />
+            ) : null}
+            <style>{resolvedPrintTemplate.template_css || ''}</style>
+            <div
+              dangerouslySetInnerHTML={{
+                __html: renderPrintTemplate(resolvedPrintTemplate.template_html, printContext),
+              }}
+            />
+          </PrintablePdfEmailWrapper>
+        )}
+      </Drawer>
 
       <Modal
         title={`Edit ${title}`}

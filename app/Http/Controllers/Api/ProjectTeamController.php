@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\ProjectTeam;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 class ProjectTeamController extends BaseCrudApiController
 {
+    use AuthorizesProjectResources;
+
     protected string $modelClass = ProjectTeam::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'project.team';
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;

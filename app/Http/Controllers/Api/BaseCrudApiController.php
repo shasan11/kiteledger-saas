@@ -1274,28 +1274,63 @@ abstract class BaseCrudApiController extends Controller
             $rules['void'] = [...$prefix, 'boolean'];
         }
 
+        if ($this->tableHasColumn('voided_reason') && !array_key_exists('voided_reason', $rules)) {
+            $rules['voided_reason'] = [...$prefix, 'string', 'max:500'];
+        }
+
+        if ($this->tableHasColumn('voided_at') && !array_key_exists('voided_at', $rules)) {
+            $rules['voided_at'] = [...$prefix, 'date'];
+        }
+
+        if ($this->tableHasColumn('voided_by_id') && !array_key_exists('voided_by_id', $rules)) {
+            $rules['voided_by_id'] = [...$prefix, 'integer', 'exists:users,id'];
+        }
+
         return $rules;
     }
 
     protected function normalizeApprovalData(array $parentData, ?Model $record = null): array
     {
-        if (!array_key_exists('approved', $parentData) || !$this->tableHasColumn('approved')) {
-            return $parentData;
+        if (array_key_exists('approved', $parentData) && $this->tableHasColumn('approved')) {
+            $approved = $this->toBool($parentData['approved']);
+            $parentData['approved'] = (bool) $approved;
+
+            if ($approved && $this->tableHasColumn('approved_at') && empty($parentData['approved_at']) && empty($record?->approved_at)) {
+                $parentData['approved_at'] = now();
+            }
+
+            if (!$approved && $this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $parentData)) {
+                $parentData['approved_at'] = null;
+            }
+
+            if (!$approved && $this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $parentData)) {
+                $parentData['approved_by_id'] = null;
+            }
         }
 
-        $approved = $this->toBool($parentData['approved']);
-        $parentData['approved'] = (bool) $approved;
+        if (array_key_exists('void', $parentData) && $this->tableHasColumn('void')) {
+            $void = $this->toBool($parentData['void']);
+            $parentData['void'] = (bool) $void;
 
-        if ($approved && $this->tableHasColumn('approved_at') && empty($parentData['approved_at']) && empty($record?->approved_at)) {
-            $parentData['approved_at'] = now();
-        }
+            if ($void && $this->tableHasColumn('voided_reason')) {
+                $reason = trim((string) ($parentData['voided_reason'] ?? $record?->voided_reason ?? ''));
 
-        if (!$approved && $this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $parentData)) {
-            $parentData['approved_at'] = null;
-        }
+                if ($reason === '') {
+                    $this->throwValidation([
+                        'voided_reason' => ['Please provide a reason before voiding this record.'],
+                    ]);
+                }
 
-        if (!$approved && $this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $parentData)) {
-            $parentData['approved_by_id'] = null;
+                $parentData['voided_reason'] = $reason;
+
+                if ($this->tableHasColumn('voided_at') && empty($parentData['voided_at']) && empty($record?->voided_at)) {
+                    $parentData['voided_at'] = now();
+                }
+
+                if ($this->tableHasColumn('voided_by_id') && empty($parentData['voided_by_id']) && empty($record?->voided_by_id)) {
+                    $parentData['voided_by_id'] = auth()->id();
+                }
+            }
         }
 
         return $parentData;

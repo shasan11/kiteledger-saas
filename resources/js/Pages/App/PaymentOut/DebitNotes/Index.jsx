@@ -6,6 +6,7 @@ import { Modal, Input, Typography } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -21,7 +22,7 @@ export default function DebitNotesIndex(props) {
         { title: 'Debit Note No', dataIndex: 'debit_note_no', key: 'debit_note_no', sorter: true, width: 160, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
         { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
         { title: 'Date', dataIndex: 'debit_note_date', key: 'debit_note_date', sorter: true, width: 120, render: displayDate },
-        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text> },
+        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -52,6 +53,10 @@ export default function DebitNotesIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
+        if (!String(reason || '').trim()) {
+            ctx.message.error('Void reason is required');
+            return;
+        }
         setVoidState((s) => ({ ...s, loading: true }));
         try {
             await axios.patch(api('/api/debit-notes/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });

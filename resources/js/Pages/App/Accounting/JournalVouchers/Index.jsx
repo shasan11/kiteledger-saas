@@ -6,6 +6,7 @@ import { Modal, Input, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -24,7 +25,7 @@ export default function JournalVouchersIndex(props) {
         { title: 'Reference', dataIndex: 'reference', key: 'reference', render: (v) => v || '-' },
         { title: 'Narration', dataIndex: 'narration', key: 'narration', render: (v) => v || '-' },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
-        { title: 'Total Debit', dataIndex: 'total_debit', key: 'total_debit', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text> },
+        { title: 'Total Debit', dataIndex: 'total_debit', key: 'total_debit', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -55,6 +56,10 @@ export default function JournalVouchersIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
+        if (!String(reason || '').trim()) {
+            ctx.message.error('Void reason is required');
+            return;
+        }
         setVoidState((s) => ({ ...s, loading: true }));
         try {
             await axios.patch(api('/api/journal-vouchers/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });

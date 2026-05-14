@@ -515,7 +515,7 @@ Route::prefix('hrm')->group(function () {
     Route::apiResource('project-teams', ProjectTeamController::class);
     Route::apiResource('project-team-members', ProjectTeamMemberController::class);
 
-    Route::prefix('payroll')->group(function () {
+    Route::prefix('payroll')->name('hrm.payroll.')->group(function () {
         Route::get('dashboard', [PayrollRunController::class, 'dashboard']);
         Route::post('runs/generate', [PayrollRunController::class, 'generate']);
         Route::post('runs/{id}/review', [PayrollRunController::class, 'review']);
@@ -603,6 +603,7 @@ Route::apiResource('document-numberings', DocumentNumberingController::class)
 Route::post('printing-templates/bulk', [PrintingTemplateController::class, 'bulkStore']);
 Route::patch('printing-templates/bulk', [PrintingTemplateController::class, 'bulkUpdate']);
 Route::delete('printing-templates/bulk', [PrintingTemplateController::class, 'bulkDestroy']);
+Route::get('printing-templates/resolve', [PrintingTemplateController::class, 'resolve']);
 Route::apiResource('printing-templates', PrintingTemplateController::class)
     ->parameters(['printing-templates' => 'printingTemplate']);
 

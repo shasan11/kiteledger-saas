@@ -21,6 +21,7 @@ class TaskStatus extends Model
         'project_id',
         'name',
         'color',
+        'sort_order',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -35,6 +36,7 @@ class TaskStatus extends Model
     {
         return [
             'active' => 'boolean',
+            'sort_order' => 'integer',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];

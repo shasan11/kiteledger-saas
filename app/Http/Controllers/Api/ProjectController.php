@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\Milestone;
 use App\Models\Project;
 use App\Models\ProjectTeam;
@@ -11,9 +12,11 @@ use Illuminate\Http\Request;
 
 class ProjectController extends BaseCrudApiController
 {
+    use AuthorizesProjectResources;
+
     protected string $modelClass = Project::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'project.project';
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;
@@ -114,10 +117,12 @@ class ProjectController extends BaseCrudApiController
             'rules' => [
                 'name' => ['required', 'string', 'max:120'],
                 'color' => ['nullable', 'string', 'max:30'],
+                'sort_order' => ['nullable', 'integer', 'min:0'],
             ],
             'update_rules' => [
                 'name' => ['required', 'string', 'max:120'],
                 'color' => ['nullable', 'string', 'max:30'],
+                'sort_order' => ['nullable', 'integer', 'min:0'],
             ],
         ],
         'teams' => [

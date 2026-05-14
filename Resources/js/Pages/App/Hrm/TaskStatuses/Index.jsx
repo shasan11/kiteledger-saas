@@ -11,6 +11,7 @@ const api = (p) => `${BACKEND}${p}`;
 export default function TaskStatuses(props) {
   const columns = [
     { title: 'Project', key: 'project', render: (_, r) => r?.project?.name || '-' },
+    { title: 'Order', dataIndex: 'sort_order', key: 'sort_order', width: 90 },
     {
       title: 'Status', key: 'status',
       render: (_, r) => <Tag color={r.colour_value || 'default'} style={{ border: `1px solid ${r.colour_value||'#d9d9d9'}`, fontWeight: 600 }}>{r.name}</Tag>,
@@ -22,16 +23,18 @@ export default function TaskStatuses(props) {
     { name: 'project_id', label: 'Project', type: 'fkSelect', required: true, col: 24,
       fkUrl: api('/api/hrm/projects'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name||'' },
     { name: 'name', label: 'Status Name', type: 'text', required: true, col: 12 },
+    { name: 'sort_order', label: 'Order', type: 'number', required: true, col: 12 },
     { name: 'colour_value', label: 'Colour', type: 'color', required: true, col: 12 },
     { name: 'active', label: 'Active', type: 'switch', col: 12 },
   ];
   const validationSchema = Yup.object().shape({
     project_id: Yup.mixed().required('Project is required'),
     name: Yup.string().required('Status name is required').max(100),
+    sort_order: Yup.number().min(0).required('Order is required'),
     colour_value: Yup.string().required('Colour is required'),
     active: Yup.boolean().nullable(),
   });
-  const initialValues = { project_id: null, name: '', colour_value: '#1677ff', active: true };
+  const initialValues = { project_id: null, name: '', sort_order: 1, colour_value: '#1677ff', active: true };
   const transformPayload = (v) => {
     const p={...v}; p.active=Boolean(p.active);
     if (p.project_id&&typeof p.project_id==='object') p.project_id=p.project_id.id??p.project_id.value;

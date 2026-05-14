@@ -51,6 +51,7 @@ const APPROVED_STATUSES = new Set([
 
 const SUPPORTED_PAYMENT_IN_DOCUMENT_TYPES = new Set([
     'quotation',
+    'proforma_invoice',
     'sales_order',
     'invoice',
     'customer_payment',
@@ -445,6 +446,15 @@ const buildPrintContext = (record, documentType, title) => {
     return {
         record,
 
+        company: {
+            name: firstPresent(record?.company?.name, record?.branch?.name, 'KiteLedger'),
+            address: firstPresent(record?.company?.address, record?.branch?.address, ''),
+            phone: firstPresent(record?.company?.phone, record?.branch?.phone, ''),
+            email: firstPresent(record?.company?.email, record?.branch?.email, ''),
+            website: firstPresent(record?.company?.website, ''),
+            tax_id: firstPresent(record?.company?.tax_id, record?.company?.pan_no, record?.branch?.tax_id, ''),
+        },
+
         document: {
             type: normalizedDocumentType,
             title: documentTitle,
@@ -454,6 +464,7 @@ const buildPrintContext = (record, documentType, title) => {
             reference: firstPresent(record?.reference, record?.reference_no, '-'),
             status: humanize(record?.status || 'draft'),
             notes: record?.notes || '',
+            terms: firstPresent(record?.terms, record?.payment_terms, ''),
         },
 
         party: {
@@ -463,6 +474,7 @@ const buildPrintContext = (record, documentType, title) => {
             address: getPartyAddress(record),
             pan_no: firstPresent(record?.contact?.pan_no, record?.contact?.vat_no, ''),
             vat_no: firstPresent(record?.contact?.vat_no, record?.contact?.pan_no, ''),
+            tax_id: firstPresent(record?.contact?.tax_id, record?.contact?.pan_no, record?.contact?.vat_no, ''),
         },
 
         currency: {
@@ -2111,7 +2123,7 @@ export default function PaymentInRecordShow({
                         type="warning"
                         showIcon
                         message="Unsupported document type"
-                        description={`Printing is configured only for Quotation, Sales Order, Invoice, Payment, and Credit Note. Current type: ${documentType}`}
+                        description={`Printing is configured for Quotation, Proforma Invoice, Sales Order, Invoice, Payment, and Credit Note. Current type: ${documentType}`}
                     />
                 ) : printTemplateLoading ? (
                     <Skeleton active paragraph={{ rows: 12 }} />

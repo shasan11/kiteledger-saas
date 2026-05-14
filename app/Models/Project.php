@@ -53,7 +53,7 @@ class Project extends Model
 
     public function taskStatuses(): HasMany
     {
-        return $this->hasMany(TaskStatus::class);
+        return $this->hasMany(TaskStatus::class)->orderBy('sort_order')->orderBy('name');
     }
 
     public function tasks(): HasMany

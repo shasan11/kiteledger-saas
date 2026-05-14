@@ -17,6 +17,9 @@ class SettingsPermissionSeeder extends Seeder
             'settings.taxes.manage', 'settings.document-series.manage', 'settings.approval-workflows.manage',
             'settings.email.manage', 'settings.localization.manage', 'settings.accounting.manage',
             'settings.hrm.manage', 'settings.inventory.manage', 'settings.roles.manage', 'settings.permissions.manage',
+            'settings.configuration.view', 'settings.configuration.update',
+            'system.settings.view', 'system.settings.update',
+            'configurations.view', 'configurations.update',
             'pos.view', 'pos.sell', 'pos.refund', 'pos.shift.open', 'pos.shift.close',
             'pos.terminal.manage', 'pos.cash_movement.manage', 'pos.reports.view',
         ];

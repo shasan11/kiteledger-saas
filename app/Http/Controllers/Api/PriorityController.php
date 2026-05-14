@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\Priority;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 class PriorityController extends BaseCrudApiController
 {
+    use AuthorizesProjectResources;
+
     protected string $modelClass = Priority::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'project.priority';
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = true;

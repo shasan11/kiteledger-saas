@@ -6,6 +6,7 @@ import { Alert, Button, Modal, Input, Space, Table, Tag, Typography } from 'antd
 import { CheckCircleOutlined, StopOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -71,14 +72,14 @@ export default function PaymentsIndex(props) {
         { title: 'Date', dataIndex: 'payment_date', key: 'payment_date', sorter: true, width: 120, render: displayDate },
         { title: 'Method', dataIndex: 'payment_method', key: 'payment_method', width: 120, render: (v) => v || '-' },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
-        { title: 'Amount', dataIndex: 'amount', key: 'amount', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text> },
+        { title: 'Amount', dataIndex: 'amount', key: 'amount', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
     ], []);
 
     const reviewColumns = useMemo(() => [
         { title: 'Payment No', dataIndex: 'payment_no', key: 'payment_no', render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
         { title: 'Customer', key: 'customer', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
         { title: 'Date', dataIndex: 'payment_date', key: 'payment_date', width: 110, render: displayDate },
-        { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', width: 120, render: (v) => <Text strong>{money(v)}</Text> },
+        { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
         {
             title: 'Action',
             key: 'action',
@@ -126,6 +127,10 @@ export default function PaymentsIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
+        if (!String(reason || '').trim()) {
+            ctx.message.error('Void reason is required');
+            return;
+        }
         setVoidState((s) => ({ ...s, loading: true }));
         try {
             await axios.patch(api('/api/customer-payments/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });

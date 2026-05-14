@@ -15,6 +15,7 @@ const DOCUMENT_TYPE_OPTIONS = [
   { label: 'Proforma Invoice', value: 'proforma_invoice' },
   { label: 'Sales Order', value: 'sales_order' },
   { label: 'Invoice', value: 'invoice' },
+  { label: 'Sales Return', value: 'sales_return' },
   { label: 'Credit Note / Sales Return', value: 'credit_note' },
   { label: 'Customer Payment', value: 'customer_payment' },
 
@@ -28,8 +29,22 @@ const DOCUMENT_TYPE_OPTIONS = [
   { label: 'Expense', value: 'expense' },
   { label: 'Journal Voucher', value: 'journal_voucher' },
   { label: 'Cash Transfer', value: 'cash_transfer' },
+  { label: 'Cheque Register', value: 'cheque_register' },
+  { label: 'Loan Account', value: 'loan_account' },
+  { label: 'Loan Top Up', value: 'loan_topup' },
+  { label: 'Loan Charge', value: 'loan_charge' },
   { label: 'Warehouse Transfer', value: 'warehouse_transfer' },
   { label: 'Inventory Adjustment', value: 'inventory_adjustment' },
+  { label: 'Product', value: 'product' },
+  { label: 'Contact', value: 'contact' },
+  { label: 'Lead', value: 'lead' },
+  { label: 'Deal', value: 'deal' },
+  { label: 'Employee', value: 'employee' },
+  { label: 'Attendance', value: 'attendance' },
+  { label: 'Leave Application', value: 'leave_application' },
+  { label: 'Payslip', value: 'payslip' },
+  { label: 'Project', value: 'project' },
+  { label: 'Task', value: 'task' },
 ];
 
 const TEMPLATE_KEY_OPTIONS = [
@@ -39,6 +54,7 @@ const TEMPLATE_KEY_OPTIONS = [
   { label: 'Proforma Invoice Default', value: 'proforma_invoice.default' },
   { label: 'Sales Order Default', value: 'sales_order.default' },
   { label: 'Invoice Default', value: 'invoice.default' },
+  { label: 'Sales Return Default', value: 'sales_return.default' },
   { label: 'Credit Note Default', value: 'credit_note.default' },
   { label: 'Customer Payment Default', value: 'customer_payment.default' },
 
@@ -50,8 +66,22 @@ const TEMPLATE_KEY_OPTIONS = [
   { label: 'Expense Default', value: 'expense.default' },
   { label: 'Journal Voucher Default', value: 'journal_voucher.default' },
   { label: 'Cash Transfer Default', value: 'cash_transfer.default' },
+  { label: 'Cheque Register Default', value: 'cheque_register.default' },
+  { label: 'Loan Account Default', value: 'loan_account.default' },
+  { label: 'Loan Top Up Default', value: 'loan_topup.default' },
+  { label: 'Loan Charge Default', value: 'loan_charge.default' },
   { label: 'Warehouse Transfer Default', value: 'warehouse_transfer.default' },
   { label: 'Inventory Adjustment Default', value: 'inventory_adjustment.default' },
+  { label: 'Product Default', value: 'product.default' },
+  { label: 'Contact Default', value: 'contact.default' },
+  { label: 'Lead Default', value: 'lead.default' },
+  { label: 'Deal Default', value: 'deal.default' },
+  { label: 'Employee Default', value: 'employee.default' },
+  { label: 'Attendance Default', value: 'attendance.default' },
+  { label: 'Leave Application Default', value: 'leave_application.default' },
+  { label: 'Payslip Default', value: 'payslip.default' },
+  { label: 'Project Default', value: 'project.default' },
+  { label: 'Task Default', value: 'task.default' },
 ];
 
 const DEFAULT_TEMPLATE_HTML = `
@@ -254,103 +284,26 @@ export default function PrintingTemplates(props) {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      render: (value, record) => (
-        <div>
-          <Text strong>{value}</Text>
-          <br />
-          <Text type="secondary">{record?.template_key || '-'}</Text>
-        </div>
-      ),
+       
     },
-    {
-      title: 'Document Type',
-      dataIndex: 'document_type',
-      key: 'document_type',
-      render: (value) => (
-        <Tag color="blue">
-          {String(value || 'general').replaceAll('_', ' ')}
-        </Tag>
-      ),
-    },
-    {
-      title: 'Default',
-      dataIndex: 'is_default',
-      key: 'is_default',
-      render: (v) => (
-        <Tag color={v ? 'green' : 'default'}>
-          {v ? 'Yes' : 'No'}
-        </Tag>
-      ),
-    },
-    {
-      title: 'System',
-      dataIndex: 'is_system_generated',
-      key: 'is_system_generated',
-      render: (v) => (
-        <Tag color={v ? 'purple' : 'default'}>
-          {v ? 'System' : 'Custom'}
-        </Tag>
-      ),
-    },
-    {
-      title: 'Active',
-      dataIndex: 'active',
-      key: 'active',
-      render: (v) => (
-        <Tag color={v ? 'green' : 'red'}>
-          {v ? 'Active' : 'Inactive'}
-        </Tag>
-      ),
-    },
+     
   ];
 
   const fields = [
     {
       name: 'name',
       label: 'Name',
+      readOnly:true,
       rules: [{ required: true, message: 'Name is required' }],
     },
-    {
-      name: 'document_type',
-      label: 'Document Type',
-      type: 'select',
-      options: DOCUMENT_TYPE_OPTIONS,
-      rules: [{ required: true, message: 'Document type is required' }],
-    },
-    {
-      name: 'template_key',
-      label: 'Template Key',
-      type: 'select',
-      options: TEMPLATE_KEY_OPTIONS,
-      rules: [{ required: true, message: 'Template key is required' }],
-    },
-    {
-      name: 'is_default',
-      label: 'Default',
-      type: 'switch',
-    },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-    },
-    {
-      name: 'is_system_generated',
-      label: 'System Generated',
-      type: 'switch',
-    },
+     
     {
       name: 'template_html',
       label: 'Template HTML',
       type: 'richtext',
       rules: [{ required: true, message: 'Template HTML is required' }],
     },
-    {
-      name: 'template_css',
-      label: 'Template CSS',
-      type: 'textarea',
-      rows: 16,
-    },
+  
   ];
 
   const initialValues = {
@@ -365,7 +318,7 @@ export default function PrintingTemplates(props) {
   };
 
   return (
-    <AuthenticatedLayout>
+    <>
       <Head title="Printing Templates" />
 
       <div style={{ padding: 18 }}>
@@ -387,6 +340,6 @@ export default function PrintingTemplates(props) {
           />
         </Card>
       </div>
-    </AuthenticatedLayout>
+    </>
   );
 }

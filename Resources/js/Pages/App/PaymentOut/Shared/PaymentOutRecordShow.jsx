@@ -376,6 +376,14 @@ const buildPrintContext = (record, documentType, title) => {
     const balance = firstPresent(record?.balance_due, Math.max(numeric(total) - numeric(paid), 0));
     return {
         record,
+        company: {
+            name: firstPresent(record?.company?.name, record?.branch?.name, 'KiteLedger'),
+            address: firstPresent(record?.company?.address, record?.branch?.address, ''),
+            phone: firstPresent(record?.company?.phone, record?.branch?.phone, ''),
+            email: firstPresent(record?.company?.email, record?.branch?.email, ''),
+            website: firstPresent(record?.company?.website, ''),
+            tax_id: firstPresent(record?.company?.tax_id, record?.company?.pan_no, record?.branch?.tax_id, ''),
+        },
         document: {
             type: normalizedDocumentType,
             title: documentTitle,
@@ -385,6 +393,7 @@ const buildPrintContext = (record, documentType, title) => {
             reference: firstPresent(record?.reference, record?.reference_no, '-'),
             status: humanize(record?.status || 'draft'),
             notes: record?.notes || '',
+            terms: firstPresent(record?.terms, record?.payment_terms, ''),
         },
         party: {
             name: getRelationName(record?.contact),
@@ -393,6 +402,7 @@ const buildPrintContext = (record, documentType, title) => {
             address: getPartyAddress(record),
             pan_no: firstPresent(record?.contact?.pan_no, record?.contact?.vat_no, ''),
             vat_no: firstPresent(record?.contact?.vat_no, record?.contact?.pan_no, ''),
+            tax_id: firstPresent(record?.contact?.tax_id, record?.contact?.pan_no, record?.contact?.vat_no, ''),
         },
         currency: {
             code: currency?.code || '',

@@ -1,4 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import {
+  Component as ReactComponent,
+  lazy,
+  Suspense,
+  useMemo,
+  useState,
+} from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
 import {
@@ -26,7 +32,7 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 const CompanyProfile = lazy(() => import('./CompanyProfile'));
@@ -56,6 +62,8 @@ const ApplicationSettings = lazy(() => import('./ApplicationSettings/Index'));
 const GeneralSettings = lazy(() => import('./GeneralSettings/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
 
+const DEFAULT_TAB_KEY = 'company-profile';
+
 const SETTINGS_TABS = [
   {
     key: 'general-group',
@@ -70,8 +78,22 @@ const SETTINGS_TABS = [
     component: CompanyProfile,
     props: {},
   },
-  
-  
+  {
+    key: 'general-settings',
+    label: 'General Settings',
+    description: 'Global application preferences.',
+    icon: <SettingOutlined />,
+    component: GeneralSettings,
+    props: {},
+  },
+  {
+    key: 'application-settings',
+    label: 'Application Settings',
+    description: 'Company logo, branding and application defaults.',
+    icon: <AppstoreOutlined />,
+    component: ApplicationSettings,
+    props: {},
+  },
   {
     key: 'master-data',
     label: 'Master Data',
@@ -110,7 +132,14 @@ const SETTINGS_TABS = [
     component: Roles,
     props: {},
   },
-   ,
+  {
+    key: 'permissions',
+    label: 'Permissions',
+    description: 'Permission rules and access actions.',
+    icon: <SafetyCertificateOutlined />,
+    component: Permissions,
+    props: {},
+  },
 
   {
     key: 'finance-group',
@@ -265,21 +294,23 @@ const SETTINGS_TABS = [
     component: CustomTemplates,
     props: {},
   },
-];
+].filter(Boolean);
 
 function getRealTabs() {
-  return SETTINGS_TABS.filter((item) => !item.disabled);
+  return SETTINGS_TABS.filter((item) => item && !item.disabled && item.component);
+}
+
+function isValidTabKey(key) {
+  return getRealTabs().some((item) => item.key === key);
 }
 
 function getInitialTab() {
-  if (typeof window === 'undefined') return 'company-profile';
+  if (typeof window === 'undefined') return DEFAULT_TAB_KEY;
 
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
 
-  return getRealTabs().some((item) => item.key === tab)
-    ? tab
-    : 'company-profile';
+  return isValidTabKey(tab) ? tab : DEFAULT_TAB_KEY;
 }
 
 function updateUrlTab(key) {
@@ -308,22 +339,109 @@ function LoadingState({ token }) {
   );
 }
 
-function ActiveComponent({ activeKey, auth, token }) {
-  const activeTab = SETTINGS_TABS.find((item) => item.key === activeKey);
+class TabErrorBoundary extends ReactComponent {
+  constructor(props) {
+    super(props);
 
-  if (!activeTab?.component) return null;
+    this.state = {
+      hasError: false,
+      error: null,
+    };
+  }
+
+  static getDerivedStateFromError(error) {
+    return {
+      hasError: true,
+      error,
+    };
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.activeKey !== this.props.activeKey && this.state.hasError) {
+      this.setState({
+        hasError: false,
+        error: null,
+      });
+    }
+  }
+
+  render() {
+    const { token } = this.props;
+
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            padding: token.paddingLG,
+            background: token.colorBgContainer,
+          }}
+        >
+          <Title level={5} style={{ marginTop: 0, color: token.colorError }}>
+            This settings tab failed to load.
+          </Title>
+
+          <Text type="secondary">
+            Check whether the imported component path exists and whether that
+            component has a valid default export.
+          </Text>
+
+          {this.state.error?.message ? (
+            <pre
+              style={{
+                marginTop: token.margin,
+                padding: token.padding,
+                borderRadius: token.borderRadius,
+                background: token.colorFillQuaternary,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                whiteSpace: 'pre-wrap',
+                color: token.colorTextSecondary,
+                fontSize: 12,
+              }}
+            >
+              {this.state.error.message}
+            </pre>
+          ) : null}
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function ActiveComponent({ activeKey, auth, token }) {
+  const activeTab = SETTINGS_TABS.find(
+    (item) => item && item.key === activeKey && !item.disabled
+  );
+
+  if (!activeTab?.component) {
+    return (
+      <div
+        style={{
+          padding: token.paddingLG,
+          background: token.colorBgContainer,
+        }}
+      >
+        <Text type="secondary">No settings component found.</Text>
+      </div>
+    );
+  }
 
   const Component = activeTab.component;
   const props = activeTab.props || {};
 
   return (
-    <Suspense fallback={<LoadingState token={token} />}>
-      <Component auth={auth} embedded {...props} />
-    </Suspense>
+    <TabErrorBoundary activeKey={activeKey} token={token}>
+      <Suspense fallback={<LoadingState token={token} />}>
+        <Component auth={auth} embedded {...props} />
+      </Suspense>
+    </TabErrorBoundary>
   );
 }
 
 function SiderItem({ item, active, token, onClick }) {
+  if (!item) return null;
+
   if (item.disabled) {
     return (
       <div
@@ -338,6 +456,7 @@ function SiderItem({ item, active, token, onClick }) {
           lineHeight: '12px',
           userSelect: 'none',
           flexShrink: 0,
+          whiteSpace: 'nowrap',
         }}
       >
         {item.label}
@@ -424,13 +543,13 @@ export default function SettingsIndex({ auth }) {
   const [activeKey, setActiveKey] = useState(getInitialTab);
 
   const activeTab = useMemo(() => {
-    return SETTINGS_TABS.find((item) => item.key === activeKey);
+    return SETTINGS_TABS.find((item) => item && item.key === activeKey);
   }, [activeKey]);
 
   const handleChange = (key) => {
-    const tab = SETTINGS_TABS.find((item) => item.key === key);
+    const tab = SETTINGS_TABS.find((item) => item && item.key === key);
 
-    if (!tab || tab.disabled) return;
+    if (!tab || tab.disabled || !tab.component) return;
 
     setActiveKey(key);
     updateUrlTab(key);
@@ -546,18 +665,37 @@ export default function SettingsIndex({ auth }) {
                   <SettingOutlined />
                 </span>
 
-                <Title
-                  level={4}
-                  style={{
-                    margin: 0,
-                    color: token.colorText,
-                    fontSize: 17,
-                    lineHeight: '22px',
-                    fontWeight: 750,
-                  }}
-                >
-                  Configuration
-                </Title>
+                <div style={{ minWidth: 0 }}>
+                  <Title
+                    level={4}
+                    style={{
+                      margin: 0,
+                      color: token.colorText,
+                      fontSize: 17,
+                      lineHeight: '22px',
+                      fontWeight: 750,
+                    }}
+                  >
+                    Configuration
+                  </Title>
+
+                  {activeTab?.description ? (
+                    <Text
+                      type="secondary"
+                      style={{
+                        display: 'block',
+                        fontSize: 12,
+                        lineHeight: '16px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: isMobile ? 220 : 520,
+                      }}
+                    >
+                      {activeTab.description}
+                    </Text>
+                  ) : null}
+                </div>
               </Space>
             </div>
           </div>
@@ -626,7 +764,7 @@ export default function SettingsIndex({ auth }) {
             }}
           >
             <Card
-              variant="outlined"
+              bordered
               style={{
                 minHeight: '100%',
                 borderRadius: token.borderRadiusLG,
