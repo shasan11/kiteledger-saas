@@ -5,9 +5,7 @@ import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import axios from 'axios';
 import {
-  Alert,
   Avatar,
-  Button,
   Card,
   Col,
   Row,
@@ -16,19 +14,17 @@ import {
   Statistic,
   Tag,
   Typography,
-  theme,
 } from 'antd';
 import {
   CalendarOutlined,
   CheckCircleOutlined,
   DollarOutlined,
   FundOutlined,
-  ReloadOutlined,
   WalletOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 
-const { Paragraph, Text, Title } = Typography;
+const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -109,7 +105,6 @@ function SummaryCard({ title, value, icon, accent, suffix = null, precision = 0 
       bordered={false}
       style={{
         borderRadius: 18,
-        background: `linear-gradient(135deg, ${accent}14 0%, #ffffff 68%)`,
         boxShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
       }}
       styles={{ body: { padding: 18 } }}
@@ -170,7 +165,6 @@ function EmployeeCell(_, record) {
 }
 
 export default function Payslips({ auth }) {
-  const { token } = theme.useToken();
   const [overview, setOverview] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
 
@@ -562,86 +556,10 @@ export default function Payslips({ auth }) {
       <div
         style={{
           padding: 16,
-          background: token.colorBgLayout,
           minHeight: 'calc(100vh - 64px)',
         }}
       >
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card
-            bordered={false}
-            style={{
-              borderRadius: 24,
-              overflow: 'hidden',
-              background:
-                'linear-gradient(135deg, rgba(114,46,209,0.10) 0%, rgba(22,119,255,0.07) 50%, #ffffff 100%)',
-              boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            }}
-            styles={{ body: { padding: 24 } }}
-          >
-            <Row gutter={[24, 24]} align="middle">
-              <Col xs={24} lg={15}>
-                <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-                  <Space size={12}>
-                    <span
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 16,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: '#722ed1',
-                        color: '#ffffff',
-                        fontSize: 20,
-                      }}
-                    >
-                      <DollarOutlined />
-                    </span>
-                    <div>
-                      <Title level={3} style={{ margin: 0, color: '#10233f' }}>
-                        Payroll Payslips
-                      </Title>
-                      <Text type="secondary">
-                        Keep salary calculations, payable totals, and payment status clear, structured, and payroll-ready.
-                      </Text>
-                    </div>
-                  </Space>
-
-                  <Paragraph style={{ margin: 0, color: '#44556b', maxWidth: 760 }}>
-                    This screen now matches the actual payslip API: payroll month and year, salary, leave and holiday counters, work-hour calculations, salary payable, bonus, deduction, total payable, and payment status. The old fake gross/net structure is gone.
-                  </Paragraph>
-
-                  <Space wrap>
-                    <Tag color="purple">Payroll accurate</Tag>
-                    <Tag color="blue">Hourly rate auto-calculates</Tag>
-                    <Tag color="green">Total payable auto-updates</Tag>
-                    <Tag color="gold">Payment status driven</Tag>
-                  </Space>
-                </Space>
-              </Col>
-
-              <Col xs={24} lg={9}>
-                <Alert
-                  type="info"
-                  showIcon
-                  icon={<WarningOutlined />}
-                  message="Payroll note"
-                  description="Use Salary Payable for the base payable amount after attendance and leave impact. Bonus and Deduction then adjust the final Total Payable."
-                  style={{
-                    borderRadius: 18,
-                    background: 'rgba(255,255,255,0.82)',
-                    border: '1px solid rgba(114,46,209,0.18)',
-                  }}
-                  action={
-                    <Button icon={<ReloadOutlined />} onClick={loadOverview}>
-                      Refresh
-                    </Button>
-                  }
-                />
-              </Col>
-            </Row>
-          </Card>
-
           {overviewLoading ? (
             <Skeleton active paragraph={{ rows: 2 }} />
           ) : (

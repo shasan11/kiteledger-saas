@@ -6,32 +6,27 @@ import * as Yup from 'yup';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
-  Alert,
   Avatar,
-  Button,
   Card,
   Col,
-  Input,
   Row,
   Skeleton,
   Space,
   Statistic,
   Tag,
   Typography,
-  theme,
 } from 'antd';
 import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   FormOutlined,
-  ReloadOutlined,
   StopOutlined,
   TeamOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
 
-const { Paragraph, Text, Title } = Typography;
+const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -99,7 +94,6 @@ function SummaryCard({ title, value, icon, accent, suffix = null }) {
       bordered={false}
       style={{
         borderRadius: 18,
-        background: `linear-gradient(135deg, ${accent}14 0%, #ffffff 68%)`,
         boxShadow: '0 12px 28px rgba(15, 23, 42, 0.06)',
       }}
       styles={{ body: { padding: 18 } }}
@@ -159,7 +153,6 @@ function EmployeeCell(_, record) {
 }
 
 export default function LeaveApplications({ auth }) {
-  const { token } = theme.useToken();
   const [overview, setOverview] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
 
@@ -455,86 +448,10 @@ export default function LeaveApplications({ auth }) {
       <div
         style={{
           padding: 16,
-          background: token.colorBgLayout,
           minHeight: 'calc(100vh - 64px)',
         }}
       >
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card
-            bordered={false}
-            style={{
-              borderRadius: 24,
-              overflow: 'hidden',
-              background:
-                'linear-gradient(135deg, rgba(250,173,20,0.10) 0%, rgba(22,119,255,0.06) 55%, #ffffff 100%)',
-              boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            }}
-            styles={{ body: { padding: 24 } }}
-          >
-            <Row gutter={[24, 24]} align="middle">
-              <Col xs={24} lg={15}>
-                <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-                  <Space size={12}>
-                    <span
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 16,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: '#faad14',
-                        color: '#ffffff',
-                        fontSize: 20,
-                      }}
-                    >
-                      <FormOutlined />
-                    </span>
-                    <div>
-                      <Title level={3} style={{ margin: 0, color: '#10233f' }}>
-                        Leave Applications
-                      </Title>
-                      <Text type="secondary">
-                        Manage request flow, future absences, approvals, and review comments in one tidy workspace.
-                      </Text>
-                    </div>
-                  </Space>
-
-                  <Paragraph style={{ margin: 0, color: '#44556b', maxWidth: 760 }}>
-                    This page now follows the real leave API shape: employee, leave type, leave dates, approved dates, duration, status, reason, review comment, and attachment reference. The UI is cleaner, and the form now reflects what your backend actually stores.
-                  </Paragraph>
-
-                  <Space wrap>
-                    <Tag color="gold">Approval workflow ready</Tag>
-                    <Tag color="blue">Duration auto-calculates</Tag>
-                    <Tag color="green">Status-driven view</Tag>
-                    <Tag color="purple">Future leave visibility</Tag>
-                  </Space>
-                </Space>
-              </Col>
-
-              <Col xs={24} lg={9}>
-                <Alert
-                  type="info"
-                  showIcon
-                  icon={<WarningOutlined />}
-                  message="Meaningful request tip"
-                  description="Use Leave Type as the actual leave category label the HR team recognizes. Approved dates can stay empty until the request is reviewed."
-                  style={{
-                    borderRadius: 18,
-                    background: 'rgba(255,255,255,0.82)',
-                    border: '1px solid rgba(250,173,20,0.18)',
-                  }}
-                  action={
-                    <Button icon={<ReloadOutlined />} onClick={loadOverview}>
-                      Refresh
-                    </Button>
-                  }
-                />
-              </Col>
-            </Row>
-          </Card>
-
           {overviewLoading ? (
             <Skeleton active paragraph={{ rows: 2 }} />
           ) : (

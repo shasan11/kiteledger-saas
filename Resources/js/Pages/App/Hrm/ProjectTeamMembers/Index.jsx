@@ -2,16 +2,13 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Card, Space, Tag, Typography, theme } from 'antd';
+import { Tag } from 'antd';
 import { UsergroupAddOutlined } from '@ant-design/icons';
-
-const { Text, Title } = Typography;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (p) => `${BACKEND}${p}`;
 
 export default function ProjectTeamMembers(props) {
-  const { token } = theme.useToken();
   const columns = [
     { title: 'Team', key: 'project_team', render: (_, r) => r?.project_team?.project_team_name || '-' },
     { title: 'Project', key: 'project', render: (_, r) => r?.project_team?.project?.name || '-' },
@@ -50,26 +47,13 @@ export default function ProjectTeamMembers(props) {
   return (
     <AuthenticatedLayout auth={props.auth}>
       <Head title="Team Members" />
-      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
-        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card bordered={false} style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(114,46,209,0.09) 0%, #ffffff 100%)', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }} styles={{ body: { padding: '20px 24px' } }}>
-            <Space size={14} align="center">
-              <span style={{ width: 44, height: 44, borderRadius: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#722ed1', color: '#ffffff', fontSize: 20, flexShrink: 0 }}>
-                <UsergroupAddOutlined />
-              </span>
-              <div>
-                <Title level={4} style={{ margin: 0, color: '#10233f' }}>Project Team Members</Title>
-                <Text type="secondary" style={{ fontSize: 13 }}>Assign employees to project teams and manage membership.</Text>
-              </div>
-            </Space>
-          </Card>
+      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
           <ReusableCrud icon={<UsergroupAddOutlined />} title="Team Member" apiUrl={api('/api/hrm/project-team-members')}
             columns={columns} fields={fields} filters={filters} validationSchema={validationSchema}
             crudInitialValues={initialValues} transformPayload={transformPayload}
             form_ui="modal" modalWidth={620}
             searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
             activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
-        </Space>
       </div>
     </AuthenticatedLayout>
   );

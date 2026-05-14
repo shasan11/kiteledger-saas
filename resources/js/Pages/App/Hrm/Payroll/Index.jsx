@@ -9,6 +9,7 @@ import {
   Card,
   Col,
   Divider,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -31,7 +32,9 @@ import {
   CheckCircleOutlined,
   DollarOutlined,
   FileDoneOutlined,
+  PlusOutlined,
   ReloadOutlined,
+  SaveOutlined,
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -58,9 +61,8 @@ const money = (value) =>
 
 function MetricCard({ title, value, prefix, icon }) {
   const { token } = theme.useToken();
-
   return (
-    <Card bordered={false} style={{ borderRadius: 18, boxShadow: token.boxShadowTertiary }}>
+    <Card bordered={false} style={{ borderRadius: 14, boxShadow: token.boxShadowTertiary }}>
       <Space align="start">
         <span
           style={{
@@ -76,7 +78,12 @@ function MetricCard({ title, value, prefix, icon }) {
         >
           {icon}
         </span>
-        <Statistic title={title} value={value} prefix={prefix} precision={typeof value === 'number' ? 2 : 0} />
+        <Statistic
+          title={title}
+          value={value}
+          prefix={prefix}
+          precision={typeof value === 'number' ? 2 : 0}
+        />
       </Space>
     </Card>
   );
@@ -91,39 +98,23 @@ function PayrollWizard({ onGenerated }) {
   const [branches, setBranches] = useState([]);
 
   useEffect(() => {
-    const loadOptions = async () => {
+    const load = async () => {
       const [periodResult, branchResult] = await Promise.allSettled([
         axios.get(api('/api/hrm/payroll/periods'), { params: { page_size: 50, ordering: '-year,-month' } }),
         axios.get(api('/api/branches'), { params: { page_size: 100 } }),
       ]);
-
-      if (periodResult.status === 'fulfilled') {
-        setPeriods(periodResult.value.data?.results || []);
-      }
-
-      if (branchResult.status === 'fulfilled') {
-        setBranches(branchResult.value.data?.results || []);
-      }
+      if (periodResult.status === 'fulfilled') setPeriods(periodResult.value.data?.results || []);
+      if (branchResult.status === 'fulfilled') setBranches(branchResult.value.data?.results || []);
     };
-
-    loadOptions();
+    load();
   }, []);
 
   const loadPreview = async () => {
     const values = form.getFieldsValue();
-    if (!values.branch_id && values.employee_scope === 'branch') {
-      message.warning('Select a branch before previewing branch payroll.');
-      return;
-    }
-
     setLoading(true);
     try {
       const { data } = await axios.get(api('/api/hrm/users'), {
-        params: {
-          branch_id: values.branch_id,
-          department_id: values.department_id,
-          page_size: 100,
-        },
+        params: { branch_id: values.branch_id, department_id: values.department_id, page_size: 100 },
       });
       setPreview(data?.results || []);
     } finally {
@@ -139,7 +130,7 @@ function PayrollWizard({ onGenerated }) {
         ...values,
         idempotency_key: `payroll-${values.payroll_period_id}-${values.branch_id || 'all'}-${Date.now()}`,
       });
-      message.success('Payroll generated safely.');
+      message.success('Payroll run generated for all employees.');
       setPreview([]);
       form.resetFields();
       onGenerated?.();
@@ -151,7 +142,7 @@ function PayrollWizard({ onGenerated }) {
   };
 
   return (
-    <Card bordered={false} style={{ borderRadius: 18 }}>
+    <Card bordered={false} style={{ borderRadius: 14 }}>
       <Steps
         size="small"
         current={preview.length ? 4 : 0}
@@ -165,16 +156,16 @@ function PayrollWizard({ onGenerated }) {
         style={{ marginBottom: 18 }}
       />
 
-      <Form form={form} layout="vertical" initialValues={{ employee_scope: 'branch' }}>
+      <Form form={form} layout="vertical" initialValues={{ employee_scope: 'all' }}>
         <Row gutter={12}>
           <Col xs={24} md={8}>
             <Form.Item name="payroll_period_id" label="Payroll Period" rules={[{ required: true }]}>
               <Select
                 showSearch
                 placeholder="Select period"
-                options={periods.map((period) => ({
-                  value: period.id,
-                  label: `${period.month}/${period.year} ${period.branch?.name ? `- ${period.branch.name}` : ''}`,
+                options={periods.map((p) => ({
+                  value: p.id,
+                  label: `${p.month}/${p.year}${p.branch?.name ? ` — ${p.branch.name}` : ''}`,
                 }))}
               />
             </Form.Item>
@@ -184,8 +175,8 @@ function PayrollWizard({ onGenerated }) {
               <Select
                 allowClear
                 showSearch
-                placeholder="All branches or select one"
-                options={branches.map((branch) => ({ value: branch.id, label: branch.name || branch.code || branch.id }))}
+                placeholder="All branches"
+                options={branches.map((b) => ({ value: b.id, label: b.name || b.code || b.id }))}
               />
             </Form.Item>
           </Col>
@@ -207,34 +198,55 @@ function PayrollWizard({ onGenerated }) {
             Preview Employees
           </Button>
           <Button type="primary" onClick={generate} loading={loading} icon={<CalculatorOutlined />}>
-            Confirm Generation
+            Generate Payroll
           </Button>
         </Space>
       </Form>
 
-      <Divider />
-      <Table
-        size="small"
-        rowKey="id"
-        dataSource={preview}
-        pagination={{ pageSize: 6 }}
-        locale={{ emptyText: 'Preview selected employees before generating payroll.' }}
-        columns={[
-          { title: 'Employee', render: (_, row) => row.name || [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email },
-          { title: 'Employee ID', dataIndex: 'employee_id' },
-          { title: 'Branch', render: (_, row) => row.branch?.name || row.branch_id || '-' },
-          { title: 'Department', render: (_, row) => row.department?.name || '-' },
-        ]}
-      />
+      {preview.length > 0 && (
+        <>
+          <Divider />
+          <Table
+            size="small"
+            rowKey="id"
+            dataSource={preview}
+            pagination={{ pageSize: 8 }}
+            columns={[
+              {
+                title: 'Employee',
+                render: (_, r) =>
+                  r.name || [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email,
+              },
+              { title: 'Employee ID', dataIndex: 'employee_id' },
+              { title: 'Branch', render: (_, r) => r.branch?.name || r.branch_id || '—' },
+              { title: 'Department', render: (_, r) => r.department?.name || '—' },
+            ]}
+          />
+        </>
+      )}
     </Card>
   );
 }
 
 export default function Payroll({ auth }) {
-  const { token } = theme.useToken();
   const { message, modal } = App.useApp();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Run detail drawer
+  const [selectedRun, setSelectedRun] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [payslips, setPayslips] = useState([]);
+  const [payslipsLoading, setPayslipsLoading] = useState(false);
+  const [payslipEdits, setPayslipEdits] = useState({});
+  const [savingPayslips, setSavingPayslips] = useState(false);
+
+  // Bulk modals
+  const [bulkMode, setBulkMode] = useState(null); // 'bonus' | 'deduction'
+  const [bulkAmount, setBulkAmount] = useState(0);
+  const [bulkComment, setBulkComment] = useState('');
+
+  // Void modal
   const [voidingRun, setVoidingRun] = useState(null);
   const [voidReason, setVoidReason] = useState('');
 
@@ -248,57 +260,283 @@ export default function Payroll({ auth }) {
     }
   };
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  useEffect(() => { loadDashboard(); }, []);
 
-  const act = async (run, action, label) => {
+  const act = (run, action, label) => {
     modal.confirm({
       title: `${label} payroll run?`,
-      content: `Run ${run.run_number} will move from ${run.status}.`,
+      content: `Run ${run.run_number} will be moved to ${label.toLowerCase()} state.`,
       okText: label,
       onOk: async () => {
         await axios.post(api(`/api/hrm/payroll/runs/${run.id}/${action}`));
-        message.success(`Payroll ${label.toLowerCase()} complete.`);
+        message.success(`Payroll run ${label.toLowerCase()} complete.`);
         loadDashboard();
+        if (drawerOpen && selectedRun?.id === run.id) setDrawerOpen(false);
       },
     });
   };
 
-  const runColumns = useMemo(
-    () => [
-      { title: 'Run #', dataIndex: 'run_number', width: 150 },
-      { title: 'Period', render: (_, row) => `${row.payroll_period?.month || '-'} / ${row.payroll_period?.year || '-'}` },
-      { title: 'Employees', dataIndex: 'total_employees', align: 'right' },
-      { title: 'Gross', dataIndex: 'total_gross', align: 'right', render: money },
-      { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
-      { title: 'Net Payable', dataIndex: 'total_net_payable', align: 'right', render: (value) => <Text strong>{money(value)}</Text> },
-      { title: 'Status', dataIndex: 'status', render: (value) => <Tag color={statusColor[value]}>{value}</Tag> },
-      {
-        title: 'Actions',
-        width: 290,
-        render: (_, row) => (
-          <Space wrap size={4}>
-            {row.status === 'generated' && <Button size="small" onClick={() => act(row, 'review', 'Review')}>Review</Button>}
-            {row.status === 'reviewed' && <Button size="small" type="primary" onClick={() => act(row, 'approve', 'Approve')}>Approve</Button>}
-            {row.status === 'approved' && <Button size="small" onClick={() => act(row, 'journal-voucher', 'Generate JV')}>JV</Button>}
-            {row.status === 'approved' && <Button size="small" onClick={() => act(row, 'mark-paid', 'Mark Paid')}>Pay</Button>}
-            {row.status === 'paid' && <Button size="small" onClick={() => act(row, 'lock', 'Lock')}>Lock</Button>}
-            {['generated', 'reviewed', 'approved'].includes(row.status) && (
-              <Button size="small" danger onClick={() => setVoidingRun(row)}>Void</Button>
-            )}
-          </Space>
+  const openRun = async (run) => {
+    setSelectedRun(run);
+    setDrawerOpen(true);
+    setPayslipEdits({});
+    setPayslipsLoading(true);
+    try {
+      const { data } = await axios.get(api('/api/hrm/payslips/'), {
+        params: { payroll_run_id: run.id, page_size: 500 },
+      });
+      const rows = data?.results || data?.data || [];
+      setPayslips(rows);
+      const init = {};
+      rows.forEach((p) => {
+        init[p.id] = {
+          bonus: p.bonus ?? 0,
+          deduction: p.deduction ?? 0,
+          bonus_comment: p.bonus_comment || '',
+          deduction_comment: p.deduction_comment || '',
+          dirty: false,
+        };
+      });
+      setPayslipEdits(init);
+    } finally {
+      setPayslipsLoading(false);
+    }
+  };
+
+  const updatePayslipEdit = (id, field, value) => {
+    setPayslipEdits((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [field]: value, dirty: true },
+    }));
+  };
+
+  const savePayslipEdits = async () => {
+    const dirty = Object.entries(payslipEdits).filter(([, e]) => e.dirty);
+    if (!dirty.length) { message.info('No changes to save.'); return; }
+    setSavingPayslips(true);
+    try {
+      await Promise.all(
+        dirty.map(([id, edit]) =>
+          axios.patch(api(`/api/hrm/payslips/${id}/`), {
+            bonus: Number(edit.bonus || 0),
+            deduction: Number(edit.deduction || 0),
+            bonus_comment: edit.bonus_comment?.trim() || null,
+            deduction_comment: edit.deduction_comment?.trim() || null,
+          }),
         ),
+      );
+      message.success(`${dirty.length} payslip${dirty.length !== 1 ? 's' : ''} updated.`);
+      await openRun(selectedRun);
+    } catch {
+      message.error('Some payslips could not be saved.');
+    } finally {
+      setSavingPayslips(false);
+    }
+  };
+
+  const applyBulk = () => {
+    if (!bulkAmount) { message.warning('Enter a valid amount.'); return; }
+    const field = bulkMode === 'bonus' ? 'bonus' : 'deduction';
+    const commentField = bulkMode === 'bonus' ? 'bonus_comment' : 'deduction_comment';
+    setPayslipEdits((prev) => {
+      const next = { ...prev };
+      payslips.forEach((p) => {
+        next[p.id] = {
+          ...(next[p.id] || {}),
+          [field]: Number(bulkAmount),
+          [commentField]: bulkComment,
+          dirty: true,
+        };
+      });
+      return next;
+    });
+    setBulkMode(null);
+    setBulkAmount(0);
+    setBulkComment('');
+    message.success(`Bulk ${bulkMode} applied to ${payslips.length} payslips. Save to confirm.`);
+  };
+
+  const dirtyPayslipCount = useMemo(
+    () => Object.values(payslipEdits).filter((e) => e.dirty).length,
+    [payslipEdits],
+  );
+
+  const runColumns = [
+    { title: 'Run #', dataIndex: 'run_number', width: 150 },
+    {
+      title: 'Period',
+      render: (_, r) => `${r.payroll_period?.month || '—'} / ${r.payroll_period?.year || '—'}`,
+    },
+    { title: 'Employees', dataIndex: 'total_employees', align: 'right', width: 100 },
+    { title: 'Gross', dataIndex: 'total_gross', align: 'right', render: money },
+    { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
+    {
+      title: 'Net Payable',
+      dataIndex: 'total_net_payable',
+      align: 'right',
+      render: (v) => <Text strong>{money(v)}</Text>,
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      width: 110,
+      render: (v) => <Tag color={statusColor[v]}>{v}</Tag>,
+    },
+    {
+      title: '',
+      width: 80,
+      render: (_, r) => (
+        <Button
+          size="small"
+          type="link"
+          onClick={(e) => { e.stopPropagation(); openRun(r); }}
+        >
+          Open
+        </Button>
+      ),
+    },
+  ];
+
+  const payslipColumns = [
+    {
+      title: 'Employee',
+      key: 'emp',
+      width: 180,
+      render: (_, p) => {
+        const emp = p.employee || p.user;
+        const name = emp
+          ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.username
+          : '—';
+        return <Text strong>{name}</Text>;
       },
-    ],
-    [],
+    },
+    { title: 'Salary', dataIndex: 'salary', align: 'right', width: 110, render: money },
+    {
+      title: 'Salary Payable',
+      dataIndex: 'salary_payable',
+      align: 'right',
+      width: 120,
+      render: money,
+    },
+    {
+      title: 'Bonus',
+      key: 'bonus',
+      width: 120,
+      render: (_, p) => (
+        <InputNumber
+          size="small"
+          min={0}
+          precision={2}
+          value={payslipEdits[p.id]?.bonus ?? p.bonus ?? 0}
+          onChange={(val) => updatePayslipEdit(p.id, 'bonus', val)}
+          style={{ width: '100%' }}
+        />
+      ),
+    },
+    {
+      title: 'Deduction',
+      key: 'deduction',
+      width: 120,
+      render: (_, p) => (
+        <InputNumber
+          size="small"
+          min={0}
+          precision={2}
+          value={payslipEdits[p.id]?.deduction ?? p.deduction ?? 0}
+          onChange={(val) => updatePayslipEdit(p.id, 'deduction', val)}
+          style={{ width: '100%' }}
+        />
+      ),
+    },
+    {
+      title: 'Total Payable',
+      key: 'total',
+      align: 'right',
+      width: 130,
+      render: (_, p) => {
+        const edit = payslipEdits[p.id];
+        const total =
+          Number(p.salary_payable || 0) +
+          Number(edit?.bonus ?? p.bonus ?? 0) -
+          Number(edit?.deduction ?? p.deduction ?? 0);
+        return (
+          <Text strong style={{ color: '#1677ff' }}>
+            {money(total)}
+          </Text>
+        );
+      },
+    },
+    {
+      title: 'Status',
+      dataIndex: 'payment_status',
+      width: 100,
+      render: (v) => (
+        <Tag color={v === 'PAID' ? 'green' : v === 'PARTIAL' ? 'blue' : 'orange'}>{v}</Tag>
+      ),
+    },
+  ];
+
+  const drawerTitle = selectedRun ? (
+    <Row align="middle" gutter={8} wrap={false}>
+      <Col flex="auto">
+        <Space>
+          <Text strong>Run {selectedRun.run_number}</Text>
+          <Tag color={statusColor[selectedRun.status]}>{selectedRun.status}</Tag>
+        </Space>
+      </Col>
+      <Col>
+        <Space size={4}>
+          {selectedRun.status === 'generated' && (
+            <Button size="small" onClick={() => act(selectedRun, 'review', 'Review')}>
+              Review
+            </Button>
+          )}
+          {selectedRun.status === 'reviewed' && (
+            <Button size="small" type="primary" onClick={() => act(selectedRun, 'approve', 'Approve')}>
+              Approve
+            </Button>
+          )}
+          {selectedRun.status === 'approved' && (
+            <Button size="small" onClick={() => act(selectedRun, 'mark-paid', 'Mark Paid')}>
+              Mark Paid
+            </Button>
+          )}
+          {selectedRun.status === 'paid' && (
+            <Button size="small" onClick={() => act(selectedRun, 'lock', 'Lock')}>
+              Lock
+            </Button>
+          )}
+          {['generated', 'reviewed', 'approved'].includes(selectedRun.status) && (
+            <Button size="small" danger onClick={() => { setVoidingRun(selectedRun); setDrawerOpen(false); }}>
+              Void
+            </Button>
+          )}
+        </Space>
+      </Col>
+    </Row>
+  ) : (
+    'Run Detail'
   );
 
   const componentFields = [
     { name: 'name', label: 'Name', type: 'text', required: true, col: 8 },
     { name: 'code', label: 'Code', type: 'text', required: true, col: 4 },
-    { name: 'type', label: 'Type', type: 'select', required: true, col: 6, options: ['earning', 'deduction', 'employer_contribution'].map((value) => ({ value, label: value })) },
-    { name: 'calculation_type', label: 'Calculation', type: 'select', required: true, col: 6, options: ['fixed', 'percentage', 'formula', 'manual'].map((value) => ({ value, label: value })) },
+    {
+      name: 'type',
+      label: 'Type',
+      type: 'select',
+      required: true,
+      col: 6,
+      options: ['earning', 'deduction', 'employer_contribution'].map((v) => ({ value: v, label: v })),
+    },
+    {
+      name: 'calculation_type',
+      label: 'Calculation',
+      type: 'select',
+      required: true,
+      col: 6,
+      options: ['fixed', 'percentage', 'formula', 'manual'].map((v) => ({ value: v, label: v })),
+    },
     { name: 'taxable', label: 'Taxable', type: 'switch', col: 6 },
     { name: 'affects_net_salary', label: 'Affects Net', type: 'switch', col: 6 },
     { name: 'sort_order', label: 'Sort Order', type: 'number', col: 6 },
@@ -311,50 +549,75 @@ export default function Payroll({ auth }) {
     { name: 'start_date', label: 'Start Date', type: 'date', required: true, col: 6 },
     { name: 'end_date', label: 'End Date', type: 'date', required: true, col: 6 },
     { name: 'branch_id', label: 'Branch ID', type: 'text', col: 8 },
-    { name: 'status', label: 'Status', type: 'select', col: 8, options: ['open', 'closed', 'locked'].map((value) => ({ value, label: value })) },
+    {
+      name: 'status',
+      label: 'Status',
+      type: 'select',
+      col: 8,
+      options: ['open', 'closed', 'locked'].map((v) => ({ value: v, label: v })),
+    },
   ];
 
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Payroll" />
-      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
+      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card bordered={false} style={{ borderRadius: 24, background: `linear-gradient(135deg, ${token.colorPrimaryBg}, ${token.colorBgContainer})` }}>
-            <Row align="middle" gutter={[16, 16]}>
-              <Col flex="auto">
-                <Title level={3} style={{ margin: 0 }}>Payroll Command Center</Title>
-                <Text type="secondary">Monthly payroll runs, salary structures, attendance impact, approvals, payments, and accounting handoff.</Text>
-              </Col>
-              <Col>
-                <Button icon={<ReloadOutlined />} loading={loading} onClick={loadDashboard}>Refresh</Button>
-              </Col>
-            </Row>
-          </Card>
+          <Row align="middle">
+            <Col flex="auto">
+              <Title level={4} style={{ margin: 0 }}>Payroll</Title>
+            </Col>
+            <Col>
+              <Button icon={<ReloadOutlined />} loading={loading} onClick={loadDashboard}>
+                Refresh
+              </Button>
+            </Col>
+          </Row>
 
           <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} xl={6}><MetricCard title="Employees Included" value={dashboard?.employees_included || 0} icon={<TeamOutlined />} /></Col>
-            <Col xs={24} sm={12} xl={6}><MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} prefix="$" icon={<DollarOutlined />} /></Col>
-            <Col xs={24} sm={12} xl={6}><MetricCard title="Deductions" value={dashboard?.total_deductions || 0} prefix="$" icon={<AuditOutlined />} /></Col>
-            <Col xs={24} sm={12} xl={6}><MetricCard title="Net Payable" value={dashboard?.net_payable || 0} prefix="$" icon={<BankOutlined />} /></Col>
+            <Col xs={24} sm={12} xl={6}>
+              <MetricCard title="Employees Included" value={dashboard?.employees_included || 0} icon={<TeamOutlined />} />
+            </Col>
+            <Col xs={24} sm={12} xl={6}>
+              <MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} prefix="$" icon={<DollarOutlined />} />
+            </Col>
+            <Col xs={24} sm={12} xl={6}>
+              <MetricCard title="Deductions" value={dashboard?.total_deductions || 0} prefix="$" icon={<AuditOutlined />} />
+            </Col>
+            <Col xs={24} sm={12} xl={6}>
+              <MetricCard title="Net Payable" value={dashboard?.net_payable || 0} prefix="$" icon={<BankOutlined />} />
+            </Col>
           </Row>
 
           <Tabs
             items={[
               {
+                key: 'generate',
+                label: 'Generate Run',
+                icon: <PlusOutlined />,
+                children: <PayrollWizard onGenerated={loadDashboard} />,
+              },
+              {
                 key: 'runs',
                 label: 'Payroll Runs',
+                icon: <CheckCircleOutlined />,
                 children: (
-                  <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-                    <PayrollWizard onGenerated={loadDashboard} />
-                    <Card title="Recent Payroll Runs" bordered={false} style={{ borderRadius: 18 }}>
-                      <Table size="small" rowKey="id" columns={runColumns} dataSource={dashboard?.recent_runs || []} pagination={false} />
-                    </Card>
-                  </Space>
+                  <Card bordered={false} style={{ borderRadius: 14 }}>
+                    <Table
+                      size="small"
+                      rowKey="id"
+                      columns={runColumns}
+                      dataSource={dashboard?.recent_runs || []}
+                      pagination={{ pageSize: 10 }}
+                      locale={{ emptyText: 'No payroll runs yet. Generate one above.' }}
+                    />
+                  </Card>
                 ),
               },
               {
                 key: 'periods',
                 label: 'Periods',
+                icon: <FileDoneOutlined />,
                 children: (
                   <ReusableCrud
                     title="Payroll Periods"
@@ -366,7 +629,7 @@ export default function Payroll({ auth }) {
                       { title: 'Year', dataIndex: 'year' },
                       { title: 'Start', dataIndex: 'start_date' },
                       { title: 'End', dataIndex: 'end_date' },
-                      { title: 'Status', dataIndex: 'status', render: (value) => <Tag>{value}</Tag> },
+                      { title: 'Status', dataIndex: 'status', render: (v) => <Tag>{v}</Tag> },
                     ]}
                     form_ui="drawer"
                     enableServerPagination
@@ -376,6 +639,7 @@ export default function Payroll({ auth }) {
               {
                 key: 'components',
                 label: 'Components',
+                icon: <SettingOutlined />,
                 children: (
                   <ReusableCrud
                     title="Salary Components"
@@ -385,10 +649,14 @@ export default function Payroll({ auth }) {
                     columns={[
                       { title: 'Name', dataIndex: 'name' },
                       { title: 'Code', dataIndex: 'code' },
-                      { title: 'Type', dataIndex: 'type', render: (value) => <Tag>{value}</Tag> },
+                      { title: 'Type', dataIndex: 'type', render: (v) => <Tag>{v}</Tag> },
                       { title: 'Calculation', dataIndex: 'calculation_type' },
-                      { title: 'Taxable', dataIndex: 'taxable', render: (value) => (value ? 'Yes' : 'No') },
-                      { title: 'Active', dataIndex: 'active', render: (value) => (value ? <Tag color="green">Active</Tag> : <Tag>Inactive</Tag>) },
+                      { title: 'Taxable', dataIndex: 'taxable', render: (v) => (v ? 'Yes' : 'No') },
+                      {
+                        title: 'Active',
+                        dataIndex: 'active',
+                        render: (v) => (v ? <Tag color="green">Active</Tag> : <Tag>Inactive</Tag>),
+                      },
                     ]}
                     form_ui="drawer"
                     enableServerPagination
@@ -400,17 +668,109 @@ export default function Payroll({ auth }) {
         </Space>
       </div>
 
+      {/* Run detail drawer */}
+      <Drawer
+        title={drawerTitle}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        width={960}
+        extra={
+          <Space>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={() => { setBulkMode('bonus'); setBulkAmount(0); setBulkComment(''); }}
+              disabled={!payslips.length}
+            >
+              Bulk Bonus
+            </Button>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={() => { setBulkMode('deduction'); setBulkAmount(0); setBulkComment(''); }}
+              disabled={!payslips.length}
+            >
+              Bulk Deduction
+            </Button>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={savePayslipEdits}
+              loading={savingPayslips}
+              disabled={!dirtyPayslipCount}
+            >
+              Save{dirtyPayslipCount > 0 ? ` (${dirtyPayslipCount})` : ''}
+            </Button>
+          </Space>
+        }
+      >
+        {selectedRun && (
+          <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+            <Col xs={12} sm={6}>
+              <Statistic title="Employees" value={selectedRun.total_employees || 0} />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic title="Gross" value={money(selectedRun.total_gross)} />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic title="Deductions" value={money(selectedRun.total_deductions)} />
+            </Col>
+            <Col xs={12} sm={6}>
+              <Statistic title="Net Payable" value={money(selectedRun.total_net_payable)} valueStyle={{ color: '#1677ff' }} />
+            </Col>
+          </Row>
+        )}
+        <Table
+          rowKey="id"
+          loading={payslipsLoading}
+          dataSource={payslips}
+          columns={payslipColumns}
+          size="small"
+          pagination={{ pageSize: 20, showTotal: (t) => `${t} payslips` }}
+          scroll={{ x: 880 }}
+          locale={{ emptyText: 'No payslips found for this run.' }}
+        />
+      </Drawer>
+
+      {/* Bulk bonus / deduction modal */}
+      <Modal
+        title={bulkMode === 'bonus' ? 'Apply Bonus to All Payslips' : 'Apply Deduction to All Payslips'}
+        open={Boolean(bulkMode)}
+        onCancel={() => setBulkMode(null)}
+        onOk={applyBulk}
+        okText="Apply to All"
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div>
+            <Text type="secondary">Amount</Text>
+            <InputNumber
+              value={bulkAmount}
+              onChange={setBulkAmount}
+              min={0}
+              precision={2}
+              style={{ width: '100%', marginTop: 4 }}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <Text type="secondary">Comment (optional)</Text>
+            <Input.TextArea
+              value={bulkComment}
+              onChange={(e) => setBulkComment(e.target.value)}
+              rows={2}
+              style={{ marginTop: 4 }}
+            />
+          </div>
+        </Space>
+      </Modal>
+
+      {/* Void modal */}
       <Modal
         title="Void payroll run"
         open={Boolean(voidingRun)}
         okText="Void Run"
         okButtonProps={{ danger: true }}
-        onCancel={() => setVoidingRun(null)}
+        onCancel={() => { setVoidingRun(null); setVoidReason(''); }}
         onOk={async () => {
-          if (!voidReason.trim()) {
-            message.warning('Void reason is required.');
-            return;
-          }
+          if (!voidReason.trim()) { message.warning('Void reason is required.'); return; }
           await axios.post(api(`/api/hrm/payroll/runs/${voidingRun.id}/void`), { reason: voidReason });
           message.success('Payroll run voided.');
           setVoidingRun(null);
@@ -418,7 +778,12 @@ export default function Payroll({ auth }) {
           loadDashboard();
         }}
       >
-        <Input.TextArea rows={4} value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="Reason for voiding this payroll run" />
+        <Input.TextArea
+          rows={4}
+          value={voidReason}
+          onChange={(e) => setVoidReason(e.target.value)}
+          placeholder="Reason for voiding this payroll run"
+        />
       </Modal>
     </AuthenticatedLayout>
   );

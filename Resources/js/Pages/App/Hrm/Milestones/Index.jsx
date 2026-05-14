@@ -2,10 +2,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Card, Space, Tag, Typography, theme } from 'antd';
+import { Tag } from 'antd';
 import { FlagOutlined } from '@ant-design/icons';
-
-const { Text, Title } = Typography;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (p) => `${BACKEND}${p}`;
@@ -13,7 +11,6 @@ const fmtDate = (v) => v ? new Date(v).toLocaleDateString() : '-';
 const STATUS_COLORS = { PENDING: 'default', IN_PROGRESS: 'blue', COMPLETED: 'green', CANCELLED: 'red', ON_HOLD: 'orange' };
 
 export default function Milestones(props) {
-  const { token } = theme.useToken();
   const columns = [
     { title: 'Project', key: 'project', render: (_, r) => r?.project?.name || '-' },
     { title: 'Milestone', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <strong>{v}</strong> },
@@ -53,26 +50,13 @@ export default function Milestones(props) {
   return (
     <AuthenticatedLayout auth={props.auth}>
       <Head title="Milestones" />
-      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
-        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card bordered={false} style={{ borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, rgba(22,119,255,0.09) 0%, rgba(82,196,26,0.05) 100%)', boxShadow: '0 4px 20px rgba(15,23,42,0.06)' }} styles={{ body: { padding: '20px 24px' } }}>
-            <Space size={14} align="center">
-              <span style={{ width: 44, height: 44, borderRadius: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#1677ff', color: '#ffffff', fontSize: 20, flexShrink: 0 }}>
-                <FlagOutlined />
-              </span>
-              <div>
-                <Title level={4} style={{ margin: 0, color: '#10233f' }}>Milestones</Title>
-                <Text type="secondary" style={{ fontSize: 13 }}>Track project milestones, timelines, and completion status.</Text>
-              </div>
-            </Space>
-          </Card>
+      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
           <ReusableCrud icon={<FlagOutlined />} title="Milestone" apiUrl={api('/api/hrm/milestones')}
             columns={columns} fields={fields} filters={filters} validationSchema={validationSchema}
             crudInitialValues={initialValues} transformPayload={transformPayload}
             form_ui="drawer" drawerWidth={720}
             searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
             activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
-        </Space>
       </div>
     </AuthenticatedLayout>
   );

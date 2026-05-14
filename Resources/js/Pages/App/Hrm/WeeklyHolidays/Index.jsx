@@ -4,9 +4,7 @@ import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { CalendarOutlined } from '@ant-design/icons';
-import { Card, Space, Tag, Typography, theme } from 'antd';
-
-const { Text, Title } = Typography;
+import { Tag } from 'antd';
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
@@ -21,8 +19,6 @@ const DAY_OPTIONS = [
 ];
 
 export default function WeeklyHolidays({ auth, embedded = false }) {
-  const { token } = theme.useToken();
-
   const columns = useMemo(() => [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
     { title: 'Day', dataIndex: 'day', key: 'day', render: (v) => v ? <Tag>{v.charAt(0).toUpperCase() + v.slice(1)}</Tag> : '-' },
@@ -63,36 +59,8 @@ export default function WeeklyHolidays({ auth, embedded = false }) {
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Weekly Holidays" />
-      <div style={{ padding: 16, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
-        <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Card
-            bordered={false}
-            style={{
-              borderRadius: 20,
-              overflow: 'hidden',
-              background: 'linear-gradient(135deg, rgba(82,196,26,0.09) 0%, rgba(19,194,194,0.05) 100%)',
-              boxShadow: '0 4px 20px rgba(15,23,42,0.06)',
-            }}
-            styles={{ body: { padding: '20px 24px' } }}
-          >
-            <Space size={14} align="center">
-              <span style={{
-                width: 44, height: 44, borderRadius: 14,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                background: '#52c41a', color: '#ffffff', fontSize: 20, flexShrink: 0,
-              }}>
-                <CalendarOutlined />
-              </span>
-              <div>
-                <Title level={4} style={{ margin: 0, color: '#10233f' }}>Weekly Holidays</Title>
-                <Text type="secondary" style={{ fontSize: 13 }}>
-                  Define recurring weekly off days for accurate attendance and scheduling.
-                </Text>
-              </div>
-            </Space>
-          </Card>
-          {crud}
-        </Space>
+      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
+        {crud}
       </div>
     </AuthenticatedLayout>
   );
