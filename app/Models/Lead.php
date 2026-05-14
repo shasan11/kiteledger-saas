@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\DealPipeline;
 
 class Lead extends Model
 {
@@ -21,6 +22,7 @@ class Lead extends Model
         'lead_no',
         'contact_id',
         'crm_account_id',
+        'deal_pipeline_id',
         'assigned_to_id',
         'converted_contact_id',
         'converted_deal_id',
@@ -41,6 +43,7 @@ class Lead extends Model
         'lost_reason',
         'priority',
         'next_follow_up_date',
+        'next_follow_up_at',
         'last_contacted_at',
         'notes',
         'converted_at',
@@ -60,6 +63,7 @@ class Lead extends Model
             'assigned_to_id' => 'integer',
             'expected_value' => 'decimal:2',
             'next_follow_up_date' => 'datetime',
+            'next_follow_up_at' => 'datetime',
             'last_contacted_at' => 'datetime',
             'converted_at' => 'datetime',
             'active' => 'boolean',
@@ -73,9 +77,9 @@ class Lead extends Model
         return $this->belongsTo(Contact::class);
     }
 
-    public function crmAccount(): BelongsTo
+    public function dealPipeline(): BelongsTo
     {
-        return $this->belongsTo(CrmAccount::class, 'crm_account_id');
+        return $this->belongsTo(DealPipeline::class, 'deal_pipeline_id');
     }
 
     public function assignedTo(): BelongsTo

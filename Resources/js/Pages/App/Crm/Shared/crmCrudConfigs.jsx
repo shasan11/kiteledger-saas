@@ -55,6 +55,7 @@ const activityTypeOptions = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'task', label: 'Task' },
   { value: 'note', label: 'Note' },
+  { value: 'follow_up', label: 'Follow Up' },
 ];
 
 export const LEAD_STATUS_OPTIONS = leadStatusOptions;
@@ -85,19 +86,20 @@ export function buildLeadCrud({ locked = {} } = {}) {
         { name: 'lead_source', label: 'Source', type: 'text', col: 8, placeholder: 'e.g. Website, Referral' },
         { name: 'expected_value', label: 'Expected Value', type: 'number', col: 8, min: 0, placeholder: '0.00' },
         {
-          name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 8, placeholder: 'Select contact',
-          fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          name: 'deal_pipeline_id', label: 'Pipeline', type: 'fkSelect', col: 8, placeholder: 'Select pipeline (default if blank)',
+          fkUrl: api('/api/deal-pipelines/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
-          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
-          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 8, placeholder: 'Link contact',
+          fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
-        { name: 'status', label: 'Status', type: 'select', col: 8, placeholder: 'Select status', options: leadStatusOptions },
-        { name: 'priority', label: 'Priority', type: 'select', col: 8, placeholder: 'Select priority', options: priorityOptions },
+        { name: 'status', label: 'Status', type: 'select', col: 4, placeholder: 'Status', options: leadStatusOptions },
+        { name: 'priority', label: 'Priority', type: 'select', col: 4, placeholder: 'Priority', options: priorityOptions },
+        { name: 'next_follow_up_at', label: 'Next Follow-up', type: 'datePicker', col: 8 },
       ],
     },
     { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2, placeholder: 'Full address' },
@@ -112,19 +114,21 @@ export function buildLeadCrud({ locked = {} } = {}) {
     website: Yup.string().nullable().max(180),
     lead_source: Yup.string().nullable().max(80),
     expected_value: Yup.number().nullable().min(0),
+    deal_pipeline_id: Yup.string().nullable(),
     contact_id: Yup.string().nullable(),
-    crm_account_id: Yup.string().nullable(),
     assigned_to_id: Yup.number().nullable(),
     status: Yup.string().nullable(),
     priority: Yup.string().nullable(),
+    next_follow_up_at: Yup.string().nullable(),
     address: Yup.string().nullable(),
     notes: Yup.string().nullable(),
   });
 
   const crudInitialValues = {
     name: '', company_name: '', email: '', phone: '', website: '',
-    lead_source: '', expected_value: null, contact_id: null, crm_account_id: null, assigned_to_id: null,
-    status: 'new', priority: 'medium', address: '', notes: '',
+    lead_source: '', expected_value: null, deal_pipeline_id: null, contact_id: null,
+    assigned_to_id: null, status: 'new', priority: 'medium',
+    next_follow_up_at: null, address: '', notes: '',
     ...locked,
   };
 
@@ -138,10 +142,11 @@ export function buildLeadCrud({ locked = {} } = {}) {
     p.lead_source = p.lead_source?.trim() || null;
     p.address = p.address?.trim() || null;
     p.notes = p.notes?.trim() || null;
+    p.deal_pipeline_id = p.deal_pipeline_id || null;
     p.contact_id = p.contact_id || null;
-    p.crm_account_id = p.crm_account_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.expected_value = p.expected_value != null && p.expected_value !== '' ? Number(p.expected_value) : null;
+    p.next_follow_up_at = formatDate(p.next_follow_up_at);
     return stripEmpty(p);
   };
 
@@ -149,7 +154,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
 }
 
 export function buildPipelineCrud() {
-  const emptyStage = { name: '', color: '', probability: null, sort_order: null, is_won_stage: false, is_lost_stage: false };
+  const emptyStage = { name: 'New', color: '', probability: null, sort_order: null, is_won_stage: false, is_lost_stage: false };
 
   const fields = [
     { name: 'name', label: 'Pipeline Name', type: 'text', required: true, col: 16, placeholder: 'e.g. Sales Pipeline' },
@@ -194,7 +199,7 @@ export function buildPipelineCrud() {
     p.stages = Array.isArray(p.stages)
       ? p.stages.map((s) => ({
           ...s,
-          name: s.name?.trim() || null,
+          name: s.name?.trim() || 'New',
           color: s.color?.trim() || null,
           probability: s.probability != null && s.probability !== '' ? Number(s.probability) : null,
           sort_order: s.sort_order != null && s.sort_order !== '' ? Number(s.sort_order) : null,
@@ -233,13 +238,13 @@ export function buildStageCrud({ locked = {} } = {}) {
   });
 
   const crudInitialValues = {
-    deal_pipeline_id: null, name: '', color: '', probability: null, sort_order: null,
+    deal_pipeline_id: null, name: 'New', color: '', probability: null, sort_order: null,
     is_won_stage: false, is_lost_stage: false, ...locked,
   };
 
   const transformPayload = (values) => {
     const p = { ...values, ...locked };
-    p.name = p.name?.trim() || null;
+    p.name = p.name?.trim() || 'New';
     p.color = p.color?.trim() || null;
     p.probability = p.probability != null && p.probability !== '' ? Number(p.probability) : null;
     p.sort_order = p.sort_order != null && p.sort_order !== '' ? Number(p.sort_order) : null;
@@ -257,8 +262,8 @@ export function buildDealCrud({ locked = {} } = {}) {
       type: 'group', label: 'Deal Details', col: 24,
       children: [
         { name: 'title', label: 'Title', type: 'text', required: true, col: 12, placeholder: 'Deal title' },
-        { name: 'deal_no', label: 'Deal No', type: 'text', col: 6, placeholder: 'Auto or manual' },
         { name: 'status', label: 'Status', type: 'select', col: 6, options: dealStatusOptions, placeholder: 'Select status' },
+        { name: 'priority', label: 'Priority', type: 'select', col: 6, options: priorityOptions, placeholder: 'Select priority' },
         {
           name: 'lead_id', label: 'Lead', type: 'fkSelect', col: 8, placeholder: 'Select lead',
           fkUrl: api('/api/leads/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
@@ -268,22 +273,17 @@ export function buildDealCrud({ locked = {} } = {}) {
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
-          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
-          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
-        },
-        {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
-          name: 'deal_pipeline_id', label: 'Pipeline', type: 'fkSelect', col: 8, placeholder: 'Select pipeline',
+          name: 'deal_pipeline_id', label: 'Pipeline', type: 'fkSelect', col: 8, placeholder: 'Default if blank',
           fkUrl: api('/api/deal-pipelines/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
-          name: 'deal_stage_id', label: 'Stage', type: 'fkSelect', col: 8, placeholder: 'Select stage',
+          name: 'deal_stage_id', label: 'Stage', type: 'fkSelect', col: 8, placeholder: 'First stage if blank',
           fkUrl: api('/api/deal-stages/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
-        { name: 'priority', label: 'Priority', type: 'select', col: 8, options: priorityOptions, placeholder: 'Select priority' },
       ],
     },
     {
@@ -293,9 +293,7 @@ export function buildDealCrud({ locked = {} } = {}) {
         { name: 'probability', label: 'Probability (%)', type: 'number', col: 6, min: 0, max: 100 },
         { name: 'committed', label: 'Committed', type: 'switch', col: 4 },
         { name: 'source', label: 'Source', type: 'text', col: 8, placeholder: 'e.g. Referral' },
-        { name: 'expected_close_date', label: 'Expected Close Date', type: 'datePicker', col: 8 },
-        { name: 'closed_date', label: 'Closed Date', type: 'datePicker', col: 8 },
-        { name: 'lost_reason', label: 'Lost Reason', type: 'text', col: 8, placeholder: 'Reason if lost' },
+        { name: 'expected_close_date', label: 'Expected Close', type: 'datePicker', col: 8 },
       ],
     },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
@@ -303,28 +301,24 @@ export function buildDealCrud({ locked = {} } = {}) {
 
   const validationSchema = Yup.object().shape({
     title: Yup.string().required('Title is required').max(180),
-    deal_no: Yup.string().nullable().max(40),
     amount: Yup.number().nullable().min(0),
     probability: Yup.number().nullable().min(0).max(100),
   });
 
   const crudInitialValues = {
-    title: '', deal_no: '', lead_id: null, contact_id: null, crm_account_id: null, deal_pipeline_id: null, deal_stage_id: null,
-    assigned_to_id: null, priority: 'medium', status: 'open', probability: null, committed: false, source: '',
-    lost_reason: '', expected_close_date: null, closed_date: null, amount: null, description: '',
+    title: '', lead_id: null, contact_id: null, deal_pipeline_id: null, deal_stage_id: null,
+    assigned_to_id: null, priority: 'medium', status: 'open', probability: null, committed: false,
+    source: '', expected_close_date: null, amount: null, description: '',
     ...locked,
   };
 
   const transformPayload = (values) => {
     const p = { ...values, ...locked };
     p.title = p.title?.trim() || null;
-    p.deal_no = p.deal_no?.trim() || null;
     p.source = p.source?.trim() || null;
-    p.lost_reason = p.lost_reason?.trim() || null;
     p.description = p.description?.trim() || null;
     p.lead_id = p.lead_id || null;
     p.contact_id = p.contact_id || null;
-    p.crm_account_id = p.crm_account_id || null;
     p.deal_pipeline_id = p.deal_pipeline_id || null;
     p.deal_stage_id = p.deal_stage_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
@@ -332,7 +326,6 @@ export function buildDealCrud({ locked = {} } = {}) {
     p.probability = p.probability != null && p.probability !== '' ? Number(p.probability) : null;
     p.committed = Boolean(p.committed);
     p.expected_close_date = formatDate(p.expected_close_date);
-    p.closed_date = formatDate(p.closed_date);
     return stripEmpty(p);
   };
 
@@ -348,7 +341,6 @@ export function buildActivityCrud({ locked = {} } = {}) {
       children: [
         { name: 'subject', label: 'Subject', type: 'text', required: true, col: 16, placeholder: 'Activity subject' },
         { name: 'activity_type', label: 'Type', type: 'select', col: 8, options: activityTypeOptions, placeholder: 'Select type' },
-        { name: 'outcome', label: 'Outcome', type: 'text', col: 8 },
         { name: 'status', label: 'Status', type: 'select', col: 8, options: activityStatusOptions, placeholder: 'Select status' },
         { name: 'priority', label: 'Priority', type: 'select', col: 8, options: priorityOptions, placeholder: 'Select priority' },
         {
@@ -364,13 +356,10 @@ export function buildActivityCrud({ locked = {} } = {}) {
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
-          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
-          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
-        },
-        {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
+        { name: 'outcome', label: 'Outcome', type: 'text', col: 8 },
       ],
     },
     {
@@ -409,8 +398,8 @@ export function buildActivityCrud({ locked = {} } = {}) {
   });
 
   const crudInitialValues = {
-    subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, crm_account_id: null, assigned_to_id: null,
-    status: 'pending', priority: 'medium', activity_type: null,
+    subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, assigned_to_id: null,
+    status: 'pending', priority: 'medium', activity_type: 'follow_up',
     due_at: null, completed_at: null, next_follow_up_at: null, reminder_at: null,
     description: '', comments: [], deleted_item_ids: [],
     ...locked,
@@ -424,7 +413,6 @@ export function buildActivityCrud({ locked = {} } = {}) {
     p.lead_id = p.lead_id || null;
     p.deal_id = p.deal_id || null;
     p.contact_id = p.contact_id || null;
-    p.crm_account_id = p.crm_account_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.due_at = formatDate(p.due_at);
     p.completed_at = formatDate(p.completed_at);

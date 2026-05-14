@@ -1,366 +1,468 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
+import {
+  Badge,
+  Button,
+  Card,
+  Col,
+  Drawer,
+  Form,
+  Input,
+  message,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+  theme,
+} from 'antd';
+import {
+  CalendarOutlined,
+  CheckOutlined,
+  CloseCircleOutlined,
+  FilterOutlined,
+  FundOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  UserSwitchOutlined,
+} from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { Head, router } from '@inertiajs/react';
-import * as Yup from 'yup';
-import { Tag, Typography } from 'antd';
-import { UserSwitchOutlined, PhoneOutlined, MailOutlined } from '@ant-design/icons';
+import { buildLeadCrud, buildActivityCrud, buildDealCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
-
-const formatDate = (value) => {
-  if (!value) return null;
-  const d = dayjs(value, 'DD-MM-YYYY', true);
-  if (d.isValid()) return d.format('YYYY-MM-DD');
-  const d2 = dayjs(value);
-  return d2.isValid() ? d2.format('YYYY-MM-DD') : value;
+const authHeaders = () => {
+  const token = localStorage.getItem('accessToken');
+  return { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 };
 
-const statusOptions = [
-  { value: 'new', label: 'New' },
-  { value: 'contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' },
-  { value: 'unqualified', label: 'Unqualified' },
-  { value: 'lost', label: 'Lost' },
-  { value: 'converted', label: 'Converted' },
+const fmtDate = (v) => v ? dayjs(v).format('DD MMM YY') : '-';
+const fmtMoney = (v) => v == null ? '-' : Number(v).toLocaleString('en', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+const STATUS_COLOR = { new: 'blue', contacted: 'cyan', qualified: 'green', unqualified: 'volcano', lost: 'red', converted: 'purple' };
+const PRIORITY_COLOR = { low: 'default', medium: 'blue', high: 'orange', urgent: 'red' };
+
+const STATUS_OPTIONS = [
+  { value: 'new', label: 'New' }, { value: 'contacted', label: 'Contacted' },
+  { value: 'qualified', label: 'Qualified' }, { value: 'unqualified', label: 'Unqualified' },
+  { value: 'lost', label: 'Lost' }, { value: 'converted', label: 'Converted' },
+];
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' }, { value: 'urgent', label: 'Urgent' },
 ];
 
-const priorityOptions = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
+const ANCHOR_FILTERS = [
+  { key: 'all', label: 'All', params: {} },
+  { key: 'new', label: 'New', params: { status: 'new' } },
+  { key: 'contacted', label: 'Contacted', params: { status: 'contacted' } },
+  { key: 'qualified', label: 'Qualified', params: { status: 'qualified' } },
+  { key: 'lost', label: 'Lost', params: { status: 'lost' } },
+  { key: 'converted', label: 'Converted', params: { status: 'converted' } },
 ];
 
-const statusColor = {
-  new: 'blue',
-  contacted: 'cyan',
-  qualified: 'green',
-  unqualified: 'volcano',
-  lost: 'red',
-  converted: 'purple',
-};
+function QuickActionBar({ lead, onRefresh }) {
+  const [messageApi, ctx] = message.useMessage();
+  const [markingLost, setMarkingLost] = useState(false);
+  const [lostReason, setLostReason] = useState('');
+  const [showLostModal, setShowLostModal] = useState(false);
+
+  const doMarkStatus = async (status) => {
+    try {
+      await axios.patch(api(`/api/leads/${lead.id}`), { status }, { headers: authHeaders() });
+      messageApi.success(`Lead marked ${status}`);
+      onRefresh?.();
+    } catch {
+      messageApi.error('Failed to update status');
+    }
+  };
+
+  const doMarkLost = async () => {
+    if (!lostReason.trim()) { messageApi.warning('Please enter a lost reason'); return; }
+    setMarkingLost(true);
+    try {
+      await axios.post(api(`/api/crm/leads/${lead.id}/mark-lost`), { lost_reason: lostReason }, { headers: authHeaders() });
+      messageApi.success('Lead marked lost');
+      setShowLostModal(false);
+      setLostReason('');
+      onRefresh?.();
+    } catch {
+      messageApi.error('Failed to mark lost');
+    } finally {
+      setMarkingLost(false);
+    }
+  };
+
+  return (
+    <>
+      {ctx}
+      <Space size={4} wrap>
+        <Tooltip title="Call">
+          <Button size="small" icon={<PhoneOutlined />} onClick={() => lead.phone && (window.location.href = `tel:${lead.phone}`)} />
+        </Tooltip>
+        <Tooltip title="Email">
+          <Button size="small" icon={<MailOutlined />} onClick={() => lead.email && (window.location.href = `mailto:${lead.email}`)} />
+        </Tooltip>
+        <Tooltip title="Mark Contacted">
+          <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('contacted')} />
+        </Tooltip>
+        <Tooltip title="Mark Lost">
+          <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => setShowLostModal(true)} />
+        </Tooltip>
+      </Space>
+      <Modal
+        title="Mark Lead Lost"
+        open={showLostModal}
+        onOk={doMarkLost}
+        confirmLoading={markingLost}
+        onCancel={() => { setShowLostModal(false); setLostReason(''); }}
+        okText="Mark Lost"
+        okButtonProps={{ danger: true }}
+      >
+        <Form layout="vertical">
+          <Form.Item label="Lost Reason" required>
+            <Input.TextArea rows={3} value={lostReason} onChange={(e) => setLostReason(e.target.value)} placeholder="Why is this lead lost?" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
 
 export default function Leads(props) {
+  const { token } = theme.useToken();
+  const [messageApi, ctx] = message.useMessage();
+  const [filters, setFilters] = useState({});
+  const [search, setSearch] = useState('');
+  const [anchor, setAnchor] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [pipelines, setPipelines] = useState([]);
+  const [convertLead, setConvertLead] = useState(null);
+  const crudRef = useRef(null);
+
+  const leadCrud = buildLeadCrud();
+  const activityCrud = buildActivityCrud();
+  const dealCrud = buildDealCrud();
+
+  useEffect(() => {
+    axios.get(api('/api/deal-pipelines/'), { headers: authHeaders(), params: { page_size: 50 } })
+      .then((r) => {
+        const rows = r.data?.data?.data || r.data?.data || r.data?.results || [];
+        setPipelines(rows);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleConvertToDeal = (lead) => {
+    setConvertLead(lead);
+  };
+
+  const doConvert = async (dealId) => {
+    try {
+      await axios.post(api(`/api/crm/leads/${convertLead.id}/convert`), { converted_deal_id: dealId }, { headers: authHeaders() });
+      messageApi.success('Lead converted to deal');
+      setConvertLead(null);
+      crudRef.current?.refresh?.();
+    } catch (e) {
+      messageApi.error(e?.response?.data?.message || 'Conversion failed');
+    }
+  };
+
+  const anchorParams = ANCHOR_FILTERS.find((a) => a.key === anchor)?.params || {};
+  const combinedFilters = { ...anchorParams, ...filters };
+  if (search) combinedFilters.search = search;
+
   const columns = [
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-      sorter: true,
+      title: 'Lead',
+      key: 'lead',
       width: 200,
-      render: (val) => <Text strong>{val || '-'}</Text>,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong style={{ fontSize: 13 }}>{record.name || '-'}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{record.company_name || record.email || '-'}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Contact',
+      key: 'contact',
+      width: 140,
+      render: (_, r) => (
+        <Space direction="vertical" size={0}>
+          <Text style={{ fontSize: 11 }}>{r.phone || r.mobile || '-'}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.email || '-'}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Source',
+      dataIndex: 'lead_source',
+      key: 'lead_source',
+      width: 110,
+      render: (v) => v ? <Text style={{ fontSize: 11 }}>{v}</Text> : <Text type="secondary" style={{ fontSize: 11 }}>-</Text>,
+    },
+    {
+      title: 'Value',
+      dataIndex: 'expected_value',
+      key: 'expected_value',
+      width: 100,
+      align: 'right',
+      render: (v) => <Text style={{ fontSize: 12 }}>{fmtMoney(v)}</Text>,
+    },
+    {
+      title: 'Pipeline',
+      key: 'pipeline',
+      width: 120,
+      render: (_, r) => <Text style={{ fontSize: 11 }}>{r.deal_pipeline?.name || r.dealPipeline?.name || '-'}</Text>,
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      sorter: true,
-      width: 130,
-      render: (val) => (
-        <Tag color={statusColor[val] || 'default'}>
-          {val ? String(val).replace(/_/g, ' ').toUpperCase() : 'NEW'}
+      width: 110,
+      render: (v) => (
+        <Tag color={STATUS_COLOR[v] || 'default'} style={{ margin: 0, fontSize: 11 }}>
+          {v ? String(v).replace(/_/g, ' ').toUpperCase() : 'NEW'}
         </Tag>
       ),
     },
     {
-      title: 'Next Follow Up',
-      dataIndex: 'next_follow_up_date',
-      key: 'next_follow_up_date',
-      sorter: true,
-      width: 150,
-      render: (val) => val || '-',
+      title: 'Priority',
+      dataIndex: 'priority',
+      key: 'priority',
+      width: 90,
+      render: (v) => (
+        <Tag color={PRIORITY_COLOR[v] || 'default'} style={{ margin: 0, fontSize: 11 }}>
+          {v ? v.toUpperCase() : 'MED'}
+        </Tag>
+      ),
     },
     {
-      title: 'Lead No',
-      dataIndex: 'lead_no',
-      key: 'lead_no',
-      sorter: true,
-      width: 120,
-      render: (val) => val || '-',
+      title: 'Assigned',
+      key: 'assigned',
+      width: 110,
+      render: (_, r) => <Text style={{ fontSize: 11 }}>{r.assigned_to?.name || r.assignedTo?.name || '-'}</Text>,
     },
     {
-      title: 'Company',
-      dataIndex: 'company_name',
-      key: 'company_name',
-      sorter: true,
+      title: 'Follow-up',
+      key: 'follow_up',
+      width: 100,
+      render: (_, r) => {
+        const d = r.next_follow_up_at || r.next_follow_up_date;
+        if (!d) return <Text type="secondary" style={{ fontSize: 11 }}>-</Text>;
+        const isOverdue = dayjs(d).isBefore(dayjs(), 'day');
+        return (
+          <Text style={{ fontSize: 11, color: isOverdue ? token.colorError : undefined }}>
+            {fmtDate(d)}
+          </Text>
+        );
+      },
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
       width: 180,
-      render: (val) => val || '-',
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      width: 200,
-      render: (val) => val || '-',
-    },
-  ];
-
-  const fields = [
-    {
-      type: 'group',
-      label: 'Basic Information',
-      col: 24,
-      accordion: false,
-      children: [
-        {
-          name: 'name',
-          label: 'Lead Name',
-          type: 'text',
-          required: true,
-          col: 12,
-          placeholder: 'Enter lead name',
-        },
-       
-        {
-          name: 'company_name',
-          label: 'Company Name',
-          type: 'text',
-          col: 12,
-          placeholder: 'Company name',
-        },
-        {
-          name: 'email',
-          label: 'Email',
-          type: 'text',
-          col: 8,
-          placeholder: 'email@example.com',
-        },
-        {
-          name: 'phone',
-          label: 'Phone',
-          type: 'text',
-          col: 8,
-          placeholder: 'Phone number',
-        },
-         
-        {
-          name: 'website',
-          label: 'Website',
-          type: 'text',
-          col: 8,
-          placeholder: 'https://example.com',
-        },
-         
-      ],
-    },
-    {
-      type: 'group',
-      label: 'Lead Classification',
-      col: 24,
-      accordion: false,
-      children: [
-        {
-          name: 'lead_source',
-          label: 'Lead Source',
-          type: 'text',
-          col: 8,
-          placeholder: 'e.g. Website, Referral',
-        },
-       
-        {
-          name: 'expected_value',
-          label: 'Expected Value',
-          type: 'number',
-          col: 8,
-          min: 0,
-          placeholder: '0.00',
-        },
-        {
-          name: 'contact_id',
-          label: 'Contact',
-          type: 'fkSelect',
-          col: 8,
-          placeholder: 'Select contact',
-          fkUrl: api('/api/contacts/'),
-          fkSearchParam: 'search',
-          fkPageSize: 20,
-          fkValueKey: 'id',
-          fkLabelKey: 'name',
-        },
-        {
-          name: 'crm_account_id',
-          label: 'Account',
-          type: 'fkSelect',
-          col: 8,
-          placeholder: 'Select account',
-          fkUrl: api('/api/crm-accounts/'),
-          fkSearchParam: 'search',
-          fkPageSize: 20,
-          fkValueKey: 'id',
-          fkLabelKey: 'name',
-        },
-        {
-          name: 'assigned_to_id',
-          label: 'Assigned To',
-          type: 'fkSelect',
-          col: 8,
-          placeholder: 'Select user',
-          fkUrl: api('/api/hrm/users'),
-          fkSearchParam: 'search',
-          fkPageSize: 20,
-          fkValueKey: 'id',
-          fkLabelKey: 'name',
-        },
-        {
-          name: 'status',
-          label: 'Status',
-          type: 'select',
-          col: 8,
-          placeholder: 'Select status',
-          options: statusOptions,
-        },
-        {
-          name: 'priority',
-          label: 'Priority',
-          type: 'select',
-          col: 8,
-          placeholder: 'Select priority',
-          options: priorityOptions,
-        },
-         
-      ],
-    },
-    {
-      name: 'address',
-      label: 'Address',
-      type: 'textarea',
-      col: 24,
-      rows: 2,
-      placeholder: 'Full address',
-    },
-    {
-      name: 'notes',
-      label: 'Notes',
-      type: 'textarea',
-      col: 24,
-      rows: 3,
-      placeholder: 'Additional notes',
+      fixed: 'right',
+      render: (_, record) => (
+        <Space size={4} wrap>
+          <QuickActionBar lead={record} onRefresh={() => crudRef.current?.refresh?.()} />
+          <Tooltip title="Convert to Deal">
+            <Button size="small" type="primary" icon={<FundOutlined />} onClick={(e) => { e.stopPropagation(); handleConvertToDeal(record); }} />
+          </Tooltip>
+        </Space>
+      ),
     },
   ];
 
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required('Name is required').max(180),
-    lead_no: Yup.string().nullable().max(40),
-    company_name: Yup.string().nullable().max(180),
-    email: Yup.string().nullable().email('Invalid email').max(120),
-    phone: Yup.string().nullable().max(40),
-    mobile: Yup.string().nullable().max(40),
-    website: Yup.string().nullable().max(180),
-    city: Yup.string().nullable().max(80),
-    state: Yup.string().nullable().max(80),
-    country: Yup.string().nullable().max(80),
-    lead_source: Yup.string().nullable().max(80),
-    industry: Yup.string().nullable().max(120),
-    expected_value: Yup.number().nullable().min(0),
-    contact_id: Yup.string().nullable(),
-    crm_account_id: Yup.string().nullable(),
-    assigned_to_id: Yup.number().nullable(),
-    status: Yup.string().nullable().oneOf(['new', 'contacted', 'qualified', 'unqualified', 'lost', 'converted', null]),
-    priority: Yup.string().nullable().oneOf(['low', 'medium', 'high', 'urgent', null]),
-    next_follow_up_date: Yup.string().nullable(),
-    address: Yup.string().nullable(),
-    notes: Yup.string().nullable(),
-  });
-
-  const crudInitialValues = {
-    name: '',
-    lead_no: '',
-    company_name: '',
-    email: '',
-    phone: '',
-    mobile: '',
-    website: '',
-    city: '',
-    state: '',
-    country: '',
-    lead_source: '',
-    industry: '',
-    expected_value: null,
-    contact_id: null,
-    crm_account_id: null,
-    assigned_to_id: null,
-    status: 'new',
-    priority: 'medium',
-    next_follow_up_date: null,
-    address: '',
-    notes: '',
-  };
-
-  const transformPayload = (values) => {
-    const p = { ...values };
-    p.name = p.name?.trim() || null;
-    p.lead_no = p.lead_no?.trim() || null;
-    p.company_name = p.company_name?.trim() || null;
-    p.email = p.email?.trim() || null;
-    p.phone = p.phone?.trim() || null;
-    p.mobile = p.mobile?.trim() || null;
-    p.website = p.website?.trim() || null;
-    p.city = p.city?.trim() || null;
-    p.state = p.state?.trim() || null;
-    p.country = p.country?.trim() || null;
-    p.lead_source = p.lead_source?.trim() || null;
-    p.industry = p.industry?.trim() || null;
-    p.address = p.address?.trim() || null;
-    p.notes = p.notes?.trim() || null;
-    p.contact_id = p.contact_id || null;
-    p.crm_account_id = p.crm_account_id || null;
-    p.assigned_to_id = p.assigned_to_id || null;
-    p.expected_value = p.expected_value != null ? Number(p.expected_value) : null;
-    p.next_follow_up_date = formatDate(p.next_follow_up_date);
-    Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
-    return p;
-  };
-
-  const anchorFilters = [
-    { key: 'all', label: 'All', title: 'All Leads', params: {} },
-    { key: 'new', label: 'New', title: 'New Leads', params: { status: 'new' } },
-    { key: 'contacted', label: 'Contacted', title: 'Contacted Leads', params: { status: 'contacted' } },
-    { key: 'qualified', label: 'Qualified', title: 'Qualified Leads', params: { status: 'qualified' } },
-    { key: 'lost', label: 'Lost', title: 'Lost Leads', params: { status: 'lost' } },
-    { key: 'converted', label: 'Converted', title: 'Converted Leads', params: { status: 'converted' } },
-  ];
+  const filterPanel = (
+    <Space wrap size={8}>
+      <Select
+        allowClear placeholder="Status" size="small" style={{ width: 120 }}
+        options={STATUS_OPTIONS}
+        value={filters.status}
+        onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+      />
+      <Select
+        allowClear placeholder="Priority" size="small" style={{ width: 110 }}
+        options={PRIORITY_OPTIONS}
+        value={filters.priority}
+        onChange={(v) => setFilters((f) => ({ ...f, priority: v }))}
+      />
+      <Select
+        allowClear placeholder="Pipeline" size="small" style={{ width: 150 }}
+        options={pipelines.map((p) => ({ value: p.id, label: p.name }))}
+        value={filters.deal_pipeline_id}
+        onChange={(v) => setFilters((f) => ({ ...f, deal_pipeline_id: v }))}
+      />
+      {Object.keys(filters).length > 0 && (
+        <Button size="small" onClick={() => setFilters({})}>Clear</Button>
+      )}
+    </Space>
+  );
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
+      {ctx}
       <Head title="Leads" />
-      <ReusableCrud
-        icon={<UserSwitchOutlined />}
-        title="Leads"
-        apiUrl={api('/api/leads/')}
-        columns={columns}
-        fields={fields}
-        validationSchema={validationSchema}
-        crudInitialValues={crudInitialValues}
-        transformPayload={transformPayload}
-        form_ui="modal"
-        drawerWidth={1200}
-        searchParam="search"
-        pageParam="page"
-        pageSizeParam="page_size"
-        sortMode="ordering"
-        orderingParam="ordering"
-        enableServerPagination={true}
-        showSearch={true}
-        canView={true}
-        activeTableRowFunction={(record) => ({
-          onClick: (event) => {
-            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
-            router.visit(route('crm.leads.show', record.id));
-          },
-          style: { cursor: 'pointer' },
-        })}
-        canAdd={true}
-        canEdit={true}
-        canDelete={true}
-        hasActions={true}
-        hasActionColumns={true}
-        anchorFilters={anchorFilters}
-        defaultAnchorKey="all"
-        anchorSyncWithHash
-      />
+
+      <div style={{ padding: token.padding, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
+        <Space direction="vertical" size={token.paddingSM} style={{ width: '100%' }}>
+
+          {/* Anchor filter tabs */}
+          <Card size="small" bodyStyle={{ padding: '8px 12px' }}>
+            <Space wrap size={4}>
+              {ANCHOR_FILTERS.map((a) => (
+                <Button
+                  key={a.key}
+                  size="small"
+                  type={anchor === a.key ? 'primary' : 'default'}
+                  onClick={() => setAnchor(a.key)}
+                >
+                  {a.label}
+                </Button>
+              ))}
+              <span style={{ marginLeft: 12 }}>
+                <Space size={8}>
+                  <Input.Search
+                    size="small"
+                    placeholder="Search leads..."
+                    style={{ width: 200 }}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    allowClear
+                  />
+                  <Button
+                    size="small"
+                    icon={<FilterOutlined />}
+                    type={showFilters ? 'primary' : 'default'}
+                    onClick={() => setShowFilters((v) => !v)}
+                  >
+                    Filters
+                  </Button>
+                </Space>
+              </span>
+            </Space>
+            {showFilters && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+                {filterPanel}
+              </div>
+            )}
+          </Card>
+
+          {/* Main ReusableCrud with overridden columns */}
+          <ReusableCrud
+            ref={crudRef}
+            icon={<UserSwitchOutlined />}
+            title="Leads"
+            apiUrl={api('/api/leads/')}
+            columns={columns}
+            fields={leadCrud.fields}
+            validationSchema={leadCrud.validationSchema}
+            crudInitialValues={leadCrud.crudInitialValues}
+            transformPayload={leadCrud.transformPayload}
+            form_ui="drawer"
+            drawerWidth={900}
+            searchParam="search"
+            pageParam="page"
+            pageSizeParam="page_size"
+            sortMode="ordering"
+            orderingParam="ordering"
+            enableServerPagination={true}
+            showSearch={false}
+            baseFilters={combinedFilters}
+            canAdd={true}
+            canEdit={true}
+            canDelete={true}
+            hasActions={true}
+            hasActionColumns={false}
+            activeTableRowFunction={(record) => ({
+              onClick: (event) => {
+                if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-tooltip-open')) return;
+                router.visit(route('crm.leads.show', record.id));
+              },
+              style: { cursor: 'pointer' },
+            })}
+            scroll={{ x: 1200 }}
+          />
+        </Space>
+      </div>
+
+      {/* Convert to Deal drawer */}
+      {convertLead && (
+        <Drawer
+          title={`Convert "${convertLead.name}" to Deal`}
+          open={!!convertLead}
+          onClose={() => setConvertLead(null)}
+          width={700}
+          footer={null}
+        >
+          <ReusableCrud
+            title="Create Deal"
+            apiUrl={api('/api/deals/')}
+            columns={[
+              { title: 'Title', dataIndex: 'title', key: 'title', render: (v) => <Text strong>{v}</Text> },
+              { title: 'Stage', key: 'stage', render: (_, r) => r.deal_stage?.name || '-' },
+              { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', render: fmtMoney },
+            ]}
+            fields={dealCrud.fields}
+            validationSchema={dealCrud.validationSchema}
+            crudInitialValues={{
+              ...dealCrud.crudInitialValues,
+              lead_id: convertLead.id,
+              title: convertLead.name,
+              amount: convertLead.expected_value,
+              source: convertLead.lead_source,
+              deal_pipeline_id: convertLead.deal_pipeline_id,
+              contact_id: convertLead.contact_id,
+              assigned_to_id: convertLead.assigned_to_id,
+            }}
+            transformPayload={(values) => {
+              const p = dealCrud.transformPayload(values);
+              return p;
+            }}
+            form_ui="drawer"
+            drawerWidth={700}
+            enableServerPagination={true}
+            baseFilters={{ lead_id: convertLead.id }}
+            showSearch={false}
+            canAdd={true}
+            canEdit={false}
+            canDelete={false}
+            hasActions={false}
+            hasActionColumns={false}
+          />
+          <div style={{ marginTop: 16, padding: 16, background: token.colorBgLayout, borderRadius: token.borderRadius }}>
+            <Text type="secondary">After creating the deal above, click below to mark the lead as converted.</Text>
+            <div style={{ marginTop: 8 }}>
+              <Button
+                type="primary"
+                onClick={async () => {
+                  try {
+                    await axios.post(api(`/api/crm/leads/${convertLead.id}/convert`), {}, { headers: authHeaders() });
+                    messageApi.success('Lead marked as converted');
+                    setConvertLead(null);
+                    crudRef.current?.refresh?.();
+                  } catch (e) {
+                    messageApi.error(e?.response?.data?.message || 'Failed to convert lead');
+                  }
+                }}
+              >
+                Mark Lead as Converted
+              </Button>
+            </div>
+          </div>
+        </Drawer>
+      )}
     </AuthenticatedLayout>
   );
 }

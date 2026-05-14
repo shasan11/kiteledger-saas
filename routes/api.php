@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\TaxJurisdictionController;
 use App\Http\Controllers\Api\TaxRateController;
 use App\Http\Controllers\Api\TaxRegistrationController;
 use App\Http\Controllers\Api\TaxRuleController;
+use App\Http\Controllers\Api\TaxSettingsController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
@@ -736,6 +737,7 @@ Route::apiResource('deal-stages', DealStageController::class)
 Route::post('deals/bulk', [DealController::class, 'bulkStore']);
 Route::patch('deals/bulk', [DealController::class, 'bulkUpdate']);
 Route::delete('deals/bulk', [DealController::class, 'bulkDestroy']);
+Route::post('deals/{deal}/move-stage', [DealController::class, 'moveStage']);
 Route::apiResource('deals', DealController::class);
 
 Route::post('crm-activities/bulk', [CrmActivityController::class, 'bulkStore']);
@@ -791,3 +793,8 @@ Route::patch('tax-exemptions/bulk', [TaxExemptionController::class, 'bulkUpdate'
 Route::delete('tax-exemptions/bulk', [TaxExemptionController::class, 'bulkDestroy']);
 Route::apiResource('tax-exemptions', TaxExemptionController::class)
     ->parameters(['tax-exemptions' => 'taxExemption']);
+
+// Simple Tax Settings (upsert / singleton)
+Route::get('tax-settings',                    [TaxSettingsController::class, 'show']);
+Route::put('tax-settings',                    [TaxSettingsController::class, 'upsert']);
+Route::post('tax-settings/toggle-advanced',   [TaxSettingsController::class, 'toggleAdvancedMode']);

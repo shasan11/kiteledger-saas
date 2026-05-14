@@ -1,47 +1,143 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
-import * as Yup from 'yup';
-import { Card, Col, Form, InputNumber, Row, Switch, Typography } from 'antd';
+import { Col, Row, Tabs, Tag, Typography, theme } from 'antd';
+import { ApartmentOutlined, FunnelPlotOutlined, SettingOutlined } from '@ant-design/icons';
 import { api } from '../Shared/crmApi';
+import { buildPipelineCrud, buildStageCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+
+const { Text } = Typography;
+
+const pipelineColumns = [
+    { title: 'Name', dataIndex: 'name', key: 'name' },
+    {
+        title: 'Default',
+        dataIndex: 'is_default',
+        key: 'is_default',
+        render: (v) => v ? <Tag color="blue">Default</Tag> : null,
+    },
+    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
+    {
+        title: 'Active',
+        dataIndex: 'active',
+        key: 'active',
+        render: (v) => <Tag color={v === false ? 'red' : 'green'}>{v === false ? 'Inactive' : 'Active'}</Tag>,
+    },
+];
+
+const stageColumns = [
+    {
+        title: 'Pipeline',
+        key: 'pipeline',
+        render: (_, r) => r.deal_pipeline?.name || '-',
+    },
+    { title: 'Stage Name', dataIndex: 'name', key: 'name' },
+    {
+        title: 'Color',
+        dataIndex: 'color',
+        key: 'color',
+        render: (v) => v ? <Tag color={v}>{v}</Tag> : '-',
+    },
+    {
+        title: 'Probability',
+        dataIndex: 'probability',
+        key: 'probability',
+        render: (v) => v != null ? `${v}%` : '-',
+    },
+    { title: 'Order', dataIndex: 'sort_order', key: 'sort_order' },
+    {
+        title: 'Type',
+        key: 'type',
+        render: (_, r) => {
+            if (r.is_won_stage) return <Tag color="green">Won</Tag>;
+            if (r.is_lost_stage) return <Tag color="red">Lost</Tag>;
+            return <Tag>Regular</Tag>;
+        },
+    },
+];
 
 export default function Configuration({ auth }) {
-  return (
-    <AuthenticatedLayout user={auth?.user}>
-      <Head title="CRM Configuration" />
-      <Row gutter={[12, 12]} style={{ padding: 16 }}>
-        <Col xs={24} lg={8}>
-          <Card size="small" title="SLA Rules">
-            <Form layout="vertical" initialValues={{ lead_response_sla_hours: 24, activity_overdue_escalation_hours: 24, stuck_deal_days: 14, reminder_before_due_minutes: 60 }}>
-              <Form.Item label="Lead response SLA hours" name="lead_response_sla_hours"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
-              <Form.Item label="Activity escalation hours" name="activity_overdue_escalation_hours"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
-              <Form.Item label="Stuck deal days" name="stuck_deal_days"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
-              <Form.Item label="Reminder before due minutes" name="reminder_before_due_minutes"><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
-              <Form.Item label="Email sync enabled"><Switch disabled /></Form.Item>
-              <Typography.Text type="secondary">Manual communication logging is active. External sync remains disabled until credentials are configured.</Typography.Text>
-            </Form>
-          </Card>
-        </Col>
-        <Col xs={24} lg={16}>
-          <ReusableCrud
-            title="Sales Sequences"
-            apiUrl={api('/api/crm-sequences/')}
-            columns={[{ title: 'Name', dataIndex: 'name' }, { title: 'Target', dataIndex: 'target_type' }, { title: 'Active', dataIndex: 'active', render: (v) => v ? 'Yes' : 'No' }]}
-            fields={[{ name: 'name', label: 'Name', type: 'text', required: true, col: 12 }, { name: 'target_type', label: 'Target', type: 'select', col: 6, options: ['lead', 'deal', 'customer'].map((value) => ({ value, label: value })) }, { name: 'active', label: 'Active', type: 'switch', col: 6 }, { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 }]}
-            validationSchema={Yup.object({ name: Yup.string().required() })}
-            crudInitialValues={{ name: '', target_type: 'lead', active: true }}
-            transformPayload={(values) => values}
-            form_ui="drawer"
-            enableServerPagination
-            showSearch
-            canAdd
-            canEdit
-            canDelete
-            hasActions
-            hasActionColumns
-          />
-        </Col>
-      </Row>
-    </AuthenticatedLayout>
-  );
+    const { token } = theme.useToken();
+
+    const pipelineCfg = buildPipelineCrud();
+    const stageCfg = buildStageCrud();
+
+    const tabs = [
+        {
+            key: 'pipelines',
+            label: (
+                <span>
+                    <FunnelPlotOutlined /> Pipelines
+                </span>
+            ),
+            children: (
+                <ReusableCrud
+                    title="Deal Pipelines"
+                    apiUrl={api('/api/deal-pipelines/')}
+                    columns={pipelineColumns}
+                    fields={pipelineCfg.fields}
+                    validationSchema={pipelineCfg.validationSchema}
+                    crudInitialValues={pipelineCfg.crudInitialValues}
+                    transformPayload={pipelineCfg.transformPayload}
+                    form_ui="drawer"
+                    drawerWidth={700}
+                    enableServerPagination
+                    showSearch
+                    canAdd
+                    canEdit
+                    canDelete
+                    hasActions
+                    hasActionColumns
+                />
+            ),
+        },
+        {
+            key: 'stages',
+            label: (
+                <span>
+                    <ApartmentOutlined /> Stages
+                </span>
+            ),
+            children: (
+                <ReusableCrud
+                    title="Deal Stages"
+                    apiUrl={api('/api/deal-stages/')}
+                    columns={stageColumns}
+                    fields={stageCfg.fields}
+                    validationSchema={stageCfg.validationSchema}
+                    crudInitialValues={stageCfg.crudInitialValues}
+                    transformPayload={stageCfg.transformPayload}
+                    relations={['dealPipeline']}
+                    form_ui="drawer"
+                    drawerWidth={600}
+                    enableServerPagination
+                    showSearch
+                    canAdd
+                    canEdit
+                    canDelete
+                    hasActions
+                    hasActionColumns
+                />
+            ),
+        },
+    ];
+
+    return (
+        <AuthenticatedLayout user={auth?.user}>
+            <Head title="CRM Settings" />
+            <div style={{ padding: token.padding }}>
+                <Row align="middle" style={{ marginBottom: token.marginMD }}>
+                    <Col>
+                        <Text strong style={{ fontSize: token.fontSizeLG }}>
+                            <SettingOutlined style={{ marginRight: 8 }} />
+                            CRM Settings
+                        </Text>
+                    </Col>
+                </Row>
+                <div style={{ background: token.colorBgContainer, padding: token.padding, borderRadius: token.borderRadiusLG }}>
+                    <Tabs defaultActiveKey="pipelines" items={tabs} size="middle" />
+                </div>
+            </div>
+        </AuthenticatedLayout>
+    );
 }

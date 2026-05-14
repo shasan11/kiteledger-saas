@@ -7,13 +7,18 @@ import {
   Button,
   Card,
   Col,
+  Drawer,
   Empty,
+  Form,
+  Input,
+  Modal,
   Row,
   Skeleton,
   Space,
   Table,
   Tag,
   Timeline,
+  Tooltip,
   Typography,
   message,
   theme,
@@ -21,10 +26,14 @@ import {
 import {
   ArrowLeftOutlined,
   CalendarOutlined,
+  CheckOutlined,
+  CloseCircleOutlined,
   ContactsOutlined,
   FileTextOutlined,
+  FundOutlined,
   MailOutlined,
   PhoneOutlined,
+  PlusOutlined,
   ScheduleOutlined,
   UserSwitchOutlined,
   DollarCircleOutlined,
@@ -1802,19 +1811,89 @@ export function ContactShow({ auth, id }) {
 }
 
 export function LeadShow({ auth, id }) {
+  const [convertDrawer, setConvertDrawer] = useState(false);
+  const [markLostModal, setMarkLostModal] = useState(false);
+  const [lostReason, setLostReason] = useState('');
+  const [activityDrawer, setActivityDrawer] = useState(false);
+  const [shellRefresh, setShellRefresh] = useState(0);
+  const [messageApi, ctx] = message.useMessage();
+
+  const doMarkStatus = async (status, reason = null) => {
+    try {
+      const payload = { status };
+      if (reason) payload.lost_reason = reason;
+      await axios.patch(`${BACKEND_BASE}/api/leads/${id}`, payload, { headers: authHeaders() });
+      messageApi.success(`Lead marked ${status}`);
+      setShellRefresh((k) => k + 1);
+    } catch {
+      messageApi.error('Failed to update status');
+    }
+  };
+
+  const doMarkLost = async () => {
+    if (!lostReason.trim()) { messageApi.warning('Lost reason required'); return; }
+    try {
+      await axios.post(`${BACKEND_BASE}/api/crm/leads/${id}/mark-lost`, { lost_reason: lostReason }, { headers: authHeaders() });
+      messageApi.success('Lead marked lost');
+      setMarkLostModal(false);
+      setLostReason('');
+      setShellRefresh((k) => k + 1);
+    } catch {
+      messageApi.error('Failed to mark lost');
+    }
+  };
+
+  const doConvert = async () => {
+    try {
+      await axios.post(`${BACKEND_BASE}/api/crm/leads/${id}/convert`, {}, { headers: authHeaders() });
+      messageApi.success('Lead marked as converted');
+      setConvertDrawer(false);
+      setShellRefresh((k) => k + 1);
+    } catch (e) {
+      messageApi.error(e?.response?.data?.message || 'Conversion failed');
+    }
+  };
+
   return (
-    <ShowShell
-      auth={auth}
-      id={id}
-      endpoint="/api/leads/"
-      mapRecord={(record) => ({ title: displayName(record) })}
-    >
+    <>
+      {ctx}
+      <ShowShell
+        key={shellRefresh}
+        auth={auth}
+        id={id}
+        endpoint="/api/leads/"
+        mapRecord={(record) => ({ title: displayName(record) })}
+      >
       {(lead) => {
         const title = displayName(lead);
 
+        const actionButtons = (
+          <Space wrap size={6}>
+            {lead?.phone && (
+              <Tooltip title={`Call ${lead.phone}`}>
+                <Button size="small" icon={<PhoneOutlined />} onClick={() => window.location.href = `tel:${lead.phone}`} />
+              </Tooltip>
+            )}
+            {lead?.email && (
+              <Tooltip title={`Email ${lead.email}`}>
+                <Button size="small" icon={<MailOutlined />} onClick={() => window.location.href = `mailto:${lead.email}`} />
+              </Tooltip>
+            )}
+            <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityDrawer(true)}>Activity</Button>
+            <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('contacted')}>Contacted</Button>
+            <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('qualified')}>Qualify</Button>
+            {lead?.status !== 'converted' && (
+              <Button size="small" type="primary" icon={<FundOutlined />} onClick={() => setConvertDrawer(true)}>Convert to Deal</Button>
+            )}
+            {lead?.status !== 'lost' && (
+              <Button size="small" danger icon={<CloseCircleOutlined />} onClick={() => setMarkLostModal(true)}>Mark Lost</Button>
+            )}
+          </Space>
+        );
+
         const overview = (
           <>
-            <DetailsCard title="Overview">
+            <DetailsCard title="Overview" extra={actionButtons}>
               <Space direction="vertical" size={14} style={{ width: '100%' }}>
                 <LeadContactBlocks lead={lead} />
 
@@ -1826,16 +1905,20 @@ export function LeadShow({ auth, id }) {
                     { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
                     { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
                     { label: 'Source', value: lead?.lead_source },
-                    { label: 'Industry', value: lead?.industry },
+                    { label: 'Pipeline', value: lead?.deal_pipeline?.name || lead?.dealPipeline?.name },
                     { label: 'Expected Value', value: formatMoney(lead?.expected_value) },
                     {
                       label: 'Assigned To',
                       value: lead?.assigned_to?.name || lead?.assignedTo?.name,
                     },
                     { label: 'Contact', value: lead?.contact?.name },
-                    { label: 'Next Follow Up', value: formatDateTime(lead?.next_follow_up_date) },
+                    { label: 'Next Follow Up', value: formatDateTime(lead?.next_follow_up_at || lead?.next_follow_up_date) },
                     { label: 'Last Contacted', value: formatDateTime(lead?.last_contacted_at) },
-                  ]}
+                    lead?.status === 'converted' && lead?.converted_deal
+                      ? { label: 'Converted Deal', value: <Button type="link" size="small" style={{ padding: 0 }} onClick={() => router.visit(`/crm/deals/${lead.converted_deal.id}`)}>{lead.converted_deal.title}</Button> }
+                      : null,
+                    lead?.lost_reason ? { label: 'Lost Reason', value: lead.lost_reason } : null,
+                  ].filter(Boolean)}
                 />
               </Space>
             </DetailsCard>
@@ -2234,16 +2317,85 @@ export function LeadShow({ auth, id }) {
             railRows={[
               { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
               { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
+              { label: 'Pipeline', value: lead?.deal_pipeline?.name || lead?.dealPipeline?.name },
               { label: 'Phone', value: lead?.phone || lead?.mobile },
               { label: 'Email', value: lead?.email },
+              { label: 'Follow-up', value: formatDate(lead?.next_follow_up_at || lead?.next_follow_up_date) },
               { label: 'Created', value: formatDateTime(lead?.created_at) },
-              { label: 'Updated', value: formatDateTime(lead?.updated_at) },
             ]}
             tabs={tabs}
           />
         );
       }}
     </ShowShell>
+
+    {/* Activity quick-add drawer */}
+    {activityDrawer && (
+      <Drawer title="Add Activity" open={activityDrawer} onClose={() => setActivityDrawer(false)} width={700}>
+        <ReusableCrud
+          title="Activities"
+          apiUrl={`${BACKEND_BASE}/api/crm-activities/`}
+          columns={[{ title: 'Subject', dataIndex: 'subject', key: 'subject' }]}
+          fields={buildActivityCrud({ locked: { lead_id: id } }).fields}
+          validationSchema={buildActivityCrud({ locked: { lead_id: id } }).validationSchema}
+          crudInitialValues={buildActivityCrud({ locked: { lead_id: id } }).crudInitialValues}
+          transformPayload={buildActivityCrud({ locked: { lead_id: id } }).transformPayload}
+          baseFilters={{ lead_id: id }}
+          form_ui="drawer"
+          drawerWidth={700}
+          enableServerPagination={false}
+          showSearch={false}
+          canAdd canEdit={false} canDelete={false} hasActions={false} hasActionColumns={false}
+        />
+      </Drawer>
+    )}
+
+    {/* Convert to Deal drawer */}
+    {convertDrawer && (
+      <Drawer title="Convert Lead to Deal" open={convertDrawer} onClose={() => setConvertDrawer(false)} width={700}>
+        <ReusableCrud
+          title="Create Deal from Lead"
+          apiUrl={`${BACKEND_BASE}/api/deals/`}
+          columns={[
+            { title: 'Title', dataIndex: 'title', key: 'title' },
+            { title: 'Stage', key: 'stage', render: (_, r) => r.deal_stage?.name || '-' },
+          ]}
+          fields={buildDealCrud({ locked: { lead_id: id } }).fields}
+          validationSchema={buildDealCrud().validationSchema}
+          crudInitialValues={{ ...buildDealCrud().crudInitialValues, lead_id: id }}
+          transformPayload={buildDealCrud({ locked: { lead_id: id } }).transformPayload}
+          baseFilters={{ lead_id: id }}
+          form_ui="drawer"
+          drawerWidth={700}
+          enableServerPagination={false}
+          showSearch={false}
+          canAdd canEdit={false} canDelete={false} hasActions={false} hasActionColumns={false}
+        />
+        <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+          <Text type="secondary">After creating the deal above, mark this lead as converted:</Text>
+          <div style={{ marginTop: 8 }}>
+            <Button type="primary" onClick={doConvert}>Mark Lead as Converted</Button>
+          </div>
+        </div>
+      </Drawer>
+    )}
+
+    {/* Mark Lost modal */}
+    <Modal
+      title="Mark Lead Lost"
+      open={markLostModal}
+      onOk={doMarkLost}
+      onCancel={() => { setMarkLostModal(false); setLostReason(''); }}
+      okText="Mark Lost"
+      okButtonProps={{ danger: true }}
+    >
+      <Form layout="vertical">
+        <Form.Item label="Lost Reason" required>
+          <Input.TextArea rows={3} value={lostReason} onChange={(e) => setLostReason(e.target.value)} placeholder="Why is this lead lost?" />
+        </Form.Item>
+      </Form>
+    </Modal>
+    </>
   );
 }
 

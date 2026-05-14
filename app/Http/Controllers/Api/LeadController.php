@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Lead;
+use App\Services\Crm\CrmPipelineResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -23,18 +24,18 @@ class LeadController extends BaseCrudApiController
 
     protected array $relations = [
         'contact',
-        'crmAccount',
         'assignedTo',
         'convertedContact',
         'convertedDeal',
+        'dealPipeline',
     ];
 
     protected array $relationDetails = [
         'contact' => 'contact_id',
-        'crmAccount' => 'crm_account_id',
         'assignedTo' => 'assigned_to_id',
         'convertedContact' => 'converted_contact_id',
         'convertedDeal' => 'converted_deal_id',
+        'dealPipeline' => 'deal_pipeline_id',
     ];
 
     protected array $searchable = [
@@ -51,15 +52,14 @@ class LeadController extends BaseCrudApiController
         'lead_source',
         'industry',
         'contact.name',
-        'crmAccount.name',
         'contact.code',
         'assignedTo.name',
     ];
 
     protected array $filterable = [
         'contact_id',
-        'crm_account_id',
         'assigned_to_id',
+        'deal_pipeline_id',
         'lead_source',
         'status',
         'priority',
@@ -99,12 +99,35 @@ class LeadController extends BaseCrudApiController
 
     protected string $defaultSort = '-created_at';
 
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+
+        if (empty($parentData['deal_pipeline_id'])) {
+            $resolver = new CrmPipelineResolver();
+            $pipeline = $resolver->getDefaultPipeline();
+            if ($pipeline) {
+                $parentData['deal_pipeline_id'] = $pipeline->id;
+            }
+        }
+
+        if (empty($parentData['status'])) {
+            $parentData['status'] = 'new';
+        }
+
+        if (empty($parentData['priority'])) {
+            $parentData['priority'] = 'medium';
+        }
+
+        return $parentData;
+    }
+
     protected function storeRules(Request $request): array
     {
         return [
             'lead_no' => ['nullable', 'string', 'max:40', Rule::unique('leads', 'lead_no')],
             'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
-            'crm_account_id' => ['nullable', 'uuid', 'exists:crm_accounts,id'],
+            'deal_pipeline_id' => ['nullable', 'uuid', 'exists:deal_pipelines,id'],
             'assigned_to_id' => ['nullable', 'integer', 'exists:users,id'],
             'converted_contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
             'converted_deal_id' => ['nullable', 'uuid', 'exists:deals,id'],
@@ -123,9 +146,10 @@ class LeadController extends BaseCrudApiController
             'industry' => ['nullable', 'string', 'max:120'],
             'expected_value' => ['nullable', 'numeric', 'min:0'],
             'status' => ['nullable', 'in:new,contacted,qualified,unqualified,converted,lost'],
-            'lost_reason' => ['nullable', 'required_if:status,lost', 'string', 'max:255'],
+            'lost_reason' => ['nullable', 'string', 'max:255'],
             'priority' => ['nullable', 'in:low,medium,high,urgent'],
             'next_follow_up_date' => ['nullable', 'date'],
+            'next_follow_up_at' => ['nullable', 'date'],
             'last_contacted_at' => ['nullable', 'date'],
             'notes' => ['nullable', 'string'],
             'converted_at' => ['nullable', 'date'],
@@ -146,7 +170,7 @@ class LeadController extends BaseCrudApiController
                 Rule::unique('leads', 'lead_no')->ignore($record->getKey(), $record->getKeyName()),
             ],
             'contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
-            'crm_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:crm_accounts,id'],
+            'deal_pipeline_id' => ['sometimes', 'nullable', 'uuid', 'exists:deal_pipelines,id'],
             'assigned_to_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'converted_contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
             'converted_deal_id' => ['sometimes', 'nullable', 'uuid', 'exists:deals,id'],
@@ -165,9 +189,10 @@ class LeadController extends BaseCrudApiController
             'industry' => ['sometimes', 'nullable', 'string', 'max:120'],
             'expected_value' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'status' => ['sometimes', 'nullable', 'in:new,contacted,qualified,unqualified,converted,lost'],
-            'lost_reason' => ['sometimes', 'nullable', 'required_if:status,lost', 'string', 'max:255'],
+            'lost_reason' => ['sometimes', 'nullable', 'string', 'max:255'],
             'priority' => ['sometimes', 'nullable', 'in:low,medium,high,urgent'],
             'next_follow_up_date' => ['sometimes', 'nullable', 'date'],
+            'next_follow_up_at' => ['sometimes', 'nullable', 'date'],
             'last_contacted_at' => ['sometimes', 'nullable', 'date'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'converted_at' => ['sometimes', 'nullable', 'date'],

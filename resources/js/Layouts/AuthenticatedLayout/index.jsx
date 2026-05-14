@@ -107,16 +107,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () => visit('crm.home', '/crm'),
                     },
                     {
-                        key: 'contact-groups',
-                        label: 'Contact Group',
-                        onClick: () => visit('crm.contact-groups.index', '/crm/contact-groups'),
-                    },
-                    {
-                        key: 'crm-accounts',
-                        label: 'Accounts',
-                        onClick: () => visit('crm.accounts.index', '/crm/accounts'),
-                    },
-                    {
                         key: 'contacts',
                         label: 'Contacts',
                         onClick: () => visit('crm.contacts.index', '/crm/contacts'),
@@ -219,8 +209,25 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <ApartmentOutlined />,
                 label: 'Tax',
                 children: [
-                    { key: 'tax-classes', label: 'Tax Classes', onClick: () => visit('tax.tax-classes.index', '/tax/tax-classes') },
-                    { key: 'tax-rates', label: 'Tax Rates', onClick: () => visit('tax.tax-rates.index', '/tax/tax-rates') },
+                    { key: 'tax-dashboard', label: 'Dashboard',      onClick: () => visit('tax.dashboard', '/tax/dashboard') },
+                    { key: 'tax-settings',  label: 'Tax Settings',   onClick: () => visit('tax.settings', '/tax/settings') },
+                    { key: 'tax-reports',   label: 'Tax Reports',    onClick: () => visit('reports.index', '/reports') },
+                    ...(permissions.includes('tax.advanced.manage') || true
+                        ? [{
+                            key: 'tax-advanced',
+                            label: 'Advanced Setup',
+                            children: [
+                                { key: 'tax-advanced-hub',         label: 'Advanced Overview',      onClick: () => visit('tax.advanced', '/tax/advanced') },
+                                { key: 'tax-classes',              label: 'Tax Groups',             onClick: () => visit('tax.tax-classes.index', '/tax/tax-classes') },
+                                { key: 'tax-rates',                label: 'Tax Rates',              onClick: () => visit('tax.tax-rates.index', '/tax/tax-rates') },
+                                { key: 'tax-rules',                label: 'When to Apply Tax',      onClick: () => visit('tax.tax-rules.index', '/tax/tax-rules') },
+                                { key: 'tax-registrations',        label: 'Tax Registrations',      onClick: () => visit('tax.tax-registrations.index', '/tax/tax-registrations') },
+                                { key: 'tax-exemptions',           label: 'Tax Free Reasons',       onClick: () => visit('tax.tax-exemptions.index', '/tax/tax-exemptions') },
+                                { key: 'tax-jurisdictions',        label: 'Where Tax Applies',      onClick: () => visit('tax.tax-jurisdictions.index', '/tax/tax-jurisdictions') },
+                                { key: 'product-tax-categories',   label: 'Product Tax Types',      onClick: () => visit('tax.product-tax-categories.index', '/tax/product-tax-categories') },
+                            ],
+                        }]
+                        : []),
                 ],
             },
             {
@@ -318,8 +325,6 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/pos')) return ['pos-screen'];
 
         if (page.url === '/crm') return ['crm-home'];
-        if (isActive('/crm/contact-groups')) return ['contact-groups'];
-        if (isActive('/crm/accounts')) return ['crm-accounts'];
         if (isActive('/crm/contacts')) return ['contacts'];
         if (isActive('/crm/leads')) return ['leads'];
         if (isActive('/crm/deals')) return ['deals'];
@@ -363,6 +368,17 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/quick-receipts')) return ['quick-receipt'];
         if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
         if (isActive('/accounting/loan-accounts')) return ['loan-accounts'];
+
+        if (isActive('/tax/dashboard'))                return ['tax-dashboard'];
+        if (isActive('/tax/settings'))                 return ['tax-settings'];
+        if (isActive('/tax/advanced'))                 return ['tax-advanced-hub'];
+        if (isActive('/tax/tax-classes'))              return ['tax-classes'];
+        if (isActive('/tax/tax-rates'))                return ['tax-rates'];
+        if (isActive('/tax/tax-rules'))                return ['tax-rules'];
+        if (isActive('/tax/tax-registrations'))        return ['tax-registrations'];
+        if (isActive('/tax/tax-exemptions'))           return ['tax-exemptions'];
+        if (isActive('/tax/tax-jurisdictions'))        return ['tax-jurisdictions'];
+        if (isActive('/tax/product-tax-categories'))   return ['product-tax-categories'];
 
         if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
         if (isActive('/inventory/products')) return ['inventory-products'];

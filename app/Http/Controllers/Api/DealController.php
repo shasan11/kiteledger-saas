@@ -4,8 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Deal;
 use App\Models\CrmDealStageHistory;
+use App\Models\DealPipeline;
+use App\Models\DealStage;
+use App\Services\Crm\CrmPipelineResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DealController extends BaseCrudApiController
 {
@@ -56,7 +60,7 @@ class DealController extends BaseCrudApiController
         'source',
     ];
 
-    protected array $booleanFilters = ['active', 'is_system_generated'];
+    protected array $booleanFilters = ['active', 'is_system_generated', 'committed'];
 
     protected array $dateRangeFilters = [
         'expected_close_date' => ['from' => 'close_from', 'to' => 'close_to'],
@@ -96,12 +100,29 @@ class DealController extends BaseCrudApiController
         'source' => ['nullable', 'string', 'max:80'],
         'priority' => ['nullable', 'in:low,medium,high,urgent'],
         'status' => ['nullable', 'in:open,won,lost,cancelled'],
-        'lost_reason' => ['nullable', 'required_if:status,lost', 'string', 'max:255'],
+        'lost_reason' => ['nullable', 'string', 'max:255'],
         'description' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $resolver = new CrmPipelineResolver();
+        $resolved = $resolver->resolvePipelineAndStage(
+            $parentData['deal_pipeline_id'] ?? null,
+            $parentData['deal_stage_id'] ?? null
+        );
+        if (empty($parentData['deal_pipeline_id'])) {
+            $parentData['deal_pipeline_id'] = $resolved['pipeline_id'];
+        }
+        if (empty($parentData['deal_stage_id'])) {
+            $parentData['deal_stage_id'] = $resolved['stage_id'];
+        }
+        return $parentData;
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {
@@ -122,7 +143,7 @@ class DealController extends BaseCrudApiController
             'source' => ['sometimes', 'nullable', 'string', 'max:80'],
             'priority' => ['sometimes', 'nullable', 'in:low,medium,high,urgent'],
             'status' => ['sometimes', 'nullable', 'in:open,won,lost,cancelled'],
-            'lost_reason' => ['sometimes', 'nullable', 'required_if:status,lost', 'string', 'max:255'],
+            'lost_reason' => ['sometimes', 'nullable', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
@@ -157,5 +178,66 @@ class DealController extends BaseCrudApiController
         }
 
         return $record;
+    }
+
+    public function moveStage(Request $request, string $id)
+    {
+        $deal = Deal::query()->with(['dealPipeline', 'dealStage'])->findOrFail($id);
+
+        $data = $request->validate([
+            'deal_stage_id' => ['required', 'uuid', 'exists:deal_stages,id'],
+            'lost_reason' => ['nullable', 'string', 'max:255'],
+            'remarks' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $newStage = DealStage::query()->findOrFail($data['deal_stage_id']);
+
+        $fromStageId = $deal->deal_stage_id;
+        $lastChange = CrmDealStageHistory::query()
+            ->where('deal_id', $deal->id)
+            ->latest('changed_at')
+            ->first();
+        $enteredAt = $lastChange?->changed_at ?? $deal->created_at;
+
+        DB::transaction(function () use ($deal, $newStage, $fromStageId, $enteredAt, $data, $request) {
+            $updates = [
+                'deal_stage_id' => $newStage->id,
+                'deal_pipeline_id' => $newStage->deal_pipeline_id ?? $deal->deal_pipeline_id,
+            ];
+
+            if ($newStage->is_won_stage) {
+                $updates['status'] = 'won';
+                $updates['closed_date'] = now()->toDateString();
+            } elseif ($newStage->is_lost_stage) {
+                $updates['status'] = 'lost';
+                $updates['closed_date'] = now()->toDateString();
+                $updates['lost_reason'] = $data['lost_reason'] ?? null;
+            } else {
+                if (in_array($deal->status, ['won', 'lost'])) {
+                    $updates['status'] = 'open';
+                    $updates['closed_date'] = null;
+                }
+            }
+
+            if ($newStage->probability !== null) {
+                $updates['probability'] = $newStage->probability;
+            }
+
+            $deal->update($updates);
+
+            if ($fromStageId !== $newStage->id) {
+                CrmDealStageHistory::query()->create([
+                    'deal_id' => $deal->id,
+                    'from_stage_id' => $fromStageId,
+                    'to_stage_id' => $newStage->id,
+                    'changed_by' => $request->user()?->id,
+                    'changed_at' => now(),
+                    'days_in_previous_stage' => $enteredAt ? $enteredAt->diffInDays(now()) : null,
+                    'remarks' => $data['remarks'] ?? null,
+                ]);
+            }
+        });
+
+        return response()->json($deal->fresh(['dealPipeline', 'dealStage', 'assignedTo', 'lead', 'contact', 'stageHistories']));
     }
 }
