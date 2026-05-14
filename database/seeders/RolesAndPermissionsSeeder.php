@@ -1059,6 +1059,7 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         $permissions = array_merge($permissions, [
+            'branches.view-all',
             'settings.view',
             'settings.update',
             'settings.company.view',

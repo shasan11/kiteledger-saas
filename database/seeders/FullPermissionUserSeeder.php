@@ -19,9 +19,7 @@ class FullPermissionUserSeeder extends Seeder
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
 
-        if (Permission::query()->doesntExist()) {
-            $this->call(RolesAndPermissionsSeeder::class);
-        }
+        $this->call(RolesAndPermissionsSeeder::class);
 
         $permissionQuery = Permission::query();
 

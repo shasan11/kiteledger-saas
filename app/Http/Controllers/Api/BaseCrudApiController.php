@@ -73,8 +73,10 @@ abstract class BaseCrudApiController extends Controller
     protected ?string $branchBypassPermission = 'branches.view-all';
 
     protected array $branchBypassRoles = [
-        'super-admin',
-        'admin',
+        'Super Admin',
+        'Company Owner',
+        'Branch Admin',
+        'Full Access User',
     ];
 
     protected array $nested = [];
