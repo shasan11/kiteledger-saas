@@ -19,6 +19,13 @@ class RolesAndPermissionsSeeder extends Seeder
         'manage',
         'approve',
         'void',
+        'generate',
+        'review',
+        'pay',
+        'lock',
+        'export',
+        'download',
+        'view-own',
     ];
 
     public function run(): void
@@ -778,13 +785,46 @@ class RolesAndPermissionsSeeder extends Seeder
 
                 'payslip' => [
                     'view',
+                    'view-own',
                     'create',
                     'update',
                     'delete',
                     'approve',
                     'reject',
+                    'download',
                     'print',
                     'export',
+                ],
+
+                'payroll' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'generate',
+                    'review',
+                    'approve',
+                    'pay',
+                    'lock',
+                    'void',
+                    'export',
+                ],
+
+                'salary_structure' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'manage',
+                ],
+
+                'reimbursement' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'approve',
+                    'pay',
                 ],
 
                 'salary_history' => [
@@ -1009,6 +1049,47 @@ class RolesAndPermissionsSeeder extends Seeder
             }
         }
 
+        $permissions = array_merge($permissions, [
+            'payroll.view',
+            'payroll.create',
+            'payroll.generate',
+            'payroll.review',
+            'payroll.approve',
+            'payroll.pay',
+            'payroll.lock',
+            'payroll.void',
+            'payroll.export',
+            'payslip.view',
+            'payslip.view-own',
+            'payslip.download',
+            'salary-structure.view',
+            'salary-structure.manage',
+            'reimbursement.view',
+            'reimbursement.create',
+            'reimbursement.approve',
+            'reimbursement.pay',
+            'crm.view',
+            'crm.manage',
+            'crm.leads.view',
+            'crm.leads.create',
+            'crm.leads.update',
+            'crm.leads.convert',
+            'crm.deals.view',
+            'crm.deals.create',
+            'crm.deals.update',
+            'crm.deals.mark-won',
+            'crm.deals.mark-lost',
+            'crm.activities.view',
+            'crm.activities.manage',
+            'crm.accounts.view',
+            'crm.accounts.manage',
+            'crm.forecast.view',
+            'crm.campaigns.view',
+            'crm.campaigns.manage',
+            'crm.communications.view',
+            'crm.communications.manage',
+        ]);
+
         sort($permissions);
 
         return array_values(array_unique($permissions));
@@ -1218,6 +1299,14 @@ class RolesAndPermissionsSeeder extends Seeder
                     'payable.*.approve',
                     'payable.*.reject',
                     'payable.*.void',
+                    'hrm.payroll.view',
+                    'hrm.payroll.approve',
+                    'hrm.payroll.pay',
+                    'hrm.payroll.void',
+                    'payroll.view',
+                    'payroll.approve',
+                    'payroll.pay',
+                    'payroll.void',
                     'report.accounting.*',
                 ],
             ],
@@ -1475,6 +1564,10 @@ class RolesAndPermissionsSeeder extends Seeder
             'HR Manager' => [
                 'allow' => [
                     'hrm.*',
+                    'payroll.*',
+                    'payslip.*',
+                    'salary-structure.*',
+                    'reimbursement.*',
                     'report.hrm.*',
                     'system.user.view',
                     'system.user.create',
@@ -1511,10 +1604,29 @@ class RolesAndPermissionsSeeder extends Seeder
                 'allow' => [
                     'hrm.employee.view',
                     'hrm.payslip.*',
+                    'hrm.payroll.*',
+                    'hrm.salary_structure.*',
+                    'hrm.reimbursement.view',
+                    'hrm.reimbursement.create',
+                    'payroll.view',
+                    'payroll.create',
+                    'payroll.generate',
+                    'payroll.review',
+                    'payroll.void',
+                    'payroll.export',
+                    'payslip.*',
+                    'salary-structure.*',
+                    'reimbursement.view',
+                    'reimbursement.create',
                     'hrm.salary_history.*',
                     'hrm.attendance.view',
                     'hrm.leave_application.view',
                     'report.hrm.payroll.*',
+                ],
+                'deny' => [
+                    'hrm.payroll.approve',
+                    'hrm.payroll.pay',
+                    'hrm.payroll.lock',
                 ],
             ],
 
@@ -1536,6 +1648,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'Employee' => [
                 'allow' => [
                     'self.*',
+                    'hrm.payslip.view-own',
+                    'hrm.payslip.download',
+                    'hrm.reimbursement.create',
+                    'payslip.view-own',
+                    'payslip.download',
+                    'reimbursement.create',
                 ],
             ],
 

@@ -25,12 +25,14 @@ class ContactController extends BaseCrudApiController
     protected array $relations = [
         'contactGroup',
         'account',
+        'crmAccount',
         'creditTerm',
     ];
 
     protected array $relationDetails = [
         'contactGroup' => 'contact_group_id',
         'account' => 'account_id',
+        'crmAccount' => 'crm_account_id',
         'creditTerm' => 'credit_term_id',
     ];
 
@@ -43,12 +45,14 @@ class ContactController extends BaseCrudApiController
         'contactGroup.name',
         'account.name',
         'account.code',
+        'crmAccount.name',
         'creditTerm.name',
     ];
 
     protected array $filterable = [
         'contact_group_id',
         'account_id',
+        'crm_account_id',
         'contact_type',
         'credit_term_id',
     ];
@@ -77,6 +81,7 @@ class ContactController extends BaseCrudApiController
     protected array $storeRules = [
         'contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
         'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+        'crm_account_id' => ['nullable', 'uuid', 'exists:crm_accounts,id'],
         'contact_type' => ['required', 'in:customer,supplier,lead'],
         'name' => ['required', 'string', 'max:180'],
         'code' => ['nullable', 'string', 'max:50'],
@@ -98,6 +103,7 @@ class ContactController extends BaseCrudApiController
         return [
             'contact_group_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
             'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+            'crm_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:crm_accounts,id'],
             'contact_type' => ['sometimes', 'required', 'in:customer,supplier,lead'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'code' => ['sometimes', 'nullable', 'string', 'max:50'],

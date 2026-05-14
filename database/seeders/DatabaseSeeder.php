@@ -54,6 +54,8 @@ class DatabaseSeeder extends Seeder
             PurchaseConfigurationSeeder::class,
             TransactionalRecordSeeder::class,
             RolesAndPermissionsSeeder::class,
+            FullPermissionUserSeeder::class,
+            PayrollSeeder::class,
         ]);
     }
 }

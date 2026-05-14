@@ -10,6 +10,12 @@ use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\CashTransferController;
 use App\Http\Controllers\Api\CreditTermController;
 use App\Http\Controllers\Api\CrmActivityController;
+use App\Http\Controllers\Api\CrmAccountController;
+use App\Http\Controllers\Api\CrmCampaignController;
+use App\Http\Controllers\Api\CrmCommunicationController;
+use App\Http\Controllers\Api\CrmContactRoleController;
+use App\Http\Controllers\Api\CrmInsightController;
+use App\Http\Controllers\Api\CrmSequenceController;
 use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\CustomTemplateController;
 use App\Http\Controllers\Api\DealController;
@@ -103,6 +109,19 @@ use App\Http\Controllers\Api\Reports\ReportController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
 use App\Http\Controllers\Api\SettingsConfigurationController;
+use App\Http\Controllers\Api\Payroll\AttendanceSummaryController;
+use App\Http\Controllers\Api\Payroll\BenefitRuleController;
+use App\Http\Controllers\Api\Payroll\EmployeeAdditionController;
+use App\Http\Controllers\Api\Payroll\EmployeeDeductionController;
+use App\Http\Controllers\Api\Payroll\EmployeeReimbursementController;
+use App\Http\Controllers\Api\Payroll\PayrollPaymentController;
+use App\Http\Controllers\Api\Payroll\PayrollPeriodController;
+use App\Http\Controllers\Api\Payroll\PayrollRunController;
+use App\Http\Controllers\Api\Payroll\PayrollSettingController;
+use App\Http\Controllers\Api\Payroll\PayslipLineController;
+use App\Http\Controllers\Api\Payroll\SalaryComponentController;
+use App\Http\Controllers\Api\Payroll\SalaryStructureController;
+use App\Http\Controllers\Api\Payroll\TaxSlabController;
 
 Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearchController::class)
     ->name('api.global-search');
@@ -496,6 +515,31 @@ Route::prefix('hrm')->group(function () {
     Route::apiResource('project-teams', ProjectTeamController::class);
     Route::apiResource('project-team-members', ProjectTeamMemberController::class);
 
+    Route::prefix('payroll')->group(function () {
+        Route::get('dashboard', [PayrollRunController::class, 'dashboard']);
+        Route::post('runs/generate', [PayrollRunController::class, 'generate']);
+        Route::post('runs/{id}/review', [PayrollRunController::class, 'review']);
+        Route::post('runs/{id}/approve', [PayrollRunController::class, 'approve']);
+        Route::post('runs/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
+        Route::post('runs/{id}/lock', [PayrollRunController::class, 'lock']);
+        Route::post('runs/{id}/void', [PayrollRunController::class, 'void']);
+        Route::post('runs/{id}/journal-voucher', [PayrollRunController::class, 'journalVoucher']);
+
+        Route::apiResource('salary-components', SalaryComponentController::class);
+        Route::apiResource('settings', PayrollSettingController::class);
+        Route::apiResource('salary-structures', SalaryStructureController::class);
+        Route::apiResource('employee-additions', EmployeeAdditionController::class);
+        Route::apiResource('employee-deductions', EmployeeDeductionController::class);
+        Route::apiResource('periods', PayrollPeriodController::class);
+        Route::apiResource('attendance-summaries', AttendanceSummaryController::class);
+        Route::apiResource('runs', PayrollRunController::class);
+        Route::apiResource('payslip-lines', PayslipLineController::class);
+        Route::apiResource('tax-slabs', TaxSlabController::class);
+        Route::apiResource('benefit-rules', BenefitRuleController::class);
+        Route::apiResource('payments', PayrollPaymentController::class);
+        Route::apiResource('reimbursements', EmployeeReimbursementController::class);
+    });
+
     Route::post('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkStore']);
     Route::patch('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkUpdate']);
     Route::delete('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkDestroy']);
@@ -607,11 +651,60 @@ Route::apiResource('loan-charges', LoanChargeController::class)
 |--------------------------------------------------------------------------
 */
 
+Route::prefix('crm')->group(function () {
+    Route::get('dashboard', [CrmInsightController::class, 'dashboard']);
+    Route::get('customers/{id}/timeline', [CrmInsightController::class, 'customerTimeline']);
+    Route::get('accounts/{id}/summary', [CrmAccountController::class, 'summary']);
+    Route::get('accounts/{id}/commercials', [CrmAccountController::class, 'commercials']);
+    Route::get('deals/forecast', [CrmInsightController::class, 'forecast']);
+    Route::get('deals/stuck', [CrmInsightController::class, 'stuckDeals']);
+    Route::get('deals/{id}/stage-history', [CrmInsightController::class, 'stageHistory']);
+    Route::get('deals/{id}/quotation-prefill', [CrmInsightController::class, 'quotationPrefill']);
+    Route::get('activities/inbox', [CrmInsightController::class, 'activityInbox']);
+    Route::post('activities/escalate-overdue', [CrmInsightController::class, 'escalateOverdue']);
+    Route::post('activities/{id}/complete', [CrmInsightController::class, 'completeActivity']);
+    Route::post('activities/{id}/reschedule', [CrmInsightController::class, 'rescheduleActivity']);
+    Route::post('communications/sync/email', [CrmCommunicationController::class, 'syncEmail']);
+    Route::get('analytics/source-roi', [CrmInsightController::class, 'sourceRoi']);
+    Route::post('leads/{id}/convert', [CrmInsightController::class, 'convertLead']);
+    Route::post('leads/{id}/mark-lost', [CrmInsightController::class, 'markLeadLost']);
+});
+
 Route::post('credit-terms/bulk', [CreditTermController::class, 'bulkStore']);
 Route::patch('credit-terms/bulk', [CreditTermController::class, 'bulkUpdate']);
 Route::delete('credit-terms/bulk', [CreditTermController::class, 'bulkDestroy']);
 Route::apiResource('credit-terms', CreditTermController::class)
     ->parameters(['credit-terms' => 'creditTerm']);
+
+Route::post('crm-accounts/bulk', [CrmAccountController::class, 'bulkStore']);
+Route::patch('crm-accounts/bulk', [CrmAccountController::class, 'bulkUpdate']);
+Route::delete('crm-accounts/bulk', [CrmAccountController::class, 'bulkDestroy']);
+Route::apiResource('crm-accounts', CrmAccountController::class)
+    ->parameters(['crm-accounts' => 'crmAccount']);
+
+Route::post('crm-contact-roles/bulk', [CrmContactRoleController::class, 'bulkStore']);
+Route::patch('crm-contact-roles/bulk', [CrmContactRoleController::class, 'bulkUpdate']);
+Route::delete('crm-contact-roles/bulk', [CrmContactRoleController::class, 'bulkDestroy']);
+Route::apiResource('crm-contact-roles', CrmContactRoleController::class)
+    ->parameters(['crm-contact-roles' => 'crmContactRole']);
+
+Route::post('crm-communications/bulk', [CrmCommunicationController::class, 'bulkStore']);
+Route::patch('crm-communications/bulk', [CrmCommunicationController::class, 'bulkUpdate']);
+Route::delete('crm-communications/bulk', [CrmCommunicationController::class, 'bulkDestroy']);
+Route::apiResource('crm-communications', CrmCommunicationController::class)
+    ->parameters(['crm-communications' => 'crmCommunication']);
+
+Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
+Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
+Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
+Route::apiResource('crm-campaigns', CrmCampaignController::class)
+    ->parameters(['crm-campaigns' => 'crmCampaign']);
+
+Route::post('crm-sequences/bulk', [CrmSequenceController::class, 'bulkStore']);
+Route::patch('crm-sequences/bulk', [CrmSequenceController::class, 'bulkUpdate']);
+Route::delete('crm-sequences/bulk', [CrmSequenceController::class, 'bulkDestroy']);
+Route::apiResource('crm-sequences', CrmSequenceController::class)
+    ->parameters(['crm-sequences' => 'crmSequence']);
 
 Route::post('leads/bulk', [LeadController::class, 'bulkStore']);
 Route::patch('leads/bulk', [LeadController::class, 'bulkUpdate']);

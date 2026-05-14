@@ -89,6 +89,10 @@ export function buildLeadCrud({ locked = {} } = {}) {
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
+          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
+          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+        },
+        {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
@@ -109,6 +113,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
     lead_source: Yup.string().nullable().max(80),
     expected_value: Yup.number().nullable().min(0),
     contact_id: Yup.string().nullable(),
+    crm_account_id: Yup.string().nullable(),
     assigned_to_id: Yup.number().nullable(),
     status: Yup.string().nullable(),
     priority: Yup.string().nullable(),
@@ -118,7 +123,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
 
   const crudInitialValues = {
     name: '', company_name: '', email: '', phone: '', website: '',
-    lead_source: '', expected_value: null, contact_id: null, assigned_to_id: null,
+    lead_source: '', expected_value: null, contact_id: null, crm_account_id: null, assigned_to_id: null,
     status: 'new', priority: 'medium', address: '', notes: '',
     ...locked,
   };
@@ -134,6 +139,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
     p.address = p.address?.trim() || null;
     p.notes = p.notes?.trim() || null;
     p.contact_id = p.contact_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.expected_value = p.expected_value != null && p.expected_value !== '' ? Number(p.expected_value) : null;
     return stripEmpty(p);
@@ -262,6 +268,10 @@ export function buildDealCrud({ locked = {} } = {}) {
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
+          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
+          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+        },
+        {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
@@ -279,8 +289,9 @@ export function buildDealCrud({ locked = {} } = {}) {
     {
       type: 'group', label: 'Financial & Dates', col: 24,
       children: [
-        { name: 'amount', label: 'Amount', type: 'number', col: 8, min: 0, placeholder: '0.00' },
-        { name: 'probability', label: 'Probability (%)', type: 'number', col: 8, min: 0, max: 100 },
+        { name: 'amount', label: 'Amount', type: 'number', col: 6, min: 0, placeholder: '0.00' },
+        { name: 'probability', label: 'Probability (%)', type: 'number', col: 6, min: 0, max: 100 },
+        { name: 'committed', label: 'Committed', type: 'switch', col: 4 },
         { name: 'source', label: 'Source', type: 'text', col: 8, placeholder: 'e.g. Referral' },
         { name: 'expected_close_date', label: 'Expected Close Date', type: 'datePicker', col: 8 },
         { name: 'closed_date', label: 'Closed Date', type: 'datePicker', col: 8 },
@@ -298,8 +309,8 @@ export function buildDealCrud({ locked = {} } = {}) {
   });
 
   const crudInitialValues = {
-    title: '', deal_no: '', lead_id: null, contact_id: null, deal_pipeline_id: null, deal_stage_id: null,
-    assigned_to_id: null, priority: 'medium', status: 'open', probability: null, source: '',
+    title: '', deal_no: '', lead_id: null, contact_id: null, crm_account_id: null, deal_pipeline_id: null, deal_stage_id: null,
+    assigned_to_id: null, priority: 'medium', status: 'open', probability: null, committed: false, source: '',
     lost_reason: '', expected_close_date: null, closed_date: null, amount: null, description: '',
     ...locked,
   };
@@ -313,11 +324,13 @@ export function buildDealCrud({ locked = {} } = {}) {
     p.description = p.description?.trim() || null;
     p.lead_id = p.lead_id || null;
     p.contact_id = p.contact_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.deal_pipeline_id = p.deal_pipeline_id || null;
     p.deal_stage_id = p.deal_stage_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.amount = p.amount != null && p.amount !== '' ? Number(p.amount) : null;
     p.probability = p.probability != null && p.probability !== '' ? Number(p.probability) : null;
+    p.committed = Boolean(p.committed);
     p.expected_close_date = formatDate(p.expected_close_date);
     p.closed_date = formatDate(p.closed_date);
     return stripEmpty(p);
@@ -349,6 +362,10 @@ export function buildActivityCrud({ locked = {} } = {}) {
         {
           name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 8, placeholder: 'Select contact',
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+        },
+        {
+          name: 'crm_account_id', label: 'Account', type: 'fkSelect', col: 8, placeholder: 'Select account',
+          fkUrl: api('/api/crm-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
         },
         {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
@@ -392,7 +409,7 @@ export function buildActivityCrud({ locked = {} } = {}) {
   });
 
   const crudInitialValues = {
-    subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, assigned_to_id: null,
+    subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, crm_account_id: null, assigned_to_id: null,
     status: 'pending', priority: 'medium', activity_type: null,
     due_at: null, completed_at: null, next_follow_up_at: null, reminder_at: null,
     description: '', comments: [], deleted_item_ids: [],
@@ -407,6 +424,7 @@ export function buildActivityCrud({ locked = {} } = {}) {
     p.lead_id = p.lead_id || null;
     p.deal_id = p.deal_id || null;
     p.contact_id = p.contact_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.due_at = formatDate(p.due_at);
     p.completed_at = formatDate(p.completed_at);

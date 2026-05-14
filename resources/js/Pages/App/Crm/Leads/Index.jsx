@@ -181,6 +181,18 @@ export default function Leads(props) {
           fkLabelKey: 'name',
         },
         {
+          name: 'crm_account_id',
+          label: 'Account',
+          type: 'fkSelect',
+          col: 8,
+          placeholder: 'Select account',
+          fkUrl: api('/api/crm-accounts/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+        },
+        {
           name: 'assigned_to_id',
           label: 'Assigned To',
           type: 'fkSelect',
@@ -244,6 +256,7 @@ export default function Leads(props) {
     industry: Yup.string().nullable().max(120),
     expected_value: Yup.number().nullable().min(0),
     contact_id: Yup.string().nullable(),
+    crm_account_id: Yup.string().nullable(),
     assigned_to_id: Yup.number().nullable(),
     status: Yup.string().nullable().oneOf(['new', 'contacted', 'qualified', 'unqualified', 'lost', 'converted', null]),
     priority: Yup.string().nullable().oneOf(['low', 'medium', 'high', 'urgent', null]),
@@ -267,6 +280,7 @@ export default function Leads(props) {
     industry: '',
     expected_value: null,
     contact_id: null,
+    crm_account_id: null,
     assigned_to_id: null,
     status: 'new',
     priority: 'medium',
@@ -292,6 +306,7 @@ export default function Leads(props) {
     p.address = p.address?.trim() || null;
     p.notes = p.notes?.trim() || null;
     p.contact_id = p.contact_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.expected_value = p.expected_value != null ? Number(p.expected_value) : null;
     p.next_follow_up_date = formatDate(p.next_follow_up_date);

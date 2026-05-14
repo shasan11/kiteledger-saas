@@ -21,6 +21,7 @@ class Deal extends Model
         'deal_no',
         'lead_id',
         'contact_id',
+        'crm_account_id',
         'deal_pipeline_id',
         'deal_stage_id',
         'assigned_to_id',
@@ -29,6 +30,7 @@ class Deal extends Model
         'expected_close_date',
         'closed_date',
         'probability',
+        'committed',
         'source',
         'priority',
         'status',
@@ -52,6 +54,7 @@ class Deal extends Model
             'expected_close_date' => 'date',
             'closed_date' => 'date',
             'probability' => 'integer',
+            'committed' => 'boolean',
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
@@ -66,6 +69,11 @@ class Deal extends Model
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function crmAccount(): BelongsTo
+    {
+        return $this->belongsTo(CrmAccount::class, 'crm_account_id');
     }
 
     public function dealPipeline(): BelongsTo
@@ -91,5 +99,20 @@ class Deal extends Model
     public function crmActivities(): HasMany
     {
         return $this->hasMany(CrmActivity::class);
+    }
+
+    public function stageHistories(): HasMany
+    {
+        return $this->hasMany(CrmDealStageHistory::class);
+    }
+
+    public function quotations(): HasMany
+    {
+        return $this->hasMany(Quotation::class);
+    }
+
+    public function crmCommunications(): HasMany
+    {
+        return $this->hasMany(CrmCommunication::class);
     }
 }

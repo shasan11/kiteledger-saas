@@ -166,6 +166,31 @@ class User extends Authenticatable
         return $this->hasMany(Payslip::class);
     }
 
+    public function generatedPayslips(): HasMany
+    {
+        return $this->hasMany(Payslip::class, 'employee_id');
+    }
+
+    public function salaryStructures(): HasMany
+    {
+        return $this->hasMany(SalaryStructure::class, 'employee_id');
+    }
+
+    public function employeeAdditions(): HasMany
+    {
+        return $this->hasMany(EmployeeAddition::class, 'employee_id');
+    }
+
+    public function employeeDeductions(): HasMany
+    {
+        return $this->hasMany(EmployeeDeduction::class, 'employee_id');
+    }
+
+    public function reimbursements(): HasMany
+    {
+        return $this->hasMany(EmployeeReimbursement::class, 'employee_id');
+    }
+
     public function awardHistories(): HasMany
     {
         return $this->hasMany(AwardHistory::class);

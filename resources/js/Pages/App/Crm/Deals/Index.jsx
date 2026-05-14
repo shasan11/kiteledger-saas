@@ -155,6 +155,18 @@ export default function Deals(props) {
           fkLabelKey: 'name',
         },
         {
+          name: 'crm_account_id',
+          label: 'Account',
+          type: 'fkSelect',
+          col: 8,
+          placeholder: 'Select account',
+          fkUrl: api('/api/crm-accounts/'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'name',
+        },
+        {
           name: 'assigned_to_id',
           label: 'Assigned To',
           type: 'fkSelect',
@@ -224,6 +236,12 @@ export default function Deals(props) {
           placeholder: '0 - 100',
         },
         {
+          name: 'committed',
+          label: 'Committed Forecast',
+          type: 'switch',
+          col: 4,
+        },
+        {
           name: 'source',
           label: 'Source',
           type: 'text',
@@ -268,6 +286,7 @@ export default function Deals(props) {
     deal_no: Yup.string().nullable().max(40),
     lead_id: Yup.string().nullable(),
     contact_id: Yup.string().nullable(),
+    crm_account_id: Yup.string().nullable(),
     deal_pipeline_id: Yup.string().nullable(),
     deal_stage_id: Yup.string().nullable(),
     assigned_to_id: Yup.number().nullable(),
@@ -287,12 +306,14 @@ export default function Deals(props) {
     deal_no: '',
     lead_id: null,
     contact_id: null,
+    crm_account_id: null,
     deal_pipeline_id: null,
     deal_stage_id: null,
     assigned_to_id: null,
     priority: 'medium',
     status: 'open',
     probability: null,
+    committed: false,
     source: '',
     lost_reason: '',
     expected_close_date: null,
@@ -310,11 +331,13 @@ export default function Deals(props) {
     p.description = p.description?.trim() || null;
     p.lead_id = p.lead_id || null;
     p.contact_id = p.contact_id || null;
+    p.crm_account_id = p.crm_account_id || null;
     p.deal_pipeline_id = p.deal_pipeline_id || null;
     p.deal_stage_id = p.deal_stage_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.amount = optionalNumber(p.amount);
     p.probability = optionalNumber(p.probability);
+    p.committed = Boolean(p.committed);
     p.expected_close_date = formatDate(p.expected_close_date);
     p.closed_date = formatDate(p.closed_date);
     Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
