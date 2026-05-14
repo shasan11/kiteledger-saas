@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 use App\Models\{
@@ -38,6 +39,25 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Gate::before(function ($user, string $ability) {
+            if (!empty($user->is_super_admin)) {
+                return true;
+            }
+
+            if (!method_exists($user, 'hasAnyRole')) {
+                return null;
+            }
+
+            return $user->hasAnyRole([
+                'Super Admin',
+                'Company Owner',
+                'Admin',
+                'Full Access User',
+                'super-admin',
+                'admin',
+            ]) ? true : null;
+        });
+
         ChartOfAccount::observe(ChartOfAccountObserver::class);
         BankAccount::observe(BankAccountObserver::class);
 
