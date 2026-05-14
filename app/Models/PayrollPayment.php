@@ -13,6 +13,7 @@ class PayrollPayment extends Model
 
     protected $fillable = [
         'payroll_run_id',
+        'payroll_id',
         'payslip_id',
         'employee_id',
         'amount',
@@ -41,6 +42,11 @@ class PayrollPayment extends Model
     public function payrollRun(): BelongsTo
     {
         return $this->belongsTo(PayrollRun::class);
+    }
+
+    public function payroll(): BelongsTo
+    {
+        return $this->belongsTo(Payroll::class);
     }
 
     public function payslip(): BelongsTo

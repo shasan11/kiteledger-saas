@@ -248,6 +248,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'hrm-users',      label: 'Employees',           onClick: () => visit('hrm.users.index', '/hrm/users') },
                     { key: 'hrm-attendance', label: 'Attendance',          onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
                     { key: 'hrm-leaves',     label: 'Leave Applications',  onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
+                    { key: 'hrm-payroll',    label: 'Payroll',             onClick: () => visit('hrm.payroll.index', '/hrm/payroll') },
                     { key: 'hrm-payslips',   label: 'Payslips',            onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
                     { key: 'hrm-emp-docs',   label: 'Employee Documents',  onClick: () => visit('hrm.employee-documents.index', '/hrm/employee-documents') },
                     { key: 'hrm-onboarding', label: 'Onboarding',          onClick: () => visit('hrm.onboarding.index', '/hrm/onboarding') },
@@ -387,6 +388,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/hrm/users'))                   return ['hrm-users'];
         if (isActive('/hrm/attendance'))              return ['hrm-attendance'];
         if (isActive('/hrm/leave-applications'))      return ['hrm-leaves'];
+        if (isActive('/hrm/payroll'))                 return ['hrm-payroll'];
         if (isActive('/hrm/payslips'))                return ['hrm-payslips'];
         if (isActive('/hrm/employee-documents'))      return ['hrm-emp-docs'];
         if (isActive('/hrm/onboarding'))              return ['hrm-onboarding'];

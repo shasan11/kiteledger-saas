@@ -20,11 +20,15 @@ class LeaveApplicationController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'user',
+        'leavePolicy',
+        'leaveTypeRecord',
     ];
 
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'user' => 'user_id',
+        'leavePolicy' => 'leave_policy_id',
+        'leaveTypeRecord' => 'leave_type_id',
     ];
 
     protected array $searchable = [
@@ -38,11 +42,16 @@ class LeaveApplicationController extends BaseCrudApiController
         'user.last_name',
         'user.username',
         'user.email',
+        'leavePolicy.name',
+        'leaveTypeRecord.name',
+        'leaveTypeRecord.code',
     ];
 
     protected array $filterable = [
         'branch_id',
         'user_id',
+        'leave_policy_id',
+        'leave_type_id',
         'leave_type',
         'status',
     ];
@@ -62,6 +71,8 @@ class LeaveApplicationController extends BaseCrudApiController
     protected array $sortable = [
         'id',
         'user_id',
+        'leave_policy_id',
+        'leave_type_id',
         'leave_type',
         'leave_from',
         'leave_to',
@@ -78,7 +89,9 @@ class LeaveApplicationController extends BaseCrudApiController
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'user_id' => ['required', 'integer', 'exists:users,id'],
-        'leave_type' => ['required', 'string', 'max:60'],
+        'leave_policy_id' => ['nullable', 'uuid', 'exists:leave_policies,id'],
+        'leave_type_id' => ['nullable', 'uuid', 'exists:leave_types,id'],
+        'leave_type' => ['required_without:leave_type_id', 'nullable', 'string', 'max:60'],
         'leave_from' => ['required', 'date'],
         'leave_to' => ['required', 'date', 'after_or_equal:leave_from'],
         'accept_leave_from' => ['nullable', 'date'],
@@ -99,7 +112,9 @@ class LeaveApplicationController extends BaseCrudApiController
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
-            'leave_type' => ['sometimes', 'required', 'string', 'max:60'],
+            'leave_policy_id' => ['sometimes', 'nullable', 'uuid', 'exists:leave_policies,id'],
+            'leave_type_id' => ['sometimes', 'nullable', 'uuid', 'exists:leave_types,id'],
+            'leave_type' => ['sometimes', 'required_without:leave_type_id', 'nullable', 'string', 'max:60'],
             'leave_from' => ['sometimes', 'required', 'date'],
             'leave_to' => ['sometimes', 'required', 'date', 'after_or_equal:leave_from'],
             'accept_leave_from' => ['sometimes', 'nullable', 'date'],

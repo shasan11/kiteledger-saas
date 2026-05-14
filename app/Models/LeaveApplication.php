@@ -19,6 +19,8 @@ class LeaveApplication extends Model
     protected $fillable = [
         'branch_id',
         'user_id',
+        'leave_policy_id',
+        'leave_type_id',
         'leave_type',
         'leave_from',
         'leave_to',
@@ -44,6 +46,8 @@ class LeaveApplication extends Model
     {
         return [
             'user_id' => 'integer',
+            'leave_policy_id' => 'string',
+            'leave_type_id' => 'string',
             'leave_from' => 'datetime',
             'leave_to' => 'datetime',
             'accept_leave_from' => 'datetime',
@@ -63,6 +67,16 @@ class LeaveApplication extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function leavePolicy(): BelongsTo
+    {
+        return $this->belongsTo(LeavePolicy::class);
+    }
+
+    public function leaveTypeRecord(): BelongsTo
+    {
+        return $this->belongsTo(LeaveType::class, 'leave_type_id');
     }
 
     public function acceptLeaveBy(): BelongsTo

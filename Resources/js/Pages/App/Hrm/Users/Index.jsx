@@ -169,7 +169,7 @@ export default function Users(props) {
   ];
 
   return (
-    <>
+    <AuthenticatedLayout auth={props.auth}>
       <Head title="Employees" />
       <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
           <ReusableCrud
@@ -199,6 +199,6 @@ export default function Users(props) {
             viewPathBuilder={(record) => route('hrm.users.show', record.id)}
           />
       </div>
-    </>
+    </AuthenticatedLayout>
   );
 }

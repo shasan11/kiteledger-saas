@@ -76,8 +76,8 @@ class AttendanceController extends BaseCrudApiController
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'user_id' => ['required', 'integer', 'exists:users,id'],
-        'in_time' => ['required', 'date'],
-        'out_time' => ['nullable', 'date', 'after_or_equal:in_time'],
+        'in_time' => ['required', 'date', 'before_or_equal:now'],
+        'out_time' => ['nullable', 'date', 'before_or_equal:now', 'after_or_equal:in_time'],
         'ip' => ['nullable', 'string', 'max:60'],
         'comment' => ['nullable', 'string', 'max:255'],
         'punch_by' => ['nullable', 'integer', 'exists:users,id'],
@@ -94,8 +94,8 @@ class AttendanceController extends BaseCrudApiController
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
-            'in_time' => ['sometimes', 'required', 'date'],
-            'out_time' => ['sometimes', 'nullable', 'date', 'after_or_equal:in_time'],
+            'in_time' => ['sometimes', 'required', 'date', 'before_or_equal:now'],
+            'out_time' => ['sometimes', 'nullable', 'date', 'before_or_equal:now', 'after_or_equal:in_time'],
             'ip' => ['sometimes', 'nullable', 'string', 'max:60'],
             'comment' => ['sometimes', 'nullable', 'string', 'max:255'],
             'punch_by' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],

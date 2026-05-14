@@ -20,11 +20,15 @@ class PayslipController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'user',
+        'employee.payrollAccount',
+        'payroll',
+        'lines.component',
     ];
 
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'user' => 'user_id',
+        'payroll' => 'payroll_id',
     ];
 
     protected array $searchable = [
@@ -39,7 +43,10 @@ class PayslipController extends BaseCrudApiController
 
     protected array $filterable = [
         'branch_id',
+        'payroll_id',
+        'payroll_run_id',
         'user_id',
+        'employee_id',
         'salary_month',
         'salary_year',
         'payment_status',

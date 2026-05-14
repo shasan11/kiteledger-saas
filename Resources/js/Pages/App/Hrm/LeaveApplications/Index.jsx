@@ -6,13 +6,20 @@ import * as Yup from 'yup';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
+  App,
   Avatar,
+  Button,
   Card,
   Col,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
   Row,
   Skeleton,
   Space,
   Statistic,
+  Switch,
   Tag,
   Typography,
 } from 'antd';
@@ -20,6 +27,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  PlusOutlined,
   FormOutlined,
   StopOutlined,
   TeamOutlined,
@@ -153,8 +161,17 @@ function EmployeeCell(_, record) {
 }
 
 export default function LeaveApplications({ auth }) {
+  const { message } = App.useApp();
   const [overview, setOverview] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leavePolicies, setLeavePolicies] = useState([]);
+  const [typeModalOpen, setTypeModalOpen] = useState(false);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [savingType, setSavingType] = useState(false);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [typeForm] = Form.useForm();
+  const [policyForm] = Form.useForm();
 
   const loadOverview = async () => {
     setOverviewLoading(true);
@@ -188,19 +205,74 @@ export default function LeaveApplications({ auth }) {
     }
   };
 
+  const loadLeaveLookups = async () => {
+    const [typesRes, policiesRes] = await Promise.all([
+      axios.get(api('/api/hrm/leave-types/'), { params: { page_size: 200, active: true } }),
+      axios.get(api('/api/hrm/leave-policies/'), { params: { page_size: 200, active: true } }),
+    ]);
+
+    setLeaveTypes(typesRes.data?.results || typesRes.data?.data || []);
+    setLeavePolicies(policiesRes.data?.results || policiesRes.data?.data || []);
+  };
+
   useEffect(() => {
     loadOverview();
+    loadLeaveLookups().catch(() => {});
   }, []);
+
+  const saveLeaveType = async () => {
+    const values = await typeForm.validateFields();
+    setSavingType(true);
+    try {
+      await axios.post(api('/api/hrm/leave-types/'), {
+        ...values,
+        code: values.code?.trim() || null,
+        max_days_per_year: values.max_days_per_year ?? null,
+        requires_approval: Boolean(values.requires_approval),
+        is_paid: Boolean(values.is_paid),
+        active: true,
+      });
+      message.success('Leave type added.');
+      setTypeModalOpen(false);
+      typeForm.resetFields();
+      await loadLeaveLookups();
+    } finally {
+      setSavingType(false);
+    }
+  };
+
+  const saveLeavePolicy = async () => {
+    const values = await policyForm.validateFields();
+    setSavingPolicy(true);
+    try {
+      await axios.post(api('/api/hrm/leave-policies/'), {
+        ...values,
+        description: values.description?.trim() || null,
+        active: true,
+      });
+      message.success('Leave policy added.');
+      setPolicyModalOpen(false);
+      policyForm.resetFields();
+      await loadLeaveLookups();
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
 
   const columns = useMemo(
     () => [
       { title: 'Employee', key: 'employee', width: 240, render: EmployeeCell },
       {
+        title: 'Policy',
+        key: 'leave_policy',
+        width: 160,
+        render: (_, row) => row?.leave_policy?.name || row?.leavePolicy?.name || '-',
+      },
+      {
         title: 'Leave Type',
-        dataIndex: 'leave_type',
         key: 'leave_type',
         width: 170,
-        render: (value) => value || '-',
+        render: (_, row) => row?.leave_type_record?.name || row?.leaveTypeRecord?.name || row?.leave_type || '-',
       },
       {
         title: 'From',
@@ -266,12 +338,29 @@ export default function LeaveApplications({ auth }) {
           row ? [row.first_name, row.last_name].filter(Boolean).join(' ') || row.username : '',
       },
       {
-        name: 'leave_type',
+        name: 'leave_policy_id',
+        label: 'Leave Policy',
+        type: 'fkSelect',
+        col: 12,
+        fkUrl: api('/api/hrm/leave-policies/'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        fkLabel: (row) => row?.name || '',
+      },
+      {
+        name: 'leave_type_id',
         label: 'Leave Type',
-        type: 'text',
+        type: 'fkSelect',
         col: 12,
         required: true,
-        placeholder: 'e.g. Annual Leave, Sick Leave, Casual Leave',
+        fkUrl: api('/api/hrm/leave-types/'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        fkLabel: (row) => row ? `${row.name}${row.code ? ` (${row.code})` : ''}` : '',
       },
       {
         name: 'leave_from',
@@ -362,9 +451,26 @@ export default function LeaveApplications({ auth }) {
           row ? [row.first_name, row.last_name].filter(Boolean).join(' ') || row.username : '',
       },
       {
-        name: 'leave_type',
+        name: 'leave_policy_id',
+        label: 'Leave Policy',
+        type: 'fkSelect',
+        fkUrl: api('/api/hrm/leave-policies'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        fkLabel: (row) => row?.name || '',
+      },
+      {
+        name: 'leave_type_id',
         label: 'Leave Type',
-        type: 'text',
+        type: 'fkSelect',
+        fkUrl: api('/api/hrm/leave-types'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        fkLabel: (row) => row ? `${row.name}${row.code ? ` (${row.code})` : ''}` : '',
       },
       {
         name: 'status',
@@ -378,7 +484,8 @@ export default function LeaveApplications({ auth }) {
 
   const validationSchema = Yup.object({
     user_id: Yup.mixed().required('Employee is required'),
-    leave_type: Yup.string().required('Leave type is required').max(60),
+    leave_type_id: Yup.mixed().required('Leave type is required'),
+    leave_policy_id: Yup.mixed().nullable(),
     leave_from: Yup.string().required('From date is required'),
     leave_to: Yup.string()
       .required('To date is required')
@@ -395,6 +502,8 @@ export default function LeaveApplications({ auth }) {
 
   const crudInitialValues = {
     user_id: null,
+    leave_policy_id: null,
+    leave_type_id: null,
     leave_type: '',
     leave_from: dayjs().format('YYYY-MM-DD'),
     leave_to: dayjs().format('YYYY-MM-DD'),
@@ -410,6 +519,8 @@ export default function LeaveApplications({ auth }) {
 
   const transformRecord = (record) => ({
     ...record,
+    leave_policy_id: record?.leave_policy_id || record?.leave_policy?.id || record?.leavePolicy?.id || null,
+    leave_type_id: record?.leave_type_id || record?.leave_type_record?.id || record?.leaveTypeRecord?.id || null,
     leave_from: toDate(record?.leave_from),
     leave_to: toDate(record?.leave_to),
     accept_leave_from: toDate(record?.accept_leave_from),
@@ -422,6 +533,17 @@ export default function LeaveApplications({ auth }) {
     if (payload.user_id && typeof payload.user_id === 'object') {
       payload.user_id = payload.user_id.id ?? payload.user_id.value;
     }
+    if (payload.leave_policy_id && typeof payload.leave_policy_id === 'object') {
+      payload.leave_policy_id = payload.leave_policy_id.id ?? payload.leave_policy_id.value;
+    }
+    const selectedTypeValue = payload.leave_type_id;
+    const selectedTypeName = typeof selectedTypeValue === 'object'
+      ? selectedTypeValue.name || selectedTypeValue.label
+      : null;
+
+    if (payload.leave_type_id && typeof payload.leave_type_id === 'object') {
+      payload.leave_type_id = payload.leave_type_id.id ?? payload.leave_type_id.value;
+    }
 
     payload.leave_from = toDate(payload.leave_from);
     payload.leave_to = toDate(payload.leave_to);
@@ -431,7 +553,8 @@ export default function LeaveApplications({ auth }) {
       payload.leave_duration === '' || payload.leave_duration == null
         ? computeLeaveDuration(values.leave_from, values.leave_to)
         : Number(payload.leave_duration);
-    payload.leave_type = payload.leave_type?.trim() || null;
+    const selectedType = leaveTypes.find((type) => type.id === payload.leave_type_id);
+    payload.leave_type = selectedType?.name || selectedTypeName || payload.leave_type?.trim() || 'Leave';
     payload.reason = payload.reason?.trim() || null;
     payload.review_comment = payload.review_comment?.trim() || null;
     payload.attachment = payload.attachment?.trim() || null;
@@ -474,6 +597,28 @@ export default function LeaveApplications({ auth }) {
             </Row>
           )}
 
+          <Card bordered={false} style={{ borderRadius: 14 }} styles={{ body: { padding: 14 } }}>
+            <Row gutter={[12, 10]} align="middle">
+              <Col flex="auto">
+                <Space size={14} wrap>
+                  <Text strong>Leave setup</Text>
+                  <Text type="secondary">{leavePolicies.length} policies</Text>
+                  <Text type="secondary">{leaveTypes.length} types</Text>
+                </Space>
+              </Col>
+              <Col>
+                <Space wrap>
+                  <Button icon={<PlusOutlined />} onClick={() => setPolicyModalOpen(true)}>
+                    Quick Add Policy
+                  </Button>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={() => setTypeModalOpen(true)}>
+                    Quick Add Type
+                  </Button>
+                </Space>
+              </Col>
+            </Row>
+          </Card>
+
           <ReusableCrud
             title="Leave Applications"
             icon={<FormOutlined />}
@@ -512,6 +657,83 @@ export default function LeaveApplications({ auth }) {
             defaultAnchorKey="pending"
             anchorSyncWithHash
           />
+
+          <Modal
+            title="Quick Add Leave Policy"
+            open={policyModalOpen}
+            onCancel={() => setPolicyModalOpen(false)}
+            onOk={saveLeavePolicy}
+            confirmLoading={savingPolicy}
+            destroyOnClose
+          >
+            <Form
+              form={policyForm}
+              layout="vertical"
+              initialValues={{ paid_leave_count: 0, unpaid_leave_count: 0 }}
+            >
+              <Form.Item name="name" label="Policy Name" rules={[{ required: true, message: 'Policy name is required' }]}>
+                <Input placeholder="Annual leave policy" />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="paid_leave_count" label="Paid Days" rules={[{ required: true, message: 'Paid days are required' }]}>
+                    <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="unpaid_leave_count" label="Unpaid Days" rules={[{ required: true, message: 'Unpaid days are required' }]}>
+                    <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item name="description" label="Description">
+                <Input.TextArea rows={3} placeholder="Optional notes for HR" />
+              </Form.Item>
+            </Form>
+          </Modal>
+
+          <Modal
+            title="Quick Add Leave Type"
+            open={typeModalOpen}
+            onCancel={() => setTypeModalOpen(false)}
+            onOk={saveLeaveType}
+            confirmLoading={savingType}
+            destroyOnClose
+          >
+            <Form
+              form={typeForm}
+              layout="vertical"
+              initialValues={{ requires_approval: true, is_paid: true }}
+            >
+              <Form.Item name="name" label="Type Name" rules={[{ required: true, message: 'Leave type is required' }]}>
+                <Input placeholder="Sick Leave" />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="code" label="Code">
+                    <Input placeholder="SL" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="max_days_per_year" label="Max Days / Year">
+                    <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item name="requires_approval" label="Requires Approval" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item name="is_paid" label="Paid Leave" valuePropName="checked">
+                    <Switch />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Form>
+          </Modal>
         </Space>
       </div>
     </AuthenticatedLayout>

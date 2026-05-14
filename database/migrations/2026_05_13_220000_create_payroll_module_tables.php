@@ -155,7 +155,7 @@ return new class extends Migration
             $table->foreignUuid('payroll_period_id')->constrained()->restrictOnDelete();
             $table->foreignUuid('branch_id')->nullable()->constrained()->nullOnDelete();
             $table->string('run_number', 40)->unique();
-            $table->enum('status', ['draft', 'generated', 'reviewed', 'approved', 'paid', 'locked', 'void'])->default('draft');
+            $table->enum('status', ['draft', 'generated', 'approved', 'processed', 'paid', 'locked', 'void'])->default('draft');
             $table->unsignedInteger('total_employees')->default(0);
             $table->decimal('total_gross', 16, 2)->default(0);
             $table->decimal('total_deductions', 16, 2)->default(0);
@@ -185,7 +185,7 @@ return new class extends Migration
             $table->foreignUuid('payroll_run_id')->nullable()->after('id')->constrained('payroll_runs')->nullOnDelete();
             $table->foreignId('employee_id')->nullable()->after('payroll_run_id')->constrained('users')->nullOnDelete();
             $table->string('payslip_number', 60)->nullable()->unique()->after('branch_id');
-            $table->enum('status', ['draft', 'generated', 'reviewed', 'approved', 'paid', 'locked', 'void'])->default('draft')->after('payslip_number');
+            $table->enum('status', ['draft', 'generated', 'approved', 'processed', 'paid', 'locked', 'void'])->default('draft')->after('payslip_number');
             $table->decimal('gross_earnings', 16, 2)->default(0)->after('status');
             $table->decimal('total_deductions', 16, 2)->default(0)->after('gross_earnings');
             $table->decimal('employer_contributions', 16, 2)->default(0)->after('total_deductions');
@@ -215,7 +215,7 @@ return new class extends Migration
             $table->decimal('amount', 16, 2);
             $table->decimal('base_currency_amount', 16, 2)->default(0);
             $table->enum('calculation_type', ['fixed', 'percentage', 'formula', 'manual'])->default('fixed');
-            $table->enum('source', ['salary_structure', 'attendance', 'manual', 'addition', 'deduction', 'tax', 'benefit', 'overtime', 'reimbursement']);
+            $table->enum('source', ['salary_structure', 'payroll_addition', 'payroll_deduction', 'payslip_manual_addition', 'payslip_manual_deduction', 'attendance', 'overtime', 'tax', 'benefit', 'reimbursement', 'manual', 'addition', 'deduction']);
             $table->text('remarks')->nullable();
             $table->timestamps();
 

@@ -517,9 +517,21 @@ Route::prefix('hrm')->group(function () {
 
     Route::prefix('payroll')->name('hrm.payroll.')->group(function () {
         Route::get('dashboard', [PayrollRunController::class, 'dashboard']);
+        Route::post('payrolls/generate', [PayrollRunController::class, 'generate']);
+        Route::post('payrolls/{id}/approve', [PayrollRunController::class, 'approve']);
+        Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);
+        Route::post('payrolls/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
+        Route::post('payrolls/{id}/lock', [PayrollRunController::class, 'lock']);
+        Route::post('payrolls/{id}/void', [PayrollRunController::class, 'void']);
+        Route::post('payrolls/{id}/journal-voucher', [PayrollRunController::class, 'journalVoucher']);
+        Route::post('payrolls/{id}/{kind}', [PayrollRunController::class, 'storeAdjustment'])
+            ->whereIn('kind', ['addition', 'deduction']);
+        Route::delete('payrolls/{id}/{kind}/{adjustmentId}', [PayrollRunController::class, 'destroyAdjustment'])
+            ->whereIn('kind', ['addition', 'deduction']);
         Route::post('runs/generate', [PayrollRunController::class, 'generate']);
         Route::post('runs/{id}/review', [PayrollRunController::class, 'review']);
         Route::post('runs/{id}/approve', [PayrollRunController::class, 'approve']);
+        Route::post('runs/{id}/process', [PayrollRunController::class, 'process']);
         Route::post('runs/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
         Route::post('runs/{id}/lock', [PayrollRunController::class, 'lock']);
         Route::post('runs/{id}/void', [PayrollRunController::class, 'void']);
@@ -532,6 +544,7 @@ Route::prefix('hrm')->group(function () {
         Route::apiResource('employee-deductions', EmployeeDeductionController::class);
         Route::apiResource('periods', PayrollPeriodController::class);
         Route::apiResource('attendance-summaries', AttendanceSummaryController::class);
+        Route::apiResource('payrolls', PayrollRunController::class);
         Route::apiResource('runs', PayrollRunController::class);
         Route::apiResource('payslip-lines', PayslipLineController::class);
         Route::apiResource('tax-slabs', TaxSlabController::class);

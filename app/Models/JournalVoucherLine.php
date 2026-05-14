@@ -18,6 +18,7 @@ class JournalVoucherLine extends Model
      */
     protected $fillable = [
         'journal_voucher_id',
+        'account_id',
         'chart_of_account_id',
         'description',
         'debit',
@@ -45,5 +46,10 @@ class JournalVoucherLine extends Model
     public function chartOfAccount(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class);
+    }
+
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
     }
 }

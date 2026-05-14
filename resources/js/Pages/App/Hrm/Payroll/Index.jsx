@@ -3,11 +3,14 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
+import dayjs from 'dayjs';
 import {
   App,
   Button,
   Card,
   Col,
+  DatePicker,
+  Descriptions,
   Divider,
   Drawer,
   Form,
@@ -18,7 +21,6 @@ import {
   Select,
   Space,
   Statistic,
-  Steps,
   Table,
   Tabs,
   Tag,
@@ -30,11 +32,11 @@ import {
   BankOutlined,
   CalculatorOutlined,
   CheckCircleOutlined,
+  DeleteOutlined,
   DollarOutlined,
   FileDoneOutlined,
   PlusOutlined,
   ReloadOutlined,
-  SaveOutlined,
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -46,29 +48,29 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 const statusColor = {
   draft: 'default',
   generated: 'processing',
-  reviewed: 'blue',
   approved: 'green',
+  processed: 'blue',
   paid: 'cyan',
   locked: 'purple',
   void: 'red',
 };
 
 const money = (value) =>
-  Number(value || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const employeeName = (employee) =>
+  employee ? [employee.first_name, employee.last_name].filter(Boolean).join(' ') || employee.username || employee.name : '-';
 
 function MetricCard({ title, value, prefix, icon }) {
   const { token } = theme.useToken();
   return (
-    <Card bordered={false} style={{ borderRadius: 14, boxShadow: token.boxShadowTertiary }}>
+    <Card bordered={false} style={{ borderRadius: token.borderRadiusLG, boxShadow: token.boxShadowTertiary }}>
       <Space align="start">
         <span
           style={{
             width: 40,
             height: 40,
-            borderRadius: 12,
+            borderRadius: token.borderRadius,
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -78,36 +80,18 @@ function MetricCard({ title, value, prefix, icon }) {
         >
           {icon}
         </span>
-        <Statistic
-          title={title}
-          value={value}
-          prefix={prefix}
-          precision={typeof value === 'number' ? 2 : 0}
-        />
+        <Statistic title={title} value={value} prefix={prefix} precision={typeof value === 'number' ? 2 : 0} />
       </Space>
     </Card>
   );
 }
 
-function PayrollWizard({ onGenerated }) {
+function PayrollWizard({ lookups, onGenerated, onQuickAddPeriod }) {
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState([]);
-  const [periods, setPeriods] = useState([]);
-  const [branches, setBranches] = useState([]);
-
-  useEffect(() => {
-    const load = async () => {
-      const [periodResult, branchResult] = await Promise.allSettled([
-        axios.get(api('/api/hrm/payroll/periods'), { params: { page_size: 50, ordering: '-year,-month' } }),
-        axios.get(api('/api/branches'), { params: { page_size: 100 } }),
-      ]);
-      if (periodResult.status === 'fulfilled') setPeriods(periodResult.value.data?.results || []);
-      if (branchResult.status === 'fulfilled') setBranches(branchResult.value.data?.results || []);
-    };
-    load();
-  }, []);
 
   const loadPreview = async () => {
     const values = form.getFieldsValue();
@@ -126,11 +110,11 @@ function PayrollWizard({ onGenerated }) {
     const values = await form.validateFields();
     setLoading(true);
     try {
-      await axios.post(api('/api/hrm/payroll/runs/generate'), {
+      await axios.post(api('/api/hrm/payroll/payrolls/generate'), {
         ...values,
         idempotency_key: `payroll-${values.payroll_period_id}-${values.branch_id || 'all'}-${Date.now()}`,
       });
-      message.success('Payroll run generated for all employees.');
+      message.success('Payroll generated.');
       setPreview([]);
       form.resetFields();
       onGenerated?.();
@@ -142,41 +126,53 @@ function PayrollWizard({ onGenerated }) {
   };
 
   return (
-    <Card bordered={false} style={{ borderRadius: 14 }}>
-      <Steps
-        size="small"
-        current={preview.length ? 4 : 0}
-        items={[
-          { title: 'Period' },
-          { title: 'Employees' },
-          { title: 'Attendance' },
-          { title: 'Adjustments' },
-          { title: 'Generate' },
-        ]}
-        style={{ marginBottom: 18 }}
-      />
-
-      <Form form={form} layout="vertical" initialValues={{ employee_scope: 'all' }}>
+    <Card
+      bordered={false}
+      title={<Space><CalculatorOutlined /> Payroll Setup</Space>}
+      extra={<Text type="secondary">Draft generation allows missing employee payroll accounts</Text>}
+      style={{ borderRadius: token.borderRadiusLG, boxShadow: token.boxShadowTertiary }}
+    >
+      <Form form={form} layout="vertical" initialValues={{ employee_scope: 'all', exchange_rate: 1 }}>
         <Row gutter={12}>
           <Col xs={24} md={8}>
-            <Form.Item name="payroll_period_id" label="Payroll Period" rules={[{ required: true }]}>
-              <Select
-                showSearch
-                placeholder="Select period"
-                options={periods.map((p) => ({
-                  value: p.id,
-                  label: `${p.month}/${p.year}${p.branch?.name ? ` — ${p.branch.name}` : ''}`,
-                }))}
-              />
+            <Form.Item label="Payroll Period" required>
+              <Space.Compact style={{ width: '100%' }}>
+                <Form.Item name="payroll_period_id" noStyle rules={[{ required: true, message: 'Select a payroll period' }]}>
+                  <Select
+                    showSearch
+                    placeholder="Select period"
+                    options={lookups.periods.map((p) => ({
+                      value: p.id,
+                      label: `${p.month}/${p.year}${p.branch?.name ? ` - ${p.branch.name}` : ''}`,
+                    }))}
+                  />
+                </Form.Item>
+                <Button icon={<PlusOutlined />} onClick={onQuickAddPeriod} />
+              </Space.Compact>
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
             <Form.Item name="branch_id" label="Branch">
+              <Select allowClear showSearch placeholder="All branches" options={lookups.branches.map((b) => ({ value: b.id, label: b.name || b.code || b.id }))} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="currency_id" label="Currency">
+              <Select allowClear showSearch placeholder="Currency" options={lookups.currencies.map((c) => ({ value: c.id, label: c.code || c.name }))} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item name="exchange_rate" label="Exchange Rate" rules={[{ required: true }]}>
+              <InputNumber min={0.000001} precision={6} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={10}>
+            <Form.Item name="source_account_id" label="Payment From Account">
               <Select
                 allowClear
                 showSearch
-                placeholder="All branches"
-                options={branches.map((b) => ({ value: b.id, label: b.name || b.code || b.id }))}
+                placeholder="Required before processing"
+                options={lookups.paymentAccounts.map((a) => ({ value: a.id, label: `${a.code ? `${a.code} - ` : ''}${a.name}` }))}
               />
             </Form.Item>
           </Col>
@@ -194,12 +190,8 @@ function PayrollWizard({ onGenerated }) {
           </Col>
         </Row>
         <Space>
-          <Button onClick={loadPreview} loading={loading} icon={<ReloadOutlined />}>
-            Preview Employees
-          </Button>
-          <Button type="primary" onClick={generate} loading={loading} icon={<CalculatorOutlined />}>
-            Generate Payroll
-          </Button>
+          <Button onClick={loadPreview} loading={loading} icon={<ReloadOutlined />}>Preview Employees</Button>
+          <Button type="primary" onClick={generate} loading={loading} icon={<CalculatorOutlined />}>Generate Payroll</Button>
         </Space>
       </Form>
 
@@ -212,14 +204,10 @@ function PayrollWizard({ onGenerated }) {
             dataSource={preview}
             pagination={{ pageSize: 8 }}
             columns={[
-              {
-                title: 'Employee',
-                render: (_, r) =>
-                  r.name || [r.first_name, r.last_name].filter(Boolean).join(' ') || r.email,
-              },
+              { title: 'Employee', render: (_, r) => employeeName(r) || r.email },
               { title: 'Employee ID', dataIndex: 'employee_id' },
-              { title: 'Branch', render: (_, r) => r.branch?.name || r.branch_id || '—' },
-              { title: 'Department', render: (_, r) => r.department?.name || '—' },
+              { title: 'Branch', render: (_, r) => r.branch?.name || '-' },
+              { title: 'Payroll Account', render: (_, r) => r.payroll_account?.name || <Tag color="warning">Missing</Tag> },
             ]}
           />
         </>
@@ -228,27 +216,152 @@ function PayrollWizard({ onGenerated }) {
   );
 }
 
+function PayrollPeriodsPanel({ periods, branches, loading, onCreate, onEdit, onRefresh, style }) {
+  const { token } = theme.useToken();
+
+  return (
+    <Card
+      bordered={false}
+      style={style}
+      title={<Space><FileDoneOutlined /> Payroll Periods</Space>}
+      extra={
+        <Space>
+          <Text type="secondary">{periods.length} periods</Text>
+          <Button icon={<ReloadOutlined />} onClick={onRefresh} />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => onCreate()}>Add Period</Button>
+        </Space>
+      }
+    >
+      <Table
+        rowKey="id"
+        size="middle"
+        loading={loading}
+        dataSource={periods}
+        pagination={{ pageSize: 12, showSizeChanger: false }}
+        columns={[
+          {
+            title: 'Period',
+            render: (_, row) => (
+              <Space direction="vertical" size={0}>
+                <Text strong>{dayjs().month((row.month || 1) - 1).format('MMMM')} {row.year}</Text>
+                <Text type="secondary">{row.start_date} to {row.end_date}</Text>
+              </Space>
+            ),
+          },
+          {
+            title: 'Branch',
+            render: (_, row) => row.branch?.name || branches.find((branch) => branch.id === row.branch_id)?.name || <Text type="secondary">All branches</Text>,
+          },
+          {
+            title: 'Status',
+            dataIndex: 'status',
+            width: 120,
+            render: (value) => {
+              const colors = { open: 'green', closed: 'default', locked: 'purple' };
+              return <Tag color={colors[value]}>{value}</Tag>;
+            },
+          },
+          {
+            title: '',
+            align: 'right',
+            width: 100,
+            render: (_, row) => <Button size="small" onClick={() => onEdit(row)}>Edit</Button>,
+          },
+        ]}
+        rowClassName={(row) => (row.status === 'open' ? 'payroll-period-row-open' : '')}
+      />
+      <style>
+        {`
+          .payroll-period-row-open td:first-child {
+            border-left: 3px solid ${token.colorSuccess};
+          }
+        `}
+      </style>
+    </Card>
+  );
+}
+
+function AdjustmentTable({ title, rows, editable, onAdd, onDelete }) {
+  return (
+    <Card
+      size="small"
+      title={title}
+      extra={<Button size="small" type="primary" icon={<PlusOutlined />} onClick={onAdd} disabled={!editable}>Add</Button>}
+    >
+      <Table
+        size="small"
+        rowKey="id"
+        dataSource={rows}
+        pagination={false}
+        columns={[
+          { title: 'Name', dataIndex: 'name' },
+          { title: 'Calculation', dataIndex: 'calculation_type', width: 110 },
+          { title: 'Applicability', dataIndex: 'applicability_type', width: 150, render: (v) => v?.replace('_', ' ') },
+          { title: 'Amount', dataIndex: 'amount', align: 'right', width: 120, render: money },
+          {
+            title: '',
+            width: 48,
+            render: (_, r) => (
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} disabled={!editable} onClick={() => onDelete(r)} />
+            ),
+          },
+        ]}
+      />
+    </Card>
+  );
+}
+
 export default function Payroll({ auth }) {
   const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  // Run detail drawer
-  const [selectedRun, setSelectedRun] = useState(null);
+  const [lookups, setLookups] = useState({ periods: [], branches: [], currencies: [], accounts: [], paymentAccounts: [], components: [] });
+  const [selectedPayroll, setSelectedPayroll] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [payslips, setPayslips] = useState([]);
-  const [payslipsLoading, setPayslipsLoading] = useState(false);
-  const [payslipEdits, setPayslipEdits] = useState({});
-  const [savingPayslips, setSavingPayslips] = useState(false);
-
-  // Bulk modals
-  const [bulkMode, setBulkMode] = useState(null); // 'bonus' | 'deduction'
-  const [bulkAmount, setBulkAmount] = useState(0);
-  const [bulkComment, setBulkComment] = useState('');
-
-  // Void modal
-  const [voidingRun, setVoidingRun] = useState(null);
+  const [adjustmentModal, setAdjustmentModal] = useState(null);
+  const [payslipDrawer, setPayslipDrawer] = useState(null);
+  const [voidingPayroll, setVoidingPayroll] = useState(null);
   const [voidReason, setVoidReason] = useState('');
+  const [periodModal, setPeriodModal] = useState({ open: false, record: null });
+  const [periodSaving, setPeriodSaving] = useState(false);
+  const [form] = Form.useForm();
+  const [lineForm] = Form.useForm();
+  const [periodForm] = Form.useForm();
+
+  const editable = ['draft', 'generated'].includes(selectedPayroll?.status);
+  const pageStyles = {
+    shell: {
+      padding: 16,
+      minHeight: 'calc(100vh - 64px)',
+      background: token.colorBgLayout,
+    },
+    header: {
+      border: `1px solid ${token.colorBorderSecondary}`,
+      background: token.colorBgContainer,
+      borderRadius: token.borderRadiusLG,
+      boxShadow: token.boxShadowTertiary,
+    },
+    headerInner: {
+      padding: 18,
+    },
+    headerMeta: {
+      color: token.colorTextSecondary,
+      marginTop: 4,
+      maxWidth: 760,
+    },
+    quickStat: {
+      padding: '10px 12px',
+      border: `1px solid ${token.colorBorderSecondary}`,
+      borderRadius: token.borderRadius,
+      background: token.colorFillQuaternary,
+      minWidth: 124,
+    },
+    sectionCard: {
+      borderRadius: token.borderRadiusLG,
+      boxShadow: token.boxShadowTertiary,
+    },
+  };
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -260,356 +373,240 @@ export default function Payroll({ auth }) {
     }
   };
 
-  useEffect(() => { loadDashboard(); }, []);
+  const loadLookups = async () => {
+    const [periods, branches, currencies, accounts, components] = await Promise.allSettled([
+      axios.get(api('/api/hrm/payroll/periods'), { params: { page_size: 100, ordering: '-year,-month' } }),
+      axios.get(api('/api/branches'), { params: { page_size: 100 } }),
+      axios.get(api('/api/currencies'), { params: { page_size: 100 } }),
+      axios.get(api('/api/accounts'), { params: { page_size: 300 } }),
+      axios.get(api('/api/hrm/payroll/salary-components'), { params: { page_size: 100 } }),
+    ]);
+    const accountRows = accounts.status === 'fulfilled' ? accounts.value.data?.results || [] : [];
+    setLookups({
+      periods: periods.status === 'fulfilled' ? periods.value.data?.results || [] : [],
+      branches: branches.status === 'fulfilled' ? branches.value.data?.results || [] : [],
+      currencies: currencies.status === 'fulfilled' ? currencies.value.data?.results || [] : [],
+      accounts: accountRows,
+      paymentAccounts: accountRows.filter((a) => ['cash', 'bank'].includes(a.nature)),
+      components: components.status === 'fulfilled' ? components.value.data?.results || [] : [],
+    });
+  };
 
-  const act = (run, action, label) => {
+  const openPeriodModal = (record = null) => {
+    setPeriodModal({ open: true, record });
+    periodForm.setFieldsValue(record ? {
+      month: record.month,
+      year: record.year,
+      start_date: record.start_date ? dayjs(record.start_date) : null,
+      end_date: record.end_date ? dayjs(record.end_date) : null,
+      branch_id: record.branch_id || null,
+      status: record.status || 'open',
+    } : {
+      month: dayjs().month() + 1,
+      year: dayjs().year(),
+      start_date: dayjs().startOf('month'),
+      end_date: dayjs().endOf('month'),
+      branch_id: null,
+      status: 'open',
+    });
+  };
+
+  const closePeriodModal = () => {
+    setPeriodModal({ open: false, record: null });
+    periodForm.resetFields();
+  };
+
+  const savePeriod = async () => {
+    const values = await periodForm.validateFields();
+    const payload = {
+      ...values,
+      start_date: values.start_date?.format('YYYY-MM-DD'),
+      end_date: values.end_date?.format('YYYY-MM-DD'),
+    };
+
+    setPeriodSaving(true);
+    try {
+      if (periodModal.record?.id) {
+        await axios.patch(api(`/api/hrm/payroll/periods/${periodModal.record.id}`), payload);
+        message.success('Payroll period updated.');
+      } else {
+        await axios.post(api('/api/hrm/payroll/periods'), payload);
+        message.success('Payroll period created.');
+      }
+      closePeriodModal();
+      await loadLookups();
+    } catch (error) {
+      message.error(error?.response?.data?.message || 'Unable to save payroll period.');
+    } finally {
+      setPeriodSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard();
+    loadLookups();
+  }, []);
+
+  const refreshSelected = async (id = selectedPayroll?.id) => {
+    if (!id) return;
+    const { data } = await axios.get(api(`/api/hrm/payroll/payrolls/${id}`));
+    setSelectedPayroll(data);
+    setDashboard((prev) => {
+      if (!prev) return prev;
+      const rows = (prev.recent_payrolls || prev.recent_runs || []).map((p) => (p.id === data.id ? data : p));
+      return { ...prev, recent_payrolls: rows, recent_runs: rows };
+    });
+  };
+
+  const openPayroll = async (payroll) => {
+    setDrawerOpen(true);
+    setSelectedPayroll(payroll);
+    await refreshSelected(payroll.id);
+  };
+
+  const act = (payroll, action, label) => {
     modal.confirm({
-      title: `${label} payroll run?`,
-      content: `Run ${run.run_number} will be moved to ${label.toLowerCase()} state.`,
+      title: `${label} payroll?`,
+      content: `${payroll.payroll_number || payroll.run_number} will move to ${label.toLowerCase()}.`,
       okText: label,
       onOk: async () => {
-        await axios.post(api(`/api/hrm/payroll/runs/${run.id}/${action}`));
-        message.success(`Payroll run ${label.toLowerCase()} complete.`);
-        loadDashboard();
-        if (drawerOpen && selectedRun?.id === run.id) setDrawerOpen(false);
+        await axios.post(api(`/api/hrm/payroll/payrolls/${payroll.id}/${action}`));
+        message.success(`Payroll ${label.toLowerCase()} complete.`);
+        await loadDashboard();
+        await refreshSelected(payroll.id);
       },
     });
   };
 
-  const openRun = async (run) => {
-    setSelectedRun(run);
-    setDrawerOpen(true);
-    setPayslipEdits({});
-    setPayslipsLoading(true);
-    try {
-      const { data } = await axios.get(api('/api/hrm/payslips/'), {
-        params: { payroll_run_id: run.id, page_size: 500 },
-      });
-      const rows = data?.results || data?.data || [];
-      setPayslips(rows);
-      const init = {};
-      rows.forEach((p) => {
-        init[p.id] = {
-          bonus: p.bonus ?? 0,
-          deduction: p.deduction ?? 0,
-          bonus_comment: p.bonus_comment || '',
-          deduction_comment: p.deduction_comment || '',
-          dirty: false,
-        };
-      });
-      setPayslipEdits(init);
-    } finally {
-      setPayslipsLoading(false);
-    }
+  const saveAdjustment = async () => {
+    const values = await form.validateFields();
+    await axios.post(api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${adjustmentModal}`), values);
+    message.success(`${adjustmentModal === 'addition' ? 'Addition' : 'Deduction'} applied.`);
+    setAdjustmentModal(null);
+    form.resetFields();
+    await refreshSelected();
   };
 
-  const updatePayslipEdit = (id, field, value) => {
-    setPayslipEdits((prev) => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [field]: value, dirty: true },
-    }));
+  const deleteAdjustment = async (kind, row) => {
+    await axios.delete(api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${kind}/${row.id}`));
+    message.success('Adjustment deleted.');
+    await refreshSelected();
   };
 
-  const savePayslipEdits = async () => {
-    const dirty = Object.entries(payslipEdits).filter(([, e]) => e.dirty);
-    if (!dirty.length) { message.info('No changes to save.'); return; }
-    setSavingPayslips(true);
-    try {
-      await Promise.all(
-        dirty.map(([id, edit]) =>
-          axios.patch(api(`/api/hrm/payslips/${id}/`), {
-            bonus: Number(edit.bonus || 0),
-            deduction: Number(edit.deduction || 0),
-            bonus_comment: edit.bonus_comment?.trim() || null,
-            deduction_comment: edit.deduction_comment?.trim() || null,
-          }),
-        ),
-      );
-      message.success(`${dirty.length} payslip${dirty.length !== 1 ? 's' : ''} updated.`);
-      await openRun(selectedRun);
-    } catch {
-      message.error('Some payslips could not be saved.');
-    } finally {
-      setSavingPayslips(false);
-    }
+  const savePayslipLine = async () => {
+    const values = await lineForm.validateFields();
+    const source = values.type === 'earning' ? 'payslip_manual_addition' : 'payslip_manual_deduction';
+    const { data } = await axios.post(api('/api/hrm/payroll/payslip-lines'), { ...values, source, payslip_id: payslipDrawer.id });
+    message.success('Payslip line added.');
+    setPayslipDrawer(data);
+    lineForm.resetFields();
+    await refreshSelected();
   };
 
-  const applyBulk = () => {
-    if (!bulkAmount) { message.warning('Enter a valid amount.'); return; }
-    const field = bulkMode === 'bonus' ? 'bonus' : 'deduction';
-    const commentField = bulkMode === 'bonus' ? 'bonus_comment' : 'deduction_comment';
-    setPayslipEdits((prev) => {
-      const next = { ...prev };
-      payslips.forEach((p) => {
-        next[p.id] = {
-          ...(next[p.id] || {}),
-          [field]: Number(bulkAmount),
-          [commentField]: bulkComment,
-          dirty: true,
-        };
-      });
-      return next;
+  const deletePayslipLine = async (line) => {
+    const { data } = await axios.delete(api(`/api/hrm/payroll/payslip-lines/${line.id}`));
+    message.success('Payslip line deleted.');
+    setPayslipDrawer(data);
+    await refreshSelected();
+  };
+
+  const payrollRows = dashboard?.recent_payrolls || dashboard?.recent_runs || [];
+  const statusCounts = useMemo(() => {
+    const seed = { generated: 0, approved: 0, processed: 0, paid: 0 };
+    payrollRows.forEach((row) => {
+      if (Object.prototype.hasOwnProperty.call(seed, row.status)) seed[row.status] += 1;
     });
-    setBulkMode(null);
-    setBulkAmount(0);
-    setBulkComment('');
-    message.success(`Bulk ${bulkMode} applied to ${payslips.length} payslips. Save to confirm.`);
-  };
-
-  const dirtyPayslipCount = useMemo(
-    () => Object.values(payslipEdits).filter((e) => e.dirty).length,
-    [payslipEdits],
+    return seed;
+  }, [payrollRows]);
+  const selectedEmployeeOptions = useMemo(
+    () => (selectedPayroll?.payslips || []).map((p) => ({ value: p.employee_id, label: employeeName(p.employee) })),
+    [selectedPayroll],
   );
 
-  const runColumns = [
-    { title: 'Run #', dataIndex: 'run_number', width: 150 },
-    {
-      title: 'Period',
-      render: (_, r) => `${r.payroll_period?.month || '—'} / ${r.payroll_period?.year || '—'}`,
-    },
+  const payrollColumns = [
+    { title: 'Payroll #', dataIndex: 'payroll_number', width: 160, render: (v, r) => v || r.run_number },
+    { title: 'Period', render: (_, r) => `${r.payroll_period?.month || '-'}/${r.payroll_period?.year || '-'}` },
     { title: 'Employees', dataIndex: 'total_employees', align: 'right', width: 100 },
-    { title: 'Gross', dataIndex: 'total_gross', align: 'right', render: money },
+    { title: 'Earnings', dataIndex: 'total_earnings', align: 'right', render: money },
     { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
-    {
-      title: 'Net Payable',
-      dataIndex: 'total_net_payable',
-      align: 'right',
-      render: (v) => <Text strong>{money(v)}</Text>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      width: 110,
-      render: (v) => <Tag color={statusColor[v]}>{v}</Tag>,
-    },
-    {
-      title: '',
-      width: 80,
-      render: (_, r) => (
-        <Button
-          size="small"
-          type="link"
-          onClick={(e) => { e.stopPropagation(); openRun(r); }}
-        >
-          Open
-        </Button>
-      ),
-    },
+    { title: 'Net Payable', dataIndex: 'total_net_payable', align: 'right', render: (v) => <Text strong>{money(v)}</Text> },
+    { title: 'Payment From Account', render: (_, r) => r.source_account?.name || <Text type="secondary">Not selected</Text> },
+    { title: 'Status', dataIndex: 'status', width: 110, render: (v) => <Tag color={statusColor[v]}>{v}</Tag> },
+    { title: '', width: 80, render: (_, r) => <Button size="small" type="link" onClick={() => openPayroll(r)}>Open</Button> },
   ];
 
   const payslipColumns = [
-    {
-      title: 'Employee',
-      key: 'emp',
-      width: 180,
-      render: (_, p) => {
-        const emp = p.employee || p.user;
-        const name = emp
-          ? [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.username
-          : '—';
-        return <Text strong>{name}</Text>;
-      },
-    },
-    { title: 'Salary', dataIndex: 'salary', align: 'right', width: 110, render: money },
-    {
-      title: 'Salary Payable',
-      dataIndex: 'salary_payable',
-      align: 'right',
-      width: 120,
-      render: money,
-    },
-    {
-      title: 'Bonus',
-      key: 'bonus',
-      width: 120,
-      render: (_, p) => (
-        <InputNumber
-          size="small"
-          min={0}
-          precision={2}
-          value={payslipEdits[p.id]?.bonus ?? p.bonus ?? 0}
-          onChange={(val) => updatePayslipEdit(p.id, 'bonus', val)}
-          style={{ width: '100%' }}
-        />
-      ),
-    },
-    {
-      title: 'Deduction',
-      key: 'deduction',
-      width: 120,
-      render: (_, p) => (
-        <InputNumber
-          size="small"
-          min={0}
-          precision={2}
-          value={payslipEdits[p.id]?.deduction ?? p.deduction ?? 0}
-          onChange={(val) => updatePayslipEdit(p.id, 'deduction', val)}
-          style={{ width: '100%' }}
-        />
-      ),
-    },
-    {
-      title: 'Total Payable',
-      key: 'total',
-      align: 'right',
-      width: 130,
-      render: (_, p) => {
-        const edit = payslipEdits[p.id];
-        const total =
-          Number(p.salary_payable || 0) +
-          Number(edit?.bonus ?? p.bonus ?? 0) -
-          Number(edit?.deduction ?? p.deduction ?? 0);
-        return (
-          <Text strong style={{ color: '#1677ff' }}>
-            {money(total)}
-          </Text>
-        );
-      },
-    },
-    {
-      title: 'Status',
-      dataIndex: 'payment_status',
-      width: 100,
-      render: (v) => (
-        <Tag color={v === 'PAID' ? 'green' : v === 'PARTIAL' ? 'blue' : 'orange'}>{v}</Tag>
-      ),
-    },
-  ];
-
-  const drawerTitle = selectedRun ? (
-    <Row align="middle" gutter={8} wrap={false}>
-      <Col flex="auto">
-        <Space>
-          <Text strong>Run {selectedRun.run_number}</Text>
-          <Tag color={statusColor[selectedRun.status]}>{selectedRun.status}</Tag>
-        </Space>
-      </Col>
-      <Col>
-        <Space size={4}>
-          {selectedRun.status === 'generated' && (
-            <Button size="small" onClick={() => act(selectedRun, 'review', 'Review')}>
-              Review
-            </Button>
-          )}
-          {selectedRun.status === 'reviewed' && (
-            <Button size="small" type="primary" onClick={() => act(selectedRun, 'approve', 'Approve')}>
-              Approve
-            </Button>
-          )}
-          {selectedRun.status === 'approved' && (
-            <Button size="small" onClick={() => act(selectedRun, 'mark-paid', 'Mark Paid')}>
-              Mark Paid
-            </Button>
-          )}
-          {selectedRun.status === 'paid' && (
-            <Button size="small" onClick={() => act(selectedRun, 'lock', 'Lock')}>
-              Lock
-            </Button>
-          )}
-          {['generated', 'reviewed', 'approved'].includes(selectedRun.status) && (
-            <Button size="small" danger onClick={() => { setVoidingRun(selectedRun); setDrawerOpen(false); }}>
-              Void
-            </Button>
-          )}
-        </Space>
-      </Col>
-    </Row>
-  ) : (
-    'Run Detail'
-  );
-
-  const componentFields = [
-    { name: 'name', label: 'Name', type: 'text', required: true, col: 8 },
-    { name: 'code', label: 'Code', type: 'text', required: true, col: 4 },
-    {
-      name: 'type',
-      label: 'Type',
-      type: 'select',
-      required: true,
-      col: 6,
-      options: ['earning', 'deduction', 'employer_contribution'].map((v) => ({ value: v, label: v })),
-    },
-    {
-      name: 'calculation_type',
-      label: 'Calculation',
-      type: 'select',
-      required: true,
-      col: 6,
-      options: ['fixed', 'percentage', 'formula', 'manual'].map((v) => ({ value: v, label: v })),
-    },
-    { name: 'taxable', label: 'Taxable', type: 'switch', col: 6 },
-    { name: 'affects_net_salary', label: 'Affects Net', type: 'switch', col: 6 },
-    { name: 'sort_order', label: 'Sort Order', type: 'number', col: 6 },
-    { name: 'active', label: 'Active', type: 'switch', col: 6 },
-  ];
-
-  const periodFields = [
-    { name: 'month', label: 'Month', type: 'number', required: true, col: 6 },
-    { name: 'year', label: 'Year', type: 'number', required: true, col: 6 },
-    { name: 'start_date', label: 'Start Date', type: 'date', required: true, col: 6 },
-    { name: 'end_date', label: 'End Date', type: 'date', required: true, col: 6 },
-    { name: 'branch_id', label: 'Branch ID', type: 'text', col: 8 },
-    {
-      name: 'status',
-      label: 'Status',
-      type: 'select',
-      col: 8,
-      options: ['open', 'closed', 'locked'].map((v) => ({ value: v, label: v })),
-    },
+    { title: 'Employee', width: 180, render: (_, p) => <Text strong>{employeeName(p.employee)}</Text> },
+    { title: 'Basic Salary', dataIndex: 'salary', align: 'right', width: 120, render: money },
+    { title: 'Earnings', dataIndex: 'gross_earnings', align: 'right', render: money },
+    { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
+    { title: 'Net Payable', dataIndex: 'net_payable', align: 'right', render: (v) => <Text strong>{money(v)}</Text> },
+    { title: 'Employee Payroll Account', render: (_, p) => p.employee?.payroll_account?.name || <Tag color="warning">Missing</Tag> },
+    { title: 'Status', dataIndex: 'status', render: (v) => <Tag color={statusColor[v]}>{v}</Tag> },
+    { title: '', width: 90, render: (_, p) => <Button size="small" onClick={() => setPayslipDrawer(p)}>Payslip</Button> },
   ];
 
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Payroll" />
-      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
+      <div style={pageStyles.shell}>
         <Space direction="vertical" size={16} style={{ display: 'flex' }}>
-          <Row align="middle">
-            <Col flex="auto">
-              <Title level={4} style={{ margin: 0 }}>Payroll</Title>
-            </Col>
-            <Col>
-              <Button icon={<ReloadOutlined />} loading={loading} onClick={loadDashboard}>
-                Refresh
-              </Button>
-            </Col>
-          </Row>
+          <Card bordered={false} style={pageStyles.header} bodyStyle={pageStyles.headerInner}>
+            <Row align="middle" gutter={[16, 16]}>
+              <Col flex="auto">
+                <Space direction="vertical" size={2}>
+                  <Title level={3} style={{ margin: 0 }}>Payroll</Title>
+                  <Text style={pageStyles.headerMeta}>
+                    Generate payroll, apply shared adjustments, review payslips, post the journal voucher, and settle salaries from the selected payment account.
+                  </Text>
+                </Space>
+              </Col>
+              <Col>
+                <Space wrap>
+                  {Object.entries(statusCounts).map(([status, count]) => (
+                    <div key={status} style={pageStyles.quickStat}>
+                      <Text type="secondary" style={{ display: 'block', textTransform: 'capitalize' }}>{status}</Text>
+                      <Space size={6}>
+                        <Tag color={statusColor[status]}>{count}</Tag>
+                        <Text strong>{count === 1 ? 'payroll' : 'payrolls'}</Text>
+                      </Space>
+                    </div>
+                  ))}
+                  <Button icon={<PlusOutlined />} onClick={() => openPeriodModal()}>Add Period</Button>
+                  <Button icon={<ReloadOutlined />} loading={loading} onClick={loadDashboard}>Refresh</Button>
+                </Space>
+              </Col>
+            </Row>
+          </Card>
 
           <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Employees Included" value={dashboard?.employees_included || 0} icon={<TeamOutlined />} />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} prefix="$" icon={<DollarOutlined />} />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Deductions" value={dashboard?.total_deductions || 0} prefix="$" icon={<AuditOutlined />} />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Net Payable" value={dashboard?.net_payable || 0} prefix="$" icon={<BankOutlined />} />
-            </Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard title="Employees Included" value={dashboard?.employees_included || 0} icon={<TeamOutlined />} /></Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} prefix="$" icon={<DollarOutlined />} /></Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard title="Deductions" value={dashboard?.total_deductions || 0} prefix="$" icon={<AuditOutlined />} /></Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard title="Net Payable" value={dashboard?.net_payable || 0} prefix="$" icon={<BankOutlined />} /></Col>
           </Row>
 
           <Tabs
             items={[
+              { key: 'generate', label: 'Create Payroll', icon: <PlusOutlined />, children: <PayrollWizard lookups={lookups} onGenerated={loadDashboard} onQuickAddPeriod={() => openPeriodModal()} /> },
               {
-                key: 'generate',
-                label: 'Generate Run',
-                icon: <PlusOutlined />,
-                children: <PayrollWizard onGenerated={loadDashboard} />,
-              },
-              {
-                key: 'runs',
-                label: 'Payroll Runs',
+                key: 'payrolls',
+                label: 'Payrolls',
                 icon: <CheckCircleOutlined />,
                 children: (
-                  <Card bordered={false} style={{ borderRadius: 14 }}>
+                  <Card
+                    bordered={false}
+                    style={pageStyles.sectionCard}
+                    title={<Space><CheckCircleOutlined /> Payroll Register</Space>}
+                    extra={<Text type="secondary">{payrollRows.length} recent records</Text>}
+                  >
                     <Table
-                      size="small"
+                      size="middle"
                       rowKey="id"
-                      columns={runColumns}
-                      dataSource={dashboard?.recent_runs || []}
-                      pagination={{ pageSize: 10 }}
-                      locale={{ emptyText: 'No payroll runs yet. Generate one above.' }}
+                      columns={payrollColumns}
+                      dataSource={payrollRows}
+                      pagination={{ pageSize: 10, showSizeChanger: false }}
+                      scroll={{ x: 1040 }}
                     />
                   </Card>
                 ),
@@ -619,20 +616,14 @@ export default function Payroll({ auth }) {
                 label: 'Periods',
                 icon: <FileDoneOutlined />,
                 children: (
-                  <ReusableCrud
-                    title="Payroll Periods"
-                    icon={<FileDoneOutlined />}
-                    apiUrl={api('/api/hrm/payroll/periods/')}
-                    fields={periodFields}
-                    columns={[
-                      { title: 'Month', dataIndex: 'month' },
-                      { title: 'Year', dataIndex: 'year' },
-                      { title: 'Start', dataIndex: 'start_date' },
-                      { title: 'End', dataIndex: 'end_date' },
-                      { title: 'Status', dataIndex: 'status', render: (v) => <Tag>{v}</Tag> },
-                    ]}
-                    form_ui="drawer"
-                    enableServerPagination
+                  <PayrollPeriodsPanel
+                    periods={lookups.periods}
+                    branches={lookups.branches}
+                    loading={loading}
+                    onCreate={() => openPeriodModal()}
+                    onEdit={openPeriodModal}
+                    onRefresh={loadLookups}
+                    style={pageStyles.sectionCard}
                   />
                 ),
               },
@@ -645,18 +636,22 @@ export default function Payroll({ auth }) {
                     title="Salary Components"
                     icon={<SettingOutlined />}
                     apiUrl={api('/api/hrm/payroll/salary-components/')}
-                    fields={componentFields}
+                    fields={[
+                      { name: 'name', label: 'Name', type: 'text', required: true, col: 8 },
+                      { name: 'code', label: 'Code', type: 'text', required: true, col: 4 },
+                      { name: 'type', label: 'Type', type: 'select', required: true, col: 6, options: ['earning', 'deduction', 'employer_contribution'].map((v) => ({ value: v, label: v })) },
+                      { name: 'calculation_type', label: 'Calculation', type: 'select', required: true, col: 6, options: ['fixed', 'percentage', 'formula', 'manual'].map((v) => ({ value: v, label: v })) },
+                      { name: 'taxable', label: 'Taxable', type: 'switch', col: 6 },
+                      { name: 'affects_net_salary', label: 'Affects Net', type: 'switch', col: 6 },
+                      { name: 'sort_order', label: 'Sort Order', type: 'number', col: 6 },
+                      { name: 'active', label: 'Active', type: 'switch', col: 6 },
+                    ]}
                     columns={[
                       { title: 'Name', dataIndex: 'name' },
                       { title: 'Code', dataIndex: 'code' },
                       { title: 'Type', dataIndex: 'type', render: (v) => <Tag>{v}</Tag> },
                       { title: 'Calculation', dataIndex: 'calculation_type' },
-                      { title: 'Taxable', dataIndex: 'taxable', render: (v) => (v ? 'Yes' : 'No') },
-                      {
-                        title: 'Active',
-                        dataIndex: 'active',
-                        render: (v) => (v ? <Tag color="green">Active</Tag> : <Tag>Inactive</Tag>),
-                      },
+                      { title: 'Active', dataIndex: 'active', render: (v) => (v ? <Tag color="green">Active</Tag> : <Tag>Inactive</Tag>) },
                     ]}
                     form_ui="drawer"
                     enableServerPagination
@@ -668,122 +663,228 @@ export default function Payroll({ auth }) {
         </Space>
       </div>
 
-      {/* Run detail drawer */}
       <Drawer
-        title={drawerTitle}
+        title={selectedPayroll ? (
+          <Space>
+            <Text strong>{selectedPayroll.payroll_number || selectedPayroll.run_number}</Text>
+            <Tag color={statusColor[selectedPayroll.status]}>{selectedPayroll.status}</Tag>
+          </Space>
+        ) : 'Payroll'}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        width={960}
-        extra={
+        width={1180}
+        extra={selectedPayroll && (
           <Space>
-            <Button
-              icon={<PlusOutlined />}
-              onClick={() => { setBulkMode('bonus'); setBulkAmount(0); setBulkComment(''); }}
-              disabled={!payslips.length}
-            >
-              Bulk Bonus
-            </Button>
-            <Button
-              icon={<PlusOutlined />}
-              onClick={() => { setBulkMode('deduction'); setBulkAmount(0); setBulkComment(''); }}
-              disabled={!payslips.length}
-            >
-              Bulk Deduction
-            </Button>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={savePayslipEdits}
-              loading={savingPayslips}
-              disabled={!dirtyPayslipCount}
-            >
-              Save{dirtyPayslipCount > 0 ? ` (${dirtyPayslipCount})` : ''}
-            </Button>
+            {selectedPayroll.status === 'generated' && <Button type="primary" onClick={() => act(selectedPayroll, 'approve', 'Approve')}>Approve</Button>}
+            {selectedPayroll.status === 'approved' && <Button type="primary" onClick={() => act(selectedPayroll, 'process', 'Process')}>Process</Button>}
+            {selectedPayroll.status === 'processed' && <Button onClick={() => act(selectedPayroll, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>}
+            {selectedPayroll.status === 'paid' && <Button onClick={() => act(selectedPayroll, 'lock', 'Lock')}>Lock</Button>}
+            {['generated', 'approved', 'processed'].includes(selectedPayroll.status) && <Button danger onClick={() => setVoidingPayroll(selectedPayroll)}>Void</Button>}
           </Space>
-        }
-      >
-        {selectedRun && (
-          <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-            <Col xs={12} sm={6}>
-              <Statistic title="Employees" value={selectedRun.total_employees || 0} />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="Gross" value={money(selectedRun.total_gross)} />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="Deductions" value={money(selectedRun.total_deductions)} />
-            </Col>
-            <Col xs={12} sm={6}>
-              <Statistic title="Net Payable" value={money(selectedRun.total_net_payable)} valueStyle={{ color: '#1677ff' }} />
-            </Col>
-          </Row>
         )}
-        <Table
-          rowKey="id"
-          loading={payslipsLoading}
-          dataSource={payslips}
-          columns={payslipColumns}
-          size="small"
-          pagination={{ pageSize: 20, showTotal: (t) => `${t} payslips` }}
-          scroll={{ x: 880 }}
-          locale={{ emptyText: 'No payslips found for this run.' }}
-        />
+      >
+        {selectedPayroll && (
+          <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+            <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 4 }}>
+              <Descriptions.Item label="Payroll Period">{selectedPayroll.payroll_period?.month}/{selectedPayroll.payroll_period?.year}</Descriptions.Item>
+              <Descriptions.Item label="Branch">{selectedPayroll.branch?.name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Currency">{selectedPayroll.currency?.code || selectedPayroll.currency?.name || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Exchange Rate">{selectedPayroll.exchange_rate}</Descriptions.Item>
+              <Descriptions.Item label="Payment From Account">{selectedPayroll.source_account?.name || <Tag color="warning">Required before processing</Tag>}</Descriptions.Item>
+              <Descriptions.Item label="Journal Voucher">{selectedPayroll.journal_voucher?.voucher_no || '-'}</Descriptions.Item>
+              <Descriptions.Item label="Status"><Tag color={statusColor[selectedPayroll.status]}>{selectedPayroll.status}</Tag></Descriptions.Item>
+            </Descriptions>
+
+            <Row gutter={[12, 12]}>
+              <Col xs={12} sm={6}><Statistic title="Employees" value={selectedPayroll.total_employees || 0} /></Col>
+              <Col xs={12} sm={6}><Statistic title="Earnings" value={money(selectedPayroll.total_earnings)} /></Col>
+              <Col xs={12} sm={6}><Statistic title="Deductions" value={money(selectedPayroll.total_deductions)} /></Col>
+              <Col xs={12} sm={6}><Statistic title="Net Payable" value={money(selectedPayroll.total_net_payable)} valueStyle={{ color: token.colorPrimary }} /></Col>
+            </Row>
+
+            <Table rowKey="id" size="small" dataSource={selectedPayroll.payslips || []} columns={payslipColumns} pagination={{ pageSize: 20 }} scroll={{ x: 980 }} />
+
+            <Row gutter={[12, 12]}>
+              <Col xs={24} lg={12}>
+                <AdjustmentTable title="Payroll Additions" rows={selectedPayroll.additions || []} editable={editable} onAdd={() => setAdjustmentModal('addition')} onDelete={(row) => deleteAdjustment('addition', row)} />
+              </Col>
+              <Col xs={24} lg={12}>
+                <AdjustmentTable title="Payroll Deductions" rows={selectedPayroll.deductions || []} editable={editable} onAdd={() => setAdjustmentModal('deduction')} onDelete={(row) => deleteAdjustment('deduction', row)} />
+              </Col>
+            </Row>
+          </Space>
+        )}
       </Drawer>
 
-      {/* Bulk bonus / deduction modal */}
       <Modal
-        title={bulkMode === 'bonus' ? 'Apply Bonus to All Payslips' : 'Apply Deduction to All Payslips'}
-        open={Boolean(bulkMode)}
-        onCancel={() => setBulkMode(null)}
-        onOk={applyBulk}
-        okText="Apply to All"
+        title={adjustmentModal === 'addition' ? 'Add Payroll Addition' : 'Add Payroll Deduction'}
+        open={Boolean(adjustmentModal)}
+        onCancel={() => { setAdjustmentModal(null); form.resetFields(); }}
+        onOk={saveAdjustment}
+        okText="Apply"
       >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <div>
-            <Text type="secondary">Amount</Text>
-            <InputNumber
-              value={bulkAmount}
-              onChange={setBulkAmount}
-              min={0}
-              precision={2}
-              style={{ width: '100%', marginTop: 4 }}
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <Text type="secondary">Comment (optional)</Text>
-            <Input.TextArea
-              value={bulkComment}
-              onChange={(e) => setBulkComment(e.target.value)}
-              rows={2}
-              style={{ marginTop: 4 }}
-            />
-          </div>
-        </Space>
+        <Form form={form} layout="vertical" initialValues={{ calculation_type: 'fixed', applicability_type: 'all_employees' }}>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="component_id" label="Component">
+            <Select allowClear showSearch options={lookups.components.map((c) => ({ value: c.id, label: c.name }))} />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}><Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="calculation_type" label="Calculation" rules={[{ required: true }]}><Select options={[{ value: 'fixed', label: 'Fixed' }, { value: 'percentage', label: 'Percentage' }]} /></Form.Item></Col>
+          </Row>
+          <Form.Item name="applicability_type" label="Applicability" rules={[{ required: true }]}>
+            <Select options={[{ value: 'all_employees', label: 'All employees' }, { value: 'selected_employees', label: 'Selected employees' }]} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.applicability_type !== next.applicability_type}>
+            {({ getFieldValue }) => getFieldValue('applicability_type') === 'selected_employees' && (
+              <Form.Item name="selected_employee_ids" label="Employees" rules={[{ required: true }]}>
+                <Select mode="multiple" options={selectedEmployeeOptions} />
+              </Form.Item>
+            )}
+          </Form.Item>
+          <Form.Item name="remarks" label="Remarks"><Input.TextArea rows={2} /></Form.Item>
+        </Form>
       </Modal>
 
-      {/* Void modal */}
       <Modal
-        title="Void payroll run"
-        open={Boolean(voidingRun)}
-        okText="Void Run"
+        title={periodModal.record ? 'Edit Payroll Period' : 'Add Payroll Period'}
+        open={periodModal.open}
+        onCancel={closePeriodModal}
+        onOk={savePeriod}
+        confirmLoading={periodSaving}
+        okText={periodModal.record ? 'Save Period' : 'Create Period'}
+        width={640}
+      >
+        <Form form={periodForm} layout="vertical">
+          <Row gutter={12}>
+            <Col xs={24} sm={12}>
+              <Form.Item name="month" label="Month" rules={[{ required: true }]}>
+                <Select
+                  options={Array.from({ length: 12 }, (_, index) => ({
+                    value: index + 1,
+                    label: dayjs().month(index).format('MMMM'),
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="year" label="Year" rules={[{ required: true }]}>
+                <InputNumber min={2000} max={2100} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="start_date" label="Start Date" rules={[{ required: true }]}>
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="end_date" label="End Date" rules={[{ required: true }]}>
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="branch_id" label="Branch">
+                <Select
+                  allowClear
+                  showSearch
+                  placeholder="All branches"
+                  options={lookups.branches.map((branch) => ({ value: branch.id, label: branch.name || branch.code || branch.id }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="status" label="Status" rules={[{ required: true }]}>
+                <Select
+                  options={[
+                    { value: 'open', label: 'Open' },
+                    { value: 'closed', label: 'Closed' },
+                    { value: 'locked', label: 'Locked' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      <Drawer
+        title={payslipDrawer ? `Payslip - ${employeeName(payslipDrawer.employee)}` : 'Payslip'}
+        open={Boolean(payslipDrawer)}
+        onClose={() => setPayslipDrawer(null)}
+        width={900}
+      >
+        {payslipDrawer && (
+          <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+            <Descriptions size="small" bordered column={2}>
+              <Descriptions.Item label="Employee">{employeeName(payslipDrawer.employee)}</Descriptions.Item>
+              <Descriptions.Item label="Payroll Account">{payslipDrawer.employee?.payroll_account?.name || <Tag color="warning">Missing</Tag>}</Descriptions.Item>
+              <Descriptions.Item label="Payable Days">{payslipDrawer.payable_days}</Descriptions.Item>
+              <Descriptions.Item label="Overtime Hours">{payslipDrawer.overtime_hours}</Descriptions.Item>
+              <Descriptions.Item label="Earnings">{money(payslipDrawer.gross_earnings)}</Descriptions.Item>
+              <Descriptions.Item label="Deductions">{money(payslipDrawer.total_deductions)}</Descriptions.Item>
+              <Descriptions.Item label="Net Payable"><Text strong>{money(payslipDrawer.net_payable)}</Text></Descriptions.Item>
+            </Descriptions>
+
+            <Table
+              size="small"
+              rowKey="id"
+              dataSource={payslipDrawer.lines || []}
+              pagination={false}
+              columns={[
+                { title: 'Type', dataIndex: 'type', width: 130, render: (v) => <Tag>{v}</Tag> },
+                { title: 'Name', dataIndex: 'name' },
+                { title: 'Source', dataIndex: 'source', width: 170, render: (v) => v?.replaceAll('_', ' ') },
+                { title: 'Amount', dataIndex: 'amount', align: 'right', width: 120, render: money },
+                {
+                  title: '',
+                  width: 48,
+                  render: (_, line) => (
+                    <Button
+                      size="small"
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      disabled={!editable || !['payslip_manual_addition', 'payslip_manual_deduction'].includes(line.source)}
+                      onClick={() => deletePayslipLine(line)}
+                    />
+                  ),
+                },
+              ]}
+            />
+
+            <Card size="small" title="Payslip Adjustment">
+              <Form form={lineForm} layout="vertical" initialValues={{ type: 'earning', calculation_type: 'fixed' }}>
+                <Row gutter={12}>
+                  <Col xs={24} md={6}><Form.Item name="type" label="Type"><Select options={[{ value: 'earning', label: 'Addition' }, { value: 'deduction', label: 'Deduction' }]} /></Form.Item></Col>
+                  <Col xs={24} md={8}><Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item></Col>
+                  <Col xs={24} md={5}><Form.Item name="amount" label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+                  <Col xs={24} md={5}><Form.Item name="calculation_type" label="Calculation"><Select options={[{ value: 'fixed', label: 'Fixed' }, { value: 'percentage', label: 'Percentage' }]} /></Form.Item></Col>
+                  <Col xs={24}><Form.Item name="remarks" label="Remarks"><Input.TextArea rows={2} /></Form.Item></Col>
+                </Row>
+                <Button type="primary" icon={<PlusOutlined />} disabled={!editable} onClick={savePayslipLine}>Add Line</Button>
+              </Form>
+            </Card>
+          </Space>
+        )}
+      </Drawer>
+
+      <Modal
+        title="Void payroll"
+        open={Boolean(voidingPayroll)}
+        okText="Void Payroll"
         okButtonProps={{ danger: true }}
-        onCancel={() => { setVoidingRun(null); setVoidReason(''); }}
+        onCancel={() => { setVoidingPayroll(null); setVoidReason(''); }}
         onOk={async () => {
           if (!voidReason.trim()) { message.warning('Void reason is required.'); return; }
-          await axios.post(api(`/api/hrm/payroll/runs/${voidingRun.id}/void`), { reason: voidReason });
-          message.success('Payroll run voided.');
-          setVoidingRun(null);
+          await axios.post(api(`/api/hrm/payroll/payrolls/${voidingPayroll.id}/void`), { reason: voidReason });
+          message.success('Payroll voided.');
+          setVoidingPayroll(null);
           setVoidReason('');
-          loadDashboard();
+          await loadDashboard();
+          await refreshSelected(voidingPayroll.id);
         }}
       >
-        <Input.TextArea
-          rows={4}
-          value={voidReason}
-          onChange={(e) => setVoidReason(e.target.value)}
-          placeholder="Reason for voiding this payroll run"
-        />
+        <Input.TextArea rows={4} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding this payroll" />
       </Modal>
     </AuthenticatedLayout>
   );

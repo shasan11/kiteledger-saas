@@ -10,6 +10,7 @@ import {
   Card,
   Col,
   DatePicker,
+  Drawer,
   Input,
   Row,
   Select,
@@ -22,6 +23,7 @@ import {
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
+  FileTextOutlined,
   FieldTimeOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -54,6 +56,7 @@ export default function Attendance({ auth }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState([]);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -75,10 +78,12 @@ export default function Attendance({ auth }) {
 
       const initEdits = {};
       attRows.forEach((att) => {
+        const status = att.in_time_status || '';
+        const noTime = NO_TIME_STATUSES.includes(status);
         initEdits[att.user_id] = {
-          in_time: att.in_time ? dayjs(att.in_time).format('HH:mm') : '',
-          out_time: att.out_time ? dayjs(att.out_time).format('HH:mm') : '',
-          status: att.in_time_status || '',
+          in_time: !noTime && att.in_time ? dayjs(att.in_time).format('HH:mm') : '',
+          out_time: !noTime && att.out_time ? dayjs(att.out_time).format('HH:mm') : '',
+          status,
           attendance_id: att.id,
           dirty: false,
         };
@@ -119,6 +124,11 @@ export default function Attendance({ auth }) {
   };
 
   const saveAll = async () => {
+    if (date.isAfter(dayjs(), 'day')) {
+      message.warning('Future attendance cannot be saved.');
+      return;
+    }
+
     const dateStr = date.format('YYYY-MM-DD');
     const dirty = Object.entries(edits).filter(([, e]) => e.dirty && e.status);
     if (!dirty.length) { message.info('No changes to save.'); return; }
@@ -130,10 +140,11 @@ export default function Attendance({ auth }) {
     await Promise.all(
       dirty.map(async ([userId, edit]) => {
         try {
+          const noTime = NO_TIME_STATUSES.includes(edit.status);
           const payload = {
             user_id: Number(userId),
-            in_time: edit.in_time ? `${dateStr}T${edit.in_time}:00` : null,
-            out_time: edit.out_time ? `${dateStr}T${edit.out_time}:00` : null,
+            in_time: noTime ? `${dateStr}T00:00:00` : (edit.in_time ? `${dateStr}T${edit.in_time}:00` : null),
+            out_time: noTime ? null : (edit.out_time ? `${dateStr}T${edit.out_time}:00` : null),
             in_time_status: edit.status || null,
             out_time_status: edit.status || null,
             active: true,
@@ -171,6 +182,31 @@ export default function Attendance({ auth }) {
   const dirtyCount = useMemo(
     () => Object.values(edits).filter((e) => e.dirty && e.status).length,
     [edits],
+  );
+
+  const reportRows = useMemo(
+    () => employees.map((emp) => {
+      const edit = edits[emp.id] || {};
+      const name = [emp.first_name, emp.last_name].filter(Boolean).join(' ') || emp.username || emp.email || '-';
+      const inTime = edit.in_time || (attendanceMap[emp.id]?.in_time ? dayjs(attendanceMap[emp.id].in_time).format('HH:mm') : '');
+      const outTime = edit.out_time || (attendanceMap[emp.id]?.out_time ? dayjs(attendanceMap[emp.id].out_time).format('HH:mm') : '');
+      const start = inTime ? dayjs(`${date.format('YYYY-MM-DD')} ${inTime}`) : null;
+      const end = outTime ? dayjs(`${date.format('YYYY-MM-DD')} ${outTime}`) : null;
+      const hours = start?.isValid() && end?.isValid() && end.isAfter(start)
+        ? (end.diff(start, 'minute') / 60).toFixed(2)
+        : '-';
+
+      return {
+        id: emp.id,
+        employee: name,
+        code: emp.employee_id || emp.username || '-',
+        status: edit.status || 'UNMARKED',
+        in_time: inTime || '-',
+        out_time: outTime || '-',
+        hours,
+      };
+    }),
+    [attendanceMap, date, edits, employees],
   );
 
   const columns = [
@@ -274,7 +310,15 @@ export default function Attendance({ auth }) {
               <Col>
                 <DatePicker
                   value={date}
-                  onChange={(d) => d && setDate(d)}
+                  onChange={(d) => {
+                    if (!d) return;
+                    if (d.isAfter(dayjs(), 'day')) {
+                      message.warning('Future attendance is not allowed.');
+                      return;
+                    }
+                    setDate(d);
+                  }}
+                  disabledDate={(current) => current && current.isAfter(dayjs(), 'day')}
                   allowClear={false}
                   style={{ width: 160 }}
                 />
@@ -306,6 +350,9 @@ export default function Attendance({ auth }) {
                   </Button>
                   <Button size="small" icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
                     Refresh
+                  </Button>
+                  <Button size="small" icon={<FileTextOutlined />} onClick={() => setReportOpen(true)}>
+                    Daily Report
                   </Button>
                   <Button
                     type="primary"
@@ -358,6 +405,56 @@ export default function Attendance({ auth }) {
               locale={{ emptyText: 'No employees found.' }}
             />
           </Card>
+
+          <Drawer
+            title={`Daily Attendance Report - ${date.format('DD MMM YYYY')}`}
+            open={reportOpen}
+            onClose={() => setReportOpen(false)}
+            width={860}
+          >
+            <Space direction="vertical" size={12} style={{ display: 'flex' }}>
+              <Row gutter={[10, 10]}>
+                {statItems.map(({ label, value, color, icon }) => (
+                  <Col xs={12} md={8} key={label}>
+                    <Card bordered={false} style={{ borderRadius: 10 }} styles={{ body: { padding: 12 } }}>
+                      <Space size={10}>
+                        <span style={{ color, fontSize: 17 }}>{icon}</span>
+                        <Statistic title={label} value={value} valueStyle={{ fontSize: 18, fontWeight: 700 }} />
+                      </Space>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+              <Table
+                rowKey="id"
+                size="small"
+                dataSource={reportRows}
+                pagination={{ pageSize: 20, showSizeChanger: true }}
+                columns={[
+                  {
+                    title: 'Employee',
+                    dataIndex: 'employee',
+                    render: (value, row) => (
+                      <div>
+                        <Text strong>{value}</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: 12 }}>{row.code}</Text>
+                      </div>
+                    ),
+                  },
+                  {
+                    title: 'Status',
+                    dataIndex: 'status',
+                    width: 130,
+                    render: (value) => <Tag color={value === 'UNMARKED' ? 'default' : 'blue'}>{value.replace('_', ' ')}</Tag>,
+                  },
+                  { title: 'In', dataIndex: 'in_time', width: 90 },
+                  { title: 'Out', dataIndex: 'out_time', width: 90 },
+                  { title: 'Hours', dataIndex: 'hours', width: 90, align: 'right' },
+                ]}
+              />
+            </Space>
+          </Drawer>
         </Space>
       </div>
     </AuthenticatedLayout>

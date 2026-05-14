@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Payroll;
 
 use App\Http\Controllers\Api\BaseCrudApiController;
 use App\Models\PayrollPeriod;
+use Illuminate\Http\Request;
 
 class PayrollPeriodController extends BaseCrudApiController
 {
@@ -24,4 +25,25 @@ class PayrollPeriodController extends BaseCrudApiController
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'status' => ['nullable', 'in:open,closed,locked'],
     ];
+
+    protected function checkAccess(Request $request, string $action, mixed $record = null): void
+    {
+        $crudPermission = match ($action) {
+            'index', 'show' => 'view',
+            'store', 'bulkStore' => 'create',
+            'update', 'bulkUpdate' => 'update',
+            'destroy', 'bulkDestroy' => 'delete',
+            default => $action,
+        };
+
+        $user = $request->user();
+        $allowed = collect([
+            "hrm.payroll.{$crudPermission}",
+            "hrm.payroll_period.{$crudPermission}",
+            "payroll.{$crudPermission}",
+            "payroll-period.{$crudPermission}",
+        ])->contains(fn (string $permission) => $user?->can($permission));
+
+        abort_unless($allowed, 403, 'You do not have permission to perform this action.');
+    }
 }

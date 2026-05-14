@@ -46,6 +46,7 @@ class User extends Authenticatable
         'shift_id',
         'leave_policy_id',
         'weekly_holiday_id',
+        'payroll_account_id',
 
         // System
         'is_system_generated',
@@ -189,6 +190,11 @@ class User extends Authenticatable
     public function reimbursements(): HasMany
     {
         return $this->hasMany(EmployeeReimbursement::class, 'employee_id');
+    }
+
+    public function payrollAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'payroll_account_id');
     }
 
     public function awardHistories(): HasMany

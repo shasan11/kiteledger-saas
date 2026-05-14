@@ -9,12 +9,13 @@ class PayrollPaymentController extends BaseCrudApiController
 {
     protected string $modelClass = PayrollPayment::class;
     protected ?string $permissionPrefix = 'hrm.payroll';
-    protected array $relations = ['payrollRun', 'payslip'];
-    protected array $relationDetails = ['payrollRun' => 'payroll_run_id', 'payslip' => 'payslip_id'];
-    protected array $filterable = ['payroll_run_id', 'payslip_id', 'employee_id', 'status'];
+    protected array $relations = ['payroll', 'payrollRun', 'payslip'];
+    protected array $relationDetails = ['payroll' => 'payroll_id', 'payrollRun' => 'payroll_run_id', 'payslip' => 'payslip_id'];
+    protected array $filterable = ['payroll_id', 'payroll_run_id', 'payslip_id', 'employee_id', 'status'];
 
     protected array $storeRules = [
-        'payroll_run_id' => ['required', 'uuid', 'exists:payroll_runs,id'],
+        'payroll_id' => ['nullable', 'uuid', 'exists:payrolls,id'],
+        'payroll_run_id' => ['nullable', 'uuid', 'exists:payrolls,id'],
         'payslip_id' => ['nullable', 'uuid', 'exists:payslips,id'],
         'employee_id' => ['required', 'integer', 'exists:users,id'],
         'amount' => ['required', 'numeric', 'gt:0'],

@@ -32,6 +32,7 @@ class UserController extends BaseCrudApiController
         'shift',
         'leavePolicy',
         'weeklyHoliday',
+        'payrollAccount',
         'roles',
     ];
 
@@ -43,6 +44,7 @@ class UserController extends BaseCrudApiController
         'shift' => 'shift_id',
         'leavePolicy' => 'leave_policy_id',
         'weeklyHoliday' => 'weekly_holiday_id',
+        'payrollAccount' => 'payroll_account_id',
     ];
 
     protected array $searchable = [
@@ -69,6 +71,7 @@ class UserController extends BaseCrudApiController
         'shift_id',
         'leave_policy_id',
         'weekly_holiday_id',
+        'payroll_account_id',
         'country',
         'city',
     ];
@@ -141,6 +144,7 @@ class UserController extends BaseCrudApiController
         'shift_id' => ['nullable', 'uuid', 'exists:shifts,id'],
         'leave_policy_id' => ['nullable', 'uuid', 'exists:leave_policies,id'],
         'weekly_holiday_id' => ['nullable', 'uuid', 'exists:weekly_holidays,id'],
+        'payroll_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
 
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -193,6 +197,7 @@ class UserController extends BaseCrudApiController
             'shift_id' => ['sometimes', 'nullable', 'uuid', 'exists:shifts,id'],
             'leave_policy_id' => ['sometimes', 'nullable', 'uuid', 'exists:leave_policies,id'],
             'weekly_holiday_id' => ['sometimes', 'nullable', 'uuid', 'exists:weekly_holidays,id'],
+            'payroll_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
 
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
