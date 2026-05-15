@@ -62,6 +62,7 @@ class SalesOrderController extends BaseCrudApiController
         'void',
     ];
 
+    protected array $amountRangeFilters = ['grand_total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = [
         'sales_order_date' => [
             'from' => 'date_from',

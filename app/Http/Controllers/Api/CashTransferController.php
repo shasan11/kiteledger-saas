@@ -62,6 +62,7 @@ class CashTransferController extends BaseCrudApiController
         'void',
     ];
 
+    protected array $amountRangeFilters = ['total_amount' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = [
         'transfer_date' => [
             'from' => 'date_from',

@@ -3,7 +3,9 @@ import GlobalSearchCommand from '@/Components/App/GlobalSearchCommand';
 import { Link } from '@inertiajs/react';
 import {
     BranchesOutlined,
+    LogoutOutlined,
     PlusOutlined,
+    ProfileOutlined,
     QuestionCircleOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -39,6 +41,48 @@ export default function AppNavbar({
 
     const controlHeight = 38;
     const radius = token.borderRadiusLG;
+    const initials = (user?.display_name || user?.name || user?.email || 'User')
+        .split(' ')
+        .map((part) => part?.[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join('')
+        .toUpperCase();
+
+    const enhancedProfileItems = [
+        {
+            key: 'profile-summary',
+            disabled: true,
+            label: (
+                <div className="app-navbar__dropdown-user">
+                    <Avatar
+                        size={42}
+                        src={user?.image_url}
+                        icon={!user?.image_url ? <UserOutlined /> : null}
+                        className="app-navbar__avatar"
+                    >
+                        {!user?.image_url ? initials : null}
+                    </Avatar>
+                    <div className="app-navbar__dropdown-user-copy">
+                        <strong>{user?.display_name || user?.name || 'User'}</strong>
+                        <span>{user?.email || 'No email available'}</span>
+                    </div>
+                </div>
+            ),
+        },
+        { type: 'divider' },
+        ...profileItems.map((item) => {
+            if (item?.key === 'profile') {
+                return { ...item, icon: item.icon || <ProfileOutlined />, label: 'View Profile' };
+            }
+
+            if (item?.key === 'logout') {
+                return { ...item, icon: <LogoutOutlined /> };
+            }
+
+            return item;
+        }),
+    ];
 
     const dark = {
         nav: '#0b1220',
@@ -168,7 +212,7 @@ export default function AppNavbar({
                     )}
 
                     <Dropdown
-                        menu={{ items: profileItems }}
+                        menu={{ items: enhancedProfileItems }}
                         placement="bottomRight"
                         trigger={['click']}
                         overlayClassName="app-navbar-dropdown"
@@ -177,9 +221,12 @@ export default function AppNavbar({
                             <Space size={10}>
                                 <Avatar
                                     size={34}
-                                    icon={<UserOutlined />}
+                                    src={user?.image_url}
+                                    icon={!user?.image_url ? <UserOutlined /> : null}
                                     className="app-navbar__avatar"
-                                />
+                                >
+                                    {!user?.image_url ? initials : null}
+                                </Avatar>
 
                                 {!isTablet && (
                                     <span className="app-navbar__user-name">
@@ -305,6 +352,38 @@ export default function AppNavbar({
                         white-space: nowrap;
                         display: inline-block;
                         line-height: 1;
+                    }
+
+                    .app-navbar__dropdown-user {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        min-width: 240px;
+                        padding: 4px 2px;
+                    }
+
+                    .app-navbar__dropdown-user-copy {
+                        display: flex;
+                        flex-direction: column;
+                        min-width: 0;
+                    }
+
+                    .app-navbar__dropdown-user-copy strong,
+                    .app-navbar__dropdown-user-copy span {
+                        max-width: 180px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
+
+                    .app-navbar__dropdown-user-copy strong {
+                        color: ${dark.text};
+                        font-size: 13px;
+                    }
+
+                    .app-navbar__dropdown-user-copy span {
+                        color: ${dark.textMuted};
+                        font-size: 12px;
                     }
 
                     .app-dark-select .ant-select-selector {

@@ -57,6 +57,7 @@ class QuotationController extends BaseCrudApiController
         'void',
     ];
 
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = [
         'quotation_date' => [
             'from' => 'date_from',

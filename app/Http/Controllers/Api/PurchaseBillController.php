@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AppSetting;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillLine;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ class PurchaseBillController extends BaseCrudApiController
     protected array $searchable = ['bill_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['bill_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id', 'bill_no', 'bill_date', 'due_date', 'status', 'total', 'balance_due', 'created_at'];
     protected string $defaultSort = '-created_at';
@@ -122,7 +124,15 @@ class PurchaseBillController extends BaseCrudApiController
             'balance_due' => $total - $paidTotal,
         ])->save();
 
+        $this->enforcePurchaseSettings($record);
+
         return $record;
+    }
+
+    private function enforcePurchaseSettings(Model $record): void
+    {
+        // Purchases add stock rather than deplete it, so negative_item_balance
+        // enforcement belongs on the sales side. Kept for future purchase rules.
     }
 
     protected function mutateNestedRowBeforeSave(

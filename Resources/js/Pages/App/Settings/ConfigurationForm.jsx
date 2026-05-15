@@ -102,6 +102,12 @@ export default function ConfigurationForm({ auth, area }) {
       );
     }
 
+    const behaviorOptions = [
+      { value: 'reject', label: 'Reject' },
+      { value: 'warn', label: 'Warn' },
+      { value: 'do_nothing', label: 'Do Nothing' },
+    ];
+
     if (area === 'sales') {
       return (
         <Row gutter={12}>
@@ -109,6 +115,10 @@ export default function ConfigurationForm({ auth, area }) {
           <Col xs={24} md={8}><Form.Item name="default_sales_tax_id" label="Default Sales Tax"><Select allowClear options={taxes} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="quotation_validity_days" label="Quotation Validity Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="invoice_due_days" label="Invoice Due Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="suggest_selling" label="Suggest Selling Price"><Select options={[{ value: 'recent', label: 'Most Recent Price' }, { value: 'fixed', label: 'Fixed Price' }]} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="negative_item_balance" label="Negative Item Balance"><Select options={behaviorOptions} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="credit_limit_exceed" label="Credit Limit Exceed"><Select options={behaviorOptions} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="negative_cash_balance" label="Negative Cash Balance"><Select options={behaviorOptions} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="require_sales_order_approval" label="Sales Order Approval" valuePropName="checked"><Switch /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="allow_negative_receivable" label="Allow Negative Receivable" valuePropName="checked"><Switch /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="overdue_reminders_enabled" label="Overdue Reminders" valuePropName="checked"><Switch /></Form.Item></Col>
@@ -121,6 +131,8 @@ export default function ConfigurationForm({ auth, area }) {
         <Col xs={24} md={8}><Form.Item name="default_supplier_account_id" label="Default Supplier Account"><Select allowClear options={accounts} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="default_purchase_tax_id" label="Default Purchase Tax"><Select allowClear options={taxes} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="bill_due_days" label="Bill Due Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
+        <Col xs={24} md={8}><Form.Item name="negative_item_balance" label="Negative Item Balance"><Select options={behaviorOptions} /></Form.Item></Col>
+        <Col xs={24} md={8}><Form.Item name="negative_cash_balance" label="Negative Cash Balance"><Select options={behaviorOptions} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="require_purchase_order_approval" label="Purchase Order Approval" valuePropName="checked"><Switch /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="require_bill_approval" label="Bill Approval" valuePropName="checked"><Switch /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="overdue_reminders_enabled" label="Overdue Reminders" valuePropName="checked"><Switch /></Form.Item></Col>

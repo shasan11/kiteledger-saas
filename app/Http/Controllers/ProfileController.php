@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -18,9 +19,29 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user()->load([
+            'branch:id,name,code',
+            'department:id,name',
+            'employmentStatus:id,name',
+            'role:id,name',
+            'employeeProfile.branch:id,name,code',
+            'employeeProfile.department:id,name',
+            'employeeProfile.designation:id,name',
+            'employeeProfile.employmentStatus:id,name',
+            'employeeProfile.user:id,name,email',
+        ]);
+
+        $employeeProfile = $user->employeeProfile;
+
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => session('status'),
+            'profileUser' => $user,
+            'employeeProfile' => $employeeProfile,
+            'accountInfo' => [
+                'roles' => method_exists($user, 'getRoleNames') ? $user->getRoleNames()->values() : collect(),
+                'permissions_count' => method_exists($user, 'getAllPermissions') ? $user->getAllPermissions()->count() : null,
+            ],
         ]);
     }
 
@@ -29,15 +50,28 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $validated = $request->validated();
+        $user = $request->user();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user->fill(collect($validated)->except(['image', 'remove_image'])->all());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        if ($request->boolean('remove_image')) {
+            $this->deleteStoredImage($user->image);
+            $user->image = null;
+        }
 
-        return Redirect::route('profile.edit');
+        if ($request->hasFile('image')) {
+            $this->deleteStoredImage($user->image);
+            $user->image = $request->file('image')->store('profile-photos', 'public');
+        }
+
+        $user->save();
+
+        return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
 
     /**
@@ -59,5 +93,18 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return Redirect::to('/');
+    }
+
+    protected function deleteStoredImage(?string $path): void
+    {
+        if (!$path) {
+            return;
+        }
+
+        $normalized = str($path)->replaceStart('/storage/', '')->toString();
+
+        if ($normalized !== $path || !str_starts_with($path, 'http')) {
+            Storage::disk('public')->delete($normalized);
+        }
     }
 }

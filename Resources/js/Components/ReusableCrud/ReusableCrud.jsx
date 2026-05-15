@@ -13,6 +13,7 @@ import {
   Col,
   Select,
   InputNumber,
+  DatePicker,
   Drawer,
   Checkbox,
   Collapse,
@@ -22,6 +23,7 @@ import {
   Space,
   theme,
 } from "antd";
+import dayjs from "dayjs";
 import {
   PlusOutlined,
   UploadOutlined,
@@ -1634,6 +1636,10 @@ export default function ReusableCrud({
         fkValueKey = "id",
         fkLabel,
         fkExtraParams = EMPTY_OBJECT,
+        fromParam,
+        toParam,
+        minParam,
+        maxParam,
       } = cfg;
 
       const currentValue = columnFilters?.[paramName] ?? "";
@@ -1677,8 +1683,106 @@ export default function ReusableCrud({
         }
       };
 
+      const fromValue = fromParam ? (columnFilters?.[fromParam] ?? null) : null;
+      const toValue = toParam ? (columnFilters?.[toParam] ?? null) : null;
+      const minValue = minParam ? (columnFilters?.[minParam] ?? "") : "";
+      const maxValue = maxParam ? (columnFilters?.[maxParam] ?? "") : "";
+      const hasRangeValue = !!(fromValue || toValue || minValue || maxValue);
+
       return {
         filterDropdown: ({ confirm, clearFilters, close }) => {
+          if (type === "date_range") {
+            return (
+              <div style={ui.filterDropdown}>
+                <DatePicker.RangePicker
+                  style={{ width: "100%" }}
+                  value={[fromValue ? dayjs(fromValue) : null, toValue ? dayjs(toValue) : null]}
+                  format="YYYY-MM-DD"
+                  onChange={(dates) => {
+                    const next = { ...columnFilters };
+                    if (dates?.[0]) next[fromParam] = dates[0].format("YYYY-MM-DD");
+                    else delete next[fromParam];
+                    if (dates?.[1]) next[toParam] = dates[1].format("YYYY-MM-DD");
+                    else delete next[toParam];
+                    setColumnFilters(next);
+                    setPagination((p) => ({ ...p, current: 1 }));
+                    confirm();
+                  }}
+                />
+                <div style={ui.filterActions}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      const next = { ...columnFilters };
+                      delete next[fromParam];
+                      delete next[toParam];
+                      setColumnFilters(next);
+                      setPagination((p) => ({ ...p, current: 1 }));
+                      clearFilters?.();
+                      confirm();
+                    }}
+                  >Reset</Button>
+                  <Button size="small" type="primary" onClick={() => close()}>Close</Button>
+                </div>
+              </div>
+            );
+          }
+
+          if (type === "amount_range") {
+            return (
+              <div style={ui.filterDropdown}>
+                <Input.Group compact>
+                  <InputNumber
+                    style={{ width: "50%" }}
+                    placeholder="Min"
+                    value={minValue || undefined}
+                    min={0}
+                    onChange={(val) => {
+                      const next = { ...columnFilters };
+                      if (val === null || val === undefined || val === "") delete next[minParam];
+                      else next[minParam] = val;
+                      setColumnFilters(next);
+                    }}
+                  />
+                  <InputNumber
+                    style={{ width: "50%" }}
+                    placeholder="Max"
+                    value={maxValue || undefined}
+                    min={0}
+                    onChange={(val) => {
+                      const next = { ...columnFilters };
+                      if (val === null || val === undefined || val === "") delete next[maxParam];
+                      else next[maxParam] = val;
+                      setColumnFilters(next);
+                    }}
+                  />
+                </Input.Group>
+                <div style={ui.filterActions}>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      const next = { ...columnFilters };
+                      delete next[minParam];
+                      delete next[maxParam];
+                      setColumnFilters(next);
+                      setPagination((p) => ({ ...p, current: 1 }));
+                      clearFilters?.();
+                      confirm();
+                    }}
+                  >Reset</Button>
+                  <Button
+                    size="small"
+                    type="primary"
+                    onClick={() => {
+                      setPagination((p) => ({ ...p, current: 1 }));
+                      confirm();
+                    }}
+                  >Apply</Button>
+                </div>
+              </div>
+            );
+          }
+
           if (type === "select") {
             return (
               <div style={ui.filterDropdown}>
@@ -1840,7 +1944,7 @@ export default function ReusableCrud({
         filterIcon: () => (
           <FilterOutlined
             style={{
-              color: columnFilters?.[paramName] ? token.colorPrimary : token.colorTextTertiary,
+              color: (hasRangeValue || columnFilters?.[paramName]) ? token.colorPrimary : token.colorTextTertiary,
             }}
           />
         ),

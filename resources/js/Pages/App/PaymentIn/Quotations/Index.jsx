@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -160,6 +160,7 @@ export default function Quotations(props) {
         key: 'contact',
         width: "250px",
         render: (_, record) => getContactName(record),
+        backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' },
       },
       {
         title: 'Date',
@@ -168,6 +169,7 @@ export default function Quotations(props) {
         sorter: true,
         width: 120,
         render: displayDate,
+        backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' },
       },
       {
         title: 'Expiry',
@@ -186,6 +188,7 @@ export default function Quotations(props) {
             {value || 'draft'}
           </Tag>
         ),
+        backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'sent', label: 'Sent' }, { value: 'accepted', label: 'Accepted' }, { value: 'rejected', label: 'Rejected' }, { value: 'expired', label: 'Expired' }, { value: 'void', label: 'Void' }] },
       },
       {
         title: 'Amount',
@@ -195,6 +198,7 @@ export default function Quotations(props) {
         align: 'right',
         width: 140,
         render: (total, record) => renderAmountWithDefaultCurrency(total, record),
+        backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' },
       }
     ],
     []
@@ -230,8 +234,8 @@ export default function Quotations(props) {
   const handleVoidConfirm = async () => {
     const { ctx, reason } = voidState;
     if (!ctx) return;
-    if (!String(reason || '').trim()) {
-      ctx.message.error('Void reason is required');
+    if (String(reason || '').trim().length < 3) {
+            ctx.message.error('Void reason is required and must be at least 3 characters.');
       return;
     }
     setVoidState((state) => ({ ...state, loading: true }));
@@ -579,7 +583,6 @@ export default function Quotations(props) {
         canEdit
         canDelete
         hasActions
-        hasActionColumns
 
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
@@ -621,8 +624,9 @@ export default function Quotations(props) {
         okText="Void"
         okButtonProps={{ danger: true }}
       >
-        <p>Please provide a reason for voiding the selected records.</p>
-        <Input.TextArea rows={3} value={voidState.reason} onChange={(event) => setVoidState((state) => ({ ...state, reason: event.target.value }))} placeholder="Void reason..." />
+        <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
+                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
+        <Input.TextArea rows={3} value={voidState.reason} onChange={(event) => setVoidState((state) => ({ ...state, reason: event.target.value }))} placeholder="Enter void reason..." />
       </Modal>
     </AuthenticatedLayout>
   );

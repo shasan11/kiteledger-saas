@@ -51,19 +51,26 @@ export const renderAmountWithDefaultCurrency = (
   const currencyPrefix = getCurrencySymbol(currency);
   const defaultPrefix = getCurrencySymbol(defaultCurrency);
 
+  const isForeignCurrency = currency && currency.code && currency.code !== defaultCurrency.code;
+  const showRate = isForeignCurrency && exchangeRate !== 1;
+
   return (
     <div style={{ textAlign: 'right', lineHeight: 1.25 }}>
       <Text strong>
         {currencyPrefix ? `${currencyPrefix} ` : ''}
         {formatNumber(amount, decimals)}
       </Text>
-      <br />
-      <Text type="secondary" style={{ fontSize: 11 }}>
-        {defaultPrefix ? `${defaultPrefix} ` : ''}
-        {formatNumber(amount * exchangeRate, defaultDecimals)}
-        {' '}
-        @ {formatNumber(exchangeRate, 6)}
-      </Text>
+      {showRate && (
+        <>
+          <br />
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            {defaultPrefix ? `${defaultPrefix} ` : ''}
+            {formatNumber(amount * exchangeRate, defaultDecimals)}
+            {' @ '}
+            {formatNumber(exchangeRate, 2)}
+          </Text>
+        </>
+      )}
     </div>
   );
 };

@@ -56,6 +56,7 @@ class JournalVoucherController extends BaseCrudApiController
         'void',
     ];
 
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = [
         'voucher_date' => [
             'from' => 'date_from',

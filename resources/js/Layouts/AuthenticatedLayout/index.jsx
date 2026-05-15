@@ -176,7 +176,6 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'pi-invoices', label: 'Invoices', onClick: () => visit('payment-in.invoices.index', '/payment-in/invoices') },
                     { key: 'pi-payment', label: 'Payment', onClick: () => visit('payment-in.payments.index', '/payment-in/payments') },
                     { key: 'pi-credit-notes', label: 'Credit Notes', onClick: () => visit('payment-in.credit-notes.index', '/payment-in/credit-notes') },
-                    { key: 'pi-customers', label: 'Customer', onClick: () => visit('payment-in.customers.index', '/payment-in/customers') },
                 ],
             },
             {

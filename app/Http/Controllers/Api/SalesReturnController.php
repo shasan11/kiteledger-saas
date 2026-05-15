@@ -21,6 +21,7 @@ class SalesReturnController extends BaseCrudApiController
     protected array $searchable = ['sales_return_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['sales_return_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id', 'sales_return_no', 'sales_return_date', 'status', 'total', 'created_at'];
     protected string $defaultSort = '-created_at';

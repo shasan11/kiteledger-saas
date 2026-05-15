@@ -12,8 +12,10 @@ class PurchaseConfiguration extends Model
 
     protected $fillable = [
         'default_supplier_account_id', 'default_purchase_tax_id', 'bill_due_days',
-        'require_purchase_order_approval', 'require_bill_approval', 'aging_buckets',
-        'overdue_reminders_enabled', 'active', 'is_system_generated', 'user_add_id',
+        'require_purchase_order_approval', 'require_bill_approval',
+        'negative_item_balance', 'negative_cash_balance',
+        'aging_buckets', 'overdue_reminders_enabled',
+        'active', 'is_system_generated', 'user_add_id',
     ];
 
     protected function casts(): array

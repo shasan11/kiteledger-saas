@@ -33,6 +33,8 @@ abstract class BaseCrudApiController extends Controller
 
     protected array $dateRangeFilters = [];
 
+    protected array $amountRangeFilters = [];
+
     protected array $sortable = [
         'id',
         'created_at',
@@ -624,6 +626,26 @@ abstract class BaseCrudApiController extends Controller
 
             if ($bool !== null) {
                 $query->where($this->qualifiedColumn($field), $bool);
+            }
+        }
+
+        foreach ($this->amountRangeFilters as $column => $config) {
+            $minKey = is_array($config) ? ($config['min'] ?? "{$column}_min") : "{$config}_min";
+            $maxKey = is_array($config) ? ($config['max'] ?? "{$column}_max") : "{$config}_max";
+            $actualColumn = is_array($config) ? $column : $config;
+
+            if (!$this->tableHasColumn($actualColumn)) {
+                continue;
+            }
+
+            $min = $this->requestParam($request, $minKey);
+            $max = $this->requestParam($request, $maxKey);
+
+            if ($min !== null && $min !== '') {
+                $query->where($this->qualifiedColumn($actualColumn), '>=', (float) $min);
+            }
+            if ($max !== null && $max !== '') {
+                $query->where($this->qualifiedColumn($actualColumn), '<=', (float) $max);
             }
         }
 
@@ -1229,10 +1251,47 @@ abstract class BaseCrudApiController extends Controller
                 return $parentData;
             }
 
+            // Approval-required documents get their real number only when approved.
+            // Leave the field null so the frontend shows "DRAFT".
+            if ($mapping['approval_required'] ?? false) {
+                return $parentData;
+            }
+
             $field = $mapping['field'] ?? null;
             $documentType = $mapping['document_type'] ?? null;
 
             if (!$field || !$documentType || !empty($parentData[$field])) {
+                return $parentData;
+            }
+
+            $parentData[$field] = app(DocumentNumberingService::class)->generate($documentType);
+        } catch (\Throwable $e) {
+            //
+        }
+
+        return $parentData;
+    }
+
+    protected function assignDocumentNumberOnApproval(array $parentData, ?Model $record): array
+    {
+        try {
+            $model = $this->newModelInstance();
+            $mapping = app(DocumentNumberingService::class)->getMappingForModel($model);
+
+            if (!$mapping || !($mapping['approval_required'] ?? false)) {
+                return $parentData;
+            }
+
+            $field = $mapping['field'] ?? null;
+            $documentType = $mapping['document_type'] ?? null;
+
+            if (!$field || !$documentType) {
+                return $parentData;
+            }
+
+            // Idempotent: if the record already has a real number, keep it.
+            $existing = $parentData[$field] ?? $record?->{$field} ?? null;
+            if ($existing && !str_starts_with((string) $existing, '#draft')) {
                 return $parentData;
             }
 
@@ -1296,6 +1355,11 @@ abstract class BaseCrudApiController extends Controller
         if (array_key_exists('approved', $parentData) && $this->tableHasColumn('approved')) {
             $approved = $this->toBool($parentData['approved']);
             $parentData['approved'] = (bool) $approved;
+
+            if ($approved) {
+                // Assign real document number on first approval (idempotent).
+                $parentData = $this->assignDocumentNumberOnApproval($parentData, $record);
+            }
 
             if ($approved && $this->tableHasColumn('approved_at') && empty($parentData['approved_at']) && empty($record?->approved_at)) {
                 $parentData['approved_at'] = now();

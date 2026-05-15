@@ -21,6 +21,7 @@ class PurchaseOrderController extends BaseCrudApiController
     protected array $searchable = ['purchase_order_no', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'credit_term_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['purchase_order_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id', 'purchase_order_no', 'purchase_order_date', 'status', 'total', 'created_at'];
     protected string $defaultSort = '-created_at';

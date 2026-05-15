@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -21,11 +21,11 @@ export default function JournalVouchersIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'Voucher No', dataIndex: 'voucher_no', key: 'voucher_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
-        { title: 'Date', dataIndex: 'voucher_date', key: 'voucher_date', sorter: true, width: 120, render: displayDate },
+        { title: 'Date', dataIndex: 'voucher_date', key: 'voucher_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Reference', dataIndex: 'reference', key: 'reference', render: (v) => v || '-' },
         { title: 'Narration', dataIndex: 'narration', key: 'narration', render: (v) => v || '-' },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
-        { title: 'Total Debit', dataIndex: 'total_debit', key: 'total_debit', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
+        { title: 'Total Debit', dataIndex: 'total_debit', key: 'total_debit', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -56,8 +56,8 @@ export default function JournalVouchersIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
-        if (!String(reason || '').trim()) {
-            ctx.message.error('Void reason is required');
+        if (String(reason || '').trim().length < 3) {
+            ctx.message.error('Void reason is required and must be at least 3 characters.');
             return;
         }
         setVoidState((s) => ({ ...s, loading: true }));
@@ -96,7 +96,6 @@ export default function JournalVouchersIndex(props) {
                 canEdit
                 canDelete
                 hasActions
-                hasActionColumns
                 canView
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
@@ -121,8 +120,9 @@ export default function JournalVouchersIndex(props) {
                 okText="Void"
                 okButtonProps={{ danger: true }}
             >
-                <p>Please provide a reason for voiding the selected records.</p>
-                <Input.TextArea rows={3} value={voidState.reason} onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))} placeholder="Void reason..." />
+                <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
+                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
+                <Input.TextArea rows={3} value={voidState.reason} onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))} placeholder="Enter void reason..." />
             </Modal>
         </AuthenticatedLayout>
     );

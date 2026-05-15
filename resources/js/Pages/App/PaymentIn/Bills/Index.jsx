@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -33,11 +33,11 @@ export default function BillsIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'Bill No', dataIndex: 'invoice_no', key: 'invoice_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
-        { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
-        { title: 'Date', dataIndex: 'invoice_date', key: 'invoice_date', sorter: true, width: 120, render: displayDate },
+        { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { title: 'Customer', type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
+        { title: 'Date', dataIndex: 'invoice_date', key: 'invoice_date', sorter: true, width: 120, render: displayDate, backendFilter: { title: 'Date', type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },
-        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
-        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text> },
+        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { title: 'Status', type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'part_paid', label: 'Part Paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }] } },
+        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 140, render: (v) => <Text strong>{money(v)}</Text>, backendFilter: { title: 'Amount', type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -72,6 +72,10 @@ export default function BillsIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
+        if (String(reason || '').trim().length < 3) {
+            ctx.message.error('Void reason is required and must be at least 3 characters.');
+            return;
+        }
         setVoidState((s) => ({ ...s, loading: true }));
         try {
             await axios.patch(api('/api/invoices/bulk'), {
@@ -111,7 +115,6 @@ export default function BillsIndex(props) {
                 canEdit
                 canDelete
                 hasActions
-                hasActionColumns
                 canView
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
@@ -137,12 +140,13 @@ export default function BillsIndex(props) {
                 okText="Void"
                 okButtonProps={{ danger: true }}
             >
-                <p>Please provide a reason for voiding the selected records.</p>
+                <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
+                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
                 <Input.TextArea
                     rows={3}
                     value={voidState.reason}
                     onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))}
-                    placeholder="Void reason..."
+                    placeholder="Enter void reason..."
                 />
             </Modal>
         </AuthenticatedLayout>

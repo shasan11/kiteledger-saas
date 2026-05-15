@@ -13,6 +13,7 @@ class SalesConfiguration extends Model
     protected $fillable = [
         'default_customer_account_id', 'default_sales_tax_id', 'quotation_validity_days',
         'invoice_due_days', 'require_sales_order_approval', 'allow_negative_receivable',
+        'suggest_selling', 'negative_item_balance', 'credit_limit_exceed', 'negative_cash_balance',
         'aging_buckets', 'overdue_reminders_enabled',
         'active', 'is_system_generated', 'user_add_id',
     ];

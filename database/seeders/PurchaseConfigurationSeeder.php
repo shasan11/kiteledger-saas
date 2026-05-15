@@ -19,6 +19,8 @@ class PurchaseConfigurationSeeder extends Seeder
                 'bill_due_days' => 30,
                 'require_purchase_order_approval' => true,
                 'require_bill_approval' => true,
+                'negative_item_balance' => 'warn',
+                'negative_cash_balance' => 'do_nothing',
                 'aging_buckets' => [30, 60, 90, 120],
                 'overdue_reminders_enabled' => true,
                 'is_system_generated' => true,

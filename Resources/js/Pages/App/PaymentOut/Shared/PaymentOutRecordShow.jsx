@@ -8,6 +8,7 @@ import {
     Card,
     Drawer,
     Empty,
+    Modal,
     Skeleton,
     Space,
     Table,
@@ -19,13 +20,15 @@ import {
 import {
     ArrowLeftOutlined,
     ArrowRightOutlined,
+    CheckCircleOutlined,
+    CalendarOutlined,
     DollarCircleOutlined,
     EditOutlined,
+    ExclamationCircleOutlined,
     FileTextOutlined,
     PrinterOutlined,
+    StopOutlined,
     UserOutlined,
-    CalendarOutlined,
-    CheckCircleOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
@@ -351,7 +354,7 @@ const normalizePrintLine = (row, currency) => {
     };
 };
 
-const buildPrintContext = (record, documentType, title) => {
+const buildPrintContext = (record, documentType, title, companyInfo = null) => {
     const normalizedDocumentType = normalizeDocumentType(documentType);
     const currency = record?.currency;
     const lines = getLines(record, normalizedDocumentType);
@@ -374,15 +377,24 @@ const buildPrintContext = (record, documentType, title) => {
     const total = firstPresent(record?.grand_total, record?.total, record?.amount, 0);
     const paid = firstPresent(record?.paid_total, record?.paid_amount, 0);
     const balance = firstPresent(record?.balance_due, Math.max(numeric(total) - numeric(paid), 0));
+    const isVoid = !!(record?.void);
+    const isDraft = !record?.void && record?.approved !== true;
     return {
         record,
         company: {
-            name: firstPresent(record?.company?.name, record?.branch?.name, 'KiteLedger'),
-            address: firstPresent(record?.company?.address, record?.branch?.address, ''),
-            phone: firstPresent(record?.company?.phone, record?.branch?.phone, ''),
-            email: firstPresent(record?.company?.email, record?.branch?.email, ''),
-            website: firstPresent(record?.company?.website, ''),
-            tax_id: firstPresent(record?.company?.tax_id, record?.company?.pan_no, record?.branch?.tax_id, ''),
+            name: firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KiteLedger'),
+            address: firstPresent(companyInfo?.address, companyInfo?.address_line_1, record?.company?.address, record?.branch?.address, ''),
+            phone: firstPresent(companyInfo?.phone, record?.company?.phone, record?.branch?.phone, ''),
+            email: firstPresent(companyInfo?.email, record?.company?.email, record?.branch?.email, ''),
+            website: firstPresent(companyInfo?.website, record?.company?.website, ''),
+            pan_or_vat: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.tax_id, ''),
+            tax_id: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.pan_no, ''),
+            logo: companyInfo?.logo_url || '',
+        },
+        branch: {
+            name: firstPresent(record?.branch?.name, ''),
+            address: firstPresent(record?.branch?.address, ''),
+            phone: firstPresent(record?.branch?.phone, ''),
         },
         document: {
             type: normalizedDocumentType,
@@ -394,6 +406,12 @@ const buildPrintContext = (record, documentType, title) => {
             status: humanize(record?.status || 'draft'),
             notes: record?.notes || '',
             terms: firstPresent(record?.terms, record?.payment_terms, ''),
+            void: isVoid,
+            is_draft: isDraft,
+            approved: !!(record?.approved),
+            voided_reason: record?.voided_reason || '',
+            approved_at: formatDate(record?.approved_at),
+            voided_at: formatDate(record?.voided_at),
         },
         party: {
             name: getRelationName(record?.contact),
@@ -409,6 +427,7 @@ const buildPrintContext = (record, documentType, title) => {
             symbol: currency?.symbol || '',
             name: currency?.name || '',
         },
+        exchange_rate: record?.exchange_rate ? Number(record.exchange_rate).toFixed(2) : '',
         totals: {
             subtotal: formatMoney(subtotal, currency),
             discount: formatMoney(discount, currency),
@@ -427,6 +446,9 @@ const buildPrintContext = (record, documentType, title) => {
             method: firstPresent(record?.payment_method, record?.method, '-'),
             account: getRelationName(record?.account),
         },
+        prepared_by: firstPresent(record?.userAdd?.name, record?.created_by?.name, ''),
+        approved_by: firstPresent(record?.approvedBy?.name, record?.approved_by?.name, ''),
+        printed_at: new Date().toLocaleString(),
         lines: lines.map((row) => normalizePrintLine(row, currency)),
     };
 };
@@ -587,11 +609,11 @@ const defaultPrintTemplateCss = `
 @media print { .print-document { padding: 18px; } }
 `.trim();
 
-function DynamicPrintTemplatePreview({ record, documentType, title, template, templateError }) {
+function DynamicPrintTemplatePreview({ record, documentType, title, template, templateError, companyInfo }) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
     const context = useMemo(
-        () => buildPrintContext(record, normalizedDocumentType, title),
-        [record, normalizedDocumentType, title]
+        () => buildPrintContext(record, normalizedDocumentType, title, companyInfo),
+        [record, normalizedDocumentType, title, companyInfo]
     );
     const resolvedTemplate = template || {
         name: 'Fallback Template',
@@ -715,6 +737,7 @@ function HeaderBlock({
 }) {
     const normalizedType = normalizeDocumentType(documentType);
     const isApproved = record?.approved === true;
+    const isVoided = record?.void === true;
     return (
         <Card className="payment-record-show__header-card border-none">
             <div className="payment-record-show__header">
@@ -763,7 +786,7 @@ function HeaderBlock({
                             </Button>
                         </Tooltip>
                     )}
-                    {editRoute && recordId && (
+                    {editRoute && recordId && !isVoided && (
                         <Link href={route(editRoute, recordId)}>
                             <Button icon={<EditOutlined />} disabled={loading || !record}>
                                 Edit
@@ -1145,6 +1168,26 @@ export default function PaymentOutRecordShow({
     const [printTemplate, setPrintTemplate] = useState(null);
     const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
     const [printTemplateError, setPrintTemplateError] = useState('');
+    const [companyInfo, setCompanyInfo] = useState(null);
+
+    const [approveModalOpen, setApproveModalOpen] = useState(false);
+    const [approveLoading, setApproveLoading] = useState(false);
+
+    const handleApprove = async () => {
+        if (!record) return;
+        setApproveLoading(true);
+        try {
+            const baseEndpoint = endpoint.replace(/\/+$/, '');
+            await axios.patch(api(`${baseEndpoint}/${record.id}/`), { approved: true });
+            const response = await axios.get(api(`${baseEndpoint}/${record.id}`));
+            setRecord(response.data?.data ?? response.data);
+            setApproveModalOpen(false);
+        } catch {
+            //
+        } finally {
+            setApproveLoading(false);
+        }
+    };
 
     const handleConvertToBill = () => {
         if (!record) return;
@@ -1203,11 +1246,13 @@ export default function PaymentOutRecordShow({
             setPrintTemplateError('');
             setPrintTemplate(null);
             try {
-                const response = await axios.get(
-                    api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(normalizedDocumentType)}`)
-                );
+                const [templateResponse, companyResponse] = await Promise.all([
+                    axios.get(api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(normalizedDocumentType)}`)),
+                    axios.get(api('/api/app-settings/current')).catch(() => ({ data: null })),
+                ]);
                 if (!active) return;
-                setPrintTemplate(response.data?.data ?? response.data ?? null);
+                setPrintTemplate(templateResponse.data?.data ?? templateResponse.data ?? null);
+                setCompanyInfo(companyResponse.data?.data ?? companyResponse.data ?? null);
             } catch (err) {
                 if (!active) return;
                 setPrintTemplate(null);
@@ -1390,6 +1435,36 @@ export default function PaymentOutRecordShow({
                                 party={partyName}
                             />
                             <main className="payment-record-show__main">
+                                {record?.void && (
+                                    <Alert
+                                        type="error"
+                                        showIcon
+                                        icon={<StopOutlined />}
+                                        message="This transaction has been voided"
+                                        description={record?.voided_reason ? `Reason: ${record.voided_reason}` : 'This transaction is voided and cannot be edited or approved.'}
+                                        style={{ marginBottom: 0 }}
+                                    />
+                                )}
+                                {!record?.void && record?.approved !== true && (
+                                    <Alert
+                                        type="warning"
+                                        showIcon
+                                        icon={<ExclamationCircleOutlined />}
+                                        message="This transaction is still in draft and has not been approved."
+                                        description="Approve it to assign the final document number and post it."
+                                        action={
+                                            <Button
+                                                size="small"
+                                                type="primary"
+                                                icon={<CheckCircleOutlined />}
+                                                onClick={() => setApproveModalOpen(true)}
+                                            >
+                                                Approve
+                                            </Button>
+                                        }
+                                        style={{ marginBottom: 0 }}
+                                    />
+                                )}
                                 <SummaryCards items={summaryItems} />
                                 <Card title={`${title} Details`} className="payment-record-show__card">
                                     <InfoTable rows={overviewRows} />
@@ -1400,6 +1475,19 @@ export default function PaymentOutRecordShow({
                     )}
                 </div>
             </div>
+
+            <Modal
+                title="Approve Transaction"
+                open={approveModalOpen}
+                onOk={handleApprove}
+                confirmLoading={approveLoading}
+                onCancel={() => setApproveModalOpen(false)}
+                okText="Confirm Approve"
+                okButtonProps={{ type: 'primary' }}
+            >
+                <p>Are you sure you want to approve this transaction?</p>
+                <p>The final document number will be assigned after approval and the transaction will be posted.</p>
+            </Modal>
 
             <Drawer
                 title="Print Preview"
@@ -1427,6 +1515,7 @@ export default function PaymentOutRecordShow({
                         title={title}
                         template={printTemplate}
                         templateError={printTemplateError}
+                        companyInfo={companyInfo}
                     />
                 )}
             </Drawer>

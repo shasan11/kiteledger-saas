@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -21,10 +21,10 @@ export default function PurchaseOrdersIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'PO No', dataIndex: 'purchase_order_no', key: 'purchase_order_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
-        { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
-        { title: 'Date', dataIndex: 'purchase_order_date', key: 'purchase_order_date', sorter: true, width: 120, render: displayDate },
-        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
-        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
+        { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
+        { title: 'Date', dataIndex: 'purchase_order_date', key: 'purchase_order_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
+        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'void', label: 'Void' }] } },
+        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -55,8 +55,8 @@ export default function PurchaseOrdersIndex(props) {
     const handleVoidConfirm = async () => {
         const { ctx, reason } = voidState;
         if (!ctx) return;
-        if (!String(reason || '').trim()) {
-            ctx.message.error('Void reason is required');
+        if (String(reason || '').trim().length < 3) {
+            ctx.message.error('Void reason is required and must be at least 3 characters.');
             return;
         }
         setVoidState((s) => ({ ...s, loading: true }));
@@ -95,7 +95,6 @@ export default function PurchaseOrdersIndex(props) {
                 canEdit
                 canDelete
                 hasActions
-                hasActionColumns
                 canView
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
@@ -120,8 +119,9 @@ export default function PurchaseOrdersIndex(props) {
                 okText="Void"
                 okButtonProps={{ danger: true }}
             >
-                <p>Please provide a reason for voiding the selected records.</p>
-                <Input.TextArea rows={3} value={voidState.reason} onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))} placeholder="Void reason..." />
+                <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
+                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
+                <Input.TextArea rows={3} value={voidState.reason} onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))} placeholder="Enter void reason..." />
             </Modal>
         </AuthenticatedLayout>
     );

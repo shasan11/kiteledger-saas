@@ -1,15 +1,12 @@
-import DangerButton from '@/Components/DangerButton';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import Modal from '@/Components/Modal';
-import SecondaryButton from '@/Components/SecondaryButton';
-import TextInput from '@/Components/TextInput';
 import { useForm } from '@inertiajs/react';
-import { useRef, useState } from 'react';
+import { Alert, Button, Form, Input, Modal, Typography, message } from 'antd';
+import { DeleteOutlined, ExclamationCircleOutlined, LockOutlined } from '@ant-design/icons';
+import { useState } from 'react';
 
-export default function DeleteUserForm({ className = '' }) {
-    const [confirmingUserDeletion, setConfirmingUserDeletion] = useState(false);
-    const passwordInput = useRef();
+const { Paragraph, Text } = Typography;
+
+export default function DeleteUserForm() {
+    const [open, setOpen] = useState(false);
 
     const {
         data,
@@ -23,98 +20,79 @@ export default function DeleteUserForm({ className = '' }) {
         password: '',
     });
 
-    const confirmUserDeletion = () => {
-        setConfirmingUserDeletion(true);
-    };
-
-    const deleteUser = (e) => {
-        e.preventDefault();
-
-        destroy(route('profile.destroy'), {
-            preserveScroll: true,
-            onSuccess: () => closeModal(),
-            onError: () => passwordInput.current.focus(),
-            onFinish: () => reset(),
-        });
-    };
-
     const closeModal = () => {
-        setConfirmingUserDeletion(false);
-
+        setOpen(false);
         clearErrors();
         reset();
     };
 
+    const deleteUser = () => {
+        destroy(route('profile.destroy'), {
+            preserveScroll: true,
+            onSuccess: closeModal,
+            onError: () => message.error('Password confirmation failed.'),
+            onFinish: () => reset('password'),
+        });
+    };
+
     return (
-        <section className={`space-y-6 ${className}`}>
-            <header>
-                <h2 className="text-lg font-medium text-gray-900">
-                    Delete Account
-                </h2>
+        <>
+            <Alert
+                showIcon
+                type="warning"
+                message="Delete account"
+                description="This permanently deletes your user account. This action cannot be undone."
+            />
 
-                <p className="mt-1 text-sm text-gray-600">
-                    Once your account is deleted, all of its resources and data
-                    will be permanently deleted. Before deleting your account,
-                    please download any data or information that you wish to
-                    retain.
-                </p>
-            </header>
+            <div className="profile-danger__body">
+                <Paragraph>
+                    Before deleting your account, make sure any business-critical
+                    ownership, approvals, or employee records have been reassigned by an administrator.
+                </Paragraph>
+                <Button danger icon={<DeleteOutlined />} onClick={() => setOpen(true)}>
+                    Delete account
+                </Button>
+            </div>
 
-            <DangerButton onClick={confirmUserDeletion}>
-                Delete Account
-            </DangerButton>
+            <Modal
+                open={open}
+                title="Confirm account deletion"
+                onCancel={closeModal}
+                okText="Delete account"
+                okButtonProps={{ danger: true, loading: processing, icon: <DeleteOutlined /> }}
+                onOk={deleteUser}
+                destroyOnHidden
+            >
+                <Alert
+                    showIcon
+                    type="error"
+                    icon={<ExclamationCircleOutlined />}
+                    message="This is permanent"
+                    description="Enter your password to confirm that you want to permanently delete your account."
+                    style={{ marginBottom: 18 }}
+                />
 
-            <Modal show={confirmingUserDeletion} onClose={closeModal}>
-                <form onSubmit={deleteUser} className="p-6">
-                    <h2 className="text-lg font-medium text-gray-900">
-                        Are you sure you want to delete your account?
-                    </h2>
-
-                    <p className="mt-1 text-sm text-gray-600">
-                        Once your account is deleted, all of its resources and
-                        data will be permanently deleted. Please enter your
-                        password to confirm you would like to permanently delete
-                        your account.
-                    </p>
-
-                    <div className="mt-6">
-                        <InputLabel
-                            htmlFor="password"
-                            value="Password"
-                            className="sr-only"
-                        />
-
-                        <TextInput
-                            id="password"
-                            type="password"
-                            name="password"
-                            ref={passwordInput}
+                <Form layout="vertical">
+                    <Form.Item
+                        label="Password"
+                        required
+                        validateStatus={errors.password ? 'error' : undefined}
+                        help={errors.password}
+                    >
+                        <Input.Password
+                            prefix={<LockOutlined />}
                             value={data.password}
-                            onChange={(e) =>
-                                setData('password', e.target.value)
-                            }
-                            className="mt-1 block w-3/4"
-                            isFocused
-                            placeholder="Password"
+                            onChange={(event) => setData('password', event.target.value)}
+                            autoComplete="current-password"
+                            placeholder="Confirm with your current password"
                         />
+                    </Form.Item>
+                </Form>
 
-                        <InputError
-                            message={errors.password}
-                            className="mt-2"
-                        />
-                    </div>
-
-                    <div className="mt-6 flex justify-end">
-                        <SecondaryButton onClick={closeModal}>
-                            Cancel
-                        </SecondaryButton>
-
-                        <DangerButton className="ms-3" disabled={processing}>
-                            Delete Account
-                        </DangerButton>
-                    </div>
-                </form>
+                <Text type="secondary">
+                    The delete button stays behind this confirmation step to prevent accidental removal.
+                </Text>
             </Modal>
-        </section>
+        </>
     );
 }

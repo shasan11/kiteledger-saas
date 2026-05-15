@@ -21,6 +21,7 @@ class ExpenseController extends BaseCrudApiController
     protected array $searchable = ['expense_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['expense_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id', 'expense_no', 'expense_date', 'status', 'total', 'created_at'];
     protected string $defaultSort = '-created_at';

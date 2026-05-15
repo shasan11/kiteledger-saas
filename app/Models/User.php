@@ -6,8 +6,10 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -63,6 +65,11 @@ class User extends Authenticatable
         'is_system_generated' => false,
     ];
 
+    protected $appends = [
+        'image_url',
+        'display_name',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -75,7 +82,7 @@ class User extends Authenticatable
     protected static function booted(): void
     {
         static::saving(function (User $user): void {
-            $name = trim((string) $user->getRawOriginal('name'));
+            $name = trim((string) $user->name);
 
             if ($name === '') {
                 $name = trim(
@@ -97,9 +104,27 @@ class User extends Authenticatable
             ?: ($this->username ?? $this->name ?? '');
     }
 
+    public function getImageUrlAttribute(): ?string
+    {
+        if (empty($this->image)) {
+            return null;
+        }
+
+        if (str_starts_with($this->image, 'http://') || str_starts_with($this->image, 'https://') || str_starts_with($this->image, '/')) {
+            return $this->image;
+        }
+
+        return Storage::disk('public')->url($this->image);
+    }
+
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function employeeProfile(): HasOne
+    {
+        return $this->hasOne(EmployeeProfile::class);
     }
 
     public function employmentStatus(): BelongsTo

@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AppSetting;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\WarehouseItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -21,6 +23,7 @@ class InvoiceController extends BaseCrudApiController
     protected array $searchable = ['invoice_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['invoice_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id', 'invoice_no', 'invoice_date', 'due_date', 'status', 'total', 'paid_total', 'balance_due', 'created_at'];
     protected string $defaultSort = '-created_at';
@@ -161,9 +164,98 @@ class InvoiceController extends BaseCrudApiController
             'balance_due' => round($total - $paidTotal, 2),
         ])->save();
 
+        $this->enforceSalesSettings($record, $lines);
+
         return $record->fresh([
             'branch', 'contact', 'warehouse', 'currency',
             'invoiceLines.product', 'invoiceLines.taxRate', 'invoiceLines.taxJurisdiction',
         ]);
+    }
+
+    private function enforceSalesSettings(Model $record, \Illuminate\Support\Collection $lines): void
+    {
+        $config = AppSetting::query()->where('active', true)->oldest()->first();
+
+        $this->checkNegativeItemBalance($config, $record, $lines);
+        $this->checkCreditLimitExceed($config, $record);
+    }
+
+    private function checkNegativeItemBalance(?AppSetting $config, Model $record, \Illuminate\Support\Collection $lines): void
+    {
+        if (!$config || ($config->negative_item_balance ?? 'warn') !== 'reject') {
+            return;
+        }
+
+        $warehouseId = $record->warehouse_id;
+        if (!$warehouseId) {
+            return;
+        }
+
+        $errors = [];
+        foreach ($lines as $line) {
+            if (!$line->product_id) {
+                continue;
+            }
+
+            $product = $line->product ?? $line->load('product')->product;
+            if (!$product || !$product->track_inventory) {
+                continue;
+            }
+
+            $stock = WarehouseItem::where('product_id', $line->product_id)
+                ->where('warehouse_id', $warehouseId)
+                ->value('qty_on_hand') ?? 0;
+
+            $available = (float) $stock;
+            $requested = (float) $line->qty;
+
+            // When updating, allow for the qty already on this line previously saved.
+            if ($available < $requested) {
+                $name = $product->name ?? $line->product_name ?? $line->product_id;
+                $errors[] = "Insufficient stock for \"{$name}\": available {$available}, requested {$requested}.";
+            }
+        }
+
+        if ($errors) {
+            $this->throwValidation(['items' => $errors]);
+        }
+    }
+
+    private function checkCreditLimitExceed(?AppSetting $config, Model $record): void
+    {
+        if (!$config || ($config->credit_limit_exceed ?? 'warn') !== 'reject') {
+            return;
+        }
+
+        $contact = $record->contact ?? $record->load('contact')->contact;
+        if (!$contact) {
+            return;
+        }
+
+        $creditLimit = (float) ($contact->credit_limit ?? 0);
+        if ($creditLimit <= 0) {
+            return;
+        }
+
+        $outstanding = Invoice::where('contact_id', $contact->id)
+            ->where('id', '!=', $record->id)
+            ->whereNotIn('status', ['paid', 'void'])
+            ->sum('balance_due');
+
+        $projected = (float) $outstanding + (float) $record->total;
+
+        if ($projected > $creditLimit) {
+            $this->throwValidation([
+                'contact_id' => [
+                    sprintf(
+                        'Credit limit exceeded for "%s". Limit: %.2f, Outstanding: %.2f, This invoice: %.2f.',
+                        $contact->name,
+                        $creditLimit,
+                        (float) $outstanding,
+                        (float) $record->total
+                    ),
+                ],
+            ]);
+        }
     }
 }
