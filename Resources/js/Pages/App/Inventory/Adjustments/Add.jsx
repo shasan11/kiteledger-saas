@@ -70,7 +70,7 @@ export default function AdjustmentAdd(props) {
             <ReusableCrud
                 title="Inventory Adjustments"
                 addTitle="New Inventory Adjustment"
-                apiUrl={api('/api/adjustments/')}
+                apiUrl={api('/api/inventory-adjustments/')}
                 fields={fields}
                 validationSchema={validationSchema}
                 crudInitialValues={crudInitialValues}

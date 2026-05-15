@@ -237,6 +237,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 children: [
                     { key: 'inventory-product-categories', label: 'Product Category', onClick: () => visit('inventory.product-categories.index', '/inventory/product-categories') },
                     { key: 'inventory-products', label: 'Products', onClick: () => visit('inventory.products.index', '/inventory/products') },
+                    { key: 'inventory-variant-products', label: 'Variant Products', onClick: () => visit('inventory.variant-products.index', '/inventory/variant-products') },
+                    { key: 'inventory-warehouse-items', label: 'Warehouse Stock', onClick: () => visit('inventory.warehouse-items.index', '/inventory/warehouse-items') },
                     { key: 'inventory-variant-attributes', label: 'Variant Attributes', onClick: () => visit('inventory.variant-attributes.index', '/inventory/variant-attributes') },
                     { key: 'inventory-unit-of-measurement', label: 'Unit of Measurement', onClick: () => visit('inventory.unit-of-measurements.index', '/inventory/unit-of-measurements') },
                     { key: 'warehouse', label: 'Warehouses', onClick: () => visit('warehouse.index', '/warehouse') },
@@ -381,6 +383,8 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/tax/product-tax-categories'))   return ['product-tax-categories'];
 
         if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
+        if (isActive('/inventory/variant-products')) return ['inventory-variant-products'];
+        if (isActive('/inventory/warehouse-items')) return ['inventory-warehouse-items'];
         if (isActive('/inventory/products')) return ['inventory-products'];
         if (isActive('/inventory/variant-attributes')) return ['inventory-variant-attributes'];
         if (isActive('/inventory/unit-of-measurements')) return ['inventory-unit-of-measurement'];

@@ -84,6 +84,7 @@ class ReportRegistry
                 'permission' => 'reports.inventory.view',
                 'reports' => [
                     'inventory-position' => ['title' => 'Inventory Position'],
+                    'warehouse-wise-stock' => ['title' => 'Warehouse Wise Stock'],
                     'inventory-ageing' => ['title' => 'Inventory Ageing'],
                     'inventory-movement' => ['title' => 'Inventory Movement'],
                     'inventory-ledger' => ['title' => 'Inventory Ledger'],

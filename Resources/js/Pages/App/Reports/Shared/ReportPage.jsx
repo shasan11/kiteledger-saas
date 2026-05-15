@@ -41,6 +41,7 @@ function readQuery(defaultBranchId) {
     customer_id: params.get('customer_id') || undefined,
     supplier_id: params.get('supplier_id') || undefined,
     product_id: params.get('product_id') || undefined,
+    category_id: params.get('category_id') || undefined,
     warehouse_id: params.get('warehouse_id') || undefined,
     chart_of_account_id: params.get('chart_of_account_id') || undefined,
     department_id: params.get('department_id') || undefined,

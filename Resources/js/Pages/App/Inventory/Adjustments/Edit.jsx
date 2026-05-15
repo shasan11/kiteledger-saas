@@ -66,7 +66,7 @@ export default function AdjustmentEdit({ id, ...props }) {
             <ReusableCrud
                 title="Inventory Adjustments"
                 editTitle="Edit Inventory Adjustment"
-                apiUrl={api('/api/adjustments/')}
+                apiUrl={api('/api/inventory-adjustments/')}
                 fields={fields}
                 validationSchema={validationSchema}
                 transformPayload={transformPayload}

@@ -5,6 +5,9 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/product-categories', fn () => Inertia::render('App/Inventory/ProductCategories/Index'))->name('product-categories.index');
     Route::get('/products', fn () => Inertia::render('App/Inventory/Products/Index'))->name('products.index');
     Route::get('/products/{id}', fn ($id) => Inertia::render('App/Inventory/Products/Show', ['id' => $id]))->name('products.show');
+    Route::get('/variant-products', fn () => Inertia::render('App/Inventory/VariantProducts/Index'))->name('variant-products.index');
+    Route::get('/variant-products/{id}', fn ($id) => Inertia::render('App/Inventory/VariantProducts/Show', ['id' => $id]))->name('variant-products.show');
+    Route::get('/warehouse-items', fn () => Inertia::render('App/Inventory/WarehouseItems/Index'))->name('warehouse-items.index');
     Route::get('/variant-attributes', fn () => Inertia::render('App/Inventory/VariantAttributes/Index'))->name('variant-attributes.index');
     Route::get('/unit-of-measurements', fn () => Inertia::render('App/Inventory/UnitOfMeasurements/Index'))->name('unit-of-measurements.index');
     Route::get('/unit-of-measurements/{id}', fn ($id) => Inertia::render('App/Inventory/UnitOfMeasurements/Show', ['id' => $id]))->name('unit-of-measurements.show');

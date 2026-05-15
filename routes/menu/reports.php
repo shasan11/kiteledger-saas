@@ -53,6 +53,7 @@ $reportPages = [
     ],
     'inventory' => [
         'inventory-position' => 'App/Reports/Inventory/InventoryPosition',
+        'warehouse-wise-stock' => 'App/Reports/Inventory/WarehouseWiseStock',
         'inventory-ageing' => 'App/Reports/Inventory/InventoryAgeing',
         'inventory-movement' => 'App/Reports/Inventory/InventoryMovement',
         'inventory-ledger' => 'App/Reports/Inventory/InventoryLedger',

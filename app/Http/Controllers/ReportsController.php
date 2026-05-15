@@ -9,6 +9,7 @@ use App\Models\Currency;
 use App\Models\Department;
 use App\Models\EmployeeProfile;
 use App\Models\Product;
+use App\Models\ProductCategory;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class ReportsController extends Controller
                 'customers' => Contact::query()->where('contact_type', 'customer')->orderBy('name')->get(['id', 'name', 'code', 'pan', 'tax_registration_no']),
                 'suppliers' => Contact::query()->where('contact_type', 'supplier')->orderBy('name')->get(['id', 'name', 'code', 'pan', 'tax_registration_no']),
                 'products' => Product::query()->orderBy('name')->get(['id', 'name', 'code', 'sku', 'barcode']),
+                'productCategories' => ProductCategory::query()->orderBy('name')->get(['id', 'name']),
                 'warehouses' => Warehouse::query()->orderBy('name')->get(['id', 'name', 'code']),
                 'chartOfAccounts' => ChartOfAccount::query()->orderBy('code')->get(['id', 'name', 'code', 'type']),
                 'departments' => Department::query()->orderBy('name')->get(['id', 'name']),

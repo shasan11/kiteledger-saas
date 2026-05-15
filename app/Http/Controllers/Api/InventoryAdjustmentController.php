@@ -4,11 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\InventoryAdjustment;
 use App\Models\InventoryAdjustmentLine;
+use App\Services\Inventory\WarehouseStockService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 class InventoryAdjustmentController extends BaseCrudApiController
 {
+    public function __construct(protected WarehouseStockService $warehouseStockService)
+    {
+    }
+
     protected string $modelClass = InventoryAdjustment::class;
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
@@ -35,7 +40,60 @@ class InventoryAdjustmentController extends BaseCrudApiController
     {
         $total = $record->inventoryAdjustmentLines()->get()->sum(fn ($i) => (float) $i->qty * (float) ($i->unit_cost ?? 0));
         $record->forceFill(['total' => $total])->save();
+
+        if ($this->shouldPostStock($record, $parentData)) {
+            $record = $this->warehouseStockService->postInventoryAdjustment($record);
+        }
+
         return $record;
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ((bool) $record->stock_posted || $record->status === 'posted') {
+            $this->throwValidation([
+                'status' => ['Posted inventory adjustments cannot be deleted.'],
+            ]);
+        }
+
+        return parent::destroy($request, $id);
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = $request->input('ids', []);
+
+        if (is_array($ids) && InventoryAdjustment::query()->whereIn('id', $ids)->where(function ($query) {
+            $query->where('stock_posted', true)->orWhere('status', 'posted');
+        })->exists()) {
+            $this->throwValidation([
+                'status' => ['Posted inventory adjustments cannot be deleted.'],
+            ]);
+        }
+
+        return parent::bulkDestroy($request);
+    }
+
+    protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
+    {
+        if (((bool) $record->stock_posted || $record->status === 'posted') && $this->hasProtectedEdit($parentData, $nestedData)) {
+            $this->throwValidation([
+                'status' => ['Posted inventory adjustments cannot be edited.'],
+            ]);
+        }
+
+        if (
+            ((isset($parentData['status']) && $parentData['status'] === 'cancelled') || (isset($parentData['void']) && (bool) $parentData['void']))
+            && ((bool) $record->stock_posted || $record->status === 'posted')
+        ) {
+            $this->throwValidation([
+                'status' => ['Posted inventory adjustments cannot be cancelled or voided.'],
+            ]);
+        }
+
+        return parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
     }
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
@@ -58,7 +116,28 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         $data['items'] = $data['items'] ?? $data['inventory_adjustment_lines'] ?? [];
+        $data['stock_posting_status'] = $record->status === 'cancelled'
+            ? 'Cancelled/Void'
+            : ((bool) $record->stock_posted ? 'Posted to Warehouse Stock' : 'Draft');
 
         return $data;
+    }
+
+    protected function shouldPostStock(Model $record, array $parentData): bool
+    {
+        if ((bool) $record->stock_posted) {
+            return false;
+        }
+
+        return ($parentData['status'] ?? $record->status) === 'posted'
+            || (array_key_exists('approved', $parentData) && (bool) $parentData['approved']);
+    }
+
+    protected function hasProtectedEdit(array $parentData, array $nestedData): bool
+    {
+        $allowedParentKeys = ['approved', 'approved_at', 'approved_by_id', 'status', 'void', 'voided_reason', 'voided_at', 'voided_by_id'];
+        $protectedParent = array_diff(array_keys($parentData), $allowedParentKeys);
+
+        return !empty($protectedParent) || !empty($nestedData);
     }
 }

@@ -42,6 +42,7 @@ class ReportFilterService
             'supplier_id' => $request->query('supplier_id'),
             'customer_id' => $request->query('customer_id'),
             'product_id' => $request->query('product_id'),
+            'category_id' => $request->query('category_id'),
             'warehouse_id' => $request->query('warehouse_id'),
             'account_id' => $request->query('account_id'),
             'chart_of_account_id' => $request->query('chart_of_account_id'),

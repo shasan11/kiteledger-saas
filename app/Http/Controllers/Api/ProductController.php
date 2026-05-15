@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Product;
 use App\Models\ProductVariantItem;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,8 @@ class ProductController extends BaseCrudApiController
         'productVariantItems',
         'productVariantItems.variantLine',
         'productVariantItems.variantLine.variant',
+        'warehouseItems',
+        'warehouseItems.warehouse',
     ];
 
     protected array $relationDetails = [
@@ -176,6 +179,19 @@ class ProductController extends BaseCrudApiController
         });
 
         return response()->json($this->serializeRecord($record));
+    }
+
+    protected function applyFilters(Builder $query, Request $request): void
+    {
+        parent::applyFilters($query, $request);
+
+        if ($categoryId = $this->requestParam($request, 'category_id')) {
+            $query->where('product_category_id', $categoryId);
+        }
+
+        if ($variantGroupId = $this->requestParam($request, 'variant_group_id')) {
+            $query->whereHas('productVariantItems.variantLine', fn (Builder $variantLine) => $variantLine->where('variant_id', $variantGroupId));
+        }
     }
 
     protected function updateRules(Request $request, Model $record): array

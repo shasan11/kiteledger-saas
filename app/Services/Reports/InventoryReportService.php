@@ -8,6 +8,7 @@ use App\Models\InvoiceLine;
 use App\Models\Product;
 use App\Models\PurchaseBillLine;
 use App\Models\SalesReturnLine;
+use App\Models\WarehouseItem;
 use App\Models\WarehouseTransferLine;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -18,6 +19,7 @@ class InventoryReportService extends BaseReportService
     {
         return match ($reportKey) {
             'inventory-position' => $this->inventoryPosition($reportKey, $filters, $meta),
+            'warehouse-wise-stock' => $this->warehouseWiseStock($reportKey, $filters, $meta),
             'inventory-ageing' => $this->inventoryAgeing($reportKey, $filters, $meta),
             'inventory-movement' => $this->inventoryMovement($reportKey, $filters, $meta),
             'inventory-ledger' => $this->inventoryLedger($reportKey, $filters, $meta),
@@ -29,26 +31,26 @@ class InventoryReportService extends BaseReportService
 
     protected function inventoryPosition(string $reportKey, array $filters, array $meta): array
     {
-        $rows = Product::query()
-            ->with(['productCategory', 'productUnit'])
+        $rows = WarehouseItem::query()
+            ->with(['warehouse', 'product.productCategory', 'product.productUnit'])
             ->when(!$filters['include_inactive'], fn ($query) => $query->where('active', true))
-            ->when(!empty($filters['product_id']), fn ($query) => $query->where('id', $filters['product_id']))
+            ->when(!empty($filters['product_id']), fn ($query) => $query->where('product_id', $filters['product_id']))
+            ->when(!empty($filters['warehouse_id']), fn ($query) => $query->where('warehouse_id', $filters['warehouse_id']))
             ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('branch_id', $filters['branch_id']))
             ->get()
-            ->map(function ($product) {
-                $qtyOnHand = $this->movementBalanceForProduct($product->id);
-                $avgCost = $this->averageCostForProduct($product->id);
+            ->map(function (WarehouseItem $item) {
+                $product = $item->product;
                 return [
-                    'product_code' => $product->code,
-                    'product_name' => $product->name,
-                    'category' => $product->productCategory?->name,
-                    'warehouse' => null,
-                    'unit' => $product->productUnit?->name,
-                    'qty_on_hand' => round($qtyOnHand, 4),
-                    'avg_cost' => round($avgCost, 2),
-                    'stock_value' => round($qtyOnHand * $avgCost, 2),
-                    'reorder_level' => $this->toFloat($product->reorder_level),
-                    'status' => $product->active ? 'Active' : 'Inactive',
+                    'product_code' => $product?->code,
+                    'product_name' => $product?->name,
+                    'category' => $product?->productCategory?->name,
+                    'warehouse' => $item->warehouse?->name,
+                    'unit' => $product?->productUnit?->name,
+                    'qty_on_hand' => round((float) $item->qty_on_hand, 4),
+                    'avg_cost' => round((float) $item->avg_cost, 2),
+                    'stock_value' => round((float) $item->total_value, 2),
+                    'reorder_level' => $this->toFloat($item->reorder_level ?? $product?->reorder_level),
+                    'status' => $item->active ? 'Active' : 'Inactive',
                 ];
             })->filter(fn ($row) => $filters['include_zero_stock'] || abs($row['qty_on_hand']) > 0.0001)
             ->values()->all();
@@ -58,6 +60,54 @@ class InventoryReportService extends BaseReportService
             ['title' => 'Product Name', 'key' => 'product_name'],
             ['title' => 'Category', 'key' => 'category'],
             ['title' => 'Warehouse', 'key' => 'warehouse'],
+            ['title' => 'Unit', 'key' => 'unit'],
+            ['title' => 'Qty On Hand', 'key' => 'qty_on_hand'],
+            ['title' => 'Avg Cost', 'key' => 'avg_cost'],
+            ['title' => 'Stock Value', 'key' => 'stock_value'],
+            ['title' => 'Reorder Level', 'key' => 'reorder_level'],
+            ['title' => 'Status', 'key' => 'status'],
+        ], $rows);
+    }
+
+    protected function warehouseWiseStock(string $reportKey, array $filters, array $meta): array
+    {
+        $rows = WarehouseItem::query()
+            ->with(['branch', 'warehouse', 'product.productCategory', 'product.productUnit'])
+            ->when(!$filters['include_inactive'], fn ($query) => $query->where('active', true))
+            ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('branch_id', $filters['branch_id']))
+            ->when(!empty($filters['warehouse_id']), fn ($query) => $query->where('warehouse_id', $filters['warehouse_id']))
+            ->when(!empty($filters['product_id']), fn ($query) => $query->where('product_id', $filters['product_id']))
+            ->when(!empty($filters['category_id']), fn ($query) => $query->whereHas('product', fn ($product) => $product->where('product_category_id', $filters['category_id'])))
+            ->get()
+            ->map(function (WarehouseItem $item) {
+                $product = $item->product;
+                $qty = (float) $item->qty_on_hand;
+                $reorder = (float) ($item->reorder_level ?? $product?->reorder_level ?? 0);
+
+                return [
+                    'warehouse' => $item->warehouse?->name,
+                    'product_code' => $product?->code,
+                    'product_name' => $product?->name,
+                    'sku' => $product?->sku,
+                    'category' => $product?->productCategory?->name,
+                    'unit' => $product?->productUnit?->name,
+                    'qty_on_hand' => round($qty, 4),
+                    'avg_cost' => round((float) $item->avg_cost, 2),
+                    'stock_value' => round((float) $item->total_value, 2),
+                    'reorder_level' => round($reorder, 4),
+                    'status' => $qty <= 0 ? 'Out of Stock' : ($reorder > 0 && $qty <= $reorder ? 'Low Stock' : 'In Stock'),
+                ];
+            })
+            ->filter(fn ($row) => $filters['include_zero_stock'] || abs($row['qty_on_hand']) > 0.0001)
+            ->values()
+            ->all();
+
+        return $this->response($meta['title'], $meta['category_label'], $reportKey, $filters, [
+            ['title' => 'Warehouse', 'key' => 'warehouse'],
+            ['title' => 'Product Code', 'key' => 'product_code'],
+            ['title' => 'Product Name', 'key' => 'product_name'],
+            ['title' => 'SKU', 'key' => 'sku'],
+            ['title' => 'Category', 'key' => 'category'],
             ['title' => 'Unit', 'key' => 'unit'],
             ['title' => 'Qty On Hand', 'key' => 'qty_on_hand'],
             ['title' => 'Avg Cost', 'key' => 'avg_cost'],
@@ -126,6 +176,7 @@ class InventoryReportService extends BaseReportService
     {
         $rows = $this->movementRows()
             ->filter(fn ($row) => empty($filters['product_id']) || $row['product_id'] === $filters['product_id'])
+            ->filter(fn ($row) => empty($filters['warehouse_id']) || ($row['warehouse_id'] ?? null) === $filters['warehouse_id'])
             ->sortBy('date')
             ->values()
             ->all();
@@ -224,9 +275,20 @@ class InventoryReportService extends BaseReportService
         foreach (DebitNoteLine::query()->with(['product', 'debitNote'])->get() as $line) {
             $rows->push($this->movementRow($line->debitNote?->debit_note_date, $line->product_id, $line->product?->name, 'Debit Note', $line->debitNote?->debit_note_no, 0, $line->qty, $line->unit_price));
         }
-        foreach (InventoryAdjustmentLine::query()->with(['product', 'inventoryAdjustment'])->get() as $line) {
+        foreach (InventoryAdjustmentLine::query()->with(['product', 'inventoryAdjustment.warehouse'])->whereHas('inventoryAdjustment', fn ($query) => $query->where('stock_posted', true))->get() as $line) {
             $qty = (float) $line->qty;
-            $rows->push($this->movementRow($line->inventoryAdjustment?->adjustment_date ?? $line->created_at, $line->product_id, $line->product?->name, 'Inventory Adjustment', $line->inventoryAdjustment?->adjustment_no, max($qty, 0), abs(min($qty, 0)), $line->unit_cost ?? 0));
+            $rows->push($this->movementRow(
+                $line->inventoryAdjustment?->adjustment_date ?? $line->created_at,
+                $line->product_id,
+                $line->product?->name,
+                'Inventory Adjustment',
+                $line->inventoryAdjustment?->adjustment_no,
+                $line->adjustment_type === 'increase' ? $qty : 0,
+                $line->adjustment_type === 'decrease' ? $qty : 0,
+                $line->unit_cost ?? 0,
+                $line->inventoryAdjustment?->warehouse?->name,
+                $line->inventoryAdjustment?->warehouse_id
+            ));
         }
         foreach (WarehouseTransferLine::query()->with(['product', 'warehouseTransfer'])->get() as $line) {
             $rows->push($this->movementRow($line->warehouseTransfer?->transfer_date ?? $line->created_at, $line->product_id, $line->product?->name, 'Warehouse Transfer', $line->warehouseTransfer?->transfer_no, 0, $line->qty, $line->unit_cost ?? 0));
@@ -235,13 +297,14 @@ class InventoryReportService extends BaseReportService
         return $rows;
     }
 
-    protected function movementRow($date, ?string $productId, ?string $productName, string $sourceType, ?string $sourceNo, float $inQty, float $outQty, float $unitCost): array
+    protected function movementRow($date, ?string $productId, ?string $productName, string $sourceType, ?string $sourceNo, float $inQty, float $outQty, float $unitCost, ?string $warehouse = null, ?string $warehouseId = null): array
     {
         return [
             'date' => $date ? Carbon::parse($date)->format('Y-m-d') : null,
             'product_id' => $productId,
             'product' => $productName,
-            'warehouse' => null,
+            'warehouse' => $warehouse,
+            'warehouse_id' => $warehouseId,
             'source_type' => $sourceType,
             'source_no' => $sourceNo,
             'in_qty' => round((float) $inQty, 4),
@@ -253,19 +316,13 @@ class InventoryReportService extends BaseReportService
 
     protected function movementBalanceForProduct(string $productId): float
     {
-        return round(
-            (float) PurchaseBillLine::query()->where('product_id', $productId)->sum('qty')
-            + (float) SalesReturnLine::query()->where('product_id', $productId)->sum('qty')
-            - (float) InvoiceLine::query()->where('product_id', $productId)->sum('qty')
-            - (float) DebitNoteLine::query()->where('product_id', $productId)->sum('qty'),
-            4
-        );
+        return round((float) WarehouseItem::query()->where('product_id', $productId)->sum('qty_on_hand'), 4);
     }
 
     protected function averageCostForProduct(string $productId): float
     {
-        $purchaseQty = (float) PurchaseBillLine::query()->where('product_id', $productId)->sum('qty');
-        $purchaseValue = (float) PurchaseBillLine::query()->where('product_id', $productId)->sum(\DB::raw('qty * unit_price'));
-        return $purchaseQty > 0 ? round($purchaseValue / $purchaseQty, 2) : 0;
+        $qty = (float) WarehouseItem::query()->where('product_id', $productId)->sum('qty_on_hand');
+        $value = (float) WarehouseItem::query()->where('product_id', $productId)->sum('total_value');
+        return $qty > 0 ? round($value / $qty, 2) : 0;
     }
 }

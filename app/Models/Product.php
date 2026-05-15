@@ -166,6 +166,11 @@ class Product extends Model
         return $this->hasMany(InventoryAdjustmentLine::class, 'product_id');
     }
 
+    public function warehouseItems(): HasMany
+    {
+        return $this->hasMany(WarehouseItem::class, 'product_id');
+    }
+
     public function warehouseTransferLines(): HasMany
     {
         return $this->hasMany(WarehouseTransferLine::class, 'product_id');

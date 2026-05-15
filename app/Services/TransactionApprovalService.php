@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Models\InventoryAdjustment;
+use App\Services\Inventory\WarehouseStockService;
 
 class TransactionApprovalService
 {
@@ -25,6 +27,7 @@ class TransactionApprovalService
         protected DocumentNumberingService $numberingService,
         protected LedgerValidationService $validationService,
         protected ParallelJournalVoucherService $jvService,
+        protected WarehouseStockService $warehouseStockService,
     ) {
     }
 
@@ -55,6 +58,10 @@ class TransactionApprovalService
 
             $fresh->saveQuietly();
 
+            if ($fresh instanceof InventoryAdjustment) {
+                $this->warehouseStockService->postInventoryAdjustment($fresh);
+            }
+
             if ($this->isAccountingImpacting($fresh)) {
                 $this->jvService->createForApprovedSource($fresh);
             }
@@ -80,6 +87,10 @@ class TransactionApprovalService
 
             if ($this->isAccountingImpacting($transaction)) {
                 $this->jvService->createForApprovedSource($transaction);
+            }
+
+            if ($transaction instanceof InventoryAdjustment) {
+                $this->warehouseStockService->postInventoryAdjustment($transaction);
             }
         });
     }

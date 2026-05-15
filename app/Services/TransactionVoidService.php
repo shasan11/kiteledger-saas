@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TransactionVoidService
 {
@@ -19,6 +20,12 @@ class TransactionVoidService
             $fresh = $transaction->lockForUpdate()->fresh();
 
             $this->validationService->validateCanVoid($fresh);
+
+            if ($fresh instanceof \App\Models\InventoryAdjustment && (bool) $fresh->stock_posted) {
+                throw ValidationException::withMessages([
+                    'status' => ['Posted inventory adjustments cannot be cancelled or voided.'],
+                ]);
+            }
 
             $fresh->void = true;
             $fresh->voided_at = now();

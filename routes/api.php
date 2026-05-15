@@ -58,6 +58,7 @@ use App\Http\Controllers\Api\VariantController;
 use App\Http\Controllers\Api\JournalVoucherController;
 use App\Http\Controllers\Api\JournalVoucherLineController;
 use App\Http\Controllers\Api\InventoryAdjustmentController;
+use App\Http\Controllers\Api\WarehouseItemController;
 use App\Http\Controllers\Api\QuotationController;
 use App\Http\Controllers\Api\SalesOrderController;
 use App\Http\Controllers\Api\WarehouseTransferController;
@@ -374,6 +375,11 @@ Route::post('inventory-adjustments/bulk', [InventoryAdjustmentController::class,
 Route::patch('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpdate']);
 Route::delete('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
 Route::apiResource('inventory-adjustments', InventoryAdjustmentController::class);
+Route::post('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkStore']);
+Route::patch('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpdate']);
+Route::delete('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
+Route::apiResource('adjustments', InventoryAdjustmentController::class);
+Route::apiResource('warehouse-items', WarehouseItemController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
 
 Route::post('quotations/bulk', [QuotationController::class, 'bulkStore']);
 Route::patch('quotations/bulk', [QuotationController::class, 'bulkUpdate']);

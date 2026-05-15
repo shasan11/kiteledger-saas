@@ -83,6 +83,7 @@ export const REPORT_CATEGORIES = [
     permission: 'reports.inventory.view',
     reports: [
       ['inventory-position', 'Inventory Position'],
+      ['warehouse-wise-stock', 'Warehouse Wise Stock'],
       ['inventory-ageing', 'Inventory Ageing'],
       ['inventory-movement', 'Inventory Movement'],
       ['inventory-ledger', 'Inventory Ledger'],
@@ -148,6 +149,7 @@ export const FILTER_PRESETS = {
   customer: { key: 'customer_id', type: 'select', source: 'customers', label: 'Customer' },
   supplier: { key: 'supplier_id', type: 'select', source: 'suppliers', label: 'Supplier' },
   product: { key: 'product_id', type: 'select', source: 'products', label: 'Product' },
+  category: { key: 'category_id', type: 'select', source: 'productCategories', label: 'Category' },
   warehouse: { key: 'warehouse_id', type: 'select', source: 'warehouses', label: 'Warehouse' },
   account: { key: 'chart_of_account_id', type: 'select', source: 'chartOfAccounts', label: 'Account' },
   department: { key: 'department_id', type: 'select', source: 'departments', label: 'Department' },
@@ -171,6 +173,7 @@ export const REPORT_CONFIG = Object.fromEntries(
         if (['detail-general-ledger'].includes(reportKey)) return [FILTER_PRESETS.dateRange, FILTER_PRESETS.branch, FILTER_PRESETS.account];
         if (['gl-master'].includes(reportKey)) return [FILTER_PRESETS.branch, FILTER_PRESETS.includeInactive];
         if (['inventory-position', 'inventory-ageing'].includes(reportKey)) return [FILTER_PRESETS.asOfDate, FILTER_PRESETS.branch, FILTER_PRESETS.product, FILTER_PRESETS.warehouse, FILTER_PRESETS.includeZeroStock];
+        if (['warehouse-wise-stock'].includes(reportKey)) return [FILTER_PRESETS.branch, FILTER_PRESETS.warehouse, FILTER_PRESETS.product, FILTER_PRESETS.category, FILTER_PRESETS.includeZeroStock, FILTER_PRESETS.includeInactive];
         if (['inventory-ledger'].includes(reportKey)) return [FILTER_PRESETS.dateRange, FILTER_PRESETS.branch, FILTER_PRESETS.product, FILTER_PRESETS.warehouse];
         if (['employee-master'].includes(reportKey)) return [FILTER_PRESETS.branch, FILTER_PRESETS.department, FILTER_PRESETS.includeInactive];
         if (['attendance-summary', 'attendance-detail', 'late-attendance', 'absent-report', 'leave-summary', 'leave-balance', 'payroll-summary', 'payslip-register', 'department-wise-cost', 'employee-turnover'].includes(reportKey)) return [FILTER_PRESETS.dateRange, FILTER_PRESETS.branch, FILTER_PRESETS.department, FILTER_PRESETS.user];

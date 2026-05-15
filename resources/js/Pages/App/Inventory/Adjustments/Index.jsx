@@ -22,6 +22,7 @@ export default function AdjustmentsIndex(props) {
         { title: 'Warehouse', dataIndex: 'warehouse', key: 'warehouse', render: (_, r) => r?.warehouse?.name || r?.warehouse_name || '-' },
         { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (v) => v || '-' },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
+        { title: 'Stock Posting', dataIndex: 'stock_posting_status', key: 'stock_posting_status', width: 190, render: (v, r) => <Tag color={r?.stock_posted ? 'green' : r?.status === 'cancelled' ? 'red' : 'default'}>{v || 'Draft'}</Tag> },
     ], []);
 
     const rowMenu = useMemo(() => [
@@ -31,7 +32,16 @@ export default function AdjustmentsIndex(props) {
             requiresSelection: true,
             onClick: async ({ selectedRowKeys, fetchData, clearSelection, message }) => {
                 try {
-                    await axios.patch(api('/api/adjustments/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
+                    await new Promise((resolve, reject) => {
+                        Modal.confirm({
+                            title: 'Post warehouse stock?',
+                            content: 'This will update warehouse stock. Continue?',
+                            okText: 'Continue',
+                            onOk: resolve,
+                            onCancel: reject,
+                        });
+                    });
+                    await axios.patch(api('/api/inventory-adjustments/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
                     message.success('Records approved');
                     clearSelection();
                     fetchData();
@@ -54,7 +64,7 @@ export default function AdjustmentsIndex(props) {
         if (!ctx) return;
         setVoidState((s) => ({ ...s, loading: true }));
         try {
-            await axios.patch(api('/api/adjustments/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
+            await axios.patch(api('/api/inventory-adjustments/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
             ctx.message.success('Records voided');
             ctx.clearSelection();
             ctx.fetchData();
@@ -70,7 +80,7 @@ export default function AdjustmentsIndex(props) {
             <Head title="Inventory Adjustments" />
             <ReusableCrud
                 title="Inventory Adjustments"
-                apiUrl={api('/api/adjustments/')}
+                apiUrl={api('/api/inventory-adjustments/')}
                 columns={columns}
                 rowMenu={rowMenu}
                 custom_add={true}
