@@ -552,6 +552,7 @@ export default function SupplierPayments() {
             <ReusableCrud
                 title="Supplier Payments"
                 apiUrl={api('/api/supplier-payments/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 columns={columns}
                 fields={fields}
                 validationSchema={validationSchema}
@@ -582,7 +583,7 @@ export default function SupplierPayments() {
                 viewPathBuilder={(record) => route('payment-out.supplier-payments.show', record.id)}
                 showSearch
                 serverFilters={buildStandardFilters()}
-                canAdd canEdit canDelete canView hasActions hasActionColumns
+                canAdd canView hasActions
             />
         </AuthenticatedLayout>
     );

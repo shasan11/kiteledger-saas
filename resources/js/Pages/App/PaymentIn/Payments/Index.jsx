@@ -1,9 +1,9 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
-import { Alert, Button, Modal, Input, Space, Table, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, StopOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { Alert, Button, Modal, Space, Table, Tag, Typography } from 'antd';
+import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
@@ -12,12 +12,10 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const money = (v) => toNumber(v).toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const displayDate = (v) => { if (!v) return '-'; const d = dayjs(v); return d.isValid() ? d.format('DD-MM-YYYY') : '-'; };
 const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red' }[s] || 'default');
 
 export default function PaymentsIndex(props) {
-    const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
     const [unapprovedCount, setUnapprovedCount] = useState(0);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [unapprovedRows, setUnapprovedRows] = useState([]);
@@ -98,52 +96,6 @@ export default function PaymentsIndex(props) {
         },
     ], [approvingIds]);
 
-    const rowMenu = useMemo(() => [
-        {
-            label: 'Bulk Approve',
-            icon: <CheckCircleOutlined />,
-            requiresSelection: true,
-            onClick: async ({ selectedRowKeys, fetchData, clearSelection, message }) => {
-                try {
-                    await axios.patch(api('/api/customer-payments/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
-                    message.success('Records approved');
-                    clearSelection();
-                    fetchData();
-                    void fetchUnapprovedCount();
-                } catch { message.error('Failed to approve records'); }
-            },
-        },
-        {
-            label: 'Bulk Void',
-            icon: <StopOutlined />,
-            danger: true,
-            requiresSelection: true,
-            onClick: ({ selectedRowKeys, fetchData, clearSelection, message }) => {
-                setVoidState({ open: true, reason: '', loading: false, ctx: { selectedRowKeys, fetchData, clearSelection, message } });
-            },
-        },
-    ], [fetchUnapprovedCount]);
-
-    const handleVoidConfirm = async () => {
-        const { ctx, reason } = voidState;
-        if (!ctx) return;
-        if (String(reason || '').trim().length < 3) {
-            ctx.message.error('Void reason is required and must be at least 3 characters.');
-            return;
-        }
-        setVoidState((s) => ({ ...s, loading: true }));
-        try {
-            await axios.patch(api('/api/customer-payments/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
-            ctx.message.success('Records voided');
-            ctx.clearSelection();
-            ctx.fetchData();
-            setVoidState({ open: false, reason: '', loading: false, ctx: null });
-        } catch {
-            ctx.message.error('Failed to void records');
-            setVoidState((s) => ({ ...s, loading: false }));
-        }
-    };
-
     return (
         <AuthenticatedLayout user={props.auth?.user}>
             <Head title="Customer Payments" />
@@ -160,11 +112,7 @@ export default function PaymentsIndex(props) {
                                     <span>
                                         {unapprovedCount} payment{unapprovedCount !== 1 ? 's' : ''} not yet approved.
                                     </span>
-                                    <Button
-                                        size="small"
-                                        type="primary"
-                                        onClick={openReview}
-                                    >
+                                    <Button size="small" type="primary" onClick={openReview}>
                                         Review &amp; Approve
                                     </Button>
                                 </Space>
@@ -176,8 +124,8 @@ export default function PaymentsIndex(props) {
                 <ReusableCrud
                     title="Customer Payments"
                     apiUrl={api('/api/customer-payments/')}
+                    bulkActions={{ approve: true, void: true, export: true }}
                     columns={columns}
-                    rowMenu={rowMenu}
                     custom_add={true}
                     custom_add_link={route('payment-in.payments.add')}
                     form_ui="drawer"
@@ -190,8 +138,6 @@ export default function PaymentsIndex(props) {
                     enableServerPagination
                     showSearch
                     canAdd={true}
-                    canEdit
-                    canDelete
                     hasActions
                     canView
                     activeTableRowFunction={(record) => ({
@@ -210,27 +156,6 @@ export default function PaymentsIndex(props) {
                 />
             </div>
 
-            {/* Void Modal */}
-            <Modal
-                title="Void Records"
-                open={voidState.open}
-                onOk={handleVoidConfirm}
-                confirmLoading={voidState.loading}
-                onCancel={() => setVoidState({ open: false, reason: '', loading: false, ctx: null })}
-                okText="Void"
-                okButtonProps={{ danger: true }}
-            >
-                <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
-                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
-                <Input.TextArea
-                    rows={3}
-                    value={voidState.reason}
-                    onChange={(e) => setVoidState((s) => ({ ...s, reason: e.target.value }))}
-                    placeholder="Enter void reason..."
-                />
-            </Modal>
-
-            {/* Review & Approve Modal */}
             <Modal
                 title={
                     <Space>
@@ -240,9 +165,7 @@ export default function PaymentsIndex(props) {
                 }
                 open={reviewOpen}
                 onCancel={() => setReviewOpen(false)}
-                footer={
-                    <Button onClick={() => setReviewOpen(false)}>Close</Button>
-                }
+                footer={<Button onClick={() => setReviewOpen(false)}>Close</Button>}
                 width={820}
                 destroyOnClose
             >

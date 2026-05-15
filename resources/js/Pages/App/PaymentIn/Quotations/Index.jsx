@@ -1,11 +1,10 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Input, Modal, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, FileTextOutlined, StopOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import { Tag, Typography } from 'antd';
+import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
@@ -142,8 +141,6 @@ const visitQuotationShow = (id) => {
 };
 
 export default function Quotations(props) {
-  const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
-
   const columns = useMemo(
     () => [
       {
@@ -203,53 +200,6 @@ export default function Quotations(props) {
     ],
     []
   );
-
-  const rowMenu = useMemo(() => [
-    {
-      label: 'Bulk Approve',
-      icon: <CheckCircleOutlined />,
-      requiresSelection: true,
-      onClick: async ({ selectedRowKeys, fetchData, clearSelection, message }) => {
-        try {
-          await axios.patch(api('/api/quotations/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
-          message.success('Records approved');
-          clearSelection();
-          fetchData();
-        } catch {
-          message.error('Failed to approve records');
-        }
-      },
-    },
-    {
-      label: 'Bulk Void',
-      icon: <StopOutlined />,
-      danger: true,
-      requiresSelection: true,
-      onClick: ({ selectedRowKeys, fetchData, clearSelection, message }) => {
-        setVoidState({ open: true, reason: '', loading: false, ctx: { selectedRowKeys, fetchData, clearSelection, message } });
-      },
-    },
-  ], []);
-
-  const handleVoidConfirm = async () => {
-    const { ctx, reason } = voidState;
-    if (!ctx) return;
-    if (String(reason || '').trim().length < 3) {
-            ctx.message.error('Void reason is required and must be at least 3 characters.');
-      return;
-    }
-    setVoidState((state) => ({ ...state, loading: true }));
-    try {
-      await axios.patch(api('/api/quotations/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
-      ctx.message.success('Records voided');
-      ctx.clearSelection();
-      ctx.fetchData();
-      setVoidState({ open: false, reason: '', loading: false, ctx: null });
-    } catch {
-      ctx.message.error('Failed to void records');
-      setVoidState((state) => ({ ...state, loading: false }));
-    }
-  };
 
   const fields = useMemo(
     () => [
@@ -561,8 +511,8 @@ export default function Quotations(props) {
         addTitle="New Quotation"
         editTitle="Edit Quotation"
         apiUrl={api('/api/quotations/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
-        rowMenu={rowMenu}
         fields={fields}
         custom_add={true}
         custom_add_link={route('payment-in.quotations.add')}
@@ -580,10 +530,8 @@ export default function Quotations(props) {
         enableServerPagination
         showSearch
         canAdd={true}
-        canEdit
-        canDelete
         hasActions
-
+        canView
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
             if (
@@ -615,19 +563,6 @@ export default function Quotations(props) {
         defaultAnchorKey="approved"
         anchorSyncWithHash
       />
-      <Modal
-        title="Void Records"
-        open={voidState.open}
-        onOk={handleVoidConfirm}
-        confirmLoading={voidState.loading}
-        onCancel={() => setVoidState({ open: false, reason: '', loading: false, ctx: null })}
-        okText="Void"
-        okButtonProps={{ danger: true }}
-      >
-        <p><strong>Warning:</strong> This transaction will be voided and cannot be reverted later. Are you sure you want to void it?</p>
-                <p style={{ marginTop: 8 }}>Please provide a reason for voiding (minimum 3 characters):</p>
-        <Input.TextArea rows={3} value={voidState.reason} onChange={(event) => setVoidState((state) => ({ ...state, reason: event.target.value }))} placeholder="Enter void reason..." />
-      </Modal>
     </AuthenticatedLayout>
   );
 }

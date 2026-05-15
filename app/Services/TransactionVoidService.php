@@ -27,12 +27,21 @@ class TransactionVoidService
                 ]);
             }
 
-            $fresh->void = true;
+            if (in_array('void', $fresh->getFillable(), true)) {
+                $fresh->void = true;
+            } elseif (in_array('voided', $fresh->getFillable(), true)) {
+                $fresh->voided = true;
+            }
+
             $fresh->voided_at = now();
             $fresh->voided_reason = $reason;
 
             if ($voidedById) {
                 $fresh->voided_by_id = $voidedById;
+            }
+
+            if (in_array('active', $fresh->getFillable(), true)) {
+                $fresh->active = false;
             }
 
             if ($this->validationService->hasStatusField($fresh)) {

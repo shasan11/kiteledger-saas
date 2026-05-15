@@ -222,7 +222,8 @@ export default function CashTransfers(props) {
       <ReusableCrud
         icon={<SwapOutlined />}
         title="Cash Transfers"
-        apiUrl={api('/api/cash-transfers')}
+        apiUrl={api('/api/cash-transfers/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}
@@ -239,10 +240,8 @@ export default function CashTransfers(props) {
         enableServerPagination={true}
         showSearch={true}
         canAdd={true}
-        canEdit={true}
-        canDelete={true}
         hasActions={true}
-        hasActionColumns={true}
+        canView
         anchorFilters={[
           { key: 'draft',     label: 'Draft',     title: 'Cash Transfers', params: { status: 'draft' } },
           { key: 'posted',    label: 'Posted',    title: 'Cash Transfers', params: { status: 'posted' } },
