@@ -1,15 +1,33 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
+import { Badge, Card, Col, Row, Space, Tag, theme, Typography } from 'antd';
 import * as Yup from 'yup';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { api } from './Shared/posHelpers';
+import { api, fetchList } from './Shared/posHelpers';
+
+const { Text, Title } = Typography;
 
 export default function PosTerminalsPage() {
     const { props } = usePage();
+    const { token } = theme.useToken();
     const branchContext = props.branchContext || {};
     const canViewAllBranches = !!branchContext.canViewAllBranches;
     const selectedBranchId = branchContext.selectedBranchId || props.auth?.currentBranchId || null;
+    const [stats, setStats] = useState({ total: 0, active: 0, defaultCount: 0 });
+
+    useEffect(() => {
+        fetchList('/api/pos-terminals', { page_size: 200 })
+            .then((payload) => {
+                const rows = payload.results || [];
+                setStats({
+                    total: rows.length,
+                    active: rows.filter((row) => row.active).length,
+                    defaultCount: rows.filter((row) => row.is_default).length,
+                });
+            })
+            .catch(() => {});
+    }, []);
 
     const accountQuickAdd = useMemo(() => ({
         title: 'Account',
@@ -44,12 +62,22 @@ export default function PosTerminalsPage() {
     }), []);
 
     const columns = useMemo(() => [
-        { title: 'Code', dataIndex: 'code', key: 'code' },
-        { title: 'Name', dataIndex: 'name', key: 'name' },
+        { title: 'Terminal', key: 'terminal', render: (_, record) => (
+            <Space direction="vertical" size={0}>
+                <Space>
+                    <Text strong>{record.name}</Text>
+                    {record.is_default ? <Tag color="blue">Default</Tag> : null}
+                </Space>
+                <Text type="secondary">{record.code || '-'}</Text>
+            </Space>
+        ) },
         { title: 'Branch', key: 'branch', render: (_, record) => record.branch?.name || '-' },
         { title: 'Warehouse', key: 'warehouse', render: (_, record) => record.warehouse?.name || '-' },
-        { title: 'Default', dataIndex: 'is_default', key: 'is_default', render: (value) => value ? 'Yes' : 'No' },
-        { title: 'Active', dataIndex: 'active', key: 'active', render: (value) => value ? 'Yes' : 'No' },
+        { title: 'Cash Account', key: 'cash_account', render: (_, record) => record.cash_account?.name || record.cashAccount?.name || '-' },
+        { title: 'Card Account', key: 'card_account', render: (_, record) => record.card_account?.name || record.cardAccount?.name || '-' },
+        { title: 'Online Account', key: 'online_account', render: (_, record) => record.online_account?.name || record.onlineAccount?.name || '-' },
+        { title: 'Default Customer', key: 'customer', render: (_, record) => record.default_customer?.name || record.defaultCustomer?.name || '-' },
+        { title: 'Status', dataIndex: 'active', key: 'active', render: (value) => <Badge status={value ? 'success' : 'default'} text={value ? 'Active' : 'Inactive'} /> },
     ], []);
 
     const fields = useMemo(() => [
@@ -83,8 +111,32 @@ export default function PosTerminalsPage() {
     });
 
     return (
-        <AuthenticatedLayout header={<h2 style={{ margin: 0 }}>POS Terminals</h2>}>
+        <AuthenticatedLayout
+            header={(
+                <Space direction="vertical" size={0}>
+                    <Title level={4} style={{ margin: 0 }}>POS Terminals</Title>
+                    <Text type="secondary">Configure counters, branch warehouses, and payment clearing accounts for POS shifts.</Text>
+                </Space>
+            )}
+        >
             <Head title="POS Terminals" />
+            <div style={{ padding: 16, background: token.colorBgLayout }}>
+                <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                    <Row gutter={[12, 12]}>
+                        {[
+                            ['Total Terminals', stats.total],
+                            ['Active Terminals', stats.active],
+                            ['Default Terminals', stats.defaultCount],
+                        ].map(([label, value]) => (
+                            <Col xs={24} md={8} key={label}>
+                                <Card bordered={false}>
+                                    <Text type="secondary">{label}</Text>
+                                    <div style={{ fontSize: 24, fontWeight: 700 }}>{value}</div>
+                                </Card>
+                            </Col>
+                        ))}
+                    </Row>
+
             <ReusableCrud
                 title="POS Terminals"
                 apiUrl={api('/api/pos-terminals/')}
@@ -104,14 +156,16 @@ export default function PosTerminalsPage() {
                     is_default: false,
                     active: true,
                 }}
-                form_ui="drawer"
-                drawerWidth={720}
+                form_ui="modal"
+                modalWidth={760}
                 enableServerPagination
                 showSearch
                 searchParam="search"
                 pageParam="page"
                 pageSizeParam="page_size"
             />
+                </Space>
+            </div>
         </AuthenticatedLayout>
     );
 }

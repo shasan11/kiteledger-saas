@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Pos\Concerns\AuthorizesPosAccess;
 use App\Http\Requests\Pos\CompletePosReturnRequest;
 use App\Http\Requests\Pos\StorePosReturnRequest;
 use App\Models\PosReturn;
+use App\Models\PosSale;
 use App\Services\Pos\PosReturnService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PosReturnController extends Controller
 {
+    use AuthorizesPosAccess;
+
     public function __construct(
         protected PosReturnService $returnService,
     ) {
@@ -19,6 +23,8 @@ class PosReturnController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->authorizePos('pos.return.view');
+
         $query = PosReturn::query()
             ->with(['branch', 'posSale.contact', 'posShift.cashier', 'salesReturn', 'approvedBy'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
@@ -28,11 +34,17 @@ class PosReturnController extends Controller
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('return_date', '<=', $request->string('date_to')))
             ->orderByDesc('return_date');
 
+        $this->applyBranchScope($query, $request);
+
         return response()->json($query->paginate((int) $request->input('page_size', 20)));
     }
 
     public function store(StorePosReturnRequest $request): JsonResponse
     {
+        $this->authorizePos('pos.return.create');
+        $sale = PosSale::query()->findOrFail($request->validated('pos_sale_id'));
+        $this->assertBranchAccess($request, $sale->branch_id, 'You cannot refund a sale from another branch.');
+
         $return = $this->returnService->createDraft($request->validated());
 
         return response()->json($return, 201);
@@ -40,6 +52,9 @@ class PosReturnController extends Controller
 
     public function show(PosReturn $id): JsonResponse
     {
+        $this->authorizePos('pos.return.view');
+        $this->assertBranchAccess(request(), $id->branch_id, 'You cannot view a POS return from another branch.');
+
         return response()->json($id->load([
             'branch',
             'posSale.contact',
@@ -52,11 +67,17 @@ class PosReturnController extends Controller
 
     public function complete(CompletePosReturnRequest $request, PosReturn $id): JsonResponse
     {
+        $this->authorizePos('pos.return.approve');
+        $this->assertBranchAccess($request, $id->branch_id, 'You cannot complete a POS return from another branch.');
+
         return response()->json($this->returnService->complete($id, $request->validated()));
     }
 
     public function cancel(PosReturn $id): JsonResponse
     {
+        $this->authorizePos('pos.return.void');
+        $this->assertBranchAccess(request(), $id->branch_id, 'You cannot cancel a POS return from another branch.');
+
         return response()->json($this->returnService->cancel($id));
     }
 }

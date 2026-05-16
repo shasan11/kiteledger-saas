@@ -339,6 +339,8 @@ export default function CompanyProfile() {
 
       const formData = new FormData();
 
+      formData.append('_method', 'PUT');
+
       Object.entries(payload).forEach(([key, value]) => {
         appendFormValue(formData, key, value);
       });
@@ -374,7 +376,7 @@ export default function CompanyProfile() {
         formData.set('remove_favicon', 'true');
       }
 
-      const response = await axios.put(api('/api/app-settings/current'), formData, {
+      const response = await axios.post(api('/api/app-settings/current'), formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

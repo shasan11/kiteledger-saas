@@ -18,17 +18,26 @@ trait AuthorizesProjectResources
     protected array $projectAccessBypassRoles = [
         'Super Admin',
         'Company Owner',
+        'Admin',
         'Branch Admin',
         'System Manager',
         'HR Manager',
+        'Full Access User',
+        'Full Access Admin',
+        'super-admin',
+        'admin',
     ];
 
     protected function baseQuery(): Builder
     {
         $query = parent::baseQuery();
-        $user = request()->user();
+        $user = $this->currentApiUser(request());
 
-        if (!$user || $this->userBypassesProjectScope($user)) {
+        if (!$user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if ($this->userBypassesProjectScope($user)) {
             return $query;
         }
 
@@ -37,11 +46,19 @@ trait AuthorizesProjectResources
 
     protected function checkAccess(Request $request, string $action, mixed $record = null): void
     {
-        parent::checkAccess($request, $action, $record);
+        $user = $this->currentApiUser($request);
 
-        $user = $request->user();
+        abort_unless(
+            $user,
+            401,
+            'Unauthenticated. Please login again.'
+        );
 
-        if (!$user || $this->userBypassesProjectScope($user)) {
+        if (!$this->userBypassesProjectCrudPermission($user)) {
+            parent::checkAccess($request, $action, $record);
+        }
+
+        if ($this->userBypassesProjectScope($user)) {
             return;
         }
 
@@ -49,7 +66,7 @@ trait AuthorizesProjectResources
             $projectId = $this->projectIdForRecord($record);
 
             abort_unless(
-                $projectId && $this->userCanAccessProject((int) $user->id, $projectId),
+                $projectId && $this->userCanAccessProject((int) $user->id, (string) $projectId),
                 403,
                 'You do not have access to this project.'
             );
@@ -59,15 +76,53 @@ trait AuthorizesProjectResources
 
         if ($incomingProjectId) {
             abort_unless(
-                $this->userCanAccessProject((int) $user->id, $incomingProjectId) || $this->isCreatingProject($action),
+                $this->userCanAccessProject((int) $user->id, (string) $incomingProjectId)
+                    || $this->isCreatingProject($action),
                 403,
                 'You do not have access to this project.'
             );
         }
 
-        if ($record instanceof Task && !$this->canMutateTask($request, $action, $record)) {
+        if ($record instanceof Task && !$this->canMutateTask($request, $action, $record, $user)) {
             abort(403, 'You can only update tasks assigned to you.');
         }
+    }
+
+    protected function currentApiUser(Request $request)
+    {
+        try {
+            if ($request->user()) {
+                return $request->user();
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        try {
+            if (auth()->check()) {
+                return auth()->user();
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        try {
+            if (auth('sanctum')->check()) {
+                return auth('sanctum')->user();
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        try {
+            if (auth('web')->check()) {
+                return auth('web')->user();
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        return null;
     }
 
     protected function scopeQueryToAccessibleProjects(Builder $query, int $userId): Builder
@@ -76,27 +131,36 @@ trait AuthorizesProjectResources
 
         if ($model instanceof Project) {
             return $query->where(function (Builder $query) use ($userId) {
-                $query
-                    ->where('project_manager_id', $userId)
-                    ->orWhereHas('projectTeams.projectTeamMembers', fn (Builder $q) => $q->where('user_id', $userId))
-                    ->orWhereHas('tasks.assignedTasks', fn (Builder $q) => $q->where('user_id', $userId));
+                $this->scopeProjectRelation($query, $userId);
             });
         }
 
         if ($model instanceof Task) {
-            return $query->whereHas('project', fn (Builder $q) => $this->scopeProjectRelation($q, $userId));
+            return $query->whereHas('project', function (Builder $query) use ($userId) {
+                $this->scopeProjectRelation($query, $userId);
+            });
         }
 
-        if ($model instanceof Milestone || $model instanceof TaskStatus || $model instanceof ProjectTeam) {
-            return $query->whereHas('project', fn (Builder $q) => $this->scopeProjectRelation($q, $userId));
+        if (
+            $model instanceof Milestone ||
+            $model instanceof TaskStatus ||
+            $model instanceof ProjectTeam
+        ) {
+            return $query->whereHas('project', function (Builder $query) use ($userId) {
+                $this->scopeProjectRelation($query, $userId);
+            });
         }
 
         if ($model instanceof ProjectTeamMember) {
-            return $query->whereHas('projectTeam.project', fn (Builder $q) => $this->scopeProjectRelation($q, $userId));
+            return $query->whereHas('projectTeam.project', function (Builder $query) use ($userId) {
+                $this->scopeProjectRelation($query, $userId);
+            });
         }
 
         if ($model instanceof AssignedTask) {
-            return $query->whereHas('task.project', fn (Builder $q) => $this->scopeProjectRelation($q, $userId));
+            return $query->whereHas('task.project', function (Builder $query) use ($userId) {
+                $this->scopeProjectRelation($query, $userId);
+            });
         }
 
         return $query;
@@ -106,8 +170,12 @@ trait AuthorizesProjectResources
     {
         $query
             ->where('project_manager_id', $userId)
-            ->orWhereHas('projectTeams.projectTeamMembers', fn (Builder $q) => $q->where('user_id', $userId))
-            ->orWhereHas('tasks.assignedTasks', fn (Builder $q) => $q->where('user_id', $userId));
+            ->orWhereHas('projectTeams.projectTeamMembers', function (Builder $query) use ($userId) {
+                $query->where('user_id', $userId);
+            })
+            ->orWhereHas('tasks.assignedTasks', function (Builder $query) use ($userId) {
+                $query->where('user_id', $userId);
+            });
     }
 
     protected function projectIdForRecord(Model $record): ?string
@@ -116,16 +184,29 @@ trait AuthorizesProjectResources
             return (string) $record->getKey();
         }
 
-        if ($record instanceof Task || $record instanceof Milestone || $record instanceof TaskStatus || $record instanceof ProjectTeam) {
-            return $record->project_id ? (string) $record->project_id : null;
+        if (
+            $record instanceof Task ||
+            $record instanceof Milestone ||
+            $record instanceof TaskStatus ||
+            $record instanceof ProjectTeam
+        ) {
+            return !empty($record->project_id) ? (string) $record->project_id : null;
         }
 
         if ($record instanceof ProjectTeamMember) {
-            return $record->projectTeam?->project_id ? (string) $record->projectTeam->project_id : null;
+            $projectTeam = $record->relationLoaded('projectTeam')
+                ? $record->getRelation('projectTeam')
+                : $record->projectTeam;
+
+            return !empty($projectTeam?->project_id) ? (string) $projectTeam->project_id : null;
         }
 
         if ($record instanceof AssignedTask) {
-            return $record->task?->project_id ? (string) $record->task->project_id : null;
+            $task = $record->relationLoaded('task')
+                ? $record->getRelation('task')
+                : $record->task;
+
+            return !empty($task?->project_id) ? (string) $task->project_id : null;
         }
 
         return null;
@@ -138,11 +219,19 @@ trait AuthorizesProjectResources
         }
 
         if ($request->filled('task_id')) {
-            return Task::query()->whereKey($request->input('task_id'))->value('project_id');
+            $projectId = Task::query()
+                ->whereKey($request->input('task_id'))
+                ->value('project_id');
+
+            return $projectId ? (string) $projectId : null;
         }
 
         if ($request->filled('project_team_id')) {
-            return ProjectTeam::query()->whereKey($request->input('project_team_id'))->value('project_id');
+            $projectId = ProjectTeam::query()
+                ->whereKey($request->input('project_team_id'))
+                ->value('project_id');
+
+            return $projectId ? (string) $projectId : null;
         }
 
         return null;
@@ -160,26 +249,108 @@ trait AuthorizesProjectResources
 
     protected function userBypassesProjectScope($user): bool
     {
-        return method_exists($user, 'hasAnyRole') && $user->hasAnyRole($this->projectAccessBypassRoles);
+        return $this->userBypassesProjectCrudPermission($user);
+    }
+
+    protected function userBypassesProjectCrudPermission($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        if (method_exists($this, 'userHasAdministrativeAccess')) {
+            try {
+                if ($this->userHasAdministrativeAccess($user)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                //
+            }
+        }
+
+        if (method_exists($user, 'hasAnyRole')) {
+            try {
+                if ($user->hasAnyRole($this->projectAccessBypassRoles)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                //
+            }
+        }
+
+        if (method_exists($user, 'hasRole')) {
+            foreach ($this->projectAccessBypassRoles as $role) {
+                try {
+                    if ($user->hasRole($role)) {
+                        return true;
+                    }
+                } catch (\Throwable $e) {
+                    //
+                }
+            }
+        }
+
+        try {
+            $role = $user->relationLoaded('role')
+                ? $user->getRelation('role')
+                : $user->role;
+
+            $roleName = $role?->name;
+
+            if ($roleName && in_array($roleName, $this->projectAccessBypassRoles, true)) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        return false;
     }
 
     protected function isCreatingProject(string $action): bool
     {
-        return $this->modelClass === Project::class && in_array($action, ['store', 'bulkStore'], true);
+        return $this->modelClass === Project::class
+            && in_array($action, ['store', 'bulkStore'], true);
     }
 
-    protected function canMutateTask(Request $request, string $action, Task $task): bool
+    protected function canMutateTask(Request $request, string $action, Task $task, $user = null): bool
     {
         if (!in_array($action, ['update', 'bulkUpdate'], true)) {
             return true;
         }
 
-        $user = $request->user();
+        $user = $user ?: $this->currentApiUser($request);
 
-        if ($user->can('project.task.assign') || (int) $task->project?->project_manager_id === (int) $user->id) {
+        if (!$user) {
+            return false;
+        }
+
+        if ($this->userBypassesProjectCrudPermission($user)) {
             return true;
         }
 
-        return $task->assignedTasks()->where('user_id', $user->id)->exists();
+        try {
+            if (method_exists($user, 'can') && $user->can('project.task.assign')) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        $project = $task->relationLoaded('project')
+            ? $task->getRelation('project')
+            : $task->project;
+
+        if ($project && (int) $project->project_manager_id === (int) $user->id) {
+            return true;
+        }
+
+        return $task->assignedTasks()
+            ->where('user_id', $user->id)
+            ->exists();
     }
 }

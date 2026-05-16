@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\AppSetting;
+use App\Support\Branding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -269,34 +270,7 @@ class AppSettingController extends BaseCrudApiController
 
     protected function makePublicFileUrl(?string $path): ?string
     {
-        if (!$path) {
-            return null;
-        }
-
-        $path = trim($path);
-
-        if (
-            str_starts_with($path, 'http://') ||
-            str_starts_with($path, 'https://')
-        ) {
-            return $path;
-        }
-
-        $path = ltrim($path, '/');
-
-        if (str_starts_with($path, 'public/')) {
-            $path = substr($path, 7);
-        }
-
-        if (str_starts_with($path, 'storage/')) {
-            $path = substr($path, 8);
-        }
-
-        if (!Storage::disk('public')->exists($path)) {
-            return null;
-        }
-
-        return rtrim(config('app.url'), '/') . '/storage/' . $path;
+        return Branding::publicFileUrl($path);
     }
 
     protected function deletePublicFile(?string $path): void

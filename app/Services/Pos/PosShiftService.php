@@ -22,6 +22,18 @@ class PosShiftService
                 throw new InvalidArgumentException('Unable to determine the logged-in cashier for this shift.');
             }
 
+            if (!$terminal->active) {
+                throw new InvalidArgumentException('Cannot open a shift on an inactive POS terminal.');
+            }
+
+            if ($actorId && (int) $cashierId !== (int) $actorId) {
+                $user = request()->user();
+
+                if (!$user || !$user->can('pos.shift.update')) {
+                    throw new InvalidArgumentException('You cannot open a shift for another cashier.');
+                }
+            }
+
             if ($branchId && $terminal->branch_id && (string) $branchId !== (string) $terminal->branch_id) {
                 throw new InvalidArgumentException('The selected terminal does not belong to this branch.');
             }
@@ -48,6 +60,14 @@ class PosShiftService
     {
         if ($shift->status !== 'open') {
             throw new InvalidArgumentException('Cannot close an already closed shift.');
+        }
+
+        if ($shift->cashier_id && auth()->id() && (int) $shift->cashier_id !== (int) auth()->id()) {
+            $user = request()->user();
+
+            if (!$user || !$user->can('pos.shift.update')) {
+                throw new InvalidArgumentException('You cannot close another cashier shift.');
+            }
         }
 
         $shift->fill([
@@ -91,7 +111,12 @@ class PosShiftService
         $sales = $shift->posSales()->whereIn('status', ['completed', 'part_refunded', 'refunded'])->get();
         $payments = $sales->flatMap->posPayments;
 
-        $cashMovementApproved = $shift->posCashMovements()->where('approved', true)->get();
+        $cashMovementApproved = $shift->posCashMovements()
+            ->where('approved', true)
+            ->where(function ($query) {
+                $query->where('is_system_generated', false)->orWhereNull('is_system_generated');
+            })
+            ->get();
         $cashIn = $cashMovementApproved->where('type', 'cash_in')->sum('amount');
         $cashOut = $cashMovementApproved->whereIn('type', ['cash_out', 'drop', 'expense'])->sum('amount');
 

@@ -8,6 +8,7 @@ use App\Models\CustomerPayment;
 use App\Models\CustomerPaymentLine;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\PosCashMovement;
 use App\Models\PosPayment;
 use App\Models\PosSale;
 use App\Models\PosSaleLine;
@@ -15,6 +16,7 @@ use App\Models\PosShift;
 use App\Models\PosTerminal;
 use App\Models\Product;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Auth\Access\AuthorizationException;
 use InvalidArgumentException;
 
 class PosSaleService
@@ -56,8 +58,10 @@ class PosSaleService
                 throw new InvalidArgumentException('Completed or cancelled POS sales cannot be edited.');
             }
 
+            $this->assertSaleBranchScope($terminal, $shift);
+
             $sale->fill([
-                'branch_id' => $payload['branch_id'] ?? $terminal->branch_id,
+                'branch_id' => $terminal->branch_id,
                 'pos_terminal_id' => $terminal->id,
                 'pos_shift_id' => $shift->id,
                 'warehouse_id' => $payload['warehouse_id'] ?? $terminal->warehouse_id,
@@ -107,7 +111,8 @@ class PosSaleService
             'pos_shift_id' => $payload['pos_shift_id'] ?? $sale->pos_shift_id,
             'items' => $payload['items'] ?? $sale->posSaleLines->map(fn ($line) => $line->only([
                 'product_id', 'product_name', 'product_code', 'barcode', 'qty', 'unit_price',
-                'discount_percent', 'discount_amount', 'tax_rate_id', 'remarks',
+                'discount_percent', 'discount_amount', 'tax_rate_id', 'is_complimentary',
+                'complimentary_reason', 'remarks',
             ]))->all(),
             'payments' => $payload['payments'] ?? $sale->posPayments->map(fn ($payment) => $payment->only([
                 'payment_date', 'payment_method', 'account_id', 'amount', 'reference', 'card_last_four', 'transaction_no', 'notes',
@@ -169,6 +174,7 @@ class PosSaleService
 
             $this->ensureInvoice($draft);
             $this->ensureCustomerPayment($draft);
+            $this->ensureCashSaleMovements($draft->fresh(['posPayments', 'posTerminal']));
             $this->accountingService->approveSaleArtifacts($draft->fresh(['invoice', 'customerPayment']));
             $this->shiftService->recalculate($draft->posShift);
 
@@ -233,6 +239,7 @@ class PosSaleService
             $this->accountingService->approveSaleArtifacts($sale->fresh(['invoice', 'customerPayment']));
         }
 
+        $this->ensureCashSaleMovements($sale->fresh(['posPayments', 'posTerminal']));
         $this->shiftService->recalculate($sale->posShift);
 
         return $sale->refresh();
@@ -262,6 +269,8 @@ class PosSaleService
                 'tax_rate_id' => $item['tax_rate_id'] ?? null,
                 'tax_amount' => $item['tax_amount'] ?? 0,
                 'line_total' => $item['line_total'] ?? 0,
+                'is_complimentary' => (bool) ($item['is_complimentary'] ?? false),
+                'complimentary_reason' => $item['complimentary_reason'] ?? null,
                 'remarks' => $item['remarks'] ?? null,
                 'active' => true,
             ]);
@@ -287,7 +296,7 @@ class PosSaleService
             $row->fill([
                 'payment_date' => $payment['payment_date'] ?? $sale->sale_date ?? now(),
                 'payment_method' => $payment['payment_method'],
-                'account_id' => $payment['account_id'] ?? null,
+                'account_id' => $payment['account_id'] ?? $this->defaultAccountIdForMethod($sale, $payment['payment_method']),
                 'amount' => round((float) $payment['amount'], 2),
                 'reference' => $payment['reference'] ?? null,
                 'card_last_four' => $payment['card_last_four'] ?? null,
@@ -409,6 +418,92 @@ class PosSaleService
             throw new InvalidArgumentException('The selected shift does not belong to the selected terminal.');
         }
 
+        if ((string) $shift->branch_id !== (string) $terminal->branch_id) {
+            throw new InvalidArgumentException('The selected shift does not belong to the selected terminal branch.');
+        }
+
+        if ($shift->cashier_id && auth()->id() && (int) $shift->cashier_id !== (int) auth()->id()) {
+            $user = request()->user();
+
+            if (!$user || !$user->can('pos.shift.update')) {
+                throw new AuthorizationException('You cannot use another cashier shift.');
+            }
+        }
+
         return $shift;
+    }
+
+    private function assertSaleBranchScope(PosTerminal $terminal, PosShift $shift): void
+    {
+        $user = request()->user();
+
+        if (!$user || !$terminal->branch_id) {
+            return;
+        }
+
+        try {
+            if ($user->can('branch.view_all') || $user->can('branches.view-all') || $user->can('branches.view_all')) {
+                return;
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        $branchIds = array_filter([
+            $user->current_branch_id ?? null,
+            $user->branch_id ?? null,
+        ]);
+
+        if (!in_array((string) $terminal->branch_id, array_map('strval', $branchIds), true)) {
+            throw new AuthorizationException('You cannot create a POS sale for another branch.');
+        }
+
+        if ((string) $shift->branch_id !== (string) $terminal->branch_id) {
+            throw new InvalidArgumentException('The POS sale branch must match the terminal and shift branch.');
+        }
+    }
+
+    private function defaultAccountIdForMethod(PosSale $sale, string $method): ?string
+    {
+        $terminal = $sale->posTerminal ?: PosTerminal::query()->find($sale->pos_terminal_id);
+
+        return match ($method) {
+            'cash' => $terminal?->cash_account_id,
+            'card' => $terminal?->card_account_id,
+            'online', 'wallet', 'bank_transfer' => $terminal?->online_account_id,
+            default => null,
+        };
+    }
+
+    private function ensureCashSaleMovements(PosSale $sale): void
+    {
+        $cashPayments = $sale->posPayments->where('payment_method', 'cash');
+
+        foreach ($cashPayments as $payment) {
+            PosCashMovement::query()->firstOrCreate(
+                [
+                    'source_type' => PosPayment::class,
+                    'source_id' => $payment->id,
+                ],
+                [
+                    'branch_id' => $sale->branch_id,
+                    'pos_terminal_id' => $sale->pos_terminal_id,
+                    'pos_shift_id' => $sale->pos_shift_id,
+                    'movement_date' => $payment->payment_date ?? $sale->sale_date ?? now(),
+                    'type' => 'cash_in',
+                    'amount' => round((float) $payment->amount, 2),
+                    'reason' => 'Cash sale',
+                    'notes' => 'System generated cash movement for POS sale ' . $sale->sale_no,
+                    'account_id' => $payment->account_id ?: $sale->posTerminal?->cash_account_id,
+                    'approved' => true,
+                    'approved_at' => now(),
+                    'approved_by_id' => $sale->approved_by_id ?: auth()->id(),
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'source_reference' => $sale->sale_no,
+                    'user_add_id' => auth()->id(),
+                ]
+            );
+        }
     }
 }

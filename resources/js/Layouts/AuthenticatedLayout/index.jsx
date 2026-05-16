@@ -31,6 +31,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const user = page.props.auth.user;
     const permissions = page.props.auth?.permissions || [];
     const branchContext = page.props.branchContext || {};
+    const can = (permission) => permissions.includes(permission);
 
     const [collapsed, setCollapsed] = useState(false);
     const [branch, setBranch] = useState(branchContext.selectedBranchId || null);
@@ -83,19 +84,26 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
-            {
+            ...([
+                'pos.sale.create',
+                'pos.sale.view',
+                'pos.shift.view',
+                'pos.terminal.view',
+                'pos.cash_movement.view',
+                'pos.return.view',
+            ].some((permission) => can(permission)) ? [{
                 key: 'pos',
                 icon: <ShopOutlined />,
                 label: 'POS',
                 children: [
-                    { key: 'pos-screen', label: 'POS Screen', onClick: () => visit('pos.index', '/pos') },
-                    { key: 'pos-sales', label: 'Sales', onClick: () => visit('pos.sales.index', '/pos/sales') },
-                    { key: 'pos-shifts', label: 'Shifts', onClick: () => visit('pos.shifts.index', '/pos/shifts') },
-                    { key: 'pos-terminals', label: 'Terminals', onClick: () => visit('pos.terminals.index', '/pos/terminals') },
-                    { key: 'pos-cash-movements', label: 'Cash Movements', onClick: () => visit('pos.cash-movements.index', '/pos/cash-movements') },
-                    { key: 'pos-returns', label: 'Returns', onClick: () => visit('pos.returns.index', '/pos/returns') },
-                ],
-            },
+                    can('pos.sale.create') && { key: 'pos-screen', label: 'POS Screen', onClick: () => visit('pos.index', '/pos') },
+                    can('pos.sale.view') && { key: 'pos-sales', label: 'Sales', onClick: () => visit('pos.sales.index', '/pos/sales') },
+                    can('pos.shift.view') && { key: 'pos-shifts', label: 'Shifts', onClick: () => visit('pos.shifts.index', '/pos/shifts') },
+                    can('pos.terminal.view') && { key: 'pos-terminals', label: 'Terminals', onClick: () => visit('pos.terminals.index', '/pos/terminals') },
+                    can('pos.cash_movement.view') && { key: 'pos-cash-movements', label: 'Cash Movements', onClick: () => visit('pos.cash-movements.index', '/pos/cash-movements') },
+                    can('pos.return.view') && { key: 'pos-returns', label: 'Returns', onClick: () => visit('pos.returns.index', '/pos/returns') },
+                ].filter(Boolean),
+            }] : []),
             {
                 key: 'crm',
                 icon: <ContactsOutlined />,
@@ -251,12 +259,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 key: 'project',
                 icon: <ProjectOutlined />,
                 label: 'Project',
-                children: [
-                    { key: 'hrm-projects-list', label: 'Projects', onClick: () => visit('hrm.projects.index', '/hrm/projects') },
-                    { key: 'hrm-milestones', label: 'Milestones', onClick: () => visit('hrm.milestones.index', '/hrm/milestones') },
-                    { key: 'hrm-tasks', label: 'Tasks', onClick: () => visit('hrm.tasks.index', '/hrm/tasks') },
-                    { key: 'hrm-task-statuses', label: 'Task Statuses', onClick: () => visit('hrm.task-statuses.index', '/hrm/task-statuses') },
-                ],
+                onClick: () => visit('hrm.projects.index', '/hrm/projects'),
             },
             ...([
                 'reports.view',
@@ -280,13 +283,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 key: 'settings',
                 icon: <SettingOutlined />,
                 label: 'Settings',
-                children: [
-                    { key: 'settings-dashboard', label: 'Configuration', onClick: () => visit('settings.index', '/settings') },
-                    { key: 'settings-hrm-setup', label: 'HRM Configuration', onClick: () => router.visit('/settings?tab=hrm-setup') },
-                    { key: 'settings-hrm-defaults', label: 'HRM Defaults', onClick: () => router.visit('/settings?tab=hrm-configuration') },
-                    { key: 'settings-users-permissions', label: 'Users & Roles', onClick: () => visit('settings.roles.index', '/settings/roles') },
-                    { key: 'settings-master-data', label: 'Master Data', onClick: () => visit('settings.master-data.index', '/settings/master-data') },
-                ],
+                onClick: () => visit('settings.index', '/settings'),
             },
         ],
         [page.url, permissions],

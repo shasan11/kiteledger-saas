@@ -160,6 +160,7 @@ Route::put('settings/configurations/{area}', [SettingsConfigurationController::c
 Route::patch('settings/configurations/{area}', [SettingsConfigurationController::class, 'update']);
 
 Route::get('app-settings/current', [AppSettingController::class, 'singletonShow']);
+Route::post('app-settings/current', [AppSettingController::class, 'singletonUpsert']);
 Route::put('app-settings/current', [AppSettingController::class, 'singletonUpsert']);
 Route::patch('app-settings/current', [AppSettingController::class, 'singletonUpsert']);
 Route::apiResource('app-settings', AppSettingController::class);
@@ -526,6 +527,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
     Route::get('pos-sales', [PosSaleController::class, 'index']);
     Route::post('pos-sales', [PosSaleController::class, 'store']);
+    Route::get('pos-sales/{id}/refundable', [PosSaleController::class, 'refundable']);
     Route::get('pos-sales/{id}', [PosSaleController::class, 'show']);
     Route::patch('pos-sales/{id}', [PosSaleController::class, 'update']);
     Route::post('pos-sales/{id}/hold', [PosSaleController::class, 'hold']);
@@ -553,7 +555,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 | HRM Routes
 |--------------------------------------------------------------------------
 */
-Route::prefix('hrm')->group(function () {
+Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
     Route::apiResource('employment-statuses', EmploymentStatusController::class);
     Route::apiResource('departments', \App\Http\Controllers\Api\DepartmentController::class);
     Route::apiResource('designations', \App\Http\Controllers\Api\DesignationController::class);
@@ -578,7 +580,9 @@ Route::prefix('hrm')->group(function () {
     Route::apiResource('public-holidays', PublicHolidayController::class);
     Route::apiResource('email-configs', EmailConfigController::class);
     Route::apiResource('emails', EmailController::class);
+
     Route::apiResource('projects', ProjectController::class);
+
     Route::apiResource('milestones', MilestoneController::class);
     Route::apiResource('priorities', PriorityController::class);
     Route::apiResource('task-statuses', TaskStatusController::class);
@@ -589,6 +593,7 @@ Route::prefix('hrm')->group(function () {
 
     Route::prefix('payroll')->name('hrm.payroll.')->group(function () {
         Route::get('dashboard', [PayrollRunController::class, 'dashboard']);
+
         Route::post('payrolls/generate', [PayrollRunController::class, 'generate']);
         Route::post('payrolls/{id}/approve', [PayrollRunController::class, 'approve']);
         Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);
@@ -596,10 +601,13 @@ Route::prefix('hrm')->group(function () {
         Route::post('payrolls/{id}/lock', [PayrollRunController::class, 'lock']);
         Route::post('payrolls/{id}/void', [PayrollRunController::class, 'void']);
         Route::post('payrolls/{id}/journal-voucher', [PayrollRunController::class, 'journalVoucher']);
+
         Route::post('payrolls/{id}/{kind}', [PayrollRunController::class, 'storeAdjustment'])
             ->whereIn('kind', ['addition', 'deduction']);
+
         Route::delete('payrolls/{id}/{kind}/{adjustmentId}', [PayrollRunController::class, 'destroyAdjustment'])
             ->whereIn('kind', ['addition', 'deduction']);
+
         Route::post('runs/generate', [PayrollRunController::class, 'generate']);
         Route::post('runs/{id}/review', [PayrollRunController::class, 'review']);
         Route::post('runs/{id}/approve', [PayrollRunController::class, 'approve']);
@@ -815,6 +823,7 @@ Route::apiResource('deals', DealController::class);
 Route::post('crm-activities/bulk', [CrmActivityController::class, 'bulkStore']);
 Route::patch('crm-activities/bulk', [CrmActivityController::class, 'bulkUpdate']);
 Route::delete('crm-activities/bulk', [CrmActivityController::class, 'bulkDestroy']);
+Route::post('crm-activities/{crmActivity}/comments', [CrmActivityController::class, 'addComment']);
 Route::apiResource('crm-activities', CrmActivityController::class)
     ->parameters(['crm-activities' => 'crmActivity']);
 

@@ -21,22 +21,53 @@ const appName = import.meta.env.VITE_APP_NAME || 'KiteLedger';
 
 const syncFavicon = (settings) => {
   const faviconUrl = resolveMediaUrl(settings?.favicon_url || settings?.favicon);
+  const selectors = [
+    'link[data-kiteledger-favicon="icon"]',
+    'link[data-kiteledger-favicon="shortcut"]',
+    'link[data-kiteledger-favicon="apple"]',
+  ];
 
-  let link = document.querySelector('link[data-kiteledger-favicon="true"]');
+  const mimeType = (() => {
+    const cleanUrl = (faviconUrl || '').split('?')[0].toLowerCase();
+
+    if (cleanUrl.endsWith('.ico')) return 'image/x-icon';
+    if (cleanUrl.endsWith('.svg')) return 'image/svg+xml';
+    if (cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg')) return 'image/jpeg';
+    if (cleanUrl.endsWith('.png')) return 'image/png';
+    if (cleanUrl.endsWith('.webp')) return 'image/webp';
+
+    return null;
+  })();
 
   if (!faviconUrl) {
-    link?.remove();
+    selectors.forEach((selector) => document.querySelector(selector)?.remove());
     return;
   }
 
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    link.dataset.kiteledgerFavicon = 'true';
-    document.head.appendChild(link);
-  }
+  const upsertLink = (key, rel, withType = true) => {
+    let link = document.querySelector(`link[data-kiteledger-favicon="${key}"]`);
 
-  link.href = faviconUrl;
+    if (!link) {
+      link = document.createElement('link');
+      link.dataset.kiteledgerFavicon = key;
+      document.head.appendChild(link);
+    }
+
+    link.rel = rel;
+    link.href = faviconUrl;
+
+    if (withType && mimeType) {
+      link.type = mimeType;
+    } else {
+      link.removeAttribute('type');
+    }
+  };
+
+  document.querySelector('link[data-kiteledger-favicon="true"]')?.remove();
+
+  upsertLink('icon', 'icon');
+  upsertLink('shortcut', 'shortcut icon');
+  upsertLink('apple', 'apple-touch-icon', false);
 };
 
 function RootApp({ App, props }) {
@@ -50,6 +81,8 @@ function RootApp({ App, props }) {
 
   useEffect(() => {
     let mounted = true;
+
+    syncFavicon(brandSettings);
 
     fetchBrandSettings()
       .then((settings) => {

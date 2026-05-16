@@ -24,6 +24,7 @@ class CrmActivityController extends BaseCrudApiController
         'crmAccount',
         'assignedTo',
         'crmActivityComments',
+        'crmActivityComments.user',
     ];
 
     protected array $relationDetails = [
@@ -117,6 +118,32 @@ class CrmActivityController extends BaseCrudApiController
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
+
+    public function addComment(Request $request, CrmActivity $crmActivity)
+    {
+        $user = $request->user();
+
+        abort_unless($user, 401);
+
+        $data = $request->validate([
+            'comment' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $crmActivity->crmActivityComments()->create([
+            'user_id' => $user->getAuthIdentifier(),
+            'user_add_id' => $user->getAuthIdentifier(),
+            'comment' => $data['comment'],
+            'active' => true,
+            'is_system_generated' => false,
+        ]);
+
+        return response()->json(
+            $this->serializeRecord(
+                $crmActivity->fresh($this->validEagerLoadRelations($crmActivity))
+            ),
+            201
+        );
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {

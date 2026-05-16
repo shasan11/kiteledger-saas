@@ -38,6 +38,8 @@ class StorePosSaleRequest extends FormRequest
             'items.*.discount_percent' => ['nullable', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
+            'items.*.is_complimentary' => ['nullable', 'boolean'],
+            'items.*.complimentary_reason' => ['nullable', 'string', 'max:180'],
             'items.*.remarks' => ['nullable', 'string', 'max:200'],
             'payments' => ['nullable', 'array'],
             'payments.*.id' => ['nullable', 'uuid', 'exists:pos_payments,id'],

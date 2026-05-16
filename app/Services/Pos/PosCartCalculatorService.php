@@ -23,18 +23,21 @@ class PosCartCalculatorService
             $qty = round((float) ($item['qty'] ?? 0), 4);
             $unitPrice = round((float) ($item['unit_price'] ?? 0), 2);
             $discountPercent = round((float) ($item['discount_percent'] ?? 0), 4);
+            $isComplimentary = (bool) ($item['is_complimentary'] ?? false);
 
             if ($qty <= 0) {
                 throw new InvalidArgumentException('Product quantity must be greater than zero.');
             }
 
             $baseAmount = round($qty * $unitPrice, 2);
-            $discountAmount = round((float) ($item['discount_amount'] ?? ($baseAmount * ($discountPercent / 100))), 2);
+            $discountAmount = $isComplimentary
+                ? $baseAmount
+                : round((float) ($item['discount_amount'] ?? ($baseAmount * ($discountPercent / 100))), 2);
             $discountAmount = min($discountAmount, $baseAmount);
-            $taxableAmount = max($baseAmount - $discountAmount, 0);
+            $taxableAmount = $isComplimentary ? 0 : max($baseAmount - $discountAmount, 0);
             $taxRate = $taxRates->get($item['tax_rate_id'] ?? null);
-            $taxAmount = round($taxableAmount * ((float) ($taxRate?->rate_percent ?? 0) / 100), 2);
-            $lineTotal = round($taxableAmount + $taxAmount, 2);
+            $taxAmount = $isComplimentary ? 0 : round($taxableAmount * ((float) ($taxRate?->rate_percent ?? 0) / 100), 2);
+            $lineTotal = $isComplimentary ? 0 : round($taxableAmount + $taxAmount, 2);
 
             return [
                 ...$item,
@@ -44,6 +47,7 @@ class PosCartCalculatorService
                 'discount_amount' => $discountAmount,
                 'tax_amount' => $taxAmount,
                 'line_total' => $lineTotal,
+                'is_complimentary' => $isComplimentary,
             ];
         });
 

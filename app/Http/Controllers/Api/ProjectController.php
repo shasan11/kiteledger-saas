@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\Milestone;
 use App\Models\Project;
 use App\Models\ProjectTeam;
@@ -12,15 +11,37 @@ use Illuminate\Http\Request;
 
 class ProjectController extends BaseCrudApiController
 {
-    use AuthorizesProjectResources;
-
+ 
     protected string $modelClass = Project::class;
 
-    protected ?string $permissionPrefix = 'project.project';
+    /*
+     |--------------------------------------------------------------------------
+     | Permission Prefix
+     |--------------------------------------------------------------------------
+     |
+     | BaseCrudApiController checks permissions like:
+     |
+     | {$permissionPrefix}.view
+     | {$permissionPrefix}.create
+     | {$permissionPrefix}.update
+     | {$permissionPrefix}.delete
+     |
+     | So this controller requires:
+     |
+     | projects.view
+     | projects.create
+     | projects.update
+     | projects.delete
+     |
+     */
+    protected ?string $permissionPrefix = 'projects';
+
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;
+
     protected bool $autoFillBranchOnCreate = false;
+
     protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
@@ -60,8 +81,14 @@ class ProjectController extends BaseCrudApiController
     ];
 
     protected array $dateRangeFilters = [
-        'start_date' => ['from' => 'start_date_from', 'to' => 'start_date_to'],
-        'end_date' => ['from' => 'end_date_from', 'to' => 'end_date_to'],
+        'start_date' => [
+            'from' => 'start_date_from',
+            'to' => 'start_date_to',
+        ],
+        'end_date' => [
+            'from' => 'end_date_from',
+            'to' => 'end_date_to',
+        ],
     ];
 
     protected array $sortable = [
@@ -92,18 +119,19 @@ class ProjectController extends BaseCrudApiController
             'rules' => [
                 'name' => ['required', 'string', 'max:180'],
                 'start_date' => ['nullable', 'date'],
-                'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+                'end_date' => ['nullable', 'date'],
                 'description' => ['nullable', 'string'],
                 'status' => ['nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
             ],
             'update_rules' => [
                 'name' => ['required', 'string', 'max:180'],
                 'start_date' => ['nullable', 'date'],
-                'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+                'end_date' => ['nullable', 'date'],
                 'description' => ['nullable', 'string'],
                 'status' => ['nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
             ],
         ],
+
         'task_statuses' => [
             'relation' => 'taskStatuses',
             'model' => TaskStatus::class,
@@ -125,6 +153,7 @@ class ProjectController extends BaseCrudApiController
                 'sort_order' => ['nullable', 'integer', 'min:0'],
             ],
         ],
+
         'teams' => [
             'relation' => 'projectTeams',
             'model' => ProjectTeam::class,
@@ -169,5 +198,42 @@ class ProjectController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+
+        if (empty($parentData['status'])) {
+            $parentData['status'] = 'PENDING';
+        }
+
+        if (!array_key_exists('active', $parentData) || $parentData['active'] === null) {
+            $parentData['active'] = true;
+        }
+
+        if (!array_key_exists('is_system_generated', $parentData) || $parentData['is_system_generated'] === null) {
+            $parentData['is_system_generated'] = false;
+        }
+
+        if (empty($parentData['user_add_id']) && auth()->id()) {
+            $parentData['user_add_id'] = auth()->id();
+        }
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+
+        if (array_key_exists('status', $parentData) && empty($parentData['status'])) {
+            $parentData['status'] = 'PENDING';
+        }
+
+        return $parentData;
     }
 }

@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\View;
+use App\Support\Branding;
 
 use App\Models\{
     ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
@@ -39,6 +41,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        View::composer('app', function ($view) {
+            $faviconUrl = Branding::faviconUrl();
+
+            $view->with([
+                'faviconUrl' => $faviconUrl,
+                'faviconMimeType' => Branding::faviconMimeType($faviconUrl),
+            ]);
+        });
+
         Gate::before(function ($user, string $ability) {
             if (!empty($user->is_super_admin)) {
                 return true;
@@ -52,7 +63,9 @@ class AppServiceProvider extends ServiceProvider
                 'Super Admin',
                 'Company Owner',
                 'Admin',
+                'Branch Admin',
                 'Full Access User',
+                'Full Access Admin',
                 'super-admin',
                 'admin',
             ]) ? true : null;

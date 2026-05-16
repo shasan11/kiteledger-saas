@@ -6,15 +6,17 @@ import {
   Button,
   Card,
   Col,
-  Drawer,
+  DatePicker,
   Form,
   Input,
+  InputNumber,
   message,
   Modal,
   Row,
   Select,
   Space,
   Statistic,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -49,6 +51,61 @@ const rowsFrom = (data) => data?.data?.data || data?.data || data?.results || (A
 
 const STATUS_COLOR = { open: 'processing', won: 'success', lost: 'error', cancelled: 'default' };
 const PRIORITY_COLOR = { low: 'default', medium: 'blue', high: 'orange', urgent: 'red' };
+const DEAL_STATUS_OPTIONS = [
+  { value: 'open', label: 'Open' },
+  { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const DEAL_PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+];
+
+const optionLabel = (record) =>
+  record?.name ||
+  record?.display_name ||
+  record?.title ||
+  record?.company_name ||
+  record?.email ||
+  record?.deal_no ||
+  record?.code ||
+  record?.id;
+
+const toOptions = (records = []) =>
+  records.map((record) => ({
+    value: record.id,
+    label: optionLabel(record),
+  }));
+
+const cleanDealPayload = (values) => {
+  const payload = {
+    ...values,
+    title: values.title?.trim() || null,
+    source: values.source?.trim() || null,
+    description: values.description?.trim() || null,
+    lead_id: values.lead_id || null,
+    contact_id: values.contact_id || null,
+    deal_pipeline_id: values.deal_pipeline_id || null,
+    deal_stage_id: values.deal_stage_id || null,
+    assigned_to_id: values.assigned_to_id || null,
+    amount: values.amount !== undefined && values.amount !== null && values.amount !== '' ? Number(values.amount) : null,
+    probability: values.probability !== undefined && values.probability !== null && values.probability !== '' ? Number(values.probability) : null,
+    committed: Boolean(values.committed),
+    expected_close_date: values.expected_close_date ? dayjs(values.expected_close_date).format('YYYY-MM-DD') : null,
+    active: true,
+  };
+
+  Object.keys(payload).forEach((key) => {
+    if (payload[key] === null || payload[key] === undefined || payload[key] === '') {
+      delete payload[key];
+    }
+  });
+
+  return payload;
+};
 
 function DealCard({ deal, onStageMove, onCardClick, stages }) {
   const { token } = theme.useToken();
@@ -341,6 +398,196 @@ function SummaryBar({ pipelineId, search }) {
   );
 }
 
+function AddDealModal({ open, selectedPipeline, onCancel, onSaved }) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [leads, setLeads] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [pipelines, setPipelines] = useState([]);
+  const [stages, setStages] = useState([]);
+  const pipelineValue = Form.useWatch('deal_pipeline_id', form);
+
+  const fetchStages = useCallback((pipelineId) => {
+    const params = { page_size: 100, ordering: 'sort_order' };
+    if (pipelineId) params.deal_pipeline_id = pipelineId;
+
+    return axios
+      .get(api('/api/deal-stages/'), { headers: authHeaders(), params })
+      .then((response) => setStages(rowsFrom(response.data)))
+      .catch(() => setStages([]));
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    form.resetFields();
+    form.setFieldsValue({
+      status: 'open',
+      priority: 'medium',
+      committed: false,
+      deal_pipeline_id: selectedPipeline || null,
+    });
+
+    setLoadingOptions(true);
+
+    Promise.all([
+      axios.get(api('/api/leads/'), { headers: authHeaders(), params: { page_size: 100 } }),
+      axios.get(api('/api/contacts/'), { headers: authHeaders(), params: { page_size: 100 } }),
+      axios.get(api('/api/hrm/users'), { headers: authHeaders(), params: { page_size: 100 } }),
+      axios.get(api('/api/deal-pipelines/'), { headers: authHeaders(), params: { page_size: 100 } }),
+      fetchStages(selectedPipeline),
+    ])
+      .then(([leadRes, contactRes, userRes, pipelineRes]) => {
+        setLeads(rowsFrom(leadRes.data));
+        setContacts(rowsFrom(contactRes.data));
+        setUsers(rowsFrom(userRes.data));
+        setPipelines(rowsFrom(pipelineRes.data));
+      })
+      .catch(() => {
+        message.error('Failed to load deal form options');
+      })
+      .finally(() => setLoadingOptions(false));
+  }, [fetchStages, form, open, selectedPipeline]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    form.setFieldsValue({ deal_stage_id: null });
+    fetchStages(pipelineValue);
+  }, [fetchStages, form, open, pipelineValue]);
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      setSaving(true);
+
+      await axios.post(api('/api/deals/'), cleanDealPayload(values), {
+        headers: authHeaders(),
+      });
+
+      message.success('Deal added');
+      onSaved();
+    } catch (error) {
+      if (error?.errorFields) return;
+
+      message.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.title?.[0] ||
+          'Failed to add deal'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Add Deal"
+      open={open}
+      onCancel={onCancel}
+      width={900}
+      destroyOnClose
+      okText="Save Deal"
+      onOk={handleSubmit}
+      confirmLoading={saving}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        disabled={saving}
+        initialValues={{
+          status: 'open',
+          priority: 'medium',
+          committed: false,
+          deal_pipeline_id: selectedPipeline || null,
+        }}
+      >
+        <Row gutter={12}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="title"
+              label="Title"
+              rules={[
+                { required: true, message: 'Title is required' },
+                { max: 180, message: 'Title must be 180 characters or fewer' },
+              ]}
+            >
+              <Input placeholder="Deal title" />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name="status" label="Status">
+              <Select options={DEAL_STATUS_OPTIONS} />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={6}>
+            <Form.Item name="priority" label="Priority">
+              <Select options={DEAL_PRIORITY_OPTIONS} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="lead_id" label="Lead">
+              <Select allowClear showSearch loading={loadingOptions} placeholder="Select lead" optionFilterProp="label" options={toOptions(leads)} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="contact_id" label="Contact">
+              <Select allowClear showSearch loading={loadingOptions} placeholder="Select contact" optionFilterProp="label" options={toOptions(contacts)} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="assigned_to_id" label="Assigned To">
+              <Select allowClear showSearch loading={loadingOptions} placeholder="Select user" optionFilterProp="label" options={toOptions(users)} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="deal_pipeline_id" label="Pipeline">
+              <Select allowClear showSearch loading={loadingOptions} placeholder="Default if blank" optionFilterProp="label" options={toOptions(pipelines)} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="deal_stage_id" label="Stage">
+              <Select allowClear showSearch loading={loadingOptions} placeholder="First stage if blank" optionFilterProp="label" options={toOptions(stages)} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="source" label="Source">
+              <Input placeholder="e.g. Referral" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item name="amount" label="Amount">
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item name="probability" label="Probability (%)">
+              <InputNumber min={0} max={100} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item name="expected_close_date" label="Expected Close">
+              <DatePicker style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={6}>
+            <Form.Item name="committed" label="Committed" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </Col>
+          <Col span={24}>
+            <Form.Item name="description" label="Description">
+              <Input.TextArea rows={3} placeholder="Deal description" />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </Modal>
+  );
+}
+
 export default function DealsIndex(props) {
   const { token } = theme.useToken();
   const [view, setView] = useState('kanban');
@@ -517,33 +764,15 @@ export default function DealsIndex(props) {
         </Space>
       </div>
 
-      {/* Quick Add Deal Drawer */}
-      <Drawer
-        title="Add Deal"
+      <AddDealModal
         open={addDrawer}
-        onClose={() => setAddDrawer(false)}
-        width={700}
-        footer={null}
-      >
-        <ReusableCrud
-          title="New Deal"
-          apiUrl={api('/api/deals/')}
-          columns={tableColumns}
-          fields={dealCrud.fields}
-          validationSchema={dealCrud.validationSchema}
-          crudInitialValues={{ ...dealCrud.crudInitialValues, deal_pipeline_id: selectedPipeline }}
-          transformPayload={dealCrud.transformPayload}
-          form_ui="drawer"
-          drawerWidth={700}
-          enableServerPagination={false}
-          showSearch={false}
-          canAdd={true}
-          canEdit={false}
-          canDelete={false}
-          hasActions={false}
-          hasActionColumns={false}
-        />
-      </Drawer>
+        selectedPipeline={selectedPipeline}
+        onCancel={() => setAddDrawer(false)}
+        onSaved={() => {
+          setAddDrawer(false);
+          setRefreshKey((key) => key + 1);
+        }}
+      />
     </AuthenticatedLayout>
   );
 }

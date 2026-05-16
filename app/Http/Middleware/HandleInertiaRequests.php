@@ -133,7 +133,9 @@ class HandleInertiaRequests extends Middleware
         }
 
         try {
-            return $user->can('branch.view_all');
+            return $user->can('branch.view_all')
+                || $user->can('branches.view-all')
+                || $user->can('branches.view_all');
         } catch (\Throwable) {
             return false;
         }

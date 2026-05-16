@@ -6,6 +6,99 @@ const { Sider } = Layout;
 
 const MOBILE_QUERY = '(max-width: 767.98px)';
 
+const MENU_ACCENTS = {
+    home: '#2563eb',
+    pos: '#059669',
+    crm: '#7c3aed',
+    'payment-in': '#0891b2',
+    'payment-out': '#ea580c',
+    accounting: '#4f46e5',
+    tax: '#dc2626',
+    inventory: '#16a34a',
+    hrm: '#db2777',
+    project: '#9333ea',
+    reports: '#0f766e',
+    settings: '#475569',
+};
+
+const FALLBACK_MENU_ACCENTS = [
+    '#2563eb',
+    '#059669',
+    '#7c3aed',
+    '#0891b2',
+    '#ea580c',
+    '#4f46e5',
+    '#dc2626',
+    '#16a34a',
+    '#db2777',
+    '#9333ea',
+    '#0f766e',
+    '#475569',
+];
+
+const isHexColor = (value) =>
+    typeof value === 'string' && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value.trim());
+
+const hexToRgb = (hex) => {
+    if (!isHexColor(hex)) return null;
+
+    const normalized =
+        hex.trim().length === 4
+            ? `#${hex
+                  .trim()
+                  .slice(1)
+                  .split('')
+                  .map((char) => `${char}${char}`)
+                  .join('')}`
+            : hex.trim();
+
+    return {
+        r: parseInt(normalized.slice(1, 3), 16),
+        g: parseInt(normalized.slice(3, 5), 16),
+        b: parseInt(normalized.slice(5, 7), 16),
+    };
+};
+
+const rgba = (hex, opacity) => {
+    const rgb = hexToRgb(hex);
+
+    if (!rgb) return hex;
+
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+};
+
+const colorizeMenuItems = (items = [], parentAccent = null, depth = 0) =>
+    items.map((item, index) => {
+        if (!item || item.type) return item;
+
+        const accent =
+            parentAccent ||
+            MENU_ACCENTS[item.key] ||
+            FALLBACK_MENU_ACCENTS[index % FALLBACK_MENU_ACCENTS.length];
+
+        return {
+            ...item,
+            className: [
+                item.className,
+                'app-sidebar-menu-item',
+                depth === 0 ? 'app-sidebar-menu-root' : 'app-sidebar-menu-child',
+            ]
+                .filter(Boolean)
+                .join(' '),
+            style: {
+                ...item.style,
+                '--sidebar-item-color': accent,
+                '--sidebar-item-hover-bg': rgba(accent, 0.1),
+                '--sidebar-item-active-bg': rgba(accent, 0.15),
+                '--sidebar-item-icon-bg': rgba(accent, 0.12),
+                '--sidebar-item-icon-border': rgba(accent, 0.24),
+            },
+            children: Array.isArray(item.children)
+                ? colorizeMenuItems(item.children, accent, depth + 1)
+                : item.children,
+        };
+    });
+
 function buildParentKeyMap(items = [], parentKeys = [], map = {}) {
     items.forEach((item) => {
         if (!item?.key) return;
@@ -77,6 +170,11 @@ export default function AppSidebar({
 
     const rootSubmenuKeys = useMemo(
         () => getRootSubmenuKeys(menuItems),
+        [menuItems],
+    );
+
+    const coloredMenuItems = useMemo(
+        () => colorizeMenuItems(menuItems),
         [menuItems],
     );
 
@@ -246,19 +344,20 @@ export default function AppSidebar({
 
                     .app-sidebar .ant-menu-item:hover,
                     .app-sidebar .ant-menu-submenu-title:hover {
-                        background: var(--sidebar-bg-hover) !important;
-                        color: var(--sidebar-text) !important;
+                        background: var(--sidebar-item-hover-bg, var(--sidebar-bg-hover)) !important;
+                        color: var(--sidebar-item-color, var(--sidebar-text)) !important;
                     }
 
                     .app-sidebar .ant-menu-item:hover .ant-menu-item-icon,
                     .app-sidebar .ant-menu-submenu-title:hover .ant-menu-item-icon {
-                        background: var(--sidebar-icon-hover-bg);
-                        color: ${token.colorPrimary};
+                        background: var(--sidebar-item-icon-bg, var(--sidebar-icon-hover-bg));
+                        color: var(--sidebar-item-color, ${token.colorPrimary});
+                        box-shadow: inset 0 0 0 1px var(--sidebar-item-icon-border, var(--sidebar-border));
                     }
 
                     .app-sidebar .ant-menu-item-selected {
-                        background: var(--sidebar-bg-active) !important;
-                        color: ${token.colorPrimary} !important;
+                        background: var(--sidebar-item-active-bg, var(--sidebar-bg-active)) !important;
+                        color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
                         font-weight: ${token.fontWeightStrong};
                     }
 
@@ -273,15 +372,16 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar .ant-menu-submenu-selected > .ant-menu-submenu-title {
-                        color: ${token.colorPrimary} !important;
+                        color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
                         font-weight: ${token.fontWeightStrong};
-                        background: var(--sidebar-bg-active) !important;
+                        background: var(--sidebar-item-active-bg, var(--sidebar-bg-active)) !important;
                     }
 
                     .app-sidebar .ant-menu-item-selected .ant-menu-item-icon,
                     .app-sidebar .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon {
-                        background: ${token.colorPrimary};
+                        background: var(--sidebar-item-color, ${token.colorPrimary});
                         color: ${token.colorTextLightSolid};
+                        box-shadow: inset 0 0 0 1px var(--sidebar-item-color, ${token.colorPrimary});
                     }
 
                     .app-sidebar .ant-menu-item-icon,
@@ -334,13 +434,13 @@ export default function AppSidebar({
                     }
 
                     .app-sidebar .ant-menu-sub .ant-menu-item:hover {
-                        background: var(--sidebar-bg-hover) !important;
-                        color: var(--sidebar-text) !important;
+                        background: var(--sidebar-item-hover-bg, var(--sidebar-bg-hover)) !important;
+                        color: var(--sidebar-item-color, var(--sidebar-text)) !important;
                     }
 
                     .app-sidebar .ant-menu-sub .ant-menu-item-selected {
-                        background: var(--sidebar-bg-active) !important;
-                        color: ${token.colorPrimary} !important;
+                        background: var(--sidebar-item-active-bg, var(--sidebar-bg-active)) !important;
+                        color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
                     }
 
                     .app-sidebar .ant-menu-sub .ant-menu-item .ant-menu-item-icon {
@@ -363,7 +463,7 @@ export default function AppSidebar({
 
                     .app-sidebar .ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow,
                     .app-sidebar .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-submenu-arrow {
-                        color: ${token.colorPrimary} !important;
+                        color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
                     }
 
                     .app-sidebar .ant-menu-inline-collapsed {
@@ -427,7 +527,7 @@ export default function AppSidebar({
                         openKeys={collapsed ? [] : openKeys}
                         onOpenChange={handleOpenChange}
                         inlineCollapsed={collapsed}
-                        items={menuItems}
+                        items={coloredMenuItems}
                         style={{
                             borderInlineEnd: 0,
                         }}

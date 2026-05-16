@@ -58,11 +58,6 @@ abstract class BaseCrudApiController extends Controller
 
     protected array $updateRules = [];
 
-    /**
-     * IMPORTANT:
-     * Default false because many master tables do NOT have branch_id.
-     * Enable this only inside controllers whose table actually has branch_id.
-     */
     protected bool $branchScoped = false;
 
     protected string $branchColumn = 'branch_id';
@@ -76,25 +71,6 @@ abstract class BaseCrudApiController extends Controller
     protected bool $preventBranchChangeOnUpdate = false;
 
     protected ?string $branchBypassPermission = 'branches.view-all';
-
-    protected array $branchBypassRoles = [
-        'Super Admin',
-        'Company Owner',
-        'Branch Admin',
-        'Full Access User',
-        'Full Access Admin',
-    ];
-
-    protected array $administrativeAccessRoles = [
-        'Super Admin',
-        'Company Owner',
-        'Admin',
-        'Branch Admin',
-        'Full Access User',
-        'Full Access Admin',
-        'super-admin',
-        'admin',
-    ];
 
     protected array $nested = [];
 
@@ -470,7 +446,10 @@ abstract class BaseCrudApiController extends Controller
         $this->checkAccess($request, 'update', $record);
         $this->assertRecordBranchAccess($request, $record);
 
-        $approved = app(TransactionApprovalService::class)->approve($record, $request->user()?->getAuthIdentifier());
+        $approved = app(TransactionApprovalService::class)->approve(
+            $record,
+            $request->user()?->getAuthIdentifier()
+        );
 
         return response()->json($this->serializeRecord($approved));
     }
@@ -518,7 +497,11 @@ abstract class BaseCrudApiController extends Controller
             'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
         ]);
 
-        $voided = app(TransactionVoidService::class)->void($record, $data['voided_reason'], $request->user()?->getAuthIdentifier());
+        $voided = app(TransactionVoidService::class)->void(
+            $record,
+            $data['voided_reason'],
+            $request->user()?->getAuthIdentifier()
+        );
 
         return response()->json($this->serializeRecord($voided));
     }
@@ -577,10 +560,13 @@ abstract class BaseCrudApiController extends Controller
             $handle = fopen('php://output', 'w');
             $rows = $this->bulkExportRows($records);
             $headers = collect($rows)->flatMap(fn ($row) => array_keys($row))->unique()->values()->all();
+
             fputcsv($handle, $headers);
+
             foreach ($rows as $row) {
                 fputcsv($handle, collect($headers)->map(fn ($key) => $this->exportValue($row[$key] ?? null))->all());
             }
+
             fclose($handle);
         }, $filename, ['Content-Type' => 'text/csv']);
     }
@@ -796,6 +782,7 @@ abstract class BaseCrudApiController extends Controller
             if ($min !== null && $min !== '') {
                 $query->where($this->qualifiedColumn($actualColumn), '>=', (float) $min);
             }
+
             if ($max !== null && $max !== '') {
                 $query->where($this->qualifiedColumn($actualColumn), '<=', (float) $max);
             }
@@ -1132,37 +1119,15 @@ abstract class BaseCrudApiController extends Controller
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (!$user || !$this->branchBypassPermission || !method_exists($user, 'can')) {
             return false;
         }
 
-        if ($this->branchBypassPermission && method_exists($user, 'can')) {
-            try {
-                if ($user->can($this->branchBypassPermission)) {
-                    return true;
-                }
-            } catch (\Throwable $e) {
-                //
-            }
+        try {
+            return $user->can($this->branchBypassPermission);
+        } catch (\Throwable $e) {
+            return false;
         }
-
-        if (method_exists($user, 'hasRole')) {
-            foreach ($this->branchBypassRoles as $role) {
-                try {
-                    if ($user->hasRole($role)) {
-                        return true;
-                    }
-                } catch (\Throwable $e) {
-                    //
-                }
-            }
-        }
-
-        if (!empty($user->is_super_admin)) {
-            return true;
-        }
-
-        return false;
     }
 
     protected function prepareIncomingPayload(array $data): array
@@ -1405,9 +1370,14 @@ abstract class BaseCrudApiController extends Controller
 
             if ($mapping['approval_required'] ?? false) {
                 $field = $mapping['field'] ?? null;
+
                 if ($field && empty($parentData[$field])) {
-                    $parentData[$field] = app(DocumentNumberingService::class)->generateDraft($model, $parentData['date'] ?? null);
+                    $parentData[$field] = app(DocumentNumberingService::class)->generateDraft(
+                        $model,
+                        $parentData['date'] ?? null
+                    );
                 }
+
                 return $parentData;
             }
 
@@ -1443,8 +1413,8 @@ abstract class BaseCrudApiController extends Controller
                 return $parentData;
             }
 
-            // Idempotent: if the record already has a real number, keep it.
             $existing = $parentData[$field] ?? $record?->{$field} ?? null;
+
             if ($existing && !str_starts_with((string) $existing, '#draft')) {
                 return $parentData;
             }
@@ -1532,7 +1502,7 @@ abstract class BaseCrudApiController extends Controller
                         'approved' => ['Voided transactions cannot be approved.'],
                     ]);
                 }
-                // Assign real document number on first approval (idempotent).
+
                 $parentData = $this->assignDocumentNumberOnApproval($parentData, $record);
             }
 
@@ -1624,12 +1594,19 @@ abstract class BaseCrudApiController extends Controller
     protected function isApprovalOnlyUpdate(array $parentData): bool
     {
         $allowed = [
-            'approved', 'approved_at', 'approved_by_id',
-            'void', 'voided', 'voided_at', 'voided_by_id', 'voided_reason',
+            'approved',
+            'approved_at',
+            'approved_by_id',
+            'void',
+            'voided',
+            'voided_at',
+            'voided_by_id',
+            'voided_reason',
             'status',
         ];
 
         $numberField = app(DocumentNumberingService::class)->getMappingForModel($this->newModelInstance())['field'] ?? null;
+
         if ($numberField) {
             $allowed[] = $numberField;
         }
@@ -1942,12 +1919,17 @@ abstract class BaseCrudApiController extends Controller
             $user = $request->user();
 
             abort_unless(
-                $user && (
-                    $this->userHasAdministrativeAccess($user) ||
-                    $user->can("{$this->permissionPrefix}.{$crudPermission}")
-                ),
+                $user,
+                401,
+                'Unauthenticated.'
+            );
+
+            $permissionName = "{$this->permissionPrefix}.{$crudPermission}";
+
+            abort_unless(
+                method_exists($user, 'can') && $user->can($permissionName),
                 403,
-                'You do not have permission to perform this action.'
+                "Missing permission: {$permissionName}"
             );
 
             return;
@@ -1971,38 +1953,6 @@ abstract class BaseCrudApiController extends Controller
             : $record;
 
         $this->authorize($ability, $target);
-    }
-
-    protected function userHasAdministrativeAccess($user): bool
-    {
-        if (!$user) {
-            return false;
-        }
-
-        if (!empty($user->is_super_admin)) {
-            return true;
-        }
-
-        if (method_exists($user, 'hasAnyRole')) {
-            try {
-                if ($user->hasAnyRole($this->administrativeAccessRoles)) {
-                    return true;
-                }
-            } catch (\Throwable $e) {
-                //
-            }
-        }
-
-        $roleName = null;
-
-        try {
-            $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
-            $roleName = $role?->name;
-        } catch (\Throwable $e) {
-            //
-        }
-
-        return $roleName && in_array($roleName, $this->administrativeAccessRoles, true);
     }
 
     protected function requestParam(Request $request, string $key, mixed $default = null): mixed

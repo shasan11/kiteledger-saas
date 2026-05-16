@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import {
     App,
     Badge,
@@ -8,7 +8,6 @@ import {
     Col,
     Descriptions,
     Divider,
-    Drawer,
     Empty,
     Form,
     Input,
@@ -19,6 +18,7 @@ import {
     Select,
     Space,
     Spin,
+    Switch,
     Table,
     Tag,
     theme,
@@ -63,16 +63,38 @@ const emptyPayment = {
 export default function PosIndex() {
     const { message } = App.useApp();
     const { token } = theme.useToken();
+    const { props } = usePage();
+
+    const auth = props.auth || {};
+    const branchContext = props.branchContext || {};
+    const permissions = auth.permissions || [];
+
+    const can = (permission) => permissions.includes(permission);
+
+    const canViewAllBranches = !!branchContext.canViewAllBranches;
+
+    const userDefaultBranchId =
+        branchContext.selectedBranchId ||
+        auth.currentBranchId ||
+        auth.user?.current_branch_id ||
+        auth.user?.branch_id ||
+        null;
 
     const barcodeRef = useRef(null);
     const beepContextRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [shiftLoading, setShiftLoading] = useState(false);
+    const [terminalLoading, setTerminalLoading] = useState(false);
+
+    const [branches, setBranches] = useState([]);
+    const [activeBranchId, setActiveBranchId] = useState(userDefaultBranchId);
+
     const [terminals, setTerminals] = useState([]);
     const [contacts, setContacts] = useState([]);
     const [heldSales, setHeldSales] = useState([]);
     const [dashboard, setDashboard] = useState(null);
+
     const [currentShift, setCurrentShift] = useState(null);
     const [activeSaleId, setActiveSaleId] = useState(null);
     const [terminalId, setTerminalId] = useState(null);
@@ -81,6 +103,7 @@ export default function PosIndex() {
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
     const [payments, setPayments] = useState([{ ...emptyPayment }]);
+
     const [summary, setSummary] = useState({
         subtotal: 0,
         discount_total: 0,
@@ -90,6 +113,7 @@ export default function PosIndex() {
         balance_due: 0,
         change_amount: 0,
     });
+
     const [checkoutOpen, setCheckoutOpen] = useState(false);
     const [heldOpen, setHeldOpen] = useState(false);
     const [receiptOpen, setReceiptOpen] = useState(false);
@@ -97,37 +121,44 @@ export default function PosIndex() {
     const [processing, setProcessing] = useState(false);
 
     const [shiftForm] = Form.useForm();
+
     const [addTerminalOpen, setAddTerminalOpen] = useState(false);
     const [addTerminalForm] = Form.useForm();
     const [addTerminalLoading, setAddTerminalLoading] = useState(false);
-    const [branches, setBranches] = useState([]);
+
     const [cashMovementOpen, setCashMovementOpen] = useState(false);
     const [cashMovementType, setCashMovementType] = useState('cash_in');
     const [cashMovementForm] = Form.useForm();
     const [cashMovementLoading, setCashMovementLoading] = useState(false);
 
-    const terminalOptions = useMemo(
-        () =>
-            terminals.map((terminal) => ({
-                value: terminal.id,
-                label: `${terminal.name} (${terminal.code})`,
-            })),
-        [terminals],
-    );
+    const selectedTerminal = useMemo(() => {
+        return terminals.find((terminal) => terminal.id === terminalId) || null;
+    }, [terminalId, terminals]);
 
-    const customerOptions = useMemo(
-        () =>
-            contacts.map((contact) => ({
-                value: contact.id,
-                label: contact.name,
-            })),
-        [contacts],
-    );
+    const selectedBranch = useMemo(() => {
+        return branches.find((branch) => String(branch.id) === String(activeBranchId)) || null;
+    }, [branches, activeBranchId]);
 
-    const selectedTerminal = useMemo(
-        () => terminals.find((terminal) => terminal.id === terminalId) || null,
-        [terminalId, terminals],
-    );
+    const terminalOptions = useMemo(() => {
+        return terminals.map((terminal) => ({
+            value: terminal.id,
+            label: `${terminal.name} (${terminal.code})`,
+        }));
+    }, [terminals]);
+
+    const branchOptions = useMemo(() => {
+        return branches.map((branch) => ({
+            value: branch.id,
+            label: `${branch.name}${branch.code ? ` (${branch.code})` : ''}`,
+        }));
+    }, [branches]);
+
+    const customerOptions = useMemo(() => {
+        return contacts.map((contact) => ({
+            value: contact.id,
+            label: contact.name,
+        }));
+    }, [contacts]);
 
     const pageStyle = {
         padding: 16,
@@ -143,25 +174,10 @@ export default function PosIndex() {
         padding: 24,
     };
 
-    const openShiftCardStyle = {
-        width: '100%',
-        maxWidth: 540,
+    const cardStyle = {
         borderRadius: token.borderRadiusLG,
-        boxShadow: token.boxShadowSecondary,
         border: `1px solid ${token.colorBorderSecondary}`,
         background: token.colorBgContainer,
-    };
-
-    const openShiftIconStyle = {
-        width: 48,
-        height: 48,
-        borderRadius: token.borderRadiusLG,
-        display: 'grid',
-        placeItems: 'center',
-        background: token.colorPrimaryBg,
-        color: token.colorPrimary,
-        fontSize: 22,
-        flexShrink: 0,
     };
 
     const mutedBoxStyle = {
@@ -171,14 +187,8 @@ export default function PosIndex() {
         border: `1px solid ${token.colorBorderSecondary}`,
     };
 
-    const cardStyle = {
-        borderRadius: token.borderRadiusLG,
-        border: `1px solid ${token.colorBorderSecondary}`,
-        background: token.colorBgContainer,
-    };
-
     useEffect(() => {
-        bootstrap();
+        void bootstrap();
     }, []);
 
     useEffect(() => {
@@ -186,7 +196,12 @@ export default function PosIndex() {
     }, [cart, payments]);
 
     useEffect(() => {
-        if (!terminalId) return;
+        if (!terminalId) {
+            setCurrentShift(null);
+            setProducts([]);
+            setHeldSales([]);
+            return;
+        }
 
         void loadCurrentShift();
         void loadHeldSales();
@@ -203,7 +218,7 @@ export default function PosIndex() {
             if (terminalId && currentShift?.id) {
                 void loadProducts(searchText);
             }
-        }, 200);
+        }, 250);
 
         return () => clearTimeout(timer);
     }, [searchText, terminalId, currentShift?.id]);
@@ -212,33 +227,109 @@ export default function PosIndex() {
         setLoading(true);
 
         try {
-            const [terminalPayload, contactPayload, dashboardPayload, branchPayload] = await Promise.all([
-                fetchList('/api/pos-terminals', {
-                    page_size: 100,
-                    active: true,
-                }),
+            const resolvedBranchId = userDefaultBranchId;
+
+            const [contactPayload, dashboardPayload, branchPayload] = await Promise.all([
                 fetchList('/api/contacts', {
                     page_size: 100,
                 }),
                 axios.get(api('/api/pos/dashboard')),
-                fetchList('/api/branches', { page_size: 100, active: true }),
+                fetchList('/api/branches', {
+                    page_size: 100,
+                    active: true,
+                }),
             ]);
 
-            setBranches(branchPayload.results || []);
+            const branchRows = canViewAllBranches
+                ? branchPayload.results || []
+                : (branchPayload.results || []).filter((branch) => {
+                      return String(branch.id) === String(resolvedBranchId);
+                  });
 
-            const terminalRows = terminalPayload.results || [];
-            const defaultTerminal = terminalRows.find((terminal) => terminal.is_default) || terminalRows[0] || null;
+            const fallbackBranchId =
+                resolvedBranchId ||
+                branchRows.find((branch) => branch.active)?.id ||
+                branchRows[0]?.id ||
+                null;
 
-            setTerminals(terminalRows);
+            setBranches(branchRows);
+            setActiveBranchId(fallbackBranchId);
             setContacts(contactPayload.results || []);
             setDashboard(dashboardPayload.data || null);
-            setTerminalId(defaultTerminal?.id ?? null);
             setCustomerId(null);
+
+            await loadTerminalsForBranch(fallbackBranchId, {
+                silent: true,
+            });
         } catch (error) {
             message.error(error?.response?.data?.message || 'Failed to load POS screen.');
         } finally {
             setLoading(false);
         }
+    }
+
+    async function loadTerminalsForBranch(branchId, options = {}) {
+        setTerminalLoading(true);
+
+        try {
+            const terminalParams = {
+                page_size: 100,
+                active: true,
+            };
+
+            if (branchId) {
+                terminalParams.branch_id = branchId;
+            }
+
+            const terminalPayload = await fetchList('/api/pos-terminals', terminalParams);
+
+            const terminalRows = terminalPayload.results || [];
+
+            const scopedTerminals = branchId
+                ? terminalRows.filter((terminal) => String(terminal.branch_id) === String(branchId))
+                : terminalRows;
+
+            const defaultTerminal =
+                scopedTerminals.find((terminal) => terminal.is_default) ||
+                scopedTerminals[0] ||
+                null;
+
+            setTerminals(scopedTerminals);
+            setTerminalId(defaultTerminal?.id ?? null);
+            setCurrentShift(null);
+            setProducts([]);
+            setHeldSales([]);
+            clearSale();
+
+            return defaultTerminal;
+        } catch (error) {
+            if (!options.silent) {
+                message.error(error?.response?.data?.message || 'Failed to load POS terminals.');
+            }
+
+            setTerminals([]);
+            setTerminalId(null);
+            setCurrentShift(null);
+            setProducts([]);
+            setHeldSales([]);
+
+            return null;
+        } finally {
+            setTerminalLoading(false);
+        }
+    }
+
+    async function handleBranchChange(branchId) {
+        if (!canViewAllBranches) return;
+
+        setActiveBranchId(branchId);
+        setTerminalId(null);
+        setCurrentShift(null);
+        setProducts([]);
+        setHeldSales([]);
+        clearSale();
+
+        await loadTerminalsForBranch(branchId);
     }
 
     async function loadProducts(query = '') {
@@ -248,6 +339,7 @@ export default function PosIndex() {
             params: {
                 q: query || undefined,
                 warehouse_id: selectedTerminal?.warehouse_id,
+                branch_id: selectedTerminal?.branch_id || activeBranchId,
                 limit: 40,
             },
         });
@@ -269,11 +361,21 @@ export default function PosIndex() {
             const response = await axios.get(api('/api/pos-shifts/current'), {
                 params: {
                     pos_terminal_id: targetTerminalId,
-                    branch_id: targetTerminal?.branch_id,
+                    branch_id: targetTerminal?.branch_id || activeBranchId,
                 },
             });
 
             setCurrentShift(response.data || null);
+
+            if (!response.data) {
+                shiftForm.setFieldsValue({
+                    terminal_id: targetTerminalId,
+                    branch_id: targetTerminal?.branch_id || activeBranchId,
+                    opening_cash: 0,
+                    notes: '',
+                });
+            }
+
             return response.data || null;
         } catch (error) {
             setCurrentShift(null);
@@ -289,6 +391,7 @@ export default function PosIndex() {
 
         const payload = await fetchList('/api/pos-sales', {
             pos_terminal_id: terminalId,
+            branch_id: selectedTerminal?.branch_id || activeBranchId,
             status: 'held',
             page_size: 50,
         });
@@ -303,12 +406,21 @@ export default function PosIndex() {
 
         const discountTotal = cart.reduce((sum, item) => {
             const base = Number(item.qty || 0) * Number(item.unit_price || 0);
+
+            if (item.is_complimentary) {
+                return sum + base;
+            }
+
             const percentAmount = base * (Number(item.discount_percent || 0) / 100);
 
             return sum + Math.min(percentAmount, base);
         }, 0);
 
         const taxTotal = cart.reduce((sum, item) => {
+            if (item.is_complimentary) {
+                return sum;
+            }
+
             const rate = Number(item.tax_rate?.rate_percent || item.tax_rate_percent || 0);
             const base = Number(item.qty || 0) * Number(item.unit_price || 0);
             const discount = base * (Number(item.discount_percent || 0) / 100);
@@ -367,6 +479,8 @@ export default function PosIndex() {
                     discount_percent: 0,
                     tax_rate_id: product.tax_rate?.id ?? null,
                     tax_rate: product.tax_rate ?? null,
+                    is_complimentary: false,
+                    complimentary_reason: '',
                     available_stock: product.available_stock,
                     track_inventory: product.track_inventory,
                 },
@@ -379,6 +493,7 @@ export default function PosIndex() {
     function playPosBeep() {
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
+
             if (!AudioContext) return;
 
             const audioContext = beepContextRef.current || new AudioContext();
@@ -421,6 +536,17 @@ export default function PosIndex() {
         setCart((current) => current.filter((_, itemIndex) => itemIndex !== index));
     }
 
+    function removePaymentRow(index) {
+        setPayments((current) => {
+            if (current.length <= 1) {
+                message.warning('At least one payment method is required.');
+                return current;
+            }
+
+            return current.filter((_, rowIndex) => rowIndex !== index);
+        });
+    }
+
     function clearSale(options = {}) {
         setCart([]);
         setPayments([{ ...emptyPayment }]);
@@ -439,12 +565,19 @@ export default function PosIndex() {
             return;
         }
 
+        if (!can('pos.shift.open')) {
+            message.error('You do not have permission to open POS shift.');
+            return;
+        }
+
         setProcessing(true);
 
         try {
+            const terminalBranchId = selectedTerminal?.branch_id || activeBranchId;
+
             const response = await axios.post(api('/api/pos-shifts/open'), {
                 pos_terminal_id: terminalId,
-                branch_id: selectedTerminal?.branch_id || null,
+                branch_id: terminalBranchId,
                 opening_cash: values.opening_cash || 0,
                 notes: values.notes || null,
             });
@@ -572,6 +705,7 @@ export default function PosIndex() {
 
     function buildSalePayload(status = 'draft', shiftId = currentShift?.id) {
         return {
+            branch_id: selectedTerminal?.branch_id || activeBranchId,
             pos_terminal_id: terminalId,
             pos_shift_id: shiftId || null,
             warehouse_id: selectedTerminal?.warehouse_id,
@@ -587,6 +721,8 @@ export default function PosIndex() {
                 unit_price: Number(item.unit_price || 0),
                 discount_percent: Number(item.discount_percent || 0),
                 tax_rate_id: item.tax_rate_id || null,
+                is_complimentary: !!item.is_complimentary,
+                complimentary_reason: item.complimentary_reason || null,
                 remarks: item.remarks || null,
             })),
             payments: payments
@@ -616,6 +752,8 @@ export default function PosIndex() {
                 discount_percent: Number(line.discount_percent || 0),
                 tax_rate_id: line.tax_rate_id || null,
                 tax_rate: line.tax_rate || null,
+                is_complimentary: !!line.is_complimentary,
+                complimentary_reason: line.complimentary_reason || '',
                 remarks: line.remarks || null,
             })),
         );
@@ -628,18 +766,31 @@ export default function PosIndex() {
 
     async function submitAddTerminal(values) {
         setAddTerminalLoading(true);
+
         try {
+            const branchId = canViewAllBranches
+                ? values.branch_id || activeBranchId
+                : activeBranchId;
+
             const response = await axios.post(api('/api/pos-terminals/'), {
                 name: values.name,
-                branch_id: values.branch_id || null,
+                branch_id: branchId,
                 warehouse_id: values.warehouse_id || null,
                 active: true,
             });
+
             const newTerminal = response.data;
-            setTerminals((current) => [...current, newTerminal]);
+
+            if (String(newTerminal.branch_id) !== String(activeBranchId)) {
+                setActiveBranchId(newTerminal.branch_id);
+            }
+
+            await loadTerminalsForBranch(newTerminal.branch_id);
+
             setTerminalId(newTerminal.id);
             setAddTerminalOpen(false);
             addTerminalForm.resetFields();
+
             message.success(`Terminal "${newTerminal.name}" created and selected.`);
         } catch (error) {
             message.error(error?.response?.data?.message || 'Failed to create terminal.');
@@ -653,28 +804,39 @@ export default function PosIndex() {
             message.warning('Open a shift before recording cash movement.');
             return;
         }
+
         setCashMovementType(type);
-        cashMovementForm.setFieldsValue({ type, amount: 0, reason: '', notes: '' });
+        cashMovementForm.setFieldsValue({
+            type,
+            amount: 0,
+            reason: '',
+            notes: '',
+        });
         setCashMovementOpen(true);
     }
 
     async function submitCashMovement(values) {
         if (!currentShift?.id) return;
+
         setCashMovementLoading(true);
+
         try {
             await axios.post(api('/api/pos-cash-movements/'), {
                 pos_terminal_id: terminalId,
                 pos_shift_id: currentShift.id,
-                branch_id: selectedTerminal?.branch_id || null,
+                branch_id: selectedTerminal?.branch_id || activeBranchId,
                 type: values.type,
                 amount: values.amount,
                 reason: values.reason || null,
                 notes: values.notes || null,
                 approved: true,
             });
+
             setCashMovementOpen(false);
             cashMovementForm.resetFields();
+
             await loadCurrentShift();
+
             message.success('Cash movement recorded.');
         } catch (error) {
             message.error(error?.response?.data?.message || 'Failed to record cash movement.');
@@ -732,6 +894,12 @@ export default function PosIndex() {
                     <Text type="secondary" style={{ fontSize: 11 }}>
                         {record.product_code || record.barcode || 'POS Item'}
                     </Text>
+
+                    {record.is_complimentary && (
+                        <div style={{ marginTop: 4 }}>
+                            <Tag color="blue">Complimentary</Tag>
+                        </div>
+                    )}
                 </div>
             ),
         },
@@ -796,12 +964,39 @@ export default function PosIndex() {
             ),
         },
         {
+            title: 'Free',
+            key: 'complimentary',
+            width: 68,
+            align: 'center',
+            render: (_, record, index) => (
+                <Switch
+                    size="small"
+                    checked={!!record.is_complimentary}
+                    onChange={(checked) => updateCartLine(index, 'is_complimentary', checked)}
+                />
+            ),
+        },
+        {
             title: 'Total',
             key: 'line_total',
             width: 88,
             align: 'right',
             render: (_, record) => {
                 const base = Number(record.qty || 0) * Number(record.unit_price || 0);
+
+                if (record.is_complimentary) {
+                    return (
+                        <Space direction="vertical" size={0} align="end">
+                            <Text strong style={{ fontSize: 12 }}>
+                                {money(0)}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                                free
+                            </Text>
+                        </Space>
+                    );
+                }
+
                 const discount = base * (Number(record.discount_percent || 0) / 100);
                 const taxRate = Number(record.tax_rate?.rate_percent || 0);
                 const tax = Math.max(base - discount, 0) * (taxRate / 100);
@@ -844,11 +1039,22 @@ export default function PosIndex() {
                     Point of Sale
                 </Title>
 
+                {canViewAllBranches && (
+                    <Select
+                        style={{ width: 220 }}
+                        value={activeBranchId}
+                        options={branchOptions}
+                        onChange={handleBranchChange}
+                        placeholder="Select branch"
+                    />
+                )}
+
                 <Space.Compact>
                     <Select
                         style={{ width: 220 }}
                         value={terminalId}
                         options={terminalOptions}
+                        loading={terminalLoading}
                         onChange={(value) => {
                             setTerminalId(value);
                             setCurrentShift(null);
@@ -857,12 +1063,22 @@ export default function PosIndex() {
                         }}
                         placeholder="Select terminal"
                     />
-                    <Button
-                        icon={<PlusOutlined />}
-                        title="Create new terminal"
-                        onClick={() => setAddTerminalOpen(true)}
-                    />
+
+                    {can('pos.terminal.create') && (
+                        <Button
+                            icon={<PlusOutlined />}
+                            title="Create new terminal"
+                            onClick={() => setAddTerminalOpen(true)}
+                        />
+                    )}
                 </Space.Compact>
+
+                <Tag>
+                    {selectedTerminal?.branch?.name ||
+                        selectedTerminal?.branch_name ||
+                        selectedBranch?.name ||
+                        'Branch'}
+                </Tag>
 
                 <Tag icon={<ClockCircleOutlined />} color={currentShift ? 'green' : 'red'}>
                     {currentShift ? currentShift.shift_no : 'No open shift'}
@@ -874,34 +1090,31 @@ export default function PosIndex() {
             </Space>
 
             <Space wrap>
-                {currentShift && (
+                {currentShift && can('pos.cash_movement.create') && (
                     <>
-                        <Button
-                            icon={<ArrowUpOutlined />}
-                            onClick={() => openCashMovement('cash_in')}
-                        >
+                        <Button icon={<ArrowUpOutlined />} onClick={() => openCashMovement('cash_in')}>
                             Cash In
                         </Button>
-                        <Button
-                            icon={<ArrowDownOutlined />}
-                            onClick={() => openCashMovement('cash_out')}
-                        >
+
+                        <Button icon={<ArrowDownOutlined />} onClick={() => openCashMovement('cash_out')}>
                             Cash Out
                         </Button>
                     </>
                 )}
 
-                {currentShift && (
+                {currentShift && can('pos.sale.update') && (
                     <Button onClick={() => setHeldOpen(true)} icon={<PauseCircleOutlined />}>
                         Held
                     </Button>
                 )}
 
-                <Button onClick={() => router.visit(route('pos.sales.index'))}>
-                    Sales History
-                </Button>
+                {can('pos.sale.view') && (
+                    <Button onClick={() => router.visit(route('pos.sales.index'))}>
+                        Sales History
+                    </Button>
+                )}
 
-                {currentShift && (
+                {currentShift && can('pos.shift.close') && (
                     <Button danger onClick={closeShift}>
                         Close Shift
                     </Button>
@@ -910,118 +1123,33 @@ export default function PosIndex() {
         </div>
     );
 
-    const openShiftScreen = (
+    const noTerminalView = (
         <div style={centerShellStyle}>
-            <Card bordered={false} style={openShiftCardStyle} bodyStyle={{ padding: 24 }}>
-                <Space direction="vertical" size={18} style={{ width: '100%' }}>
-                    <Space align="start" size={14}>
-                        <div style={openShiftIconStyle}>
-                            <ClockCircleOutlined />
-                        </div>
-
-                        <div>
-                            <Title level={4} style={{ margin: 0, color: token.colorText }}>
-                                Open POS Shift
-                            </Title>
-
+            <Card bordered={false} style={{ ...cardStyle, width: '100%', maxWidth: 560 }}>
+                <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={
+                        <Space direction="vertical" size={4}>
+                            <Text strong>No POS terminal found for this branch.</Text>
                             <Text type="secondary">
-                                No shift is open. Open a shift first to use the POS screen.
+                                {can('pos.terminal.create')
+                                    ? 'Create a terminal first to start selling.'
+                                    : 'Contact administrator to create a POS terminal for your branch.'}
                             </Text>
-                        </div>
-                    </Space>
+                        </Space>
+                    }
+                />
 
-                    <div style={mutedBoxStyle}>
-                        <Descriptions
-                            size="small"
-                            column={1}
-                            items={[
-                                {
-                                    key: 'terminal',
-                                    label: 'Terminal',
-                                    children: selectedTerminal
-                                        ? `${selectedTerminal.name} (${selectedTerminal.code})`
-                                        : 'No terminal selected',
-                                },
-                                {
-                                    key: 'branch',
-                                    label: 'Branch',
-                                    children: selectedTerminal?.branch?.name || selectedTerminal?.branch_name || '-',
-                                },
-                                {
-                                    key: 'warehouse',
-                                    label: 'Warehouse',
-                                    children:
-                                        selectedTerminal?.warehouse?.name ||
-                                        selectedTerminal?.warehouse_name ||
-                                        '-',
-                                },
-                            ]}
-                        />
-                    </div>
-
-                    <Form
-                        form={shiftForm}
-                        layout="vertical"
-                        onFinish={submitOpenShift}
-                        initialValues={{
-                            opening_cash: 0,
-                        }}
+                {can('pos.terminal.create') && (
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        block
+                        onClick={() => setAddTerminalOpen(true)}
                     >
-                        <Form.Item label="Terminal">
-                            <Space.Compact style={{ width: '100%' }}>
-                                <Select
-                                    style={{ flex: 1 }}
-                                    value={terminalId}
-                                    options={terminalOptions}
-                                    onChange={(value) => {
-                                        setTerminalId(value);
-                                        setCurrentShift(null);
-                                        setProducts([]);
-                                    }}
-                                    placeholder="Select terminal"
-                                />
-                                <Button
-                                    icon={<PlusOutlined />}
-                                    title="Create new terminal"
-                                    onClick={() => setAddTerminalOpen(true)}
-                                />
-                            </Space.Compact>
-                        </Form.Item>
-
-                        <Form.Item
-                            name="opening_cash"
-                            label="Opening Cash"
-                            rules={[
-                                {
-                                    required: true,
-                                    message: 'Opening cash is required.',
-                                },
-                            ]}
-                        >
-                            <InputNumber
-                                style={{ width: '100%' }}
-                                min={0}
-                                prefix="Rs."
-                                placeholder="Enter opening cash"
-                            />
-                        </Form.Item>
-
-                        <Form.Item name="notes" label="Notes">
-                            <Input.TextArea rows={3} placeholder="Optional shift note" />
-                        </Form.Item>
-
-                        <Button
-                            type="primary"
-                            htmlType="submit"
-                            loading={processing}
-                            disabled={!terminalId}
-                            block
-                            size="large"
-                        >
-                            Open Shift
-                        </Button>
-                    </Form>
-                </Space>
+                        Create Terminal
+                    </Button>
+                )}
             </Card>
         </div>
     );
@@ -1031,7 +1159,7 @@ export default function PosIndex() {
             <Head title="POS" />
 
             <div style={pageStyle}>
-                {loading || shiftLoading ? (
+                {loading || shiftLoading || terminalLoading ? (
                     <div
                         style={{
                             minHeight: 420,
@@ -1041,8 +1169,15 @@ export default function PosIndex() {
                     >
                         <Spin />
                     </div>
+                ) : terminals.length < 1 ? (
+                    noTerminalView
                 ) : !currentShift ? (
-                    openShiftScreen
+                    <div style={centerShellStyle}>
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="Open a POS shift to start selling."
+                        />
+                    </div>
                 ) : (
                     <Row gutter={12} align="stretch">
                         <Col xs={24} xl={15}>
@@ -1246,33 +1381,170 @@ export default function PosIndex() {
                 )}
             </div>
 
-            <Drawer
+            <Modal
+                title="Open POS Shift"
+                open={!loading && !shiftLoading && !terminalLoading && terminals.length > 0 && !currentShift}
+                closable={false}
+                maskClosable={false}
+                keyboard={false}
+                footer={null}
+                destroyOnClose={false}
+                width={560}
+            >
+                <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                    <Text type="secondary">
+                        Select the terminal and count the opening cash before using POS.
+                    </Text>
+
+                    <div style={mutedBoxStyle}>
+                        <Descriptions
+                            size="small"
+                            column={1}
+                            items={[
+                                {
+                                    key: 'branch',
+                                    label: 'Branch',
+                                    children:
+                                        selectedTerminal?.branch?.name ||
+                                        selectedTerminal?.branch_name ||
+                                        selectedBranch?.name ||
+                                        '-',
+                                },
+                                {
+                                    key: 'terminal',
+                                    label: 'Terminal',
+                                    children: selectedTerminal
+                                        ? `${selectedTerminal.name} (${selectedTerminal.code})`
+                                        : '-',
+                                },
+                                {
+                                    key: 'warehouse',
+                                    label: 'Warehouse',
+                                    children:
+                                        selectedTerminal?.warehouse?.name ||
+                                        selectedTerminal?.warehouse_name ||
+                                        '-',
+                                },
+                            ]}
+                        />
+                    </div>
+
+                    <Form
+                        form={shiftForm}
+                        layout="vertical"
+                        onFinish={submitOpenShift}
+                        initialValues={{ opening_cash: 0 }}
+                    >
+                        {canViewAllBranches && (
+                            <Form.Item label="Branch">
+                                <Select
+                                    value={activeBranchId}
+                                    options={branchOptions}
+                                    onChange={handleBranchChange}
+                                    placeholder="Select branch"
+                                />
+                            </Form.Item>
+                        )}
+
+                        <Form.Item label="Terminal" required>
+                            <Space.Compact style={{ width: '100%' }}>
+                                <Select
+                                    style={{ flex: 1 }}
+                                    value={terminalId}
+                                    options={terminalOptions}
+                                    loading={terminalLoading}
+                                    onChange={(value) => {
+                                        setTerminalId(value);
+                                        setCurrentShift(null);
+                                        setProducts([]);
+                                        clearSale();
+                                    }}
+                                    placeholder="Select terminal"
+                                />
+
+                                {can('pos.terminal.create') && (
+                                    <Button
+                                        icon={<PlusOutlined />}
+                                        title="Create new terminal"
+                                        onClick={() => setAddTerminalOpen(true)}
+                                    />
+                                )}
+                            </Space.Compact>
+                        </Form.Item>
+
+                        <Form.Item
+                            name="opening_cash"
+                            label="Opening Cash"
+                            rules={[
+                                {
+                                    required: true,
+                                    message: 'Opening cash is required.',
+                                },
+                            ]}
+                        >
+                            <InputNumber
+                                style={{ width: '100%' }}
+                                min={0}
+                                prefix="Rs."
+                                placeholder="0.00"
+                            />
+                        </Form.Item>
+
+                        <Form.Item name="notes" label="Notes">
+                            <Input.TextArea rows={3} placeholder="Optional shift note" />
+                        </Form.Item>
+
+                        <Button
+                            type="primary"
+                            htmlType="submit"
+                            loading={processing}
+                            disabled={!terminalId || !can('pos.shift.open')}
+                            block
+                        >
+                            Open Shift
+                        </Button>
+                    </Form>
+                </Space>
+            </Modal>
+
+            <Modal
                 title="Checkout"
                 open={checkoutOpen}
-                onClose={() => setCheckoutOpen(false)}
+                onCancel={() => setCheckoutOpen(false)}
                 width={460}
                 destroyOnClose
+                footer={null}
             >
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                     {payments.map((payment, index) => (
                         <Card key={index} size="small">
                             <Space direction="vertical" style={{ width: '100%' }}>
-                                <Select
-                                    value={payment.payment_method}
-                                    options={paymentOptions}
-                                    onChange={(value) =>
-                                        setPayments((current) =>
-                                            current.map((row, rowIndex) =>
-                                                rowIndex === index
-                                                    ? {
-                                                          ...row,
-                                                          payment_method: value,
-                                                      }
-                                                    : row,
-                                            ),
-                                        )
-                                    }
-                                />
+                                <Space.Compact style={{ width: '100%' }}>
+                                    <Select
+                                        style={{ flex: 1 }}
+                                        value={payment.payment_method}
+                                        options={paymentOptions}
+                                        onChange={(value) =>
+                                            setPayments((current) =>
+                                                current.map((row, rowIndex) =>
+                                                    rowIndex === index
+                                                        ? {
+                                                              ...row,
+                                                              payment_method: value,
+                                                          }
+                                                        : row,
+                                                ),
+                                            )
+                                        }
+                                    />
+
+                                    <Button
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        disabled={payments.length <= 1}
+                                        onClick={() => removePaymentRow(index)}
+                                    />
+                                </Space.Compact>
 
                                 <InputNumber
                                     style={{ width: '100%' }}
@@ -1372,14 +1644,24 @@ export default function PosIndex() {
                         icon={<DollarOutlined />}
                         onClick={completeSale}
                         loading={processing}
+                        disabled={
+                            summary.balance_due > 0 &&
+                            !payments.some((payment) => payment.payment_method === 'credit')
+                        }
                         block
                     >
                         Complete Sale
                     </Button>
                 </Space>
-            </Drawer>
+            </Modal>
 
-            <Drawer title="Held Sales" open={heldOpen} onClose={() => setHeldOpen(false)} width={420}>
+            <Modal
+                title="Held Sales"
+                open={heldOpen}
+                onCancel={() => setHeldOpen(false)}
+                footer={null}
+                width={520}
+            >
                 <List
                     dataSource={heldSales}
                     renderItem={(sale) => (
@@ -1409,13 +1691,14 @@ export default function PosIndex() {
                         emptyText: 'No held carts',
                     }}
                 />
-            </Drawer>
+            </Modal>
 
-            <Drawer
+            <Modal
                 title="Receipt Preview"
                 open={receiptOpen}
-                onClose={() => setReceiptOpen(false)}
+                onCancel={() => setReceiptOpen(false)}
                 width={520}
+                footer={null}
             >
                 {saleReceipt ? (
                     <Space direction="vertical" style={{ width: '100%' }} size={10}>
@@ -1439,7 +1722,11 @@ export default function PosIndex() {
                                             justifyContent: 'space-between',
                                         }}
                                     >
-                                        <Text>{line.product_name}</Text>
+                                        <Space>
+                                            <Text>{line.product_name}</Text>
+                                            {line.is_complimentary && <Tag color="blue">Complimentary</Tag>}
+                                        </Space>
+
                                         <Text strong>{money(line.line_total)}</Text>
                                     </Space>
                                 </List.Item>
@@ -1474,40 +1761,63 @@ export default function PosIndex() {
                 ) : (
                     <Empty description="No receipt loaded" />
                 )}
-            </Drawer>
+            </Modal>
 
-            {/* Quick-add Terminal Modal */}
             <Modal
                 title="Create POS Terminal"
                 open={addTerminalOpen}
-                onCancel={() => { setAddTerminalOpen(false); addTerminalForm.resetFields(); }}
+                onCancel={() => {
+                    setAddTerminalOpen(false);
+                    addTerminalForm.resetFields();
+                }}
                 onOk={() => addTerminalForm.submit()}
                 confirmLoading={addTerminalLoading}
                 destroyOnClose
             >
-                <Form form={addTerminalForm} layout="vertical" onFinish={submitAddTerminal}>
+                <Form
+                    form={addTerminalForm}
+                    layout="vertical"
+                    onFinish={submitAddTerminal}
+                    initialValues={{
+                        branch_id: activeBranchId,
+                    }}
+                >
                     <Form.Item
                         name="name"
                         label="Terminal Name"
-                        rules={[{ required: true, message: 'Terminal name is required.' }]}
+                        rules={[
+                            {
+                                required: true,
+                                message: 'Terminal name is required.',
+                            },
+                        ]}
                     >
                         <Input placeholder="e.g. Counter 1" />
                     </Form.Item>
-                    <Form.Item name="branch_id" label="Branch">
-                        <Select
-                            allowClear
-                            placeholder="Select branch"
-                            options={branches.map((b) => ({ value: b.id, label: b.name }))}
-                        />
-                    </Form.Item>
+
+                    {canViewAllBranches ? (
+                        <Form.Item name="branch_id" label="Branch">
+                            <Select
+                                allowClear
+                                placeholder="Select branch"
+                                options={branchOptions}
+                            />
+                        </Form.Item>
+                    ) : (
+                        <Form.Item label="Branch">
+                            <Input readOnly value={selectedBranch?.name || '-'} />
+                        </Form.Item>
+                    )}
                 </Form>
             </Modal>
 
-            {/* Cash In / Cash Out Modal */}
             <Modal
                 title={cashMovementType === 'cash_in' ? 'Cash In' : 'Cash Out'}
                 open={cashMovementOpen}
-                onCancel={() => { setCashMovementOpen(false); cashMovementForm.resetFields(); }}
+                onCancel={() => {
+                    setCashMovementOpen(false);
+                    cashMovementForm.resetFields();
+                }}
                 onOk={() => cashMovementForm.submit()}
                 confirmLoading={cashMovementLoading}
                 destroyOnClose
@@ -1516,7 +1826,10 @@ export default function PosIndex() {
                     form={cashMovementForm}
                     layout="vertical"
                     onFinish={submitCashMovement}
-                    initialValues={{ type: cashMovementType, amount: 0 }}
+                    initialValues={{
+                        type: cashMovementType,
+                        amount: 0,
+                    }}
                 >
                     <Form.Item name="type" label="Movement Type" rules={[{ required: true }]}>
                         <Select
@@ -1528,16 +1841,29 @@ export default function PosIndex() {
                             ]}
                         />
                     </Form.Item>
+
                     <Form.Item
                         name="amount"
                         label="Amount"
-                        rules={[{ required: true, message: 'Amount is required.' }, { type: 'number', min: 0.01, message: 'Amount must be greater than 0.' }]}
+                        rules={[
+                            {
+                                required: true,
+                                message: 'Amount is required.',
+                            },
+                            {
+                                type: 'number',
+                                min: 0.01,
+                                message: 'Amount must be greater than 0.',
+                            },
+                        ]}
                     >
                         <InputNumber style={{ width: '100%' }} min={0} prefix="Rs." placeholder="0.00" />
                     </Form.Item>
+
                     <Form.Item name="reason" label="Reason / Category">
                         <Input placeholder="e.g. Opening float, Petty cash expense" />
                     </Form.Item>
+
                     <Form.Item name="notes" label="Notes">
                         <Input.TextArea rows={2} placeholder="Optional notes" />
                     </Form.Item>
@@ -1557,6 +1883,13 @@ export default function PosIndex() {
                                 <span>
                                     Shift: <strong>{currentShift.shift_no}</strong>
                                     {' · '}Terminal: <strong>{selectedTerminal?.name || '-'}</strong>
+                                    {' · '}Branch:{' '}
+                                    <strong>
+                                        {selectedTerminal?.branch?.name ||
+                                            selectedTerminal?.branch_name ||
+                                            selectedBranch?.name ||
+                                            '-'}
+                                    </strong>
                                 </span>
                             </Space>
                         </div>

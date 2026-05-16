@@ -3,21 +3,23 @@
 namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Pos\Concerns\AuthorizesPosAccess;
 use App\Http\Requests\Pos\StorePosTerminalRequest;
 use App\Http\Requests\Pos\UpdatePosTerminalRequest;
-use App\Models\Branch;
 use App\Models\PosTerminal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PosTerminalController extends Controller
 {
+    use AuthorizesPosAccess;
+
     public function index(Request $request): JsonResponse
     {
+        $this->authorizePos('pos.terminal.view');
+
         $query = PosTerminal::query()
             ->with(['branch', 'warehouse', 'cashAccount', 'cardAccount', 'onlineAccount', 'defaultCustomer'])
-            ->when(!$this->canViewAllBranches($request), fn ($q) => $q->whereIn('branch_id', $this->accessibleBranchIds($request)))
-            ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->string('branch_id')))
             ->when($request->filled('active'), fn ($q) => $q->where('active', filter_var($request->input('active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $search = trim((string) $request->input('search'));
@@ -30,11 +32,15 @@ class PosTerminalController extends Controller
             ->orderByDesc('is_default')
             ->orderBy('name');
 
+        $this->applyBranchScope($query, $request);
+
         return response()->json($query->paginate((int) $request->input('page_size', 20)));
     }
 
     public function store(StorePosTerminalRequest $request): JsonResponse
     {
+        $this->authorizePos('pos.terminal.create');
+
         $payload = $request->validated();
         $payload['branch_id'] = $this->resolveWritableBranchId($request, $payload['branch_id'] ?? null);
         $payload['code'] = trim((string) ($payload['code'] ?? '')) ?: $this->generateNextCode();
@@ -56,11 +62,17 @@ class PosTerminalController extends Controller
 
     public function show(PosTerminal $pos_terminal): JsonResponse
     {
+        $this->authorizePos('pos.terminal.view');
+        $this->assertTerminalAccess(request(), $pos_terminal);
+
         return response()->json($pos_terminal->load(['branch', 'warehouse', 'cashAccount', 'cardAccount', 'onlineAccount', 'defaultCustomer']));
     }
 
     public function update(UpdatePosTerminalRequest $request, PosTerminal $pos_terminal): JsonResponse
     {
+        $this->authorizePos('pos.terminal.update');
+        $this->assertTerminalAccess($request, $pos_terminal);
+
         $payload = $request->validated();
 
         if (!$this->canViewAllBranches($request)) {
@@ -87,6 +99,9 @@ class PosTerminalController extends Controller
 
     public function destroy(PosTerminal $pos_terminal): JsonResponse
     {
+        $this->authorizePos('pos.terminal.delete');
+        $this->assertTerminalAccess(request(), $pos_terminal);
+
         abort_if($pos_terminal->posShifts()->exists() || $pos_terminal->posSales()->exists(), 422, 'Terminal cannot be deleted once used.');
 
         $pos_terminal->delete();
@@ -109,55 +124,4 @@ class PosTerminalController extends Controller
         return $code;
     }
 
-    protected function resolveWritableBranchId(Request $request, ?string $branchId): ?string
-    {
-        if ($this->canViewAllBranches($request) && $branchId) {
-            return $branchId;
-        }
-
-        $user = $request->user();
-
-        return $user?->current_branch_id
-            ?? $user?->branch_id
-            ?? Branch::query()->where('code', 'MAIN')->value('id')
-            ?? Branch::query()->value('id');
-    }
-
-    protected function accessibleBranchIds(Request $request): array
-    {
-        $user = $request->user();
-        $ids = array_filter([
-            $user?->current_branch_id,
-            $user?->branch_id,
-        ]);
-
-        if (empty($ids)) {
-            $fallback = Branch::query()->where('code', 'MAIN')->value('id')
-                ?? Branch::query()->value('id');
-
-            if ($fallback) {
-                $ids[] = $fallback;
-            }
-        }
-
-        return array_values(array_unique(array_map('strval', $ids)));
-    }
-
-    protected function canViewAllBranches(Request $request): bool
-    {
-        $user = $request->user();
-
-        if (!$user) {
-            return false;
-        }
-
-        try {
-            return $user->can('branch.view_all')
-                || $user->can('branches.view-all')
-                || $user->hasRole('super-admin')
-                || $user->hasRole('admin');
-        } catch (\Throwable) {
-            return false;
-        }
-    }
 }

@@ -27,6 +27,9 @@ class PosCashMovement extends Model
         'approved_by_id',
         'active',
         'is_system_generated',
+        'source_type',
+        'source_id',
+        'source_reference',
         'user_add_id',
     ];
 

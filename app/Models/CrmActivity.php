@@ -94,7 +94,7 @@ class CrmActivity extends Model
 
     public function crmActivityComments(): HasMany
     {
-        return $this->hasMany(CrmActivityComment::class);
+        return $this->hasMany(CrmActivityComment::class)->with('user')->oldest();
     }
 
     public function escalations(): HasMany

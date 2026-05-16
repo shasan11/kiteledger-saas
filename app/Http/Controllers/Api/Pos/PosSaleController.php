@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Pos;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Pos\Concerns\AuthorizesPosAccess;
 use App\Http\Requests\Pos\CompletePosSaleRequest;
 use App\Http\Requests\Pos\StorePosSaleRequest;
 use App\Models\PosSale;
@@ -18,6 +19,8 @@ use Illuminate\Support\Carbon;
 
 class PosSaleController extends Controller
 {
+    use AuthorizesPosAccess;
+
     public function __construct(
         protected PosSaleService $saleService,
         protected PosInventoryService $inventoryService,
@@ -26,6 +29,8 @@ class PosSaleController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->authorizePos('pos.sale.view');
+
         $query = PosSale::query()
             ->with([
                 'branch',
@@ -39,6 +44,7 @@ class PosSaleController extends Controller
                 'posPayments',
             ])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+            ->when($request->boolean('refundable'), fn ($q) => $q->whereIn('status', ['completed', 'part_refunded']))
             ->when($request->filled('pos_terminal_id'), fn ($q) => $q->where('pos_terminal_id', $request->string('pos_terminal_id')))
             ->when($request->filled('cashier_id'), fn ($q) => $q->whereHas('posShift', fn ($inner) => $inner->where('cashier_id', $request->integer('cashier_id'))))
             ->when($request->filled('shift_id'), fn ($q) => $q->where('pos_shift_id', $request->string('shift_id')))
@@ -54,11 +60,17 @@ class PosSaleController extends Controller
             })
             ->orderByDesc('sale_date');
 
+        $this->applyBranchScope($query, $request);
+
         return response()->json($query->paginate((int) $request->input('page_size', 20)));
     }
 
     public function store(StorePosSaleRequest $request): JsonResponse
     {
+        $this->authorizePos('pos.sale.create');
+        $terminal = PosTerminal::query()->findOrFail($request->validated('pos_terminal_id'));
+        $this->assertTerminalAccess($request, $terminal);
+
         $sale = $this->saleService->createOrUpdateDraft(null, $request->validated());
 
         return response()->json($sale, 201);
@@ -66,6 +78,9 @@ class PosSaleController extends Controller
 
     public function show(PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.view');
+        $this->assertBranchAccess(request(), $id->branch_id, 'You cannot view a POS sale from another branch.');
+
         return response()->json($id->load([
             'branch',
             'posTerminal',
@@ -85,6 +100,9 @@ class PosSaleController extends Controller
 
     public function update(StorePosSaleRequest $request, PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.update');
+        $this->assertBranchAccess($request, $id->branch_id, 'You cannot update a POS sale from another branch.');
+
         $sale = $this->saleService->createOrUpdateDraft($id, $request->validated());
 
         return response()->json($sale);
@@ -92,6 +110,9 @@ class PosSaleController extends Controller
 
     public function hold(StorePosSaleRequest $request, PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.update');
+        $this->assertBranchAccess($request, $id->branch_id, 'You cannot update a POS sale from another branch.');
+
         $sale = $this->saleService->holdSale($id, $request->validated());
 
         return response()->json($sale->fresh([
@@ -106,6 +127,9 @@ class PosSaleController extends Controller
 
     public function complete(CompletePosSaleRequest $request, PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.create');
+        $this->assertBranchAccess($request, $id->branch_id, 'You cannot complete a POS sale from another branch.');
+
         $sale = $this->saleService->completeSale($id, $request->validated());
 
         return response()->json($sale);
@@ -113,11 +137,17 @@ class PosSaleController extends Controller
 
     public function cancel(PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.update');
+        $this->assertBranchAccess(request(), $id->branch_id, 'You cannot cancel a POS sale from another branch.');
+
         return response()->json($this->saleService->cancel($id));
     }
 
     public function void(Request $request, PosSale $id): JsonResponse
     {
+        $this->authorizePos('pos.sale.void');
+        $this->assertBranchAccess($request, $id->branch_id, 'You cannot void a POS sale from another branch.');
+
         $validated = $request->validate([
             'reason' => ['required', 'string'],
         ]);
@@ -127,14 +157,22 @@ class PosSaleController extends Controller
 
     public function productSearch(Request $request): JsonResponse
     {
+        $this->authorizePos('pos.sale.create');
+
         $warehouseId = $request->string('warehouse_id')->toString() ?: null;
         $q = trim((string) $request->input('q'));
         $barcode = trim((string) $request->input('barcode'));
+
+        $branchId = $request->string('branch_id')->toString() ?: null;
+        $this->assertBranchAccess($request, $branchId, 'You cannot sell products from another branch.');
 
         $products = Product::query()
             ->with(['productUnit', 'taxClass'])
             ->where('active', true)
             ->where('allow_sale', true)
+            ->when($branchId && $this->tableHasColumn('products', 'branch_id'), fn ($query) => $query->where(function ($inner) use ($branchId) {
+                $inner->where('branch_id', $branchId)->orWhereNull('branch_id');
+            }))
             ->when($barcode !== '', fn ($query) => $query->where('barcode', $barcode))
             ->when($q !== '', function ($query) use ($q) {
                 $query->where(function ($inner) use ($q) {
@@ -173,28 +211,34 @@ class PosSaleController extends Controller
 
     public function dashboard(): JsonResponse
     {
+        $this->authorizePos('pos.sale.view');
+
         $today = Carbon::today();
-        $sales = PosSale::query()
+        $request = request();
+        $salesQuery = PosSale::query()
             ->with('posPayments')
             ->whereDate('sale_date', $today)
-            ->whereIn('status', ['completed', 'part_refunded', 'refunded'])
-            ->get();
+            ->whereIn('status', ['completed', 'part_refunded', 'refunded']);
+
+        $this->applyBranchScope($salesQuery, $request);
+
+        $sales = $salesQuery->get();
 
         $todaySales = round($sales->sum('grand_total'), 2);
         $todayRefunds = round($sales->whereIn('status', ['part_refunded', 'refunded'])->sum('change_amount'), 2);
         $payments = $sales->flatMap->posPayments;
         $topProducts = Product::query()
-            ->whereIn('id', function ($query) use ($today) {
+            ->whereIn('id', function ($query) use ($salesQuery) {
                 $query->select('product_id')
                     ->from('pos_sale_lines')
                     ->whereNotNull('product_id')
-                    ->whereIn('pos_sale_id', PosSale::query()->select('id')->whereDate('sale_date', $today));
+                    ->whereIn('pos_sale_id', (clone $salesQuery)->select('id'));
             })
             ->get()
-            ->map(function ($product) use ($today) {
+            ->map(function ($product) use ($salesQuery) {
                 $qty = \App\Models\PosSaleLine::query()
                     ->where('product_id', $product->id)
-                    ->whereIn('pos_sale_id', PosSale::query()->select('id')->whereDate('sale_date', $today))
+                    ->whereIn('pos_sale_id', (clone $salesQuery)->select('id'))
                     ->sum('qty');
 
                 return ['product' => $product->name, 'qty' => (float) $qty];
@@ -214,10 +258,26 @@ class PosSaleController extends Controller
             'today_card_sales' => round($payments->where('payment_method', 'card')->sum('amount'), 2),
             'today_online_sales' => round($payments->where('payment_method', 'online')->sum('amount'), 2),
             'today_refunds' => $todayRefunds,
-            'open_shift_count' => PosShift::query()->where('status', 'open')->count(),
-            'active_terminal_count' => PosTerminal::query()->where('active', true)->count(),
+            'open_shift_count' => tap(PosShift::query()->where('status', 'open'), fn ($query) => $this->applyBranchScope($query, $request))->count(),
+            'active_terminal_count' => tap(PosTerminal::query()->where('active', true), fn ($query) => $this->applyBranchScope($query, $request))->count(),
             'top_selling_products' => $topProducts,
             'hourly_sales' => $hourly,
         ]);
+    }
+
+    public function refundable(PosSale $id): JsonResponse
+    {
+        $this->authorizePos('pos.return.create');
+        $this->assertBranchAccess(request(), $id->branch_id, 'You cannot refund a sale from another branch.');
+
+        return response()->json($id->load([
+            'branch',
+            'posTerminal',
+            'posShift.cashier',
+            'contact',
+            'posSaleLines.product',
+            'posSaleLines.taxRate',
+            'posReturns',
+        ]));
     }
 }

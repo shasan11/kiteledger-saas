@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -918,28 +918,28 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const loadRecord = useCallback(async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await axios.get(api(`${endpoint}${id}/`), {
+        headers: authHeaders(),
+      });
+
+      setRecord(unwrap(response.data));
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to load record.';
+      setError(msg);
+      messageApi.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [endpoint, id, messageApi]);
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError('');
-
-      try {
-        const response = await axios.get(api(`${endpoint}${id}/`), {
-          headers: authHeaders(),
-        });
-
-        setRecord(unwrap(response.data));
-      } catch (err) {
-        const msg = err?.response?.data?.message || 'Failed to load record.';
-        setError(msg);
-        messageApi.error(msg);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, [endpoint, id]);
+    loadRecord();
+  }, [loadRecord]);
 
   const title = mapRecord(record)?.title || 'CRM Record';
 
@@ -1430,6 +1430,22 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           padding-top: 6px;
         }
 
+        .crm-show__comment-form {
+          padding: 12px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+          margin-bottom: var(--crm-padding);
+        }
+
+        .crm-show__comment-form .ant-form-item {
+          margin-bottom: 10px;
+        }
+
+        .crm-show__comments-list {
+          min-width: 0;
+        }
+
         .crm-show__state {
           padding: var(--crm-padding-lg);
           background: var(--crm-surface);
@@ -1530,10 +1546,102 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
             </div>
           ) : null}
 
-          {!loading && record ? children(record) : null}
+          {!loading && record
+            ? children(record, {
+                setRecord,
+                reload: loadRecord,
+                messageApi,
+              })
+            : null}
         </div>
       </div>
     </AuthenticatedLayout>
+  );
+}
+
+function ActivityCommentsPanel({ activity, comments = [], onActivityUpdated }) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+
+  const submitComment = async () => {
+    const values = await form.validateFields();
+    const comment = String(values.comment || '').trim();
+
+    if (!comment) return;
+
+    setSaving(true);
+
+    try {
+      const response = await axios.post(
+        api(`/api/crm-activities/${activity.id}/comments`),
+        { comment },
+        { headers: authHeaders() }
+      );
+
+      form.resetFields();
+      onActivityUpdated?.(unwrap(response.data));
+      message.success('Comment added');
+    } catch (error) {
+      message.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.comment?.[0] ||
+          'Failed to add comment'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <DetailsCard title="Comments">
+      <Form form={form} layout="vertical" className="crm-show__comment-form">
+        <Form.Item
+          name="comment"
+          rules={[
+            { required: true, message: 'Write a comment first' },
+            { max: 5000, message: 'Comment must be 5000 characters or fewer' },
+          ]}
+        >
+          <Input.TextArea
+            rows={3}
+            placeholder="Add a comment"
+            disabled={saving}
+            autoSize={{ minRows: 3, maxRows: 7 }}
+          />
+        </Form.Item>
+        <Button type="primary" onClick={submitComment} loading={saving}>
+          Add Comment
+        </Button>
+      </Form>
+
+      <div className="crm-show__comments-list">
+        {comments.length ? (
+          <Timeline
+            className="crm-show__timeline"
+            items={comments.map((comment) => {
+              const userName =
+                comment?.user?.display_name ||
+                comment?.user?.name ||
+                comment?.user?.email ||
+                'User';
+
+              return {
+                children: (
+                  <Space direction="vertical" size={2}>
+                    <Text>{comment?.comment}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {userName} | {formatDateTime(comment?.created_at)}
+                    </Text>
+                  </Space>
+                ),
+              };
+            })}
+          />
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No comments yet" />
+        )}
+      </div>
+    </DetailsCard>
   );
 }
 
@@ -2313,7 +2421,7 @@ export function ActivityShow({ auth, id }) {
       endpoint="/api/crm-activities/"
       mapRecord={(record) => ({ title: record?.subject || 'Activity' })}
     >
-      {(activity) => {
+      {(activity, { setRecord }) => {
         const comments =
           activity?.crm_activity_comments ||
           activity?.crmActivityComments ||
@@ -2352,25 +2460,11 @@ export function ActivityShow({ auth, id }) {
         );
 
         const commentsContent = (
-          <DetailsCard title="Comments">
-            {comments.length ? (
-              <Timeline
-                className="crm-show__timeline"
-                items={comments.map((comment) => ({
-                  children: (
-                    <Space direction="vertical" size={2}>
-                      <Text>{comment?.comment}</Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {comment?.user?.name || 'User'} | {formatDateTime(comment?.created_at)}
-                      </Text>
-                    </Space>
-                  ),
-                }))}
-              />
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No comments yet" />
-            )}
-          </DetailsCard>
+          <ActivityCommentsPanel
+            activity={activity}
+            comments={comments}
+            onActivityUpdated={setRecord}
+          />
         );
 
         const linkedContent = (

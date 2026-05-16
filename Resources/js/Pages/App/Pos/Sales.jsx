@@ -1,21 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Button, Card, DatePicker, Row, Col, Select, Space, Table, Tag, Typography, App } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { api, defaultRangeForKey, fetchList, money, rangeParams, saleStatusColor } from './Shared/posHelpers';
+import PosReturnModal from './Shared/PosReturnModal';
 
 const { Text, Title } = Typography;
 
 export default function PosSalesPage() {
     const { message } = App.useApp();
+    const { props } = usePage();
+    const permissions = props.auth?.permissions || [];
+    const can = (permission) => permissions.includes(permission);
     const [loading, setLoading] = useState(true);
     const [rangeKey, setRangeKey] = useState('today');
     const [range, setRange] = useState(defaultRangeForKey('today'));
     const [rows, setRows] = useState([]);
     const [terminals, setTerminals] = useState([]);
     const [filters, setFilters] = useState({ status: undefined, pos_terminal_id: undefined, cashier_id: undefined });
+    const [returnSaleId, setReturnSaleId] = useState(null);
 
     useEffect(() => {
         void bootstrap();
@@ -54,6 +59,10 @@ export default function PosSalesPage() {
         }
     }
 
+    function canReturnSale(record) {
+        return can('pos.return.create') && ['completed', 'part_refunded'].includes(record.status);
+    }
+
     const columns = useMemo(() => [
         { title: 'Sale No', dataIndex: 'sale_no', key: 'sale_no', render: (value) => <Text strong>{value}</Text> },
         { title: 'Date', dataIndex: 'sale_date', key: 'sale_date', render: (value) => dayjs(value).format('DD-MM-YYYY HH:mm') },
@@ -67,11 +76,13 @@ export default function PosSalesPage() {
             render: (_, record) => (
                 <Space>
                     <Button size="small" onClick={() => router.visit(route('pos.sales.show', record.id))}>View</Button>
-                    <Button size="small" onClick={() => router.visit(route('pos.returns.index'), { data: { sale_id: record.id } })}>Refund</Button>
+                    {canReturnSale(record) && (
+                        <Button size="small" danger onClick={() => setReturnSaleId(record.id)}>Return</Button>
+                    )}
                 </Space>
             ),
         },
-    ], []);
+    ], [permissions]);
 
     return (
         <AuthenticatedLayout
@@ -146,6 +157,16 @@ export default function PosSalesPage() {
                     </Space>
                 </Card>
             </div>
+
+            <PosReturnModal
+                open={!!returnSaleId}
+                saleId={returnSaleId}
+                onCancel={() => setReturnSaleId(null)}
+                onSuccess={async () => {
+                    setReturnSaleId(null);
+                    await loadRows();
+                }}
+            />
         </AuthenticatedLayout>
     );
 }

@@ -42,6 +42,15 @@ const STATUS_OPTIONS = [
   value: v,
 }));
 
+const PROJECT_STATUS_ANCHORS = [
+  { key: 'all', label: 'All', params: {} },
+  ...STATUS_OPTIONS.map(({ label, value }) => ({
+    key: value.toLowerCase(),
+    label,
+    params: { status: value },
+  })),
+];
+
 const ACTIVE_OPTIONS = [
   { label: 'Active', value: true },
   { label: 'Inactive', value: false },
@@ -467,7 +476,6 @@ export default function Projects(props) {
 
       <div
         style={{
-          padding: 16,
           minHeight: 'calc(100vh - 64px)',
           background: '#f5f5f5',
         }}
@@ -506,6 +514,9 @@ export default function Projects(props) {
           activeParam="active"
           enableServerPagination
           enableInactiveDrawer
+          anchorFilters={PROJECT_STATUS_ANCHORS}
+          defaultAnchorKey="all"
+          anchorSyncWithHash
           showSearch
           canAdd
           canEdit

@@ -25,6 +25,8 @@ class PosSaleLine extends Model
         'tax_amount',
         'line_total',
         'returned_qty',
+        'is_complimentary',
+        'complimentary_reason',
         'remarks',
         'active',
     ];
@@ -39,6 +41,7 @@ class PosSaleLine extends Model
             'tax_amount' => 'decimal:2',
             'line_total' => 'decimal:2',
             'returned_qty' => 'decimal:4',
+            'is_complimentary' => 'boolean',
             'active' => 'boolean',
         ];
     }

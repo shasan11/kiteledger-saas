@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -10,6 +10,9 @@ const { Title } = Typography;
 
 export default function PosCashMovementsPage() {
     const { message } = App.useApp();
+    const { props } = usePage();
+    const permissions = props.auth?.permissions || [];
+    const can = (permission) => permissions.includes(permission);
     const [rows, setRows] = useState([]);
     const [shifts, setShifts] = useState([]);
     const [terminals, setTerminals] = useState([]);
@@ -65,7 +68,7 @@ export default function PosCashMovementsPage() {
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span />
-                            <Button type="primary" onClick={() => setOpen(true)}>New Cash Movement</Button>
+                            <Button type="primary" disabled={!can('pos.cash_movement.create')} onClick={() => setOpen(true)}>New Cash Movement</Button>
                         </div>
                         <Table rowKey="id" columns={columns} dataSource={rows} />
                     </Space>

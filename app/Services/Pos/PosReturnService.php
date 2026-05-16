@@ -3,9 +3,11 @@
 namespace App\Services\Pos;
 
 use App\Models\Currency;
+use App\Models\PosCashMovement;
 use App\Models\PosReturn;
 use App\Models\PosReturnLine;
 use App\Models\PosSale;
+use App\Models\PosShift;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnLine;
 use Illuminate\Support\Facades\DB;
@@ -28,10 +30,12 @@ class PosReturnService
                 throw new InvalidArgumentException('Returns can only be created from completed sales.');
             }
 
+            $shift = $this->resolveReturnShift($payload, $sale);
+
             $return = PosReturn::create([
-                'branch_id' => $payload['branch_id'] ?? $sale->branch_id,
+                'branch_id' => $sale->branch_id,
                 'pos_sale_id' => $sale->id,
-                'pos_shift_id' => $payload['pos_shift_id'] ?? $sale->pos_shift_id,
+                'pos_shift_id' => $shift->id,
                 'return_date' => $payload['return_date'] ?? now(),
                 'refund_method' => $payload['refund_method'],
                 'reason' => $payload['reason'] ?? null,
@@ -100,6 +104,7 @@ class PosReturnService
 
             $this->ensureSalesReturn($return->fresh(['posSale.contact', 'posSale.posSaleLines', 'posReturnLines.posSaleLine']));
             $this->updateSale($return);
+            $this->ensureCashRefundMovement($return->fresh(['posSale.posTerminal', 'posShift']));
             $this->accountingService->approveReturnArtifacts($return->fresh(['salesReturn']));
             $this->shiftService->recalculate($return->posShift);
 
@@ -133,6 +138,9 @@ class PosReturnService
         if ($return->approved) {
             $this->accountingService->approveReturnArtifacts($return->fresh(['salesReturn']));
         }
+
+        $this->ensureCashRefundMovement($return->fresh(['posSale.posTerminal', 'posShift']));
+        $this->shiftService->recalculate($return->posShift);
 
         return $return->refresh();
     }
@@ -194,5 +202,76 @@ class PosReturnService
             'payment_status' => 'refunded',
             'sales_return_id' => $return->sales_return_id,
         ])->saveQuietly();
+    }
+
+    private function resolveReturnShift(array $payload, PosSale $sale): PosShift
+    {
+        $shift = !empty($payload['pos_shift_id'])
+            ? PosShift::query()->find($payload['pos_shift_id'])
+            : PosShift::query()
+                ->where('pos_terminal_id', $sale->pos_terminal_id)
+                ->where('branch_id', $sale->branch_id)
+                ->where('cashier_id', auth()->id())
+                ->where('status', 'open')
+                ->latest('opened_at')
+                ->first();
+
+        if (!$shift) {
+            throw new InvalidArgumentException('An open shift is required before creating a POS return.');
+        }
+
+        if ($shift->status !== 'open') {
+            throw new InvalidArgumentException('Returns can only be created on an open shift.');
+        }
+
+        if ((string) $shift->branch_id !== (string) $sale->branch_id) {
+            throw new InvalidArgumentException('You cannot refund a sale from another branch.');
+        }
+
+        if ((string) $shift->pos_terminal_id !== (string) $sale->pos_terminal_id) {
+            throw new InvalidArgumentException('The return shift must belong to the original sale terminal.');
+        }
+
+        if ($shift->cashier_id && auth()->id() && (int) $shift->cashier_id !== (int) auth()->id()) {
+            $user = request()->user();
+
+            if (!$user || !$user->can('pos.shift.update')) {
+                throw new InvalidArgumentException('You cannot use another cashier shift.');
+            }
+        }
+
+        return $shift;
+    }
+
+    private function ensureCashRefundMovement(PosReturn $return): void
+    {
+        if ($return->refund_method !== 'cash' || (float) $return->refund_amount <= 0) {
+            return;
+        }
+
+        PosCashMovement::query()->firstOrCreate(
+            [
+                'source_type' => PosReturn::class,
+                'source_id' => $return->id,
+            ],
+            [
+                'branch_id' => $return->branch_id,
+                'pos_terminal_id' => $return->posSale->pos_terminal_id,
+                'pos_shift_id' => $return->pos_shift_id,
+                'movement_date' => $return->return_date ?? now(),
+                'type' => 'cash_out',
+                'amount' => round((float) $return->refund_amount, 2),
+                'reason' => 'Cash refund',
+                'notes' => 'System generated cash refund for POS return ' . $return->return_no . ' against sale ' . $return->posSale->sale_no,
+                'account_id' => $return->posSale->posTerminal?->cash_account_id,
+                'approved' => true,
+                'approved_at' => now(),
+                'approved_by_id' => $return->approved_by_id ?: auth()->id(),
+                'active' => true,
+                'is_system_generated' => true,
+                'source_reference' => $return->return_no,
+                'user_add_id' => auth()->id(),
+            ]
+        );
     }
 }
