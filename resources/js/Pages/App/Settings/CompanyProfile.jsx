@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
   Button,
   Card,
@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import { DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import axios from 'axios';
+import { publishBrandSettings } from '@/brandSettings';
 import { api, cleanPayload, fetchList } from './settingsApi';
 
 const { Text } = Typography;
@@ -32,6 +33,17 @@ const DEFAULT_BRAND_COLORS = {
   brand_header_color: '#ffffff',
   brand_text_color: '#111827',
 };
+
+const LIVE_BRAND_FIELDS = new Set([
+  'company_name',
+  'tag_line',
+  'brand_primary_color',
+  'brand_secondary_color',
+  'brand_accent_color',
+  'brand_sidebar_color',
+  'brand_header_color',
+  'brand_text_color',
+]);
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'January' },
@@ -61,6 +73,7 @@ export default function CompanyProfile() {
   const [logoFileList, setLogoFileList] = useState([]);
   const [darkLogoFileList, setDarkLogoFileList] = useState([]);
   const [faviconFileList, setFaviconFileList] = useState([]);
+  const [brandPreviewBase, setBrandPreviewBase] = useState(null);
 
   const sectionStyle = {
     padding: 16,
@@ -168,6 +181,7 @@ export default function CompanyProfile() {
       ]);
 
       const data = settings.data || {};
+      setBrandPreviewBase(data);
 
       form.setFieldsValue({
         company_name: data.company_name || '',
@@ -368,7 +382,9 @@ export default function CompanyProfile() {
 
       const data = response.data || {};
 
+      setBrandPreviewBase(data);
       setUploadPreviews(data);
+      publishBrandSettings(data);
 
       form.setFieldsValue({
         remove_logo: false,
@@ -377,11 +393,6 @@ export default function CompanyProfile() {
       });
 
       message.success('Company settings saved');
-
-      router.reload({
-        preserveScroll: true,
-        preserveState: false,
-      });
     } catch (error) {
       if (error?.errorFields) return;
 
@@ -460,6 +471,7 @@ export default function CompanyProfile() {
         <ColorPicker
           showText
           format="hex"
+          disabledAlpha
           style={{
             width: '100%',
           }}
@@ -467,6 +479,19 @@ export default function CompanyProfile() {
       </Form.Item>
     </Col>
   );
+
+  const handleValuesChange = (changedValues, allValues) => {
+    const changedFieldNames = Object.keys(changedValues);
+
+    if (!changedFieldNames.some((field) => LIVE_BRAND_FIELDS.has(field))) {
+      return;
+    }
+
+    publishBrandSettings({
+      ...(brandPreviewBase || {}),
+      ...allValues,
+    });
+  };
 
   return (
     <>
@@ -498,7 +523,7 @@ export default function CompanyProfile() {
             },
           }}
         >
-          <Form form={form} layout="vertical">
+          <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
             <Form.Item name="remove_logo" hidden>
               <Input />
             </Form.Item>
@@ -636,15 +661,7 @@ export default function CompanyProfile() {
                 <ColorField name="brand_header_color" label="Header Color" />
                 <ColorField name="brand_text_color" label="Text Color" />
 
-                <Col xs={24} md={8}>
-                  <Form.Item
-                    name="active"
-                    label="Company Profile Active"
-                    valuePropName="checked"
-                  >
-                    <Switch />
-                  </Form.Item>
-                </Col>
+                
               </Row>
             </Section>
 
@@ -849,7 +866,9 @@ export default function CompanyProfile() {
                   <Form.Item name="suggest_selling" label="Suggest Selling">
                     <Radio.Group optionType="button" buttonStyle="solid">
                       <Radio.Button value="recent">Recent Price</Radio.Button>
-                      <Radio.Button value="fixed">Fixed Price</Radio.Button>
+                      <Radio.Button value="last_sale">Last Sale</Radio.Button>
+                      <Radio.Button value="standard_price">Standard Price</Radio.Button>
+                      <Radio.Button value="average_cost_markup">Avg Cost + Markup</Radio.Button>
                     </Radio.Group>
                   </Form.Item>
                 </Col>
@@ -857,9 +876,9 @@ export default function CompanyProfile() {
                 <Col xs={24} md={12}>
                   <Form.Item name="negative_cash_balance" label="Negative Cash Balance">
                     <Radio.Group optionType="button" buttonStyle="solid">
-                      <Radio.Button value="reject">Reject</Radio.Button>
+                      <Radio.Button value="allow">Allow</Radio.Button>
                       <Radio.Button value="warn">Warn</Radio.Button>
-                      <Radio.Button value="do_nothing">Do Nothing</Radio.Button>
+                      <Radio.Button value="block">Block</Radio.Button>
                     </Radio.Group>
                   </Form.Item>
                 </Col>
@@ -867,9 +886,9 @@ export default function CompanyProfile() {
                 <Col xs={24} md={12}>
                   <Form.Item name="negative_item_balance" label="Negative Item Balance">
                     <Radio.Group optionType="button" buttonStyle="solid">
-                      <Radio.Button value="reject">Reject</Radio.Button>
+                      <Radio.Button value="allow">Allow</Radio.Button>
                       <Radio.Button value="warn">Warn</Radio.Button>
-                      <Radio.Button value="do_nothing">Do Nothing</Radio.Button>
+                      <Radio.Button value="block">Block</Radio.Button>
                     </Radio.Group>
                   </Form.Item>
                 </Col>
@@ -877,9 +896,9 @@ export default function CompanyProfile() {
                 <Col xs={24} md={12}>
                   <Form.Item name="credit_limit_exceed" label="Credit Limit Exceed">
                     <Radio.Group optionType="button" buttonStyle="solid">
-                      <Radio.Button value="reject">Reject</Radio.Button>
+                      <Radio.Button value="allow">Allow</Radio.Button>
                       <Radio.Button value="warn">Warn</Radio.Button>
-                      <Radio.Button value="do_nothing">Do Nothing</Radio.Button>
+                      <Radio.Button value="block">Block</Radio.Button>
                     </Radio.Group>
                   </Form.Item>
                 </Col>

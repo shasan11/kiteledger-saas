@@ -783,6 +783,7 @@ export default function Index() {
             <ReusableCrud
                 title="Quotation"
                 apiUrl={api('/api/quotations/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

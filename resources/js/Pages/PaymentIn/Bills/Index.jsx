@@ -943,6 +943,7 @@ const transformPayload = (values) => {
             <ReusableCrud
                 title="Invoices Register"
                 apiUrl={api('/api/invoices/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

@@ -48,6 +48,7 @@ const EmailTemplates = lazy(() => import('./EmailTemplates'));
 
 const ConfigurationForm = lazy(() => import('./ConfigurationForm'));
 const HrmSetup = lazy(() => import('./HrmSetup/Index'));
+const CrmSetup = lazy(() => import('../Crm/Configuration/Index'));
 
 const Users = lazy(() => import('../Hrm/Users/Index'));
 const Roles = lazy(() => import('../Hrm/Roles/Index'));
@@ -230,6 +231,14 @@ const SETTINGS_TABS = [
     description: 'Departments, leave, holidays, awards and other HRM setup data.',
     icon: <AppstoreOutlined />,
     component: HrmSetup,
+    props: {},
+  },
+  {
+    key: 'crm-setup',
+    label: 'CRM Setup',
+    description: 'Lead, deal and contact setup data.',
+    icon: <AppstoreOutlined />,
+    component: CrmSetup,
     props: {},
   },
   {

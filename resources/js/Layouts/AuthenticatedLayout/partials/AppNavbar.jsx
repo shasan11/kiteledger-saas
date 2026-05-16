@@ -1,5 +1,6 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import GlobalSearchCommand from '@/Components/App/GlobalSearchCommand';
+import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
 import { Link } from '@inertiajs/react';
 import {
     BranchesOutlined,
@@ -19,9 +20,41 @@ import {
     Space,
     theme,
 } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 
 const { Header } = Layout;
 const { useBreakpoint } = Grid;
+
+const isHexColor = (value) =>
+    typeof value === 'string' && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value.trim());
+
+const hexToRgb = (hex) => {
+    if (!isHexColor(hex)) return null;
+
+    const normalized =
+        hex.trim().length === 4
+            ? `#${hex
+                  .trim()
+                  .slice(1)
+                  .split('')
+                  .map((char) => `${char}${char}`)
+                  .join('')}`
+            : hex.trim();
+
+    return {
+        r: parseInt(normalized.slice(1, 3), 16),
+        g: parseInt(normalized.slice(3, 5), 16),
+        b: parseInt(normalized.slice(5, 7), 16),
+    };
+};
+
+const rgba = (hex, opacity) => {
+    const rgb = hexToRgb(hex);
+
+    if (!rgb) return hex;
+
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+};
 
 export default function AppNavbar({
     user,
@@ -35,6 +68,24 @@ export default function AppNavbar({
 }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
+    const [brandSettings, setBrandSettings] = useState(null);
+
+    useEffect(() => {
+        let mounted = true;
+
+        fetchBrandSettings()
+            .then((settings) => {
+                if (mounted) setBrandSettings(settings);
+            })
+            .catch(() => {});
+
+        const unsubscribeBrandSettings = subscribeToBrandSettings(setBrandSettings);
+
+        return () => {
+            mounted = false;
+            unsubscribeBrandSettings();
+        };
+    }, []);
 
     const isMobile = !screens.md;
     const isTablet = !screens.lg;
@@ -84,8 +135,16 @@ export default function AppNavbar({
         }),
     ];
 
-    const dark = {
-        nav: '#0b1220',
+    const dark = useMemo(() => {
+        const nav = isHexColor(brandSettings?.brand_sidebar_color)
+            ? brandSettings.brand_sidebar_color.trim()
+            : '#0b1220';
+        const primary = isHexColor(brandSettings?.brand_primary_color)
+            ? brandSettings.brand_primary_color.trim()
+            : token.colorPrimary;
+
+        return {
+        nav,
         navSoft: '#111827',
         navElevated: '#162033',
         border: 'rgba(148, 163, 184, 0.18)',
@@ -93,9 +152,10 @@ export default function AppNavbar({
         text: '#f8fafc',
         textSecondary: '#cbd5e1',
         textMuted: '#94a3b8',
-        primarySoft: 'rgba(59, 130, 246, 0.16)',
-        primaryBorder: 'rgba(59, 130, 246, 0.35)',
-    };
+        primarySoft: rgba(primary, 0.16),
+        primaryBorder: rgba(primary, 0.35),
+        };
+    }, [brandSettings?.brand_primary_color, brandSettings?.brand_sidebar_color, token.colorPrimary]);
 
     return (
         <>

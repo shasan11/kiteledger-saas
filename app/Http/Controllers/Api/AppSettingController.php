@@ -93,10 +93,10 @@ class AppSettingController extends BaseCrudApiController
         'brand_header_color' => ['nullable', 'string', 'max:20'],
         'brand_text_color' => ['nullable', 'string', 'max:20'],
 
-        'suggest_selling' => ['nullable', 'in:recent,fixed'],
-        'negative_cash_balance' => ['nullable', 'in:reject,warn,do_nothing'],
-        'negative_item_balance' => ['nullable', 'in:reject,warn,do_nothing'],
-        'credit_limit_exceed' => ['nullable', 'in:reject,warn,do_nothing'],
+        'suggest_selling' => ['nullable', 'in:recent,last_sale,standard_price,average_cost_markup'],
+        'negative_cash_balance' => ['nullable', 'in:allow,warn,block'],
+        'negative_item_balance' => ['nullable', 'in:allow,warn,block'],
+        'credit_limit_exceed' => ['nullable', 'in:allow,warn,block'],
 
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],

@@ -96,24 +96,34 @@ const getPath = (object, path, fallback = '') => {
 };
 
 const renderPrintTemplate = (templateHtml, context) => {
-  let output = templateHtml || '';
+  const resolve = (scope, path, fallback = '') => {
+    const scoped = getPath(scope, path, undefined);
+    return scoped !== undefined && scoped !== null ? scoped : getPath(context, path, fallback);
+  };
 
-  output = output.replace(/{{#([\w.]+)}}([\s\S]*?){{\/\1}}/g, (_, path, block) => {
-    const value = getPath(context, path);
-    if (!Array.isArray(value)) return '';
+  const render = (template, scope = context) =>
+    String(template || '')
+      .replace(/{{([#^])([\w.]+)}}([\s\S]*?){{\/\2}}/g, (_, mode, path, block) => {
+        const value = resolve(scope, path, null);
+        const truthy = Array.isArray(value) ? value.length > 0 : !!value;
 
-    return value
-      .map((item, index) =>
-        block.replace(/{{\s*([^}]+)\s*}}/g, (__, key) => {
-          const cleanKey = key.trim();
-          if (cleanKey === '@index') return index + 1;
-          return escapeHtml(getPath(item, cleanKey, getPath(context, cleanKey, '')));
-        })
-      )
-      .join('');
-  });
+        if (mode === '^') {
+          return truthy ? '' : render(block, scope);
+        }
 
-  return output.replace(/{{\s*([^}]+)\s*}}/g, (_, path) => escapeHtml(getPath(context, path.trim(), '')));
+        if (Array.isArray(value)) {
+          return value
+            .map((item, index) => render(block, { ...context, ...(item || {}), '@index': index + 1 }))
+            .join('');
+        }
+
+        if (!truthy) return '';
+
+        return render(block, typeof value === 'object' ? { ...context, ...value } : scope);
+      })
+      .replace(/{{\s*([^}]+)\s*}}/g, (_, path) => escapeHtml(resolve(scope, path.trim(), '')));
+
+  return render(templateHtml);
 };
 
 const formatDate = (value, withTime = false) => {
@@ -1461,6 +1471,7 @@ export default function AccountingRecordShow({
   const [printTemplate, setPrintTemplate] = useState(null);
   const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
   const [printTemplateError, setPrintTemplateError] = useState('');
+  const [companyInfo, setCompanyInfo] = useState(null);
   const [form] = Form.useForm();
 
   const module = moduleFromTitle(title);
@@ -1541,13 +1552,17 @@ export default function AccountingRecordShow({
       setPrintTemplate(null);
 
       try {
-        const response = await axios.get(
-          api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(printDocumentType)}`),
-          { headers: authHeaders() }
-        );
+        const [response, companyResponse] = await Promise.all([
+          axios.get(
+            api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(printDocumentType)}`),
+            { headers: authHeaders() }
+          ),
+          axios.get(api('/api/app-settings/current'), { headers: authHeaders() }).catch(() => ({ data: null })),
+        ]);
 
         if (active) {
           setPrintTemplate(response.data?.data ?? response.data ?? null);
+          setCompanyInfo(companyResponse.data?.data ?? companyResponse.data ?? null);
         }
       } catch (err) {
         if (active) {
@@ -1585,7 +1600,8 @@ export default function AccountingRecordShow({
   const canApprove =
     record &&
     Object.prototype.hasOwnProperty.call(record, 'approved') &&
-    !record.approved;
+    !record.approved &&
+    !record.void;
 
   const printContext = useMemo(() => {
     const lines = module === 'journal'
@@ -1597,12 +1613,25 @@ export default function AccountingRecordShow({
     return {
       record,
       company: {
-        name: record?.company?.name || record?.branch?.name || 'KiteLedger',
-        address: record?.company?.address || record?.branch?.address || '',
-        phone: record?.company?.phone || record?.branch?.phone || '',
-        email: record?.company?.email || record?.branch?.email || '',
-        website: record?.company?.website || '',
-        tax_id: record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
+        name: companyInfo?.company_name || record?.company?.name || record?.branch?.name || 'KiteLedger',
+        logo: companyInfo?.logo_url || record?.company?.logo_url || record?.company?.logo || '',
+        address: companyInfo?.address || companyInfo?.address_line_1 || record?.company?.address || record?.branch?.address || '',
+        phone: companyInfo?.phone || record?.company?.phone || record?.branch?.phone || '',
+        email: companyInfo?.email || record?.company?.email || record?.branch?.email || '',
+        website: companyInfo?.website || record?.company?.website || '',
+        pan_or_vat: companyInfo?.tax_number || companyInfo?.vat_number || record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
+        tax_id: companyInfo?.tax_number || companyInfo?.vat_number || record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
+        initials: String(companyInfo?.company_name || record?.company?.name || record?.branch?.name || 'KL')
+          .split(/\s+/)
+          .map((part) => part.charAt(0))
+          .join('')
+          .slice(0, 3)
+          .toUpperCase(),
+      },
+      branch: {
+        name: record?.branch?.name || '',
+        address: record?.branch?.address || '',
+        phone: record?.branch?.phone || '',
       },
       document: {
         type: printDocumentType || '',
@@ -1611,6 +1640,12 @@ export default function AccountingRecordShow({
         date: formatDate(record?.voucher_date || record?.transfer_date || record?.date),
         reference: record?.reference || '-',
         status: humanize(record?.status || (record?.approved ? 'approved' : 'draft')),
+        approved: !!record?.approved,
+        void: !!record?.void,
+        voided: !!record?.void,
+        is_draft: !record?.void && record?.approved !== true,
+        show_watermark: !!(companyInfo?.show_watermark ?? true),
+        voided_reason: record?.voided_reason || '',
         notes: record?.notes || record?.narration || '',
         terms: '',
       },
@@ -1627,6 +1662,27 @@ export default function AccountingRecordShow({
         tax: formatMoney(0),
         grand_total: formatMoney(total),
         total: formatMoney(total),
+        amount_in_words: record?.amount_in_words || record?.total_in_words || '',
+      },
+      payment: {
+        method: record?.payment_method || record?.method || '',
+        reference_number: record?.reference_no || record?.reference || '',
+        source_account: relationLabel(record?.fromAccount || record?.from_account || record?.account),
+        destination_account: relationLabel(record?.toAccount || record?.to_account),
+      },
+      subtotal: formatMoney(total),
+      discount: formatMoney(0),
+      tax: formatMoney(0),
+      total: formatMoney(total),
+      amount_paid: formatMoney(0),
+      balance_due: formatMoney(0),
+      notes: record?.notes || record?.narration || '',
+      terms: '',
+      prepared_by: relationLabel(record?.userAdd || record?.user_add),
+      approved_by: relationLabel(record?.approvedBy || record?.approved_by),
+      printed_at: new Date().toLocaleString(),
+      settings: {
+        show_watermark: !!(companyInfo?.show_watermark ?? true),
       },
       lines: lines.map((line) => ({
         product_name: relationLabel(line?.chartOfAccount || line?.chart_of_account || line?.account || line?.toAccount || line?.to_account) || '-',
@@ -1636,8 +1692,17 @@ export default function AccountingRecordShow({
         tax_amount: formatMoney(0),
         line_total: formatMoney(line?.debit || line?.amount || line?.credit || 0),
       })),
+      items: lines.map((line) => ({
+        product_name: relationLabel(line?.chartOfAccount || line?.chart_of_account || line?.account || line?.toAccount || line?.to_account) || '-',
+        description: line?.description || line?.narration || '-',
+        qty: '1.00',
+        unit_price: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        discount_amount: formatMoney(0),
+        tax_amount: formatMoney(0),
+        line_total: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+      })),
     };
-  }, [formatMoney, module, printDocumentType, record, recordTitle, title]);
+  }, [companyInfo, formatMoney, module, printDocumentType, record, recordTitle, title]);
 
   const resolvedPrintTemplate = printTemplate || {
     template_html: `
@@ -1667,6 +1732,23 @@ export default function AccountingRecordShow({
       await loadRecord();
     } catch (err) {
       message.error(err?.response?.data?.message || 'Update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const approveRecord = async () => {
+    setSaving(true);
+
+    try {
+      await axios.post(api(`${baseEndpoint}/${id}/approve`), {}, {
+        headers: authHeaders(),
+      });
+
+      message.success(`${title} approved`);
+      await loadRecord();
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Approval failed');
     } finally {
       setSaving(false);
     }
@@ -2168,6 +2250,7 @@ export default function AccountingRecordShow({
                     ].filter(Boolean),
                     onClick: ({ key }) => {
                       if (key === 'edit') {
+                        if (record?.approved || record?.void) return;
                         if (editRoute) {
                           router.visit(route(editRoute, id));
                         } else {
@@ -2184,13 +2267,7 @@ export default function AccountingRecordShow({
                       }
 
                       if (key === 'approve') {
-                        updateRecord(
-                          {
-                            approved: true,
-                            status: record?.status === 'draft' ? 'posted' : record?.status,
-                          },
-                          `${title} approved`
-                        );
+                        approveRecord();
                       }
                     },
                   }}
@@ -2237,22 +2314,30 @@ export default function AccountingRecordShow({
               />
 
               <main className="accounting-show__main">
-                {canApprove && module !== 'cash' ? (
+                {canApprove ? (
                   <Alert
                     showIcon
                     type="warning"
-                    message={`${title} is not approved yet.`}
+                    message="This transaction is still in draft and has not been approved."
+                    description="Approve it to assign the final document number and post it."
                     action={
                       <Button
                         size="small"
                         type="primary"
-                        onClick={() =>
-                          updateRecord({ approved: true }, `${title} approved`)
-                        }
+                        onClick={approveRecord}
                       >
                         Approve
                       </Button>
                     }
+                  />
+                ) : null}
+
+                {record?.void ? (
+                  <Alert
+                    showIcon
+                    type="error"
+                    message="This transaction has been voided"
+                    description={record?.voided_reason ? `Reason: ${record.voided_reason}` : 'This transaction is voided and cannot be edited or approved.'}
                   />
                 ) : null}
 

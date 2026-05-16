@@ -61,15 +61,11 @@ export default function VariantAttributes(props) {
       label: 'Attribute Name',
       type: 'text',
       required: true,
-      col: 12,
+      col: 24,
       placeholder: 'e.g. Color, Size, Material',
     },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-      col: 12,
-    },
+       
+    
     {
       name: 'items',
       label: 'Attribute Values',
@@ -88,22 +84,7 @@ export default function VariantAttributes(props) {
           width: '3fr',
           placeholder: 'e.g. Red, Small, Cotton',
         },
-        {
-          key: 'sort_order',
-          name: 'sort_order',
-          label: 'Sort Order',
-          type: 'number',
-          width: '130px',
-          min: 0,
-          placeholder: '0',
-        },
-        {
-          key: 'active',
-          name: 'active',
-          label: 'Active',
-          type: 'switch',
-          width: '100px',
-        },
+         
       ],
     },
   ];
@@ -167,8 +148,8 @@ export default function VariantAttributes(props) {
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
-        form_ui="drawer"
-        drawerWidth={900}
+        form_ui="modal"
+        modalWidth={500}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

@@ -160,9 +160,25 @@ export default function QuickAddModal({
                       value={values?.[name]}
                       min={field.min}
                       max={field.max}
+                      addonBefore={field.addonBefore || field.prefix}
+                      addonAfter={field.addonAfter || field.suffix}
+                      formatter={field.formatter}
+                      parser={field.parser}
                       disabled={readOnly}
                       placeholder={field.placeholder || ""}
                       onChange={(v) => setFieldValue(name, v)}
+                    />
+                  );
+
+                case "password":
+                  return (
+                    <Input.Password
+                      size="large"
+                      value={values?.[name] || ""}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || ""}
+                      onChange={(e) => setFieldValue(name, e.target.value)}
+                      maxLength={field.maxLength}
                     />
                   );
 
@@ -377,4 +393,3 @@ export default function QuickAddModal({
     </Modal>
   );
 }
-

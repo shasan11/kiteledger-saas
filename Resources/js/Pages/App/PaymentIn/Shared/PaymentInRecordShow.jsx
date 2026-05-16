@@ -461,6 +461,13 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             pan_or_vat: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.tax_id, ''),
             tax_id: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.pan_no, ''),
             logo: companyInfo?.logo_url || '',
+            watermark: companyInfo?.watermark_url || '',
+            initials: String(firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KL'))
+                .split(/\s+/)
+                .map((part) => part.charAt(0))
+                .join('')
+                .slice(0, 3)
+                .toUpperCase(),
         },
 
         branch: {
@@ -480,11 +487,13 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             notes: record?.notes || '',
             terms: firstPresent(record?.terms, record?.payment_terms, ''),
             void: isVoid,
+            voided: isVoid,
             is_draft: isDraft,
             approved: !!(record?.approved),
             voided_reason: record?.voided_reason || '',
             approved_at: formatDate(record?.approved_at),
             voided_at: formatDate(record?.voided_at),
+            show_watermark: !!(companyInfo?.show_watermark ?? true),
         },
 
         party: {
@@ -497,6 +506,13 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             tax_id: firstPresent(record?.contact?.tax_id, record?.contact?.pan_no, record?.contact?.vat_no, ''),
         },
 
+        customer: {
+            name: getRelationName(record?.contact),
+            phone: getPartyPhone(record),
+            email: getPartyEmail(record),
+            address: getPartyAddress(record),
+        },
+
         currency: {
             code: currency?.code || '',
             symbol: currency?.symbol || '',
@@ -504,6 +520,14 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
         },
 
         exchange_rate: record?.exchange_rate ? Number(record.exchange_rate).toFixed(2) : '',
+        subtotal: formatMoney(subtotal, currency),
+        discount: formatMoney(discount, currency),
+        tax: formatMoney(tax, currency),
+        total: formatMoney(total, currency),
+        amount_paid: formatMoney(paid, currency),
+        balance_due: formatMoney(balance, currency),
+        notes: record?.notes || '',
+        terms: firstPresent(record?.terms, record?.payment_terms, ''),
 
         totals: {
             subtotal: formatMoney(subtotal, currency),
@@ -513,6 +537,7 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             total: formatMoney(total, currency),
             paid: formatMoney(paid, currency),
             balance: formatMoney(balance, currency),
+            amount_in_words: firstPresent(record?.amount_in_words, record?.total_in_words, ''),
         },
 
         payment: {
@@ -523,13 +548,20 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             ),
             method: firstPresent(record?.payment_method, record?.method, '-'),
             account: getRelationName(record?.account),
+            reference_number: firstPresent(record?.reference_no, record?.reference, ''),
+            source_account: getRelationName(record?.account),
+            destination_account: getRelationName(record?.contact),
         },
 
         prepared_by: firstPresent(record?.userAdd?.name, record?.created_by?.name, ''),
         approved_by: firstPresent(record?.approvedBy?.name, record?.approved_by?.name, ''),
         printed_at: new Date().toLocaleString(),
+        settings: {
+            show_watermark: !!(companyInfo?.show_watermark ?? true),
+        },
 
         lines: lines.map((row) => normalizePrintLine(row, currency)),
+        items: lines.map((row) => normalizePrintLine(row, currency)),
     };
 };
 
@@ -619,31 +651,38 @@ const buildPaymentPrefillFromInvoice = (record) => {
 };
 
 const renderPrintTemplate = (templateHtml, context) => {
-    let output = templateHtml || '';
+    const resolve = (scope, path, fallback = '') => {
+        const scoped = getPath(scope, path, undefined);
+        return scoped !== undefined && scoped !== null ? scoped : getPath(context, path, fallback);
+    };
 
-    output = output.replace(/{{#([\w.]+)}}([\s\S]*?){{\/\1}}/g, (_, path, block) => {
-        const value = getPath(context, path);
+    const render = (template, scope = context) =>
+        String(template || '')
+            .replace(/{{([#^])([\w.]+)}}([\s\S]*?){{\/\2}}/g, (_, mode, path, block) => {
+                const value = resolve(scope, path, null);
+                const truthy = Array.isArray(value) ? value.length > 0 : !!value;
 
-        if (!Array.isArray(value)) return '';
+                if (mode === '^') {
+                    return truthy ? '' : render(block, scope);
+                }
 
-        return value
-            .map((item, index) =>
-                block.replace(/{{\s*([^}]+)\s*}}/g, (_, key) => {
-                    const cleanKey = key.trim();
+                if (Array.isArray(value)) {
+                    return value
+                        .map((item, index) => render(block, { ...context, ...(item || {}), '@index': index + 1 }))
+                        .join('');
+                }
 
-                    if (cleanKey === '@index') return index + 1;
+                if (!truthy) return '';
 
-                    return escapeHtml(getPath(item, cleanKey, getPath(context, cleanKey, '')));
-                })
-            )
-            .join('');
-    });
+                return render(block, typeof value === 'object' ? { ...context, ...value } : scope);
+            })
+            .replace(/{{\s*([^}]+)\s*}}/g, (_, path) => {
+                const cleanPath = path.trim();
+                if (cleanPath === '@index') return escapeHtml(resolve(scope, cleanPath, ''));
+                return escapeHtml(resolve(scope, cleanPath, ''));
+            });
 
-    output = output.replace(/{{\s*([^}]+)\s*}}/g, (_, path) => {
-        return escapeHtml(getPath(context, path.trim(), ''));
-    });
-
-    return output;
+    return render(templateHtml);
 };
 
 const defaultPrintTemplateHtml = `
@@ -1048,7 +1087,7 @@ function HeaderBlock({
                         </Tooltip>
                     )}
 
-                    {editRoute && recordId && !isVoided && (
+                    {editRoute && recordId && !isVoided && !isApproved && (
                         <Link href={route(editRoute, recordId)}>
                             <Button icon={<EditOutlined />} disabled={loading || !record}>
                                 Edit
@@ -1509,7 +1548,7 @@ export default function PaymentInRecordShow({
         setApproveLoading(true);
         try {
             const baseEndpoint = endpoint.replace(/\/+$/, '');
-            await axios.patch(api(`${baseEndpoint}/${record.id}/`), { approved: true });
+            await axios.post(api(`${baseEndpoint}/${record.id}/approve`));
             const response = await axios.get(api(`${baseEndpoint}/${record.id}`));
             setRecord(response.data?.data ?? response.data);
             setApproveModalOpen(false);

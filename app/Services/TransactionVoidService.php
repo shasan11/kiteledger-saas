@@ -45,7 +45,7 @@ class TransactionVoidService
             }
 
             if ($this->validationService->hasStatusField($fresh)) {
-                $fresh->status = 'cancelled';
+                $fresh->status = $this->voidStatusFor($fresh);
             }
 
             $fresh->saveQuietly();
@@ -59,5 +59,12 @@ class TransactionVoidService
     public function cancel(Model $transaction, string $reason, ?int $voidedById = null): Model
     {
         return $this->void($transaction, $reason, $voidedById);
+    }
+
+    protected function voidStatusFor(Model $transaction): string
+    {
+        return in_array(class_basename($transaction), ['Invoice', 'PurchaseBill'], true)
+            ? 'void'
+            : 'cancelled';
     }
 }

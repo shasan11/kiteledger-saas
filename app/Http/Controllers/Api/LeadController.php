@@ -10,6 +10,8 @@ use Illuminate\Validation\Rule;
 
 class LeadController extends BaseCrudApiController
 {
+    private const STATUSES = ['new', 'contacted', 'qualified', 'unqualified', 'converted', 'lost'];
+
     protected string $modelClass = Lead::class;
 
     protected ?string $permissionPrefix = null;
@@ -145,7 +147,7 @@ class LeadController extends BaseCrudApiController
             'lead_source' => ['nullable', 'string', 'max:80'],
             'industry' => ['nullable', 'string', 'max:120'],
             'expected_value' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['nullable', 'in:new,contacted,qualified,unqualified,converted,lost'],
+            'status' => ['nullable', Rule::in(self::STATUSES)],
             'lost_reason' => ['nullable', 'string', 'max:255'],
             'priority' => ['nullable', 'in:low,medium,high,urgent'],
             'next_follow_up_date' => ['nullable', 'date'],
@@ -188,7 +190,7 @@ class LeadController extends BaseCrudApiController
             'lead_source' => ['sometimes', 'nullable', 'string', 'max:80'],
             'industry' => ['sometimes', 'nullable', 'string', 'max:120'],
             'expected_value' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'status' => ['sometimes', 'nullable', 'in:new,contacted,qualified,unqualified,converted,lost'],
+            'status' => ['sometimes', 'nullable', Rule::in(self::STATUSES)],
             'lost_reason' => ['sometimes', 'nullable', 'string', 'max:255'],
             'priority' => ['sometimes', 'nullable', 'in:low,medium,high,urgent'],
             'next_follow_up_date' => ['sometimes', 'nullable', 'date'],
@@ -200,5 +202,33 @@ class LeadController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    public function moveStatus(Request $request, string $id)
+    {
+        $lead = Lead::query()->with(['contact', 'assignedTo', 'convertedContact', 'convertedDeal', 'dealPipeline'])->findOrFail($id);
+
+        $data = $request->validate([
+            'status' => ['required', Rule::in(self::STATUSES)],
+            'lost_reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $updates = ['status' => $data['status']];
+
+        if ($data['status'] === 'lost') {
+            $updates['lost_reason'] = $data['lost_reason'] ?? $lead->lost_reason;
+        } elseif ($lead->status === 'lost') {
+            $updates['lost_reason'] = null;
+        }
+
+        if ($data['status'] === 'converted' && !$lead->converted_at) {
+            $updates['converted_at'] = now();
+        } elseif ($lead->status === 'converted' && $data['status'] !== 'converted') {
+            $updates['converted_at'] = null;
+        }
+
+        $lead->update($updates);
+
+        return response()->json($lead->fresh(['contact', 'assignedTo', 'convertedContact', 'convertedDeal', 'dealPipeline']));
     }
 }

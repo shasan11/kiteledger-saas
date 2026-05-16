@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\DocumentNumbering;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class DocumentNumberingService
@@ -80,7 +82,7 @@ class DocumentNumberingService
         }
 
         $field = $mapping['field'];
-        if ($model->{$field} !== null) {
+        if ($model->{$field} !== null && !str_starts_with((string) $model->{$field}, '#draft')) {
             return null;
         }
 
@@ -117,5 +119,16 @@ class DocumentNumberingService
     protected function formatCode(string $prefix, int $number, int $pad = 6): string
     {
         return $prefix . '-' . str_pad((string) $number, $pad, '0', STR_PAD_LEFT);
+    }
+
+    public function generateDraft(Model|string $model, mixed $date = null): string
+    {
+        $modelClass = is_string($model) ? class_basename($model) : class_basename($model);
+        $mapping = $this->modelMapping[$modelClass] ?? null;
+        $documentType = $mapping['document_type'] ?? 'document';
+        $prefix = strtoupper(str_replace('_', '-', (string) $documentType));
+        $stamp = Carbon::parse($date ?: now())->format('Ymd');
+
+        return sprintf('#draft-%s-%s-%s', $prefix, $stamp, strtolower((string) Str::uuid()));
     }
 }

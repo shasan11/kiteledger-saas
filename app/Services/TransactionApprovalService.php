@@ -36,6 +36,10 @@ class TransactionApprovalService
         return DB::transaction(function () use ($transaction, $approvedById) {
             $fresh = $transaction->lockForUpdate()->fresh();
 
+            if ($this->validationService->hasApprovedField($fresh) && $fresh->approved) {
+                return $fresh->refresh();
+            }
+
             $this->validationService->validateCanApprove($fresh);
 
             if ($this->validationService->hasApprovedField($fresh)) {
@@ -47,7 +51,7 @@ class TransactionApprovalService
             }
 
             $numberField = $this->getNumberField($fresh);
-            if ($numberField && !$fresh->{$numberField}) {
+            if ($numberField && (!$fresh->{$numberField} || str_starts_with((string) $fresh->{$numberField}, '#draft'))) {
                 $number = $this->numberingService->generateForApprovedModel($fresh);
                 if ($number) {
                     $fresh->{$numberField} = $number;
@@ -78,7 +82,7 @@ class TransactionApprovalService
 
         DB::transaction(function () use ($transaction) {
             $numberField = $this->getNumberField($transaction);
-            if ($numberField && !$transaction->{$numberField}) {
+            if ($numberField && (!$transaction->{$numberField} || str_starts_with((string) $transaction->{$numberField}, '#draft'))) {
                 $number = $this->numberingService->generateForApprovedModel($transaction);
                 if ($number) {
                     $transaction->saveQuietly([$numberField => $number]);

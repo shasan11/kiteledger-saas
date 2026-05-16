@@ -56,8 +56,8 @@ class LedgerValidationService
             throw new InvalidArgumentException('Model does not support approval.');
         }
 
-        if ($transaction->approved) {
-            throw new InvalidArgumentException('Transaction is already approved.');
+        if (($transaction->void ?? false) || ($transaction->voided ?? false)) {
+            throw new InvalidArgumentException('Voided transactions cannot be approved.');
         }
     }
 
@@ -71,7 +71,7 @@ class LedgerValidationService
             throw new InvalidArgumentException('Only approved transactions can be voided.');
         }
 
-        if ($transaction->void) {
+        if (($transaction->void ?? false) || ($transaction->voided ?? false)) {
             throw new InvalidArgumentException('Transaction is already voided.');
         }
     }

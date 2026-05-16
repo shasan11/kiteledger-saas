@@ -16,6 +16,7 @@ import {
   Skeleton,
   Space,
   Table,
+  Tabs,
   Tag,
   Timeline,
   Tooltip,
@@ -42,6 +43,7 @@ import {
   NumberOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
@@ -50,8 +52,6 @@ import {
   buildActivityCrud,
   buildDealCrud,
   buildLeadCrud,
-  buildPipelineCrud,
-  buildStageCrud,
 } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 
 const { Paragraph, Text, Title } = Typography;
@@ -558,61 +558,113 @@ function RecentTransactions({ rows = [] }) {
   );
 }
 
-function DealsTabContent({ leadId, dealCrud, dealCrudColumns }) {
-  const [view, setView] = useState('list');
+function DealsTabContent({ lead, leadId, dealCrud, dealCrudColumns }) {
+  const [view, setView] = useState('kanban');
+  const [addingDeal, setAddingDeal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { token } = theme.useToken();
 
   return (
-    <DetailsCard
-      title="Deals"
-      extra={
-        <Space.Compact size="small">
-          <Button
-            icon={<UnorderedListOutlined />}
-            type={view === 'list' ? 'primary' : 'default'}
-            onClick={() => setView('list')}
-          >
-            List
-          </Button>
-          <Button
-            icon={<AppstoreOutlined />}
-            type={view === 'kanban' ? 'primary' : 'default'}
-            onClick={() => setView('kanban')}
-          >
-            Kanban
-          </Button>
-        </Space.Compact>
-      }
-    >
-      {view === 'list' ? (
-        <ReusableCrud
-          title="Deals"
-          apiUrl={dealCrud.apiUrl}
-          columns={dealCrudColumns}
-          fields={dealCrud.fields}
-          validationSchema={dealCrud.validationSchema}
-          crudInitialValues={dealCrud.crudInitialValues}
-          transformPayload={dealCrud.transformPayload}
-          baseFilters={{ lead_id: leadId }}
-          form_ui="drawer"
-          drawerWidth={1100}
-          searchParam="search"
-          pageParam="page"
-          pageSizeParam="page_size"
-          sortMode="ordering"
-          orderingParam="ordering"
-          enableServerPagination
-          showSearch
-          canAdd
-          canEdit
-          canDelete
-          hasActions
-          hasActionColumns
-        />
-      ) : (
-        <DealKanban leadId={leadId} tokenColors={token} />
-      )}
-    </DetailsCard>
+    <>
+      <DetailsCard
+        title="Deals"
+        extra={
+          <Space size={6}>
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddingDeal(true)}>
+              Add Deal
+            </Button>
+            <Space.Compact size="small">
+              <Button
+                icon={<UnorderedListOutlined />}
+                type={view === 'list' ? 'primary' : 'default'}
+                onClick={() => setView('list')}
+              >
+                List
+              </Button>
+              <Button
+                icon={<AppstoreOutlined />}
+                type={view === 'kanban' ? 'primary' : 'default'}
+                onClick={() => setView('kanban')}
+              >
+                Kanban
+              </Button>
+            </Space.Compact>
+          </Space>
+        }
+      >
+        {view === 'list' ? (
+          <ReusableCrud
+            title="Deals"
+            apiUrl={dealCrud.apiUrl}
+            columns={dealCrudColumns}
+            fields={dealCrud.fields}
+            validationSchema={dealCrud.validationSchema}
+            crudInitialValues={dealCrud.crudInitialValues}
+            transformPayload={dealCrud.transformPayload}
+            baseFilters={{ lead_id: leadId }}
+            form_ui="drawer"
+            drawerWidth={1100}
+            searchParam="search"
+            pageParam="page"
+            pageSizeParam="page_size"
+            sortMode="ordering"
+            orderingParam="ordering"
+            enableServerPagination
+            showSearch
+            canAdd
+            canEdit
+            canDelete
+            hasActions
+            hasActionColumns
+          />
+        ) : (
+          <DealKanban key={`lead-deals-kanban-${refreshKey}`} leadId={leadId} tokenColors={token} />
+        )}
+      </DetailsCard>
+
+      {addingDeal ? (
+        <div style={{ display: 'none' }}>
+          <ReusableCrud
+            key={`lead-deal-add-${refreshKey}`}
+            title="Deals"
+            apiUrl={dealCrud.apiUrl}
+            columns={dealCrudColumns}
+            fields={dealCrud.fields}
+            validationSchema={dealCrud.validationSchema}
+            crudInitialValues={{
+              ...dealCrud.crudInitialValues,
+              lead_id: leadId,
+              contact_id: lead?.contact_id || null,
+              deal_pipeline_id: lead?.deal_pipeline_id || null,
+              assigned_to_id: lead?.assigned_to_id || null,
+              title: lead?.name || lead?.company_name || '',
+              amount: lead?.expected_value || null,
+              source: lead?.lead_source || '',
+            }}
+            transformPayload={dealCrud.transformPayload}
+            baseFilters={{ lead_id: leadId }}
+            form_ui="modal"
+            modalWidth={860}
+            enableServerPagination={false}
+            showSearch={false}
+            canAdd
+            canEdit={false}
+            canDelete={false}
+            hasActions={false}
+            hasActionColumns={false}
+            openOnMount
+            openMode="add"
+            submitLabelOverride="Create Deal"
+            onFormClose={() => setAddingDeal(false)}
+            onAddSuccess={() => {
+              setAddingDeal(false);
+              setView('kanban');
+              setRefreshKey((key) => key + 1);
+            }}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -620,63 +672,85 @@ function DealKanban({ leadId, tokenColors }) {
   const [stages, setStages] = useState([]);
   const [dealsByStage, setDealsByStage] = useState({});
   const [loading, setLoading] = useState(true);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  const load = useMemo(() => async () => {
+    setLoading(true);
+
+    try {
+      const [stagesRes, dealsRes] = await Promise.all([
+        axios.get(api('/api/deal-stages/'), {
+          headers: authHeaders(),
+          params: { page_size: 100, ordering: 'sort_order' },
+        }),
+        axios.get(api('/api/deals/'), {
+          headers: authHeaders(),
+          params: { lead_id: leadId, page_size: 200 },
+        }),
+      ]);
+
+      const stageRows = rowsFrom(stagesRes.data);
+      const dealRows = rowsFrom(dealsRes.data);
+
+      setStages(stageRows);
+
+      const grouped = stageRows.reduce((acc, stage) => {
+        acc[stage.id] = [];
+        return acc;
+      }, { __unassigned: [] });
+
+      dealRows.forEach((deal) => {
+        const key =
+          deal.deal_stage_id && grouped[deal.deal_stage_id]
+            ? deal.deal_stage_id
+            : '__unassigned';
+
+        grouped[key].push(deal);
+      });
+
+      setDealsByStage(grouped);
+    } catch (error) {
+      setStages([]);
+      setDealsByStage({});
+      messageApi.error(error?.response?.data?.message || 'Failed to load deals');
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId]);
 
   useEffect(() => {
     let mounted = true;
-
-    const load = async () => {
-      setLoading(true);
-
-      try {
-        const [stagesRes, dealsRes] = await Promise.all([
-          axios.get(api('/api/deal-stages/'), {
-            headers: authHeaders(),
-            params: { page_size: 100, ordering: 'sort_order' },
-          }),
-          axios.get(api('/api/deals/'), {
-            headers: authHeaders(),
-            params: { lead_id: leadId, page_size: 200 },
-          }),
-        ]);
-
-        if (!mounted) return;
-
-        const stageRows = rowsFrom(stagesRes.data);
-        const dealRows = rowsFrom(dealsRes.data);
-
-        setStages(stageRows);
-
-        const grouped = stageRows.reduce((acc, stage) => {
-          acc[stage.id] = [];
-          return acc;
-        }, { __unassigned: [] });
-
-        dealRows.forEach((deal) => {
-          const key =
-            deal.deal_stage_id && grouped[deal.deal_stage_id]
-              ? deal.deal_stage_id
-              : '__unassigned';
-
-          grouped[key].push(deal);
-        });
-
-        setDealsByStage(grouped);
-      } catch {
-        if (mounted) {
-          setStages([]);
-          setDealsByStage({});
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
 
     load();
 
     return () => {
       mounted = false;
     };
-  }, [leadId]);
+  }, [load]);
+
+  const moveDeal = async (dealId, stageId) => {
+    if (stageId === '__unassigned') return;
+
+    const previous = dealsByStage;
+    const allDeals = Object.values(dealsByStage).flat();
+    const deal = allDeals.find((item) => item.id === dealId);
+    if (!deal || deal.deal_stage_id === stageId) return;
+
+    setDealsByStage((current) => {
+      const next = Object.fromEntries(Object.entries(current).map(([key, value]) => [key, value.filter((item) => item.id !== dealId)]));
+      next[stageId] = [...(next[stageId] || []), { ...deal, deal_stage_id: stageId }];
+      return next;
+    });
+
+    try {
+      await axios.post(api(`/api/deals/${dealId}/move-stage`), { deal_stage_id: stageId }, { headers: authHeaders() });
+      messageApi.success('Deal moved');
+      load();
+    } catch (error) {
+      setDealsByStage(previous);
+      messageApi.error(error?.response?.data?.message || 'Could not move deal');
+    }
+  };
 
   if (loading) return <Skeleton active paragraph={{ rows: 6 }} />;
 
@@ -687,12 +761,22 @@ function DealKanban({ leadId, tokenColors }) {
 
   return (
     <div className="crm-show__kanban">
+      {contextHolder}
       {columns.map((stage) => {
         const items = dealsByStage[stage.id] || [];
         const total = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
 
         return (
-          <div className="crm-show__kanban-column" key={stage.id}>
+          <div
+            className="crm-show__kanban-column"
+            key={stage.id}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              const dealId = event.dataTransfer.getData('dealId');
+              if (dealId) moveDeal(dealId, stage.id);
+            }}
+          >
             <div className="crm-show__kanban-head">
               <Space size={8}>
                 <span
@@ -720,6 +804,8 @@ function DealKanban({ leadId, tokenColors }) {
                     onClick={() =>
                       router.visit(safeRoute('crm.deals.show', deal.id, `/crm/deals/${deal.id}`))
                     }
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData('dealId', deal.id)}
                   >
                     <Text strong className="crm-show__kanban-title">
                       {deal.title || deal.deal_no || '-'}
@@ -1468,8 +1554,6 @@ function RecordLayout({
   const { token } = theme.useToken();
   const [activeTab, setActiveTab] = useState(tabs?.[0]?.key || 'overview');
 
-  const active = tabs.find((tab) => tab.key === activeTab) || tabs[0];
-
   return (
     <>
       <Card className="crm-show__bar-card">
@@ -1542,27 +1626,22 @@ function RecordLayout({
 
             <RailTable rows={railRows} />
 
-            <div className="crm-show__tabs">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`crm-show__tab ${
-                    activeTab === tab.key ? 'crm-show__tab--active' : ''
-                  }`}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  <span>{tab.label}</span>
-                  {tab.count !== undefined ? (
-                    <span className="crm-show__tab-count">{tab.count}</span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
           </Card>
         </aside>
 
-        <main className="crm-show__main">{active?.children}</main>
+        <main className="crm-show__main">
+          <Card className="crm-show__card">
+            <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
+              items={tabs.map((tab) => ({
+                key: tab.key,
+                label: tab.count !== undefined ? `${tab.label} (${tab.count})` : tab.label,
+                children: tab.children,
+              }))}
+            />
+          </Card>
+        </main>
       </div>
     </>
   );
@@ -1815,6 +1894,7 @@ export function LeadShow({ auth, id }) {
   const [markLostModal, setMarkLostModal] = useState(false);
   const [lostReason, setLostReason] = useState('');
   const [activityDrawer, setActivityDrawer] = useState(false);
+  const [editDrawer, setEditDrawer] = useState(false);
   const [shellRefresh, setShellRefresh] = useState(0);
   const [messageApi, ctx] = message.useMessage();
 
@@ -1880,6 +1960,7 @@ export function LeadShow({ auth, id }) {
               </Tooltip>
             )}
             <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityDrawer(true)}>Activity</Button>
+            <Button size="small" icon={<EditOutlined />} onClick={() => setEditDrawer(true)}>Edit Lead</Button>
             <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('contacted')}>Contacted</Button>
             <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('qualified')}>Qualify</Button>
             {lead?.status !== 'converted' && (
@@ -1951,40 +2032,8 @@ export function LeadShow({ auth, id }) {
           </>
         );
 
-        const leadCrud = buildLeadCrud();
         const activityCrud = buildActivityCrud({ locked: { lead_id: id } });
         const dealCrud = buildDealCrud({ locked: { lead_id: id } });
-        const pipelineCrud = buildPipelineCrud();
-        const stageCrud = buildStageCrud();
-
-        const leadCrudColumns = [
-          {
-            title: 'Name',
-            dataIndex: 'name',
-            key: 'name',
-            sorter: true,
-            render: (value) => <Text strong>{value || '-'}</Text>,
-          },
-          {
-            title: 'Company',
-            dataIndex: 'company_name',
-            key: 'company_name',
-            render: (value) => value || '-',
-          },
-          {
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            width: 120,
-            render: (value) => <SmartTag value={value || 'new'} />,
-          },
-          {
-            title: 'Email',
-            dataIndex: 'email',
-            key: 'email',
-            render: (value) => value || '-',
-          },
-        ];
 
         const activityCrudColumns = [
           {
@@ -2068,122 +2117,8 @@ export function LeadShow({ auth, id }) {
           },
         ];
 
-        const pipelineCrudColumns = [
-          {
-            title: 'Name',
-            dataIndex: 'name',
-            key: 'name',
-            sorter: true,
-            render: (value) => <Text strong>{value || '-'}</Text>,
-          },
-          {
-            title: 'Description',
-            dataIndex: 'description',
-            key: 'description',
-            ellipsis: true,
-            render: (value) => value || '-',
-          },
-          {
-            title: 'Default',
-            dataIndex: 'is_default',
-            key: 'is_default',
-            width: 100,
-            render: (value) => (
-              <Tag color={value ? 'green' : 'default'} className="crm-show__tag">
-                {value ? 'Yes' : 'No'}
-              </Tag>
-            ),
-          },
-        ];
-
-        const stageCrudColumns = [
-          {
-            title: 'Stage',
-            dataIndex: 'name',
-            key: 'name',
-            sorter: true,
-            render: (value) => <Text strong>{value || '-'}</Text>,
-          },
-          {
-            title: 'Pipeline',
-            key: 'pipeline',
-            render: (_, record) => record?.deal_pipeline?.name || '-',
-          },
-          {
-            title: 'Probability %',
-            dataIndex: 'probability',
-            key: 'probability',
-            width: 130,
-            align: 'right',
-            render: (value) => value ?? '-',
-          },
-          {
-            title: 'Order',
-            dataIndex: 'sort_order',
-            key: 'sort_order',
-            width: 90,
-            align: 'right',
-            render: (value) => value ?? '-',
-          },
-          {
-            title: 'Won',
-            dataIndex: 'is_won_stage',
-            key: 'is_won_stage',
-            width: 80,
-            render: (value) =>
-              value ? (
-                <Tag color="green" className="crm-show__tag">
-                  Won
-                </Tag>
-              ) : (
-                '-'
-              ),
-          },
-          {
-            title: 'Lost',
-            dataIndex: 'is_lost_stage',
-            key: 'is_lost_stage',
-            width: 80,
-            render: (value) =>
-              value ? (
-                <Tag color="red" className="crm-show__tag">
-                  Lost
-                </Tag>
-              ) : (
-                '-'
-              ),
-          },
-        ];
-
         const tabs = [
           { key: 'overview', label: 'Overview', children: overview },
-          {
-            key: 'lead',
-            label: 'Lead',
-            children: (
-              <DetailsCard title="Lead">
-                <ReusableCrud
-                  title="Lead"
-                  apiUrl={leadCrud.apiUrl}
-                  columns={leadCrudColumns}
-                  fields={leadCrud.fields}
-                  validationSchema={leadCrud.validationSchema}
-                  crudInitialValues={leadCrud.crudInitialValues}
-                  transformPayload={leadCrud.transformPayload}
-                  baseFilters={{ id }}
-                  form_ui="drawer"
-                  drawerWidth={1100}
-                  enableServerPagination={false}
-                  showSearch={false}
-                  canAdd={false}
-                  canEdit
-                  canDelete={false}
-                  hasActions
-                  hasActionColumns
-                />
-              </DetailsCard>
-            ),
-          },
           {
             key: 'activities',
             label: 'Activities',
@@ -2221,6 +2156,7 @@ export function LeadShow({ auth, id }) {
             label: 'Deals',
             children: (
               <DealsTabContent
+                lead={lead}
                 leadId={id}
                 dealCrud={dealCrud}
                 dealCrudColumns={dealCrudColumns}
@@ -2228,70 +2164,8 @@ export function LeadShow({ auth, id }) {
             ),
           },
           {
-            key: 'pipelines',
-            label: 'Pipelines',
-            children: (
-              <DetailsCard title="Deal Pipelines">
-                <ReusableCrud
-                  title="Pipelines"
-                  apiUrl={pipelineCrud.apiUrl}
-                  columns={pipelineCrudColumns}
-                  fields={pipelineCrud.fields}
-                  validationSchema={pipelineCrud.validationSchema}
-                  crudInitialValues={pipelineCrud.crudInitialValues}
-                  transformPayload={pipelineCrud.transformPayload}
-                  form_ui="drawer"
-                  drawerWidth={1100}
-                  searchParam="search"
-                  pageParam="page"
-                  pageSizeParam="page_size"
-                  sortMode="ordering"
-                  orderingParam="ordering"
-                  enableServerPagination
-                  showSearch
-                  canAdd
-                  canEdit
-                  canDelete
-                  hasActions
-                  hasActionColumns
-                />
-              </DetailsCard>
-            ),
-          },
-          {
-            key: 'stages',
-            label: 'Stages',
-            children: (
-              <DetailsCard title="Deal Stages">
-                <ReusableCrud
-                  title="Stages"
-                  apiUrl={stageCrud.apiUrl}
-                  columns={stageCrudColumns}
-                  fields={stageCrud.fields}
-                  validationSchema={stageCrud.validationSchema}
-                  crudInitialValues={stageCrud.crudInitialValues}
-                  transformPayload={stageCrud.transformPayload}
-                  form_ui="drawer"
-                  drawerWidth={900}
-                  searchParam="search"
-                  pageParam="page"
-                  pageSizeParam="page_size"
-                  sortMode="ordering"
-                  orderingParam="ordering"
-                  enableServerPagination
-                  showSearch
-                  canAdd
-                  canEdit
-                  canDelete
-                  hasActions
-                  hasActionColumns
-                />
-              </DetailsCard>
-            ),
-          },
-          {
             key: 'comments',
-            label: 'Comments',
+            label: 'Notes',
             children: <LeadCommentsTab leadId={id} />,
           },
         ];
@@ -2328,6 +2202,38 @@ export function LeadShow({ auth, id }) {
         );
       }}
     </ShowShell>
+
+    {/* Edit lead modal */}
+    {editDrawer && (
+      <div style={{ display: 'none' }}>
+        <ReusableCrud
+          title="Leads"
+          apiUrl={`${BACKEND_BASE}/api/leads/`}
+          columns={[{ title: 'Lead', dataIndex: 'name', key: 'name' }]}
+          fields={buildLeadCrud().fields}
+          validationSchema={buildLeadCrud().validationSchema}
+          crudInitialValues={buildLeadCrud().crudInitialValues}
+          transformPayload={buildLeadCrud().transformPayload}
+          form_ui="modal"
+          modalWidth={900}
+          enableServerPagination={false}
+          showSearch={false}
+          canAdd={false}
+          canEdit
+          canDelete={false}
+          hasActions={false}
+          hasActionColumns={false}
+          openOnMount
+          openMode="edit"
+          openEditId={id}
+          onFormClose={() => setEditDrawer(false)}
+          onEditSuccess={() => {
+            setEditDrawer(false);
+            setShellRefresh((key) => key + 1);
+          }}
+        />
+      </div>
+    )}
 
     {/* Activity quick-add drawer */}
     {activityDrawer && (

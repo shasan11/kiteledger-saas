@@ -1061,6 +1061,7 @@ export default function Index() {
             <ReusableCrud
                 title="New Purchase Bill"
                 apiUrl={api('/api/purchase-bills/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

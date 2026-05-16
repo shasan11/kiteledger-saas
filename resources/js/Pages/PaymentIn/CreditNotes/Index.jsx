@@ -823,6 +823,7 @@ export default function Index() {
             <ReusableCrud
                 title="Credit Note"
                 apiUrl={api('/api/credit-notes/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

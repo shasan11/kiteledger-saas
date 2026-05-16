@@ -23,7 +23,7 @@ class SalesConfigurationSeeder extends Seeder
                 'suggest_selling' => 'recent',
                 'negative_item_balance' => 'warn',
                 'credit_limit_exceed' => 'warn',
-                'negative_cash_balance' => 'do_nothing',
+                'negative_cash_balance' => 'warn',
                 'aging_buckets' => [30, 60, 90, 120],
                 'overdue_reminders_enabled' => true,
                 'is_system_generated' => true,

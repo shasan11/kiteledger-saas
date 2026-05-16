@@ -4,48 +4,53 @@ namespace Database\Seeders;
 
 use App\Models\PrintingTemplate;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class PrintingTemplateSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach ($this->documentTypes() as $type => $label) {
-            $template = PrintingTemplate::query()
-                ->where('document_type', $type)
-                ->where('template_key', "{$type}.default")
-                ->first();
+        DB::transaction(function () {
+            foreach ($this->documentTypes() as $type => $label) {
+                $templateKey = "{$type}.default";
 
-            $attributes = [
-                    'name' => "{$label} Default Print",
-                    'template_html' => $this->html($label, $type),
+                $template = PrintingTemplate::query()
+                    ->where('document_type', $type)
+                    ->where('template_key', $templateKey)
+                    ->first();
+
+                $attributes = [
+                    'name' => "{$label} Standard Print",
+                    'template_html' => $this->html($label),
                     'template_css' => $this->css(),
                     'is_default' => true,
                     'active' => true,
                     'is_system_generated' => true,
                     'user_add_id' => null,
-            ];
+                ];
 
-            if (!$template) {
-                PrintingTemplate::query()->create([
-                    'document_type' => $type,
-                    'template_key' => "{$type}.default",
-                    ...$attributes,
-                ]);
-            } elseif ($template->is_system_generated) {
-                $template->update($attributes);
-            } else {
-                $template->update([
-                    'is_default' => true,
-                    'active' => $template->active ?? true,
-                ]);
+                if (! $template) {
+                    PrintingTemplate::query()->create([
+                        'document_type' => $type,
+                        'template_key' => $templateKey,
+                        ...$attributes,
+                    ]);
+                } elseif ($template->is_system_generated) {
+                    $template->update($attributes);
+                } else {
+                    $template->update([
+                        'is_default' => true,
+                        'active' => $template->active ?? true,
+                    ]);
+                }
+
+                PrintingTemplate::query()
+                    ->where('document_type', $type)
+                    ->where('template_key', '!=', $templateKey)
+                    ->where('is_default', true)
+                    ->update(['is_default' => false]);
             }
-
-            PrintingTemplate::query()
-                ->where('document_type', $type)
-                ->where('template_key', "{$type}_standard")
-                ->where('is_default', true)
-                ->update(['is_default' => false]);
-        }
+        });
     }
 
     private function documentTypes(): array
@@ -85,210 +90,352 @@ class PrintingTemplateSeeder extends Seeder
         ];
     }
 
-    private function html(string $label, string $type): string
+    private function html(string $label): string
     {
         return <<<HTML
-<div class="kl-doc">
+<div class="kl-document">
 
-  <!-- WATERMARK (shown only when document.void or not document.approved) -->
-  {{#document.void}}
-  <div class="kl-watermark kl-watermark--void">VOID</div>
-  {{/document.void}}
+    {{#document.show_watermark}}
+        {{#document.void}}
+            <div class="kl-watermark kl-watermark-danger">VOIDED</div>
+        {{/document.void}}
 
-  {{#document.is_draft}}
-  <div class="kl-watermark kl-watermark--draft">DRAFT</div>
-  {{/document.is_draft}}
+        {{#document.voided}}
+            {{^document.void}}
+                <div class="kl-watermark kl-watermark-danger">VOIDED</div>
+            {{/document.void}}
+        {{/document.voided}}
 
-  <!-- ====== HEADER ====== -->
-  <header class="kl-header">
+        {{#document.is_draft}}
+            <div class="kl-watermark kl-watermark-muted">DRAFT</div>
+        {{/document.is_draft}}
 
-    <div class="kl-company">
-      {{#company.logo}}
-      <img src="{{company.logo}}" alt="Company Logo" class="kl-logo" />
-      {{/company.logo}}
-      <div class="kl-company-info">
-        <div class="kl-company-name">{{company.name}}</div>
-        <div class="kl-company-detail">{{company.address}}</div>
-        <div class="kl-company-detail">{{company.phone}}{{#company.email}} &bull; {{company.email}}{{/company.email}}</div>
-        {{#company.website}}<div class="kl-company-detail">{{company.website}}</div>{{/company.website}}
-        {{#company.pan_or_vat}}<div class="kl-company-detail"><strong>PAN/VAT:</strong> {{company.pan_or_vat}}</div>{{/company.pan_or_vat}}
-        {{#branch.name}}<div class="kl-branch-tag">Branch: {{branch.name}}</div>{{/branch.name}}
-      </div>
-    </div>
+        {{#document.approved}}
+            <div class="kl-watermark kl-watermark-success">APPROVED</div>
+        {{/document.approved}}
+    {{/document.show_watermark}}
 
-    <div class="kl-doc-id">
-      <div class="kl-doc-title">{$label}</div>
-      <table class="kl-id-table">
-        <tr><td>Number</td><td><strong>{{document.number}}</strong></td></tr>
-        <tr><td>Date</td><td>{{document.date}}</td></tr>
-        {{#document.due_date}}<tr><td>Due / Ref</td><td>{{document.due_date}}</td></tr>{{/document.due_date}}
-        <tr>
-          <td>Status</td>
-          <td>
-            <span class="kl-badge kl-badge--status">{{document.status}}</span>
-            {{#document.approved}}<span class="kl-badge kl-badge--approved">Approved</span>{{/document.approved}}
-            {{#document.void}}<span class="kl-badge kl-badge--void">Voided</span>{{/document.void}}
-          </td>
-        </tr>
-        {{#document.reference}}<tr><td>Reference</td><td>{{document.reference}}</td></tr>{{/document.reference}}
-      </table>
-    </div>
+    <header class="kl-header">
+        <div class="kl-brand">
+            <div class="kl-logo-wrap">
+                {{#company.logo}}
+                    <img src="{{company.logo}}" alt="{{company.name}}" class="kl-logo">
+                {{/company.logo}}
 
-  </header>
+                {{^company.logo}}
+                    <div class="kl-logo-placeholder">{{company.initials}}</div>
+                {{/company.logo}}
+            </div>
 
-  <!-- ====== PARTY (Customer / Supplier / Account) ====== -->
-  {{#customer.name}}
-  <section class="kl-party-row">
-    <div class="kl-party">
-      <div class="kl-party-label">Bill To</div>
-      <div class="kl-party-name">{{customer.name}}</div>
-      {{#customer.address}}<div class="kl-party-detail">{{customer.address}}</div>{{/customer.address}}
-      {{#customer.phone}}<div class="kl-party-detail">{{customer.phone}}</div>{{/customer.phone}}
-      {{#customer.email}}<div class="kl-party-detail">{{customer.email}}</div>{{/customer.email}}
-    </div>
-  </section>
-  {{/customer.name}}
+            <div class="kl-company">
+                <h1>{{company.name}}</h1>
 
-  {{#supplier.name}}
-  <section class="kl-party-row">
-    <div class="kl-party">
-      <div class="kl-party-label">Supplier</div>
-      <div class="kl-party-name">{{supplier.name}}</div>
-      {{#supplier.address}}<div class="kl-party-detail">{{supplier.address}}</div>{{/supplier.address}}
-      {{#supplier.phone}}<div class="kl-party-detail">{{supplier.phone}}</div>{{/supplier.phone}}
-      {{#supplier.email}}<div class="kl-party-detail">{{supplier.email}}</div>{{/supplier.email}}
-    </div>
-  </section>
-  {{/supplier.name}}
+                {{#company.address}}
+                    <p>{{company.address}}</p>
+                {{/company.address}}
 
-  {{#account.name}}
-  <section class="kl-party-row">
-    <div class="kl-party">
-      <div class="kl-party-label">Account</div>
-      <div class="kl-party-name">{{account.name}}</div>
-    </div>
-  </section>
-  {{/account.name}}
+                <p>
+                    {{#company.phone}}{{company.phone}}{{/company.phone}}
+                    {{#company.email}}{{#company.phone}} · {{/company.phone}}{{company.email}}{{/company.email}}
+                </p>
 
-  {{#party.name}}
-  <section class="kl-party-row">
-    <div class="kl-party">
-      <div class="kl-party-label">Party</div>
-      <div class="kl-party-name">{{party.name}}</div>
-      {{#party.address}}<div class="kl-party-detail">{{party.address}}</div>{{/party.address}}
-      {{#party.phone}}<div class="kl-party-detail">{{party.phone}}</div>{{/party.phone}}
-      {{#party.email}}<div class="kl-party-detail">{{party.email}}</div>{{/party.email}}
-    </div>
-  </section>
-  {{/party.name}}
+                {{#company.website}}
+                    <p>{{company.website}}</p>
+                {{/company.website}}
 
-  <!-- ====== PAYMENT DETAILS (for payment documents) ====== -->
-  {{#payment.method}}
-  <section class="kl-payment-details">
-    <span><strong>Payment Method:</strong> {{payment.method}}</span>
-    {{#payment.account}}<span style="margin-left:16px"><strong>Account:</strong> {{payment.account}}</span>{{/payment.account}}
-  </section>
-  {{/payment.method}}
+                {{#company.pan_or_vat}}
+                    <p>PAN/VAT: <strong>{{company.pan_or_vat}}</strong></p>
+                {{/company.pan_or_vat}}
 
-  <!-- ====== LINE ITEMS ====== -->
-  {{#lines}}
-  <table class="kl-lines">
-    <thead>
-      <tr>
-        <th class="kl-col-num">#</th>
-        <th>Item / Description</th>
-        <th class="kl-col-right">Qty</th>
-        <th class="kl-col-right">Unit Price</th>
-        <th class="kl-col-right">Discount</th>
-        <th class="kl-col-right">Tax</th>
-        <th class="kl-col-right">Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{#lines}}
-      <tr>
-        <td class="kl-col-num">{{@index}}</td>
-        <td>
-          <div class="kl-item-name">{{product_name}}</div>
-          {{#description}}<div class="kl-item-desc">{{description}}</div>{{/description}}
-        </td>
-        <td class="kl-col-right">{{qty}}</td>
-        <td class="kl-col-right">{{unit_price}}</td>
-        <td class="kl-col-right">{{discount_amount}}</td>
-        <td class="kl-col-right">{{tax_amount}}</td>
-        <td class="kl-col-right kl-fw-bold">{{line_total}}</td>
-      </tr>
-      {{/lines}}
-    </tbody>
-  </table>
-  {{/lines}}
+                {{#branch.name}}
+                    <div class="kl-branch">
+                        {{branch.name}}
+                        {{#branch.address}} · {{branch.address}}{{/branch.address}}
+                        {{#branch.phone}} · {{branch.phone}}{{/branch.phone}}
+                    </div>
+                {{/branch.name}}
+            </div>
+        </div>
 
-  <!-- ====== TOTALS ====== -->
-  <div class="kl-totals-wrap">
-    <div class="kl-totals">
-      <div class="kl-totals-row"><span>Subtotal</span><span>{{totals.subtotal}}</span></div>
-      <div class="kl-totals-row"><span>Discount</span><span>{{totals.discount}}</span></div>
-      <div class="kl-totals-row"><span>Tax</span><span>{{totals.tax}}</span></div>
-      <div class="kl-totals-row kl-totals-grand"><span>Grand Total</span><span>{{totals.grand_total}}</span></div>
-      {{#totals.paid}}<div class="kl-totals-row"><span>Amount Paid</span><span>{{totals.paid}}</span></div>{{/totals.paid}}
-      {{#totals.balance}}<div class="kl-totals-row kl-totals-balance"><span>Balance Due</span><span>{{totals.balance}}</span></div>{{/totals.balance}}
-    </div>
-  </div>
+        <div class="kl-title-card">
+            <div class="kl-document-label">{$label}</div>
 
-  <!-- ====== CURRENCY / EXCHANGE RATE ====== -->
-  {{#currency.code}}
-  <div class="kl-currency-row">
-    Currency: <strong>{{currency.code}}</strong>{{#exchange_rate}} &bull; Exchange Rate: {{exchange_rate}}{{/exchange_rate}}
-  </div>
-  {{/currency.code}}
+            <table class="kl-meta-table">
+                <tr>
+                    <td>Document No.</td>
+                    <td>{{document.number}}</td>
+                </tr>
+                <tr>
+                    <td>Date</td>
+                    <td>{{document.date}}</td>
+                </tr>
 
-  <!-- ====== NOTES / TERMS ====== -->
-  {{#document.notes}}
-  <div class="kl-notes">
-    <div class="kl-notes-label">Notes</div>
-    <div class="kl-notes-text">{{document.notes}}</div>
-  </div>
-  {{/document.notes}}
+                {{#document.due_date}}
+                    <tr>
+                        <td>Due Date</td>
+                        <td>{{document.due_date}}</td>
+                    </tr>
+                {{/document.due_date}}
 
-  {{#document.terms}}
-  <div class="kl-notes">
-    <div class="kl-notes-label">Terms &amp; Conditions</div>
-    <div class="kl-notes-text">{{document.terms}}</div>
-  </div>
-  {{/document.terms}}
+                {{#document.reference}}
+                    <tr>
+                        <td>Reference</td>
+                        <td>{{document.reference}}</td>
+                    </tr>
+                {{/document.reference}}
 
-  {{#document.void}}
-  <div class="kl-void-reason">
-    <strong>Void Reason:</strong> {{document.voided_reason}}
-  </div>
-  {{/document.void}}
+                <tr>
+                    <td>Status</td>
+                    <td>
+                        <span class="kl-status">{{document.status}}</span>
 
-  <!-- ====== SIGNATURES ====== -->
-  <div class="kl-signatures">
-    <div class="kl-sig">
-      <div class="kl-sig-line"></div>
-      <div class="kl-sig-label">Prepared By</div>
-      {{#prepared_by}}<div class="kl-sig-name">{{prepared_by}}</div>{{/prepared_by}}
-    </div>
-    <div class="kl-sig">
-      <div class="kl-sig-line"></div>
-      <div class="kl-sig-label">Approved By</div>
-      {{#approved_by}}<div class="kl-sig-name">{{approved_by}}</div>{{/approved_by}}
-    </div>
-    <div class="kl-sig">
-      <div class="kl-sig-line"></div>
-      <div class="kl-sig-label">Received By</div>
-    </div>
-  </div>
+                        {{#document.approved}}
+                            <span class="kl-status kl-status-success">Approved</span>
+                        {{/document.approved}}
 
-  <!-- ====== FOOTER ====== -->
-  <footer class="kl-footer">
-    <span>{{company.name}}</span>
-    {{#company.phone}}<span> &bull; {{company.phone}}</span>{{/company.phone}}
-    {{#company.email}}<span> &bull; {{company.email}}</span>{{/company.email}}
-    {{#printed_at}}<span style="float:right">Printed: {{printed_at}}</span>{{/printed_at}}
-  </footer>
+                        {{#document.void}}
+                            <span class="kl-status kl-status-danger">Voided</span>
+                        {{/document.void}}
 
+                        {{#document.voided}}
+                            {{^document.void}}
+                                <span class="kl-status kl-status-danger">Voided</span>
+                            {{/document.void}}
+                        {{/document.voided}}
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </header>
+
+    <section class="kl-parties">
+        {{#customer.name}}
+            <div class="kl-party-card">
+                <div class="kl-section-label">Bill To</div>
+                <h2>{{customer.name}}</h2>
+
+                {{#customer.address}}<p>{{customer.address}}</p>{{/customer.address}}
+                {{#customer.phone}}<p>{{customer.phone}}</p>{{/customer.phone}}
+                {{#customer.email}}<p>{{customer.email}}</p>{{/customer.email}}
+            </div>
+        {{/customer.name}}
+
+        {{#supplier.name}}
+            <div class="kl-party-card">
+                <div class="kl-section-label">Supplier</div>
+                <h2>{{supplier.name}}</h2>
+
+                {{#supplier.address}}<p>{{supplier.address}}</p>{{/supplier.address}}
+                {{#supplier.phone}}<p>{{supplier.phone}}</p>{{/supplier.phone}}
+                {{#supplier.email}}<p>{{supplier.email}}</p>{{/supplier.email}}
+            </div>
+        {{/supplier.name}}
+
+        {{#party.name}}
+            <div class="kl-party-card">
+                <div class="kl-section-label">Party</div>
+                <h2>{{party.name}}</h2>
+
+                {{#party.address}}<p>{{party.address}}</p>{{/party.address}}
+                {{#party.phone}}<p>{{party.phone}}</p>{{/party.phone}}
+                {{#party.email}}<p>{{party.email}}</p>{{/party.email}}
+            </div>
+        {{/party.name}}
+
+        {{#account.name}}
+            <div class="kl-party-card">
+                <div class="kl-section-label">Account</div>
+                <h2>{{account.name}}</h2>
+            </div>
+        {{/account.name}}
+    </section>
+
+    {{#payment.method}}
+        <section class="kl-info-strip">
+            <div>
+                <span>Payment Method</span>
+                <strong>{{payment.method}}</strong>
+            </div>
+
+            {{#payment.account}}
+                <div>
+                    <span>Account</span>
+                    <strong>{{payment.account}}</strong>
+                </div>
+            {{/payment.account}}
+
+            {{#payment.reference_number}}
+                <div>
+                    <span>Reference</span>
+                    <strong>{{payment.reference_number}}</strong>
+                </div>
+            {{/payment.reference_number}}
+
+            {{#payment.source_account}}
+                <div>
+                    <span>Source</span>
+                    <strong>{{payment.source_account}}</strong>
+                </div>
+            {{/payment.source_account}}
+
+            {{#payment.destination_account}}
+                <div>
+                    <span>Destination</span>
+                    <strong>{{payment.destination_account}}</strong>
+                </div>
+            {{/payment.destination_account}}
+        </section>
+    {{/payment.method}}
+
+    {{#items}}
+        <section class="kl-table-section">
+            <table class="kl-line-table">
+                <thead>
+                    <tr>
+                        <th class="kl-col-index">#</th>
+                        <th>Item / Description</th>
+                        <th class="kl-text-right">Qty</th>
+                        <th class="kl-text-right">Rate</th>
+                        <th class="kl-text-right">Discount</th>
+                        <th class="kl-text-right">Tax</th>
+                        <th class="kl-text-right">Amount</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {{#items}}
+                        <tr>
+                            <td class="kl-col-index">{{@index}}</td>
+                            <td>
+                                <div class="kl-item-title">{{product_name}}</div>
+                                {{#description}}
+                                    <div class="kl-item-description">{{description}}</div>
+                                {{/description}}
+                            </td>
+                            <td class="kl-text-right">{{qty}}</td>
+                            <td class="kl-text-right">{{unit_price}}</td>
+                            <td class="kl-text-right">{{discount_amount}}</td>
+                            <td class="kl-text-right">{{tax_amount}}</td>
+                            <td class="kl-text-right kl-amount">{{line_total}}</td>
+                        </tr>
+                    {{/items}}
+                </tbody>
+            </table>
+        </section>
+    {{/items}}
+
+    <section class="kl-summary">
+        <div class="kl-summary-left">
+            {{#totals.amount_in_words}}
+                <div class="kl-amount-words">
+                    <span>Amount in words</span>
+                    <strong>{{totals.amount_in_words}}</strong>
+                </div>
+            {{/totals.amount_in_words}}
+
+            {{#currency.code}}
+                <div class="kl-currency">
+                    Currency: <strong>{{currency.code}}</strong>
+                    {{#exchange_rate}} · Exchange Rate: <strong>{{exchange_rate}}</strong>{{/exchange_rate}}
+                </div>
+            {{/currency.code}}
+        </div>
+
+        <div class="kl-total-card">
+            <div class="kl-total-row">
+                <span>Subtotal</span>
+                <strong>{{totals.subtotal}}</strong>
+            </div>
+
+            <div class="kl-total-row">
+                <span>Discount</span>
+                <strong>{{totals.discount}}</strong>
+            </div>
+
+            <div class="kl-total-row">
+                <span>Tax</span>
+                <strong>{{totals.tax}}</strong>
+            </div>
+
+            <div class="kl-total-row kl-total-grand">
+                <span>Grand Total</span>
+                <strong>{{totals.grand_total}}</strong>
+            </div>
+
+            {{#totals.paid}}
+                <div class="kl-total-row">
+                    <span>Amount Paid</span>
+                    <strong>{{totals.paid}}</strong>
+                </div>
+            {{/totals.paid}}
+
+            {{#totals.balance}}
+                <div class="kl-total-row kl-total-balance">
+                    <span>Balance Due</span>
+                    <strong>{{totals.balance}}</strong>
+                </div>
+            {{/totals.balance}}
+        </div>
+    </section>
+
+    {{#document.notes}}
+        <section class="kl-note-card">
+            <div class="kl-section-label">Notes</div>
+            <p>{{document.notes}}</p>
+        </section>
+    {{/document.notes}}
+
+    {{#document.terms}}
+        <section class="kl-note-card">
+            <div class="kl-section-label">Terms &amp; Conditions</div>
+            <p>{{document.terms}}</p>
+        </section>
+    {{/document.terms}}
+
+    {{#document.void}}
+        <section class="kl-alert">
+            <strong>Void Reason:</strong> {{document.voided_reason}}
+        </section>
+    {{/document.void}}
+
+    {{#document.voided}}
+        {{^document.void}}
+            <section class="kl-alert">
+                <strong>Void Reason:</strong> {{document.voided_reason}}
+            </section>
+        {{/document.void}}
+    {{/document.voided}}
+
+    <section class="kl-signatures">
+        <div class="kl-signature">
+            <div></div>
+            <span>Prepared By</span>
+            {{#prepared_by}}<strong>{{prepared_by}}</strong>{{/prepared_by}}
+        </div>
+
+        <div class="kl-signature">
+            <div></div>
+            <span>Approved By</span>
+            {{#approved_by}}<strong>{{approved_by}}</strong>{{/approved_by}}
+        </div>
+
+        <div class="kl-signature">
+            <div></div>
+            <span>Received By</span>
+        </div>
+    </section>
+
+    <footer class="kl-footer">
+        <div>
+            <strong>{{company.name}}</strong>
+            {{#company.phone}} · {{company.phone}}{{/company.phone}}
+            {{#company.email}} · {{company.email}}{{/company.email}}
+        </div>
+
+        {{#printed_at}}
+            <div>Printed: {{printed_at}}</div>
+        {{/printed_at}}
+    </footer>
 </div>
 HTML;
     }
@@ -296,319 +443,594 @@ HTML;
     private function css(): string
     {
         return <<<CSS
-/* ===== KiteLedger Print Template ===== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-.kl-doc {
-  position: relative;
-  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
-  color: #1a1a2e;
-  font-size: 11.5px;
-  line-height: 1.5;
-  padding: 28px 32px;
-  min-height: 297mm;
-  background: #fff;
+:root {
+    --kl-ink: #111827;
+    --kl-muted: #6b7280;
+    --kl-soft: #f9fafb;
+    --kl-border: #e5e7eb;
+    --kl-border-strong: #d1d5db;
+    --kl-primary: #1f2937;
+    --kl-success: #047857;
+    --kl-danger: #b91c1c;
+    --kl-warning-bg: #fef2f2;
 }
 
-/* ---- WATERMARK ---- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #ffffff;
+}
+
+.kl-document {
+    position: relative;
+    width: 100%;
+    min-height: 297mm;
+    padding: 30px 34px;
+    background: #ffffff;
+    color: var(--kl-ink);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.kl-document h1,
+.kl-document h2,
+.kl-document h3,
+.kl-document p {
+    margin: 0;
+}
+
 .kl-watermark {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-35deg);
-  font-size: 96px;
-  font-weight: 900;
-  letter-spacing: 12px;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.06;
+    position: fixed;
+    top: 48%;
+    left: 50%;
+    z-index: 0;
+    transform: translate(-50%, -50%) rotate(-32deg);
+    font-size: 82px;
+    font-weight: 800;
+    letter-spacing: 10px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0.045;
 }
-.kl-watermark--void  { color: #c0392b; }
-.kl-watermark--draft { color: #7f8c8d; }
 
-/* ---- HEADER ---- */
+.kl-watermark-danger {
+    color: var(--kl-danger);
+}
+
+.kl-watermark-muted {
+    color: var(--kl-muted);
+}
+
+.kl-watermark-success {
+    color: var(--kl-success);
+}
+
+.kl-header,
+.kl-parties,
+.kl-info-strip,
+.kl-table-section,
+.kl-summary,
+.kl-note-card,
+.kl-alert,
+.kl-signatures,
+.kl-footer {
+    position: relative;
+    z-index: 1;
+}
+
 .kl-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  padding-bottom: 18px;
-  border-bottom: 3px solid #1a1a2e;
-  margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 275px;
+    gap: 28px;
+    align-items: start;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1.5px solid var(--kl-ink);
+}
+
+.kl-brand {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+}
+
+.kl-logo-wrap {
+    width: 72px;
 }
 
 .kl-logo {
-  height: 60px;
-  width: auto;
-  max-width: 180px;
-  object-fit: contain;
-  margin-bottom: 8px;
-  display: block;
+    display: block;
+    max-width: 72px;
+    max-height: 64px;
+    object-fit: contain;
 }
 
-.kl-company { max-width: 55%; }
-
-.kl-company-name {
-  font-size: 20px;
-  font-weight: 800;
-  color: #1a1a2e;
-  margin-bottom: 4px;
-  line-height: 1.2;
+.kl-logo-placeholder {
+    width: 62px;
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--kl-border-strong);
+    border-radius: 10px;
+    color: var(--kl-primary);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    background: var(--kl-soft);
 }
 
-.kl-company-detail {
-  color: #4a4a6a;
-  font-size: 11px;
-  line-height: 1.45;
+.kl-company h1 {
+    margin-bottom: 5px;
+    font-size: 19px;
+    line-height: 1.15;
+    font-weight: 800;
+    color: var(--kl-ink);
 }
 
-.kl-branch-tag {
-  display: inline-block;
-  margin-top: 6px;
-  background: #e8e8f0;
-  color: #4a4a6a;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 10px;
+.kl-company p {
+    color: var(--kl-muted);
+    font-size: 10.8px;
+    line-height: 1.45;
 }
 
-/* ---- DOC ID block ---- */
-.kl-doc-id { text-align: right; min-width: 220px; }
-
-.kl-doc-title {
-  font-size: 26px;
-  font-weight: 900;
-  color: #1a1a2e;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 10px;
+.kl-branch {
+    display: inline-block;
+    margin-top: 7px;
+    padding: 4px 8px;
+    border: 1px solid var(--kl-border);
+    border-radius: 999px;
+    background: var(--kl-soft);
+    color: var(--kl-muted);
+    font-size: 10px;
 }
 
-.kl-id-table { width: 100%; border-collapse: collapse; margin-left: auto; }
-
-.kl-id-table td {
-  padding: 2px 4px;
-  font-size: 11px;
-  color: #333;
-  vertical-align: top;
+.kl-title-card {
+    text-align: right;
 }
 
-.kl-id-table td:first-child {
-  color: #777;
-  white-space: nowrap;
-  text-align: right;
-  padding-right: 8px;
-  width: 70px;
+.kl-document-label {
+    margin-bottom: 12px;
+    color: var(--kl-ink);
+    font-size: 25px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: .6px;
+    text-transform: uppercase;
 }
 
-/* ---- BADGES ---- */
-.kl-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-left: 4px;
+.kl-meta-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-left: auto;
 }
 
-.kl-badge--status   { background: #e8f4fd; color: #2980b9; }
-.kl-badge--approved { background: #d4efdf; color: #1e8449; }
-.kl-badge--void     { background: #fdecea; color: #c0392b; border: 1px solid #c0392b; }
-
-/* ---- PARTY ---- */
-.kl-party-row { margin-bottom: 16px; }
-
-.kl-party {
-  display: inline-block;
-  border: 1px solid #d5d5e5;
-  border-radius: 6px;
-  padding: 10px 14px;
-  background: #f8f8fc;
-  min-width: 240px;
+.kl-meta-table td {
+    padding: 4px 0;
+    font-size: 10.8px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--kl-border);
 }
 
-.kl-party-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: #888;
-  margin-bottom: 4px;
+.kl-meta-table tr:last-child td {
+    border-bottom: 0;
 }
 
-.kl-party-name { font-size: 13px; font-weight: 700; color: #1a1a2e; }
-
-.kl-party-detail { font-size: 11px; color: #555; margin-top: 2px; }
-
-/* ---- PAYMENT DETAILS ---- */
-.kl-payment-details {
-  margin-bottom: 14px;
-  padding: 8px 12px;
-  background: #f0f4ff;
-  border-left: 3px solid #3a5bde;
-  border-radius: 0 4px 4px 0;
-  font-size: 11px;
-  color: #2c3e7a;
+.kl-meta-table td:first-child {
+    width: 92px;
+    padding-right: 12px;
+    color: var(--kl-muted);
+    text-align: left;
+    white-space: nowrap;
 }
 
-/* ---- LINE ITEMS TABLE ---- */
-.kl-lines {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-  font-size: 11px;
+.kl-meta-table td:last-child {
+    color: var(--kl-ink);
+    font-weight: 700;
+    text-align: right;
 }
 
-.kl-lines th {
-  background: #1a1a2e;
-  color: #fff;
-  padding: 7px 9px;
-  text-align: left;
-  font-weight: 700;
-  font-size: 10.5px;
-  letter-spacing: 0.3px;
+.kl-status {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 2px 7px;
+    border: 1px solid var(--kl-border-strong);
+    border-radius: 999px;
+    color: var(--kl-primary);
+    background: #ffffff;
+    font-size: 9.2px;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: .35px;
+    text-transform: uppercase;
 }
 
-.kl-lines td {
-  border-bottom: 1px solid #e5e5ef;
-  padding: 7px 9px;
-  vertical-align: top;
-  color: #222;
+.kl-status-success {
+    color: var(--kl-success);
+    border-color: #a7f3d0;
+    background: #ecfdf5;
 }
 
-.kl-lines tr:nth-child(even) td { background: #f8f8fc; }
-.kl-lines tr:last-child td      { border-bottom: 2px solid #1a1a2e; }
-
-.kl-col-num   { width: 30px; text-align: center !important; }
-.kl-col-right { text-align: right !important; }
-.kl-fw-bold   { font-weight: 700; }
-
-.kl-item-name { font-weight: 600; }
-.kl-item-desc { color: #777; font-size: 10.5px; margin-top: 2px; }
-
-/* ---- TOTALS ---- */
-.kl-totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 20px; }
-
-.kl-totals {
-  width: 280px;
-  border: 1px solid #d5d5e5;
-  border-radius: 6px;
-  overflow: hidden;
+.kl-status-danger {
+    color: var(--kl-danger);
+    border-color: #fecaca;
+    background: #fef2f2;
 }
 
-.kl-totals-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 12px;
-  border-bottom: 1px solid #e5e5ef;
-  font-size: 11px;
+.kl-parties {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
 }
 
-.kl-totals-row:last-child { border-bottom: 0; }
-
-.kl-totals-grand {
-  background: #1a1a2e;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 9px 12px;
+.kl-party-card {
+    min-height: 92px;
+    padding: 13px 14px;
+    border: 1px solid var(--kl-border);
+    border-radius: 10px;
+    background: #ffffff;
 }
 
-.kl-totals-balance {
-  background: #fdecea;
-  color: #c0392b;
-  font-weight: 700;
+.kl-section-label {
+    margin-bottom: 6px;
+    color: var(--kl-muted);
+    font-size: 9.6px;
+    font-weight: 800;
+    letter-spacing: .7px;
+    text-transform: uppercase;
 }
 
-/* ---- CURRENCY ROW ---- */
-.kl-currency-row {
-  font-size: 10.5px;
-  color: #888;
-  margin-bottom: 12px;
-  text-align: right;
+.kl-party-card h2 {
+    margin-bottom: 4px;
+    color: var(--kl-ink);
+    font-size: 13px;
+    line-height: 1.25;
+    font-weight: 800;
 }
 
-/* ---- NOTES / TERMS ---- */
-.kl-notes {
-  margin-bottom: 14px;
-  padding: 10px 14px;
-  border: 1px solid #e5e5ef;
-  border-radius: 6px;
-  background: #fdfdff;
+.kl-party-card p {
+    color: var(--kl-muted);
+    font-size: 10.6px;
+    line-height: 1.45;
 }
 
-.kl-notes-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: #888;
-  margin-bottom: 4px;
+.kl-info-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 11px 12px;
+    border: 1px solid var(--kl-border);
+    border-radius: 10px;
+    background: var(--kl-soft);
 }
 
-.kl-notes-text { font-size: 11px; color: #444; white-space: pre-wrap; }
-
-/* ---- VOID REASON ---- */
-.kl-void-reason {
-  margin: 12px 0;
-  padding: 9px 14px;
-  background: #fdecea;
-  border: 1px solid #e9a09a;
-  border-radius: 5px;
-  color: #922b21;
-  font-size: 11px;
+.kl-info-strip div {
+    min-width: 0;
 }
 
-/* ---- SIGNATURES ---- */
+.kl-info-strip span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--kl-muted);
+    font-size: 9.4px;
+    font-weight: 800;
+    letter-spacing: .45px;
+    text-transform: uppercase;
+}
+
+.kl-info-strip strong {
+    display: block;
+    color: var(--kl-ink);
+    font-size: 10.7px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.kl-table-section {
+    margin-top: 2px;
+    margin-bottom: 18px;
+}
+
+.kl-line-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.kl-line-table th {
+    padding: 8px 8px;
+    color: #ffffff;
+    background: var(--kl-primary);
+    font-size: 9.8px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: .35px;
+}
+
+.kl-line-table th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.kl-line-table th:last-child {
+    border-top-right-radius: 8px;
+}
+
+.kl-line-table td {
+    padding: 8px 8px;
+    color: var(--kl-ink);
+    font-size: 10.5px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--kl-border);
+}
+
+.kl-line-table tbody tr:nth-child(even) td {
+    background: #fcfcfd;
+}
+
+.kl-line-table tbody tr:last-child td {
+    border-bottom: 1.5px solid var(--kl-border-strong);
+}
+
+.kl-col-index {
+    width: 34px;
+    text-align: center !important;
+}
+
+.kl-text-right {
+    text-align: right !important;
+}
+
+.kl-item-title {
+    color: var(--kl-ink);
+    font-weight: 800;
+}
+
+.kl-item-description {
+    margin-top: 2px;
+    color: var(--kl-muted);
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.kl-amount {
+    font-weight: 800;
+}
+
+.kl-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 24px;
+    align-items: start;
+    margin-bottom: 16px;
+}
+
+.kl-summary-left {
+    min-height: 1px;
+}
+
+.kl-amount-words {
+    padding: 11px 12px;
+    border: 1px solid var(--kl-border);
+    border-radius: 10px;
+    background: var(--kl-soft);
+}
+
+.kl-amount-words span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--kl-muted);
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.kl-amount-words strong {
+    display: block;
+    color: var(--kl-ink);
+    font-size: 10.8px;
+    font-weight: 800;
+}
+
+.kl-currency {
+    margin-top: 10px;
+    color: var(--kl-muted);
+    font-size: 10.2px;
+}
+
+.kl-total-card {
+    border: 1px solid var(--kl-border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.kl-total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--kl-border);
+    color: var(--kl-muted);
+    font-size: 10.7px;
+}
+
+.kl-total-row:last-child {
+    border-bottom: 0;
+}
+
+.kl-total-row strong {
+    color: var(--kl-ink);
+    font-weight: 800;
+}
+
+.kl-total-grand {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    color: #ffffff;
+    background: var(--kl-primary);
+    font-size: 12.3px;
+    font-weight: 800;
+}
+
+.kl-total-grand strong {
+    color: #ffffff;
+}
+
+.kl-total-balance {
+    color: var(--kl-danger);
+    background: var(--kl-warning-bg);
+    font-weight: 800;
+}
+
+.kl-total-balance strong {
+    color: var(--kl-danger);
+}
+
+.kl-note-card {
+    margin-bottom: 12px;
+    padding: 12px 13px;
+    border: 1px solid var(--kl-border);
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.kl-note-card p {
+    color: var(--kl-ink);
+    font-size: 10.8px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.kl-alert {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    color: var(--kl-danger);
+    background: var(--kl-warning-bg);
+    font-size: 10.8px;
+}
+
 .kl-signatures {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
-  margin-top: 52px;
-  margin-bottom: 28px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 34px;
+    margin-top: 48px;
+    margin-bottom: 26px;
 }
 
-.kl-sig { text-align: center; }
-
-.kl-sig-line {
-  border-top: 1px solid #1a1a2e;
-  margin-bottom: 6px;
+.kl-signature {
+    text-align: center;
 }
 
-.kl-sig-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #555;
+.kl-signature div {
+    height: 1px;
+    margin-bottom: 7px;
+    background: var(--kl-border-strong);
 }
 
-.kl-sig-name { font-size: 11px; color: #333; margin-top: 2px; }
+.kl-signature span {
+    display: block;
+    color: var(--kl-muted);
+    font-size: 9.8px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
 
-/* ---- FOOTER ---- */
+.kl-signature strong {
+    display: block;
+    margin-top: 3px;
+    color: var(--kl-ink);
+    font-size: 10.5px;
+    font-weight: 800;
+}
+
 .kl-footer {
-  border-top: 1px solid #d5d5e5;
-  padding-top: 8px;
-  font-size: 10px;
-  color: #888;
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 9px;
+    margin-top: 12px;
+    border-top: 1px solid var(--kl-border);
+    color: var(--kl-muted);
+    font-size: 9.8px;
 }
 
-/* ---- PRINT MEDIA ---- */
-@page { size: A4; margin: 18mm 16mm; }
+.kl-footer strong {
+    color: var(--kl-ink);
+}
+
+@page {
+    size: A4;
+    margin: 16mm 14mm;
+}
 
 @media print {
-  .kl-doc { padding: 0; min-height: unset; }
-  .kl-watermark { position: fixed; }
-  .kl-lines { page-break-inside: auto; }
-  .kl-lines tr { page-break-inside: avoid; }
-  .kl-signatures { page-break-inside: avoid; }
+    html,
+    body {
+        width: 210mm;
+        min-height: 297mm;
+        background: #ffffff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .kl-document {
+        min-height: auto;
+        padding: 0;
+    }
+
+    .kl-header,
+    .kl-party-card,
+    .kl-info-strip,
+    .kl-total-card,
+    .kl-note-card,
+    .kl-alert,
+    .kl-signatures,
+    .kl-footer {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .kl-line-table {
+        page-break-inside: auto;
+    }
+
+    .kl-line-table thead {
+        display: table-header-group;
+    }
+
+    .kl-line-table tfoot {
+        display: table-footer-group;
+    }
+
+    .kl-line-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .kl-watermark {
+        position: fixed;
+    }
 }
 CSS;
     }

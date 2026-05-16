@@ -224,6 +224,7 @@ export default function CashTransfers(props) {
         icon={<SwapOutlined />}
         title="Cash Transfers"
         apiUrl={api('/api/cash-transfers/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         ui_type="add fom"

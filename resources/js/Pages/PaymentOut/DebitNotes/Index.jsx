@@ -766,6 +766,7 @@ export default function Index() {
             <ReusableCrud
                 title="Debit Note"
                 apiUrl={api('/api/debit-notes/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

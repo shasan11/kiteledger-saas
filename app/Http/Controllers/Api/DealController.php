@@ -190,7 +190,13 @@ class DealController extends BaseCrudApiController
             'remarks' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $newStage = DealStage::query()->findOrFail($data['deal_stage_id']);
+        $newStage = DealStage::query()
+            ->where('active', true)
+            ->findOrFail($data['deal_stage_id']);
+
+        if ($deal->deal_pipeline_id && $newStage->deal_pipeline_id !== $deal->deal_pipeline_id) {
+            abort(422, 'The selected stage does not belong to this deal pipeline.');
+        }
 
         $fromStageId = $deal->deal_stage_id;
         $lastChange = CrmDealStageHistory::query()

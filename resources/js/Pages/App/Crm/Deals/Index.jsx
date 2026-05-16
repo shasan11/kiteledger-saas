@@ -359,8 +359,6 @@ export default function DealsIndex(props) {
       .then((r) => {
         const rows = rowsFrom(r.data);
         setPipelines(rows);
-        const def = rows.find((p) => p.is_default) || rows[0];
-        if (def) setSelectedPipeline(def.id);
       })
       .catch(() => {});
   }, []);

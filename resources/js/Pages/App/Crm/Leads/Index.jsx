@@ -12,29 +12,30 @@ import {
   message,
   Modal,
   Row,
+  Segmented,
   Select,
   Space,
-  Table,
   Tag,
   Tooltip,
   Typography,
   theme,
+  Empty,
+  Skeleton,
 } from 'antd';
 import {
-  CalendarOutlined,
+  AppstoreOutlined,
   CheckOutlined,
   CloseCircleOutlined,
-  FilterOutlined,
   FundOutlined,
   MailOutlined,
   PhoneOutlined,
   PlusOutlined,
-  ReloadOutlined,
+  UnorderedListOutlined,
   UserSwitchOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { buildLeadCrud, buildActivityCrud, buildDealCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+import { buildLeadCrud, buildDealCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
@@ -53,8 +54,8 @@ const PRIORITY_COLOR = { low: 'default', medium: 'blue', high: 'orange', urgent:
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New' }, { value: 'contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' }, { value: 'unqualified', label: 'Unqualified' },
-  { value: 'lost', label: 'Lost' }, { value: 'converted', label: 'Converted' },
+  { value: 'qualified', label: 'Qualified' }, { value: 'unqualified', label: 'Proposal' },
+  { value: 'converted', label: 'Won' }, { value: 'lost', label: 'Lost' },
 ];
 const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' },
@@ -66,9 +67,178 @@ const ANCHOR_FILTERS = [
   { key: 'new', label: 'New', params: { status: 'new' } },
   { key: 'contacted', label: 'Contacted', params: { status: 'contacted' } },
   { key: 'qualified', label: 'Qualified', params: { status: 'qualified' } },
+  { key: 'unqualified', label: 'Proposal', params: { status: 'unqualified' } },
+  { key: 'converted', label: 'Won', params: { status: 'converted' } },
   { key: 'lost', label: 'Lost', params: { status: 'lost' } },
-  { key: 'converted', label: 'Converted', params: { status: 'converted' } },
 ];
+
+const rowsFrom = (data) => data?.data?.data || data?.data || data?.results || (Array.isArray(data) ? data : []);
+
+function LeadsKanban({ filters, onOpenLead }) {
+  const { token } = theme.useToken();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [messageApi, ctx] = message.useMessage();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(api('/api/leads/'), {
+        headers: authHeaders(),
+        params: { page_size: 300, ordering: '-created_at', ...filters },
+      });
+      setRows(rowsFrom(res.data));
+    } catch (error) {
+      messageApi.error(error?.response?.data?.message || 'Failed to load leads');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [JSON.stringify(filters)]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const moveLead = async (leadId, status) => {
+    const previousRows = rows;
+    const current = rows.find((item) => item.id === leadId);
+    if (!current || current.status === status) return;
+
+    setRows((items) => items.map((item) => item.id === leadId ? { ...item, status } : item));
+
+    try {
+      await axios.post(api(`/api/leads/${leadId}/move-status`), { status }, { headers: authHeaders() });
+      messageApi.success('Lead moved');
+      load();
+    } catch (error) {
+      setRows(previousRows);
+      messageApi.error(error?.response?.data?.message || 'Could not move lead');
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card style={{ borderRadius: token.borderRadiusLG, borderColor: token.colorBorderSecondary }}>
+        <Skeleton active paragraph={{ rows: 8 }} />
+      </Card>
+    );
+  }
+
+  const columns = STATUS_OPTIONS.map((status) => ({
+    ...status,
+    rows: rows.filter((lead) => (lead.status || 'new') === status.value),
+  }));
+
+  return (
+    <>
+      {ctx}
+      <div
+        style={{
+          display: 'flex',
+          gap: token.paddingSM,
+          overflowX: 'auto',
+          paddingBottom: token.paddingXS,
+          minHeight: 'calc(100vh - 235px)',
+        }}
+      >
+        {columns.map((column) => {
+          const total = column.rows.reduce((sum, lead) => sum + Number(lead.expected_value || 0), 0);
+          return (
+            <div
+              key={column.value}
+              style={{
+                flex: '0 0 276px',
+                minWidth: 276,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                background: token.colorFillQuaternary,
+                borderRadius: token.borderRadiusLG,
+                padding: token.paddingSM,
+                maxHeight: 'calc(100vh - 236px)',
+                overflowY: 'auto',
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const leadId = event.dataTransfer.getData('leadId');
+                if (leadId) moveLead(leadId, column.value);
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  marginBottom: token.paddingSM,
+                }}
+              >
+                <Space direction="vertical" size={2}>
+                  <Space size={6}>
+                    <Tag color={STATUS_COLOR[column.value] || 'default'} style={{ margin: 0, fontWeight: 600 }}>{column.label}</Tag>
+                    <Badge count={column.rows.length} color={token.colorTextSecondary} />
+                  </Space>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{fmtMoney(total)} total value</Text>
+                </Space>
+              </div>
+
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                {column.rows.map((lead) => (
+                  <Card
+                    key={lead.id}
+                    size="small"
+                    hoverable
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData('leadId', lead.id)}
+                    onClick={() => onOpenLead(lead)}
+                    bodyStyle={{ padding: 12 }}
+                    style={{
+                      borderRadius: token.borderRadius,
+                      cursor: 'pointer',
+                      borderColor: token.colorBorderSecondary,
+                      boxShadow: token.boxShadowTertiary,
+                    }}
+                  >
+                    <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                      <div>
+                        <Text strong style={{ fontSize: 13 }}>{lead.name || lead.lead_no || '-'}</Text>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {lead.company_name || lead.contact?.name || lead.email || '-'}
+                          </Text>
+                        </div>
+                      </div>
+                      <Space wrap size={4}>
+                        {lead.lead_source ? <Tag style={{ margin: 0, fontSize: 11 }}>{lead.lead_source}</Tag> : null}
+                        <Tag color={PRIORITY_COLOR[lead.priority] || 'default'} style={{ margin: 0, fontSize: 11 }}>
+                          {String(lead.priority || 'medium').toUpperCase()}
+                        </Tag>
+                      </Space>
+                      <Text style={{ color: token.colorPrimary, fontSize: 13, fontWeight: 650 }}>
+                        {fmtMoney(lead.expected_value)}
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {lead.assigned_to?.name || lead.assignedTo?.name || 'Unassigned'} | Next: {fmtDate(lead.next_follow_up_at || lead.next_follow_up_date)}
+                      </Text>
+                    </Space>
+                  </Card>
+                ))}
+                {!column.rows.length ? (
+                  <div style={{ minHeight: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px dashed ${token.colorBorderSecondary}`, borderRadius: token.borderRadius, background: token.colorBgContainer }}>
+                    <Text type="secondary">Drop leads here</Text>
+                  </div>
+                ) : null}
+              </Space>
+            </div>
+          );
+        })}
+        {!rows.length ? (
+          <Card style={{ minWidth: 320, borderRadius: token.borderRadiusLG, borderColor: token.colorBorderSecondary }}>
+            <Empty description="No leads found" />
+          </Card>
+        ) : null}
+      </div>
+    </>
+  );
+}
 
 function QuickActionBar({ lead, onRefresh }) {
   const [messageApi, ctx] = message.useMessage();
@@ -147,10 +317,12 @@ export default function Leads(props) {
   const [showFilters, setShowFilters] = useState(false);
   const [pipelines, setPipelines] = useState([]);
   const [convertLead, setConvertLead] = useState(null);
+  const [addLead, setAddLead] = useState(false);
+  const [view, setView] = useState('kanban');
+  const [kanbanRefreshKey, setKanbanRefreshKey] = useState(0);
   const crudRef = useRef(null);
 
   const leadCrud = buildLeadCrud();
-  const activityCrud = buildActivityCrud();
   const dealCrud = buildDealCrud();
 
   useEffect(() => {
@@ -180,6 +352,13 @@ export default function Leads(props) {
   const anchorParams = ANCHOR_FILTERS.find((a) => a.key === anchor)?.params || {};
   const combinedFilters = { ...anchorParams, ...filters };
   if (search) combinedFilters.search = search;
+
+  const activeFilterCount = Object.values({ ...filters, search }).filter((value) => value !== undefined && value !== null && value !== '').length;
+
+  const refreshCurrentView = () => {
+    crudRef.current?.refresh?.();
+    setKanbanRefreshKey((key) => key + 1);
+  };
 
   const columns = [
     {
@@ -287,12 +466,6 @@ export default function Leads(props) {
   const filterPanel = (
     <Space wrap size={8}>
       <Select
-        allowClear placeholder="Status" size="small" style={{ width: 120 }}
-        options={STATUS_OPTIONS}
-        value={filters.status}
-        onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-      />
-      <Select
         allowClear placeholder="Priority" size="small" style={{ width: 110 }}
         options={PRIORITY_OPTIONS}
         value={filters.priority}
@@ -305,64 +478,137 @@ export default function Leads(props) {
         onChange={(v) => setFilters((f) => ({ ...f, deal_pipeline_id: v }))}
       />
       {Object.keys(filters).length > 0 && (
-        <Button size="small" onClick={() => setFilters({})}>Clear</Button>
+        <Button size="small" onClick={() => setFilters({})}>Clear filters</Button>
       )}
     </Space>
   );
 
+  const headerNode = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: token.padding, flexWrap: 'wrap' }}>
+      <Space direction="vertical" size={0}>
+        <Text strong style={{ fontSize: 18, lineHeight: 1.25 }}>Leads</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>Track incoming opportunities from first touch to conversion.</Text>
+      </Space>
+      <Space size={8} wrap>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddLead(true)}>
+          Add Lead
+        </Button>
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { label: 'Kanban', value: 'kanban', icon: <AppstoreOutlined /> },
+            { label: 'List', value: 'list', icon: <UnorderedListOutlined /> },
+          ]}
+        />
+      </Space>
+    </div>
+  );
+
   return (
-    <AuthenticatedLayout user={props.auth?.user}>
+    <AuthenticatedLayout user={props.auth?.user} header={headerNode}>
       {ctx}
       <Head title="Leads" />
 
-      <div style={{ padding: token.padding, background: token.colorBgLayout, minHeight: 'calc(100vh - 64px)' }}>
+      <div style={{ padding: token.padding, background: token.colorBgLayout, minHeight: 'calc(100vh - 104px)' }}>
         <Space direction="vertical" size={token.paddingSM} style={{ width: '100%' }}>
-
-          {/* Anchor filter tabs */}
-          <Card size="small" bodyStyle={{ padding: '8px 12px' }}>
-            <Space wrap size={4}>
-              {ANCHOR_FILTERS.map((a) => (
-                <Button
-                  key={a.key}
-                  size="small"
-                  type={anchor === a.key ? 'primary' : 'default'}
-                  onClick={() => setAnchor(a.key)}
-                >
-                  {a.label}
-                </Button>
-              ))}
-              <span style={{ marginLeft: 12 }}>
-                <Space size={8}>
+          <Card
+            size="small"
+            bodyStyle={{ padding: token.paddingSM }}
+            style={{ borderRadius: token.borderRadiusLG, borderColor: token.colorBorderSecondary }}
+          >
+            <Row gutter={[10, 10]} align="middle" justify="space-between">
+              <Col flex="auto">
+                <Space wrap size={8}>
                   <Input.Search
-                    size="small"
-                    placeholder="Search leads..."
-                    style={{ width: 200 }}
+                    placeholder="Search name, company, email..."
+                    style={{ width: 280, maxWidth: '100%' }}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     allowClear
                   />
                   <Button
-                    size="small"
-                    icon={<FilterOutlined />}
                     type={showFilters ? 'primary' : 'default'}
-                    onClick={() => setShowFilters((v) => !v)}
+                    onClick={() => setShowFilters((value) => !value)}
                   >
-                    Filters
+                    Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
                   </Button>
+                  {(activeFilterCount > 0 || anchor !== 'all') && (
+                    <Button
+                      onClick={() => {
+                        setSearch('');
+                        setFilters({});
+                        setAnchor('all');
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  )}
                 </Space>
-              </span>
-            </Space>
+              </Col>
+              <Col>
+                <Space size={8} wrap>
+                  <Select
+                    size="middle"
+                    style={{ width: 160 }}
+                    value={anchor}
+                    onChange={setAnchor}
+                    options={ANCHOR_FILTERS.map((item) => ({ label: item.key === 'all' ? 'All statuses' : item.label, value: item.key }))}
+                  />
+                </Space>
+              </Col>
+            </Row>
             {showFilters && (
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <div style={{ marginTop: token.paddingSM, paddingTop: token.paddingSM, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
                 {filterPanel}
               </div>
             )}
           </Card>
 
-          {/* Main ReusableCrud with overridden columns */}
+          {view === 'list' ? (
+            <ReusableCrud
+              ref={crudRef}
+              icon={<UserSwitchOutlined />}
+              title="Leads"
+              apiUrl={api('/api/leads/')}
+              columns={columns}
+              fields={leadCrud.fields}
+              validationSchema={leadCrud.validationSchema}
+              crudInitialValues={leadCrud.crudInitialValues}
+              transformPayload={leadCrud.transformPayload}
+              form_ui="drawer"
+              drawerWidth={900}
+              searchParam="search"
+              pageParam="page"
+              pageSizeParam="page_size"
+              sortMode="ordering"
+              orderingParam="ordering"
+              enableServerPagination={true}
+              showSearch={false}
+              baseFilters={combinedFilters}
+              canAdd={false}
+              canEdit={true}
+              canDelete={true}
+              hasActions={false}
+              hasActionColumns={false}
+              activeTableRowFunction={(record) => ({
+                onClick: (event) => {
+                  if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-tooltip-open')) return;
+                  router.visit(route('crm.leads.show', record.id));
+                },
+                style: { cursor: 'pointer' },
+              })}
+              scroll={{ x: 1200 }}
+            />
+          ) : (
+            <LeadsKanban key={kanbanRefreshKey} filters={combinedFilters} onOpenLead={(lead) => router.visit(route('crm.leads.show', lead.id))} />
+          )}
+        </Space>
+      </div>
+
+      {addLead ? (
+        <div style={{ display: 'none' }}>
           <ReusableCrud
-            ref={crudRef}
-            icon={<UserSwitchOutlined />}
             title="Leads"
             apiUrl={api('/api/leads/')}
             columns={columns}
@@ -370,32 +616,25 @@ export default function Leads(props) {
             validationSchema={leadCrud.validationSchema}
             crudInitialValues={leadCrud.crudInitialValues}
             transformPayload={leadCrud.transformPayload}
-            form_ui="drawer"
-            drawerWidth={900}
-            searchParam="search"
-            pageParam="page"
-            pageSizeParam="page_size"
-            sortMode="ordering"
-            orderingParam="ordering"
-            enableServerPagination={true}
+            form_ui="modal"
+            modalWidth={900}
+            enableServerPagination={false}
             showSearch={false}
-            baseFilters={combinedFilters}
-            canAdd={true}
-            canEdit={true}
-            canDelete={true}
-            hasActions={true}
+            canAdd
+            canEdit={false}
+            canDelete={false}
+            hasActions={false}
             hasActionColumns={false}
-            activeTableRowFunction={(record) => ({
-              onClick: (event) => {
-                if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-tooltip-open')) return;
-                router.visit(route('crm.leads.show', record.id));
-              },
-              style: { cursor: 'pointer' },
-            })}
-            scroll={{ x: 1200 }}
+            openOnMount
+            openMode="add"
+            onFormClose={() => setAddLead(false)}
+            onAddSuccess={() => {
+              setAddLead(false);
+              refreshCurrentView();
+            }}
           />
-        </Space>
-      </div>
+        </div>
+      ) : null}
 
       {/* Convert to Deal drawer */}
       {convertLead && (

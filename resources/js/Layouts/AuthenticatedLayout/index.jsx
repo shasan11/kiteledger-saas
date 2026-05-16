@@ -102,11 +102,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'CRM',
                 children: [
                     {
-                        key: 'crm-home',
-                        label: 'CRM Home',
-                        onClick: () => visit('crm.home', '/crm'),
-                    },
-                    {
                         key: 'contacts',
                         label: 'Contacts',
                         onClick: () => visit('crm.contacts.index', '/crm/contacts'),
@@ -131,26 +126,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         label: 'Activities',
                         onClick: () => visit('crm.activities.index', '/crm/activities'),
                     },
-                    {
-                        key: 'forecast',
-                        label: 'Forecast',
-                        onClick: () => visit('crm.forecast.index', '/crm/forecast'),
-                    },
-                    {
-                        key: 'campaigns',
-                        label: 'Campaigns',
-                        onClick: () => visit('crm.campaigns.index', '/crm/campaigns'),
-                    },
-                    {
-                        key: 'communications',
-                        label: 'Communications',
-                        onClick: () => visit('crm.communications.index', '/crm/communications'),
-                    },
-                    {
-                        key: 'crm-configuration',
-                        label: 'Configuration',
-                        onClick: () => visit('crm.configuration.index', '/crm/configuration'),
-                    },
                 ],
             },
             // {
@@ -174,6 +149,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     { key: 'pi-quotations', label: 'Quotations', onClick: () => visit('payment-in.quotations.index', '/payment-in/quotations') },
                     { key: 'pi-sales-orders', label: 'Sales Order', onClick: () => visit('payment-in.sales-orders.index', '/payment-in/sales-orders') },
                     { key: 'pi-invoices', label: 'Invoices', onClick: () => visit('payment-in.invoices.index', '/payment-in/invoices') },
+                    { key: 'pi-bills', label: 'Bills', onClick: () => visit('payment-in.bills.index', '/payment-in/bills') },
                     { key: 'pi-payment', label: 'Payment', onClick: () => visit('payment-in.payments.index', '/payment-in/payments') },
                     { key: 'pi-credit-notes', label: 'Credit Notes', onClick: () => visit('payment-in.credit-notes.index', '/payment-in/credit-notes') },
                 ],
@@ -325,15 +301,11 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/pos/sales')) return ['pos-sales'];
         if (isActive('/pos')) return ['pos-screen'];
 
-        if (page.url === '/crm') return ['crm-home'];
+        if (page.url === '/crm') return ['leads'];
         if (isActive('/crm/contacts')) return ['contacts'];
         if (isActive('/crm/leads')) return ['leads'];
         if (isActive('/crm/deals')) return ['deals'];
         if (isActive('/crm/activity-inbox')) return ['activity-inbox'];
-        if (isActive('/crm/forecast')) return ['forecast'];
-        if (isActive('/crm/campaigns')) return ['campaigns'];
-        if (isActive('/crm/communications')) return ['communications'];
-        if (isActive('/crm/configuration')) return ['crm-configuration'];
         if (isActive('/crm/activities')) return ['activities'];
 
         if (isActive('/workflow')) return ['workflow'];
@@ -356,6 +328,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
         if (isActive('/payment-out/purchase-bills')) return ['po-purchase-bills'];
         if (isActive('/payment-out/payments')) return ['po-payment-out'];
+        if (isActive('/payment-out/supplier-payments')) return ['po-payment-out'];
         if (isActive('/payment-out/purchase-orders')) return ['po-purchase-order'];
         if (isActive('/payment-out/expenses')) return ['po-expenses'];
         if (isActive('/payment-out/debit-notes')) return ['po-debit-note'];

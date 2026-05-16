@@ -1,45 +1,13 @@
 import { useEffect, useState } from 'react';
-
-const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+import {
+    fetchBrandSettings,
+    resolveMediaUrl,
+    subscribeToBrandSettings,
+} from '@/brandSettings';
 
 const cachedLogoUrls = {
     light: undefined,
     dark: undefined,
-};
-
-let logoSettingsPromise = null;
-
-const api = (path) => `${BACKEND_BASE}${path}`;
-
-const resolveMediaUrl = (url) => {
-    if (!url || typeof url !== 'string') return null;
-
-    if (
-        url.startsWith('http://') ||
-        url.startsWith('https://') ||
-        url.startsWith('data:')
-    ) {
-        return url;
-    }
-
-    return api(url.startsWith('/') ? url : `/${url}`);
-};
-
-const fetchApplicationSettings = async () => {
-    if (!logoSettingsPromise) {
-        logoSettingsPromise = fetch(api('/api/app-settings/current'), {
-            headers: {
-                Accept: 'application/json',
-            },
-        })
-            .then(async (response) => {
-                if (!response.ok) return null;
-                return response.json();
-            })
-            .catch(() => null);
-    }
-
-    return logoSettingsPromise;
 };
 
 const fetchApplicationLogo = async (dark = false) => {
@@ -49,7 +17,7 @@ const fetchApplicationLogo = async (dark = false) => {
         return cachedLogoUrls[cacheKey];
     }
 
-    const data = await fetchApplicationSettings();
+    const data = await fetchBrandSettings().catch(() => null);
 
     const logoUrl = resolveMediaUrl(
         dark ? data?.dark_logo_url : data?.logo_url
@@ -58,6 +26,11 @@ const fetchApplicationLogo = async (dark = false) => {
     cachedLogoUrls[cacheKey] = logoUrl;
 
     return logoUrl;
+};
+
+const syncLogoCache = (settings) => {
+    cachedLogoUrls.light = resolveMediaUrl(settings?.logo_url);
+    cachedLogoUrls.dark = resolveMediaUrl(settings?.dark_logo_url);
 };
 
 function DefaultLogo(props) {
@@ -95,8 +68,17 @@ export default function ApplicationLogo({
             setLogoUrl(url);
         });
 
+        const unsubscribeBrandSettings = subscribeToBrandSettings((settings) => {
+            if (!mounted) return;
+
+            syncLogoCache(settings);
+            setFailed(false);
+            setLogoUrl(cachedLogoUrls[cacheKey] ?? null);
+        });
+
         return () => {
             mounted = false;
+            unsubscribeBrandSettings();
         };
     }, [dark, cacheKey]);
 

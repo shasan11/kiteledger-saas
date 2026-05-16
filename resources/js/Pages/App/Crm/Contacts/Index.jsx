@@ -42,6 +42,42 @@ const capitalizeFirst = (value) => {
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 };
 
+const contactGroupQuickAdd = {
+  title: 'Contact Group',
+  apiUrl: api('/api/contact-groups/'),
+  fields: [
+    { name: 'name', label: 'Group Name', type: 'text', required: true, col: 24, placeholder: 'Group name' },
+    {
+      name: 'parent_id',
+      label: 'Parent Group',
+      type: 'fkSelect',
+      col: 24,
+      placeholder: 'Parent group',
+      fkUrl: api('/api/contact-groups/'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      allowClear: true,
+    },
+    { name: 'active', label: 'Active', type: 'switch', col: 24 },
+    { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 },
+  ],
+  initialValues: { name: '', parent_id: null, active: true, description: '' },
+  validationSchema: Yup.object({
+    name: Yup.string().required('Group name is required').max(120),
+    parent_id: Yup.string().nullable(),
+    active: Yup.boolean().nullable(),
+    description: Yup.string().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    name: values.name?.trim() || null,
+    parent_id: values.parent_id || null,
+    active: values.active !== false,
+    description: values.description?.trim() || null,
+  }),
+};
+
 export default function Contacts(props) {
   const columns = [
    
@@ -181,18 +217,8 @@ export default function Contacts(props) {
       fkPageSize: 20,
       fkValueKey: 'id',
       fkLabelKey: 'name',
-    },
-    {
-      name: 'crm_account_id',
-      label: 'CRM Account',
-      type: 'fkSelect',
-      col: 8,
-      placeholder: 'Select CRM account',
-      fkUrl: api('/api/crm-accounts/'),
-      fkSearchParam: 'search',
-      fkPageSize: 20,
-      fkValueKey: 'id',
-      fkLabelKey: 'name',
+      quickAdd: contactGroupQuickAdd,
+      allowClear: true,
     },
     
     {
@@ -258,7 +284,6 @@ export default function Contacts(props) {
     email: Yup.string().nullable().email('Invalid email').max(120),
     contact_group_id: Yup.string().nullable(),
     account_id: Yup.string().nullable(),
-    crm_account_id: Yup.string().nullable(),
     tax_registration_no: Yup.string().nullable().max(80),
     tax_registration_type: Yup.string().nullable().oneOf(['pan', 'vat', 'none', null]),
     credit_term_id: Yup.string().nullable(),
@@ -276,7 +301,6 @@ export default function Contacts(props) {
     email: '',
     contact_group_id: null,
     account_id: null,
-    crm_account_id: null,
     tax_registration_no: '',
     tax_registration_type: null,
     credit_term_id: null,
@@ -297,7 +321,6 @@ export default function Contacts(props) {
     p.tax_registration_no = p.tax_registration_no?.trim() || null;
     p.contact_group_id = p.contact_group_id || null;
     p.account_id = p.account_id || null;
-    p.crm_account_id = p.crm_account_id || null;
     p.credit_term_id = p.credit_term_id || null;
     p.credit_limit = p.credit_limit != null ? Number(p.credit_limit) : null;
     p.accept_purchase = Boolean(p.accept_purchase);

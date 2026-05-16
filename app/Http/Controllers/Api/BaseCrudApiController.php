@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Services\DocumentNumberingService;
+use App\Services\TransactionApprovalService;
+use App\Services\TransactionVoidService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -14,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Throwable;
 
 abstract class BaseCrudApiController extends Controller
 {
@@ -79,6 +82,18 @@ abstract class BaseCrudApiController extends Controller
         'Company Owner',
         'Branch Admin',
         'Full Access User',
+        'Full Access Admin',
+    ];
+
+    protected array $administrativeAccessRoles = [
+        'Super Admin',
+        'Company Owner',
+        'Admin',
+        'Branch Admin',
+        'Full Access User',
+        'Full Access Admin',
+        'super-admin',
+        'admin',
     ];
 
     protected array $nested = [];
@@ -165,6 +180,7 @@ abstract class BaseCrudApiController extends Controller
 
         $this->checkAccess($request, 'update', $record);
         $this->assertRecordBranchAccess($request, $record);
+        $this->assertTransactionEditable($record);
 
         $input = $this->prepareIncomingPayload($request->all());
         $input = $this->applyBranchToUpdatePayload($input, $request, $record);
@@ -201,6 +217,7 @@ abstract class BaseCrudApiController extends Controller
 
         $this->checkAccess($request, 'destroy', $record);
         $this->assertRecordBranchAccess($request, $record);
+        $this->assertTransactionDestroyable($record);
 
         DB::transaction(function () use ($record) {
             foreach ($this->nested as $field => $config) {
@@ -346,6 +363,7 @@ abstract class BaseCrudApiController extends Controller
 
             $this->checkAccess($request, 'update', $record);
             $this->assertRecordBranchAccess($request, $record);
+            $this->assertTransactionEditable($record);
 
             $row = $this->prepareIncomingPayload($row);
             $row = $this->applyBranchToUpdatePayload($row, $request, $record);
@@ -443,6 +461,128 @@ abstract class BaseCrudApiController extends Controller
         return response()->json([
             'message' => 'Deleted successfully.',
         ]);
+    }
+
+    public function transactionApprove(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $approved = app(TransactionApprovalService::class)->approve($record, $request->user()?->getAuthIdentifier());
+
+        return response()->json($this->serializeRecord($approved));
+    }
+
+    public function bulkApprove(Request $request)
+    {
+        $this->checkAccess($request, 'bulkUpdate');
+
+        $data = $this->validateCompat($request->all(), [
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required'],
+        ]);
+
+        $approvedCount = 0;
+        $failed = [];
+
+        foreach (array_values(array_unique($data['ids'])) as $id) {
+            try {
+                $record = $this->findRecord($id);
+                $this->checkAccess($request, 'update', $record);
+                $this->assertRecordBranchAccess($request, $record);
+                app(TransactionApprovalService::class)->approve($record, $request->user()?->getAuthIdentifier());
+                $approvedCount++;
+            } catch (Throwable $e) {
+                $failed[] = ['id' => $id, 'reason' => $e->getMessage()];
+            }
+        }
+
+        return response()->json([
+            'success' => count($failed) === 0,
+            'approved_count' => $approvedCount,
+            'voided_count' => 0,
+            'failed' => $failed,
+        ], count($failed) === 0 ? 200 : 422);
+    }
+
+    public function transactionVoid(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $data = $this->validateCompat($request->all(), [
+            'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $voided = app(TransactionVoidService::class)->void($record, $data['voided_reason'], $request->user()?->getAuthIdentifier());
+
+        return response()->json($this->serializeRecord($voided));
+    }
+
+    public function bulkVoid(Request $request)
+    {
+        $this->checkAccess($request, 'bulkUpdate');
+
+        $data = $this->validateCompat($request->all(), [
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required'],
+            'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $voidedCount = 0;
+        $failed = [];
+
+        foreach (array_values(array_unique($data['ids'])) as $id) {
+            try {
+                $record = $this->findRecord($id);
+                $this->checkAccess($request, 'update', $record);
+                $this->assertRecordBranchAccess($request, $record);
+                app(TransactionVoidService::class)->void($record, $data['voided_reason'], $request->user()?->getAuthIdentifier());
+                $voidedCount++;
+            } catch (Throwable $e) {
+                $failed[] = ['id' => $id, 'reason' => $e->getMessage()];
+            }
+        }
+
+        return response()->json([
+            'success' => count($failed) === 0,
+            'approved_count' => 0,
+            'voided_count' => $voidedCount,
+            'failed' => $failed,
+        ], count($failed) === 0 ? 200 : 422);
+    }
+
+    public function bulkExport(Request $request)
+    {
+        $this->checkAccess($request, 'index');
+
+        $data = $this->validateCompat($request->all(), [
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required'],
+            'format' => ['nullable', 'string', 'in:csv'],
+        ]);
+
+        $records = $this->newQuery()
+            ->with($this->validEagerLoadRelations())
+            ->whereIn($this->primaryKeyName(), array_values(array_unique($data['ids'])))
+            ->get();
+
+        $filename = Str::slug(class_basename($this->modelClass)) . '-selected-' . now()->format('YmdHis') . '.csv';
+
+        return response()->streamDownload(function () use ($records) {
+            $handle = fopen('php://output', 'w');
+            $rows = $this->bulkExportRows($records);
+            $headers = collect($rows)->flatMap(fn ($row) => array_keys($row))->unique()->values()->all();
+            fputcsv($handle, $headers);
+            foreach ($rows as $row) {
+                fputcsv($handle, collect($headers)->map(fn ($key) => $this->exportValue($row[$key] ?? null))->all());
+            }
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
     protected function baseQuery(): Builder
@@ -608,6 +748,18 @@ abstract class BaseCrudApiController extends Controller
 
             if ($value !== null && $value !== '') {
                 $query->where($this->qualifiedColumn($field), $value);
+            }
+        }
+
+        foreach ($this->searchable as $field) {
+            if (Str::contains($field, '.') || !$this->tableHasColumn($field)) {
+                continue;
+            }
+
+            $value = $this->requestParam($request, $field);
+
+            if ($value !== null && $value !== '') {
+                $query->where($this->qualifiedColumn($field), 'like', '%' . $value . '%');
             }
         }
 
@@ -1251,9 +1403,11 @@ abstract class BaseCrudApiController extends Controller
                 return $parentData;
             }
 
-            // Approval-required documents get their real number only when approved.
-            // Leave the field null so the frontend shows "DRAFT".
             if ($mapping['approval_required'] ?? false) {
+                $field = $mapping['field'] ?? null;
+                if ($field && empty($parentData[$field])) {
+                    $parentData[$field] = app(DocumentNumberingService::class)->generateDraft($model, $parentData['date'] ?? null);
+                }
                 return $parentData;
             }
 
@@ -1335,6 +1489,10 @@ abstract class BaseCrudApiController extends Controller
             $rules['void'] = [...$prefix, 'boolean'];
         }
 
+        if ($this->tableHasColumn('voided') && !array_key_exists('voided', $rules)) {
+            $rules['voided'] = [...$prefix, 'boolean'];
+        }
+
         if ($this->tableHasColumn('voided_reason') && !array_key_exists('voided_reason', $rules)) {
             $rules['voided_reason'] = [...$prefix, 'string', 'max:500'];
         }
@@ -1352,11 +1510,28 @@ abstract class BaseCrudApiController extends Controller
 
     protected function normalizeApprovalData(array $parentData, ?Model $record = null): array
     {
+        if ($record && $this->isTransactionVoided($record) && !(($parentData['void'] ?? false) || ($parentData['voided'] ?? false))) {
+            $this->throwValidation([
+                'status' => ['Voided records cannot be edited.'],
+            ]);
+        }
+
+        if ($record && $this->isTransactionApproved($record) && !$this->isApprovalOnlyUpdate($parentData)) {
+            $this->throwValidation([
+                'status' => ['Approved records cannot be edited.'],
+            ]);
+        }
+
         if (array_key_exists('approved', $parentData) && $this->tableHasColumn('approved')) {
             $approved = $this->toBool($parentData['approved']);
             $parentData['approved'] = (bool) $approved;
 
             if ($approved) {
+                if ($record && $this->isTransactionVoided($record)) {
+                    $this->throwValidation([
+                        'approved' => ['Voided transactions cannot be approved.'],
+                    ]);
+                }
                 // Assign real document number on first approval (idempotent).
                 $parentData = $this->assignDocumentNumberOnApproval($parentData, $record);
             }
@@ -1374,16 +1549,24 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        if (array_key_exists('void', $parentData) && $this->tableHasColumn('void')) {
-            $void = $this->toBool($parentData['void']);
-            $parentData['void'] = (bool) $void;
+        $voidField = $this->tableHasColumn('void') ? 'void' : ($this->tableHasColumn('voided') ? 'voided' : null);
+
+        if ($voidField && array_key_exists($voidField, $parentData)) {
+            $void = $this->toBool($parentData[$voidField]);
+            $parentData[$voidField] = (bool) $void;
 
             if ($void && $this->tableHasColumn('voided_reason')) {
                 $reason = trim((string) ($parentData['voided_reason'] ?? $record?->voided_reason ?? ''));
 
                 if ($reason === '') {
                     $this->throwValidation([
-                        'voided_reason' => ['Please provide a reason before voiding this record.'],
+                        'voided_reason' => ['Void reason is compulsory.'],
+                    ]);
+                }
+
+                if (mb_strlen($reason) < 3) {
+                    $this->throwValidation([
+                        'voided_reason' => ['Void reason must be at least 3 characters.'],
                     ]);
                 }
 
@@ -1400,6 +1583,170 @@ abstract class BaseCrudApiController extends Controller
         }
 
         return $parentData;
+    }
+
+    protected function assertTransactionEditable(Model $record): void
+    {
+        if ($this->isTransactionVoided($record)) {
+            $this->throwValidation(['status' => ['Voided records cannot be edited.']]);
+        }
+
+        if ($this->isTransactionApproved($record)) {
+            $this->throwValidation(['status' => ['Approved records cannot be edited.']]);
+        }
+    }
+
+    protected function assertTransactionDestroyable(Model $record): void
+    {
+        if ($this->isTransactionApproved($record)) {
+            $this->throwValidation(['status' => ['Approved records cannot be deleted.']]);
+        }
+
+        if ($this->isTransactionVoided($record)) {
+            $this->throwValidation(['status' => ['Voided records cannot be deleted.']]);
+        }
+    }
+
+    protected function isTransactionApproved(Model $record): bool
+    {
+        return in_array('approved', $record->getFillable(), true) && (bool) ($record->approved ?? false);
+    }
+
+    protected function isTransactionVoided(Model $record): bool
+    {
+        return (
+            in_array('void', $record->getFillable(), true) && (bool) ($record->void ?? false)
+        ) || (
+            in_array('voided', $record->getFillable(), true) && (bool) ($record->voided ?? false)
+        );
+    }
+
+    protected function isApprovalOnlyUpdate(array $parentData): bool
+    {
+        $allowed = [
+            'approved', 'approved_at', 'approved_by_id',
+            'void', 'voided', 'voided_at', 'voided_by_id', 'voided_reason',
+            'status',
+        ];
+
+        $numberField = app(DocumentNumberingService::class)->getMappingForModel($this->newModelInstance())['field'] ?? null;
+        if ($numberField) {
+            $allowed[] = $numberField;
+        }
+
+        return collect(array_keys($parentData))->every(fn ($key) => in_array($key, $allowed, true));
+    }
+
+    protected function exportValue(mixed $value): string
+    {
+        if (is_array($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Yes' : 'No';
+        }
+
+        return (string) ($value ?? '');
+    }
+
+    protected function bulkExportRows($records): array
+    {
+        if (!$this->tableHasColumn('approved') && !$this->tableHasColumn('void')) {
+            return $this->serializeCollection($records);
+        }
+
+        return collect($records)
+            ->map(fn (Model $record) => $this->transactionExportRow($record))
+            ->values()
+            ->all();
+    }
+
+    protected function transactionExportRow(Model $record): array
+    {
+        $data = $this->serializeRecord($record);
+
+        return [
+            'document_number' => $this->firstExportValue($data, [
+                'quotation_no',
+                'sales_order_no',
+                'invoice_no',
+                'payment_no',
+                'sales_return_no',
+                'purchase_order_no',
+                'bill_no',
+                'expense_no',
+                'debit_note_no',
+                'transfer_no',
+                'voucher_no',
+                'code',
+                'reference',
+            ]),
+            'date' => $this->firstExportValue($data, [
+                'quotation_date',
+                'sales_order_date',
+                'invoice_date',
+                'payment_date',
+                'sales_return_date',
+                'purchase_order_date',
+                'bill_date',
+                'expense_date',
+                'debit_note_date',
+                'transfer_date',
+                'voucher_date',
+                'date',
+            ]),
+            'customer_supplier_account' => $this->exportRelationLabel($data['contact'] ?? $data['account'] ?? $data['from_account'] ?? $data['to_account'] ?? null),
+            'status' => $data['status'] ?? '',
+            'approved' => (bool) ($data['approved'] ?? false),
+            'voided' => (bool) ($data['void'] ?? $data['voided'] ?? false),
+            'amount' => $this->firstExportValue($data, [
+                'grand_total',
+                'total_amount',
+                'total',
+                'amount',
+                'paid_amount',
+                'total_debit',
+            ]),
+            'branch' => $this->exportRelationLabel($data['branch'] ?? null),
+            'created_by' => $this->exportRelationLabel($data['user_add'] ?? $data['created_by'] ?? null),
+            'reference_number' => $this->firstExportValue($data, ['reference_no', 'reference', 'supplier_bill_no']),
+        ];
+    }
+
+    protected function firstExportValue(array $data, array $keys): mixed
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $data) && $data[$key] !== null && $data[$key] !== '') {
+                return $data[$key];
+            }
+        }
+
+        return '';
+    }
+
+    protected function exportRelationLabel(mixed $value): string
+    {
+        if (is_array($value)) {
+            return (string) (
+                $value['label'] ??
+                $value['display_name'] ??
+                $value['company_name'] ??
+                $value['person_name'] ??
+                $value['name'] ??
+                $value['account_name'] ??
+                $value['bank_name'] ??
+                $value['title'] ??
+                $value['code'] ??
+                ''
+            );
+        }
+
+        return (string) ($value ?? '');
     }
 
     protected function mutateNestedRowBeforeSave(
@@ -1595,7 +1942,10 @@ abstract class BaseCrudApiController extends Controller
             $user = $request->user();
 
             abort_unless(
-                $user && $user->can("{$this->permissionPrefix}.{$crudPermission}"),
+                $user && (
+                    $this->userHasAdministrativeAccess($user) ||
+                    $user->can("{$this->permissionPrefix}.{$crudPermission}")
+                ),
                 403,
                 'You do not have permission to perform this action.'
             );
@@ -1621,6 +1971,38 @@ abstract class BaseCrudApiController extends Controller
             : $record;
 
         $this->authorize($ability, $target);
+    }
+
+    protected function userHasAdministrativeAccess($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasAnyRole')) {
+            try {
+                if ($user->hasAnyRole($this->administrativeAccessRoles)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                //
+            }
+        }
+
+        $roleName = null;
+
+        try {
+            $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+            $roleName = $role?->name;
+        } catch (\Throwable $e) {
+            //
+        }
+
+        return $roleName && in_array($roleName, $this->administrativeAccessRoles, true);
     }
 
     protected function requestParam(Request $request, string $key, mixed $default = null): mixed

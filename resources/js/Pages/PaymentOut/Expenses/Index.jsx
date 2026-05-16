@@ -743,6 +743,7 @@ export default function Index() {
             <ReusableCrud
                 title="Expense"
                 apiUrl={api('/api/expenses/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

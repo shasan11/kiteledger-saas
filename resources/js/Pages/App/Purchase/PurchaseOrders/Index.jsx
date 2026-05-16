@@ -699,6 +699,7 @@ export default function PurchaseOrders({ auth }) {
         editTitle="Edit Purchase Order"
         icon={<ShoppingOutlined />}
         apiUrl={api('/api/purchase-orders/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

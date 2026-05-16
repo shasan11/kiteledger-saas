@@ -540,6 +540,7 @@ export default function CustomerPayments() {
             <ReusableCrud
                 title="Customer Payment"
                 apiUrl={api('/api/customer-payments/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 columns={columns}
                 fields={fields}
                 validationSchema={validationSchema}

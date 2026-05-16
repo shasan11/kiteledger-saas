@@ -2,9 +2,9 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import { Col, Row, Tabs, Tag, Typography, theme } from 'antd';
-import { ApartmentOutlined, FunnelPlotOutlined, SettingOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ContactsOutlined, FunnelPlotOutlined, SettingOutlined } from '@ant-design/icons';
 import { api } from '../Shared/crmApi';
-import { buildPipelineCrud, buildStageCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+import { buildContactGroupCrud, buildPipelineCrud, buildStageCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 
 const { Text } = Typography;
 
@@ -56,11 +56,28 @@ const stageColumns = [
     },
 ];
 
-export default function Configuration({ auth }) {
+const contactGroupColumns = [
+    { title: 'Group', dataIndex: 'name', key: 'name', sorter: true },
+    {
+        title: 'Parent',
+        key: 'parent',
+        render: (_, r) => r.parent?.name || '-',
+    },
+    { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true },
+    {
+        title: 'Status',
+        dataIndex: 'active',
+        key: 'active',
+        render: (v) => <Tag color={v === false ? 'red' : 'green'}>{v === false ? 'Inactive' : 'Active'}</Tag>,
+    },
+];
+
+export default function Configuration({ auth, embedded = false }) {
     const { token } = theme.useToken();
 
     const pipelineCfg = buildPipelineCrud();
     const stageCfg = buildStageCrud();
+    const contactGroupCfg = buildContactGroupCrud();
 
     const tabs = [
         {
@@ -120,10 +137,48 @@ export default function Configuration({ auth }) {
                 />
             ),
         },
+        {
+            key: 'contact-groups',
+            label: (
+                <span>
+                    <ContactsOutlined /> Contact Groups
+                </span>
+            ),
+            children: (
+                <ReusableCrud
+                    title="Contact Groups"
+                    apiUrl={api('/api/contact-groups/')}
+                    columns={contactGroupColumns}
+                    fields={contactGroupCfg.fields}
+                    validationSchema={contactGroupCfg.validationSchema}
+                    crudInitialValues={contactGroupCfg.crudInitialValues}
+                    transformPayload={contactGroupCfg.transformPayload}
+                    form_ui="drawer"
+                    drawerWidth={620}
+                    searchParam="search"
+                    pageParam="page"
+                    pageSizeParam="page_size"
+                    sortMode="ordering"
+                    orderingParam="ordering"
+                    activeParam="active"
+                    enableServerPagination
+                    enableInactiveDrawer
+                    showSearch
+                    canAdd
+                    canEdit
+                    canDelete
+                    canView
+                    hasActions
+                    hasActionColumns
+                    backendFilter={{ active: 'active', parent: 'parent_id' }}
+                    backendSort={{ name: 'name', active: 'active', created_at: 'created_at' }}
+                />
+            ),
+        },
     ];
 
-    return (
-        <AuthenticatedLayout user={auth?.user}>
+    const content = (
+        <>
             <Head title="CRM Settings" />
             <div style={{ padding: token.padding }}>
                 <Row align="middle" style={{ marginBottom: token.marginMD }}>
@@ -138,6 +193,16 @@ export default function Configuration({ auth }) {
                     <Tabs defaultActiveKey="pipelines" items={tabs} size="middle" />
                 </div>
             </div>
+        </>
+    );
+
+    if (embedded) {
+        return content;
+    }
+
+    return (
+        <AuthenticatedLayout user={auth?.user}>
+            {content}
         </AuthenticatedLayout>
     );
 }

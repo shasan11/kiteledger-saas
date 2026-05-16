@@ -1001,6 +1001,7 @@ export default function Index() {
             <ReusableCrud
                 title="Sales Invoice"
                 apiUrl={api('/api/invoices/')}
+                bulkActions={{ approve: true, void: true, export: true }}
                 fields={fields}
                 columns={columns}
                 validationSchema={validationSchema}

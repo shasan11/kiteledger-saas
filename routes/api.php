@@ -185,6 +185,11 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 Route::post('cash-transfers/bulk', [CashTransferController::class, 'bulkStore']);
 Route::patch('cash-transfers/bulk', [CashTransferController::class, 'bulkUpdate']);
 Route::delete('cash-transfers/bulk', [CashTransferController::class, 'bulkDestroy']);
+Route::post('cash-transfers/bulk-approve', [CashTransferController::class, 'bulkApprove']);
+Route::post('cash-transfers/bulk-void', [CashTransferController::class, 'bulkVoid']);
+Route::post('cash-transfers/bulk-export', [CashTransferController::class, 'bulkExport']);
+Route::post('cash-transfers/{id}/approve', [CashTransferController::class, 'transactionApprove']);
+Route::post('cash-transfers/{id}/void', [CashTransferController::class, 'transactionVoid']);
 
 Route::apiResource('cash-transfers', CashTransferController::class)
     ->parameters([
@@ -230,6 +235,11 @@ Route::apiResource('chart-of-accounts', ChartOfAccountController::class)
 Route::post('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkStore']);
 Route::patch('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkUpdate']);
 Route::delete('journal-vouchers/bulk', [JournalVoucherController::class, 'bulkDestroy']);
+Route::post('journal-vouchers/bulk-approve', [JournalVoucherController::class, 'bulkApprove']);
+Route::post('journal-vouchers/bulk-void', [JournalVoucherController::class, 'bulkVoid']);
+Route::post('journal-vouchers/bulk-export', [JournalVoucherController::class, 'bulkExport']);
+Route::post('journal-vouchers/{id}/approve', [JournalVoucherController::class, 'transactionApprove']);
+Route::post('journal-vouchers/{id}/void', [JournalVoucherController::class, 'transactionVoid']);
 
 Route::apiResource('journal-vouchers', JournalVoucherController::class)
     ->parameters([
@@ -384,11 +394,21 @@ Route::apiResource('warehouse-items', WarehouseItemController::class)->only(['in
 Route::post('quotations/bulk', [QuotationController::class, 'bulkStore']);
 Route::patch('quotations/bulk', [QuotationController::class, 'bulkUpdate']);
 Route::delete('quotations/bulk', [QuotationController::class, 'bulkDestroy']);
+Route::post('quotations/bulk-approve', [QuotationController::class, 'bulkApprove']);
+Route::post('quotations/bulk-void', [QuotationController::class, 'bulkVoid']);
+Route::post('quotations/bulk-export', [QuotationController::class, 'bulkExport']);
+Route::post('quotations/{id}/approve', [QuotationController::class, 'transactionApprove']);
+Route::post('quotations/{id}/void', [QuotationController::class, 'transactionVoid']);
 Route::apiResource('quotations', QuotationController::class);
 
 Route::post('sales-orders/bulk', [SalesOrderController::class, 'bulkStore']);
 Route::patch('sales-orders/bulk', [SalesOrderController::class, 'bulkUpdate']);
 Route::delete('sales-orders/bulk', [SalesOrderController::class, 'bulkDestroy']);
+Route::post('sales-orders/bulk-approve', [SalesOrderController::class, 'bulkApprove']);
+Route::post('sales-orders/bulk-void', [SalesOrderController::class, 'bulkVoid']);
+Route::post('sales-orders/bulk-export', [SalesOrderController::class, 'bulkExport']);
+Route::post('sales-orders/{id}/approve', [SalesOrderController::class, 'transactionApprove']);
+Route::post('sales-orders/{id}/void', [SalesOrderController::class, 'transactionVoid']);
 Route::apiResource('sales-orders', SalesOrderController::class);
 
 Route::post('proforma-invoices/bulk', [ProformaInvoiceController::class, 'bulkStore']);
@@ -399,46 +419,91 @@ Route::apiResource('proforma-invoices', ProformaInvoiceController::class);
 Route::post('invoices/bulk', [InvoiceController::class, 'bulkStore']);
 Route::patch('invoices/bulk', [InvoiceController::class, 'bulkUpdate']);
 Route::delete('invoices/bulk', [InvoiceController::class, 'bulkDestroy']);
+Route::post('invoices/bulk-approve', [InvoiceController::class, 'bulkApprove']);
+Route::post('invoices/bulk-void', [InvoiceController::class, 'bulkVoid']);
+Route::post('invoices/bulk-export', [InvoiceController::class, 'bulkExport']);
+Route::post('invoices/{id}/approve', [InvoiceController::class, 'transactionApprove']);
+Route::post('invoices/{id}/void', [InvoiceController::class, 'transactionVoid']);
 Route::apiResource('invoices', InvoiceController::class);
 
 Route::post('customer-payments/bulk', [CustomerPaymentController::class, 'bulkStore']);
 Route::patch('customer-payments/bulk', [CustomerPaymentController::class, 'bulkUpdate']);
 Route::delete('customer-payments/bulk', [CustomerPaymentController::class, 'bulkDestroy']);
+Route::post('customer-payments/bulk-approve', [CustomerPaymentController::class, 'bulkApprove']);
+Route::post('customer-payments/bulk-void', [CustomerPaymentController::class, 'bulkVoid']);
+Route::post('customer-payments/bulk-export', [CustomerPaymentController::class, 'bulkExport']);
+Route::post('customer-payments/{id}/approve', [CustomerPaymentController::class, 'transactionApprove']);
+Route::post('customer-payments/{id}/void', [CustomerPaymentController::class, 'transactionVoid']);
 Route::apiResource('customer-payments', CustomerPaymentController::class);
 
 Route::post('sales-returns/bulk', [SalesReturnController::class, 'bulkStore']);
 Route::patch('sales-returns/bulk', [SalesReturnController::class, 'bulkUpdate']);
 Route::delete('sales-returns/bulk', [SalesReturnController::class, 'bulkDestroy']);
+Route::post('sales-returns/bulk-approve', [SalesReturnController::class, 'bulkApprove']);
+Route::post('sales-returns/bulk-void', [SalesReturnController::class, 'bulkVoid']);
+Route::post('sales-returns/bulk-export', [SalesReturnController::class, 'bulkExport']);
+Route::post('sales-returns/{id}/approve', [SalesReturnController::class, 'transactionApprove']);
+Route::post('sales-returns/{id}/void', [SalesReturnController::class, 'transactionVoid']);
 Route::apiResource('sales-returns', SalesReturnController::class);
 
 Route::post('credit-notes/bulk', [SalesReturnController::class, 'bulkStore']);
 Route::patch('credit-notes/bulk', [SalesReturnController::class, 'bulkUpdate']);
 Route::delete('credit-notes/bulk', [SalesReturnController::class, 'bulkDestroy']);
+Route::post('credit-notes/bulk-approve', [SalesReturnController::class, 'bulkApprove']);
+Route::post('credit-notes/bulk-void', [SalesReturnController::class, 'bulkVoid']);
+Route::post('credit-notes/bulk-export', [SalesReturnController::class, 'bulkExport']);
+Route::post('credit-notes/{id}/approve', [SalesReturnController::class, 'transactionApprove']);
+Route::post('credit-notes/{id}/void', [SalesReturnController::class, 'transactionVoid']);
 Route::apiResource('credit-notes', SalesReturnController::class);
 
 Route::post('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkStore']);
 Route::patch('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkUpdate']);
 Route::delete('purchase-orders/bulk', [PurchaseOrderController::class, 'bulkDestroy']);
+Route::post('purchase-orders/bulk-approve', [PurchaseOrderController::class, 'bulkApprove']);
+Route::post('purchase-orders/bulk-void', [PurchaseOrderController::class, 'bulkVoid']);
+Route::post('purchase-orders/bulk-export', [PurchaseOrderController::class, 'bulkExport']);
+Route::post('purchase-orders/{id}/approve', [PurchaseOrderController::class, 'transactionApprove']);
+Route::post('purchase-orders/{id}/void', [PurchaseOrderController::class, 'transactionVoid']);
 Route::apiResource('purchase-orders', PurchaseOrderController::class);
 
 Route::post('purchase-bills/bulk', [PurchaseBillController::class, 'bulkStore']);
 Route::patch('purchase-bills/bulk', [PurchaseBillController::class, 'bulkUpdate']);
 Route::delete('purchase-bills/bulk', [PurchaseBillController::class, 'bulkDestroy']);
+Route::post('purchase-bills/bulk-approve', [PurchaseBillController::class, 'bulkApprove']);
+Route::post('purchase-bills/bulk-void', [PurchaseBillController::class, 'bulkVoid']);
+Route::post('purchase-bills/bulk-export', [PurchaseBillController::class, 'bulkExport']);
+Route::post('purchase-bills/{id}/approve', [PurchaseBillController::class, 'transactionApprove']);
+Route::post('purchase-bills/{id}/void', [PurchaseBillController::class, 'transactionVoid']);
 Route::apiResource('purchase-bills', PurchaseBillController::class);
 
 Route::post('expenses/bulk', [ExpenseController::class, 'bulkStore']);
 Route::patch('expenses/bulk', [ExpenseController::class, 'bulkUpdate']);
 Route::delete('expenses/bulk', [ExpenseController::class, 'bulkDestroy']);
+Route::post('expenses/bulk-approve', [ExpenseController::class, 'bulkApprove']);
+Route::post('expenses/bulk-void', [ExpenseController::class, 'bulkVoid']);
+Route::post('expenses/bulk-export', [ExpenseController::class, 'bulkExport']);
+Route::post('expenses/{id}/approve', [ExpenseController::class, 'transactionApprove']);
+Route::post('expenses/{id}/void', [ExpenseController::class, 'transactionVoid']);
 Route::apiResource('expenses', ExpenseController::class);
 
 Route::post('debit-notes/bulk', [DebitNoteController::class, 'bulkStore']);
 Route::patch('debit-notes/bulk', [DebitNoteController::class, 'bulkUpdate']);
 Route::delete('debit-notes/bulk', [DebitNoteController::class, 'bulkDestroy']);
+Route::post('debit-notes/bulk-approve', [DebitNoteController::class, 'bulkApprove']);
+Route::post('debit-notes/bulk-void', [DebitNoteController::class, 'bulkVoid']);
+Route::post('debit-notes/bulk-export', [DebitNoteController::class, 'bulkExport']);
+Route::post('debit-notes/{id}/approve', [DebitNoteController::class, 'transactionApprove']);
+Route::post('debit-notes/{id}/void', [DebitNoteController::class, 'transactionVoid']);
 Route::apiResource('debit-notes', DebitNoteController::class);
 
 Route::post('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkStore']);
 Route::patch('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkUpdate']);
 Route::delete('supplier-payments/bulk', [SupplierPaymentController::class, 'bulkDestroy']);
+Route::post('supplier-payments/bulk-approve', [SupplierPaymentController::class, 'bulkApprove']);
+Route::post('supplier-payments/bulk-void', [SupplierPaymentController::class, 'bulkVoid']);
+Route::post('supplier-payments/bulk-export', [SupplierPaymentController::class, 'bulkExport']);
+Route::post('supplier-payments/{id}/approve', [SupplierPaymentController::class, 'transactionApprove']);
+Route::post('supplier-payments/{id}/void', [SupplierPaymentController::class, 'transactionVoid']);
 Route::apiResource('supplier-payments', SupplierPaymentController::class);
 
 Route::post('variants/bulk', [VariantController::class, 'bulkStore']);
@@ -730,6 +795,7 @@ Route::apiResource('crm-sequences', CrmSequenceController::class)
 Route::post('leads/bulk', [LeadController::class, 'bulkStore']);
 Route::patch('leads/bulk', [LeadController::class, 'bulkUpdate']);
 Route::delete('leads/bulk', [LeadController::class, 'bulkDestroy']);
+Route::post('leads/{lead}/move-status', [LeadController::class, 'moveStatus']);
 Route::apiResource('leads', LeadController::class);
 
 Route::post('deal-pipelines/bulk', [DealPipelineController::class, 'bulkStore']);

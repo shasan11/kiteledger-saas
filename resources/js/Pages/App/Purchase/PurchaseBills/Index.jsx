@@ -133,6 +133,7 @@ export default function PurchaseBills({ auth }) {
         title="Purchase Bills"
         icon={<FileProtectOutlined />}
         apiUrl={api('/api/purchase-bills/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

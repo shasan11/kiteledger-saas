@@ -23,10 +23,10 @@ return new class extends Migration
             $table->string('website', 180)->nullable();
             $table->text('footer')->nullable();
             $table->string('logo', 255)->nullable();
-            $table->enum('suggest_selling', ["recent","fixed"])->default('recent');
-            $table->enum('negative_cash_balance', ["reject","warn","do_nothing"])->default('warn');
-            $table->enum('negative_item_balance', ["reject","warn","do_nothing"])->default('warn');
-            $table->enum('credit_limit_exceed', ["reject","warn","do_nothing"])->default('warn');
+            $table->enum('suggest_selling', ["recent","last_sale","standard_price","average_cost_markup"])->default('recent');
+            $table->enum('negative_cash_balance', ["allow","warn","block"])->default('warn');
+            $table->enum('negative_item_balance', ["allow","warn","block"])->default('warn');
+            $table->enum('credit_limit_exceed', ["allow","warn","block"])->default('warn');
             $table->boolean('active')->default(true);
             $table->boolean('is_system_generated')->default(false);
             $table->foreignId('user_add_id')->nullable()->constrained('users');

@@ -35,5 +35,4 @@ Route::prefix('payment-in')->name('payment-in.')->group(function () {
     Route::get('/credit-notes/{id}/edit', fn ($id) => Inertia::render('App/PaymentIn/CreditNotes/Edit', ['id' => $id]))->name('credit-notes.edit');
     Route::get('/credit-notes/{id}', fn ($id) => Inertia::render('App/PaymentIn/CreditNotes/Show', ['id' => $id]))->name('credit-notes.show');
 
-    Route::get('/customers', fn () => Inertia::render('App/PaymentIn/Customers/Index'))->name('customers.index');
 });

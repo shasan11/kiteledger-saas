@@ -182,7 +182,7 @@ class InvoiceController extends BaseCrudApiController
 
     private function checkNegativeItemBalance(?AppSetting $config, Model $record, \Illuminate\Support\Collection $lines): void
     {
-        if (!$config || ($config->negative_item_balance ?? 'warn') !== 'reject') {
+        if (!$config || !in_array(($config->negative_item_balance ?? 'warn'), ['block', 'reject'], true)) {
             return;
         }
 
@@ -223,7 +223,7 @@ class InvoiceController extends BaseCrudApiController
 
     private function checkCreditLimitExceed(?AppSetting $config, Model $record): void
     {
-        if (!$config || ($config->credit_limit_exceed ?? 'warn') !== 'reject') {
+        if (!$config || !in_array(($config->credit_limit_exceed ?? 'warn'), ['block', 'reject'], true)) {
             return;
         }
 

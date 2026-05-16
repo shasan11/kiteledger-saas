@@ -20,7 +20,7 @@ class PurchaseConfigurationSeeder extends Seeder
                 'require_purchase_order_approval' => true,
                 'require_bill_approval' => true,
                 'negative_item_balance' => 'warn',
-                'negative_cash_balance' => 'do_nothing',
+                'negative_cash_balance' => 'warn',
                 'aging_buckets' => [30, 60, 90, 120],
                 'overdue_reminders_enabled' => true,
                 'is_system_generated' => true,

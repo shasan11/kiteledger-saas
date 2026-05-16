@@ -23,9 +23,9 @@ const leadStatusOptions = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
-  { value: 'unqualified', label: 'Unqualified' },
+  { value: 'unqualified', label: 'Proposal' },
+  { value: 'converted', label: 'Won' },
   { value: 'lost', label: 'Lost' },
-  { value: 'converted', label: 'Converted' },
 ];
 
 const priorityOptions = [
@@ -64,6 +64,156 @@ export const DEAL_STATUS_OPTIONS = dealStatusOptions;
 export const ACTIVITY_STATUS_OPTIONS = activityStatusOptions;
 export const ACTIVITY_TYPE_OPTIONS = activityTypeOptions;
 
+const quickPipelineConfig = {
+  title: 'Deal Pipeline',
+  apiUrl: api('/api/deal-pipelines/'),
+  fields: [
+    { name: 'name', label: 'Pipeline Name', type: 'text', required: true, col: 24, placeholder: 'e.g. Sales Pipeline' },
+    { name: 'is_default', label: 'Default Pipeline', type: 'switch', col: 12 },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+    { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 },
+  ],
+  initialValues: { name: '', is_default: false, active: true, description: '' },
+  validationSchema: Yup.object({
+    name: Yup.string().required('Pipeline name is required').max(120),
+    is_default: Yup.boolean().nullable(),
+    active: Yup.boolean().nullable(),
+    description: Yup.string().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    name: values.name?.trim() || null,
+    is_default: Boolean(values.is_default),
+    active: values.active !== false,
+    description: values.description?.trim() || null,
+  }),
+};
+
+const quickContactGroupConfig = {
+  title: 'Contact Group',
+  apiUrl: api('/api/contact-groups/'),
+  fields: [
+    { name: 'name', label: 'Group Name', type: 'text', required: true, col: 24, placeholder: 'Group name' },
+    {
+      name: 'parent_id', label: 'Parent Group', type: 'fkSelect', col: 24, placeholder: 'Parent group',
+      fkUrl: api('/api/contact-groups/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+    },
+    { name: 'active', label: 'Active', type: 'switch', col: 24 },
+    { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 },
+  ],
+  initialValues: { name: '', parent_id: null, active: true, description: '' },
+  validationSchema: Yup.object({
+    name: Yup.string().required('Group name is required').max(120),
+    parent_id: Yup.string().nullable(),
+    active: Yup.boolean().nullable(),
+    description: Yup.string().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    name: values.name?.trim() || null,
+    parent_id: values.parent_id || null,
+    active: values.active !== false,
+    description: values.description?.trim() || null,
+  }),
+};
+
+const quickContactConfig = {
+  title: 'Contact',
+  apiUrl: api('/api/contacts/'),
+  fields: [
+    { name: 'contact_type', label: 'Contact Type', type: 'select', required: true, col: 12, options: [{ value: 'customer', label: 'Customer' }, { value: 'supplier', label: 'Supplier' }, { value: 'lead', label: 'Lead' }] },
+    { name: 'name', label: 'Contact Name', type: 'text', required: true, col: 12, placeholder: 'Contact name' },
+    { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'email@example.com' },
+    { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: 'Phone number' },
+    {
+      name: 'contact_group_id', label: 'Contact Group', type: 'fkSelect', col: 12, placeholder: 'Select group',
+      fkUrl: api('/api/contact-groups/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+      quickAdd: quickContactGroupConfig,
+    },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+  ],
+  initialValues: { contact_type: 'lead', name: '', email: '', phone: '', contact_group_id: null, active: true },
+  validationSchema: Yup.object({
+    contact_type: Yup.string().required('Contact type is required'),
+    name: Yup.string().required('Contact name is required').max(180),
+    email: Yup.string().nullable().email('Invalid email').max(120),
+    phone: Yup.string().nullable().max(40),
+    contact_group_id: Yup.string().nullable(),
+    active: Yup.boolean().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    contact_type: values.contact_type || 'lead',
+    name: values.name?.trim() || null,
+    email: values.email?.trim() || null,
+    phone: values.phone?.trim() || null,
+    contact_group_id: values.contact_group_id || null,
+    active: values.active !== false,
+  }),
+};
+
+const quickUserConfig = {
+  title: 'User',
+  apiUrl: api('/api/hrm/users'),
+  fields: [
+    { name: 'first_name', label: 'First Name', type: 'text', required: true, col: 12 },
+    { name: 'last_name', label: 'Last Name', type: 'text', required: true, col: 12 },
+    { name: 'email', label: 'Email', type: 'text', required: true, col: 12 },
+    { name: 'username', label: 'Username', type: 'text', required: true, col: 12 },
+    { name: 'password', label: 'Password', type: 'password', required: true, col: 12 },
+    { name: 'phone', label: 'Phone', type: 'text', col: 12 },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+  ],
+  initialValues: { first_name: '', last_name: '', email: '', username: '', password: '', phone: '', active: true },
+  validationSchema: Yup.object({
+    first_name: Yup.string().required('First name is required').max(80),
+    last_name: Yup.string().required('Last name is required').max(80),
+    email: Yup.string().required('Email is required').email().max(120),
+    username: Yup.string().required('Username is required').max(80),
+    password: Yup.string().required('Password is required').min(6).max(255),
+    phone: Yup.string().nullable().max(40),
+    active: Yup.boolean().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    first_name: values.first_name?.trim() || null,
+    last_name: values.last_name?.trim() || null,
+    email: values.email?.trim() || null,
+    username: values.username?.trim() || null,
+    password: values.password || null,
+    phone: values.phone?.trim() || null,
+    active: values.active !== false,
+  }),
+};
+
+export function buildContactGroupCrud({ locked = {} } = {}) {
+  const fields = [
+    { name: 'name', label: 'Group Name', type: 'text', required: true, col: 12, placeholder: 'e.g. Enterprise Buyers' },
+    {
+      name: 'parent_id', label: 'Parent Group', type: 'fkSelect', col: 12, placeholder: 'Select parent group',
+      fkUrl: api('/api/contact-groups/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+    },
+    { name: 'active', label: 'Active', type: 'switch', col: 6 },
+    { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3, placeholder: 'Optional description' },
+  ];
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required('Group name is required').max(120),
+    parent_id: Yup.string().nullable(),
+    active: Yup.boolean().nullable(),
+    description: Yup.string().nullable(),
+  });
+
+  const crudInitialValues = { name: '', parent_id: null, active: true, description: '', ...locked };
+
+  const transformPayload = (values) => {
+    const p = { ...values, ...locked };
+    p.name = p.name?.trim() || null;
+    p.parent_id = p.parent_id || null;
+    p.description = p.description?.trim() || null;
+    p.active = p.active !== false;
+    return stripEmpty(p);
+  };
+
+  return { apiUrl: api('/api/contact-groups/'), fields, validationSchema, crudInitialValues, transformPayload };
+}
+
 export function buildLeadCrud({ locked = {} } = {}) {
   const fields = [
     {
@@ -84,18 +234,21 @@ export function buildLeadCrud({ locked = {} } = {}) {
       col: 24,
       children: [
         { name: 'lead_source', label: 'Source', type: 'text', col: 8, placeholder: 'e.g. Website, Referral' },
-        { name: 'expected_value', label: 'Expected Value', type: 'number', col: 8, min: 0, placeholder: '0.00' },
+        { name: 'expected_value', label: 'Expected Value', type: 'number', col: 8, min: 0, addonBefore: 'NPR', placeholder: '0.00' },
         {
           name: 'deal_pipeline_id', label: 'Pipeline', type: 'fkSelect', col: 8, placeholder: 'Select pipeline (default if blank)',
           fkUrl: api('/api/deal-pipelines/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          quickAdd: quickPipelineConfig,
         },
         {
           name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 8, placeholder: 'Link contact',
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          quickAdd: quickContactConfig,
         },
         {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
           fkUrl: api('/api/hrm/users'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          quickAdd: quickUserConfig,
         },
         { name: 'status', label: 'Status', type: 'select', col: 4, placeholder: 'Status', options: leadStatusOptions },
         { name: 'priority', label: 'Priority', type: 'select', col: 4, placeholder: 'Priority', options: priorityOptions },

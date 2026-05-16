@@ -116,6 +116,7 @@ export default function Expenses({ auth }) {
         title="Expenses"
         icon={<CreditCardOutlined />}
         apiUrl={api('/api/expenses/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

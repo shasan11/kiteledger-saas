@@ -111,6 +111,7 @@ export default function DebitNotes({ auth }) {
         title="Debit Notes"
         icon={<FileExclamationOutlined />}
         apiUrl={api('/api/debit-notes/')}
+        bulkActions={{ approve: true, void: true, export: true }}
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

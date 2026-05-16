@@ -20,6 +20,7 @@ import {
   Dropdown,
   notification,
   AutoComplete,
+  Alert,
   Space,
   theme,
 } from "antd";
@@ -40,6 +41,8 @@ import {
   LockOutlined,
   CloseOutlined,
   DownOutlined,
+  CheckCircleOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import { Formik, Field, FieldArray } from "formik";
 import * as XLSX from "xlsx";
@@ -78,6 +81,7 @@ export default function ReusableCrud({
   fields = EMPTY_ARRAY,
   columns = EMPTY_ARRAY,
   validationSchema,
+  bulkActions = null,
   bulkactions = EMPTY_ARRAY,
   singleactions = EMPTY_ARRAY,
   ui_type,
@@ -112,6 +116,9 @@ export default function ReusableCrud({
 
   onFormValuesChange,
   hideSubmitButton = false,
+  hideFormOnlyClose = false,
+  onFormOnlyClose = null,
+  onFormClose = null,
   submitLabelOverride = null,
   onSubmitButtonClick = null,
   renderSubmitButton = null,
@@ -343,6 +350,11 @@ export default function ReusableCrud({
   const [serverPaginated, setServerPaginated] = useState(false);
   const [submitErrors, setSubmitErrors] = useState(EMPTY_ARRAY);
   const [quickAddState, setQuickAddState] = useState(null);
+  const [transactionVoidState, setTransactionVoidState] = useState({
+    open: false,
+    reason: "",
+    loading: false,
+  });
 
   const [columnFilters, setColumnFilters] = useState(EMPTY_OBJECT);
   const [objectArrayExpandedRows, setObjectArrayExpandedRows] = useState(EMPTY_OBJECT);
@@ -443,6 +455,62 @@ export default function ReusableCrud({
   const baseUrl = useMemo(
     () => `${apiUrl}${filterUrl ? filterUrl : ""}`,
     [apiUrl, filterUrl]
+  );
+
+  const transactionEndpointSlugs = [
+    "cash-transfers",
+    "journal-vouchers",
+    "quotations",
+    "sales-orders",
+    "invoices",
+    "customer-payments",
+    "credit-notes",
+    "sales-returns",
+    "purchase-orders",
+    "purchase-bills",
+    "expenses",
+    "debit-notes",
+    "supplier-payments",
+  ];
+
+  const normalizedApiBase = useMemo(
+    () => String(apiUrl || "").replace(/\/+$/, ""),
+    [apiUrl]
+  );
+
+  const isTransactionalCrud = useMemo(
+    () => transactionEndpointSlugs.some((slug) => normalizedApiBase.endsWith(`/api/${slug}`) || normalizedApiBase.endsWith(`/${slug}`)),
+    [normalizedApiBase]
+  );
+
+  const normalizedBulkActions = useMemo(() => {
+    if (bulkActions && !Array.isArray(bulkActions) && typeof bulkActions === "object") {
+      return {
+        approve: bulkActions.approve !== false,
+        void: bulkActions.void !== false,
+        export: bulkActions.export !== false,
+      };
+    }
+
+    if (Array.isArray(bulkActions)) {
+      return {
+        approve: bulkActions.includes("approve"),
+        void: bulkActions.includes("void"),
+        export: bulkActions.includes("export"),
+      };
+    }
+
+    return {
+      approve: false,
+      void: false,
+      export: false,
+    };
+  }, [bulkActions]);
+
+  const hasTransactionBulkActions = isTransactionalCrud && (
+    normalizedBulkActions.approve ||
+    normalizedBulkActions.void ||
+    normalizedBulkActions.export
   );
 
   const applyRecordTransform = useCallback(
@@ -2033,6 +2101,129 @@ export default function ReusableCrud({
     return items;
   };
 
+  const runTransactionBulkApprove = useCallback(async () => {
+    if (!selectedRowKeys.length) {
+      message.warning("Select at least one record first");
+      return;
+    }
+
+    try {
+      const res = await axios.post(
+        `${normalizedApiBase}/bulk-approve`,
+        { ids: selectedRowKeys },
+        { headers: { ...authHeaders, "Content-Type": "application/json" } }
+      );
+      const failed = res?.data?.failed || [];
+      const count = Number(res?.data?.approved_count || 0);
+      if (failed.length) {
+        notification.warning({
+          message: "Some records could not be approved",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+      } else {
+        message.success(`${count} record${count === 1 ? "" : "s"} approved`);
+      }
+      setSelectedRowKeys(EMPTY_ARRAY);
+      fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
+    } catch (error) {
+      const failed = error?.response?.data?.failed || [];
+      const count = Number(error?.response?.data?.approved_count || 0);
+      if (count > 0) {
+        notification.warning({
+          message: "Some records could not be approved",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+        setSelectedRowKeys(EMPTY_ARRAY);
+        fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
+      } else if (failed.length) {
+        notification.error({
+          message: "Approval failed",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+      } else {
+        message.error(error?.response?.data?.message || "Failed to approve selected records");
+      }
+    }
+  }, [selectedRowKeys, normalizedApiBase, authHeaders, fetchData, pagination.current, pagination.pageSize, searchText]);
+
+  const runTransactionBulkVoid = useCallback(async () => {
+    if (!selectedRowKeys.length) {
+      message.warning("Select at least one record first");
+      return;
+    }
+
+    const reason = String(transactionVoidState.reason || "").trim();
+
+    if (reason.length < 3) {
+      message.error("Void reason is required and must be at least 3 characters.");
+      return;
+    }
+
+    setTransactionVoidState((state) => ({ ...state, loading: true }));
+
+    try {
+      const res = await axios.post(
+        `${normalizedApiBase}/bulk-void`,
+        { ids: selectedRowKeys, voided_reason: reason },
+        { headers: { ...authHeaders, "Content-Type": "application/json" } }
+      );
+      const failed = res?.data?.failed || [];
+      const count = Number(res?.data?.voided_count || 0);
+      if (failed.length) {
+        notification.warning({
+          message: "Some records could not be voided",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+      } else {
+        message.success(`${count} record${count === 1 ? "" : "s"} voided`);
+      }
+      setTransactionVoidState({ open: false, reason: "", loading: false });
+      setSelectedRowKeys(EMPTY_ARRAY);
+      fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
+    } catch (error) {
+      const failed = error?.response?.data?.failed || [];
+      const count = Number(error?.response?.data?.voided_count || 0);
+      if (count > 0) {
+        notification.warning({
+          message: "Some records could not be voided",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+        setTransactionVoidState({ open: false, reason: "", loading: false });
+        setSelectedRowKeys(EMPTY_ARRAY);
+        fetchData({ page: pagination.current, pageSize: pagination.pageSize, search: searchText });
+      } else if (failed.length) {
+        notification.error({
+          message: "Void failed",
+          description: failed.map((item) => `${item.id}: ${item.reason}`).join("\n"),
+        });
+        setTransactionVoidState((state) => ({ ...state, loading: false }));
+      } else {
+        message.error(error?.response?.data?.message || "Failed to void selected records");
+        setTransactionVoidState((state) => ({ ...state, loading: false }));
+      }
+    }
+  }, [transactionVoidState.reason, selectedRowKeys, normalizedApiBase, authHeaders, fetchData, pagination.current, pagination.pageSize, searchText]);
+
+  const runTransactionBulkExport = useCallback(async () => {
+    if (!selectedRowKeys.length) {
+      message.warning("Select at least one record first");
+      return;
+    }
+
+    try {
+      const res = await axios.post(
+        `${normalizedApiBase}/bulk-export`,
+        { ids: selectedRowKeys, format: "csv" },
+        { headers: { ...authHeaders, "Content-Type": "application/json" }, responseType: "blob" }
+      );
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8" });
+      saveAs(blob, `${String(title || "transactions").toLowerCase().replace(/\s+/g, "-")}-selected.csv`);
+      message.success("Selected records exported");
+    } catch (error) {
+      message.error(error?.response?.data?.message || "Failed to export selected records");
+    }
+  }, [selectedRowKeys, normalizedApiBase, authHeaders, title]);
+
   const topMenuItems = useMemo(() => {
     const items = [];
 
@@ -2078,6 +2269,7 @@ export default function ReusableCrud({
     if (Array.isArray(rowMenu) && rowMenu.length) {
       rowMenu
         .filter((item) => {
+          if (isTransactionalCrud && /^bulk\s+(approve|void)$/i.test(String(item?.label || ""))) return false;
           if (typeof item?.show === "function") return item.show({ selectedRowKeys, data, viewActive });
           return item?.show !== false;
         })
@@ -2131,6 +2323,11 @@ export default function ReusableCrud({
     viewActive,
     selectedRowKeys,
     rowMenu,
+    isTransactionalCrud,
+    hasTransactionBulkActions,
+    normalizedBulkActions,
+    runTransactionBulkApprove,
+    runTransactionBulkExport,
     data,
     fetchData,
     bulkAddLoading,
@@ -2150,10 +2347,20 @@ export default function ReusableCrud({
     return (columns || EMPTY_ARRAY).map((col) => {
       let next = { ...col };
 
-      if (col?.backendFilter) {
+      const autoTextFilter =
+        !col?.backendFilter &&
+        typeof col?.dataIndex === "string" &&
+        !col.dataIndex.includes(".") &&
+        col.dataIndex !== "id";
+
+      if (col?.backendFilter || autoTextFilter) {
         next = {
           ...next,
-          ...buildBackendColumnFilter(col.backendFilter),
+          ...buildBackendColumnFilter(col.backendFilter || {
+            title: col.title || col.dataIndex,
+            type: "text",
+            paramName: col.dataIndex,
+          }),
         };
       }
 
@@ -2168,7 +2375,7 @@ export default function ReusableCrud({
   }, [columns, buildBackendColumnFilter, sortState]);
 
   const canRowActionsExist =
-    showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
+    !isTransactionalCrud && showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
 
   const viewColumn =
     showViewColumn && typeof viewPathBuilder === "function"
@@ -2446,6 +2653,10 @@ export default function ReusableCrud({
                       value={values?.[name]}
                       min={field.min}
                       max={field.max}
+                      addonBefore={field.addonBefore || field.prefix}
+                      addonAfter={field.addonAfter || field.suffix}
+                      formatter={field.formatter}
+                      parser={field.parser}
                       size="medium"
                       disabled={readOnly}
                       onChange={(val) => setFieldValue(name, val)}
@@ -3797,6 +4008,16 @@ export default function ReusableCrud({
         background: ${token.colorFillQuaternary} !important;
       }
 
+      .reusable-crud-token .transaction-row-voided > td {
+        background: ${token.colorErrorBg} !important;
+        color: ${token.colorTextSecondary};
+        text-decoration: line-through;
+      }
+
+      .reusable-crud-token .transaction-row-draft > td {
+        background: ${token.colorWarningBg} !important;
+      }
+
       .reusable-crud-token .ant-form-item {
         margin-bottom: ${token.marginSM}px;
       }
@@ -3948,15 +4169,22 @@ export default function ReusableCrud({
                     <div style={ui.formOnlyActions}>
                       {headerSubmitButton}
 
-                      <Button
-                        type="text"
-                        icon={<CloseOutlined style={{ fontSize: 18 }} />}
-                        onClick={() => {
-                          if (typeof window !== "undefined" && window.history.length > 1) {
-                            window.history.back();
-                          }
-                        }}
-                      />
+                      {!hideFormOnlyClose ? (
+                        <Button
+                          type="text"
+                          icon={<CloseOutlined style={{ fontSize: 18 }} />}
+                          onClick={() => {
+                            if (typeof onFormOnlyClose === "function") {
+                              onFormOnlyClose(submitMeta);
+                              return;
+                            }
+
+                            if (typeof window !== "undefined" && window.history.length > 1) {
+                              window.history.back();
+                            }
+                          }}
+                        />
+                      ) : null}
                     </div>
                   </div>
 
@@ -4086,6 +4314,7 @@ export default function ReusableCrud({
               onClose={() => {
                 setVisible(false);
                 setSubmitErrors(EMPTY_ARRAY);
+                if (typeof onFormClose === "function") onFormClose();
               }}
               destroyOnClose
               styles={{
@@ -4130,6 +4359,7 @@ export default function ReusableCrud({
             onCancel={() => {
               setVisible(false);
               setSubmitErrors(EMPTY_ARRAY);
+              if (typeof onFormClose === "function") onFormClose();
             }}
             footer={null}
             destroyOnClose
@@ -4238,11 +4468,19 @@ export default function ReusableCrud({
         </Button>
       ) : (
         <div style={ui.shell}>
-          {canView && selectedRowKeys.length > 0 && bulkactions?.length > 0 && (
+          {canView && selectedRowKeys.length > 0 && (bulkactions?.length > 0 || hasTransactionBulkActions) && (
             <div style={ui.bulkBar}>
-              <span style={{ fontWeight: 700, color: token.colorText }}>
-                {selectedRowKeys.length} selected
-              </span>
+              <Alert
+                type="success"
+                showIcon
+                message={`${selectedRowKeys.length} selected`}
+                style={{
+                  padding: 0,
+                  background: "transparent",
+                  border: 0,
+                  flex: "1 1 180px",
+                }}
+              />
 
               {bulkactions.map((action, index) => (
                 <Button
@@ -4288,6 +4526,40 @@ export default function ReusableCrud({
                   {action.label}
                 </Button>
               ))}
+
+              {hasTransactionBulkActions && (
+                <Space size="small" wrap>
+                  {normalizedBulkActions.approve && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<CheckCircleOutlined />}
+                      onClick={runTransactionBulkApprove}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                  {normalizedBulkActions.void && (
+                    <Button
+                      danger
+                      size="small"
+                      icon={<StopOutlined />}
+                      onClick={() => setTransactionVoidState({ open: true, reason: "", loading: false })}
+                    >
+                      Void
+                    </Button>
+                  )}
+                  {normalizedBulkActions.export && (
+                    <Button
+                      size="small"
+                      icon={<DownloadOutlined />}
+                      onClick={runTransactionBulkExport}
+                    >
+                      Export
+                    </Button>
+                  )}
+                </Space>
+              )}
             </div>
           )}
 
@@ -4363,6 +4635,12 @@ export default function ReusableCrud({
                     }
                     : null
                 }
+                rowClassName={(record) => {
+                  if (!isTransactionalCrud) return "";
+                  if (record?.void || record?.voided) return "transaction-row-voided";
+                  if (record?.approved === false) return "transaction-row-draft";
+                  return "";
+                }}
                 pagination={{
                   current: pagination.current,
                   pageSize: pagination.pageSize,
@@ -4405,6 +4683,49 @@ export default function ReusableCrud({
             </div>
           )}
         </div>
+      )}
+
+      {isTransactionalCrud && (
+        <Modal
+          title="Void Selected"
+          open={transactionVoidState.open}
+          onOk={runTransactionBulkVoid}
+          confirmLoading={transactionVoidState.loading}
+          onCancel={() => setTransactionVoidState({ open: false, reason: "", loading: false })}
+          okText="Void"
+          okButtonProps={{
+            danger: true,
+            disabled: String(transactionVoidState.reason || "").trim().length < 3,
+          }}
+        >
+          <p>
+            <strong>Warning:</strong>{" "}
+            This transaction will be voided and cannot be reverted later. Are you sure you want to void it?
+          </p>
+          <Form layout="vertical" style={{ marginTop: token.marginMD }}>
+            <Form.Item
+              label="Void reason"
+              required
+              validateStatus={
+                transactionVoidState.reason && transactionVoidState.reason.trim().length < 3 ? "error" : undefined
+              }
+              help={
+                transactionVoidState.reason && transactionVoidState.reason.trim().length < 3
+                  ? "Void reason must be at least 3 characters."
+                  : undefined
+              }
+            >
+              <Input.TextArea
+                rows={3}
+                value={transactionVoidState.reason}
+                onChange={(event) =>
+                  setTransactionVoidState((state) => ({ ...state, reason: event.target.value }))
+                }
+                placeholder="Enter void reason"
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
       )}
 
       {formNode}

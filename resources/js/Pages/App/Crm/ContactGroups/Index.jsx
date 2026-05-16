@@ -11,6 +11,7 @@ import {
   Segmented,
   Skeleton,
   Space,
+  Tag,
   Tree,
   Typography,
   theme,
@@ -208,6 +209,21 @@ export default function ContactGroups(props) {
       key: 'parent',
       render: (_, record) => record?.parent?.name || '-',
     },
+    {
+      title: 'Status',
+      dataIndex: 'active',
+      key: 'active',
+      sorter: true,
+      width: 120,
+      render: (value) => <Tag color={value === false ? 'red' : 'green'}>{value === false ? 'Inactive' : 'Active'}</Tag>,
+    },
+    {
+      title: 'Description',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+      render: (value) => value || '-',
+    },
   ];
 
   const fields = [
@@ -230,6 +246,12 @@ export default function ContactGroups(props) {
       fkPageSize: 20,
       fkValueKey: 'id',
       fkLabelKey: 'name',
+    },
+    {
+      name: 'active',
+      label: 'Active',
+      type: 'switch',
+      col: 24,
     },
     {
       name: 'description',
@@ -265,6 +287,7 @@ export default function ContactGroups(props) {
       ),
 
     description: Yup.string().nullable(),
+    active: Yup.boolean().nullable(),
   });
 
   const crudInitialValues = {
@@ -272,6 +295,7 @@ export default function ContactGroups(props) {
     name: '',
     parent_id: null,
     parent_id_detail: null,
+    active: true,
     description: '',
   };
 
@@ -284,6 +308,7 @@ export default function ContactGroups(props) {
       name: record.name ?? '',
       parent_id: record.parent_id ?? record.parent?.id ?? null,
       parent_id_detail: record.parent ?? record.parent_id_detail ?? null,
+      active: record.active !== false,
       description: record.description ?? '',
     };
   };
@@ -294,6 +319,7 @@ export default function ContactGroups(props) {
     p.name = p.name?.trim() || null;
     p.description = p.description?.trim() || null;
     p.parent_id = getId(p.parent_id);
+    p.active = p.active !== false;
 
     delete p.id;
     delete p.parent;
@@ -428,6 +454,10 @@ export default function ContactGroups(props) {
             canDelete={true}
             hasActions={true}
             hasActionColumns={true}
+            activeParam="active"
+            enableInactiveDrawer={true}
+            backendFilter={{ active: 'active', parent: 'parent_id' }}
+            backendSort={{ name: 'name', active: 'active', created_at: 'created_at' }}
           />
         ) : (
           <ContactGroupTreeView />
