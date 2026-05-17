@@ -400,8 +400,11 @@ function SummaryBar({ pipelineId, search }) {
 
 function AddDealModal({ open, selectedPipeline, onCancel, onSaved }) {
   const [form] = Form.useForm();
+  const [contactForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [quickContactOpen, setQuickContactOpen] = useState(false);
   const [leads, setLeads] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [users, setUsers] = useState([]);
@@ -482,109 +485,181 @@ function AddDealModal({ open, selectedPipeline, onCancel, onSaved }) {
     }
   };
 
+  const handleQuickContact = async () => {
+    try {
+      const values = await contactForm.validateFields();
+      setSavingContact(true);
+
+      const response = await axios.post(api('/api/contacts/'), {
+        contact_type: values.contact_type || 'lead',
+        name: values.name?.trim() || null,
+        email: values.email?.trim() || null,
+        phone: values.phone?.trim() || null,
+        active: true,
+      }, { headers: authHeaders() });
+
+      const contact = response.data?.data || response.data;
+      setContacts((current) => [contact, ...current.filter((item) => item.id !== contact.id)]);
+      form.setFieldsValue({ contact_id: contact.id });
+      contactForm.resetFields();
+      setQuickContactOpen(false);
+      message.success('Contact added');
+    } catch (error) {
+      if (error?.errorFields) return;
+      message.error(error?.response?.data?.message || 'Failed to add contact');
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
   return (
-    <Modal
-      title="Add Deal"
-      open={open}
-      onCancel={onCancel}
-      width={900}
-      destroyOnClose
-      okText="Save Deal"
-      onOk={handleSubmit}
-      confirmLoading={saving}
-    >
-      <Form
-        form={form}
-        layout="vertical"
-        disabled={saving}
-        initialValues={{
-          status: 'open',
-          priority: 'medium',
-          committed: false,
-          deal_pipeline_id: selectedPipeline || null,
-        }}
+    <>
+      <Modal
+        title="Add Deal"
+        open={open}
+        onCancel={onCancel}
+        width={900}
+        destroyOnClose
+        okText="Save Deal"
+        onOk={handleSubmit}
+        confirmLoading={saving}
       >
-        <Row gutter={12}>
-          <Col xs={24} md={12}>
-            <Form.Item
-              name="title"
-              label="Title"
-              rules={[
-                { required: true, message: 'Title is required' },
-                { max: 180, message: 'Title must be 180 characters or fewer' },
-              ]}
-            >
-              <Input placeholder="Deal title" />
-            </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
-            <Form.Item name="status" label="Status">
-              <Select options={DEAL_STATUS_OPTIONS} />
-            </Form.Item>
-          </Col>
-          <Col xs={12} md={6}>
-            <Form.Item name="priority" label="Priority">
-              <Select options={DEAL_PRIORITY_OPTIONS} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="lead_id" label="Lead">
-              <Select allowClear showSearch loading={loadingOptions} placeholder="Select lead" optionFilterProp="label" options={toOptions(leads)} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="contact_id" label="Contact">
-              <Select allowClear showSearch loading={loadingOptions} placeholder="Select contact" optionFilterProp="label" options={toOptions(contacts)} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="assigned_to_id" label="Assigned To">
-              <Select allowClear showSearch loading={loadingOptions} placeholder="Select user" optionFilterProp="label" options={toOptions(users)} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="deal_pipeline_id" label="Pipeline">
-              <Select allowClear showSearch loading={loadingOptions} placeholder="Default if blank" optionFilterProp="label" options={toOptions(pipelines)} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="deal_stage_id" label="Stage">
-              <Select allowClear showSearch loading={loadingOptions} placeholder="First stage if blank" optionFilterProp="label" options={toOptions(stages)} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={8}>
-            <Form.Item name="source" label="Source">
-              <Input placeholder="e.g. Referral" />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={6}>
-            <Form.Item name="amount" label="Amount">
-              <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={6}>
-            <Form.Item name="probability" label="Probability (%)">
-              <InputNumber min={0} max={100} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={6}>
-            <Form.Item name="expected_close_date" label="Expected Close">
-              <DatePicker style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={6}>
-            <Form.Item name="committed" label="Committed" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </Col>
-          <Col span={24}>
-            <Form.Item name="description" label="Description">
-              <Input.TextArea rows={3} placeholder="Deal description" />
-            </Form.Item>
-          </Col>
-        </Row>
-      </Form>
-    </Modal>
+        <Form
+          form={form}
+          layout="vertical"
+          disabled={saving}
+          initialValues={{
+            status: 'open',
+            priority: 'medium',
+            committed: false,
+            deal_pipeline_id: selectedPipeline || null,
+          }}
+        >
+          <Row gutter={12}>
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="title"
+                label="Title"
+                rules={[
+                  { required: true, message: 'Title is required' },
+                  { max: 180, message: 'Title must be 180 characters or fewer' },
+                ]}
+              >
+                <Input placeholder="Deal title" />
+              </Form.Item>
+            </Col>
+            <Col xs={12} md={6}>
+              <Form.Item name="status" label="Status">
+                <Select options={DEAL_STATUS_OPTIONS} />
+              </Form.Item>
+            </Col>
+            <Col xs={12} md={6}>
+              <Form.Item name="priority" label="Priority">
+                <Select options={DEAL_PRIORITY_OPTIONS} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="lead_id" label="Lead">
+                <Select allowClear showSearch loading={loadingOptions} placeholder="Select lead" optionFilterProp="label" options={toOptions(leads)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item label="Contact">
+                <Space.Compact style={{ width: '100%' }}>
+                  <Form.Item name="contact_id" noStyle>
+                    <Select allowClear showSearch loading={loadingOptions} placeholder="Select contact" optionFilterProp="label" options={toOptions(contacts)} />
+                  </Form.Item>
+                  <Button icon={<PlusOutlined />} onClick={() => setQuickContactOpen(true)} />
+                </Space.Compact>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="assigned_to_id" label="Assigned To">
+                <Select allowClear showSearch loading={loadingOptions} placeholder="Select user" optionFilterProp="label" options={toOptions(users)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="deal_pipeline_id" label="Pipeline">
+                <Select allowClear showSearch loading={loadingOptions} placeholder="Default if blank" optionFilterProp="label" options={toOptions(pipelines)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="deal_stage_id" label="Stage">
+                <Select allowClear showSearch loading={loadingOptions} placeholder="First stage if blank" optionFilterProp="label" options={toOptions(stages)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="source" label="Source">
+                <Input placeholder="e.g. Referral" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="amount" label="Amount">
+                <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="probability" label="Probability (%)">
+                <InputNumber min={0} max={100} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="expected_close_date" label="Expected Close">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="committed" label="Committed" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item name="description" label="Description">
+                <Input.TextArea rows={3} placeholder="Deal description" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Quick Add Contact"
+        open={quickContactOpen}
+        onCancel={() => {
+          setQuickContactOpen(false);
+          contactForm.resetFields();
+        }}
+        onOk={handleQuickContact}
+        confirmLoading={savingContact}
+        okText="Add Contact"
+        destroyOnClose
+      >
+        <Form form={contactForm} layout="vertical" initialValues={{ contact_type: 'lead' }}>
+          <Row gutter={12}>
+            <Col xs={24} md={12}>
+              <Form.Item name="contact_type" label="Contact Type" rules={[{ required: true, message: 'Contact type is required' }]}>
+                <Select options={[{ value: 'customer', label: 'Customer' }, { value: 'supplier', label: 'Supplier' }, { value: 'lead', label: 'Lead' }]} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="name" label="Contact Name" rules={[{ required: true, message: 'Contact name is required' }]}>
+                <Input placeholder="Contact name" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="email" label="Email">
+                <Input placeholder="email@example.com" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="phone" label="Phone">
+                <Input placeholder="Phone number" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+    </>
   );
 }
 

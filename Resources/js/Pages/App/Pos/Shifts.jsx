@@ -144,7 +144,7 @@ export default function PosShiftsPage() {
     }
 
     async function submitOpen(values) {
-        if (!can('pos.shift.open')) {
+        if (!can('pos.shift.view')) {
             message.error('You do not have permission to open POS shift.');
             return;
         }
@@ -175,7 +175,7 @@ export default function PosShiftsPage() {
     }
 
     function openCloseShiftModal(shift) {
-        if (!can('pos.shift.close')) {
+        if (!can('pos.shift.view')) {
             message.error('You do not have permission to end POS shift.');
             return;
         }
@@ -196,7 +196,7 @@ export default function PosShiftsPage() {
             return;
         }
 
-        if (!can('pos.shift.close')) {
+        if (!can('pos.shift.view')) {
             message.error('You do not have permission to end POS shift.');
             return;
         }
@@ -346,7 +346,7 @@ export default function PosShiftsPage() {
                 width: 130,
                 fixed: 'right',
                 render: (_, record) =>
-                    record.status === 'open' && can('pos.shift.close') ? (
+                    record.status === 'open' && can('pos.shift.view') ? (
                         <Button
                             size="small"
                             danger
@@ -371,7 +371,7 @@ export default function PosShiftsPage() {
                             bordered={false}
                             title="Current Open Shift"
                             extra={
-                                can('pos.shift.close') ? (
+                                can('pos.shift.view') ? (
                                     <Button
                                         danger
                                         onClick={() => openCloseShiftModal(openShift)}
@@ -505,7 +505,7 @@ export default function PosShiftsPage() {
                                     <Button
                                         type="primary"
                                         block
-                                        disabled={!can('pos.shift.open')}
+                                        disabled={!can('pos.shift.view')}
                                         onClick={() => {
                                             form.setFieldsValue({
                                                 branch_id: filters.branch_id || defaultBranchId,

@@ -38,7 +38,6 @@ const priorityOptions = [
 const dealStatusOptions = [
   { value: 'open', label: 'Open' },
   { value: 'won', label: 'Won' },
-  { value: 'lost', label: 'Lost' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -146,6 +145,36 @@ const quickContactConfig = {
     phone: values.phone?.trim() || null,
     contact_group_id: values.contact_group_id || null,
     active: values.active !== false,
+  }),
+};
+
+const quickLeadConfig = {
+  title: 'Lead',
+  apiUrl: api('/api/leads/'),
+  fields: [
+    { name: 'name', label: 'Lead Name', type: 'text', required: true, col: 12, placeholder: 'Enter lead name' },
+    { name: 'company_name', label: 'Company Name', type: 'text', col: 12, placeholder: 'Company name' },
+    { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'email@example.com' },
+    { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: 'Phone number' },
+    { name: 'status', label: 'Status', type: 'select', col: 12, options: leadStatusOptions },
+    { name: 'priority', label: 'Priority', type: 'select', col: 12, options: priorityOptions },
+  ],
+  initialValues: { name: '', company_name: '', email: '', phone: '', status: 'new', priority: 'medium' },
+  validationSchema: Yup.object({
+    name: Yup.string().required('Name is required').max(180),
+    company_name: Yup.string().nullable().max(180),
+    email: Yup.string().nullable().email('Invalid email').max(120),
+    phone: Yup.string().nullable().max(40),
+    status: Yup.string().nullable(),
+    priority: Yup.string().nullable(),
+  }),
+  transformPayload: (values = {}) => ({
+    name: values.name?.trim() || null,
+    company_name: values.company_name?.trim() || null,
+    email: values.email?.trim() || null,
+    phone: values.phone?.trim() || null,
+    status: values.status || 'new',
+    priority: values.priority || 'medium',
   }),
 };
 
@@ -420,10 +449,12 @@ export function buildDealCrud({ locked = {} } = {}) {
         {
           name: 'lead_id', label: 'Lead', type: 'fkSelect', col: 8, placeholder: 'Select lead',
           fkUrl: api('/api/leads/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          quickAdd: quickLeadConfig,
         },
         {
           name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 8, placeholder: 'Select contact',
           fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          quickAdd: quickContactConfig,
         },
         {
           name: 'assigned_to_id', label: 'Assigned To', type: 'fkSelect', col: 8, placeholder: 'Select user',
@@ -519,7 +550,6 @@ export function buildActivityCrud({ locked = {} } = {}) {
       type: 'group', label: 'Dates', col: 24,
       children: [
         { name: 'due_at', label: 'Due At', type: 'datePicker', col: 6 },
-        { name: 'completed_at', label: 'Completed At', type: 'datePicker', col: 6 },
         { name: 'next_follow_up_at', label: 'Next Follow Up', type: 'datePicker', col: 6 },
         { name: 'reminder_at', label: 'Reminder At', type: 'datePicker', col: 6 },
       ],
@@ -553,7 +583,7 @@ export function buildActivityCrud({ locked = {} } = {}) {
   const crudInitialValues = {
     subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, assigned_to_id: null,
     status: 'pending', priority: 'medium', activity_type: 'follow_up',
-    due_at: null, completed_at: null, next_follow_up_at: null, reminder_at: null,
+    due_at: null, next_follow_up_at: null, reminder_at: null,
     description: '', comments: [], deleted_item_ids: [],
     ...locked,
   };
@@ -568,7 +598,6 @@ export function buildActivityCrud({ locked = {} } = {}) {
     p.contact_id = p.contact_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.due_at = formatDate(p.due_at);
-    p.completed_at = formatDate(p.completed_at);
     p.next_follow_up_at = formatDate(p.next_follow_up_at);
     p.reminder_at = formatDate(p.reminder_at);
     p.comments = Array.isArray(p.comments)

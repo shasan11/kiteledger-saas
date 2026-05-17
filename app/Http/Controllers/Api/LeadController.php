@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Lead;
 use App\Services\Crm\CrmPipelineResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -100,6 +101,35 @@ class LeadController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected function baseQuery(): Builder
+    {
+        return $this->applyAssignedUserScope(parent::baseQuery());
+    }
+
+    protected function findRecord(mixed $id): Model
+    {
+        return $this->applyAssignedUserScope($this->newQuery())->findOrFail($id);
+    }
+
+    private function applyAssignedUserScope(Builder $query): Builder
+    {
+        $user = request()->user();
+
+        if (!$user || $this->userHasFullCrmAccess($user)) {
+            return $query;
+        }
+
+        return $query->where('assigned_to_id', $user->getAuthIdentifier());
+    }
+
+    private function userHasFullCrmAccess($user): bool
+    {
+        return method_exists($user, 'can') && (
+            $user->can('crm.manage') ||
+            $user->can('crm.*')
+        );
+    }
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
@@ -206,7 +236,9 @@ class LeadController extends BaseCrudApiController
 
     public function moveStatus(Request $request, string $id)
     {
-        $lead = Lead::query()->with(['contact', 'assignedTo', 'convertedContact', 'convertedDeal', 'dealPipeline'])->findOrFail($id);
+        $lead = $this->applyAssignedUserScope(Lead::query())
+            ->with(['contact', 'assignedTo', 'convertedContact', 'convertedDeal', 'dealPipeline'])
+            ->findOrFail($id);
 
         $data = $request->validate([
             'status' => ['required', Rule::in(self::STATUSES)],

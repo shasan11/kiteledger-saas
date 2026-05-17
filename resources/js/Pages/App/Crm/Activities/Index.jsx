@@ -2,7 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Tag, Typography } from 'antd';
+import { Space, Tag, Typography } from 'antd';
 import { ScheduleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -38,6 +38,7 @@ const activityTypeOptions = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'task', label: 'Task' },
   { value: 'note', label: 'Note' },
+  { value: 'follow_up', label: 'Follow Up' },
 ];
 
 const statusColor = {
@@ -46,6 +47,16 @@ const statusColor = {
   completed: 'green',
   cancelled: 'red',
 };
+
+const priorityColor = {
+  low: 'default',
+  medium: 'blue',
+  high: 'orange',
+  urgent: 'red',
+};
+
+const labelize = (value) => value ? String(value).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-';
+const relatedLabel = (record) => record?.lead?.name || record?.deal?.title || record?.contact?.name || '-';
 
 const emptyComment = {
   user_id: null,
@@ -60,7 +71,20 @@ export default function Activities(props) {
       key: 'subject',
       sorter: true,
       width: 220,
-      render: (val) => <Text strong>{val || '-'}</Text>,
+      render: (val, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{val || '-'}</Text>
+          {record?.activity_type ? <Tag style={{ width: 'fit-content', margin: 0 }}>{labelize(record.activity_type)}</Tag> : null}
+        </Space>
+      ),
+    },
+    {
+      title: 'Priority',
+      dataIndex: 'priority',
+      key: 'priority',
+      sorter: true,
+      width: 110,
+      render: (val) => <Tag color={priorityColor[val] || 'default'}>{labelize(val || 'medium')}</Tag>,
     },
     {
       title: 'Status',
@@ -68,29 +92,22 @@ export default function Activities(props) {
       key: 'status',
       sorter: true,
       width: 120,
-      render: (val) => (
-        <Tag color={statusColor[val] || 'default'}>
-          {val ? String(val).replace(/_/g, ' ').toUpperCase() : 'PENDING'}
-        </Tag>
-      ),
+      render: (val) => <Tag color={statusColor[val] || 'default'}>{labelize(val || 'pending')}</Tag>,
     },
     {
-      title: 'Type',
-      dataIndex: 'activity_type',
-      key: 'activity_type',
-      sorter: true,
-      width: 100,
-      render: (val) => val ? <Tag>{String(val).toUpperCase()}</Tag> : '-',
+      title: 'Assigned',
+      key: 'assigned_to',
+      width: 140,
+      render: (_, record) => record?.assigned_to?.name || record?.assignedTo?.name || '-',
     },
     {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-      render: (val) => val || '-',
+      title: 'Related',
+      key: 'related',
+      width: 180,
+      render: (_, record) => relatedLabel(record),
     },
     {
-      title: 'Due At',
+      title: 'Due Date',
       dataIndex: 'due_at',
       key: 'due_at',
       sorter: true,
@@ -98,9 +115,9 @@ export default function Activities(props) {
       render: (val) => val || '-',
     },
     {
-      title: 'Completed At',
-      dataIndex: 'completed_at',
-      key: 'completed_at',
+      title: 'Follow-up',
+      dataIndex: 'next_follow_up_at',
+      key: 'next_follow_up_at',
       sorter: true,
       width: 140,
       render: (val) => val || '-',
@@ -217,13 +234,6 @@ export default function Activities(props) {
           placeholder: 'Select date',
         },
         {
-          name: 'completed_at',
-          label: 'Completed At',
-          type: 'datePicker',
-          col: 6,
-          placeholder: 'Select date',
-        },
-        {
           name: 'next_follow_up_at',
           label: 'Next Follow Up',
           type: 'datePicker',
@@ -291,9 +301,8 @@ export default function Activities(props) {
     assigned_to_id: Yup.number().nullable(),
     status: Yup.string().nullable().oneOf(['pending', 'in_progress', 'completed', 'cancelled', null]),
     priority: Yup.string().nullable().oneOf(['low', 'medium', 'high', 'urgent', null]),
-    activity_type: Yup.string().nullable().oneOf(['call', 'email', 'meeting', 'task', 'note', null]),
+    activity_type: Yup.string().nullable().oneOf(['call', 'email', 'meeting', 'task', 'note', 'follow_up', null]),
     due_at: Yup.string().nullable(),
-    completed_at: Yup.string().nullable(),
     next_follow_up_at: Yup.string().nullable(),
     reminder_at: Yup.string().nullable(),
     description: Yup.string().nullable(),
@@ -316,7 +325,6 @@ export default function Activities(props) {
     priority: 'medium',
     activity_type: null,
     due_at: null,
-    completed_at: null,
     next_follow_up_at: null,
     reminder_at: null,
     description: '',
@@ -334,7 +342,6 @@ export default function Activities(props) {
     p.contact_id = p.contact_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.due_at = formatDate(p.due_at);
-    p.completed_at = formatDate(p.completed_at);
     p.next_follow_up_at = formatDate(p.next_follow_up_at);
     p.reminder_at = formatDate(p.reminder_at);
     p.comments = Array.isArray(p.comments)

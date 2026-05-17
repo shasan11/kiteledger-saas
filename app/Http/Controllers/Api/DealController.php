@@ -7,6 +7,7 @@ use App\Models\CrmDealStageHistory;
 use App\Models\DealPipeline;
 use App\Models\DealStage;
 use App\Services\Crm\CrmPipelineResolver;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -82,6 +83,35 @@ class DealController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected function baseQuery(): Builder
+    {
+        return $this->applyAssignedUserScope(parent::baseQuery());
+    }
+
+    protected function findRecord(mixed $id): Model
+    {
+        return $this->applyAssignedUserScope($this->newQuery())->findOrFail($id);
+    }
+
+    private function applyAssignedUserScope(Builder $query): Builder
+    {
+        $user = request()->user();
+
+        if (!$user || $this->userHasFullCrmAccess($user)) {
+            return $query;
+        }
+
+        return $query->where('assigned_to_id', $user->getAuthIdentifier());
+    }
+
+    private function userHasFullCrmAccess($user): bool
+    {
+        return method_exists($user, 'can') && (
+            $user->can('crm.manage') ||
+            $user->can('crm.*')
+        );
+    }
 
     protected array $storeRules = [
         'deal_no' => ['nullable', 'string', 'max:40', 'unique:deals,deal_no'],
@@ -182,7 +212,9 @@ class DealController extends BaseCrudApiController
 
     public function moveStage(Request $request, string $id)
     {
-        $deal = Deal::query()->with(['dealPipeline', 'dealStage'])->findOrFail($id);
+        $deal = $this->applyAssignedUserScope(Deal::query())
+            ->with(['dealPipeline', 'dealStage'])
+            ->findOrFail($id);
 
         $data = $request->validate([
             'deal_stage_id' => ['required', 'uuid', 'exists:deal_stages,id'],

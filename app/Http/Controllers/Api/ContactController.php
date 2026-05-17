@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Contact;
 use App\Models\ChartOfAccount;
 use App\Models\JournalVoucherLine;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -77,6 +78,41 @@ class ContactController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected function baseQuery(): Builder
+    {
+        return $this->applyAssignedUserScope(parent::baseQuery());
+    }
+
+    protected function findRecord(mixed $id): Model
+    {
+        return $this->applyAssignedUserScope($this->newQuery())->findOrFail($id);
+    }
+
+    private function applyAssignedUserScope(Builder $query): Builder
+    {
+        $user = request()->user();
+
+        if (!$user || $this->userHasFullCrmAccess($user)) {
+            return $query;
+        }
+
+        $userId = $user->getAuthIdentifier();
+
+        return $query->where(function (Builder $query) use ($userId) {
+            $query->whereHas('leads', fn (Builder $leadQuery) => $leadQuery->where('assigned_to_id', $userId))
+                ->orWhereHas('deals', fn (Builder $dealQuery) => $dealQuery->where('assigned_to_id', $userId))
+                ->orWhereHas('crmActivities', fn (Builder $activityQuery) => $activityQuery->where('assigned_to_id', $userId));
+        });
+    }
+
+    private function userHasFullCrmAccess($user): bool
+    {
+        return method_exists($user, 'can') && (
+            $user->can('crm.manage') ||
+            $user->can('crm.*')
+        );
+    }
 
     protected array $storeRules = [
         'contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],

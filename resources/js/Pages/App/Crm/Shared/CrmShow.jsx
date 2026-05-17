@@ -253,9 +253,9 @@ function RailTable({ rows = [] }) {
 
 function DetailsCard({ title, extra, children }) {
   return (
-    <Card className="crm-show__card" title={title} extra={extra}>
+    <>
       {children}
-    </Card>
+    </>
   );
 }
 
@@ -439,15 +439,34 @@ const documentColumns = (numberField, dateField, amountField, statusField = 'sta
 ];
 
 const transactionRouteBySource = {
+  CreditNote: ['sales.credit-notes.show', '/sales/credit-notes'],
   CustomerPayment: ['sales.customer-payments.show', '/sales/customer-payments'],
   DebitNote: ['payment-out.debit-notes.show', '/payment-out/debit-notes'],
   Expense: ['payment-out.expenses.show', '/payment-out/expenses'],
   Invoice: ['sales.invoices.show', '/sales/invoices'],
-  JournalVoucher: ['accounting.journal-vouchers.show', '/accounting/journal-vouchers'],
+  Bill: ['payment-out.purchase-bills.show', '/payment-out/purchase-bills'],
+  Payment: ['sales.customer-payments.show', '/sales/customer-payments'],
+  PurchaseOrder: ['payment-out.purchase-orders.show', '/payment-out/purchase-orders'],
   PurchaseBill: ['payment-out.purchase-bills.show', '/payment-out/purchase-bills'],
-  SalesReturn: ['sales.sales-returns.show', '/sales/sales-returns'],
+  Quotation: ['payment-in.quotations.show', '/payment-in/quotations'],
+  SalesOrder: ['sales.sales-orders.show', '/sales/sales-orders'],
   SupplierPayment: ['payment-out.supplier-payments.show', '/payment-out/supplier-payments'],
 };
+
+const allowedTransactionTypes = new Set([
+  'Quotation',
+  'SalesOrder',
+  'Invoice',
+  'Bill',
+  'Payment',
+  'CustomerPayment',
+  'CreditNote',
+  'PurchaseOrder',
+  'PurchaseBill',
+  'Expense',
+  'DebitNote',
+  'SupplierPayment',
+]);
 
 const transactionUrl = (row) => {
   const source =
@@ -459,19 +478,13 @@ const transactionUrl = (row) => {
     return safeRoute(source[0], row.source_id, `${source[1]}/${row.source_id}`);
   }
 
-  if (row?.journal_voucher_id) {
-    return safeRoute(
-      'accounting.journal-vouchers.show',
-      row.journal_voucher_id,
-      `/accounting/journal-vouchers/${row.journal_voucher_id}`
-    );
-  }
-
   return null;
 };
 
 function RecentTransactions({ rows = [] }) {
-  const data = Array.isArray(rows) ? rows : [];
+  const data = Array.isArray(rows)
+    ? rows.filter((row) => allowedTransactionTypes.has(row?.source_type))
+    : [];
 
   return (
     <DetailsCard title="Recent Transactions">
@@ -506,9 +519,9 @@ function RecentTransactions({ rows = [] }) {
                 <Text strong className="crm-show__link-text">
                   {row?.source_no || value || '-'}
                 </Text>
-                <Text type="secondary">
-                  {labelize(row?.source_type || 'journal_voucher')}
-                </Text>
+                <Tag className="crm-show__tag" style={{ width: 'fit-content' }}>
+                  {labelize(row?.source_type)}
+                </Tag>
               </Space>
             ),
           },
@@ -689,7 +702,7 @@ function DealKanban({ leadId, tokenColors }) {
         }),
       ]);
 
-      const stageRows = rowsFrom(stagesRes.data);
+      const stageRows = rowsFrom(stagesRes.data).filter((stage) => !stage.is_lost_stage);
       const dealRows = rowsFrom(dealsRes.data);
 
       setStages(stageRows);
@@ -1658,9 +1671,14 @@ function RecordLayout({
   amountIcon,
   railRows,
   tabs,
+  activeKey,
+  onTabChange,
+  tabPosition = 'top',
 }) {
   const { token } = theme.useToken();
-  const [activeTab, setActiveTab] = useState(tabs?.[0]?.key || 'overview');
+  const [internalActiveTab, setInternalActiveTab] = useState(tabs?.[0]?.key || 'overview');
+  const activeTab = activeKey || internalActiveTab;
+  const setActiveTab = onTabChange || setInternalActiveTab;
 
   return (
     <>
@@ -1742,6 +1760,7 @@ function RecordLayout({
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
+              tabPosition={tabPosition}
               items={tabs.map((tab) => ({
                 key: tab.key,
                 label: tab.count !== undefined ? `${tab.label} (${tab.count})` : tab.label,
@@ -1899,7 +1918,6 @@ export function ContactShow({ auth, id }) {
               </Paragraph>
             </DetailsCard>
 
-            <RecentTransactions rows={contact?.recent_transactions} />
           </>
         );
 
@@ -1908,6 +1926,11 @@ export function ContactShow({ auth, id }) {
             key: 'overview',
             label: 'Overview',
             children: overview,
+          },
+          {
+            key: 'recent_transactions',
+            label: 'Recent Transactions',
+            children: <RecentTransactions rows={contact?.recent_transactions} />,
           },
           {
             key: 'activities',
@@ -2001,9 +2024,10 @@ export function LeadShow({ auth, id }) {
   const [convertDrawer, setConvertDrawer] = useState(false);
   const [markLostModal, setMarkLostModal] = useState(false);
   const [lostReason, setLostReason] = useState('');
-  const [activityDrawer, setActivityDrawer] = useState(false);
+  const [activityModal, setActivityModal] = useState(false);
   const [editDrawer, setEditDrawer] = useState(false);
   const [shellRefresh, setShellRefresh] = useState(0);
+  const [activeTab, setActiveTab] = useState('details');
   const [messageApi, ctx] = message.useMessage();
 
   const doMarkStatus = async (status, reason = null) => {
@@ -2067,7 +2091,7 @@ export function LeadShow({ auth, id }) {
                 <Button size="small" icon={<MailOutlined />} onClick={() => window.location.href = `mailto:${lead.email}`} />
               </Tooltip>
             )}
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityDrawer(true)}>Activity</Button>
+            <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityModal(true)}>Activity</Button>
             <Button size="small" icon={<EditOutlined />} onClick={() => setEditDrawer(true)}>Edit Lead</Button>
             <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('contacted')}>Contacted</Button>
             <Button size="small" icon={<CheckOutlined />} onClick={() => doMarkStatus('qualified')}>Qualify</Button>
@@ -2225,8 +2249,44 @@ export function LeadShow({ auth, id }) {
           },
         ];
 
+        const activityPriorityFilters = [
+          { key: 'all', label: 'All', params: {} },
+          { key: 'low', label: 'Low', params: { priority: 'low' } },
+          { key: 'medium', label: 'Medium', params: { priority: 'medium' } },
+          { key: 'high', label: 'High', params: { priority: 'high' } },
+          { key: 'urgent', label: 'Urgent', params: { priority: 'urgent' } },
+        ];
+
+        const timeline = (
+          <DetailsCard title="Timeline">
+            <RelatedTable
+              title="Timeline"
+              endpoint="/api/crm-activities/"
+              params={{ lead_id: id }}
+              columns={activityCrudColumns}
+              rowUrl={(row) => safeRoute('crm.activities.show', row.id, `/crm/activities/${row.id}`)}
+            />
+          </DetailsCard>
+        );
+
         const tabs = [
-          { key: 'overview', label: 'Overview', children: overview },
+          {
+            key: 'details',
+            label: 'Details',
+            children: (
+              <>
+                {overview}
+                <DealsTabContent
+                  lead={lead}
+                  leadId={id}
+                  dealCrud={dealCrud}
+                  dealCrudColumns={dealCrudColumns}
+                />
+                <LeadCommentsTab leadId={id} />
+              </>
+            ),
+          },
+          { key: 'timeline', label: 'Timeline', children: timeline },
           {
             key: 'activities',
             label: 'Activities',
@@ -2241,8 +2301,8 @@ export function LeadShow({ auth, id }) {
                   crudInitialValues={activityCrud.crudInitialValues}
                   transformPayload={activityCrud.transformPayload}
                   baseFilters={{ lead_id: id }}
-                  form_ui="drawer"
-                  drawerWidth={1100}
+                  form_ui="modal"
+                  modalWidth={900}
                   searchParam="search"
                   pageParam="page"
                   pageSizeParam="page_size"
@@ -2255,26 +2315,11 @@ export function LeadShow({ auth, id }) {
                   canDelete
                   hasActions
                   hasActionColumns
+                  anchorFilters={activityPriorityFilters}
+                  defaultAnchorKey="all"
                 />
               </DetailsCard>
             ),
-          },
-          {
-            key: 'deals',
-            label: 'Deals',
-            children: (
-              <DealsTabContent
-                lead={lead}
-                leadId={id}
-                dealCrud={dealCrud}
-                dealCrudColumns={dealCrudColumns}
-              />
-            ),
-          },
-          {
-            key: 'comments',
-            label: 'Notes',
-            children: <LeadCommentsTab leadId={id} />,
           },
         ];
 
@@ -2306,6 +2351,8 @@ export function LeadShow({ auth, id }) {
               { label: 'Created', value: formatDateTime(lead?.created_at) },
             ]}
             tabs={tabs}
+            activeKey={activeTab}
+            onTabChange={setActiveTab}
           />
         );
       }}
@@ -2344,8 +2391,8 @@ export function LeadShow({ auth, id }) {
     )}
 
     {/* Activity quick-add drawer */}
-    {activityDrawer && (
-      <Drawer title="Add Activity" open={activityDrawer} onClose={() => setActivityDrawer(false)} width={700}>
+    {activityModal && (
+      <div style={{ display: 'none' }}>
         <ReusableCrud
           title="Activities"
           apiUrl={`${BACKEND_BASE}/api/crm-activities/`}
@@ -2355,13 +2402,22 @@ export function LeadShow({ auth, id }) {
           crudInitialValues={buildActivityCrud({ locked: { lead_id: id } }).crudInitialValues}
           transformPayload={buildActivityCrud({ locked: { lead_id: id } }).transformPayload}
           baseFilters={{ lead_id: id }}
-          form_ui="drawer"
-          drawerWidth={700}
+          form_ui="modal"
+          modalWidth={860}
           enableServerPagination={false}
           showSearch={false}
           canAdd canEdit={false} canDelete={false} hasActions={false} hasActionColumns={false}
+          openOnMount
+          openMode="add"
+          submitLabelOverride="Add Activity"
+          onFormClose={() => setActivityModal(false)}
+          onAddSuccess={() => {
+            setActivityModal(false);
+            setActiveTab('activities');
+            setShellRefresh((key) => key + 1);
+          }}
         />
-      </Drawer>
+      </div>
     )}
 
     {/* Convert to Deal drawer */}
@@ -2443,7 +2499,6 @@ export function ActivityShow({ auth, id }) {
                   { label: 'Contact', value: activity?.contact?.name },
                   { label: 'Deal', value: activity?.deal?.title || activity?.deal?.name },
                   { label: 'Due At', value: formatDateTime(activity?.due_at) },
-                  { label: 'Completed At', value: formatDateTime(activity?.completed_at) },
                   { label: 'Reminder At', value: formatDateTime(activity?.reminder_at) },
                   { label: 'Next Follow Up', value: formatDateTime(activity?.next_follow_up_at) },
                   { label: 'Outcome', value: activity?.outcome },
