@@ -439,49 +439,122 @@ const documentColumns = (numberField, dateField, amountField, statusField = 'sta
 ];
 
 const transactionRouteBySource = {
-  CreditNote: ['sales.credit-notes.show', '/sales/credit-notes'],
-  CustomerPayment: ['sales.customer-payments.show', '/sales/customer-payments'],
-  DebitNote: ['payment-out.debit-notes.show', '/payment-out/debit-notes'],
-  Expense: ['payment-out.expenses.show', '/payment-out/expenses'],
-  Invoice: ['sales.invoices.show', '/sales/invoices'],
-  Bill: ['payment-out.purchase-bills.show', '/payment-out/purchase-bills'],
-  Payment: ['sales.customer-payments.show', '/sales/customer-payments'],
+  Quotation: ['payment-in.quotations.show', '/payment-in/quotations'],
+  SalesOrder: ['payment-in.sales-orders.show', '/payment-in/sales-orders'],
+  Invoice: ['payment-in.invoices.show', '/payment-in/invoices'],
+  Bill: ['payment-in.bills.show', '/payment-in/bills'],
+  Payment: ['payment-in.payments.show', '/payment-in/payments'],
+  CustomerPayment: ['payment-in.payments.show', '/payment-in/payments'],
+  CreditNote: ['payment-in.credit-notes.show', '/payment-in/credit-notes'],
+
   PurchaseOrder: ['payment-out.purchase-orders.show', '/payment-out/purchase-orders'],
   PurchaseBill: ['payment-out.purchase-bills.show', '/payment-out/purchase-bills'],
-  Quotation: ['payment-in.quotations.show', '/payment-in/quotations'],
-  SalesOrder: ['sales.sales-orders.show', '/sales/sales-orders'],
+  Expense: ['payment-out.expenses.show', '/payment-out/expenses'],
+  DebitNote: ['payment-out.debit-notes.show', '/payment-out/debit-notes'],
   SupplierPayment: ['payment-out.supplier-payments.show', '/payment-out/supplier-payments'],
 };
 
-const allowedTransactionTypes = new Set([
-  'Quotation',
-  'SalesOrder',
-  'Invoice',
-  'Bill',
-  'Payment',
-  'CustomerPayment',
-  'CreditNote',
-  'PurchaseOrder',
-  'PurchaseBill',
-  'Expense',
-  'DebitNote',
-  'SupplierPayment',
-]);
+const allowedTransactionTypes = new Set(Object.keys(transactionRouteBySource));
+
+const getTransactionSourceId = (row) =>
+  row?.source_id ||
+  row?.source?.id ||
+  row?.document_id ||
+  row?.transaction_id ||
+  row?.model_id ||
+  row?.id ||
+  null;
 
 const transactionUrl = (row) => {
-  const source =
-    row?.source_type && row?.source_id
-      ? transactionRouteBySource[row.source_type]
-      : null;
+  const sourceType = row?.source_type;
+  const sourceId = getTransactionSourceId(row);
 
-  if (source) {
-    return safeRoute(source[0], row.source_id, `${source[1]}/${row.source_id}`);
-  }
+  if (!sourceType || !sourceId) return null;
 
-  return null;
+  const source = transactionRouteBySource[sourceType];
+
+  if (!source) return null;
+
+  return safeRoute(source[0], sourceId, `${source[1]}/${sourceId}`);
 };
 
+const moneyNumber = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+
+  const num = Number(value);
+
+  return Number.isFinite(num) ? num : 0;
+};
+
+const amountInValue = (row) =>
+  moneyNumber(
+    row?.amount_in ??
+      row?.amountIn ??
+      row?.debit ??
+      row?.grand_total ??
+      row?.total_amount ??
+      row?.total ??
+      row?.amount
+  );
+
+const paidValue = (row) =>
+  moneyNumber(
+    row?.paid ??
+      row?.paid_amount ??
+      row?.paidAmount ??
+      row?.credit ??
+      row?.received_amount ??
+      row?.payment_amount
+  );
+
+const transactionDateValue = (row) =>
+  row?.voucher_date ||
+  row?.date ||
+  row?.invoice_date ||
+  row?.quotation_date ||
+  row?.sales_order_date ||
+  row?.order_date ||
+  row?.bill_date ||
+  row?.purchase_bill_date ||
+  row?.payment_date ||
+  row?.expense_date ||
+  row?.debit_note_date ||
+  row?.credit_note_date ||
+  row?.created_at ||
+  null;
+
+const transactionNoValue = (row, fallback) =>
+  row?.source_no ||
+  row?.document_no ||
+  row?.reference_no ||
+  row?.reference ||
+  row?.invoice_no ||
+  row?.quotation_no ||
+  row?.sales_order_no ||
+  row?.order_no ||
+  row?.bill_no ||
+  row?.payment_no ||
+  row?.expense_no ||
+  row?.debit_note_no ||
+  row?.credit_note_no ||
+  fallback ||
+  '-';
+
+function MoneyCell({ value, color }) {
+  const amount = moneyNumber(value);
+
+  if (!amount) return <Text type="secondary">-</Text>;
+
+  return (
+    <Text strong style={{ color, whiteSpace: 'nowrap' }}>
+      {formatMoney(amount)}
+    </Text>
+  );
+}
+
 function RecentTransactions({ rows = [] }) {
+  const { token } = theme.useToken();
+
   const data = Array.isArray(rows)
     ? rows.filter((row) => allowedTransactionTypes.has(row?.source_type))
     : [];
@@ -492,7 +565,9 @@ function RecentTransactions({ rows = [] }) {
         size="small"
         scroll={{ x: 980 }}
         dataSource={data}
-        rowKey={(row, index) => row?.id || index}
+        rowKey={(row, index) =>
+          `${row?.source_type || 'transaction'}-${getTransactionSourceId(row) || index}`
+        }
         pagination={{ pageSize: 10, hideOnSinglePage: true }}
         rowClassName={(_, index) => (index % 2 === 0 ? 'crm-show__table-row' : 'crm-show__table-row is-alt')}
         locale={{
@@ -513,11 +588,11 @@ function RecentTransactions({ rows = [] }) {
             title: 'Transaction',
             dataIndex: 'voucher_no',
             key: 'voucher_no',
-            width: 220,
+            width: 240,
             render: (value, row) => (
               <Space direction="vertical" size={0}>
                 <Text strong className="crm-show__link-text">
-                  {row?.source_no || value || '-'}
+                  {transactionNoValue(row, value)}
                 </Text>
                 <Tag className="crm-show__tag" style={{ width: 'fit-content' }}>
                   {labelize(row?.source_type)}
@@ -530,40 +605,49 @@ function RecentTransactions({ rows = [] }) {
             dataIndex: 'voucher_date',
             key: 'voucher_date',
             width: 140,
-            render: formatDate,
+            render: (_, row) => formatDate(transactionDateValue(row)),
           },
           {
             title: 'Description',
             dataIndex: 'description',
             key: 'description',
-            render: (value) => value || '-',
+            render: (value, row) => value || row?.remarks || row?.narration || '-',
           },
           {
-            title: 'Debit',
-            dataIndex: 'debit',
-            key: 'debit',
-            width: 120,
+            title: 'Amount In',
+            key: 'amount_in',
+            width: 140,
             align: 'right',
-            render: formatMoney,
+            render: (_, row) => (
+              <MoneyCell value={amountInValue(row)} color={token.colorSuccess} />
+            ),
           },
           {
-            title: 'Credit',
-            dataIndex: 'credit',
-            key: 'credit',
-            width: 120,
+            title: 'Paid',
+            key: 'paid',
+            width: 140,
             align: 'right',
-            render: formatMoney,
+            render: (_, row) => (
+              <MoneyCell value={paidValue(row)} color={token.colorError} />
+            ),
           },
           {
             title: 'Status',
             dataIndex: 'approval_status',
             key: 'approval_status',
             width: 140,
-            render: (value) => (
-              <Tag color={value === 'Approved' ? 'success' : 'warning'} className="crm-show__tag">
-                {value || 'Not Approved'}
-              </Tag>
-            ),
+            render: (value, row) => {
+              const status = value || row?.status || row?.approved_status || 'Not Approved';
+
+              return (
+                <Tag
+                  color={status === 'Approved' || status === 'approved' ? 'success' : 'warning'}
+                  className="crm-show__tag"
+                >
+                  {labelize(status)}
+                </Tag>
+              );
+            },
           },
         ]}
       />
@@ -685,7 +769,9 @@ function DealKanban({ leadId, tokenColors }) {
   const [stages, setStages] = useState([]);
   const [dealsByStage, setDealsByStage] = useState({});
   const [loading, setLoading] = useState(true);
+  const [editingDealId, setEditingDealId] = useState(null);
   const [messageApi, contextHolder] = message.useMessage();
+  const dealCrud = buildDealCrud({ locked: { lead_id: leadId } });
 
   const load = useMemo(() => async () => {
     setLoading(true);
@@ -773,76 +859,122 @@ function DealKanban({ leadId, tokenColors }) {
   ];
 
   return (
-    <div className="crm-show__kanban">
-      {contextHolder}
-      {columns.map((stage) => {
-        const items = dealsByStage[stage.id] || [];
-        const total = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+    <>
+      <div className="crm-show__kanban">
+        {contextHolder}
+        {columns.map((stage) => {
+          const items = dealsByStage[stage.id] || [];
+          const total = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
 
-        return (
-          <div
-            className="crm-show__kanban-column"
-            key={stage.id}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              const dealId = event.dataTransfer.getData('dealId');
-              if (dealId) moveDeal(dealId, stage.id);
-            }}
-          >
-            <div className="crm-show__kanban-head">
-              <Space size={8}>
-                <span
-                  className="crm-show__kanban-dot"
-                  style={{ background: stage.color || tokenColors.colorPrimary }}
-                />
-                <Text strong>{stage.name}</Text>
+          return (
+            <div
+              className="crm-show__kanban-column"
+              key={stage.id}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const dealId = event.dataTransfer.getData('dealId');
+                if (dealId) moveDeal(dealId, stage.id);
+              }}
+            >
+              <div className="crm-show__kanban-head">
+                <Space size={8}>
+                  <span
+                    className="crm-show__kanban-dot"
+                    style={{ background: stage.color || tokenColors.colorPrimary }}
+                  />
+                  <Text strong>{stage.name}</Text>
+                </Space>
+
+                <Tag className="crm-show__tag">{items.length}</Tag>
+              </div>
+
+              <div className="crm-show__kanban-total">
+                Total: <strong>{formatMoney(total)}</strong>
+              </div>
+
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                {items.length ? (
+                  items.map((deal) => (
+                    <Card
+                      key={deal.id}
+                      size="small"
+                      hoverable
+                      className="crm-show__kanban-card"
+                      onClick={() =>
+                        router.visit(safeRoute('crm.deals.show', deal.id, `/crm/deals/${deal.id}`))
+                      }
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData('dealId', deal.id)}
+                    >
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Text strong className="crm-show__kanban-title">
+                            {deal.title || deal.deal_no || '-'}
+                          </Text>
+
+                          <Text type="secondary" className="crm-show__kanban-money">
+                            {formatMoney(deal.amount)}
+                          </Text>
+                        </div>
+
+                        <Button
+                          size="small"
+                          icon={<EditOutlined />}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingDealId(deal.id);
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ marginTop: 6 }}>
+                        <SmartTag value={deal.status || 'open'} />
+                      </div>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="crm-show__kanban-empty">
+                    <Text type="secondary">No deals</Text>
+                  </div>
+                )}
               </Space>
-
-              <Tag className="crm-show__tag">{items.length}</Tag>
             </div>
+          );
+        })}
+      </div>
 
-            <div className="crm-show__kanban-total">
-              Total: <strong>{formatMoney(total)}</strong>
-            </div>
-
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-              {items.length ? (
-                items.map((deal) => (
-                  <Card
-                    key={deal.id}
-                    size="small"
-                    hoverable
-                    className="crm-show__kanban-card"
-                    onClick={() =>
-                      router.visit(safeRoute('crm.deals.show', deal.id, `/crm/deals/${deal.id}`))
-                    }
-                    draggable
-                    onDragStart={(event) => event.dataTransfer.setData('dealId', deal.id)}
-                  >
-                    <Text strong className="crm-show__kanban-title">
-                      {deal.title || deal.deal_no || '-'}
-                    </Text>
-
-                    <Text type="secondary" className="crm-show__kanban-money">
-                      {formatMoney(deal.amount)}
-                    </Text>
-
-                    <div style={{ marginTop: 6 }}>
-                      <SmartTag value={deal.status || 'open'} />
-                    </div>
-                  </Card>
-                ))
-              ) : (
-                <div className="crm-show__kanban-empty">
-                  <Text type="secondary">No deals</Text>
-                </div>
-              )}
-            </Space>
-          </div>
-        );
-      })}
-    </div>
+      {editingDealId ? (
+        <div style={{ display: 'none' }}>
+          <ReusableCrud
+            title="Deals"
+            apiUrl={dealCrud.apiUrl}
+            columns={[{ title: 'Title', dataIndex: 'title', key: 'title' }]}
+            fields={dealCrud.fields}
+            validationSchema={dealCrud.validationSchema}
+            crudInitialValues={dealCrud.crudInitialValues}
+            transformPayload={dealCrud.transformPayload}
+            form_ui="modal"
+            modalWidth={900}
+            enableServerPagination={false}
+            showSearch={false}
+            canAdd={false}
+            canEdit
+            canDelete={false}
+            hasActions={false}
+            hasActionColumns={false}
+            openOnMount
+            openMode="edit"
+            openEditId={editingDealId}
+            onFormClose={() => setEditingDealId(null)}
+            onEditSuccess={() => {
+              setEditingDealId(null);
+              load();
+            }}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -1674,6 +1806,7 @@ function RecordLayout({
   activeKey,
   onTabChange,
   tabPosition = 'top',
+  headerActions = null,
 }) {
   const { token } = theme.useToken();
   const [internalActiveTab, setInternalActiveTab] = useState(tabs?.[0]?.key || 'overview');
@@ -1701,7 +1834,10 @@ function RecordLayout({
             </div>
           </div>
 
-          <Space wrap>{tags}</Space>
+          <Space wrap>
+            {tags}
+            {headerActions}
+          </Space>
         </div>
       </Card>
 
@@ -2270,22 +2406,6 @@ export function LeadShow({ auth, id }) {
         );
 
         const tabs = [
-          {
-            key: 'details',
-            label: 'Details',
-            children: (
-              <>
-                {overview}
-                <DealsTabContent
-                  lead={lead}
-                  leadId={id}
-                  dealCrud={dealCrud}
-                  dealCrudColumns={dealCrudColumns}
-                />
-                <LeadCommentsTab leadId={id} />
-              </>
-            ),
-          },
           { key: 'timeline', label: 'Timeline', children: timeline },
           {
             key: 'activities',
@@ -2321,6 +2441,28 @@ export function LeadShow({ auth, id }) {
               </DetailsCard>
             ),
           },
+          {
+            key: 'deals',
+            label: 'Deals',
+            children: (
+              <DealsTabContent
+                lead={lead}
+                leadId={id}
+                dealCrud={dealCrud}
+                dealCrudColumns={dealCrudColumns}
+              />
+            ),
+          },
+          {
+            key: 'details',
+            label: 'Details',
+            children: (
+              <>
+                {overview}
+                <LeadCommentsTab leadId={id} />
+              </>
+            ),
+          },
         ];
 
         return (
@@ -2335,6 +2477,11 @@ export function LeadShow({ auth, id }) {
                 <SmartTag value={lead?.priority || 'medium'} />
                 <SmartTag value={lead?.active === false ? 'inactive' : 'active'} />
               </>
+            }
+            headerActions={
+              <Button size="small" icon={<EditOutlined />} onClick={() => setEditDrawer(true)}>
+                Edit Lead
+              </Button>
             }
             backLabel="Leads"
             backUrl={safeRoute('crm.leads.index', null, '/crm/leads')}

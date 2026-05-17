@@ -17,7 +17,10 @@ class TransactionVoidService
     public function void(Model $transaction, string $reason, ?int $voidedById = null): Model
     {
         return DB::transaction(function () use ($transaction, $reason, $voidedById) {
-            $fresh = $transaction->lockForUpdate()->fresh();
+            $fresh = $transaction->newQuery()
+                ->whereKey($transaction->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
             $this->validationService->validateCanVoid($fresh);
 
