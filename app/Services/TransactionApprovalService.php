@@ -34,7 +34,10 @@ class TransactionApprovalService
     public function approve(Model $transaction, ?int $approvedById = null): Model
     {
         return DB::transaction(function () use ($transaction, $approvedById) {
-            $fresh = $transaction->lockForUpdate()->fresh();
+            $fresh = $transaction->newQuery()
+                ->whereKey($transaction->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
             if ($this->validationService->hasApprovedField($fresh) && $fresh->approved) {
                 return $fresh->refresh();

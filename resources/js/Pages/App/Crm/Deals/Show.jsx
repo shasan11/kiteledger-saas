@@ -26,13 +26,14 @@ import {
   ArrowLeftOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  EditOutlined,
   FileTextOutlined,
   PlusOutlined,
   ScheduleOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { buildActivityCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+import { buildActivityCrud, buildDealCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
 import dayjs from 'dayjs';
 
 const { Text, Title } = Typography;
@@ -208,8 +209,10 @@ export default function DealShow({ auth, id }) {
   const [lostReason, setLostReason] = useState('');
   const [movingStage, setMovingStage] = useState(null);
   const [activityModal, setActivityModal] = useState(false);
+  const [editModal, setEditModal] = useState(false);
 
   const activityCrud = buildActivityCrud({ locked: { deal_id: id } });
+  const dealCrud = buildDealCrud();
 
   const loadDeal = useCallback(async () => {
     setLoading(true);
@@ -657,6 +660,9 @@ export default function DealShow({ auth, id }) {
               </div>
 
               <Space wrap size={6}>
+                <Button size="small" icon={<EditOutlined />} onClick={() => setEditModal(true)}>
+                  Edit Deal
+                </Button>
                 <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityModal(true)}>
                   Activity
                 </Button>
@@ -835,6 +841,37 @@ export default function DealShow({ auth, id }) {
             onAddSuccess={() => {
               setActivityModal(false);
               setActiveTab('activities');
+              loadDeal();
+            }}
+          />
+        </div>
+      ) : null}
+
+      {editModal ? (
+        <div style={{ display: 'none' }}>
+          <ReusableCrud
+            title="Deals"
+            apiUrl={api('/api/deals/')}
+            columns={[{ title: 'Title', dataIndex: 'title', key: 'title' }]}
+            fields={dealCrud.fields}
+            validationSchema={dealCrud.validationSchema}
+            crudInitialValues={dealCrud.crudInitialValues}
+            transformPayload={dealCrud.transformPayload}
+            form_ui="modal"
+            modalWidth={900}
+            enableServerPagination={false}
+            showSearch={false}
+            canAdd={false}
+            canEdit
+            canDelete={false}
+            hasActions={false}
+            hasActionColumns={false}
+            openOnMount
+            openMode="edit"
+            openEditId={id}
+            onFormClose={() => setEditModal(false)}
+            onEditSuccess={() => {
+              setEditModal(false);
               loadDeal();
             }}
           />
