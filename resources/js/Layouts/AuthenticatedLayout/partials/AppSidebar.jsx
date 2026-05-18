@@ -6,36 +6,6 @@ const { Sider } = Layout;
 
 const MOBILE_QUERY = '(max-width: 767.98px)';
 
-const MENU_ACCENTS = {
-    home: '#2563eb',
-    pos: '#059669',
-    crm: '#7c3aed',
-    'payment-in': '#0891b2',
-    'payment-out': '#ea580c',
-    accounting: '#4f46e5',
-    tax: '#dc2626',
-    inventory: '#16a34a',
-    hrm: '#db2777',
-    project: '#9333ea',
-    reports: '#0f766e',
-    settings: '#475569',
-};
-
-const FALLBACK_MENU_ACCENTS = [
-    '#2563eb',
-    '#059669',
-    '#7c3aed',
-    '#0891b2',
-    '#ea580c',
-    '#4f46e5',
-    '#dc2626',
-    '#16a34a',
-    '#db2777',
-    '#9333ea',
-    '#0f766e',
-    '#475569',
-];
-
 const isHexColor = (value) =>
     typeof value === 'string' && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value.trim());
 
@@ -67,14 +37,9 @@ const rgba = (hex, opacity) => {
     return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 
-const colorizeMenuItems = (items = [], parentAccent = null, depth = 0) =>
-    items.map((item, index) => {
+const colorizeMenuItems = (items = [], primaryColor, depth = 0) =>
+    items.map((item) => {
         if (!item || item.type) return item;
-
-        const accent =
-            parentAccent ||
-            MENU_ACCENTS[item.key] ||
-            FALLBACK_MENU_ACCENTS[index % FALLBACK_MENU_ACCENTS.length];
 
         return {
             ...item,
@@ -87,14 +52,14 @@ const colorizeMenuItems = (items = [], parentAccent = null, depth = 0) =>
                 .join(' '),
             style: {
                 ...item.style,
-                '--sidebar-item-color': accent,
-                '--sidebar-item-hover-bg': rgba(accent, 0.1),
-                '--sidebar-item-active-bg': rgba(accent, 0.15),
-                '--sidebar-item-icon-bg': rgba(accent, 0.12),
-                '--sidebar-item-icon-border': rgba(accent, 0.24),
+                '--sidebar-item-color': primaryColor,
+                '--sidebar-item-hover-bg': rgba(primaryColor, 0.1),
+                '--sidebar-item-active-bg': rgba(primaryColor, 0.15),
+                '--sidebar-item-icon-bg': rgba(primaryColor, 0.12),
+                '--sidebar-item-icon-border': rgba(primaryColor, 0.24),
             },
             children: Array.isArray(item.children)
-                ? colorizeMenuItems(item.children, accent, depth + 1)
+                ? colorizeMenuItems(item.children, primaryColor, depth + 1)
                 : item.children,
         };
     });
@@ -174,8 +139,8 @@ export default function AppSidebar({
     );
 
     const coloredMenuItems = useMemo(
-        () => colorizeMenuItems(menuItems),
-        [menuItems],
+        () => colorizeMenuItems(menuItems, token.colorPrimary),
+        [menuItems, token.colorPrimary],
     );
 
     const activeParentKeys = useMemo(() => {
