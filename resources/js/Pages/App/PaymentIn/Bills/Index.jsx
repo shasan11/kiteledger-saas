@@ -24,7 +24,7 @@ const statusColor = (status) => ({
 
 export default function BillsIndex(props) {
     const columns = useMemo(() => [
-        { title: 'Bill No', dataIndex: 'invoice_no', key: 'invoice_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        { title: 'Invoice No', dataIndex: 'invoice_no', key: 'invoice_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
         { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { title: 'Customer', type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'invoice_date', key: 'invoice_date', sorter: true, width: 120, render: displayDate, backendFilter: { title: 'Date', type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },
@@ -34,14 +34,14 @@ export default function BillsIndex(props) {
 
     return (
         <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="Bills" />
+            <Head title="Invoices" />
             <ReusableCrud
-                title="Bills"
+                title="Invoices"
                 apiUrl={api('/api/invoices/')}
                 bulkActions={{ approve: true, void: true, export: true }}
                 columns={columns}
                 custom_add={true}
-                custom_add_link={route('payment-in.bills.add')}
+                custom_add_link={route('payment-in.invoices.add')}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 24px)"
                 searchParam="search"
@@ -57,7 +57,7 @@ export default function BillsIndex(props) {
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
                         if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-picker')) return;
-                        router.visit(route('payment-in.bills.show', record.id));
+                        router.visit(route('payment-in.invoices.show', record.id));
                     },
                     style: { cursor: 'pointer' },
                 })}

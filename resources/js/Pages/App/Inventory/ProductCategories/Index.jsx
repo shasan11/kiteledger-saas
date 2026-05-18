@@ -20,6 +20,11 @@ export default function ProductCategories({ auth }) {
     { title: 'Parent', dataIndex: 'parent', key: 'parent',render: (_, record) =>record.parent_name },
   ], []);
 
+  const anchorFilters = useMemo(() => [
+    { key: 'all_categories', label: 'All Categories', params: {} },
+    { key: 'root_categories', label: 'Root Categories', params: { root_only: true } },
+  ], []);
+
   const fields = useMemo(() => [
     { name: 'name', label: 'Name', type: 'text', col: 25, required: true },
     { name: 'parent_id', label: 'Parent Category', type: 'fkSelect', col: 24, fkUrl: api('/api/product-categories/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
@@ -47,6 +52,8 @@ export default function ProductCategories({ auth }) {
         apiUrl={api('/api/product-categories/')}
         columns={columns}
         fields={fields}
+        anchorFilters={anchorFilters}
+        defaultAnchorKey="all_categories"
         validationSchema={validationSchema}
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}

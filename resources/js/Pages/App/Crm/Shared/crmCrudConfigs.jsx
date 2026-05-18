@@ -12,6 +12,16 @@ const formatDate = (value) => {
   return d2.isValid() ? d2.format('YYYY-MM-DD') : value;
 };
 
+const formatDateTime = (value) => {
+  if (!value) return null;
+  const strictDateTime = dayjs(value, 'YYYY-MM-DD HH:mm:ss', true);
+  if (strictDateTime.isValid()) return strictDateTime.format('YYYY-MM-DD HH:mm:ss');
+  const strictDate = dayjs(value, 'DD-MM-YYYY', true);
+  if (strictDate.isValid()) return strictDate.format('YYYY-MM-DD 00:00:00');
+  const fallback = dayjs(value);
+  return fallback.isValid() ? fallback.format('YYYY-MM-DD HH:mm:ss') : value;
+};
+
 const stripEmpty = (p, exclude = []) => {
   Object.keys(p).forEach((k) => {
     if (p[k] === '' && !exclude.includes(k)) p[k] = null;
@@ -23,8 +33,8 @@ const leadStatusOptions = [
   { value: 'new', label: 'New' },
   { value: 'contacted', label: 'Contacted' },
   { value: 'qualified', label: 'Qualified' },
-  { value: 'unqualified', label: 'Proposal' },
-  { value: 'converted', label: 'Won' },
+  { value: 'unqualified', label: 'Unqualified' },
+  { value: 'converted', label: 'Converted' },
   { value: 'lost', label: 'Lost' },
 ];
 
@@ -38,6 +48,7 @@ const priorityOptions = [
 const dealStatusOptions = [
   { value: 'open', label: 'Open' },
   { value: 'won', label: 'Won' },
+  { value: 'lost', label: 'Lost' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -54,6 +65,8 @@ const activityTypeOptions = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'task', label: 'Task' },
   { value: 'note', label: 'Note' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'sms', label: 'SMS' },
   { value: 'follow_up', label: 'Follow Up' },
 ];
 
@@ -121,7 +134,7 @@ const quickContactConfig = {
     { name: 'contact_type', label: 'Contact Type', type: 'select', required: true, col: 12, options: [{ value: 'customer', label: 'Customer' }, { value: 'supplier', label: 'Supplier' }, { value: 'lead', label: 'Lead' }] },
     { name: 'name', label: 'Contact Name', type: 'text', required: true, col: 12, placeholder: 'Contact name' },
     { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'email@example.com' },
-    { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: 'Phone number' },
+    { name: 'phone', label: 'Phone', type: 'phone', col: 12, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
     {
       name: 'contact_group_id', label: 'Contact Group', type: 'fkSelect', col: 12, placeholder: 'Select group',
       fkUrl: api('/api/contact-groups/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
@@ -155,7 +168,7 @@ const quickLeadConfig = {
     { name: 'name', label: 'Lead Name', type: 'text', required: true, col: 12, placeholder: 'Enter lead name' },
     { name: 'company_name', label: 'Company Name', type: 'text', col: 12, placeholder: 'Company name' },
     { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'email@example.com' },
-    { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: 'Phone number' },
+    { name: 'phone', label: 'Phone', type: 'phone', col: 12, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
     { name: 'status', label: 'Status', type: 'select', col: 12, options: leadStatusOptions },
     { name: 'priority', label: 'Priority', type: 'select', col: 12, options: priorityOptions },
   ],
@@ -187,7 +200,7 @@ const quickUserConfig = {
     { name: 'email', label: 'Email', type: 'text', required: true, col: 12 },
     { name: 'username', label: 'Username', type: 'text', required: true, col: 12 },
     { name: 'password', label: 'Password', type: 'password', required: true, col: 12 },
-    { name: 'phone', label: 'Phone', type: 'text', col: 12 },
+    { name: 'phone', label: 'Phone', type: 'phone', col: 12, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
     { name: 'active', label: 'Active', type: 'switch', col: 12 },
   ],
   initialValues: { first_name: '', last_name: '', email: '', username: '', password: '', phone: '', active: true },
@@ -253,7 +266,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
         { name: 'name', label: 'Lead Name', type: 'text', required: true, col: 12, placeholder: 'Enter lead name' },
         { name: 'company_name', label: 'Company Name', type: 'text', col: 12, placeholder: 'Company name' },
         { name: 'email', label: 'Email', type: 'text', col: 8, placeholder: 'email@example.com' },
-        { name: 'phone', label: 'Phone', type: 'text', col: 8, placeholder: 'Phone number' },
+        { name: 'phone', label: 'Phone', type: 'phone', col: 8, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
         { name: 'website', label: 'Website', type: 'text', col: 8, placeholder: 'https://example.com' },
       ],
     },
@@ -281,7 +294,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
         },
         { name: 'status', label: 'Status', type: 'select', col: 4, placeholder: 'Status', options: leadStatusOptions },
         { name: 'priority', label: 'Priority', type: 'select', col: 4, placeholder: 'Priority', options: priorityOptions },
-        { name: 'next_follow_up_at', label: 'Next Follow-up', type: 'datePicker', col: 8 },
+        { name: 'next_follow_up_at', label: 'Next Follow-up', type: 'datePicker', col: 8, showTime: true, format: 'YYYY-MM-DD HH:mm:ss' },
       ],
     },
     { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2, placeholder: 'Full address' },
@@ -328,7 +341,7 @@ export function buildLeadCrud({ locked = {} } = {}) {
     p.contact_id = p.contact_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
     p.expected_value = p.expected_value != null && p.expected_value !== '' ? Number(p.expected_value) : null;
-    p.next_follow_up_at = formatDate(p.next_follow_up_at);
+    p.next_follow_up_at = formatDateTime(p.next_follow_up_at);
     return stripEmpty(p);
   };
 
@@ -549,14 +562,15 @@ export function buildActivityCrud({ locked = {} } = {}) {
     {
       type: 'group', label: 'Dates', col: 24,
       children: [
-        { name: 'due_at', label: 'Due At', type: 'datePicker', col: 6 },
-        { name: 'next_follow_up_at', label: 'Next Follow Up', type: 'datePicker', col: 6 },
-        { name: 'reminder_at', label: 'Reminder At', type: 'datePicker', col: 6 },
+        { name: 'due_at', label: 'Due At', type: 'datePicker', col: 6, showTime: true, format: 'YYYY-MM-DD HH:mm:ss' },
+        { name: 'next_follow_up_at', label: 'Next Follow Up', type: 'datePicker', col: 6, showTime: true, format: 'YYYY-MM-DD HH:mm:ss' },
+        { name: 'reminder_at', label: 'Reminder At', type: 'datePicker', col: 6, showTime: true, format: 'YYYY-MM-DD HH:mm:ss' },
       ],
     },
     { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 3 },
     {
       name: 'comments', label: 'Comments', type: 'objectArray', col: 24,
+      deletedFieldName: 'deleted_comment_ids',
       headerBg: '#424b59', headerColor: '#ffffff',
       addButtonLabel: 'Add Comment', defaultItem: { ...emptyComment },
       columns: [
@@ -584,7 +598,7 @@ export function buildActivityCrud({ locked = {} } = {}) {
     subject: '', outcome: '', lead_id: null, deal_id: null, contact_id: null, assigned_to_id: null,
     status: 'pending', priority: 'medium', activity_type: 'follow_up',
     due_at: null, next_follow_up_at: null, reminder_at: null,
-    description: '', comments: [], deleted_item_ids: [],
+    description: '', comments: [], deleted_comment_ids: [],
     ...locked,
   };
 
@@ -597,9 +611,9 @@ export function buildActivityCrud({ locked = {} } = {}) {
     p.deal_id = p.deal_id || null;
     p.contact_id = p.contact_id || null;
     p.assigned_to_id = p.assigned_to_id || null;
-    p.due_at = formatDate(p.due_at);
-    p.next_follow_up_at = formatDate(p.next_follow_up_at);
-    p.reminder_at = formatDate(p.reminder_at);
+    p.due_at = formatDateTime(p.due_at);
+    p.next_follow_up_at = formatDateTime(p.next_follow_up_at);
+    p.reminder_at = formatDateTime(p.reminder_at);
     p.comments = Array.isArray(p.comments)
       ? p.comments.map((c) => ({
           ...c,
@@ -607,8 +621,9 @@ export function buildActivityCrud({ locked = {} } = {}) {
           comment: c.comment?.trim() || null,
         }))
       : [];
-    p.deleted_item_ids = Array.isArray(p.deleted_item_ids) ? p.deleted_item_ids : [];
-    return stripEmpty(p, ['comments', 'deleted_item_ids']);
+    p.deleted_comment_ids = Array.isArray(p.deleted_comment_ids) ? p.deleted_comment_ids : [];
+    delete p.deleted_item_ids;
+    return stripEmpty(p, ['comments', 'deleted_comment_ids']);
   };
 
   return { apiUrl: api('/api/crm-activities/'), fields, validationSchema, crudInitialValues, transformPayload };

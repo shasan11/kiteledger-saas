@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
-import { Alert, Button, Modal, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, message, Modal, Space, Table, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -11,11 +11,24 @@ import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionD
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = localStorage.getItem('accessToken');
+    return { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+};
+const errorMessage = (error, fallback) => {
+    const data = error?.response?.data;
+    if (data?.message) return data.message;
+    if (data?.detail) return data.detail;
+    if (data?.failed?.length) return data.failed.map((item) => item.reason).filter(Boolean).join('\n') || fallback;
+    const firstError = data?.errors ? Object.values(data.errors).flat()?.[0] : null;
+    return firstError || fallback;
+};
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const displayDate = (v) => { if (!v) return '-'; const d = dayjs(v); return d.isValid() ? d.format('DD-MM-YYYY') : '-'; };
 const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red' }[s] || 'default');
 
 export default function PaymentsIndex(props) {
+    const crudRef = useRef(null);
     const [unapprovedCount, setUnapprovedCount] = useState(0);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [unapprovedRows, setUnapprovedRows] = useState([]);
@@ -25,12 +38,15 @@ export default function PaymentsIndex(props) {
     const fetchUnapprovedCount = useCallback(async () => {
         try {
             const response = await axios.get(api('/api/customer-payments/'), {
+                headers: authHeaders(),
                 params: { approved: false, page_size: 1 },
             });
             const payload = response.data;
             const count = payload?.count ?? payload?.total ?? (Array.isArray(payload?.results) ? payload.results.length : 0);
             setUnapprovedCount(Number(count) || 0);
-        } catch {}
+        } catch (error) {
+            message.error(errorMessage(error, 'Failed to load unapproved payment count.'));
+        }
     }, []);
 
     useEffect(() => {
@@ -42,11 +58,15 @@ export default function PaymentsIndex(props) {
         setReviewLoading(true);
         try {
             const response = await axios.get(api('/api/customer-payments/'), {
+                headers: authHeaders(),
                 params: { approved: false, page_size: 50, ordering: '-payment_date' },
             });
             const payload = response.data;
             setUnapprovedRows(payload?.results ?? payload?.data ?? []);
-        } catch {}
+        } catch (error) {
+            message.error(errorMessage(error, 'Failed to load payments for review.'));
+            setUnapprovedRows([]);
+        }
         finally {
             setReviewLoading(false);
         }
@@ -55,10 +75,20 @@ export default function PaymentsIndex(props) {
     const approveRecord = async (record) => {
         setApprovingIds((prev) => new Set([...prev, record.id]));
         try {
-            await axios.patch(api(`/api/customer-payments/${record.id}/`), { approved: true });
-            setUnapprovedRows((prev) => prev.filter((r) => r.id !== record.id));
-            setUnapprovedCount((prev) => Math.max(prev - 1, 0));
-        } catch {}
+            await axios.post(api(`/api/customer-payments/${record.id}/approve`), {}, { headers: authHeaders() });
+            message.success('Payment approved.');
+            await fetchUnapprovedCount();
+            crudRef.current?.refresh?.();
+
+            const response = await axios.get(api('/api/customer-payments/'), {
+                headers: authHeaders(),
+                params: { approved: false, page_size: 50, ordering: '-payment_date' },
+            });
+            const payload = response.data;
+            setUnapprovedRows(payload?.results ?? payload?.data ?? []);
+        } catch (error) {
+            message.error(errorMessage(error, 'Failed to approve payment.'));
+        }
         finally {
             setApprovingIds((prev) => { const next = new Set(prev); next.delete(record.id); return next; });
         }
@@ -122,6 +152,7 @@ export default function PaymentsIndex(props) {
                 )}
 
                 <ReusableCrud
+                    ref={crudRef}
                     title="Customer Payments"
                     apiUrl={api('/api/customer-payments/')}
                     bulkActions={{ approve: true, void: true, export: true }}

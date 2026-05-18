@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\DebitNote;
 use App\Models\DebitNoteLine;
+use App\Models\TaxRate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -41,7 +42,7 @@ class DebitNoteController extends BaseCrudApiController
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_type' => ['nullable', 'string', 'in:percent,amount'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -56,7 +57,7 @@ class DebitNoteController extends BaseCrudApiController
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_type' => ['nullable', 'string', 'in:percent,amount'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -77,6 +78,7 @@ class DebitNoteController extends BaseCrudApiController
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'warehouse_id' => ['nullable', 'uuid', 'exists:warehouses,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
@@ -86,11 +88,12 @@ class DebitNoteController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'debit_note_no' => ['sometimes', 'required', 'string', 'max:40', 'unique:debit_notes,debit_note_no,' . $record->id . ',id'],
+            'debit_note_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:debit_notes,debit_note_no,' . $record->id . ',id'],
             'debit_note_date' => ['sometimes', 'required', 'date'],
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'warehouse_id' => ['sometimes', 'nullable', 'uuid', 'exists:warehouses,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
@@ -103,5 +106,52 @@ class DebitNoteController extends BaseCrudApiController
         $record->forceFill(['total' => $total])->save();
 
         return $record;
+    }
+
+    protected function mutateNestedRowBeforeSave(
+        array $row,
+        Model $parent,
+        array $config,
+        bool $isUpdate
+    ): array {
+        $row['tax_amount'] = $this->calculateTaxAmount($row);
+        $row['line_total'] = $this->calculateLineTotal($row);
+
+        return $row;
+    }
+
+    protected function calculateLineTotal(array $row): float
+    {
+        $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
+        $discountType = $row['discount_type'] ?? 'percent';
+        $discountAmount = $discountType === 'amount'
+            ? min((float) ($row['discount_amount'] ?? 0), $gross)
+            : round($gross * ((float) ($row['discount_percent'] ?? 0) / 100), 2);
+        $taxableAmount = max($gross - $discountAmount, 0);
+
+        return round($taxableAmount + $this->calculateTaxAmount($row, $taxableAmount), 2);
+    }
+
+    protected function calculateTaxAmount(array $row, ?float $taxableAmount = null): float
+    {
+        if (empty($row['tax_rate_id'])) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        $taxRate = TaxRate::query()->find($row['tax_rate_id']);
+        if (!$taxRate) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        if ($taxableAmount === null) {
+            $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
+            $discountType = $row['discount_type'] ?? 'percent';
+            $discountAmount = $discountType === 'amount'
+                ? min((float) ($row['discount_amount'] ?? 0), $gross)
+                : round($gross * ((float) ($row['discount_percent'] ?? 0) / 100), 2);
+            $taxableAmount = max($gross - $discountAmount, 0);
+        }
+
+        return round($taxableAmount * ((float) $taxRate->rate_percent / 100), 2);
     }
 }

@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\CustomerPayment;
 use App\Models\CustomerPaymentLine;
+use App\Models\Invoice;
+use App\Services\TransactionApprovalService;
+use App\Services\TransactionVoidService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -16,7 +19,7 @@ class CustomerPaymentController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
 
-    protected array $relations = ['branch', 'contact', 'account', 'currency', 'bankChargesAccount', 'tdsChargesAccount'];
+    protected array $relations = ['branch', 'contact', 'account', 'currency', 'bankChargesAccount', 'tdsChargesAccount', 'customerPaymentLines', 'customerPaymentLines.invoice'];
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'contact' => 'contact_id',
@@ -46,11 +49,11 @@ class CustomerPaymentController extends BaseCrudApiController
             'relation_details' => ['invoice' => 'invoice_id'],
             'rules' => [
                 'invoice_id' => ['required', 'uuid', 'exists:invoices,id'],
-                'allocated_amount' => ['required', 'numeric', 'min:0'],
+                'allocated_amount' => ['required', 'numeric', 'gt:0'],
             ],
             'update_rules' => [
                 'invoice_id' => ['required', 'uuid', 'exists:invoices,id'],
-                'allocated_amount' => ['required', 'numeric', 'min:0'],
+                'allocated_amount' => ['required', 'numeric', 'gt:0'],
             ],
         ],
     ];
@@ -99,23 +102,14 @@ class CustomerPaymentController extends BaseCrudApiController
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
-        $allocated = collect($nestedData['items'] ?? [])->sum(fn ($row) => (float) ($row['allocated_amount'] ?? 0));
-        if ($allocated > (float) ($parentData['amount'] ?? 0)) {
-            abort(422, 'Allocated amount total cannot exceed payment amount.');
-        }
+        $this->validatePaymentAllocations($parentData, $nestedData);
 
         return $parentData;
     }
 
     protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
     {
-        $amount = (float) ($parentData['amount'] ?? $record->amount ?? 0);
-        if (array_key_exists('items', $nestedData)) {
-            $allocated = collect($nestedData['items'])->sum(fn ($row) => (float) ($row['allocated_amount'] ?? 0));
-            if ($allocated > $amount) {
-                abort(422, 'Allocated amount total cannot exceed payment amount.');
-            }
-        }
+        $this->validatePaymentAllocations($parentData, $nestedData, $record);
 
         return $parentData;
     }
@@ -123,7 +117,176 @@ class CustomerPaymentController extends BaseCrudApiController
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
         $record->forceFill(['total' => (float) $record->amount])->save();
+        Invoice::recalculatePaymentTotalsForContact($record->contact_id);
 
         return $record;
+    }
+
+    public function transactionApprove(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $approved = app(TransactionApprovalService::class)->approve(
+            $record,
+            $request->user()?->getAuthIdentifier()
+        );
+
+        Invoice::recalculatePaymentTotalsForContact($approved->contact_id);
+
+        return response()->json($this->serializeRecord($approved->refresh()));
+    }
+
+    public function transactionVoid(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $data = $this->validateCompat($request->all(), [
+            'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $voided = app(TransactionVoidService::class)->void(
+            $record,
+            $data['voided_reason'],
+            $request->user()?->getAuthIdentifier()
+        );
+
+        Invoice::recalculatePaymentTotalsForContact($voided->contact_id);
+
+        return response()->json($this->serializeRecord($voided->refresh()));
+    }
+
+    public function bulkApprove(Request $request)
+    {
+        $response = parent::bulkApprove($request);
+        $this->recalculateContactsForIds((array) $request->input('ids', []));
+
+        return $response;
+    }
+
+    public function bulkVoid(Request $request)
+    {
+        $response = parent::bulkVoid($request);
+        $this->recalculateContactsForIds((array) $request->input('ids', []));
+
+        return $response;
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+        $contactId = $record->contact_id;
+
+        $response = parent::destroy($request, $id);
+        Invoice::recalculatePaymentTotalsForContact($contactId);
+
+        return $response;
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = (array) $request->input('ids', []);
+        $contactIds = CustomerPayment::query()
+            ->whereIn('id', $ids)
+            ->pluck('contact_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $response = parent::bulkDestroy($request);
+
+        $contactIds->each(fn ($contactId) => Invoice::recalculatePaymentTotalsForContact($contactId));
+
+        return $response;
+    }
+
+    private function validatePaymentAllocations(array $parentData, array $nestedData, ?Model $record = null): void
+    {
+        $rows = array_key_exists('items', $nestedData)
+            ? collect($nestedData['items'] ?? [])
+            : ($record
+                ? $record->customerPaymentLines()->get()->map(fn ($line) => [
+                'id' => $line->id,
+                'invoice_id' => $line->invoice_id,
+                'allocated_amount' => $line->allocated_amount,
+                ])
+                : collect());
+
+        $amount = (float) ($parentData['amount'] ?? $record?->amount ?? 0);
+        $contactId = $parentData['contact_id'] ?? $record?->contact_id;
+        $seen = [];
+        $allocated = 0;
+
+        foreach ($rows as $index => $row) {
+            $invoiceId = $row['invoice_id'] ?? null;
+            $lineAmount = (float) ($row['allocated_amount'] ?? 0);
+
+            if (!$invoiceId) {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['Invoice is required.']]);
+            }
+
+            if (isset($seen[$invoiceId])) {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['The same invoice cannot be allocated more than once in one payment.']]);
+            }
+            $seen[$invoiceId] = true;
+
+            if ($lineAmount <= 0) {
+                $this->throwValidation(["items.{$index}.allocated_amount" => ['Allocated amount must be greater than zero.']]);
+            }
+
+            $invoice = Invoice::query()->find($invoiceId);
+            if (!$invoice) {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['Selected invoice was not found.']]);
+            }
+
+            $invoice->recalculatePaymentTotals();
+
+            if ($contactId && $invoice->contact_id !== $contactId) {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['Selected invoice does not belong to this customer.']]);
+            }
+
+            if ((bool) $invoice->void || $invoice->status === 'void') {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['Voided invoices cannot receive payments.']]);
+            }
+
+            if (!(bool) $invoice->approved || !in_array($invoice->status, ['posted', 'part_paid', 'paid'], true)) {
+                $this->throwValidation(["items.{$index}.invoice_id" => ['Only approved posted invoices can receive payments.']]);
+            }
+
+            $existingAllocation = ($record && (bool) $record->approved && !(bool) $record->void)
+                ? (float) CustomerPaymentLine::query()
+                    ->where('customer_payment_id', $record->getKey())
+                    ->where('invoice_id', $invoiceId)
+                    ->sum('allocated_amount')
+                : 0;
+
+            $availableBalance = (float) $invoice->balance_due + $existingAllocation;
+            if ($lineAmount > round($availableBalance, 2)) {
+                $this->throwValidation(["items.{$index}.allocated_amount" => [
+                    sprintf('Allocated amount %.2f exceeds invoice balance %.2f.', $lineAmount, $availableBalance),
+                ]]);
+            }
+
+            $allocated += $lineAmount;
+        }
+
+        if ($allocated > $amount) {
+            $this->throwValidation(['items' => ['Allocated amount total cannot exceed payment amount.']]);
+        }
+    }
+
+    private function recalculateContactsForIds(array $ids): void
+    {
+        CustomerPayment::query()
+            ->whereIn('id', array_values(array_unique(array_filter($ids))))
+            ->pluck('contact_id')
+            ->filter()
+            ->unique()
+            ->each(fn ($contactId) => Invoice::recalculatePaymentTotalsForContact($contactId));
     }
 }

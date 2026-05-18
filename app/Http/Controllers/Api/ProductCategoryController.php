@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\ProductCategory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -54,6 +55,15 @@ class ProductCategoryController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected function applyFilters(Builder $query, Request $request): void
+    {
+        parent::applyFilters($query, $request);
+
+        if ($request->boolean('root_only')) {
+            $query->whereNull($this->qualifiedColumn('parent_id'));
+        }
+    }
 
     protected array $storeRules = [
         'name'                => ['required', 'string', 'max:120'],

@@ -258,7 +258,7 @@ export default function PurchaseBillEdit({ id, ...props }) {
       storeFullObject: true, fkLabel: (r) => [r?.code, r?.symbol, r?.name].filter(Boolean).join(' - '),
       onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }),
     },
-    { name: 'exchange_rate', label: 'Exchange Rate To NPR', type: 'number', required: true, col: 8, min: 0 },
+    { name: 'exchange_rate', label: 'Exchange Rate To NPR', type: 'number', required: true, col: 8, min: 0.000001 },
     { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
     {
       name: 'items', label: '', type: 'objectArray', col: 24,
@@ -271,7 +271,7 @@ export default function PurchaseBillEdit({ id, ...props }) {
       columns: [
         {
           key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
-          placeholder: 'Add Code or Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
           fkOptionRender: (r) => (
@@ -288,7 +288,7 @@ export default function PurchaseBillEdit({ id, ...props }) {
             return { ...baseRow, tax_amount: c.tax_amount, tax_breakup: c.tax_breakup, line_total: c.line_total };
           },
         },
-        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0 },
+        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0.000001 },
         { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0, addonBefore: ({ values }) => getCurrencySymbol(values), prefix: ({ values }) => getCurrencySymbol(values) },
         { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '170px', component: LineDiscountInput },
         {

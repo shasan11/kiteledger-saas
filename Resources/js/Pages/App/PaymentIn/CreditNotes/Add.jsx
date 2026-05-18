@@ -899,11 +899,11 @@ export default function CreditNoteAdd(props) {
             type: 'fkSelect',
             width: '250px',
             placeholder: 'Add Code or Product',
-            fkUrl: api('/api/products/'),
+            fkUrl: api('/api/products/search?transaction=sale'),
             fkSearchParam: 'search',
             fkPageSize: 20,
             fkValueKey: 'id',
-            fkLabelKey: 'name',
+            fkLabelKey: 'label',
             labelField: 'product_name',
             quickAdd: productQuickAdd,
 

@@ -22,12 +22,36 @@ class TransactionVoidService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            if ((bool) ($fresh->void ?? false) || (bool) ($fresh->voided ?? false)) {
+                $this->jvService->reverseForSource($fresh, $reason);
+
+                if ($fresh instanceof \App\Models\CustomerPayment) {
+                    \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+                }
+
+                if ($fresh instanceof \App\Models\SupplierPayment) {
+                    \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+                }
+
+                return $fresh->refresh();
+            }
+
             $this->validationService->validateCanVoid($fresh);
 
             if ($fresh instanceof \App\Models\InventoryAdjustment && (bool) $fresh->stock_posted) {
                 throw ValidationException::withMessages([
                     'status' => ['Posted inventory adjustments cannot be cancelled or voided.'],
                 ]);
+            }
+
+            if ($fresh instanceof \App\Models\ProductionOrder) {
+                return app(\App\Services\Manufacturing\ProductionPostingService::class)
+                    ->void($fresh, $reason, $voidedById);
+            }
+
+            if ($fresh instanceof \App\Models\ProductionJournal && (bool) $fresh->stock_posted) {
+                return app(\App\Services\Inventory\ProductionPostingService::class)
+                    ->reverse($fresh, $reason, $voidedById);
             }
 
             if (in_array('void', $fresh->getFillable(), true)) {
@@ -54,6 +78,14 @@ class TransactionVoidService
             $fresh->saveQuietly();
 
             $this->jvService->reverseForSource($fresh, $reason);
+
+            if ($fresh instanceof \App\Models\CustomerPayment) {
+                \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+            }
+
+            if ($fresh instanceof \App\Models\SupplierPayment) {
+                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+            }
 
             return $fresh->refresh();
         });

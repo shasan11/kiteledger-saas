@@ -31,6 +31,7 @@ export default function ExpenseAdd(props) {
         { name: 'expense_date', label: 'Expense Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
         { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
         { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
+        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0.000001 },
         { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         {
             name: 'items', label: 'Expense Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Expense Line', defaultItem: { ...emptyLine }, headerBg: '#4b5563', headerColor: '#ffffff',
@@ -38,7 +39,7 @@ export default function ExpenseAdd(props) {
                 { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
                 { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
                 { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '130px', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0 },
+                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0.000001 },
                 { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
                 { key: 'line_total', name: 'line_total', label: 'Total', type: 'number', width: '130px', min: 0, disabled: true },
             ],
@@ -48,11 +49,12 @@ export default function ExpenseAdd(props) {
 
     const validationSchema = useMemo(() => Yup.object().shape({
         expense_date: Yup.mixed().required('Date is required'),
-        items: Yup.array().of(Yup.object().shape({ amount: Yup.number().typeError('Amount required').min(0).required() }).test('acct', 'Account is required', (l) => !!asId(l?.chart_of_account_id))).min(1, 'At least one expense line is required').required(),
+        exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').nullable(),
+        items: Yup.array().of(Yup.object().shape({ amount: Yup.number().typeError('Amount required').moreThan(0, 'Must be > 0').required() }).test('acct', 'Account is required', (l) => !!asId(l?.chart_of_account_id))).min(1, 'At least one expense line is required').required(),
     }), []);
 
     const crudInitialValues = useMemo(() => ({
-        expense_no: '', expense_date: dayjs(), due_date: null, contact_id: null, currency_id: null, tds_charges_account_id: null, notes: '', items: [{ ...emptyLine }], deleted_item_ids: [],
+        expense_no: '', expense_date: dayjs(), due_date: null, contact_id: null, currency_id: null, exchange_rate: 1, tds_charges_account_id: null, notes: '', items: [{ ...emptyLine }], deleted_item_ids: [],
     }), []);
 
     const transformPayload = (values = {}) => {
@@ -71,6 +73,7 @@ export default function ExpenseAdd(props) {
             due_date: formatDate(values.due_date),
             contact_id: asId(values.contact_id ?? values.contact),
             currency_id: asId(values.currency_id ?? values.currency),
+            exchange_rate: toNumber(values.exchange_rate) || 1,
             tds_charges_account_id: asId(values.tds_charges_account_id),
             notes: nullIfEmpty(values.notes),
             items,

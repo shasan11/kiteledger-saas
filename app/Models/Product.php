@@ -25,6 +25,7 @@ class Product extends Model
         'product_unit_id',
         'tax_class_id',
         'product_type',
+        'variant_signature',
         'sales_account_id',
         'purchase_account_id',
         'sales_return_account_id',
@@ -67,6 +68,11 @@ class Product extends Model
     }
 
     public function variants(): HasMany
+    {
+        return $this->hasMany(Product::class, 'parent_id');
+    }
+
+    public function children(): HasMany
     {
         return $this->hasMany(Product::class, 'parent_id');
     }
@@ -174,5 +180,45 @@ class Product extends Model
     public function warehouseTransferLines(): HasMany
     {
         return $this->hasMany(WarehouseTransferLine::class, 'product_id');
+    }
+
+    public function posSaleLines(): HasMany
+    {
+        return $this->hasMany(PosSaleLine::class, 'product_id');
+    }
+
+    public function posReturnLines(): HasMany
+    {
+        return $this->hasMany(PosReturnLine::class, 'product_id');
+    }
+
+    public function productionFinishedJournals(): HasMany
+    {
+        return $this->hasMany(ProductionJournal::class, 'finished_product_id');
+    }
+
+    public function productionRawMaterialLines(): HasMany
+    {
+        return $this->hasMany(ProductionJournalRawMaterial::class, 'product_id');
+    }
+
+    public function productionByProductLines(): HasMany
+    {
+        return $this->hasMany(ProductionJournalByProduct::class, 'product_id');
+    }
+
+    public function productionOrdersAsFinishedProduct(): HasMany
+    {
+        return $this->hasMany(ProductionOrder::class, 'finished_product_id');
+    }
+
+    public function productionOrderRawMaterialLines(): HasMany
+    {
+        return $this->hasMany(ProductionOrderRawMaterial::class, 'product_id');
+    }
+
+    public function productionOrderByproductLines(): HasMany
+    {
+        return $this->hasMany(ProductionOrderByproduct::class, 'product_id');
     }
 }

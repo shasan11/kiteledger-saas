@@ -3,14 +3,15 @@
 namespace App\Observers;
 
 use App\Models\ChequeRegister;
-use App\Observers\Concerns\CapturesAccountingEffect;
 use App\Domain\Accounting\Services\ChequeRegisterService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ChequeRegisterObserver
 {
-    use CapturesAccountingEffect;
+    public function __construct(
+        protected ChequeRegisterService $chequeRegisterService,
+    ) {
+    }
 
     public function saving(ChequeRegister $chequeRegister): void
     {
@@ -27,27 +28,9 @@ class ChequeRegisterObserver
         }
     }
 
-    public function updating(ChequeRegister $chequeRegister): void
-    {
-        $fresh = ChequeRegister::query()->find($chequeRegister->getKey());
-
-        if ($fresh) {
-            $oldEffect = app(ChequeRegisterService::class)->snapshotEffect($fresh);
-
-            $this->storeOldEffect($chequeRegister, null, $oldEffect);
-        }
-    }
-
     public function saved(ChequeRegister $chequeRegister): void
     {
-        DB::transaction(function () use ($chequeRegister) {
-            $oldEffect = $this->pullOldEffect($chequeRegister);
-
-            app(ChequeRegisterService::class)->syncFinancials(
-                chequeRegister: $chequeRegister->fresh(),
-                oldEffect: $oldEffect
-            );
-        });
+        $this->chequeRegisterService->recalculateTotal($chequeRegister);
     }
 
     public function deleting(ChequeRegister $chequeRegister): void

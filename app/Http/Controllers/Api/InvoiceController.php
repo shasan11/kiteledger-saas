@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 
 class InvoiceController extends BaseCrudApiController
 {
+    private array $stockAllowanceByLineId = [];
+
     protected string $modelClass = Invoice::class;
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
@@ -113,6 +115,29 @@ class InvoiceController extends BaseCrudApiController
         ];
     }
 
+    protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
+    {
+        $this->stockAllowanceByLineId = [];
+
+        if (isset($nestedData['items']) && is_array($nestedData['items'])) {
+            $lineIds = collect($nestedData['items'])
+                ->pluck('id')
+                ->filter()
+                ->values();
+
+            if ($lineIds->isNotEmpty()) {
+                $this->stockAllowanceByLineId = InvoiceLine::query()
+                    ->where('invoice_id', $record->getKey())
+                    ->whereIn('id', $lineIds)
+                    ->pluck('qty', 'id')
+                    ->map(fn ($qty) => (float) $qty)
+                    ->all();
+            }
+        }
+
+        return parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+    }
+
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
         $lines = $record->invoiceLines()->with('taxRate')->get();
@@ -158,11 +183,11 @@ class InvoiceController extends BaseCrudApiController
             $total += $lineTotal;
         }
 
-        $paidTotal = (float) ($record->paid_total ?? 0);
         $record->forceFill([
             'total' => round($total, 2),
-            'balance_due' => round($total - $paidTotal, 2),
         ])->save();
+
+        $record->recalculatePaymentTotals();
 
         $this->enforceSalesSettings($record, $lines);
 
@@ -206,7 +231,7 @@ class InvoiceController extends BaseCrudApiController
                 ->where('warehouse_id', $warehouseId)
                 ->value('qty_on_hand') ?? 0;
 
-            $available = (float) $stock;
+            $available = (float) $stock + (float) ($this->stockAllowanceByLineId[$line->id] ?? 0);
             $requested = (float) $line->qty;
 
             // When updating, allow for the qty already on this line previously saved.

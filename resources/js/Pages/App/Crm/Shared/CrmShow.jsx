@@ -253,9 +253,9 @@ function RailTable({ rows = [] }) {
 
 function DetailsCard({ title, extra, children }) {
   return (
-    <>
+    <Card size="small" title={title} extra={extra} className="crm-show__card">
       {children}
-    </>
+    </Card>
   );
 }
 
@@ -2191,10 +2191,15 @@ export function LeadShow({ auth, id }) {
     }
   };
 
-  const doConvert = async () => {
+  const doConvert = async (dealId) => {
+    if (!dealId) {
+      messageApi.error('Create a deal before marking this lead as converted.');
+      return;
+    }
+
     try {
-      await axios.post(`${BACKEND_BASE}/api/crm/leads/${id}/convert`, {}, { headers: authHeaders() });
-      messageApi.success('Lead marked as converted');
+      await axios.post(`${BACKEND_BASE}/api/crm/leads/${id}/convert`, { converted_deal_id: dealId }, { headers: authHeaders() });
+      messageApi.success('Lead converted to deal');
       setConvertDrawer(false);
       setShellRefresh((k) => k + 1);
     } catch (e) {
@@ -2494,7 +2499,7 @@ export function LeadShow({ auth, id }) {
               { label: 'Pipeline', value: lead?.deal_pipeline?.name || lead?.dealPipeline?.name },
               { label: 'Phone', value: lead?.phone || lead?.mobile },
               { label: 'Email', value: lead?.email },
-              { label: 'Follow-up', value: formatDate(lead?.next_follow_up_at || lead?.next_follow_up_date) },
+              { label: 'Follow-up', value: formatDateTime(lead?.next_follow_up_at || lead?.next_follow_up_date) },
               { label: 'Created', value: formatDateTime(lead?.created_at) },
             ]}
             tabs={tabs}
@@ -2587,12 +2592,13 @@ export function LeadShow({ auth, id }) {
           enableServerPagination={false}
           showSearch={false}
           canAdd canEdit={false} canDelete={false} hasActions={false} hasActionColumns={false}
+          onAddSuccess={(savedRecord) => {
+            const createdDeal = savedRecord?.data || savedRecord;
+            return doConvert(createdDeal?.id);
+          }}
         />
         <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
-          <Text type="secondary">After creating the deal above, mark this lead as converted:</Text>
-          <div style={{ marginTop: 8 }}>
-            <Button type="primary" onClick={doConvert}>Mark Lead as Converted</Button>
-          </div>
+          <Text type="secondary">Create the deal here. The lead will be marked Converted and linked to the new deal automatically.</Text>
         </div>
       </Drawer>
     )}

@@ -39,13 +39,13 @@ const emptyItem = {
     product_id_detail: null,
     product_name: '',
     description: '',
-    quantity: 1,
+    qty: 1,
     unit_code: 'PCS',
-    rate: 0,
+    unit_price: 0,
     discount: 0,
     discount_type: 'percent',
     tax_code: 'no_vat',
-    amount: 0,
+    line_total: 0,
     notes: '',
 };
 
@@ -76,8 +76,8 @@ const tdsTypeOptions = [
 ];
 
 const calculateLine = (row = {}) => {
-    const qty = toNumber(row.quantity);
-    const rate = toNumber(row.rate);
+    const qty = toNumber(row.qty ?? row.quantity);
+    const rate = toNumber(row.unit_price ?? row.rate);
     const gross = qty * rate;
 
     const discountValue = toNumber(row.discount);
@@ -102,7 +102,7 @@ const calculateLine = (row = {}) => {
         taxable,
         nonTaxable,
         vat,
-        amount: net + vat,
+        line_total: net + vat,
     };
 };
 
@@ -118,7 +118,7 @@ const calculateTotals = (values = {}) => {
             acc.nonTaxableTotal += line.nonTaxable;
             acc.taxableTotal += line.taxable;
             acc.vat += line.vat;
-            acc.itemTotal += line.amount;
+            acc.itemTotal += line.line_total;
 
             return acc;
         },
@@ -149,12 +149,12 @@ const calculateTotals = (values = {}) => {
 };
 
 const initialValues = {
-    customer_id: null,
-    customer_id_detail: null,
+    contact_id: null,
+    contact_id_detail: null,
     customer_name: '',
 
-    reference_no: '',
-    proforma_code: 'DRAFT',
+    reference: '',
+    proforma_no: 'DRAFT',
 
     proforma_date: dayjs().format('YYYY-MM-DD'),
     due_date: dayjs().format('YYYY-MM-DD'),
@@ -163,7 +163,7 @@ const initialValues = {
     currency_id_detail: null,
     currency_name: '',
     currency_code: '',
-    exchange_rate_to_npr: 1,
+    exchange_rate: 1,
 
     warehouse_id: null,
     warehouse_id_detail: null,
@@ -200,12 +200,12 @@ const initialValues = {
 };
 
 const validationSchema = Yup.object().shape({
-    customer_id: Yup.string().nullable().required('Customer is required'),
+    contact_id: Yup.string().nullable().required('Customer is required'),
     proforma_date: Yup.string().required('Proforma Invoice date is required'),
     due_date: Yup.string().required('Due date is required'),
-    warehouse_id: Yup.string().nullable().required('Warehouse is required'),
+    warehouse_id: Yup.string().nullable(),
 
-    exchange_rate_to_npr: Yup.number()
+    exchange_rate: Yup.number()
         .typeError('Exchange rate is required')
         .min(0.0001, 'Exchange rate must be greater than 0')
         .required('Exchange rate is required'),
@@ -213,12 +213,14 @@ const validationSchema = Yup.object().shape({
     items: Yup.array()
         .of(
             Yup.object().shape({
-                product_id: Yup.string().nullable().required('Product is required'),
-                quantity: Yup.number()
+                product_id: Yup.string().nullable(),
+                product_name: Yup.string().nullable(),
+                description: Yup.string().nullable(),
+                qty: Yup.number()
                     .typeError('Qty is required')
                     .min(0.0001, 'Qty must be greater than 0')
                     .required('Qty is required'),
-                rate: Yup.number()
+                unit_price: Yup.number()
                     .typeError('Rate is required')
                     .min(0, 'Rate cannot be negative')
                     .required('Rate is required'),
@@ -258,7 +260,7 @@ export default function Index() {
     const fields = useMemo(
         () => [
             {
-                name: 'customer_id',
+                name: 'contact_id',
                 label: 'Customer Name',
                 type: 'fkSelect',
                 required: true,
@@ -283,14 +285,14 @@ export default function Index() {
                     '',
             },
             {
-                name: 'reference_no',
+                name: 'reference',
                 label: 'Reference No',
                 col: 8,
                 placeholder: 'Reference Number',
             },
 
             {
-                name: 'proforma_code',
+                name: 'proforma_no',
                 label: 'Proforma Invoice Code',
                 col: 8,
                 readOnly: true,
@@ -330,7 +332,7 @@ export default function Index() {
                 fkLabel: (row) => row?.name || row?.display_name || row?.code || '',
             },
             {
-                name: 'exchange_rate_to_npr',
+                name: 'exchange_rate',
                 label: 'Exchange Rate To NPR',
                 type: 'number',
                 required: true,
@@ -342,7 +344,7 @@ export default function Index() {
                 name: 'warehouse_id',
                 label: 'Warehouse',
                 type: 'fkSelect',
-                required: true,
+                required: false,
                 col: 8,
                 placeholder: 'Select Warehouse',
                 fkUrl: '/api/warehouses/',
@@ -422,11 +424,11 @@ export default function Index() {
                         type: 'fkSelect',
                         width: '3fr',
                         placeholder: 'Add Code or Product',
-                        fkUrl: '/api/products/',
+                        fkUrl: '/api/products/search',
                         fkSearchParam: 'search',
                         fkPageSize: 20,
                         fkValueKey: 'id',
-                        fkLabelKey: 'name',
+                        fkLabelKey: 'label',
                         labelField: 'product_name',
                         fkLabel: (row) => {
                             const code = row?.code || row?.sku || '';
@@ -439,8 +441,8 @@ export default function Index() {
                         },
                     },
                     {
-                        key: 'quantity',
-                        name: 'quantity',
+                        key: 'qty',
+                        name: 'qty',
                         label: 'Qty',
                         type: 'number',
                         width: '90px',
@@ -456,8 +458,8 @@ export default function Index() {
                         options: unitOptions,
                     },
                     {
-                        key: 'rate',
-                        name: 'rate',
+                        key: 'unit_price',
+                        name: 'unit_price',
                         label: 'Rate',
                         type: 'number',
                         width: '110px',
@@ -490,13 +492,13 @@ export default function Index() {
                         options: taxOptions,
                     },
                     {
-                        key: 'amount',
-                        name: 'amount',
+                        key: 'line_total',
+                        name: 'line_total',
                         label: 'Amount',
                         type: 'number',
                         width: '120px',
                         readOnly: true,
-                        formula: (row) => Number(calculateLine(row).amount.toFixed(2)),
+                        formula: (row) => Number(calculateLine(row).line_total.toFixed(2)),
                     },
                 ],
                 collapsedFields: [
@@ -728,25 +730,25 @@ export default function Index() {
         () => [
             {
                 title: 'Proforma Invoice Code',
-                dataIndex: 'proforma_code',
-                key: 'proforma_code',
+                dataIndex: 'proforma_no',
+                key: 'proforma_no',
                 width: 160,
                 backendSort: true,
-                sortField: 'proforma_code',
+                sortField: 'proforma_no',
                 render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
             },
             {
                 title: 'Customer',
-                dataIndex: 'customer_name',
-                key: 'customer_name',
+                dataIndex: 'contact',
+                key: 'contact',
                 width: 240,
                 backendSort: true,
                 sortField: 'customer_name',
                 render: (_, record) =>
+                    record?.contact?.display_name ||
+                    record?.contact?.company_name ||
+                    record?.contact?.name ||
                     record?.customer_name ||
-                    record?.customer?.display_name ||
-                    record?.customer?.company_name ||
-                    record?.customer?.name ||
                     '-',
             },
             {
@@ -777,8 +779,8 @@ export default function Index() {
             },
             {
                 title: 'Reference No',
-                dataIndex: 'reference_no',
-                key: 'reference_no',
+                dataIndex: 'reference',
+                key: 'reference',
                 width: 170,
                 render: (value) => value || '-',
             },
@@ -795,17 +797,14 @@ export default function Index() {
             },
             {
                 title: 'Grand Total',
-                dataIndex: 'grand_total',
-                key: 'grand_total',
+                dataIndex: 'total',
+                key: 'total',
                 width: 150,
                 align: 'right',
                 backendSort: true,
-                sortField: 'grand_total',
+                sortField: 'total',
                 render: (_, record) => {
-                    const total =
-                        record?.grand_total ??
-                        record?.total_amount ??
-                        calculateTotals(record).grandTotal;
+                    const total = record?.total ?? record?.grand_total ?? 0;
 
                     return <Text strong>{money(total)}</Text>;
                 },
@@ -820,7 +819,6 @@ export default function Index() {
 
                     if (status === 'issued' || status === 'approved') return <Tag color="green">Issued</Tag>;
                     if (status === 'cancelled') return <Tag color="red">Cancelled</Tag>;
-                    if (status === 'void') return <Tag color="volcano">Void</Tag>;
 
                     return <Tag>Draft</Tag>;
                 },
@@ -831,74 +829,42 @@ export default function Index() {
 
     const transformPayload = (values) => {
         const items = (values.items || [])
-            .filter((row) => row.product_id || row.description)
+            .filter((row) => row.product_id || row.product_name || row.description)
             .map((row) => {
                 const line = calculateLine(row);
+                const productId = row.product_id || null;
+                const customName = !productId ? (row.product_name || row.description || 'Custom item') : null;
 
                 return {
                     id: row.id,
-                    product_id: row.product_id,
+                    product_id: productId,
+                    custom_product_name: customName,
                     description: row.description || row.product_name || '',
-                    quantity: toNumber(row.quantity),
+                    qty: toNumber(row.qty),
                     unit_code: row.unit_code || '',
-                    rate: toNumber(row.rate),
-                    discount: toNumber(row.discount),
-                    discount_type: row.discount_type || 'percent',
-                    tax_code: row.tax_code || 'no_vat',
-                    taxable_amount: Number(line.taxable.toFixed(2)),
-                    non_taxable_amount: Number(line.nonTaxable.toFixed(2)),
-                    vat_amount: Number(line.vat.toFixed(2)),
-                    amount: Number(line.amount.toFixed(2)),
-                    notes: row.notes || '',
+                    unit_price: toNumber(row.unit_price),
+                    discount_percent: row.discount_type === 'amount' || toNumber(row.discount) <= 0
+                        ? 0
+                        : toNumber(row.discount),
+                    tax_rate_id: row.tax_rate_id || null,
+                    tax_amount: Number(line.vat.toFixed(2)),
+                    line_total: Number(line.line_total.toFixed(2)),
                 };
             });
 
-        const totals = calculateTotals(values);
-
         return {
-            customer_id: values.customer_id,
-            reference_no: values.reference_no || '',
-            proforma_code: values.proforma_code || 'DRAFT',
+            contact_id: values.contact_id,
+            reference: values.reference || '',
+            proforma_no: values.proforma_no && values.proforma_no !== 'DRAFT' ? values.proforma_no : null,
 
             proforma_date: formatDateForBackend(values.proforma_date),
-            due_date: formatDateForBackend(values.due_date),
 
             currency_id: values.currency_id || null,
-            exchange_rate_to_npr: toNumber(values.exchange_rate_to_npr || 1),
-            warehouse_id: values.warehouse_id,
-
-            is_export_sales: !!values.is_export_sales,
-            export_country_id: values.is_export_sales ? values.export_country_id : null,
-            export_document_date: values.is_export_sales
-                ? formatDateForBackend(values.export_document_date)
-                : null,
-            export_document_no: values.is_export_sales ? values.export_document_no || '' : '',
-
-            received_by: values.received_by || '',
-            expiry: values.expiry || '',
-            batch_no: values.batch_no || '',
-            udf: values.udf || '',
+            exchange_rate: toNumber(values.exchange_rate || 1),
 
             notes: values.notes || '',
 
-            proforma_discount: toNumber(values.proforma_discount),
-            proforma_discount_type: values.proforma_discount_type || 'percent',
-
-            tds_applicable: !!values.tds_applicable,
-            tds_account_id: values.tds_applicable ? values.tds_account_id : null,
-            tds_type: values.tds_applicable ? values.tds_type : null,
-            tds_amount: values.tds_applicable ? toNumber(values.tds_amount) : 0,
-
-            sub_total: Number(totals.subTotal.toFixed(2)),
-            discount_amount: Number(totals.invoiceDiscount.toFixed(2)),
-            line_discount_amount: Number(totals.lineDiscount.toFixed(2)),
-            non_taxable_total: Number(totals.nonTaxableTotal.toFixed(2)),
-            taxable_total: Number(totals.taxableTotal.toFixed(2)),
-            vat_amount: Number(totals.vat.toFixed(2)),
-            grand_total: Number(totals.grandTotal.toFixed(2)),
-
-            approved: !!values.approved,
-            status: values.status || 'draft',
+            status: ['draft', 'issued', 'cancelled'].includes(values.status) ? values.status : 'draft',
 
             items,
         };
@@ -929,8 +895,8 @@ export default function Index() {
                 currency.exchange_rate ??
                 currency.rate_to_npr;
 
-            if (rate && Number(values.exchange_rate_to_npr || 0) !== Number(rate)) {
-                setFieldValue('exchange_rate_to_npr', Number(rate), false);
+            if (rate && Number(values.exchange_rate || 0) !== Number(rate)) {
+                setFieldValue('exchange_rate', Number(rate), false);
             }
         }
 
@@ -957,7 +923,7 @@ export default function Index() {
                     product.selling_price ??
                     product.rate ??
                     product.price ??
-                    row.rate ??
+                    row.unit_price ??
                     0;
 
                 if (!row.product_name && productName) {
@@ -972,15 +938,15 @@ export default function Index() {
                     setFieldValue(`items[${index}].unit_code`, unit, false);
                 }
 
-                if ((row.rate === null || row.rate === undefined || Number(row.rate) === 0) && rate) {
-                    setFieldValue(`items[${index}].rate`, Number(rate), false);
+                if ((row.unit_price === null || row.unit_price === undefined || Number(row.unit_price) === 0) && rate) {
+                    setFieldValue(`items[${index}].unit_price`, Number(rate), false);
                 }
             }
 
-            const nextAmount = Number(calculateLine(row).amount.toFixed(2));
+            const nextAmount = Number(calculateLine(row).line_total.toFixed(2));
 
-            if (Number(row.amount || 0) !== nextAmount) {
-                setFieldValue(`items[${index}].amount`, nextAmount, false);
+            if (Number(row.line_total || 0) !== nextAmount) {
+                setFieldValue(`items[${index}].line_total`, nextAmount, false);
             }
         });
     };
@@ -1000,23 +966,8 @@ export default function Index() {
                 <Button type="default" disabled={!isValid || isSubmitting} onClick={() => triggerStatusAction('issued', false)}>
                     Issue
                 </Button>
-                <Button type="default" disabled={!isValid || isSubmitting} onClick={() => triggerStatusAction('issued', true)}>
-                    Approve
-                </Button>
-                <Button type="default" disabled={!isValid || isSubmitting} onClick={() => triggerStatusAction('issued', true)}>
-                    Print
-                </Button>
-                <Button type="default" disabled={!isValid || isSubmitting} onClick={() => triggerStatusAction('issued', true)}>
-                    Convert to Invoice
-                </Button>
                 <Button danger disabled={isSubmitting} onClick={() => triggerStatusAction('cancelled', false)}>
                     Cancel
-                </Button>
-                <Button danger disabled={isSubmitting} onClick={() => triggerStatusAction('void', false)}>
-                    Void
-                </Button>
-                <Button disabled={!isValid || isSubmitting} onClick={() => triggerStatusAction('draft', false)}>
-                    Duplicate
                 </Button>
             </div>
         );

@@ -298,7 +298,7 @@ function SummaryCards({ cards, token }) {
     return (
         <Row gutter={[token.marginMD, token.marginMD]}>
             {cards.map((card) => (
-                <Col key={card.key} xs={24} sm={12} lg={8} xl={4}>
+                <Col key={card.key} xs={24} sm={12} lg={8} xl={8}>
                     <Card
                         hoverable
                         onClick={() => visit(card.url)}

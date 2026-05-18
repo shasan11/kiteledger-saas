@@ -7,10 +7,10 @@ Route::prefix('payment-in')->name('payment-in.')->group(function () {
     Route::get('/quotations/{id}/edit', fn ($id) => Inertia::render('App/PaymentIn/Quotations/Edit', ['id' => $id]))->name('quotations.edit');
     Route::get('/quotations/{id}', fn ($id) => Inertia::render('App/PaymentIn/Quotations/Show', ['id' => $id]))->name('quotations.show');
 
-    Route::get('/bills', fn () => Inertia::render('App/PaymentIn/Bills/Index'))->name('bills.index');
-    Route::get('/bills/add', fn () => Inertia::render('App/PaymentIn/Bills/Add'))->name('bills.add');
-    Route::get('/bills/{id}/edit', fn ($id) => Inertia::render('App/PaymentIn/Bills/Edit', ['id' => $id]))->name('bills.edit');
-    Route::get('/bills/{id}', fn ($id) => Inertia::render('App/PaymentIn/Bills/Show', ['id' => $id]))->name('bills.show');
+    Route::get('/bills', fn () => redirect()->route('payment-in.invoices.index'))->name('bills.index');
+    Route::get('/bills/add', fn () => redirect()->route('payment-in.invoices.add'))->name('bills.add');
+    Route::get('/bills/{id}/edit', fn ($id) => redirect()->route('payment-in.invoices.edit', $id))->name('bills.edit');
+    Route::get('/bills/{id}', fn ($id) => redirect()->route('payment-in.invoices.show', $id))->name('bills.show');
 
     Route::get('/proforma-invoices', fn () => Inertia::render('App/PaymentIn/ProformaInvoices/Index'))->name('proforma-invoices.index');
     Route::get('/proforma-invoices/{id}', fn ($id) => Inertia::render('App/PaymentIn/ProformaInvoices/Show', ['id' => $id]))->name('proforma-invoices.show');

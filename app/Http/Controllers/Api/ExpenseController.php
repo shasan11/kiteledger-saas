@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Expense;
 use App\Models\ExpenseLine;
+use App\Models\TaxRate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -41,7 +42,7 @@ class ExpenseController extends BaseCrudApiController
                 'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
-                'amount' => ['required', 'numeric', 'min:0'],
+                'amount' => ['required', 'numeric', 'gt:0'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
@@ -49,7 +50,7 @@ class ExpenseController extends BaseCrudApiController
                 'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
-                'amount' => ['required', 'numeric', 'min:0'],
+                'amount' => ['required', 'numeric', 'gt:0'],
                 'tax_amount' => ['nullable', 'numeric', 'min:0'],
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
@@ -64,6 +65,7 @@ class ExpenseController extends BaseCrudApiController
         'due_date' => ['nullable', 'date'],
         'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
         'tds_charges_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
@@ -81,6 +83,7 @@ class ExpenseController extends BaseCrudApiController
             'due_date' => ['sometimes', 'nullable', 'date'],
             'contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
             'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
@@ -95,5 +98,32 @@ class ExpenseController extends BaseCrudApiController
         $record->forceFill(['total' => $total])->save();
 
         return $record;
+    }
+
+    protected function mutateNestedRowBeforeSave(
+        array $row,
+        Model $parent,
+        array $config,
+        bool $isUpdate
+    ): array {
+        $amount = (float) ($row['amount'] ?? 0);
+        $row['tax_amount'] = $this->calculateTaxAmount($row, $amount);
+        $row['line_total'] = round($amount + (float) $row['tax_amount'], 2);
+
+        return $row;
+    }
+
+    protected function calculateTaxAmount(array $row, float $amount): float
+    {
+        if (empty($row['tax_rate_id'])) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        $taxRate = TaxRate::query()->find($row['tax_rate_id']);
+        if (!$taxRate) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        return round($amount * ((float) $taxRate->rate_percent / 100), 2);
     }
 }

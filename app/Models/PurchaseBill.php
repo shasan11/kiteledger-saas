@@ -122,4 +122,59 @@ class PurchaseBill extends Model
     {
         return $this->hasMany(SupplierPaymentLine::class);
     }
+
+    public function recalculatePaymentTotals(): self
+    {
+        if ((bool) $this->void || $this->status === 'void') {
+            return $this;
+        }
+
+        $paidTotal = (float) $this->supplierPaymentLines()
+            ->whereHas('supplierPayment', function ($query) {
+                $query->where('approved', true)
+                    ->where(function ($query) {
+                        $query->where('void', false)->orWhereNull('void');
+                    });
+            })
+            ->sum('allocated_amount');
+
+        $total = (float) ($this->total ?? 0);
+        $status = $this->status;
+
+        if ((bool) $this->approved || $status !== 'draft') {
+            $status = match (true) {
+                $paidTotal <= 0 => 'posted',
+                $paidTotal < $total => 'part_paid',
+                default => 'paid',
+            };
+        }
+
+        $this->forceFill([
+            'paid_total' => round($paidTotal, 2),
+            'balance_due' => round(max($total - $paidTotal, 0), 2),
+            'status' => $status,
+        ])->saveQuietly();
+
+        return $this->refresh();
+    }
+
+    public static function recalculatePaymentTotalsForIds(array $ids): void
+    {
+        static::query()
+            ->whereIn('id', array_values(array_unique(array_filter($ids))))
+            ->get()
+            ->each(fn (self $bill) => $bill->recalculatePaymentTotals());
+    }
+
+    public static function recalculatePaymentTotalsForContact(?string $contactId): void
+    {
+        if (!$contactId) {
+            return;
+        }
+
+        static::query()
+            ->where('contact_id', $contactId)
+            ->get()
+            ->each(fn (self $bill) => $bill->recalculatePaymentTotals());
+    }
 }

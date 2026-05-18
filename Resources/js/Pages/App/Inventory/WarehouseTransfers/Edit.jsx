@@ -32,7 +32,7 @@ export default function WarehouseTransferEdit({ id, ...props }) {
         {
             name: 'items', label: 'Transfer Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Product', defaultItem: { product_id: null, qty: 1, remarks: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/search'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
                 { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '120px', min: 0 },
                 { key: 'remarks', name: 'remarks', label: 'Remarks', type: 'text', width: '2fr' },
             ],

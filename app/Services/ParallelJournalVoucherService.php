@@ -7,8 +7,11 @@ use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
+use App\Domain\Accounting\Services\JournalVoucherService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class ParallelJournalVoucherService
 {
@@ -16,25 +19,17 @@ class ParallelJournalVoucherService
         protected DocumentNumberingService $numberingService,
         protected LedgerValidationService $validationService,
         protected AccountingAccountResolverService $accountResolver,
+        protected JournalVoucherService $journalVoucherService,
     ) {
     }
 
     public function createForApprovedSource(Model $source): ?JournalVoucher
     {
-        if (!$source->approved) {
-            return null;
-        }
-
-        // Idempotency: skip if source already linked to a JV
-        if (isset($source->journal_voucher_id) && $source->journal_voucher_id) {
+        if (!(bool) ($source->approved ?? false) || (bool) ($source->void ?? false)) {
             return null;
         }
 
         $sourceType = class_basename($source);
-
-        if ($this->alreadyExists($sourceType, $source->id)) {
-            return null;
-        }
 
         return DB::transaction(function () use ($source, $sourceType) {
             return match ($sourceType) {
@@ -44,9 +39,12 @@ class ParallelJournalVoucherService
                 'SupplierPayment' => $this->createForSupplierPayment($source),
                 'Expense' => $this->createForExpense($source),
                 'CashTransfer' => $this->createForCashTransfer($source),
+                'ChequeRegister' => $this->createForChequeRegister($source),
                 'SalesReturn' => $this->createForSalesReturn($source),
                 'DebitNote' => $this->createForDebitNote($source),
                 'InventoryAdjustment' => $this->createForInventoryAdjustment($source),
+                'ProductionOrder' => $this->createForProductionOrder($source),
+                'ProductionJournal' => $this->createForProductionJournal($source),
                 'LoanTopUp' => $this->createForLoanTopUp($source),
                 'LoanCharge' => $this->createForLoanCharge($source),
                 default => null,
@@ -129,7 +127,10 @@ class ParallelJournalVoucherService
         ];
 
         if ($payment->bank_charges > 0) {
-            $bankChargesAccount = $this->accountResolver->getBankChargesExpenseAccount();
+            $bankChargesAccount = $payment->bank_charges_account_id
+                ? ChartOfAccount::find($payment->bank_charges_account_id)
+                : null;
+            $bankChargesAccount ??= $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
                 'chart_of_account_id' => $bankChargesAccount->id,
                 'debit' => $payment->bank_charges,
@@ -243,9 +244,11 @@ class ParallelJournalVoucherService
             $apAccount = $payment->contact->account->chartOfAccount ?? $apAccount;
         }
 
+        $tdsCharges = (float) ($payment->tds_charges ?? 0);
+
         $lines[] = [
             'chart_of_account_id' => $apAccount->id,
-            'debit' => $payment->amount,
+            'debit' => (float) $payment->amount + $tdsCharges,
             'credit' => 0,
             'description' => "Payment to {$payment->contact?->name}",
         ];
@@ -272,12 +275,15 @@ class ParallelJournalVoucherService
             'description' => 'Bank Debit',
         ];
 
-        if (!empty($payment->tds_charges) && $payment->tds_charges > 0) {
-            $tdsPayableAccount = $this->accountResolver->getTdsPayableAccount();
+        if ($tdsCharges > 0) {
+            $tdsPayableAccount = $payment->tds_charges_account_id
+                ? ChartOfAccount::find($payment->tds_charges_account_id)
+                : null;
+            $tdsPayableAccount ??= $this->accountResolver->getTdsPayableAccount();
             $lines[] = [
                 'chart_of_account_id' => $tdsPayableAccount->id,
                 'debit' => 0,
-                'credit' => $payment->tds_charges,
+                'credit' => $tdsCharges,
                 'description' => 'TDS Payable',
             ];
         }
@@ -384,6 +390,60 @@ class ParallelJournalVoucherService
         );
     }
 
+    public function createForChequeRegister($cheque): JournalVoucher
+    {
+        $bankAccount = $this->resolveChartOfAccountFromAccount($cheque->account_id);
+        $relatedAccountId = $cheque->direction === 'received'
+            ? ($cheque->receiver_related_account_id ?: $cheque->related_account_id)
+            : $cheque->related_account_id;
+        $relatedAccount = $this->resolveChartOfAccountFromAccount($relatedAccountId);
+
+        $amount = (float) $cheque->amount;
+
+        $lines = $cheque->direction === 'received'
+            ? [
+                [
+                    'chart_of_account_id' => $bankAccount->id,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "Cheque received {$cheque->cheque_no}",
+                ],
+                [
+                    'chart_of_account_id' => $relatedAccount->id,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "Cheque received from {$cheque->payee_name}",
+                ],
+            ]
+            : [
+                [
+                    'chart_of_account_id' => $relatedAccount->id,
+                    'debit' => $amount,
+                    'credit' => 0,
+                    'description' => "Cheque issued to {$cheque->payee_name}",
+                ],
+                [
+                    'chart_of_account_id' => $bankAccount->id,
+                    'debit' => 0,
+                    'credit' => $amount,
+                    'description' => "Cheque issued {$cheque->cheque_no}",
+                ],
+            ];
+
+        $this->validationService->validateBalanced($lines);
+
+        return $this->createJournal(
+            $cheque,
+            $lines,
+            $cheque->cleared_date ?? $cheque->issued_date ?? $cheque->received_date ?? $cheque->cheque_date ?? now(),
+            'ChequeRegister',
+            $cheque->id,
+            $cheque->cheque_no,
+            $cheque->branch_id,
+            null,
+        );
+    }
+
     public function createForSalesReturn($return): JournalVoucher
     {
         $lines = [];
@@ -419,8 +479,8 @@ class ParallelJournalVoucherService
             $taxAccount = $this->accountResolver->getTaxPayableAccount();
             $lines[] = [
                 'chart_of_account_id' => $taxAccount->id,
-                'debit' => 0,
-                'credit' => $totalTax,
+                'debit' => $totalTax,
+                'credit' => 0,
                 'description' => 'Tax Reversal',
             ];
         }
@@ -550,6 +610,180 @@ class ParallelJournalVoucherService
         );
     }
 
+    public function createForProductionJournal($journal): JournalVoucher
+    {
+        $lines = [];
+        $inventoryAccount = $this->accountResolver->getInventoryAccount();
+
+        if ((float) $journal->finished_goods_cost > 0) {
+            $finishedAccount = $journal->finishedProduct?->purchase_account_id
+                ? ChartOfAccount::find($journal->finishedProduct->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $finishedAccount?->id ?? $inventoryAccount->id,
+                'debit' => (float) $journal->finished_goods_cost,
+                'credit' => 0,
+                'description' => 'Finished goods produced',
+            ];
+        }
+
+        foreach ($journal->byProducts as $line) {
+            if ((float) $line->allocated_cost <= 0) {
+                continue;
+            }
+
+            $byProductAccount = $line->product?->purchase_account_id
+                ? ChartOfAccount::find($line->product->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $byProductAccount?->id ?? $inventoryAccount->id,
+                'debit' => (float) $line->allocated_cost,
+                'credit' => 0,
+                'description' => 'By-product produced',
+            ];
+        }
+
+        foreach ($journal->rawMaterials as $line) {
+            if ((float) $line->amount <= 0) {
+                continue;
+            }
+
+            $rawAccount = $line->product?->purchase_account_id
+                ? ChartOfAccount::find($line->product->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $rawAccount?->id ?? $inventoryAccount->id,
+                'debit' => 0,
+                'credit' => (float) $line->amount,
+                'description' => 'Raw material consumed',
+            ];
+        }
+
+        if ((float) $journal->production_expense_amount > 0) {
+            $expenseAccount = $this->accountResolver->getPurchaseExpenseAccount();
+
+            foreach ($journal->productionExpenses as $expense) {
+                if ((float) $expense->amount <= 0) {
+                    continue;
+                }
+
+                $account = $expense->costTerm?->chart_of_account_id
+                    ? ChartOfAccount::find($expense->costTerm->chart_of_account_id)
+                    : $expenseAccount;
+
+                $lines[] = [
+                    'chart_of_account_id' => $account?->id ?? $expenseAccount->id,
+                    'debit' => 0,
+                    'credit' => (float) $expense->amount,
+                    'description' => $expense->costTerm?->name ?? 'Production expense absorbed',
+                ];
+            }
+        }
+
+        $this->validationService->validateBalanced($lines);
+
+        return $this->createJournal(
+            $journal,
+            $lines,
+            $journal->date ?? now(),
+            'ProductionJournal',
+            $journal->id,
+            $journal->code,
+            $journal->branch_id,
+            null,
+        );
+    }
+
+    public function createForProductionOrder($order): ?JournalVoucher
+    {
+        $lines = [];
+        $inventoryAccount = $this->accountResolver->getInventoryAccount();
+
+        if ((float) $order->total_finished_goods_cost > 0) {
+            $finishedAccount = $order->finishedProduct?->purchase_account_id
+                ? ChartOfAccount::find($order->finishedProduct->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $finishedAccount?->id ?? $inventoryAccount->id,
+                'debit' => (float) $order->total_finished_goods_cost,
+                'credit' => 0,
+                'description' => 'Finished goods produced',
+            ];
+        }
+
+        foreach ($order->byproducts as $line) {
+            if ((float) $line->allocated_cost <= 0) {
+                continue;
+            }
+
+            $account = $line->product?->purchase_account_id
+                ? ChartOfAccount::find($line->product->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $account?->id ?? $inventoryAccount->id,
+                'debit' => (float) $line->allocated_cost,
+                'credit' => 0,
+                'description' => 'By-product produced',
+            ];
+        }
+
+        foreach ($order->rawMaterials as $line) {
+            if ((float) $line->total_cost <= 0) {
+                continue;
+            }
+
+            $account = $line->product?->purchase_account_id
+                ? ChartOfAccount::find($line->product->purchase_account_id)
+                : $inventoryAccount;
+
+            $lines[] = [
+                'chart_of_account_id' => $account?->id ?? $inventoryAccount->id,
+                'debit' => 0,
+                'credit' => (float) $line->total_cost,
+                'description' => 'Raw material consumed',
+            ];
+        }
+
+        foreach ($order->expenses as $expense) {
+            if ((float) $expense->amount <= 0) {
+                continue;
+            }
+
+            $account = $expense->expense_account_id
+                ? ChartOfAccount::find($expense->expense_account_id)
+                : $this->accountResolver->getPurchaseExpenseAccount();
+
+            $lines[] = [
+                'chart_of_account_id' => $account->id,
+                'debit' => 0,
+                'credit' => (float) $expense->amount,
+                'description' => $expense->name ?: 'Production expense absorbed',
+            ];
+        }
+
+        if (empty($lines)) {
+            return null;
+        }
+
+        $this->validationService->validateBalanced($lines);
+
+        return $this->createJournal(
+            $order,
+            $lines,
+            $order->date ?? now(),
+            'ProductionOrder',
+            $order->id,
+            $order->code,
+            $order->branch_id,
+            null,
+        );
+    }
+
     public function createForLoanTopUp($topUp): JournalVoucher
     {
         // loan_received_in_account_id is FK to accounts table, not chart_of_accounts
@@ -630,58 +864,21 @@ class ParallelJournalVoucherService
 
     public function reverseForSource(Model $source, ?string $reason = null): ?JournalVoucher
     {
-        $sourceType = class_basename($source);
-
-        $original = JournalVoucher::where('source_type', $sourceType)
-            ->where('source_id', $source->id)
-            ->first();
+        $original = $this->findExistingJournal($source, class_basename($source));
 
         if (!$original) {
             return null;
         }
 
-        return DB::transaction(function () use ($original, $reason) {
-            $lines = [];
+        if ((bool) ($original->void ?? false)) {
+            return $original->fresh(['journalVoucherLines']);
+        }
 
-            foreach ($original->journalVoucherLines as $line) {
-                $lines[] = [
-                    'chart_of_account_id' => $line->chart_of_account_id,
-                    'debit' => $line->credit,
-                    'credit' => $line->debit,
-                    'description' => $line->description,
-                ];
-            }
-
-            $reversal = $this->createJournal(
-                null,
-                $lines,
-                now()->toDateString(),
-                'JournalVoucher',
-                null,
-                null,
-                $original->branch_id,
-                $original->currency_id,
-            );
-
-            $reversal->update([
-                'source_type' => 'JournalVoucher',
-                'source_id' => $original->id,
-                'source_no' => $original->voucher_no,
-                'source_module' => 'Reversal',
-                'reversed_journal_voucher_id' => $original->id,
-                'reversal_reason' => $reason,
-                'reversed_at' => now(),
-            ]);
-
-            return $reversal;
-        });
-    }
-
-    protected function alreadyExists(string $sourceType, string $sourceId): bool
-    {
-        return JournalVoucher::where('source_type', $sourceType)
-            ->where('source_id', $sourceId)
-            ->exists();
+        return $this->journalVoucherService->void(
+            $original,
+            $reason ?: 'Source transaction voided',
+            request()->user()?->getAuthIdentifier()
+        );
     }
 
     /**
@@ -710,43 +907,192 @@ class ParallelJournalVoucherService
         ?string $branchId,
         ?string $currencyId,
     ): JournalVoucher {
-        $voucher = new JournalVoucher([
+        return DB::transaction(function () use ($sourceModel, $lines, $date, $sourceType, $sourceId, $sourceNo, $branchId, $currencyId) {
+            $this->validationService->validateJournalVoucherLines($lines);
+
+            $voucher = $sourceModel && $sourceId
+                ? $this->findExistingJournal($sourceModel, $sourceType)
+                : null;
+
+            $oldEffect = $voucher
+                ? $this->journalVoucherService->snapshotEffect($voucher->fresh(['journalVoucherLines']))
+                : [];
+
+            $payload = $this->journalPayload(
+                sourceType: $sourceType,
+                sourceId: $sourceId,
+                sourceNo: $sourceNo,
+                date: $date,
+                branchId: $branchId,
+                currencyId: $currencyId,
+                exchangeRate: $this->resolveJournalExchangeRate($sourceModel, $currencyId),
+                total: collect($lines)->sum('debit')
+            );
+
+            JournalVoucher::withoutEvents(function () use (&$voucher, $payload) {
+                if ($voucher) {
+                    $voucher->forceFill($payload)->saveQuietly();
+                    return;
+                }
+
+                $voucher = JournalVoucher::query()->create(array_merge($payload, [
+                    'voucher_no' => $this->numberingService->generate('journal_voucher'),
+                ]));
+            });
+
+            JournalVoucherLine::withoutEvents(function () use ($voucher, $lines) {
+                JournalVoucherLine::query()
+                    ->where('journal_voucher_id', $voucher->id)
+                    ->delete();
+
+                foreach ($lines as $line) {
+                    JournalVoucherLine::query()->create(
+                        $this->journalLinePayload(
+                            voucherId: $voucher->id,
+                            chartOfAccountId: $line['chart_of_account_id'],
+                            debit: (float) ($line['debit'] ?? 0),
+                            credit: (float) ($line['credit'] ?? 0),
+                            description: $line['description'] ?? null
+                        )
+                    );
+                }
+            });
+
+            $this->syncSourceBackReference($sourceModel, $voucher);
+
+            $voucher = $voucher->fresh(['journalVoucherLines']);
+            $this->journalVoucherService->syncFinancials($voucher, $oldEffect);
+
+            return $voucher->fresh(['journalVoucherLines']);
+        });
+    }
+
+    protected function findExistingJournal(Model $source, string $sourceType): ?JournalVoucher
+    {
+        $sourceTable = $source->getTable();
+
+        foreach (['subsequent_journal_voucher_id', 'journal_voucher_id'] as $column) {
+            if (Schema::hasColumn($sourceTable, $column) && !empty($source->{$column})) {
+                $voucher = JournalVoucher::query()->find($source->{$column});
+
+                if ($voucher) {
+                    return $voucher;
+                }
+            }
+        }
+
+        return JournalVoucher::query()
+            ->where('source_id', $source->getKey())
+            ->whereIn('source_type', array_unique([
+                $this->sourceType($sourceType),
+                $sourceType,
+                class_basename($source),
+            ]))
+            ->first();
+    }
+
+    protected function journalPayload(
+        string $sourceType,
+        ?string $sourceId,
+        ?string $sourceNo,
+        mixed $date,
+        ?string $branchId,
+        ?string $currencyId,
+        float $exchangeRate,
+        float|int $total
+    ): array {
+        $currencyId = $currencyId ?? Currency::where('is_base', true)->first()?->id;
+
+        $payload = [
             'voucher_date' => $date,
-            'source_type' => $sourceType,
+            'source_type' => $this->sourceType($sourceType),
             'source_id' => $sourceId,
             'source_no' => $sourceNo,
-            'source_module' => $sourceType,
+            'source_module' => Str::headline($this->sourceType($sourceType)),
             'is_auto_generated' => true,
             'branch_id' => $branchId,
-            'currency_id' => $currencyId ?? Currency::where('is_base', true)->first()?->id,
+            'currency_id' => $currencyId,
+            'exchange_rate' => $exchangeRate,
             'status' => 'posted',
             'active' => true,
             'approved' => true,
             'approved_at' => now(),
-        ]);
+            'void' => false,
+            'voided_at' => null,
+            'voided_by_id' => null,
+            'voided_reason' => null,
+            'total' => $total,
+        ];
 
-        $voucher->voucher_no = $this->numberingService->generate('journal_voucher');
-
-        $totalDebit = collect($lines)->sum('debit');
-        $voucher->total = $totalDebit;
-
-        $voucher->saveQuietly();
-
-        foreach ($lines as $line) {
-            JournalVoucherLine::create([
-                'journal_voucher_id' => $voucher->id,
-                'chart_of_account_id' => $line['chart_of_account_id'],
-                'debit' => $line['debit'],
-                'credit' => $line['credit'],
-                'description' => $line['description'] ?? null,
-            ]);
+        if (Schema::hasColumn('journal_vouchers', 'is_system_generated')) {
+            $payload['is_system_generated'] = true;
         }
 
-        // Link source model back to this JV
-        if ($sourceModel !== null && $sourceId && isset($sourceModel->journal_voucher_id)) {
-            $sourceModel->forceFill(['journal_voucher_id' => $voucher->id])->saveQuietly();
+        return $payload;
+    }
+
+    protected function resolveJournalExchangeRate(?Model $sourceModel, ?string $currencyId): float
+    {
+        $sourceRate = (float) ($sourceModel?->exchange_rate ?? 0);
+        if ($sourceRate > 0) {
+            return $sourceRate;
         }
 
-        return $voucher->refresh();
+        $currency = $currencyId
+            ? Currency::query()->find($currencyId)
+            : Currency::query()->where('is_base', true)->first();
+
+        if ($currency?->is_base) {
+            return 1;
+        }
+
+        $currencyRate = (float) ($currency?->exchange_rate ?? 0);
+
+        return $currencyRate > 0 ? $currencyRate : 1;
+    }
+
+    protected function journalLinePayload(
+        string $voucherId,
+        string $chartOfAccountId,
+        float $debit,
+        float $credit,
+        ?string $description
+    ): array {
+        $payload = [
+            'journal_voucher_id' => $voucherId,
+            'chart_of_account_id' => $chartOfAccountId,
+            'debit' => $debit,
+            'credit' => $credit,
+            'description' => $description,
+        ];
+
+        if (Schema::hasColumn('journal_voucher_lines', 'account_id')) {
+            $payload['account_id'] = ChartOfAccount::query()
+                ->whereKey($chartOfAccountId)
+                ->value('account_id');
+        }
+
+        return $payload;
+    }
+
+    protected function syncSourceBackReference(?Model $source, JournalVoucher $voucher): void
+    {
+        if (!$source) {
+            return;
+        }
+
+        $table = $source->getTable();
+
+        foreach (['subsequent_journal_voucher_id', 'journal_voucher_id'] as $column) {
+            if (Schema::hasColumn($table, $column)) {
+                $source->forceFill([$column => $voucher->id])->saveQuietly();
+                return;
+            }
+        }
+    }
+
+    protected function sourceType(string $sourceType): string
+    {
+        return Str::snake($sourceType);
     }
 }

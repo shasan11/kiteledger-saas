@@ -253,7 +253,7 @@ export default function DebitNoteEdit({ id, ...props }) {
       columns: [
         {
           key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
-          placeholder: 'Add Code or Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
           fkOptionRender: (r) => (
@@ -270,7 +270,7 @@ export default function DebitNoteEdit({ id, ...props }) {
             return { ...baseRow, tax_amount: c.tax_amount, tax_breakup: c.tax_breakup, line_total: c.line_total };
           },
         },
-        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0 },
+        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0.000001 },
         { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0 },
         { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '170px', component: LineDiscountInput },
         {

@@ -37,6 +37,8 @@ const activityTypeOptions = [
   { value: 'meeting', label: 'Meeting' },
   { value: 'task', label: 'Task' },
   { value: 'note', label: 'Note' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'sms', label: 'SMS' },
   { value: 'follow_up', label: 'Follow Up' },
 ];
 
@@ -81,14 +83,14 @@ const parseDate = (value) => {
   return fallbackDate.isValid() ? fallbackDate : null;
 };
 
-const formatDate = (value) => {
+const formatDateTime = (value) => {
   const parsedDate = parseDate(value);
-  return parsedDate ? parsedDate.format('YYYY-MM-DD') : null;
+  return parsedDate ? parsedDate.format('YYYY-MM-DD HH:mm:ss') : null;
 };
 
 const formatDisplayDate = (value) => {
   const parsedDate = parseDate(value);
-  return parsedDate ? parsedDate.format('DD MMM YYYY') : '-';
+  return parsedDate ? parsedDate.format('DD MMM YYYY HH:mm') : '-';
 };
 
 const getDateState = (value) => {
@@ -404,21 +406,27 @@ export default function Activities(props) {
           label: 'Due Date',
           type: 'datePicker',
           col: 8,
-          placeholder: 'Select due date',
+          placeholder: 'Select due date and time',
+          showTime: true,
+          format: 'YYYY-MM-DD HH:mm:ss',
         },
         {
           name: 'next_follow_up_at',
           label: 'Next Follow Up',
           type: 'datePicker',
           col: 8,
-          placeholder: 'Select follow-up date',
+          placeholder: 'Select follow-up date and time',
+          showTime: true,
+          format: 'YYYY-MM-DD HH:mm:ss',
         },
         {
           name: 'reminder_at',
           label: 'Reminder Date',
           type: 'datePicker',
           col: 8,
-          placeholder: 'Select reminder date',
+          placeholder: 'Select reminder date and time',
+          showTime: true,
+          format: 'YYYY-MM-DD HH:mm:ss',
         },
       ],
     },
@@ -441,6 +449,7 @@ export default function Activities(props) {
           label: 'Comments',
           type: 'objectArray',
           col: 24,
+          deletedFieldName: 'deleted_comment_ids',
           headerBg: token.colorFillAlter,
           headerColor: token.colorTextHeading,
           addButtonLabel: 'Add Comment',
@@ -482,7 +491,7 @@ export default function Activities(props) {
     assigned_to_id: Yup.mixed().nullable(),
     status: Yup.string().nullable().oneOf(['pending', 'in_progress', 'completed', 'cancelled', null]),
     priority: Yup.string().nullable().oneOf(['low', 'medium', 'high', 'urgent', null]),
-    activity_type: Yup.string().nullable().oneOf(['call', 'email', 'meeting', 'task', 'note', 'follow_up', null]),
+    activity_type: Yup.string().nullable().oneOf(['call', 'email', 'meeting', 'task', 'note', 'whatsapp', 'sms', 'follow_up', null]),
     due_at: Yup.mixed().nullable(),
     next_follow_up_at: Yup.mixed().nullable(),
     reminder_at: Yup.mixed().nullable(),
@@ -510,7 +519,7 @@ export default function Activities(props) {
     reminder_at: null,
     description: '',
     comments: [],
-    deleted_item_ids: [],
+    deleted_comment_ids: [],
   };
 
   const transformPayload = (values) => {
@@ -523,9 +532,9 @@ export default function Activities(props) {
     payload.deal_id = normalizeSelectValue(payload.deal_id);
     payload.contact_id = normalizeSelectValue(payload.contact_id);
     payload.assigned_to_id = normalizeSelectValue(payload.assigned_to_id);
-    payload.due_at = formatDate(payload.due_at);
-    payload.next_follow_up_at = formatDate(payload.next_follow_up_at);
-    payload.reminder_at = formatDate(payload.reminder_at);
+    payload.due_at = formatDateTime(payload.due_at);
+    payload.next_follow_up_at = formatDateTime(payload.next_follow_up_at);
+    payload.reminder_at = formatDateTime(payload.reminder_at);
     payload.comments = Array.isArray(payload.comments)
       ? payload.comments
           .map((comment) => ({
@@ -536,12 +545,13 @@ export default function Activities(props) {
           .filter((comment) => comment.user_id || comment.comment)
       : [];
 
-    payload.deleted_item_ids = Array.isArray(payload.deleted_item_ids)
-      ? payload.deleted_item_ids
+    payload.deleted_comment_ids = Array.isArray(payload.deleted_comment_ids)
+      ? payload.deleted_comment_ids
       : [];
+    delete payload.deleted_item_ids;
 
     Object.keys(payload).forEach((key) => {
-      if (payload[key] === '' && key !== 'comments' && key !== 'deleted_item_ids') {
+      if (payload[key] === '' && key !== 'comments' && key !== 'deleted_comment_ids') {
         payload[key] = null;
       }
     });

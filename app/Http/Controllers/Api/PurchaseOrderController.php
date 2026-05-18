@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderLine;
+use App\Models\TaxRate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -41,7 +42,7 @@ class PurchaseOrderController extends BaseCrudApiController
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_type' => ['nullable', 'string', 'in:percent,amount'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -56,7 +57,7 @@ class PurchaseOrderController extends BaseCrudApiController
                 'product_id' => ['nullable', 'uuid', 'exists:products,id'],
                 'product_name' => ['nullable', 'string', 'max:255'],
                 'description' => ['nullable', 'string', 'max:200'],
-                'qty' => ['required', 'numeric', 'min:0'],
+                'qty' => ['required', 'numeric', 'gt:0'],
                 'unit_price' => ['required', 'numeric', 'min:0'],
                 'discount_type' => ['nullable', 'string', 'in:percent,amount'],
                 'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -77,7 +78,7 @@ class PurchaseOrderController extends BaseCrudApiController
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'credit_term_id' => ['nullable', 'uuid', 'exists:credit_terms,id'],
-        'exchange_rate' => ['nullable', 'numeric', 'min:0'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
         'approved' => ['nullable', 'boolean'],
         'status' => ['nullable', 'in:draft,confirmed,received,cancelled'],
@@ -92,7 +93,7 @@ class PurchaseOrderController extends BaseCrudApiController
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'credit_term_id' => ['sometimes', 'nullable', 'uuid', 'exists:credit_terms,id'],
-            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'approved' => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', 'nullable', 'in:draft,confirmed,received,cancelled'],
@@ -113,6 +114,7 @@ class PurchaseOrderController extends BaseCrudApiController
         array $config,
         bool $isUpdate
     ): array {
+        $row['tax_amount'] = $this->calculateTaxAmount($row);
         $row['line_total'] = $this->calculateLineTotal($row);
 
         return $row;
@@ -121,8 +123,36 @@ class PurchaseOrderController extends BaseCrudApiController
     protected function calculateLineTotal(array $row): float
     {
         $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
-        $discount = ($gross * (float) ($row['discount_percent'] ?? 0)) / 100;
+        $discountType = $row['discount_type'] ?? 'percent';
+        $discount = $discountType === 'amount'
+            ? min((float) ($row['discount_amount'] ?? 0), $gross)
+            : round($gross * ((float) ($row['discount_percent'] ?? 0) / 100), 2);
 
-        return round(max($gross - $discount, 0) + (float) ($row['tax_amount'] ?? 0), 2);
+        $taxableAmount = max($gross - $discount, 0);
+
+        return round($taxableAmount + $this->calculateTaxAmount($row, $taxableAmount), 2);
+    }
+
+    protected function calculateTaxAmount(array $row, ?float $taxableAmount = null): float
+    {
+        if (empty($row['tax_rate_id'])) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        $taxRate = TaxRate::query()->find($row['tax_rate_id']);
+        if (!$taxRate) {
+            return (float) ($row['tax_amount'] ?? 0);
+        }
+
+        if ($taxableAmount === null) {
+            $gross = (float) ($row['qty'] ?? 0) * (float) ($row['unit_price'] ?? 0);
+            $discountType = $row['discount_type'] ?? 'percent';
+            $discount = $discountType === 'amount'
+                ? min((float) ($row['discount_amount'] ?? 0), $gross)
+                : round($gross * ((float) ($row['discount_percent'] ?? 0) / 100), 2);
+            $taxableAmount = max($gross - $discount, 0);
+        }
+
+        return round($taxableAmount * ((float) $taxRate->rate_percent / 100), 2);
     }
 }
