@@ -19,7 +19,9 @@ export default function PurchaseBillsIndex(props) {
         { title: 'Date', dataIndex: 'bill_date', key: 'bill_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'part_paid', label: 'Part Paid' }, { value: 'paid', label: 'Paid' }, { value: 'void', label: 'Void' }] } },
-        { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
+        { title: 'Total', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 140, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
+        { title: 'Paid', dataIndex: 'paid_total', key: 'paid_total', sorter: true, align: 'right', width: 140, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
+        { title: 'Balance', dataIndex: 'balance_due', key: 'balance_due', sorter: true, align: 'right', width: 140, render: (v, record) => renderAmountWithDefaultCurrency(v, record) },
     ], []);
 
     return (

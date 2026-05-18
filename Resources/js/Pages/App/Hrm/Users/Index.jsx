@@ -924,15 +924,10 @@ export default function Users(props) {
     },
   });
 
-  return (
-    <AuthenticatedLayout
-      auth={props.auth}
-      user={props.auth?.user}
-      header={<AccessControlTabs activeKey="users" />}
-    >
+  const content = (
+    <>
       <Head title="Employees" />
-
-      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
+      <div style={{ padding: props.embedded ? 0 : 16, minHeight: props.embedded ? 'auto' : 'calc(100vh - 64px)' }}>
         <ReusableCrud
           icon={<TeamOutlined />}
           title="Employee"
@@ -962,6 +957,20 @@ export default function Users(props) {
           activeTableRowFunction={handleEmployeeRowClick}
         />
       </div>
+    </>
+  );
+
+  if (props.embedded) {
+    return content;
+  }
+
+  return (
+    <AuthenticatedLayout
+      auth={props.auth}
+      user={props.auth?.user}
+      header={<AccessControlTabs activeKey="users" />}
+    >
+      {content}
     </AuthenticatedLayout>
   );
 }

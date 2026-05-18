@@ -238,6 +238,13 @@ export default function DebitNoteAdd(props) {
     { name: 'debit_note_no', label: 'Debit Note No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
     { name: 'debit_note_date', label: 'Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     {
+      name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8,
+      placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+      fkLabel: (r) => r?.name || r?.code || '',
+      onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }),
+    },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', required: true, col: 8, min: 0.000001 },
+    {
       name: 'purchase_bill_id',
       label: 'From Purchase Bill',
       type: 'fkSelect',
@@ -274,6 +281,8 @@ export default function DebitNoteAdd(props) {
           purchase_bill_id: record,
           contact_id: record?.contact ?? values.contact_id,
           warehouse_id: record?.warehouse ?? values.warehouse_id,
+          currency_id: record?.currency ?? values.currency_id,
+          exchange_rate: toNumber(record?.exchange_rate) || toNumber(values.exchange_rate) || 1,
           items,
         };
       },
@@ -336,6 +345,7 @@ export default function DebitNoteAdd(props) {
   const validationSchema = useMemo(() => Yup.object().shape({
     contact_id: Yup.mixed().test('req', 'Supplier is required', (v) => !!asId(v)).required('Supplier is required'),
     debit_note_date: Yup.mixed().required('Date is required'),
+    exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').required('Required'),
     items: Yup.array().of(
       Yup.object().shape({
         qty: Yup.number().typeError('Qty must be a number').moreThan(0, 'Qty must be > 0').required('Required'),
@@ -352,7 +362,7 @@ export default function DebitNoteAdd(props) {
 
   const crudInitialValues = useMemo(() => ({
     debit_note_no: null, debit_note_date: dayjs(),
-    contact_id: null, warehouse_id: null,
+    contact_id: null, warehouse_id: null, currency_id: null, exchange_rate: 1,
     purchase_bill_id: null,
     notes: '',
     items: [{ ...emptyLine }], deleted_item_ids: [],
@@ -367,7 +377,8 @@ export default function DebitNoteAdd(props) {
       debit_note_date: formatDate(values.debit_note_date),
       contact_id: asId(values.contact_id ?? values.contact),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
-      purchase_bill_id: asId(values.purchase_bill_id) || null,
+      currency_id: asId(values.currency_id ?? values.currency),
+      exchange_rate: toNumber(values.exchange_rate) || 1,
       notes: nullIfEmpty(values.notes),
       total: summary.grandTotal,
       items,

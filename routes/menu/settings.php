@@ -24,13 +24,13 @@ Route::prefix('settings')->name('settings.')->group(function () {
 
     Route::get('/users', fn () => redirect()->route('settings.index', ['tab' => 'users']))->name('users.index');
     Route::get('/roles', fn () => redirect()->route('settings.index', ['tab' => 'roles']))->name('roles.index');
-    Route::get('/permissions', fn () => redirect()->route('settings.index', ['tab' => 'permissions']))->name('permissions.index');
+    Route::get('/permissions', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('permissions.index');
     Route::get('/alert-types', fn () => redirect()->route('settings.index', ['tab' => 'alert-types']))->name('alert-types.index');
     Route::get('/reporting-tags', fn () => redirect()->route('settings.index', ['tab' => 'reporting-tags']))->name('reporting-tags.index');
     Route::get('/document-numberings', fn () => redirect()->route('settings.index', ['tab' => 'document-numberings']))->name('document-numberings.index');
     Route::get('/printing-templates', fn () => redirect()->route('settings.index', ['tab' => 'printing-templates']))->name('printing-templates.index');
-    Route::get('/custom-templates', fn () => redirect()->route('settings.index', ['tab' => 'custom-templates']))->name('custom-templates.index');
-    Route::get('/application-settings', fn () => redirect()->route('settings.index', ['tab' => 'application-settings']))->name('application-settings.index');
-    Route::get('/general-settings', fn () => redirect()->route('settings.index', ['tab' => 'general-settings']))->name('general-settings.index');
+    Route::get('/custom-templates', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('custom-templates.index');
+    Route::get('/application-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('application-settings.index');
+    Route::get('/general-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('general-settings.index');
     Route::get('/master-data', fn () => redirect()->route('settings.index', ['tab' => 'master-data']))->name('master-data.index');
 });

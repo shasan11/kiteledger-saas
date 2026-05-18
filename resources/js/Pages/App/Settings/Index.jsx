@@ -52,15 +52,11 @@ const CrmSetup = lazy(() => import('../Crm/Configuration/Index'));
 
 const Users = lazy(() => import('../Hrm/Users/Index'));
 const Roles = lazy(() => import('../Hrm/Roles/Index'));
-const Permissions = lazy(() => import('../Hrm/Permissions/Index'));
 
 const AlertTypes = lazy(() => import('./AlertTypes/Index'));
 const ReportingTags = lazy(() => import('./ReportingTags/Index'));
 const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
 const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
-const CustomTemplates = lazy(() => import('./CustomTemplates/Index'));
-const ApplicationSettings = lazy(() => import('./ApplicationSettings/Index'));
-const GeneralSettings = lazy(() => import('./GeneralSettings/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
 
 const DEFAULT_TAB_KEY = 'company-profile';
@@ -77,22 +73,6 @@ const SETTINGS_TABS = [
     description: 'Company details and print identity.',
     icon: <BankOutlined />,
     component: CompanyProfile,
-    props: {},
-  },
-  {
-    key: 'general-settings',
-    label: 'General Settings',
-    description: 'Global application preferences.',
-    icon: <SettingOutlined />,
-    component: GeneralSettings,
-    props: {},
-  },
-  {
-    key: 'application-settings',
-    label: 'Application Settings',
-    description: 'Company logo, branding and application defaults.',
-    icon: <AppstoreOutlined />,
-    component: ApplicationSettings,
     props: {},
   },
   {
@@ -115,7 +95,7 @@ const SETTINGS_TABS = [
     description: 'Branch and location setup.',
     icon: <ApartmentOutlined />,
     component: Branches,
-    props: {},
+    props: { embedded: true },
   },
   {
     key: 'users',
@@ -133,15 +113,6 @@ const SETTINGS_TABS = [
     component: Roles,
     props: {},
   },
-  {
-    key: 'permissions',
-    label: 'Permissions',
-    description: 'Permission rules and access actions.',
-    icon: <SafetyCertificateOutlined />,
-    component: Permissions,
-    props: {},
-  },
-
   {
     key: 'finance-group',
     label: 'Finance & Accounting',
@@ -161,7 +132,7 @@ const SETTINGS_TABS = [
     description: 'Base and transaction currencies.',
     icon: <DollarOutlined />,
     component: Currencies,
-    props: {},
+    props: { embedded: true, readOnly: true },
   },
   {
     key: 'taxes',
@@ -293,14 +264,6 @@ const SETTINGS_TABS = [
     description: 'Print document layouts.',
     icon: <FileTextOutlined />,
     component: PrintingTemplates,
-    props: {},
-  },
-  {
-    key: 'custom-templates',
-    label: 'Custom Templates',
-    description: 'Reusable rich text templates.',
-    icon: <FileTextOutlined />,
-    component: CustomTemplates,
     props: {},
   },
 ].filter(Boolean);

@@ -7,6 +7,11 @@ import { BankOutlined } from '@ant-design/icons';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const withPhonePrefix = (value) => {
+  const phone = String(value || '').trim();
+  if (!phone) return null;
+  return phone.startsWith('+') ? phone : `+977 ${phone}`;
+};
 
 export default function Branches(props) {
   const columns = [
@@ -26,21 +31,29 @@ export default function Branches(props) {
   ];
 
   const fields = [
-    { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'code', label: 'Code', type: 'text', required: true },
-    { name: 'phone', label: 'Phone', type: 'text' },
-    { name: 'email', label: 'Email', type: 'text' },
-    { name: 'is_head_office', label: 'Head Office', type: 'switch' },
-    { name: 'is_transaction_enabled', label: 'Transaction Enabled', type: 'switch' },
-    { name: 'is_pos_enabled', label: 'POS Enabled', type: 'switch' },
-    { name: 'is_warehouse_enabled', label: 'Warehouse Enabled', type: 'switch' },
-    { name: 'is_ai_enabled', label: 'AI Enabled', type: 'switch' },
-    { name: 'is_billing_location_enabled', label: 'Billing Location Enabled', type: 'switch' },
-    { name: 'abbreviated_tax_enabled', label: 'Abbreviated Tax Enabled', type: 'switch' },
-    { name: 'track_location', label: 'Track Location', type: 'switch' },
-    { name: 'logo', label: 'Logo', type: 'text' },
-    { name: 'favicon', label: 'Favicon', type: 'text' },
-    { name: 'address', label: 'Address', type: 'textarea' },
+    { type: 'group', label: 'Basic Info', col: 24, children: [
+      { name: 'name', label: 'Branch Name', type: 'text', required: true, col: 12 },
+      { name: 'code', label: 'Branch Code', type: 'text', required: true, col: 12 },
+      { name: 'is_head_office', label: 'Head Office', type: 'switch', col: 12 },
+      { name: 'active', label: 'Active', type: 'switch', col: 12 },
+    ] },
+    { type: 'group', label: 'Address & Contact', col: 24, children: [
+      { name: 'phone', label: 'Phone', type: 'text', col: 12, placeholder: '+977 9800000000' },
+      { name: 'email', label: 'Email', type: 'text', col: 12 },
+      { name: 'address', label: 'Address', type: 'textarea', col: 24 },
+    ] },
+    { type: 'group', label: 'Branch Capabilities', col: 24, children: [
+      { name: 'is_transaction_enabled', label: 'Transaction Enabled', type: 'switch', col: 8 },
+      { name: 'is_pos_enabled', label: 'POS Enabled', type: 'switch', col: 8 },
+      { name: 'is_warehouse_enabled', label: 'Warehouse Enabled', type: 'switch', col: 8 },
+      { name: 'is_billing_location_enabled', label: 'Billing Location Enabled', type: 'switch', col: 8 },
+      { name: 'abbreviated_tax_enabled', label: 'Abbreviated Tax Enabled', type: 'switch', col: 8 },
+      { name: 'track_location', label: 'Track Location', type: 'switch', col: 8 },
+    ] },
+    { type: 'group', label: 'Branding', col: 24, children: [
+      { name: 'logo', label: 'Logo', type: 'text', col: 12 },
+      { name: 'favicon', label: 'Favicon', type: 'text', col: 12 },
+    ] },
   ];
 
   const validationSchema = Yup.object().shape({
@@ -56,6 +69,7 @@ export default function Branches(props) {
     is_billing_location_enabled: Yup.boolean().nullable(),
     abbreviated_tax_enabled: Yup.boolean().nullable(),
     track_location: Yup.boolean().nullable(),
+    active: Yup.boolean().nullable(),
     logo: Yup.string().nullable(),
     favicon: Yup.string().nullable(),
     address: Yup.string().nullable(),
@@ -67,6 +81,7 @@ export default function Branches(props) {
     phone: '',
     email: '',
     is_head_office: false,
+    active: true,
     is_transaction_enabled: false,
     is_pos_enabled: false,
     is_warehouse_enabled: false,
@@ -83,6 +98,7 @@ export default function Branches(props) {
     const payload = { ...values };
     payload.name = payload.name?.trim() || null;
     payload.code = payload.code?.trim() || null;
+    payload.phone = withPhonePrefix(payload.phone);
     payload.is_head_office = Boolean(payload.is_head_office);
     payload.is_transaction_enabled = Boolean(payload.is_transaction_enabled);
     payload.is_pos_enabled = Boolean(payload.is_pos_enabled);

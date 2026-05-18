@@ -1068,6 +1068,9 @@ export default function SimpleSettingsCrud({
   editButtonText = 'Edit',
   modalTitle,
   drawerTitle,
+  canAdd = true,
+  canEdit = true,
+  showActions = true,
 }) {
   const { token } = theme.useToken();
 
@@ -1134,7 +1137,7 @@ export default function SimpleSettingsCrud({
         ...column,
         render: (value, record) => renderValue(column, value, record),
       })),
-      {
+      ...(showActions && canEdit ? [{
         title: '',
         key: 'actions',
         width: 110,
@@ -1144,9 +1147,9 @@ export default function SimpleSettingsCrud({
             {editButtonText}
           </Button>
         ),
-      },
+      }] : []),
     ],
-    [safeColumns, openEdit, editButtonText]
+    [safeColumns, openEdit, editButtonText, showActions, canEdit]
   );
 
   const buildPayload = (formValues) => {
@@ -1331,6 +1334,16 @@ export default function SimpleSettingsCrud({
       );
     }
 
+    if (field.type === 'date') {
+      return (
+        <Input
+          type="date"
+          placeholder={field.placeholder}
+          disabled={disabled}
+        />
+      );
+    }
+
     if (field.type === 'color') {
       return <Input type="color" disabled={disabled} />;
     }
@@ -1380,14 +1393,16 @@ export default function SimpleSettingsCrud({
           Refresh
         </Button>
 
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={openCreate}
-          disabled={saving}
-        >
-          {addButtonText}
-        </Button>
+        {canAdd ? (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openCreate}
+            disabled={saving}
+          >
+            {addButtonText}
+          </Button>
+        ) : null}
       </Space>
 
       <div style={{ padding: token.paddingSM }}>

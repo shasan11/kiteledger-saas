@@ -30,9 +30,9 @@ export default function ExpenseEdit({ id, ...props }) {
         { name: 'expense_no', label: 'Expense No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
         { name: 'expense_date', label: 'Expense Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
         { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
-        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
+        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '', onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }) },
         { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0.000001 },
-        { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         {
             name: 'items', label: 'Expense Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Expense Line', defaultItem: { ...emptyLine }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [

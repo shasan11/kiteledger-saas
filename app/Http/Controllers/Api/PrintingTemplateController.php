@@ -48,7 +48,7 @@ class PrintingTemplateController extends BaseCrudApiController
         'name' => ['required', 'string', 'max:120'],
         'document_type' => ['required', 'string', 'max:80'],
         'template_key' => ['nullable', 'string', 'max:120'],
-        'template_html' => ['nullable', 'string'],
+        'template_html' => ['required', 'string'],
         'template_css' => ['nullable', 'string'],
         'is_default' => ['nullable', 'boolean'],
         'active' => ['nullable', 'boolean'],
@@ -62,7 +62,7 @@ class PrintingTemplateController extends BaseCrudApiController
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'document_type' => ['sometimes', 'required', 'string', 'max:80'],
             'template_key' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'template_html' => ['sometimes', 'nullable', 'string'],
+            'template_html' => ['sometimes', 'required', 'string'],
             'template_css' => ['sometimes', 'nullable', 'string'],
             'is_default' => ['sometimes', 'nullable', 'boolean'],
             'active' => ['sometimes', 'nullable', 'boolean'],
@@ -78,6 +78,7 @@ class PrintingTemplateController extends BaseCrudApiController
         $parentData['document_type'] = $parentData['document_type'] ?: 'general';
         $parentData['template_key'] = $parentData['template_key'] ?: $this->templateKeyFromName($parentData['name'] ?? 'template');
         $parentData['active'] = $parentData['active'] ?? true;
+        $this->clearOtherDefaults($parentData);
 
         return $parentData;
     }
@@ -92,7 +93,26 @@ class PrintingTemplateController extends BaseCrudApiController
             $parentData['template_key'] = $record->template_key ?: $this->templateKeyFromName($parentData['name'] ?? $record->name ?? 'template');
         }
 
+        $this->clearOtherDefaults($parentData, $record);
+
         return $parentData;
+    }
+
+    protected function clearOtherDefaults(array $parentData, ?Model $record = null): void
+    {
+        if (empty($parentData['is_default'])) {
+            return;
+        }
+
+        $documentType = $parentData['document_type'] ?? $record?->document_type;
+        if (!$documentType) {
+            return;
+        }
+
+        PrintingTemplate::query()
+            ->where('document_type', $documentType)
+            ->when($record, fn ($query) => $query->whereKeyNot($record->getKey()))
+            ->update(['is_default' => false]);
     }
 
     protected function templateKeyFromName(string $name): string

@@ -25,7 +25,7 @@ class PurchaseBillController extends BaseCrudApiController
     protected array $booleanFilters = ['active', 'approved', 'void'];
     protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['bill_date' => ['from' => 'date_from', 'to' => 'date_to']];
-    protected array $sortable = ['id', 'bill_no', 'bill_date', 'due_date', 'status', 'total', 'balance_due', 'created_at'];
+    protected array $sortable = ['id', 'bill_no', 'bill_date', 'due_date', 'status', 'total', 'paid_total', 'balance_due', 'created_at'];
     protected string $defaultSort = '-created_at';
 
     protected array $nested = [

@@ -19,7 +19,7 @@ class EmailTemplateController extends BaseCrudApiController
         'module' => ['required', 'string', 'max:80'],
         'template_key' => ['required', 'string', 'max:120', 'unique:email_templates,template_key'],
         'subject' => ['required', 'string', 'max:180'],
-        'body' => ['nullable', 'string'],
+        'body' => ['required', 'string'],
         'variables' => ['nullable', 'array'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
