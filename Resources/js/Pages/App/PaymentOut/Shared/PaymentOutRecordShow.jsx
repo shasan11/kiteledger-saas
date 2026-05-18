@@ -54,6 +54,7 @@ const APPROVED_STATUSES = new Set([
 const SUPPORTED_PAYMENT_OUT_DOCUMENT_TYPES = new Set([
     'purchase_order',
     'purchase_bill',
+    'expense',
     'supplier_payment',
     'debit_note',
 ]);
@@ -68,6 +69,8 @@ const normalizeDocumentType = (value) => {
         payment_out: 'supplier_payment',
         supplier_payment: 'supplier_payment',
         supplier_receipt: 'supplier_payment',
+        expense: 'expense',
+        expenses: 'expense',
         debit_note: 'debit_note',
         purchase_return: 'debit_note',
     };
@@ -106,6 +109,7 @@ export const getRelationName = (value) => {
         value.invoice_no ||
         value.purchase_order_no ||
         value.payment_no ||
+        value.expense_no ||
         value.debit_note_no ||
         value.code ||
         '-'
@@ -203,6 +207,15 @@ const documentTypeConfig = {
         dueKeys: ['due_date'],
         linesKeys: ['purchaseBillLines', 'purchase_bill_lines', 'items'],
     },
+    expense: {
+        numberLabel: 'Expense No',
+        numberKeys: ['expense_no', 'code'],
+        dateLabel: 'Expense Date',
+        dateKeys: ['expense_date', 'date'],
+        dueLabel: 'Due Date',
+        dueKeys: ['due_date'],
+        linesKeys: ['expenseLines', 'expense_lines', 'items'],
+    },
     supplier_payment: {
         numberLabel: 'Payment No',
         numberKeys: ['payment_no', 'code'],
@@ -263,13 +276,20 @@ const taxLabel = (row) => {
 const lineProductName = (row) =>
     getRelationName(row?.product) !== '-'
         ? getRelationName(row?.product)
-        : firstPresent(row?.product_name, row?.custom_product_name, row?.description) || '-';
+        : firstPresent(
+              row?.product_name,
+              row?.custom_product_name,
+              getRelationName(row?.chartOfAccount),
+              getRelationName(row?.chart_of_account),
+              row?.description
+          ) || '-';
 
 const getPrintDocumentTitle = (documentType, fallbackTitle) => {
     const normalized = normalizeDocumentType(documentType);
     const map = {
         purchase_order: 'Purchase Order',
         purchase_bill: 'Purchase Bill',
+        expense: 'Expense',
         supplier_payment: 'Payment Voucher',
         debit_note: 'Debit Note',
     };
@@ -1034,10 +1054,11 @@ function buildMainCards(record, documentType) {
         },
     ];
 
-    if (['purchase_order', 'purchase_bill', 'debit_note'].includes(normalizedDocumentType)) {
+    if (['purchase_order', 'purchase_bill', 'expense', 'debit_note'].includes(normalizedDocumentType)) {
         const titleMap = {
             purchase_order: 'Purchase Order Lines',
             purchase_bill: 'Purchase Bill Lines',
+            expense: 'Expense Lines',
             debit_note: 'Debit Note Lines',
         };
         cards.push(

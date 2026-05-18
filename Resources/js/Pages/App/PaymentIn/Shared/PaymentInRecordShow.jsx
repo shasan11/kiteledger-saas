@@ -916,13 +916,7 @@ function DynamicPrintTemplatePreview({
                 document_number: context.document.number,
                 record_id: record?.id,
             }}
-            toolbarExtra={
-                templateError ? (
-                    <Tag color="warning">Using fallback template</Tag>
-                ) : (
-                    <Tag color="success">{resolvedTemplate.template_key || 'default'}</Tag>
-                )
-            }
+             
             contentStyle={{
                 width: '210mm',
                 minHeight: '297mm',
@@ -2241,7 +2235,7 @@ export default function PaymentInRecordShow({
                 title="Print Preview"
                 open={printOpen}
                 onClose={() => setPrintOpen(false)}
-                width={1180}
+                width={900}
                 destroyOnClose={false}
                 styles={{
                     body: {
