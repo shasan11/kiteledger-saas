@@ -66,6 +66,9 @@ use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
 use App\Http\Controllers\Api\ProductVariantItemController;
+use App\Http\Controllers\Api\ProductionCostTermController;
+use App\Http\Controllers\Api\ProductionJournalController;
+use App\Http\Controllers\Api\ProductionOrderController;
 use App\Http\Controllers\Api\WarehouseController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\CurrencyController;
@@ -356,6 +359,10 @@ Route::apiResource('product-units', ProductUnitController::class)
 Route::post('products/bulk', [ProductController::class, 'bulkStore']);
 Route::patch('products/bulk', [ProductController::class, 'bulkUpdate']);
 Route::delete('products/bulk', [ProductController::class, 'bulkDestroy']);
+Route::get('products/search', [ProductController::class, 'search']);
+Route::get('products/{id}/variants', [ProductController::class, 'variants']);
+Route::post('products/{id}/generate-variants', [ProductController::class, 'generateVariants']);
+Route::patch('products/{id}/sync-variants', [ProductController::class, 'syncVariants']);
 
 Route::apiResource('products', ProductController::class)
     ->parameters([
@@ -391,6 +398,30 @@ Route::patch('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpd
 Route::delete('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
 Route::apiResource('adjustments', InventoryAdjustmentController::class);
 Route::apiResource('warehouse-items', WarehouseItemController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+
+Route::post('production-cost-terms/bulk', [ProductionCostTermController::class, 'bulkStore']);
+Route::patch('production-cost-terms/bulk', [ProductionCostTermController::class, 'bulkUpdate']);
+Route::delete('production-cost-terms/bulk', [ProductionCostTermController::class, 'bulkDestroy']);
+Route::apiResource('production-cost-terms', ProductionCostTermController::class);
+
+Route::post('production-orders/bulk', [ProductionOrderController::class, 'bulkStore']);
+Route::patch('production-orders/bulk', [ProductionOrderController::class, 'bulkUpdate']);
+Route::delete('production-orders/bulk', [ProductionOrderController::class, 'bulkDestroy']);
+Route::post('production-orders/bulk-approve', [ProductionOrderController::class, 'bulkApprove']);
+Route::post('production-orders/bulk-void', [ProductionOrderController::class, 'bulkVoid']);
+Route::post('production-orders/bulk-export', [ProductionOrderController::class, 'bulkExport']);
+Route::post('production-orders/{id}/approve', [ProductionOrderController::class, 'transactionApprove']);
+Route::post('production-orders/{id}/void', [ProductionOrderController::class, 'transactionVoid']);
+Route::apiResource('production-orders', ProductionOrderController::class);
+
+Route::post('production-journals/bulk', [ProductionJournalController::class, 'bulkStore']);
+Route::patch('production-journals/bulk', [ProductionJournalController::class, 'bulkUpdate']);
+Route::delete('production-journals/bulk', [ProductionJournalController::class, 'bulkDestroy']);
+Route::post('production-journals/bulk-approve', [ProductionJournalController::class, 'bulkApprove']);
+Route::post('production-journals/bulk-void', [ProductionJournalController::class, 'bulkVoid']);
+Route::post('production-journals/{id}/approve', [ProductionJournalController::class, 'transactionApprove']);
+Route::post('production-journals/{id}/void', [ProductionJournalController::class, 'transactionVoid']);
+Route::apiResource('production-journals', ProductionJournalController::class);
 
 Route::post('quotations/bulk', [QuotationController::class, 'bulkStore']);
 Route::patch('quotations/bulk', [QuotationController::class, 'bulkUpdate']);

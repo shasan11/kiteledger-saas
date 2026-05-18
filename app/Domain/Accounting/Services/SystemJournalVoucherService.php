@@ -50,10 +50,15 @@ class SystemJournalVoucherService
                 'narration' => $narration ?: "System generated from {$sourceType}",
                 'status' => $status,
                 'active' => true,
-                'approved' => false,
+                'approved' => $status === 'posted',
+                'approved_at' => $status === 'posted' ? now() : null,
                 'void' => false,
                 'exchange_rate' => $exchangeRate ?: 1,
             ];
+
+            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_auto_generated')) {
+                $voucherPayload['is_auto_generated'] = true;
+            }
 
             if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_system_generated')) {
                 $voucherPayload['is_system_generated'] = true;
@@ -177,11 +182,6 @@ class SystemJournalVoucherService
             'credit' => $credit,
         ];
 
-        if (Schema::hasColumn($table, 'account_id')) {
-            $payload['account_id'] = $accountId;
-            return $payload;
-        }
-
         if (Schema::hasColumn($table, 'chart_of_account_id')) {
             $coaId = ChartOfAccount::query()
                 ->where('account_id', $accountId)
@@ -194,6 +194,13 @@ class SystemJournalVoucherService
             }
 
             $payload['chart_of_account_id'] = $coaId;
+        }
+
+        if (Schema::hasColumn($table, 'account_id')) {
+            $payload['account_id'] = $accountId;
+        }
+
+        if (isset($payload['account_id']) || isset($payload['chart_of_account_id'])) {
             return $payload;
         }
 
@@ -213,6 +220,14 @@ class SystemJournalVoucherService
 
         if (Schema::hasColumn($table, 'source_id')) {
             $payload['source_id'] = $sourceId;
+        }
+
+        if (Schema::hasColumn($table, 'source_no')) {
+            $payload['source_no'] = $this->sourceNo($sourceType, $sourceId);
+        }
+
+        if (Schema::hasColumn($table, 'source_module')) {
+            $payload['source_module'] = str($sourceType)->headline()->toString();
         }
 
         $specificColumn = match ($sourceType) {
@@ -252,5 +267,10 @@ class SystemJournalVoucherService
     protected function reference(string $sourceType, string $sourceId): string
     {
         return 'SYS:' . strtoupper($sourceType) . ':' . $sourceId;
+    }
+
+    protected function sourceNo(string $sourceType, string $sourceId): string
+    {
+        return $sourceType . ':' . $sourceId;
     }
 }

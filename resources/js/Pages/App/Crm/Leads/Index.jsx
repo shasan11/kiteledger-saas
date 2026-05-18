@@ -54,8 +54,8 @@ const PRIORITY_COLOR = { low: 'default', medium: 'blue', high: 'orange', urgent:
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'New' }, { value: 'contacted', label: 'Contacted' },
-  { value: 'qualified', label: 'Qualified' }, { value: 'unqualified', label: 'Proposal' },
-  { value: 'converted', label: 'Won' }, { value: 'lost', label: 'Lost' },
+  { value: 'qualified', label: 'Qualified' }, { value: 'unqualified', label: 'Unqualified' },
+  { value: 'converted', label: 'Converted' }, { value: 'lost', label: 'Lost' },
 ];
 const PRIORITY_OPTIONS = [
   { value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' },
@@ -67,8 +67,8 @@ const ANCHOR_FILTERS = [
   { key: 'new', label: 'New', params: { status: 'new' } },
   { key: 'contacted', label: 'Contacted', params: { status: 'contacted' } },
   { key: 'qualified', label: 'Qualified', params: { status: 'qualified' } },
-  { key: 'unqualified', label: 'Proposal', params: { status: 'unqualified' } },
-  { key: 'converted', label: 'Won', params: { status: 'converted' } },
+  { key: 'unqualified', label: 'Unqualified', params: { status: 'unqualified' } },
+  { key: 'converted', label: 'Converted', params: { status: 'converted' } },
   { key: 'lost', label: 'Lost', params: { status: 'lost' } },
 ];
 
@@ -339,11 +339,17 @@ export default function Leads(props) {
   };
 
   const doConvert = async (dealId) => {
+    if (!dealId) {
+      messageApi.error('Create a deal before marking this lead as converted.');
+      return;
+    }
+
     try {
       await axios.post(api(`/api/crm/leads/${convertLead.id}/convert`), { converted_deal_id: dealId }, { headers: authHeaders() });
       messageApi.success('Lead converted to deal');
       setConvertLead(null);
       crudRef.current?.refresh?.();
+      setKanbanRefreshKey((key) => key + 1);
     } catch (e) {
       messageApi.error(e?.response?.data?.message || 'Conversion failed');
     }
@@ -679,26 +685,13 @@ export default function Leads(props) {
             canDelete={false}
             hasActions={false}
             hasActionColumns={false}
+            onAddSuccess={(savedRecord) => {
+              const createdDeal = savedRecord?.data || savedRecord;
+              return doConvert(createdDeal?.id);
+            }}
           />
           <div style={{ marginTop: 16, padding: 16, background: token.colorBgLayout, borderRadius: token.borderRadius }}>
-            <Text type="secondary">After creating the deal above, click below to mark the lead as converted.</Text>
-            <div style={{ marginTop: 8 }}>
-              <Button
-                type="primary"
-                onClick={async () => {
-                  try {
-                    await axios.post(api(`/api/crm/leads/${convertLead.id}/convert`), {}, { headers: authHeaders() });
-                    messageApi.success('Lead marked as converted');
-                    setConvertLead(null);
-                    crudRef.current?.refresh?.();
-                  } catch (e) {
-                    messageApi.error(e?.response?.data?.message || 'Failed to convert lead');
-                  }
-                }}
-              >
-                Mark Lead as Converted
-              </Button>
-            </div>
+            <Text type="secondary">Create the deal here. The lead will be marked Converted and linked to the new deal automatically.</Text>
           </div>
         </Drawer>
       )}

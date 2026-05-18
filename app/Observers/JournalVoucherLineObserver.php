@@ -2,11 +2,13 @@
 
 namespace App\Observers;
 
+use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use App\Observers\Concerns\CapturesAccountingEffect;
 use App\Domain\Accounting\Services\JournalVoucherService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class JournalVoucherLineObserver
@@ -34,6 +36,24 @@ class JournalVoucherLineObserver
             throw ValidationException::withMessages([
                 'line' => 'A line cannot have both debit and credit.',
             ]);
+        }
+
+        if (!$line->chart_of_account_id) {
+            throw ValidationException::withMessages([
+                'chart_of_account_id' => 'Every journal voucher line must have a valid chart_of_account_id.',
+            ]);
+        }
+
+        $chartOfAccount = ChartOfAccount::query()->find($line->chart_of_account_id);
+
+        if (!$chartOfAccount || !$chartOfAccount->account_id) {
+            throw ValidationException::withMessages([
+                'chart_of_account_id' => 'Selected chart of account is not linked to an account.',
+            ]);
+        }
+
+        if (Schema::hasColumn($line->getTable(), 'account_id')) {
+            $line->account_id = $chartOfAccount->account_id;
         }
     }
 

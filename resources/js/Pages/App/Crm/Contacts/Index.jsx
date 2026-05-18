@@ -9,7 +9,6 @@ import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Space, Tag, Typography } from 'antd';
- import dayjs from 'dayjs';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -195,9 +194,10 @@ export default function Contacts(props) {
     {
       name: 'phone',
       label: 'Phone',
-      type: 'text',
+      type: 'phone',
       col: 8,
       placeholder: '+977 9800000000',
+      defaultCountryCode: '+977',
     },
     {
       name: 'email',

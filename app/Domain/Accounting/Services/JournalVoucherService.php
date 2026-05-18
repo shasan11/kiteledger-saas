@@ -4,6 +4,7 @@ namespace App\Domain\Accounting\Services;
 
 use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
+use App\Models\JournalVoucherLine;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
@@ -18,10 +19,6 @@ class JournalVoucherService
     public function snapshotEffect(JournalVoucher $journalVoucher): array
     {
         $journalVoucher->loadMissing('journalVoucherLines');
-
-        if ($this->shouldSkipPosting($journalVoucher)) {
-            return [];
-        }
 
         if (!$this->postingService->isFinanciallyPosted($journalVoucher, ['posted'])) {
             return [];
@@ -39,6 +36,76 @@ class JournalVoucherService
         return $this->postingService->normalizeEffect($effect);
     }
 
+    public function post(JournalVoucher $journalVoucher, ?int $approvedById = null): JournalVoucher
+    {
+        return DB::transaction(function () use ($journalVoucher, $approvedById) {
+            $journalVoucher = JournalVoucher::query()
+                ->with('journalVoucherLines')
+                ->lockForUpdate()
+                ->findOrFail($journalVoucher->id);
+
+            $oldEffect = $this->snapshotEffect($journalVoucher);
+
+            $this->validateBalanced($journalVoucher);
+            $this->normalizeLineAccountIds($journalVoucher);
+
+            $journalVoucher->forceFill([
+                'status' => 'posted',
+                'active' => true,
+                'approved' => true,
+                'approved_at' => $journalVoucher->approved_at ?: now(),
+                'approved_by_id' => $journalVoucher->approved_by_id ?: $approvedById,
+                'void' => false,
+                'voided_at' => null,
+                'voided_by_id' => null,
+                'voided_reason' => null,
+            ])->saveQuietly();
+
+            $this->assignVoucherNumberIfMissing($journalVoucher);
+            $this->recalculateTotal($journalVoucher);
+
+            $journalVoucher = $journalVoucher->fresh(['journalVoucherLines']);
+            $newEffect = $this->snapshotEffect($journalVoucher);
+
+            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
+
+            return $journalVoucher;
+        });
+    }
+
+    public function void(JournalVoucher $journalVoucher, string $reason, ?int $voidedById = null): JournalVoucher
+    {
+        return DB::transaction(function () use ($journalVoucher, $reason, $voidedById) {
+            $journalVoucher = JournalVoucher::query()
+                ->with('journalVoucherLines')
+                ->lockForUpdate()
+                ->findOrFail($journalVoucher->id);
+
+            if (!$this->postingService->isFinanciallyPosted($journalVoucher, ['posted'])) {
+                throw ValidationException::withMessages([
+                    'journal_voucher' => 'Only posted journal vouchers can be voided.',
+                ]);
+            }
+
+            $oldEffect = $this->snapshotEffect($journalVoucher);
+
+            $journalVoucher->forceFill([
+                'status' => 'cancelled',
+                'active' => false,
+                'void' => true,
+                'voided_at' => now(),
+                'voided_by_id' => $voidedById,
+                'voided_reason' => $reason,
+            ])->saveQuietly();
+
+            $newEffect = $this->snapshotEffect($journalVoucher->fresh(['journalVoucherLines']));
+
+            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
+
+            return $journalVoucher->fresh(['journalVoucherLines']);
+        });
+    }
+
     public function syncFinancials(JournalVoucher $journalVoucher, array $oldEffect = []): void
     {
         DB::transaction(function () use ($journalVoucher, $oldEffect) {
@@ -48,6 +115,7 @@ class JournalVoucherService
                 ->findOrFail($journalVoucher->id);
 
             $this->validateBalanced($journalVoucher);
+            $this->normalizeLineAccountIds($journalVoucher);
             $this->assignVoucherNumberIfMissing($journalVoucher);
             $this->recalculateTotal($journalVoucher);
 
@@ -92,6 +160,20 @@ class JournalVoucherService
                 ]);
             }
 
+            if (empty($line->chart_of_account_id)) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Every journal line must have a chart of account.',
+                ]);
+            }
+
+            $accountId = $this->resolveLineAccountId($line);
+
+            if (!$accountId) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Every journal line must resolve to a linked account from chart_of_account_id.',
+                ]);
+            }
+
             $totalDebit += $debit;
             $totalCredit += $credit;
         }
@@ -133,10 +215,7 @@ class JournalVoucherService
 
     protected function resolveLineAccountId($line): ?string
     {
-        if (
-            Schema::hasColumn($line->getTable(), 'account_id')
-            && !empty($line->account_id)
-        ) {
+        if (Schema::hasColumn($line->getTable(), 'account_id') && !empty($line->account_id)) {
             return $line->account_id;
         }
 
@@ -149,12 +228,28 @@ class JournalVoucherService
         return null;
     }
 
-    protected function shouldSkipPosting(JournalVoucher $journalVoucher): bool
+    protected function normalizeLineAccountIds(JournalVoucher $journalVoucher): void
     {
-        if (!(bool) ($journalVoucher->is_system_generated ?? false)) {
-            return false;
+        $journalVoucher->loadMissing('journalVoucherLines');
+
+        $line = new JournalVoucherLine();
+
+        if (!Schema::hasColumn($line->getTable(), 'account_id')) {
+            return;
         }
 
-        return true;
+        foreach ($journalVoucher->journalVoucherLines as $line) {
+            $accountId = $this->resolveLineAccountId($line);
+
+            if (!$accountId) {
+                throw ValidationException::withMessages([
+                    'lines' => 'Every journal line must resolve to a linked account from chart_of_account_id.',
+                ]);
+            }
+
+            if ((string) $line->account_id !== (string) $accountId) {
+                $line->forceFill(['account_id' => $accountId])->saveQuietly();
+            }
+        }
     }
 }

@@ -16,6 +16,31 @@ import { cleanUploadValuesForSubmit, getSingleUploadFileList, hasAnyFile, openUp
 
 const { Dragger } = Upload;
 
+const COUNTRY_CODE_OPTIONS = [
+  { value: "+977", label: "+977" },
+  { value: "+91", label: "+91" },
+  { value: "+1", label: "+1" },
+  { value: "+44", label: "+44" },
+  { value: "+61", label: "+61" },
+  { value: "+971", label: "+971" },
+  { value: "+974", label: "+974" },
+  { value: "+966", label: "+966" },
+];
+
+const splitPhoneValue = (value, defaultCode = "+977") => {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\+\d{1,4})\s*(.*)$/);
+  return {
+    code: match?.[1] || defaultCode,
+    number: match ? match[2] || "" : text,
+  };
+};
+
+const buildPhoneValue = (code, number) => {
+  const cleanNumber = String(number || "").trim().replace(/^(\+\d{1,4})\s*/, "");
+  return cleanNumber ? `${code || "+977"} ${cleanNumber}` : "";
+};
+
 export default function QuickAddModal({
   open,
   title,
@@ -234,6 +259,7 @@ export default function QuickAddModal({
                       value={values?.[name]}
                       disabled={readOnly}
                       format={field.format || "YYYY-MM-DD"}
+                      showTime={field.showTime}
                       placeholder={field.placeholder || "Select date"}
                       onChange={(v) => setFieldValue(name, v)}
                     />
@@ -258,6 +284,32 @@ export default function QuickAddModal({
                       {field.inlineLabel || field.label}
                     </Checkbox>
                   );
+
+                case "phone": {
+                  const defaultCode = field.defaultCountryCode || "+977";
+                  const phoneParts = splitPhoneValue(values?.[name], defaultCode);
+                  const addonBefore = (
+                    <Select
+                      value={phoneParts.code}
+                      disabled={readOnly}
+                      style={{ width: 92 }}
+                      options={field.countryCodeOptions || COUNTRY_CODE_OPTIONS}
+                      onChange={(code) => setFieldValue(name, buildPhoneValue(code, phoneParts.number))}
+                    />
+                  );
+
+                  return (
+                    <Input
+                      size="large"
+                      value={phoneParts.number}
+                      addonBefore={addonBefore}
+                      disabled={readOnly}
+                      placeholder={field.placeholder || `${defaultCode} 9800000000`}
+                      maxLength={field.maxLength}
+                      onChange={(e) => setFieldValue(name, buildPhoneValue(phoneParts.code, e.target.value))}
+                    />
+                  );
+                }
 
                 case "radio":
                 case "radiobtn":

@@ -8,11 +8,12 @@ import { DollarOutlined } from '@ant-design/icons';
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-export default function Currencies(props) {
+export default function Currencies({ readOnly = false }) {
   const columns = [
     { title: 'Code', dataIndex: 'code', key: 'code', sorter: true },
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
     { title: 'Symbol', dataIndex: 'symbol', key: 'symbol', sorter: true },
+    { title: 'Exchange Rate', dataIndex: 'exchange_rate', key: 'exchange_rate', sorter: true, render: (value) => Number(value || 1).toFixed(6) },
     { title: 'Decimal Places', dataIndex: 'decimal_places', key: 'decimal_places', sorter: true },
     {
       title: 'Base Currency',
@@ -21,6 +22,12 @@ export default function Currencies(props) {
       render: (val) => (
         <Tag color={val ? 'green' : 'default'}>{val ? 'Yes' : 'No'}</Tag>
       ),
+    },
+    {
+      title: 'Active',
+      dataIndex: 'active',
+      key: 'active',
+      render: (val) => <Tag color={val ? 'green' : 'default'}>{val ? 'Active' : 'Inactive'}</Tag>,
     },
   ];
 
@@ -78,11 +85,11 @@ export default function Currencies(props) {
         orderingParam="ordering"
         enableServerPagination={true}
         showSearch={true}
-        canAdd={true}
-        canEdit={true}
-        canDelete={true}
-        hasActions={true}
-        hasActionColumns={true}
+        canAdd={!readOnly}
+        canEdit={!readOnly}
+        canDelete={!readOnly}
+        hasActions={!readOnly}
+        hasActionColumns={!readOnly}
       />
     </>
   );

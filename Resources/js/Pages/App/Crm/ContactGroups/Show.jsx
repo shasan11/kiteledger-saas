@@ -619,8 +619,10 @@ export default function ContactGroupShow({ auth, id }) {
       {
         name: 'phone',
         label: 'Phone',
-        type: 'text',
+        type: 'phone',
         col: 8,
+        placeholder: '+977 9800000000',
+        defaultCountryCode: '+977',
       },
       {
         name: 'email',

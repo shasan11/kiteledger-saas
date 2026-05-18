@@ -54,6 +54,7 @@ const APPROVED_STATUSES = new Set([
 const SUPPORTED_PAYMENT_OUT_DOCUMENT_TYPES = new Set([
     'purchase_order',
     'purchase_bill',
+    'expense',
     'supplier_payment',
     'debit_note',
 ]);
@@ -68,6 +69,8 @@ const normalizeDocumentType = (value) => {
         payment_out: 'supplier_payment',
         supplier_payment: 'supplier_payment',
         supplier_receipt: 'supplier_payment',
+        expense: 'expense',
+        expenses: 'expense',
         debit_note: 'debit_note',
         purchase_return: 'debit_note',
     };
@@ -106,6 +109,7 @@ export const getRelationName = (value) => {
         value.invoice_no ||
         value.purchase_order_no ||
         value.payment_no ||
+        value.expense_no ||
         value.debit_note_no ||
         value.code ||
         '-'
@@ -203,6 +207,15 @@ const documentTypeConfig = {
         dueKeys: ['due_date'],
         linesKeys: ['purchaseBillLines', 'purchase_bill_lines', 'items'],
     },
+    expense: {
+        numberLabel: 'Expense No',
+        numberKeys: ['expense_no', 'code'],
+        dateLabel: 'Expense Date',
+        dateKeys: ['expense_date', 'date'],
+        dueLabel: 'Due Date',
+        dueKeys: ['due_date'],
+        linesKeys: ['expenseLines', 'expense_lines', 'items'],
+    },
     supplier_payment: {
         numberLabel: 'Payment No',
         numberKeys: ['payment_no', 'code'],
@@ -263,13 +276,20 @@ const taxLabel = (row) => {
 const lineProductName = (row) =>
     getRelationName(row?.product) !== '-'
         ? getRelationName(row?.product)
-        : firstPresent(row?.product_name, row?.custom_product_name, row?.description) || '-';
+        : firstPresent(
+              row?.product_name,
+              row?.custom_product_name,
+              getRelationName(row?.chartOfAccount),
+              getRelationName(row?.chart_of_account),
+              row?.description
+          ) || '-';
 
 const getPrintDocumentTitle = (documentType, fallbackTitle) => {
     const normalized = normalizeDocumentType(documentType);
     const map = {
         purchase_order: 'Purchase Order',
         purchase_bill: 'Purchase Bill',
+        expense: 'Expense',
         supplier_payment: 'Payment Voucher',
         debit_note: 'Debit Note',
     };
@@ -317,6 +337,15 @@ const getPartyAddress = (record) =>
         record?.contact?.billing_address,
         record?.supplier?.address,
         record?.party?.address,
+        ''
+    );
+
+const compactAddress = (companyInfo = null) =>
+    firstPresent(
+        companyInfo?.address,
+        [companyInfo?.address_line_1, companyInfo?.address_line_2, companyInfo?.city, companyInfo?.state, companyInfo?.postal_code, companyInfo?.country]
+            .filter(Boolean)
+            .join(', '),
         ''
     );
 
@@ -383,13 +412,16 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
         record,
         company: {
             name: firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KiteLedger'),
-            address: firstPresent(companyInfo?.address, companyInfo?.address_line_1, record?.company?.address, record?.branch?.address, ''),
+            legal_name: firstPresent(companyInfo?.legal_name, companyInfo?.company_name, record?.company?.legal_name, record?.company?.name, ''),
+            address: firstPresent(compactAddress(companyInfo), record?.company?.address, record?.branch?.address, ''),
             phone: firstPresent(companyInfo?.phone, record?.company?.phone, record?.branch?.phone, ''),
             email: firstPresent(companyInfo?.email, record?.company?.email, record?.branch?.email, ''),
             website: firstPresent(companyInfo?.website, record?.company?.website, ''),
             pan_or_vat: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.tax_id, ''),
+            registration_number: firstPresent(companyInfo?.registration_number, record?.company?.registration_number, ''),
+            footer: firstPresent(companyInfo?.footer, ''),
             tax_id: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.pan_no, ''),
-            logo: companyInfo?.logo_url || '',
+            logo: firstPresent(companyInfo?.logo_url, companyInfo?.dark_logo_url, companyInfo?.logo, companyInfo?.dark_logo, ''),
             watermark: companyInfo?.watermark_url || '',
             initials: String(firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KL'))
                 .split(/\s+/)
@@ -436,6 +468,15 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             phone: getPartyPhone(record),
             email: getPartyEmail(record),
             address: getPartyAddress(record),
+        },
+        customer: {
+            name: getRelationName(record?.contact),
+            phone: getPartyPhone(record),
+            email: getPartyEmail(record),
+            address: getPartyAddress(record),
+        },
+        account: {
+            name: getRelationName(record?.account),
         },
         currency: {
             code: currency?.code || '',
@@ -1034,10 +1075,11 @@ function buildMainCards(record, documentType) {
         },
     ];
 
-    if (['purchase_order', 'purchase_bill', 'debit_note'].includes(normalizedDocumentType)) {
+    if (['purchase_order', 'purchase_bill', 'expense', 'debit_note'].includes(normalizedDocumentType)) {
         const titleMap = {
             purchase_order: 'Purchase Order Lines',
             purchase_bill: 'Purchase Bill Lines',
+            expense: 'Expense Lines',
             debit_note: 'Debit Note Lines',
         };
         cards.push(
@@ -1543,7 +1585,7 @@ export default function PaymentOutRecordShow({
                         type="warning"
                         showIcon
                         message="Unsupported document type"
-                        description={`Printing is configured for Purchase Order, Purchase Bill, Supplier Payment, and Debit Note. Current type: ${documentType}`}
+                        description={`Printing is configured for purchase/payment-out documents: Purchase Order, Purchase Bill, Expense, Supplier Payment, and Debit Note. Current type: ${documentType}`}
                     />
                 ) : printTemplateLoading ? (
                     <Skeleton active paragraph={{ rows: 12 }} />

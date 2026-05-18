@@ -41,6 +41,7 @@ class ChequeRegister extends Model
         'voided_at',
         'exchange_rate',
         'total',
+        'journal_voucher_id',
         'user_add_id',
     ];
 
@@ -93,6 +94,11 @@ class ChequeRegister extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function journalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class);
     }
 
     public function voidedBy(): BelongsTo

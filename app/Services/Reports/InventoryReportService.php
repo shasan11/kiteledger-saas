@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Models\DebitNoteLine;
 use App\Models\InventoryAdjustmentLine;
+use App\Models\InventoryLedger;
 use App\Models\InvoiceLine;
 use App\Models\Product;
 use App\Models\PurchaseBillLine;
@@ -292,6 +293,20 @@ class InventoryReportService extends BaseReportService
         }
         foreach (WarehouseTransferLine::query()->with(['product', 'warehouseTransfer'])->get() as $line) {
             $rows->push($this->movementRow($line->warehouseTransfer?->transfer_date ?? $line->created_at, $line->product_id, $line->product?->name, 'Warehouse Transfer', $line->warehouseTransfer?->transfer_no, 0, $line->qty, $line->unit_cost ?? 0));
+        }
+        foreach (InventoryLedger::query()->with(['product', 'warehouse'])->get() as $line) {
+            $rows->push($this->movementRow(
+                $line->transaction_date ?? $line->created_at,
+                $line->product_id,
+                $line->product?->name,
+                $line->source_type,
+                $line->source_no,
+                (float) $line->qty_in,
+                (float) $line->qty_out,
+                (float) $line->unit_cost,
+                $line->warehouse?->name,
+                $line->warehouse_id
+            ));
         }
 
         return $rows;

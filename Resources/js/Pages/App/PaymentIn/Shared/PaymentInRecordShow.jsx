@@ -373,6 +373,15 @@ const getPartyAddress = (record) =>
         ''
     );
 
+const compactAddress = (companyInfo = null) =>
+    firstPresent(
+        companyInfo?.address,
+        [companyInfo?.address_line_1, companyInfo?.address_line_2, companyInfo?.city, companyInfo?.state, companyInfo?.postal_code, companyInfo?.country]
+            .filter(Boolean)
+            .join(', '),
+        ''
+    );
+
 const normalizePrintLine = (row, currency) => {
     const qty = firstPresent(row?.qty, row?.quantity, 0);
     const unitPrice = firstPresent(row?.unit_price, row?.rate, row?.price, 0);
@@ -454,13 +463,16 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
 
         company: {
             name: firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KiteLedger'),
-            address: firstPresent(companyInfo?.address, companyInfo?.address_line_1, record?.company?.address, record?.branch?.address, ''),
+            legal_name: firstPresent(companyInfo?.legal_name, companyInfo?.company_name, record?.company?.legal_name, record?.company?.name, ''),
+            address: firstPresent(compactAddress(companyInfo), record?.company?.address, record?.branch?.address, ''),
             phone: firstPresent(companyInfo?.phone, record?.company?.phone, record?.branch?.phone, ''),
             email: firstPresent(companyInfo?.email, record?.company?.email, record?.branch?.email, ''),
             website: firstPresent(companyInfo?.website, record?.company?.website, ''),
             pan_or_vat: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.tax_id, ''),
+            registration_number: firstPresent(companyInfo?.registration_number, record?.company?.registration_number, ''),
+            footer: firstPresent(companyInfo?.footer, ''),
             tax_id: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, record?.company?.pan_no, ''),
-            logo: companyInfo?.logo_url || '',
+            logo: firstPresent(companyInfo?.logo_url, companyInfo?.dark_logo_url, companyInfo?.logo, companyInfo?.dark_logo, ''),
             watermark: companyInfo?.watermark_url || '',
             initials: String(firstPresent(companyInfo?.company_name, record?.company?.name, record?.branch?.name, 'KL'))
                 .split(/\s+/)
@@ -511,6 +523,9 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             phone: getPartyPhone(record),
             email: getPartyEmail(record),
             address: getPartyAddress(record),
+        },
+        account: {
+            name: getRelationName(record?.account),
         },
 
         currency: {
@@ -916,13 +931,7 @@ function DynamicPrintTemplatePreview({
                 document_number: context.document.number,
                 record_id: record?.id,
             }}
-            toolbarExtra={
-                templateError ? (
-                    <Tag color="warning">Using fallback template</Tag>
-                ) : (
-                    <Tag color="success">{resolvedTemplate.template_key || 'default'}</Tag>
-                )
-            }
+             
             contentStyle={{
                 width: '210mm',
                 minHeight: '297mm',
@@ -2241,7 +2250,7 @@ export default function PaymentInRecordShow({
                 title="Print Preview"
                 open={printOpen}
                 onClose={() => setPrintOpen(false)}
-                width={1180}
+                width={900}
                 destroyOnClose={false}
                 styles={{
                     body: {

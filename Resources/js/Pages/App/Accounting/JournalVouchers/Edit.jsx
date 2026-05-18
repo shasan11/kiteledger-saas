@@ -33,7 +33,7 @@ export default function JournalVoucherEdit({ id, ...props }) {
         {
             name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { chart_of_account_id: null, description: '', debit: 0, credit: 0 }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - ') },
                 { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
                 { key: 'debit', name: 'debit', label: 'Debit', type: 'number', width: '140px', min: 0 },
                 { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '140px', min: 0 },

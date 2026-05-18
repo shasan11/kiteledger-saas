@@ -11,13 +11,16 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 export default function ReportingTags(props) {
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
+    { title: 'Code', key: 'code', render: (_, r) => (r.code || String(r.name || '').trim().toLowerCase().replace(/\s+/g, '_') || '-') },
+    { title: 'Module / Category', dataIndex: 'description', key: 'description', sorter: true, render: (v) => v || '-' },
     {
       title: 'Color',
       dataIndex: 'color',
       key: 'color',
       render: (color) => color ? <Tag color={color}>{color}</Tag> : '-',
     },
-    { title: 'Description', dataIndex: 'description', key: 'description', sorter: true },
+    { title: 'Active', dataIndex: 'active', key: 'active', render: (v) => <Tag color={v ? 'green' : 'default'}>{v ? 'Active' : 'Inactive'}</Tag> },
+    { title: 'Updated At', dataIndex: 'updated_at', key: 'updated_at', render: (v) => v ? new Date(v).toLocaleString() : '-' },
     {
       title: 'Lines',
       dataIndex: 'lines',

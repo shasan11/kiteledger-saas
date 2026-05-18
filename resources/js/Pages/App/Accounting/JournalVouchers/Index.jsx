@@ -31,6 +31,7 @@ export default function JournalVouchersIndex(props) {
                 bulkActions={{ approve: true, void: true, export: true }}
                 columns={columns}
                 custom_add={true}
+                filterUrl={"?is_system_generated=false"}
                 custom_add_link={route('accounting.journal-vouchers.add')}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 24px)"

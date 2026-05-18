@@ -161,6 +161,9 @@ class CrmActivityController extends BaseCrudApiController
 
         abort_unless($user, 401);
 
+        $crmActivity = $this->applyAssignedUserScope(CrmActivity::query())
+            ->findOrFail($crmActivity->getKey());
+
         $data = $request->validate([
             'comment' => ['required', 'string', 'max:5000'],
         ]);

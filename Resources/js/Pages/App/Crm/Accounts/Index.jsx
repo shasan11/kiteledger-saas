@@ -26,7 +26,7 @@ export default function Accounts({ auth }) {
     { name: 'segment', label: 'Segment', type: 'text', col: 6 },
     { name: 'source', label: 'Source', type: 'text', col: 6 },
     { name: 'website', label: 'Website', type: 'text', col: 6 },
-    { name: 'phone', label: 'Phone', type: 'text', col: 6 },
+    { name: 'phone', label: 'Phone', type: 'phone', col: 6, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
     { name: 'email', label: 'Email', type: 'text', col: 6 },
     { name: 'owner_id', label: 'Owner', type: 'fkSelect', col: 8, fkUrl: api('/api/hrm/users'), fkValueKey: 'id', fkLabelKey: 'name', fkSearchParam: 'search' },
     { name: 'annual_revenue', label: 'Annual Revenue', type: 'number', col: 8 },

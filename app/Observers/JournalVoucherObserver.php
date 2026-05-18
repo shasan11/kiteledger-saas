@@ -70,10 +70,9 @@ class JournalVoucherObserver
     protected function isSystemGeneratedFromCashTransfer(JournalVoucher $journalVoucher): bool
     {
         return (bool) (
-            $journalVoucher->is_system_generated
+            $journalVoucher->is_auto_generated
             && (
                 $journalVoucher->source_type === 'cash_transfer'
-                || $journalVoucher->cash_transfer_id
                 || str_contains((string) $journalVoucher->reference, 'Cash Transfer')
             )
         );

@@ -23,7 +23,7 @@ trait CapturesAccountingEffect
             ? $this->effectKey($model)
             : $this->effectKey($model, $id);
 
-        static::$oldEffects[$key] = $effect;
+        static::$oldEffects[$key] ??= $effect;
     }
 
     protected function pullOldEffect(Model|string $model, mixed $id = null): array

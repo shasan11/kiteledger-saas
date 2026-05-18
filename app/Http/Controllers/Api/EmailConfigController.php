@@ -58,6 +58,35 @@ class EmailConfigController extends BaseCrudApiController
         'user_add_id'       => ['nullable', 'integer', 'exists:users,id'],
     ];
 
+    public function index(Request $request)
+    {
+        $this->checkAccess($request, 'index');
+
+        $record = $this->singleConfig();
+
+        return response()->json($record ? $this->serializeRecord($record) : null);
+    }
+
+    public function store(Request $request)
+    {
+        $this->checkAccess($request, 'store');
+
+        $record = $this->singleConfig();
+        $rules = $record ? $this->makeRulesPartial($this->storeRules) : $this->storeRules;
+        $validated = $this->validateCompat($request->all(), $rules);
+
+        if ($record && array_key_exists('email_pass', $validated) && empty($validated['email_pass'])) {
+            unset($validated['email_pass']);
+        }
+
+        $record = $record ?: new EmailConfig();
+        $record->fill($validated);
+        $record->save();
+        $record->load($this->eagerLoadRelations());
+
+        return response()->json($this->serializeRecord($record), $record->wasRecentlyCreated ? 201 : 200);
+    }
+
     protected function updateRules(Request $request, Model $record): array
     {
         return [
@@ -88,5 +117,14 @@ class EmailConfigController extends BaseCrudApiController
             unset($parentData['email_pass']);
         }
         return $parentData;
+    }
+
+    protected function singleConfig(): ?EmailConfig
+    {
+        return EmailConfig::query()
+            ->with($this->eagerLoadRelations())
+            ->orderByDesc('active')
+            ->orderBy('created_at')
+            ->first();
     }
 }

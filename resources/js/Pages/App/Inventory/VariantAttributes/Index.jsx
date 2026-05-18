@@ -52,6 +52,13 @@ export default function VariantAttributes(props) {
         return lines.length;
       },
     },
+    {
+      title: 'Active',
+      dataIndex: 'active',
+      key: 'active',
+      width: '12%',
+      render: (value) => <Tag color={value ? 'green' : 'default'}>{value ? 'Active' : 'Inactive'}</Tag>,
+    },
      
   ];
 
@@ -63,6 +70,19 @@ export default function VariantAttributes(props) {
       required: true,
       col: 24,
       placeholder: 'e.g. Color, Size, Material',
+    },
+    {
+      name: 'sort_order',
+      label: 'Sort Order',
+      type: 'number',
+      col: 12,
+      min: 0,
+    },
+    {
+      name: 'active',
+      label: 'Active',
+      type: 'switch',
+      col: 12,
     },
        
     
@@ -83,6 +103,21 @@ export default function VariantAttributes(props) {
           type: 'text',
           width: '3fr',
           placeholder: 'e.g. Red, Small, Cotton',
+        },
+        {
+          key: 'sort_order',
+          name: 'sort_order',
+          label: 'Sort',
+          type: 'number',
+          width: '120px',
+          min: 0,
+        },
+        {
+          key: 'active',
+          name: 'active',
+          label: 'Active',
+          type: 'switch',
+          width: '120px',
         },
          
       ],
@@ -105,6 +140,7 @@ export default function VariantAttributes(props) {
 
   const crudInitialValues = {
     name: '',
+    sort_order: 0,
     active: true,
     items: [{ ...emptyItem }],
     deleted_item_ids: [],
@@ -113,6 +149,7 @@ export default function VariantAttributes(props) {
   const transformPayload = (values) => {
     const payload = { ...values };
     payload.name = payload.name?.trim() || null;
+    payload.sort_order = Number(payload.sort_order || 0);
     payload.active = Boolean(payload.active);
     payload.items = (payload.items || [])
       .filter((row) => row.value?.trim())

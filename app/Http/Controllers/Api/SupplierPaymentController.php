@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\SupplierPayment;
 use App\Models\SupplierPaymentLine;
+use App\Models\PurchaseBill;
+use App\Services\TransactionApprovalService;
+use App\Services\TransactionVoidService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -23,6 +26,8 @@ class SupplierPaymentController extends BaseCrudApiController
         'currency',
         'bankChargesAccount',
         'tdsChargesAccount',
+        'supplierPaymentLines',
+        'supplierPaymentLines.purchaseBill',
     ];
 
     protected array $relationDetails = [
@@ -55,11 +60,11 @@ class SupplierPaymentController extends BaseCrudApiController
             'relation_details' => ['purchaseBill' => 'purchase_bill_id'],
             'rules' => [
                 'purchase_bill_id' => ['required', 'uuid', 'exists:purchase_bills,id'],
-                'allocated_amount' => ['required', 'numeric', 'min:0'],
+                'allocated_amount' => ['required', 'numeric', 'gt:0'],
             ],
             'update_rules' => [
                 'purchase_bill_id' => ['required', 'uuid', 'exists:purchase_bills,id'],
-                'allocated_amount' => ['required', 'numeric', 'min:0'],
+                'allocated_amount' => ['required', 'numeric', 'gt:0'],
             ],
         ],
     ];
@@ -71,7 +76,7 @@ class SupplierPaymentController extends BaseCrudApiController
         'contact_id' => ['required', 'uuid', 'exists:contacts,id'],
         'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
-        'amount' => ['required', 'numeric', 'min:0'],
+        'amount' => ['required', 'numeric', 'gt:0'],
         'method' => ['nullable', 'string', 'max:20'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
@@ -80,7 +85,7 @@ class SupplierPaymentController extends BaseCrudApiController
         'tds_charges_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
         'tds_type' => ['nullable', 'string', 'max:20'],
         'tds_charges' => ['nullable', 'numeric', 'min:0'],
-        'exchange_rate' => ['nullable', 'numeric', 'min:0'],
+        'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'approved' => ['nullable', 'boolean'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
     ];
@@ -94,7 +99,7 @@ class SupplierPaymentController extends BaseCrudApiController
             'contact_id' => ['sometimes', 'required', 'uuid', 'exists:contacts,id'],
             'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
-            'amount' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'amount' => ['sometimes', 'required', 'numeric', 'gt:0'],
             'method' => ['sometimes', 'nullable', 'string', 'max:20'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
@@ -103,7 +108,7 @@ class SupplierPaymentController extends BaseCrudApiController
             'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
             'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],
             'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'approved' => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
         ];
@@ -121,7 +126,8 @@ class SupplierPaymentController extends BaseCrudApiController
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
-        $this->validateAllocatedAmount($parentData, $nestedData);
+        $this->validateChargeAccounts($parentData);
+        $this->validatePaymentAllocations($parentData, $nestedData);
 
         return $parentData;
     }
@@ -131,7 +137,8 @@ class SupplierPaymentController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
-        $this->validateAllocatedAmount($parentData, $nestedData, $record);
+        $this->validateChargeAccounts($parentData, $record);
+        $this->validatePaymentAllocations($parentData, $nestedData, $record);
 
         return $parentData;
     }
@@ -139,27 +146,197 @@ class SupplierPaymentController extends BaseCrudApiController
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
         $record->forceFill(['total' => (float) $record->amount])->save();
+        PurchaseBill::recalculatePaymentTotalsForContact($record->contact_id);
 
         return $record;
     }
 
-    protected function validateAllocatedAmount(
-        array $parentData,
-        array $nestedData,
-        ?Model $record = null
-    ): void {
-        if (!array_key_exists('items', $nestedData)) {
-            return;
-        }
+    public function transactionApprove(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $approved = app(TransactionApprovalService::class)->approve(
+            $record,
+            $request->user()?->getAuthIdentifier()
+        );
+
+        PurchaseBill::recalculatePaymentTotalsForContact($approved->contact_id);
+
+        return response()->json($this->serializeRecord($approved->refresh()));
+    }
+
+    public function transactionVoid(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $data = $this->validateCompat($request->all(), [
+            'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $voided = app(TransactionVoidService::class)->void(
+            $record,
+            $data['voided_reason'],
+            $request->user()?->getAuthIdentifier()
+        );
+
+        PurchaseBill::recalculatePaymentTotalsForContact($voided->contact_id);
+
+        return response()->json($this->serializeRecord($voided->refresh()));
+    }
+
+    public function bulkApprove(Request $request)
+    {
+        $response = parent::bulkApprove($request);
+        $this->recalculateContactsForIds((array) $request->input('ids', []));
+
+        return $response;
+    }
+
+    public function bulkVoid(Request $request)
+    {
+        $response = parent::bulkVoid($request);
+        $this->recalculateContactsForIds((array) $request->input('ids', []));
+
+        return $response;
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+        $contactId = $record->contact_id;
+
+        $response = parent::destroy($request, $id);
+        PurchaseBill::recalculatePaymentTotalsForContact($contactId);
+
+        return $response;
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = (array) $request->input('ids', []);
+        $contactIds = SupplierPayment::query()
+            ->whereIn('id', $ids)
+            ->pluck('contact_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $response = parent::bulkDestroy($request);
+
+        $contactIds->each(fn ($contactId) => PurchaseBill::recalculatePaymentTotalsForContact($contactId));
+
+        return $response;
+    }
+
+    private function validatePaymentAllocations(array $parentData, array $nestedData, ?Model $record = null): void
+    {
+        $rows = array_key_exists('items', $nestedData)
+            ? collect($nestedData['items'] ?? [])
+            : ($record
+                ? $record->supplierPaymentLines()->get()->map(fn ($line) => [
+                    'id' => $line->id,
+                    'purchase_bill_id' => $line->purchase_bill_id,
+                    'allocated_amount' => $line->allocated_amount,
+                ])
+                : collect());
 
         $amount = (float) ($parentData['amount'] ?? $record?->amount ?? 0);
-        $allocated = collect($nestedData['items'])
-            ->sum(fn ($row) => (float) ($row['allocated_amount'] ?? 0));
+        $contactId = $parentData['contact_id'] ?? $record?->contact_id;
+        $seen = [];
+        $allocated = 0;
+
+        foreach ($rows as $index => $row) {
+            $billId = $row['purchase_bill_id'] ?? null;
+            $lineAmount = (float) ($row['allocated_amount'] ?? 0);
+
+            if (!$billId) {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['Purchase bill is required.']]);
+            }
+
+            if (isset($seen[$billId])) {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['The same purchase bill cannot be allocated more than once in one payment.']]);
+            }
+            $seen[$billId] = true;
+
+            if ($lineAmount <= 0) {
+                $this->throwValidation(["items.{$index}.allocated_amount" => ['Allocated amount must be greater than zero.']]);
+            }
+
+            $bill = PurchaseBill::query()->find($billId);
+            if (!$bill) {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['Selected purchase bill was not found.']]);
+            }
+
+            $bill->recalculatePaymentTotals();
+
+            if ($contactId && $bill->contact_id !== $contactId) {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['Selected purchase bill does not belong to this supplier.']]);
+            }
+
+            if ((bool) $bill->void || $bill->status === 'void') {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['Voided purchase bills cannot receive payments.']]);
+            }
+
+            if (!(bool) $bill->approved || !in_array($bill->status, ['posted', 'part_paid', 'paid'], true)) {
+                $this->throwValidation(["items.{$index}.purchase_bill_id" => ['Only approved posted purchase bills can receive payments.']]);
+            }
+
+            $existingAllocation = ($record && (bool) $record->approved && !(bool) $record->void)
+                ? (float) SupplierPaymentLine::query()
+                    ->where('supplier_payment_id', $record->getKey())
+                    ->where('purchase_bill_id', $billId)
+                    ->sum('allocated_amount')
+                : 0;
+
+            $availableBalance = (float) $bill->balance_due + $existingAllocation;
+            if ($lineAmount > round($availableBalance, 2)) {
+                $this->throwValidation(["items.{$index}.allocated_amount" => [
+                    sprintf('Allocated amount %.2f exceeds purchase bill balance %.2f.', $lineAmount, $availableBalance),
+                ]]);
+            }
+
+            $allocated += $lineAmount;
+        }
 
         if ($allocated > $amount) {
             $this->throwValidation([
                 'items' => ['Allocated amount total cannot exceed payment amount.'],
             ]);
         }
+    }
+
+    private function validateChargeAccounts(array $parentData, ?Model $record = null): void
+    {
+        $bankCharges = (float) ($parentData['bank_charges'] ?? $record?->bank_charges ?? 0);
+        $bankChargesAccountId = $parentData['bank_charges_account_id'] ?? $record?->bank_charges_account_id;
+        if ($bankCharges > 0 && !$bankChargesAccountId) {
+            $this->throwValidation([
+                'bank_charges_account_id' => ['Bank charges account is required when bank charges are greater than zero.'],
+            ]);
+        }
+
+        $tdsCharges = (float) ($parentData['tds_charges'] ?? $record?->tds_charges ?? 0);
+        $tdsChargesAccountId = $parentData['tds_charges_account_id'] ?? $record?->tds_charges_account_id;
+        if ($tdsCharges > 0 && !$tdsChargesAccountId) {
+            $this->throwValidation([
+                'tds_charges_account_id' => ['TDS charges account is required when TDS charges are greater than zero.'],
+            ]);
+        }
+    }
+
+    private function recalculateContactsForIds(array $ids): void
+    {
+        SupplierPayment::query()
+            ->whereIn('id', array_values(array_unique(array_filter($ids))))
+            ->pluck('contact_id')
+            ->filter()
+            ->unique()
+            ->each(fn ($contactId) => PurchaseBill::recalculatePaymentTotalsForContact($contactId));
     }
 }

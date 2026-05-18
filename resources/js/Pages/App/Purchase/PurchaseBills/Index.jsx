@@ -66,7 +66,7 @@ export default function PurchaseBills({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyLine },
       columns: [
-        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
         { key: 'custom_product_name', name: 'custom_product_name', label: 'Product Name', type: 'text', width: '2fr' },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
         { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '90px', min: 0 },

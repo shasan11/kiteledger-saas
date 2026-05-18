@@ -291,11 +291,11 @@ export default function Quotations(props) {
             type: 'fkSelect',
             width: '3fr',
             placeholder: 'Add Code or Product',
-            fkUrl: api('/api/products/'),
+            fkUrl: api('/api/products/search?transaction=sale'),
             fkSearchParam: 'search',
             fkPageSize: 20,
             fkValueKey: 'id',
-            fkLabelKey: 'name',
+            fkLabelKey: 'label',
           },
           {
             key: 'qty',

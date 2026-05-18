@@ -271,7 +271,7 @@ export default function SalesOrderEdit({ id, ...props }) {
       columns: [
         {
           key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
-          placeholder: 'Add Code or Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=sale'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
           fkOptionRender: (r) => (

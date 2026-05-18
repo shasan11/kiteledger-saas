@@ -15,8 +15,8 @@ export default function CreditNotesIndex(props) {
     const columns = useMemo(() => [
         { title: 'Credit Note No', dataIndex: 'sales_return_no', key: 'sales_return_no', sorter: true, width: 160, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
         { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
-        { title: 'Date', dataIndex: 'sales_return_date', key: 'sales_return_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
-        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={({ draft: 'default', posted: 'blue', void: 'red' }[v] || 'default')} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'void', label: 'Void' }] } },
+        { title: 'Credit Note Date', dataIndex: 'sales_return_date', key: 'sales_return_date', sorter: true, width: 150, render: displayDate, backendFilter: { title: 'Credit Note Date', type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
+        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={({ draft: 'default', posted: 'blue', cancelled: 'red' }[v] || 'default')} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'posted', label: 'Posted' }, { value: 'cancelled', label: 'Cancelled' }] } },
         { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
     ], []);
 

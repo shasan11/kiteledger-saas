@@ -55,7 +55,7 @@ export default function DebitNotes({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyLine },
       columns: [
-        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
         { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '90px', min: 0 },
         { key: 'unit_price', name: 'unit_price', label: 'Unit Price', type: 'number', width: '130px', min: 0 },

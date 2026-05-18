@@ -11,7 +11,7 @@ use App\Models\{
     ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
     JournalVoucher, JournalVoucherLine, ChequeRegister,
     LoanAccount, LoanTopUp, LoanCharge,
-    Invoice, CustomerPayment, PurchaseBill, SupplierPayment,
+    Invoice, CustomerPayment, PurchaseBill, SupplierPayment, SupplierPaymentLine,
     Expense, SalesReturn, DebitNote, InventoryAdjustment,
     Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
     Contact, Product, Lead, Deal,
@@ -25,12 +25,13 @@ use App\Observers\{
     ChequeRegisterObserver,
     LoanAccountObserver, LoanTopUpObserver, LoanChargeObserver,
     InvoiceObserver, CustomerPaymentObserver,
-    PurchaseBillObserver, SupplierPaymentObserver,
+    PurchaseBillObserver, SupplierPaymentObserver, SupplierPaymentLineObserver,
     ExpenseObserver, SalesReturnObserver, DebitNoteObserver,
     InventoryAdjustmentObserver, QuotationObserver,
     SalesOrderObserver, PurchaseOrderObserver, ProformaInvoiceObserver,
     ContactObserver, ProductObserver, LeadObserver, DealObserver,
-    PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver
+    PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver,
+    SubsequentJournalVoucherObserver
 };
 
 class AppServiceProvider extends ServiceProvider
@@ -90,6 +91,7 @@ class AppServiceProvider extends ServiceProvider
         CustomerPayment::observe(CustomerPaymentObserver::class);
         PurchaseBill::observe(PurchaseBillObserver::class);
         SupplierPayment::observe(SupplierPaymentObserver::class);
+        SupplierPaymentLine::observe(SupplierPaymentLineObserver::class);
         Expense::observe(ExpenseObserver::class);
         SalesReturn::observe(SalesReturnObserver::class);
         DebitNote::observe(DebitNoteObserver::class);
@@ -108,5 +110,21 @@ class AppServiceProvider extends ServiceProvider
         PosSale::observe(PosSaleObserver::class);
         PosCashMovement::observe(PosCashMovementObserver::class);
         PosReturn::observe(PosReturnObserver::class);
+
+        foreach ([
+            ChequeRegister::class,
+            Invoice::class,
+            CustomerPayment::class,
+            PurchaseBill::class,
+            SupplierPayment::class,
+            Expense::class,
+            SalesReturn::class,
+            DebitNote::class,
+            InventoryAdjustment::class,
+            LoanTopUp::class,
+            LoanCharge::class,
+        ] as $accountingTransaction) {
+            $accountingTransaction::observe(SubsequentJournalVoucherObserver::class);
+        }
     }
 }

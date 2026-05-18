@@ -32,6 +32,16 @@ class CrmInsightService
 
         return [
             'metrics' => [
+                'total_leads' => Lead::query()->count(),
+                'new_leads' => Lead::query()->where('status', 'new')->count(),
+                'qualified_leads' => Lead::query()->where('status', 'qualified')->count(),
+                'converted_leads' => Lead::query()->where('status', 'converted')->count(),
+                'lost_leads' => Lead::query()->where('status', 'lost')->count(),
+                'open_deals' => (clone $openDeals)->count(),
+                'pipeline_value' => (float) (clone $openDeals)->sum('amount'),
+                'weighted_forecast' => $this->forecast(['period' => 'this_month'])['totals']['weighted_forecast'],
+                'upcoming_activities' => CrmActivity::query()->where('due_at', '>', $now)->whereNotIn('status', ['completed', 'cancelled'])->count(),
+                'stuck_deals' => $this->stuckDeals((int) ($filters['stuck_deal_days'] ?? 14))->count(),
                 'leads_created_this_week' => Lead::query()->where('created_at', '>=', $now->copy()->startOfWeek())->count(),
                 'open_leads' => Lead::query()->whereNotIn('status', ['converted', 'lost'])->count(),
                 'followups_due_today' => CrmActivity::query()->whereDate('due_at', $now->toDateString())->whereNotIn('status', ['completed', 'cancelled'])->count(),

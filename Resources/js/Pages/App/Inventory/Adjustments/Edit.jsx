@@ -32,7 +32,7 @@ export default function AdjustmentEdit({ id, ...props }) {
         {
             name: 'items', label: 'Adjustment Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Product', defaultItem: { product_id: null, adjustment_type: 'increase', qty: 0, unit_cost: 0, remarks: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/search'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
                 { key: 'adjustment_type', name: 'adjustment_type', label: 'Type', type: 'select', width: '130px', options: [{ value: 'increase', label: 'Increase' }, { value: 'decrease', label: 'Decrease' }] },
                 { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '100px', min: 0 },
                 { key: 'unit_cost', name: 'unit_cost', label: 'Unit Cost', type: 'number', width: '130px', min: 0 },

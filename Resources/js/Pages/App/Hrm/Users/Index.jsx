@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Avatar, Input, Select, Tag } from 'antd';
 import { TeamOutlined } from '@ant-design/icons';
@@ -645,143 +645,143 @@ export default function Users(props) {
   ];
 
   const fields = [
-  {
-    type: 'group',
-    label: 'Basic Information',
-    col: 24,
-    accordion: false,
-    children: [
-      {
-        name: 'first_name',
-        label: 'First Name',
-        type: 'text',
-        required: true,
-        col: 12,
-      },
-      {
-        name: 'last_name',
-        label: 'Last Name',
-        type: 'text',
-        required: true,
-        col: 12,
-      },
-      {
-        name: 'email',
-        label: 'Email',
-        type: 'custom',
-        required: true,
-        col: 12,
-        render: renderEmailInput,
-      },
-      {
-        name: 'phone',
-        label: 'Phone',
-        type: 'text',
-        col: 12,
-      },
-    ],
-  },
+    {
+      type: 'group',
+      label: 'Basic Information',
+      col: 24,
+      accordion: false,
+      children: [
+        {
+          name: 'first_name',
+          label: 'First Name',
+          type: 'text',
+          required: true,
+          col: 12,
+        },
+        {
+          name: 'last_name',
+          label: 'Last Name',
+          type: 'text',
+          required: true,
+          col: 12,
+        },
+        {
+          name: 'email',
+          label: 'Email',
+          type: 'custom',
+          required: true,
+          col: 12,
+          render: renderEmailInput,
+        },
+        {
+          name: 'phone',
+          label: 'Phone',
+          type: 'text',
+          col: 12,
+        },
+      ],
+    },
 
-  {
-    type: 'group',
-    label: 'Login & Access',
-    col: 24,
-    accordion: false,
-    children: [
-      {
-        name: 'username',
-        label: 'Username',
-        type: 'text',
-        required: true,
-        col: 12,
-      },
-      {
-        name: 'password',
-        label: 'Password',
-        type: 'custom',
-        col: 12,
-        placeholder: 'Leave blank while editing',
-        render: renderPasswordInput,
-      },
-      fkField({
-        name: 'role_id',
-        label: 'Role',
-        url: '/api/hrm/roles',
-        quickAdd: quickAddRole,
-        required: true,
-      }),
-      {
-        name: 'active',
-        label: 'Active',
-        type: 'switch',
-        col: 12,
-      },
-    ],
-  },
+    {
+      type: 'group',
+      label: 'Login & Access',
+      col: 24,
+      accordion: false,
+      children: [
+        {
+          name: 'username',
+          label: 'Username',
+          type: 'text',
+          required: true,
+          col: 12,
+        },
+        {
+          name: 'password',
+          label: 'Password',
+          type: 'custom',
+          col: 12,
+          placeholder: 'Leave blank while editing',
+          render: renderPasswordInput,
+        },
+        fkField({
+          name: 'role_id',
+          label: 'Role',
+          url: '/api/hrm/roles',
+          quickAdd: quickAddRole,
+          required: true,
+        }),
+        {
+          name: 'active',
+          label: 'Active',
+          type: 'switch',
+          col: 12,
+        },
+      ],
+    },
 
-  {
-    type: 'group',
-    label: 'Employment Details',
-    col: 24,
-    accordion: false,
-    children: [
-      {
-        name: 'employee_id',
-        label: 'Employee ID',
-        type: 'text',
-        col: 12,
-      },
-      {
-        name: 'join_date',
-        label: 'Join Date',
-        type: 'date',
-        col: 12,
-      },
-      {
-        name: 'leave_date',
-        label: 'Leave Date',
-        type: 'date',
-        col: 12,
-      },
-      fkField({
-        name: 'branch_id',
-        label: 'Branch',
-        url: '/api/branches',
-        required: false,
-      }),
-      fkField({
-        name: 'department_id',
-        label: 'Department',
-        url: '/api/hrm/departments',
-        quickAdd: quickAddDepartment,
-      }),
-      fkField({
-        name: 'employment_status_id',
-        label: 'Employment Status',
-        url: '/api/hrm/employment-statuses',
-        quickAdd: quickAddEmploymentStatus,
-      }),
-      fkField({
-        name: 'shift_id',
-        label: 'Shift',
-        url: '/api/hrm/shifts',
-        quickAdd: quickAddShift,
-      }),
-      fkField({
-        name: 'leave_policy_id',
-        label: 'Leave Policy',
-        url: '/api/hrm/leave-policies',
-        quickAdd: quickAddLeavePolicy,
-      }),
-      fkField({
-        name: 'weekly_holiday_id',
-        label: 'Weekly Holiday',
-        url: '/api/hrm/weekly-holidays',
-        quickAdd: quickAddWeeklyHoliday,
-      }),
-    ],
-  },
-];
+    {
+      type: 'group',
+      label: 'Employment Details',
+      col: 24,
+      accordion: false,
+      children: [
+        {
+          name: 'employee_id',
+          label: 'Employee ID',
+          type: 'text',
+          col: 12,
+        },
+        {
+          name: 'join_date',
+          label: 'Join Date',
+          type: 'date',
+          col: 12,
+        },
+        {
+          name: 'leave_date',
+          label: 'Leave Date',
+          type: 'date',
+          col: 12,
+        },
+        fkField({
+          name: 'branch_id',
+          label: 'Branch',
+          url: '/api/branches',
+          required: false,
+        }),
+        fkField({
+          name: 'department_id',
+          label: 'Department',
+          url: '/api/hrm/departments',
+          quickAdd: quickAddDepartment,
+        }),
+        fkField({
+          name: 'employment_status_id',
+          label: 'Employment Status',
+          url: '/api/hrm/employment-statuses',
+          quickAdd: quickAddEmploymentStatus,
+        }),
+        fkField({
+          name: 'shift_id',
+          label: 'Shift',
+          url: '/api/hrm/shifts',
+          quickAdd: quickAddShift,
+        }),
+        fkField({
+          name: 'leave_policy_id',
+          label: 'Leave Policy',
+          url: '/api/hrm/leave-policies',
+          quickAdd: quickAddLeavePolicy,
+        }),
+        fkField({
+          name: 'weekly_holiday_id',
+          label: 'Weekly Holiday',
+          url: '/api/hrm/weekly-holidays',
+          quickAdd: quickAddWeeklyHoliday,
+        }),
+      ],
+    },
+  ];
 
   const validationSchema = Yup.object().shape({
     first_name: Yup.string().required('First name is required').max(80),
@@ -892,15 +892,42 @@ export default function Users(props) {
     return payload;
   };
 
-  return (
-    <AuthenticatedLayout
-      auth={props.auth}
-      user={props.auth?.user}
-      header={<AccessControlTabs activeKey="users" />}
-    >
-      <Head title="Employees" />
+  const handleEmployeeRowClick = (record) => ({
+    style: {
+      cursor: 'pointer',
+    },
+    onClick: (event) => {
+      const target = event.target;
 
-      <div style={{ padding: 16, minHeight: 'calc(100vh - 64px)' }}>
+      const clickedControl = target?.closest?.(
+        [
+          'button',
+          'a',
+          'input',
+          'textarea',
+          'select',
+          '.ant-btn',
+          '.ant-checkbox',
+          '.ant-checkbox-wrapper',
+          '.ant-table-selection-column',
+          '.ant-dropdown-trigger',
+          '.ant-switch',
+          '.ant-select',
+          '.ant-picker',
+          '[data-no-row-click]',
+        ].join(',')
+      );
+
+      if (clickedControl) return;
+
+      router.visit(route('hrm.users.show', record.id));
+    },
+  });
+
+  const content = (
+    <>
+      <Head title="Employees" />
+      <div style={{ padding: props.embedded ? 0 : 16, minHeight: props.embedded ? 'auto' : 'calc(100vh - 64px)' }}>
         <ReusableCrud
           icon={<TeamOutlined />}
           title="Employee"
@@ -927,10 +954,23 @@ export default function Users(props) {
           canDelete
           hasActions
           hasActionColumns
-          showViewColumn
-          viewPathBuilder={(record) => route('hrm.users.show', record.id)}
+          activeTableRowFunction={handleEmployeeRowClick}
         />
       </div>
+    </>
+  );
+
+  if (props.embedded) {
+    return content;
+  }
+
+  return (
+    <AuthenticatedLayout
+      auth={props.auth}
+      user={props.auth?.user}
+      header={<AccessControlTabs activeKey="users" />}
+    >
+      {content}
     </AuthenticatedLayout>
   );
 }

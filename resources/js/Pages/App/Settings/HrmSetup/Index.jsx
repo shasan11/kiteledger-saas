@@ -140,199 +140,28 @@ function LoadingSection({ token }) {
   );
 }
 
-function OverviewCard({ item, token, active, onSelect }) {
-  return (
-    <Card
-      hoverable
-      size="small"
-      onClick={() => onSelect(item.key)}
-      style={{
-        height: '100%',
-        borderRadius: token.borderRadiusLG,
-        borderColor: active ? token.colorPrimaryBorder : token.colorBorderSecondary,
-        background: active ? token.colorPrimaryBg : token.colorBgContainer,
-        boxShadow: active ? token.boxShadowSecondary : 'none',
-      }}
-      styles={{
-        body: {
-          padding: 14,
-        },
-      }}
-    >
-      <Space direction="vertical" size={8} style={{ display: 'flex' }}>
-        <Space size={10} align="start">
-          <span
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: token.borderRadius,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: active ? token.colorPrimary : token.colorFillQuaternary,
-              color: active ? token.colorTextLightSolid : token.colorPrimary,
-              border: `1px solid ${active ? token.colorPrimary : token.colorBorderSecondary}`,
-              flexShrink: 0,
-              fontSize: 16,
-            }}
-          >
-            {item.icon}
-          </span>
-
-          <div style={{ minWidth: 0 }}>
-            <Text
-              strong
-              style={{
-                display: 'block',
-                color: token.colorText,
-                fontSize: 13,
-              }}
-            >
-              {item.label}
-            </Text>
-            <Paragraph
-              style={{
-                margin: '4px 0 0',
-                color: token.colorTextSecondary,
-                fontSize: 12,
-                lineHeight: 1.45,
-              }}
-              ellipsis={{ rows: 2 }}
-            >
-              {item.description}
-            </Paragraph>
-          </div>
-        </Space>
-
-        <Button
-          type={active ? 'primary' : 'default'}
-          size="small"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect(item.key);
-          }}
-          style={{ alignSelf: 'flex-start' }}
-        >
-          {active ? 'Open' : 'Manage'}
-        </Button>
-      </Space>
-    </Card>
-  );
-}
-
 export default function HrmSetupIndex({ auth }) {
   const { token } = theme.useToken();
-  const screens = useBreakpoint();
   const [activeSection, setActiveSection] = useState(DEFAULT_SECTION);
 
-  const activeItem = useMemo(
-    () => ALL_SECTIONS.find((item) => item.key === activeSection) || ALL_SECTIONS[0],
-    [activeSection],
-  );
-
   return (
-    <div
-      style={{
-        padding: screens.md ? 16 : 12,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}
-    >
-      <Card
-        size="small"
-        style={{
-          borderRadius: token.borderRadiusLG,
-          borderColor: token.colorBorderSecondary,
-          background: token.colorBgContainer,
-        }}
-        styles={{
-          body: {
-            padding: screens.md ? 18 : 14,
-          },
-        }}
-      >
-        <Space direction="vertical" size={4} style={{ display: 'flex' }}>
-          <Title level={5} style={{ margin: 0 }}>
-            HRM Setup
-          </Title>
-          <Paragraph
-            style={{
-              margin: 0,
-              color: token.colorTextSecondary,
-            }}
-          >
-            Maintain HRM setup data here instead of jumping between separate master pages. Each section supports list, add, edit, and delete in the same workspace.
-          </Paragraph>
-        </Space>
-      </Card>
-
-      {SECTION_GROUPS.map((group) => (
-        <Card
-          key={group.key}
-          size="small"
-          title={group.label}
-          style={{
-            borderRadius: token.borderRadiusLG,
-            borderColor: token.colorBorderSecondary,
-          }}
-          extra={
-            <Text style={{ color: token.colorTextSecondary, fontSize: 12 }}>
-              {group.description}
-            </Text>
-          }
-        >
-          <Row gutter={[12, 12]}>
-            {group.items.map((item) => (
-              <Col key={item.key} xs={24} sm={12} xl={8}>
-                <OverviewCard
-                  item={item}
-                  token={token}
-                  active={item.key === activeSection}
-                  onSelect={setActiveSection}
-                />
-              </Col>
-            ))}
-          </Row>
-        </Card>
-      ))}
-
-      <Card
-        size="small"
-        style={{
-          borderRadius: token.borderRadiusLG,
-          borderColor: token.colorBorderSecondary,
-          overflow: 'hidden',
-        }}
-        styles={{
-          body: {
-            padding: 0,
-          },
-        }}
-      >
+    <div style={{ padding: 12 }}>
+      <Card size="small" style={{ borderColor: token.colorBorderSecondary }} styles={{ body: { padding: 0 } }}>
         <Tabs
           activeKey={activeSection}
           onChange={setActiveSection}
           destroyInactiveTabPane
           size="small"
-          tabBarStyle={{
-            padding: '0 12px',
-            margin: 0,
-            background: token.colorBgContainer,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          }}
+          tabBarStyle={{ padding: '0 12px', margin: 0, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           items={ALL_SECTIONS.map((item) => ({
             key: item.key,
-            label: (
-              <Space size={6}>
-                {item.icon}
-                <span>{item.label}</span>
-              </Space>
-            ),
+            label: <Space size={6}>{item.icon}<span>{item.label}</span></Space>,
             children: item.component ? (
-              <Suspense fallback={<LoadingSection token={token} />}>
-                <item.component auth={auth} embedded />
-              </Suspense>
+              <div style={{ padding: 12 }}>
+                <Suspense fallback={<LoadingSection token={token} />}>
+                  <item.component auth={auth} embedded />
+                </Suspense>
+              </div>
             ) : null,
           }))}
         />

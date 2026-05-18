@@ -1,8 +1,8 @@
-import PaymentInRecordShow from '@/Pages/App/PaymentIn/Shared/PaymentInRecordShow';
+import PaymentOutRecordShow from '@/Pages/App/PaymentOut/Shared/PaymentOutRecordShow';
 
 export default function PurchaseBillShow({ id }) {
     return (
-        <PaymentInRecordShow
+        <PaymentOutRecordShow
             id={id}
             title="Purchase Bill"
             endpoint="/api/purchase-bills/"

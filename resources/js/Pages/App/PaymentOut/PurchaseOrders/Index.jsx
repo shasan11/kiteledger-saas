@@ -10,14 +10,14 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const displayDate = (v) => { if (!v) return '-'; const d = dayjs(v); return d.isValid() ? d.format('DD-MM-YYYY') : '-'; };
-const statusColor = (s) => ({ draft: 'default', sent: 'blue', received: 'green', cancelled: 'red', void: 'red' }[s] || 'default');
+const statusColor = (s) => ({ draft: 'default', confirmed: 'blue', received: 'green', cancelled: 'red' }[s] || 'default');
 
 export default function PurchaseOrdersIndex(props) {
     const columns = useMemo(() => [
         { title: 'PO No', dataIndex: 'purchase_order_no', key: 'purchase_order_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
         { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'purchase_order_date', key: 'purchase_order_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
-        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'void', label: 'Void' }] } },
+        { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag>, backendFilter: { type: 'select', paramName: 'status', options: [{ value: 'draft', label: 'Draft' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }] } },
         { title: 'Amount', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 150, render: (v, record) => renderAmountWithDefaultCurrency(v, record), backendFilter: { type: 'amount_range', minParam: 'amount_min', maxParam: 'amount_max' } },
     ], []);
 

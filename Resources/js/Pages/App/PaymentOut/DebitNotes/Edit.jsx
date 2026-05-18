@@ -238,6 +238,13 @@ export default function DebitNoteEdit({ id, ...props }) {
     { name: 'debit_note_no', label: 'Debit Note No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
     { name: 'debit_note_date', label: 'Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     {
+      name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8,
+      placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+      fkLabel: (r) => r?.name || r?.code || '',
+      onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }),
+    },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', required: true, col: 8, min: 0.000001 },
+    {
       name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8,
       placeholder: 'Select Warehouse', fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true,
       quickAdd: warehouseQuickAdd,
@@ -253,7 +260,7 @@ export default function DebitNoteEdit({ id, ...props }) {
       columns: [
         {
           key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
-          placeholder: 'Add Code or Product', fkUrl: api('/api/products/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
           fkOptionRender: (r) => (
@@ -270,7 +277,7 @@ export default function DebitNoteEdit({ id, ...props }) {
             return { ...baseRow, tax_amount: c.tax_amount, tax_breakup: c.tax_breakup, line_total: c.line_total };
           },
         },
-        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0 },
+        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0.000001 },
         { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0 },
         { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '170px', component: LineDiscountInput },
         {
@@ -295,6 +302,7 @@ export default function DebitNoteEdit({ id, ...props }) {
   const validationSchema = useMemo(() => Yup.object().shape({
     contact_id: Yup.mixed().test('req', 'Supplier is required', (v) => !!asId(v)).required('Supplier is required'),
     debit_note_date: Yup.mixed().required('Date is required'),
+    exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').required('Required'),
     items: Yup.array().of(
       Yup.object().shape({
         qty: Yup.number().typeError('Qty must be a number').moreThan(0, 'Qty must be > 0').required('Required'),
@@ -318,6 +326,8 @@ export default function DebitNoteEdit({ id, ...props }) {
       debit_note_date: formatDate(values.debit_note_date),
       contact_id: asId(values.contact_id ?? values.contact),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
+      currency_id: asId(values.currency_id ?? values.currency),
+      exchange_rate: toNumber(values.exchange_rate) || 1,
       notes: nullIfEmpty(values.notes),
       total: summary.grandTotal,
       items,

@@ -3,29 +3,14 @@
 namespace App\Observers;
 
 use App\Models\SupplierPayment;
-use App\Services\TransactionApprovalService;
-use App\Services\TransactionVoidService;
+use App\Observers\Concerns\HandlesAccountingTransactionObserver;
 
 class SupplierPaymentObserver
 {
-    public function __construct(
-        protected TransactionApprovalService $approvalService,
-        protected TransactionVoidService $voidService,
-    ) {
-    }
+    use HandlesAccountingTransactionObserver;
 
     public function updated(SupplierPayment $model): void
     {
-        if ($model->wasChanged('approved') && (bool) $model->approved === true) {
-            $this->approvalService->handleApprovedTransition($model);
-        }
-
-        if ($model->wasChanged('void') && (bool) $model->void === true) {
-            $this->voidService->void($model, $model->voided_reason ?? 'Voided');
-        }
-
-        if ($model->wasChanged('status') && in_array($model->status, ['cancelled', 'void'], true)) {
-            $this->voidService->cancel($model, $model->voided_reason ?? 'Cancelled');
-        }
+        $this->handleAccountingTransactionUpdated($model);
     }
 }

@@ -95,6 +95,19 @@ const getPath = (object, path, fallback = '') => {
     }, object) ?? fallback;
 };
 
+const compactAddress = (companyInfo = null) =>
+  companyInfo?.address ||
+  [
+    companyInfo?.address_line_1,
+    companyInfo?.address_line_2,
+    companyInfo?.city,
+    companyInfo?.state,
+    companyInfo?.postal_code,
+    companyInfo?.country,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
 const renderPrintTemplate = (templateHtml, context) => {
   const resolve = (scope, path, fallback = '') => {
     const scoped = getPath(scope, path, undefined);
@@ -1614,12 +1627,15 @@ export default function AccountingRecordShow({
       record,
       company: {
         name: companyInfo?.company_name || record?.company?.name || record?.branch?.name || 'KiteLedger',
-        logo: companyInfo?.logo_url || record?.company?.logo_url || record?.company?.logo || '',
-        address: companyInfo?.address || companyInfo?.address_line_1 || record?.company?.address || record?.branch?.address || '',
+        legal_name: companyInfo?.legal_name || companyInfo?.company_name || record?.company?.legal_name || record?.company?.name || '',
+        logo: companyInfo?.logo_url || companyInfo?.dark_logo_url || companyInfo?.logo || companyInfo?.dark_logo || record?.company?.logo_url || record?.company?.logo || '',
+        address: compactAddress(companyInfo) || record?.company?.address || record?.branch?.address || '',
         phone: companyInfo?.phone || record?.company?.phone || record?.branch?.phone || '',
         email: companyInfo?.email || record?.company?.email || record?.branch?.email || '',
         website: companyInfo?.website || record?.company?.website || '',
         pan_or_vat: companyInfo?.tax_number || companyInfo?.vat_number || record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
+        registration_number: companyInfo?.registration_number || record?.company?.registration_number || '',
+        footer: companyInfo?.footer || '',
         tax_id: companyInfo?.tax_number || companyInfo?.vat_number || record?.company?.tax_id || record?.company?.pan_no || record?.branch?.tax_id || '',
         initials: String(companyInfo?.company_name || record?.company?.name || record?.branch?.name || 'KL')
           .split(/\s+/)
@@ -1656,6 +1672,15 @@ export default function AccountingRecordShow({
         email: '',
         tax_id: '',
       },
+      account: {
+        name: relationLabel(record?.account || record?.fromAccount || record?.from_account || record?.toAccount || record?.to_account),
+      },
+      currency: {
+        code: record?.currency?.code || companyInfo?.default_currency || '',
+        symbol: record?.currency?.symbol || '',
+        name: record?.currency?.name || '',
+      },
+      exchange_rate: record?.exchange_rate ? Number(record.exchange_rate).toFixed(2) : '',
       totals: {
         subtotal: formatMoney(total),
         discount: formatMoney(0),
@@ -1689,17 +1714,23 @@ export default function AccountingRecordShow({
         description: line?.description || line?.narration || '-',
         qty: '1.00',
         unit_price: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        debit: formatMoney(line?.debit || 0),
+        credit: formatMoney(line?.credit || 0),
         tax_amount: formatMoney(0),
         line_total: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        amount: formatMoney(line?.amount || line?.debit || line?.credit || 0),
       })),
       items: lines.map((line) => ({
         product_name: relationLabel(line?.chartOfAccount || line?.chart_of_account || line?.account || line?.toAccount || line?.to_account) || '-',
         description: line?.description || line?.narration || '-',
         qty: '1.00',
         unit_price: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        debit: formatMoney(line?.debit || 0),
+        credit: formatMoney(line?.credit || 0),
         discount_amount: formatMoney(0),
         tax_amount: formatMoney(0),
         line_total: formatMoney(line?.debit || line?.amount || line?.credit || 0),
+        amount: formatMoney(line?.amount || line?.debit || line?.credit || 0),
       })),
     };
   }, [companyInfo, formatMoney, module, printDocumentType, record, recordTitle, title]);

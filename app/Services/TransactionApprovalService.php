@@ -5,6 +5,8 @@ namespace App\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use App\Models\InventoryAdjustment;
+use App\Models\ProductionOrder;
+use App\Models\ProductionJournal;
 use App\Services\Inventory\WarehouseStockService;
 
 class TransactionApprovalService
@@ -16,9 +18,12 @@ class TransactionApprovalService
         'SupplierPayment',
         'Expense',
         'CashTransfer',
+        'ChequeRegister',
         'SalesReturn',
         'DebitNote',
         'InventoryAdjustment',
+        'ProductionOrder',
+        'ProductionJournal',
         'LoanTopUp',
         'LoanCharge',
     ];
@@ -65,12 +70,40 @@ class TransactionApprovalService
 
             $fresh->saveQuietly();
 
+            if ($fresh instanceof \App\Models\Invoice) {
+                $fresh->recalculatePaymentTotals();
+            }
+
+            if ($fresh instanceof \App\Models\PurchaseBill) {
+                $fresh->recalculatePaymentTotals();
+            }
+
             if ($fresh instanceof InventoryAdjustment) {
                 $this->warehouseStockService->postInventoryAdjustment($fresh);
             }
 
+            if ($fresh instanceof ProductionOrder) {
+                return app(\App\Services\Manufacturing\ProductionPostingService::class)
+                    ->approve($fresh, $approvedById)
+                    ->refresh();
+            }
+
+            if ($fresh instanceof ProductionJournal) {
+                return app(\App\Services\Inventory\ProductionPostingService::class)
+                    ->post($fresh)
+                    ->refresh();
+            }
+
             if ($this->isAccountingImpacting($fresh)) {
                 $this->jvService->createForApprovedSource($fresh);
+            }
+
+            if ($fresh instanceof \App\Models\CustomerPayment) {
+                \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+            }
+
+            if ($fresh instanceof \App\Models\SupplierPayment) {
+                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             return $fresh->refresh();
@@ -96,8 +129,32 @@ class TransactionApprovalService
                 $this->jvService->createForApprovedSource($transaction);
             }
 
+            if ($transaction instanceof \App\Models\Invoice) {
+                $transaction->recalculatePaymentTotals();
+            }
+
+            if ($transaction instanceof \App\Models\PurchaseBill) {
+                $transaction->recalculatePaymentTotals();
+            }
+
+            if ($transaction instanceof \App\Models\CustomerPayment) {
+                \App\Models\Invoice::recalculatePaymentTotalsForContact($transaction->contact_id);
+            }
+
+            if ($transaction instanceof \App\Models\SupplierPayment) {
+                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($transaction->contact_id);
+            }
+
             if ($transaction instanceof InventoryAdjustment) {
                 $this->warehouseStockService->postInventoryAdjustment($transaction);
+            }
+
+            if ($transaction instanceof ProductionOrder) {
+                app(\App\Services\Manufacturing\ProductionPostingService::class)->approve($transaction);
+            }
+
+            if ($transaction instanceof ProductionJournal) {
+                app(\App\Services\Inventory\ProductionPostingService::class)->post($transaction);
             }
         });
     }
@@ -121,6 +178,11 @@ class TransactionApprovalService
     public function markPostedIfSupported(Model $transaction): void
     {
         if ($this->validationService->hasStatusField($transaction) && $transaction->status === 'draft') {
+            if ($transaction instanceof \App\Models\PurchaseOrder) {
+                $transaction->status = 'confirmed';
+                return;
+            }
+
             $transaction->status = 'posted';
         }
     }

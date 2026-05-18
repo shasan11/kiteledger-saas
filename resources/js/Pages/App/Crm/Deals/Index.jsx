@@ -107,6 +107,47 @@ const cleanDealPayload = (values) => {
   return payload;
 };
 
+const COUNTRY_CODE_OPTIONS = [
+  { value: '+977', label: '+977' },
+  { value: '+91', label: '+91' },
+  { value: '+1', label: '+1' },
+  { value: '+44', label: '+44' },
+  { value: '+61', label: '+61' },
+  { value: '+971', label: '+971' },
+  { value: '+974', label: '+974' },
+  { value: '+966', label: '+966' },
+];
+
+const splitPhoneValue = (value, defaultCode = '+977') => {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\+\d{1,4})\s*(.*)$/);
+  return { code: match?.[1] || defaultCode, number: match ? match[2] || '' : text };
+};
+
+const buildPhoneValue = (code, number) => {
+  const cleanNumber = String(number || '').trim().replace(/^(\+\d{1,4})\s*/, '');
+  return cleanNumber ? `${code || '+977'} ${cleanNumber}` : '';
+};
+
+function PhoneInput({ value, onChange, placeholder = '+977 9800000000' }) {
+  const parts = splitPhoneValue(value);
+  return (
+    <Input
+      value={parts.number}
+      placeholder={placeholder}
+      addonBefore={(
+        <Select
+          value={parts.code}
+          style={{ width: 92 }}
+          options={COUNTRY_CODE_OPTIONS}
+          onChange={(code) => onChange?.(buildPhoneValue(code, parts.number))}
+        />
+      )}
+      onChange={(event) => onChange?.(buildPhoneValue(parts.code, event.target.value))}
+    />
+  );
+}
+
 function DealCard({ deal, onStageMove, onCardClick, stages }) {
   const { token } = theme.useToken();
   const isStuck = deal.updated_at && dayjs().diff(dayjs(deal.updated_at), 'day') > 14 && deal.status === 'open';
@@ -366,7 +407,7 @@ function SummaryBar({ pipelineId, search }) {
   const { token } = theme.useToken();
 
   useEffect(() => {
-    const params = { page_size: 300, status: 'open', ...(pipelineId ? { deal_pipeline_id: pipelineId } : {}) };
+    const params = { page_size: 300, status: 'open', ...(pipelineId ? { deal_pipeline_id: pipelineId } : {}), ...(search ? { search } : {}) };
     axios.get(api('/api/deals/'), { headers: authHeaders(), params })
       .then((r) => {
         const deals = rowsFrom(r.data);
@@ -376,7 +417,7 @@ function SummaryBar({ pipelineId, search }) {
         setData({ count: deals.length, total, weighted, stuck: stuck.length });
       })
       .catch(() => {});
-  }, [pipelineId]);
+  }, [pipelineId, search]);
 
   if (!data) return null;
 
@@ -653,7 +694,7 @@ function AddDealModal({ open, selectedPipeline, onCancel, onSaved }) {
             </Col>
             <Col xs={24} md={12}>
               <Form.Item name="phone" label="Phone">
-                <Input placeholder="Phone number" />
+                <PhoneInput />
               </Form.Item>
             </Col>
           </Row>

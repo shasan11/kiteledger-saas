@@ -41,19 +41,19 @@ export default function SupplierPaymentAdd(props) {
         { name: 'payment_date', label: 'Payment Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
         { name: 'account_id', label: 'Payment Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'method', label: 'Payment Method', type: 'select', col: 8, options: [{ value: 'cash', label: 'Cash' }, { value: 'cheque', label: 'Cheque' }, { value: 'bank_transfer', label: 'Bank Transfer' }, { value: 'online', label: 'Online' }] },
-        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
-        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0 },
-        { name: 'amount', label: 'Payment Amount', type: 'number', required: true, col: 8, min: 0 },
-        { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '', onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }) },
+        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0.000001 },
+        { name: 'amount', label: 'Payment Amount', type: 'number', required: true, col: 8, min: 0.000001 },
+        { name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'bank_charges', label: 'Bank Charges', type: 'number', col: 8, min: 0 },
-        { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'tds_charges', label: 'TDS Amount', type: 'number', col: 8, min: 0 },
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         {
             name: 'items', label: 'Bill Allocations', type: 'objectArray', col: 24, addButtonLabel: 'Add Bill', defaultItem: { purchase_bill_id: null, allocated_amount: 0 }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
                 { key: 'purchase_bill_id', name: 'purchase_bill_id', label: 'Purchase Bill', type: 'fkSelect', width: '3fr', placeholder: 'Select Bill', fkUrl: api('/api/purchase-bills/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'bill_no' },
-                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '200px', min: 0 },
+                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '200px', min: 0.000001 },
             ],
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
@@ -62,7 +62,8 @@ export default function SupplierPaymentAdd(props) {
     const validationSchema = useMemo(() => Yup.object().shape({
         contact_id: Yup.mixed().test('req', 'Supplier is required', (v) => !!asId(v)).required(),
         payment_date: Yup.mixed().required('Date is required'),
-        amount: Yup.number().typeError('Amount required').min(0).required('Amount is required'),
+        exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').nullable(),
+        amount: Yup.number().typeError('Amount required').moreThan(0, 'Must be > 0').required('Amount is required'),
     }), []);
 
     const crudInitialValues = useMemo(() => {
@@ -98,7 +99,7 @@ export default function SupplierPaymentAdd(props) {
             contact_id: asId(values.contact_id ?? values.contact),
             account_id: asId(values.account_id ?? values.account),
             currency_id: asId(values.currency_id ?? values.currency),
-            exchange_rate: toNumber(values.exchange_rate) || null,
+            exchange_rate: toNumber(values.exchange_rate) || 1,
             amount: toNumber(values.amount),
             method: nullIfEmpty(values.method),
             bank_charges_account_id: asId(values.bank_charges_account_id),

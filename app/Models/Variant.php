@@ -19,6 +19,7 @@ class Variant extends Model
      */
     protected $fillable = [
         'name',
+        'sort_order',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -33,6 +34,7 @@ class Variant extends Model
     {
         return [
             'active' => 'boolean',
+            'sort_order' => 'integer',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];

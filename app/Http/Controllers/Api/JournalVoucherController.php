@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Accounting\Services\JournalVoucherService;
+use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +28,7 @@ class JournalVoucherController extends BaseCrudApiController
         'currency',
         'items',
         'items.chartOfAccount',
+        'items.account',
     ];
 
     protected array $relationDetails = [
@@ -110,10 +113,12 @@ class JournalVoucherController extends BaseCrudApiController
 
             'relations' => [
                 'chartOfAccount',
+                'account',
             ],
 
             'relation_details' => [
                 'chartOfAccount' => 'chart_of_account_id',
+                'account' => 'account_id',
             ],
 
             'rules' => [
@@ -255,6 +260,18 @@ class JournalVoucherController extends BaseCrudApiController
             abort(422, 'Each journal voucher line must have either debit or credit.');
         }
 
+        $chartOfAccount = ChartOfAccount::query()->find($row['chart_of_account_id'] ?? null);
+
+        if (! $chartOfAccount) {
+            abort(422, 'Every journal voucher line must have a valid chart_of_account_id.');
+        }
+
+        if (! $chartOfAccount->account_id) {
+            abort(422, 'Selected chart of account is not linked to an account.');
+        }
+
+        $row['account_id'] = $chartOfAccount->account_id;
+
         return $row;
     }
 
@@ -321,5 +338,58 @@ class JournalVoucherController extends BaseCrudApiController
         if ($totals['debit'] !== $totals['credit']) {
             abort(422, 'Journal voucher is not balanced. Debit and credit totals must be equal.');
         }
+    }
+
+    protected function assertTransactionEditable(Model $record): void
+    {
+        if ((bool) ($record->void ?? false)) {
+            $this->throwValidation(['status' => ['Voided journal vouchers cannot be edited.']]);
+        }
+    }
+
+    protected function assertTransactionDestroyable(Model $record): void
+    {
+        if (($record->status ?? 'draft') === 'posted' || (bool) ($record->approved ?? false)) {
+            $this->throwValidation(['status' => ['Posted journal vouchers cannot be deleted. Void or reverse them first.']]);
+        }
+
+        if ((bool) ($record->void ?? false)) {
+            $this->throwValidation(['status' => ['Voided journal vouchers cannot be deleted.']]);
+        }
+    }
+
+    public function transactionApprove(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $posted = app(JournalVoucherService::class)->post(
+            $record,
+            $request->user()?->getAuthIdentifier()
+        );
+
+        return response()->json($this->serializeRecord($posted->load($this->validEagerLoadRelations($posted))));
+    }
+
+    public function transactionVoid(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'update', $record);
+        $this->assertRecordBranchAccess($request, $record);
+
+        $data = $this->validateCompat($request->all(), [
+            'voided_reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        $voided = app(JournalVoucherService::class)->void(
+            $record,
+            $data['voided_reason'],
+            $request->user()?->getAuthIdentifier()
+        );
+
+        return response()->json($this->serializeRecord($voided->load($this->validEagerLoadRelations($voided))));
     }
 }
