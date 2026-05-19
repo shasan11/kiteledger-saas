@@ -122,6 +122,9 @@ class SupplierPaymentController extends BaseCrudApiController
             $data['payment_no'] = null;
         }
 
+        $data['bank_charges'] = (float) ($data['bank_charges'] ?? 0);
+        $data['tds_charges'] = (float) ($data['tds_charges'] ?? 0);
+
         return parent::prepareIncomingPayload($data);
     }
 

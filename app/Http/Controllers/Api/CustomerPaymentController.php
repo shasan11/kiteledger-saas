@@ -101,6 +101,14 @@ class CustomerPaymentController extends BaseCrudApiController
         ];
     }
 
+    protected function prepareIncomingPayload(array $data): array
+    {
+        $data['bank_charges'] = (float) ($data['bank_charges'] ?? 0);
+        $data['tds_charges'] = (float) ($data['tds_charges'] ?? 0);
+
+        return parent::prepareIncomingPayload($data);
+    }
+
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
