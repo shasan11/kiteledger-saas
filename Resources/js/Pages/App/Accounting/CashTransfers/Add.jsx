@@ -13,6 +13,21 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
 const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
+const transferTotal = (items = []) => (Array.isArray(items) ? items : []).reduce((sum, row) => sum + toNumber(row?.amount), 0);
+const currencyLabel = (values = {}) => (
+    values.currency_id_detail?.code ||
+    values.currency_id_detail?.name ||
+    values.currency?.code ||
+    values.currency?.name ||
+    values.currency_name ||
+    ''
+);
+const formatMoney = (amount) => Number(toNumber(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TransferTotal = ({ values }) => (
+    <div style={{ marginTop: -4, fontWeight: 700, color: '#111827' }}>
+        Total {currencyLabel(values)} {formatMoney(transferTotal(values?.items))}
+    </div>
+);
 const formatDate = (v) => {
     if (!v) return null;
     if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
@@ -38,6 +53,7 @@ export default function CashTransferAdd(props) {
                 { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
             ],
         },
+        { name: 'transfer_total', label: '', type: 'custom', col: 24, render: TransferTotal },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
     ], []);
 

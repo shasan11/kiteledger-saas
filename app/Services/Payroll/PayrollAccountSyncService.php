@@ -111,7 +111,7 @@ class PayrollAccountSyncService
         return Account::query()->create([
             'name' => $this->employeeAccountName($employee),
             'code' => $this->employeeAccountCode($employee),
-            'nature' => 'liability',
+            'nature' => 'employee',
             'active' => true,
             'is_system_generated' => true,
             'user_add_id' => auth()->id(),
@@ -159,7 +159,7 @@ class PayrollAccountSyncService
             $account = Account::query()->create([
                 'name' => 'Payroll Payable',
                 'code' => 'PAYROLL-PAY',
-                'nature' => 'liability',
+                'nature' => 'coa',
                 'active' => true,
                 'is_system_generated' => true,
                 'user_add_id' => auth()->id(),

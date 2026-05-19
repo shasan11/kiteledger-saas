@@ -13,6 +13,25 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
 const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
+const lineTotals = (items = []) => {
+    const rows = Array.isArray(items) ? items : [];
+    const debit = rows.reduce((sum, row) => sum + toNumber(row?.debit), 0);
+    const credit = rows.reduce((sum, row) => sum + toNumber(row?.credit), 0);
+    const difference = Math.round((debit - credit) * 100) / 100;
+    return { debit, credit, difference };
+};
+const isBalanced = (items = []) => Math.abs(lineTotals(items).difference) < 0.01;
+const formatMoney = (amount) => Number(toNumber(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const DifferenceText = ({ values }) => {
+    const { difference } = lineTotals(values?.items);
+    const balanced = Math.abs(difference) < 0.01;
+
+    return (
+        <div style={{ marginTop: -4, fontWeight: 700, color: balanced ? '#15803d' : '#dc2626' }}>
+            Difference: {formatMoney(Math.abs(difference))}
+        </div>
+    );
+};
 const formatDate = (v) => {
     if (!v) return null;
     if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
@@ -39,12 +58,16 @@ export default function JournalVoucherAdd(props) {
                 { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '140px', min: 0 },
             ],
         },
+        { name: 'journal_difference', label: '', type: 'custom', col: 24, render: DifferenceText },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
     ], []);
 
     const validationSchema = useMemo(() => Yup.object().shape({
         voucher_date: Yup.mixed().required('Date is required'),
-        items: Yup.array().min(1, 'At least one journal line is required').required(),
+        items: Yup.array()
+            .min(1, 'At least one journal line is required')
+            .test('balanced', 'Journal voucher difference must be 0 before saving.', isBalanced)
+            .required(),
     }), []);
 
     const crudInitialValues = useMemo(() => ({

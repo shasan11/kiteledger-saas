@@ -154,6 +154,7 @@ export default function BankAccounts() {
     const [formKey, setFormKey] = useState(0);
     const [formMode, setFormMode] = useState('add');
     const [editId, setEditId] = useState(null);
+    const [companyName, setCompanyName] = useState('');
 
     const activeFilter = useMemo(() => {
         if (tabKey === 'inactive') return 'false';
@@ -228,6 +229,27 @@ export default function BankAccounts() {
     useEffect(() => {
         fetchRows({ page: 1 });
     }, [fetchRows]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        axios
+            .get(api('/api/app-settings/current'), { headers: getAuthHeaders() })
+            .then((response) => {
+                if (cancelled) return;
+
+                const settings = response.data?.data ?? response.data ?? {};
+                const name = settings.legal_name || settings.company_name || '';
+                setCompanyName(String(name || '').trim());
+            })
+            .catch(() => {
+                if (!cancelled) setCompanyName('');
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const openAddForm = () => {
         setFormMode('add');
@@ -514,7 +536,7 @@ export default function BankAccounts() {
         currency_name: '',
         description: '',
         bank_name: '',
-        account_name: '',
+        account_name: companyName,
         account_number: '',
         account_type: '',
         swift_code: '',

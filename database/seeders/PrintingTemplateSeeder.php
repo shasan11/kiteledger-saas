@@ -69,14 +69,12 @@ class PrintingTemplateSeeder extends Seeder
             'sales_return' => 'Sales Return',
             'credit_note' => 'Credit Note',
 
-            // Purchase / payment-out module
             'purchase_order' => 'Purchase Order',
             'purchase_bill' => 'Purchase Bill',
             'expense' => 'Expense Voucher',
             'supplier_payment' => 'Supplier Payment Voucher',
             'debit_note' => 'Debit Note',
 
-            // Accounting module
             'journal_voucher' => 'Journal Voucher',
             'cash_transfer' => 'Cash Transfer Voucher',
             'cheque_register' => 'Cheque Register',
@@ -84,7 +82,6 @@ class PrintingTemplateSeeder extends Seeder
             'loan_topup' => 'Loan Top Up',
             'loan_charge' => 'Loan Charge',
 
-            // Inventory / warehouse module
             'warehouse_transfer' => 'Warehouse Transfer',
             'inventory_adjustment' => 'Inventory Adjustment',
             'product' => 'Product Sheet',
@@ -386,13 +383,19 @@ HTML);
     private function wrap(string $label, string $body): string
     {
         return trim(<<<HTML
-<table style="width:100%; min-height:297mm; padding:28px 32px; background:#ffffff; color:#111827; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.45; box-sizing:border-box; border-collapse:collapse;">
+<table style="width:100%; min-height:297mm; background:#ffffff; color:#111827; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.45; box-sizing:border-box; border-collapse:collapse;">
     <tr>
-        <td style="vertical-align:top;">
+        <td style="padding:24px 30px; vertical-align:top;">
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="vertical-align:top;">
 {$this->companyHeaderHtml($label)}
 {$body}
 {$this->signatureHtml()}
 {$this->footerHtml()}
+                    </td>
+                </tr>
+            </table>
         </td>
     </tr>
 </table>
@@ -402,33 +405,78 @@ HTML);
     private function companyHeaderHtml(string $label): string
     {
         return <<<HTML
-<table style="width:100%; border-collapse:collapse; margin-bottom:16px; border-bottom:2px solid #111827;">
+<table style="width:100%; border-collapse:collapse; margin-bottom:18px; border-bottom:2px solid #111827;">
     <tr>
-        <td style="width:62%; padding:0 18px 14px 0; vertical-align:top;">
+        <td style="width:58%; padding:0 20px 16px 0; vertical-align:top;">
             <table style="width:100%; border-collapse:collapse;">
                 <tr>
-                    <td style="width:78px; vertical-align:top;">
-                        {{#company.logo}}<img src="{{company.logo}}" alt="{{company.name}}" style="display:block; max-width:68px; max-height:62px; object-fit:contain;">{{/company.logo}}
-                        {{^company.logo}}<span style="display:block; width:58px; height:58px; border:1px solid #111827; text-align:center; line-height:58px; font-size:16px; font-weight:800;">{{company.name}}</span>{{/company.logo}}
-                    </td>
                     <td style="vertical-align:top;">
-                        <strong style="display:block; font-size:19px; line-height:1.15; color:#111827;">{{company.name}}</strong>
-                        {{#company.legal_name}}<span style="display:block; color:#4b5563;">{{company.legal_name}}</span>{{/company.legal_name}}
-                        {{#company.address}}<span style="display:block; color:#4b5563;">{{company.address}}</span>{{/company.address}}
-                        <span style="display:block; color:#4b5563;">{{company.phone}}{{#company.email}} | {{company.email}}{{/company.email}}{{#company.website}} | {{company.website}}{{/company.website}}</span>
-                        <span style="display:block; color:#4b5563;">{{#company.pan_or_vat}}PAN/VAT: <strong style="color:#111827;">{{company.pan_or_vat}}</strong>{{/company.pan_or_vat}}{{#company.registration_number}} | Reg: {{company.registration_number}}{{/company.registration_number}}</span>
-                        {{#branch.name}}<span style="display:block; color:#4b5563;">Branch: <strong style="color:#111827;">{{branch.name}}</strong>{{#branch.address}} | {{branch.address}}{{/branch.address}}</span>{{/branch.name}}
+                        <div style="margin-bottom:8px;">
+                            {{#company.logo}}
+                                <img src="{{company.logo}}" alt="{{company.name}}" style="display:block; max-width:82px; max-height:70px; object-fit:contain; margin-bottom:7px;">
+                            {{/company.logo}}
+
+                            {{^company.logo}}
+                                <span style="display:block; width:72px; height:54px; border:1px solid #d1d5db; text-align:center; line-height:54px; font-size:11px; font-weight:700; color:#6b7280; margin-bottom:7px;">
+                                    LOGO
+                                </span>
+                            {{/company.logo}}
+
+                            <strong style="display:block; font-size:20px; line-height:1.15; color:#111827; font-weight:800;">
+                                {{company.name}}
+                            </strong>
+
+                            {{#company.legal_name}}
+                                <span style="display:block; margin-top:2px; color:#4b5563; font-size:11px;">
+                                    {{company.legal_name}}
+                                </span>
+                            {{/company.legal_name}}
+                        </div>
+
+                        {{#company.address}}
+                            <span style="display:block; color:#4b5563;">{{company.address}}</span>
+                        {{/company.address}}
+
+                        <span style="display:block; color:#4b5563;">
+                            {{company.phone}}{{#company.email}} | {{company.email}}{{/company.email}}{{#company.website}} | {{company.website}}{{/company.website}}
+                        </span>
+
+                        <span style="display:block; color:#4b5563;">
+                            {{#company.pan_or_vat}}PAN/VAT: <strong style="color:#111827;">{{company.pan_or_vat}}</strong>{{/company.pan_or_vat}}{{#company.registration_number}} | Reg: {{company.registration_number}}{{/company.registration_number}}
+                        </span>
+
+                        {{#branch.name}}
+                            <span style="display:block; color:#4b5563;">
+                                Branch: <strong style="color:#111827;">{{branch.name}}</strong>{{#branch.address}} | {{branch.address}}{{/branch.address}}
+                            </span>
+                        {{/branch.name}}
                     </td>
                 </tr>
             </table>
         </td>
-        <td style="width:38%; padding:0 0 14px 0; text-align:right; vertical-align:top;">
-            <h2 style="margin:0 0 10px 0; font-size:23px; line-height:1.05; font-weight:800; text-transform:uppercase; letter-spacing:0; color:#111827;">{$label}</h2>
+
+        <td style="width:42%; padding:0 0 16px 0; text-align:right; vertical-align:top;">
+            <h2 style="margin:0 0 10px 0; font-size:22px; line-height:1.1; font-weight:800; text-transform:uppercase; color:#111827;">
+                {$label}
+            </h2>
+
             <table style="width:100%; border-collapse:collapse; border:1px solid #111827;">
-                <tr><th style="width:42%; padding:5px 7px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Document No.</th><td style="padding:5px 7px; border:1px solid #d1d5db; text-align:right; font-weight:700;">{{document.number}}</td></tr>
-                <tr><th style="padding:5px 7px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Date</th><td style="padding:5px 7px; border:1px solid #d1d5db; text-align:right;">{{document.date}}</td></tr>
-                <tr><th style="padding:5px 7px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Status</th><td style="padding:5px 7px; border:1px solid #d1d5db; text-align:right;">{{document.status}}</td></tr>
-                <tr><th style="padding:5px 7px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Reference</th><td style="padding:5px 7px; border:1px solid #d1d5db; text-align:right;">{{document.reference}}</td></tr>
+                <tr>
+                    <th style="width:42%; padding:6px 8px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Document No.</th>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right; font-weight:700;">{{document.number}}</td>
+                </tr>
+                <tr>
+                    <th style="padding:6px 8px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Date</th>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right;">{{document.date}}</td>
+                </tr>
+                <tr>
+                    <th style="padding:6px 8px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Status</th>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right;">{{document.status}}</td>
+                </tr>
+                <tr>
+                    <th style="padding:6px 8px; border:1px solid #d1d5db; background:#f3f4f6; text-align:left;">Reference</th>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right;">{{document.reference}}</td>
+                </tr>
             </table>
         </td>
     </tr>
