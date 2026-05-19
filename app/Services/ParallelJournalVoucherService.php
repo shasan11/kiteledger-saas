@@ -900,11 +900,16 @@ class ParallelJournalVoucherService
         $account = Account::findOrFail($accountId);
         $coa = ChartOfAccount::where('account_id', $account->id)->first();
 
-        if (!$coa) {
-            throw new \RuntimeException("No ChartOfAccount linked to Account [{$account->id}] ({$account->name})");
+        if ($coa) {
+            return $coa;
         }
 
-        return $coa;
+        // Fallback: use nature-based default CoA when no direct link exists
+        return match ($account->nature) {
+            'bank'  => $this->accountResolver->getDefaultBankAccount(),
+            'cash'  => $this->accountResolver->getCashAccount(),
+            default => $this->accountResolver->getDefaultBankAccount(),
+        };
     }
 
     protected function createJournal(
