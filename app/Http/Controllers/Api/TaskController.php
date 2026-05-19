@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\AssignedTask;
+use App\Models\Milestone;
 use App\Models\Task;
+use App\Models\TaskStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -99,14 +101,14 @@ class TaskController extends BaseCrudApiController
 
     protected array $storeRules = [
         'project_id' => ['required', 'uuid', 'exists:projects,id'],
-        'milestone_id' => ['required', 'uuid', 'exists:milestones,id'],
-        'priority_id' => ['required', 'uuid', 'exists:priorities,id'],
+        'milestone_id' => ['nullable', 'uuid', 'exists:milestones,id'],
+        'priority_id' => ['nullable', 'uuid', 'exists:priorities,id'],
         'task_status_id' => ['required', 'uuid', 'exists:task_statuses,id'],
         'name' => ['required', 'string', 'max:180'],
         'start_date' => ['required', 'date'],
         'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-        'completion_time' => ['required', 'numeric', 'min:0'],
-        'description' => ['required', 'string'],
+        'completion_time' => ['nullable', 'numeric', 'min:0'],
+        'description' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
@@ -114,19 +116,102 @@ class TaskController extends BaseCrudApiController
 
     protected function updateRules(Request $request, Model $record): array
     {
+        $startDate = $request->input('start_date', $record->start_date?->format('Y-m-d'));
+        $endDate = $request->input('end_date', $record->end_date?->format('Y-m-d'));
+
         return [
             'project_id' => ['sometimes', 'required', 'uuid', 'exists:projects,id'],
-            'milestone_id' => ['sometimes', 'required', 'uuid', 'exists:milestones,id'],
-            'priority_id' => ['sometimes', 'required', 'uuid', 'exists:priorities,id'],
+            'milestone_id' => ['sometimes', 'nullable', 'uuid', 'exists:milestones,id'],
+            'priority_id' => ['sometimes', 'nullable', 'uuid', 'exists:priorities,id'],
             'task_status_id' => ['sometimes', 'required', 'uuid', 'exists:task_statuses,id'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
-            'start_date' => ['sometimes', 'required', 'date'],
-            'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:start_date'],
-            'completion_time' => ['sometimes', 'required', 'numeric', 'min:0'],
-            'description' => ['sometimes', 'required', 'string'],
+            'start_date' => [
+                'sometimes',
+                'required',
+                'date',
+                function ($attribute, $value, $fail) use ($endDate) {
+                    if ($endDate && strtotime((string) $value) > strtotime((string) $endDate)) {
+                        $fail('The start date must be before or equal to the end date.');
+                    }
+                },
+            ],
+            'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:' . $startDate],
+            'completion_time' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'description' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ($record->assignedTasks()->exists()) {
+            return response()->json([
+                'message' => 'Cannot delete this task because it has assignees.',
+            ], 422);
+        }
+
+        return parent::destroy($request, $id);
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $this->validateProjectScopedSelections($parentData, null);
+
+        if (!array_key_exists('completion_time', $parentData) || $parentData['completion_time'] === null) {
+            $parentData['completion_time'] = 0;
+        }
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+        $this->validateProjectScopedSelections($parentData, $record);
+
+        return $parentData;
+    }
+
+    protected function validateProjectScopedSelections(array $data, ?Task $task): void
+    {
+        $projectId = $data['project_id'] ?? $task?->project_id;
+
+        if (!$projectId) {
+            return;
+        }
+
+        if (!empty($data['milestone_id'])) {
+            $belongs = Milestone::query()
+                ->whereKey($data['milestone_id'])
+                ->where('project_id', $projectId)
+                ->exists();
+
+            if (!$belongs) {
+                $this->throwValidation([
+                    'milestone_id' => ['Selected milestone does not belong to this project.'],
+                ]);
+            }
+        }
+
+        if (!empty($data['task_status_id'])) {
+            $belongs = TaskStatus::query()
+                ->whereKey($data['task_status_id'])
+                ->where('project_id', $projectId)
+                ->exists();
+
+            if (!$belongs) {
+                $this->throwValidation([
+                    'task_status_id' => ['Selected task status does not belong to this project.'],
+                ]);
+            }
+        }
     }
 }

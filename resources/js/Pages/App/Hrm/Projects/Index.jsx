@@ -60,7 +60,7 @@ const fmtDate = (value) => {
   if (!value) return '-';
 
   const date = dayjs(value);
-  return date.isValid() ? date.format('YYYY-MM-DD') : '-';
+  return date.isValid() ? date.format('DD MMM YYYY') : '-';
 };
 
 const normalizeDate = (value) => {
@@ -280,7 +280,7 @@ export default function Projects(props) {
       name: 'name',
       label: 'Project Name',
       type: 'text',
-      required: true,
+      required: false,
       col: 24,
     },
     {
@@ -373,8 +373,7 @@ export default function Projects(props) {
 
     description: Yup.string()
       .trim()
-      .required('Description is required')
-      .min(10, 'Description must be at least 10 characters')
+      .nullable()
       .max(1000, 'Description cannot exceed 1000 characters'),
 
     active: Yup.boolean()
@@ -474,12 +473,7 @@ export default function Projects(props) {
     <AuthenticatedLayout auth={props.auth}>
       <Head title="Projects" />
 
-      <div
-        style={{
-          minHeight: 'calc(100vh - 64px)',
-          background: '#f5f5f5',
-        }}
-      >
+      <div style={{ minHeight: 'calc(100vh - 64px)' }}>
         <ReusableCrud
           icon={<ProjectOutlined />}
           title="Projects"
@@ -505,7 +499,7 @@ export default function Projects(props) {
             style: { cursor: 'pointer' },
           })}
           form_ui="modal"
-          modalWidth={500}
+          modalWidth={760}
           searchParam="search"
           pageParam="page"
           pageSizeParam="page_size"

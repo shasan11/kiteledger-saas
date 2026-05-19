@@ -8,7 +8,7 @@ use App\Models\PayrollSetting;
 class PayrollSettingController extends BaseCrudApiController
 {
     protected string $modelClass = PayrollSetting::class;
-    protected ?string $permissionPrefix = 'hrm.payroll';
+    protected ?string $permissionPrefix = 'hrm.payroll.settings';
     protected bool $branchScoped = true;
     protected array $relations = ['branch', 'currency'];
     protected array $relationDetails = ['branch' => 'branch_id', 'currency' => 'currency_id'];

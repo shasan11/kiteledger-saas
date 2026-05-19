@@ -71,19 +71,7 @@ export default function VariantAttributes(props) {
       col: 24,
       placeholder: 'e.g. Color, Size, Material',
     },
-    {
-      name: 'sort_order',
-      label: 'Sort Order',
-      type: 'number',
-      col: 12,
-      min: 0,
-    },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-      col: 12,
-    },
+   
        
     
     {
@@ -104,21 +92,7 @@ export default function VariantAttributes(props) {
           width: '3fr',
           placeholder: 'e.g. Red, Small, Cotton',
         },
-        {
-          key: 'sort_order',
-          name: 'sort_order',
-          label: 'Sort',
-          type: 'number',
-          width: '120px',
-          min: 0,
-        },
-        {
-          key: 'active',
-          name: 'active',
-          label: 'Active',
-          type: 'switch',
-          width: '120px',
-        },
+        
          
       ],
     },

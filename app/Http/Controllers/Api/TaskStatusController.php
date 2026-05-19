@@ -6,7 +6,6 @@ use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\TaskStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class TaskStatusController extends BaseCrudApiController
 {
@@ -76,5 +75,91 @@ class TaskStatusController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $this->ensureUniqueStatusName($parentData['project_id'] ?? null, $parentData['name'] ?? null);
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+        $this->ensureUniqueStatusName(
+            $parentData['project_id'] ?? $record->project_id,
+            $parentData['name'] ?? $record->name,
+            $record->getKey()
+        );
+
+        return $parentData;
+    }
+
+    protected function afterSave(
+        Model $record,
+        array $parentData,
+        array $nestedData,
+        bool $isUpdate
+    ): Model {
+        $record = parent::afterSave($record, $parentData, $nestedData, $isUpdate);
+        $this->normalizeSortOrder($record->project_id);
+
+        return $record;
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ($record->tasks()->exists()) {
+            return response()->json([
+                'message' => 'Cannot delete this status because tasks are using it.',
+            ], 422);
+        }
+
+        return parent::destroy($request, $id);
+    }
+
+    protected function normalizeSortOrder(string $projectId): void
+    {
+        TaskStatus::query()
+            ->where('project_id', $projectId)
+            ->orderBy('sort_order')
+            ->orderBy('created_at')
+            ->get()
+            ->values()
+            ->each(function (TaskStatus $status, int $index) {
+                $expected = $index + 1;
+
+                if ((int) $status->sort_order !== $expected) {
+                    $status->forceFill(['sort_order' => $expected])->saveQuietly();
+                }
+            });
+    }
+
+    protected function ensureUniqueStatusName(?string $projectId, ?string $name, ?string $ignoreId = null): void
+    {
+        if (!$projectId || !$name) {
+            return;
+        }
+
+        $query = TaskStatus::query()
+            ->where('project_id', $projectId)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)]);
+
+        if ($ignoreId) {
+            $query->whereKeyNot($ignoreId);
+        }
+
+        if ($query->exists()) {
+            $this->throwValidation([
+                'name' => ['This status name already exists for this project.'],
+            ]);
+        }
     }
 }

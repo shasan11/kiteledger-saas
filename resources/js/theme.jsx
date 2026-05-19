@@ -763,6 +763,7 @@ const mergeDarkTheme = () => {
 
 const applyBrandSettings = (config, settings = null, mode = 'light') => {
   const brand = createDynamicBrand(settings || {}, mode);
+  const explicitTextColor = normalizeHexColor(settings?.brand_text_color);
 
   return {
     ...config,
@@ -783,7 +784,7 @@ const applyBrandSettings = (config, settings = null, mode = 'light') => {
       colorError: brand.error,
       colorInfo: brand.info,
 
-      colorText: brand.mainText,
+      colorText: explicitTextColor || config.token.colorText,
     },
 
     components: {

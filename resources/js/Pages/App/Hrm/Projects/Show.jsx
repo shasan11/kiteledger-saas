@@ -73,10 +73,9 @@ const { Paragraph, Text, Title } = Typography;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
-const UNASSIGNED_STATUS_ID = 'unassigned';
 
 const PROJECT_STATUSES = ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ON_HOLD'];
-const MILESTONE_STATUSES = ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+const MILESTONE_STATUSES = ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ON_HOLD'];
 
 const STATUS_COLORS = {
   PENDING: 'default',
@@ -86,7 +85,7 @@ const STATUS_COLORS = {
   ON_HOLD: 'orange',
 };
 
-const COMPLETED_STATUS_NAMES = ['COMPLETED', 'DONE', 'FINISHED', 'CLOSED', 'RESOLVED'];
+const COMPLETED_STATUS_NAMES = ['COMPLETED', 'COMPLETE', 'DONE', 'FINISHED', 'CLOSED', 'RESOLVED'];
 const IN_PROGRESS_STATUS_NAMES = ['IN_PROGRESS', 'IN PROGRESS', 'DOING', 'STARTED', 'ACTIVE'];
 
 const childMeta = {
@@ -101,16 +100,24 @@ const childMeta = {
 const toArray = (value) => (Array.isArray(value) ? value : []);
 const humanize = (value) => (value ? String(value).replace(/_/g, ' ') : '-');
 const normalizeText = (value) => String(value || '').replace(/[_-]/g, ' ').trim().toUpperCase();
-const formatDate = (value) => (value ? dayjs(value).format('DD-MM-YYYY') : '-');
+const formatDate = (value) => (value ? dayjs(value).format('DD MMM YYYY') : '-');
 const dateValue = (value) => (value ? dayjs(value).format('YYYY-MM-DD') : null);
 const collection = (payload) => payload?.results || payload?.data || (Array.isArray(payload) ? payload : []);
 const relationLabel = (record, fallback = '-') => record?.name || record?.project_team_name || record?.label || fallback;
+const apiErrorMessage = (error, fallback = 'Something went wrong.') => {
+  const data = error?.response?.data;
 
-const normalizeDropStatusId = (value) => (
-  value === null || value === undefined || value === ''
-    ? UNASSIGNED_STATUS_ID
-    : String(value)
-);
+  if (data?.message) return data.message;
+
+  if (data && typeof data === 'object') {
+    const firstFieldError = Object.values(data)[0];
+
+    if (Array.isArray(firstFieldError)) return firstFieldError[0];
+    if (typeof firstFieldError === 'string') return firstFieldError;
+  }
+
+  return fallback;
+};
 
 const kanbanCollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -222,23 +229,23 @@ function WorkCard({ label, value, icon, children }) {
   );
 }
 
-function ActionMenu({ onEdit, onDelete }) {
+function ActionMenu({ onEdit, onDelete, disabled = false }) {
   return (
     <Dropdown
       trigger={['click']}
       menu={{
         items: [
-          { key: 'edit', label: 'Edit', icon: <EditOutlined />, onClick: onEdit },
-          { key: 'delete', danger: true, label: 'Delete', icon: <DeleteOutlined />, onClick: onDelete },
+          { key: 'edit', label: 'Edit', icon: <EditOutlined />, disabled, onClick: onEdit },
+          { key: 'delete', danger: true, label: 'Delete', icon: <DeleteOutlined />, disabled, onClick: onDelete },
         ],
       }}
     >
-      <Button type="text" icon={<MoreOutlined />} />
+      <Button type="text" icon={<MoreOutlined />} disabled={disabled} />
     </Dropdown>
   );
 }
 
-function KanbanColumn({ column, tasks, children, onAddTask }) {
+function KanbanColumn({ column, tasks, children, onAddTask, disabled = false }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `column-${column.id}`,
     data: {
@@ -265,6 +272,7 @@ function KanbanColumn({ column, tasks, children, onAddTask }) {
             size="small"
             type="text"
             icon={<PlusOutlined />}
+            disabled={disabled}
             onClick={() => onAddTask(column.id)}
           />
         </Tooltip>
@@ -284,7 +292,7 @@ function KanbanColumn({ column, tasks, children, onAddTask }) {
   );
 }
 
-function TaskCard({ task, onOpen }) {
+function TaskCard({ task, onOpen, dragDisabled = false }) {
   const status = getTaskStatus(task);
   const assignees = getTaskAssignees(task);
   const overdue = isOverdueTask(task);
@@ -300,10 +308,11 @@ function TaskCard({ task, onOpen }) {
     isDragging,
   } = useSortable({
     id: `task-${task.id}`,
+    disabled: dragDisabled,
     data: {
       type: 'task',
       taskId: task.id,
-      statusId: normalizeDropStatusId(statusIdOf(task)),
+      statusId: statusIdOf(task) ? String(statusIdOf(task)) : null,
     },
   });
 
@@ -327,8 +336,9 @@ function TaskCard({ task, onOpen }) {
             size="small"
             className="project-show__task-drag-handle"
             icon={<HolderOutlined />}
-            {...attributes}
-            {...listeners}
+            disabled={dragDisabled}
+            {...(!dragDisabled ? attributes : {})}
+            {...(!dragDisabled ? listeners : {})}
             onClick={(event) => event.stopPropagation()}
           />
 
@@ -414,6 +424,8 @@ export default function ProjectShow({ auth, id }) {
   );
 
   const tasks = localTasks;
+  const projectInactive = project?.active === false;
+  const hasTaskStatuses = taskStatuses.length > 0;
 
   const teams = toArray(project?.project_teams || project?.projectTeams);
 
@@ -435,6 +447,21 @@ export default function ProjectShow({ auth, id }) {
   const inProgressTasks = tasks.filter(isInProgressTask);
   const overdueTasks = tasks.filter(isOverdueTask);
   const progressPercent = tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
+  const currentUserId = auth?.user?.id;
+  const myTasks = currentUserId
+    ? tasks.filter((task) => getTaskAssignees(task).some((assignee) => String(assignee.user_id || assignee.user?.id) === String(currentUserId)))
+    : [];
+  const projectHealth = (() => {
+    const projectDone = normalizeText(project?.status) === 'COMPLETED';
+    const projectOverdue = project?.end_date && dayjs(project.end_date).isBefore(dayjs(), 'day') && !projectDone;
+    const projectDueSoon = project?.end_date && dayjs(project.end_date).diff(dayjs(), 'day') <= 7 && !projectDone;
+
+    if (projectOverdue) return { label: 'Delayed', color: 'red' };
+    if (overdueTasks.length || projectDueSoon) return { label: 'At Risk', color: 'orange' };
+    if (progressPercent > 70) return { label: 'Good', color: 'green' };
+
+    return { label: 'At Risk', color: 'orange' };
+  })();
 
   const optionUsers = users.map((user) => ({ label: getUserLabel(user), value: user.id }));
   const optionPriorities = priorities.map((priority) => ({ label: priority.name, value: priority.id }));
@@ -469,7 +496,7 @@ export default function ProjectShow({ auth, id }) {
       setProject(data);
       setLocalTasks(toArray(data?.tasks));
     } catch (error) {
-      message.error(error?.response?.data?.message || 'Unable to load project.');
+      message.error(apiErrorMessage(error, 'Unable to load project.'));
     } finally {
       setLoading(false);
     }
@@ -487,31 +514,19 @@ export default function ProjectShow({ auth, id }) {
 
   useEffect(() => {
     loadProject();
-    loadLookups().catch(() => null);
+    loadLookups().catch((error) => {
+      message.error(apiErrorMessage(error, 'Unable to load project lookups.'));
+    });
   }, [id]);
 
   const columnsForBoard = useMemo(() => {
-    const statusColumns = taskStatuses.map((status) => ({
+    return taskStatuses.map((status) => ({
       id: String(status.id),
       statusId: status.id,
       name: status.name,
       color: status.color || token.colorPrimary,
     }));
-
-    const hasUnassigned = tasks.some((task) => !statusIdOf(task));
-
-    return hasUnassigned
-      ? [
-          ...statusColumns,
-          {
-            id: UNASSIGNED_STATUS_ID,
-            statusId: null,
-            name: 'Unassigned',
-            color: token.colorTextTertiary,
-          },
-        ]
-      : statusColumns;
-  }, [taskStatuses, tasks, token.colorPrimary, token.colorTextTertiary]);
+  }, [taskStatuses, token.colorPrimary]);
 
   const filteredTasks = useMemo(() => {
     const query = searchText.trim().toLowerCase();
@@ -531,10 +546,10 @@ export default function ProjectShow({ auth, id }) {
     const grouped = new Map(columnsForBoard.map((column) => [column.id, []]));
 
     filteredTasks.forEach((task) => {
-      const key = statusIdOf(task) ? String(statusIdOf(task)) : UNASSIGNED_STATUS_ID;
+      const key = statusIdOf(task) ? String(statusIdOf(task)) : null;
 
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
+      if (!key || !grouped.has(key)) {
+        return;
       }
 
       grouped.get(key).push(task);
@@ -591,7 +606,7 @@ export default function ProjectShow({ auth, id }) {
       setProjectOpen(false);
       loadProject();
     } catch (error) {
-      message.error(error?.response?.data?.message || 'Unable to save project.');
+      message.error(apiErrorMessage(error, 'Unable to save project.'));
     } finally {
       setSaving(false);
     }
@@ -606,7 +621,7 @@ export default function ProjectShow({ auth, id }) {
       message.success(successText);
       loadProject();
     } catch (error) {
-      message.error(error?.response?.data?.message || 'Unable to update project.');
+      message.error(apiErrorMessage(error, 'Unable to update project.'));
     } finally {
       setSaving(false);
     }
@@ -674,6 +689,16 @@ export default function ProjectShow({ auth, id }) {
   });
 
   const openChildEditor = (type, row = null, overrides = {}) => {
+    if (projectInactive) {
+      message.warning('Make the project active before changing project items.');
+      return;
+    }
+
+    if (type === 'task' && !hasTaskStatuses) {
+      message.warning('Create a task status first.');
+      return;
+    }
+
     setChildType(type);
     setEditingChild(row);
 
@@ -686,7 +711,7 @@ export default function ProjectShow({ auth, id }) {
 
   const openTaskForStatus = (statusId) => {
     openChildEditor('task', null, {
-      task_status_id: statusId === UNASSIGNED_STATUS_ID ? undefined : statusId,
+      task_status_id: statusId,
       milestone_id: selectedMilestone !== 'all' ? selectedMilestone : milestones[0]?.id,
     });
   };
@@ -708,6 +733,12 @@ export default function ProjectShow({ auth, id }) {
         payload.project_id = project.id;
       }
 
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === '') {
+          payload[key] = null;
+        }
+      });
+
       const url = editingChild ? `${meta.endpoint}/${editingChild.id}` : meta.endpoint;
       const method = editingChild ? 'patch' : 'post';
 
@@ -722,7 +753,7 @@ export default function ProjectShow({ auth, id }) {
 
       loadProject();
     } catch (error) {
-      message.error(error?.response?.data?.message || `Unable to save ${meta.title.toLowerCase()}.`);
+      message.error(apiErrorMessage(error, `Unable to save ${meta.title.toLowerCase()}.`));
     } finally {
       setSaving(false);
     }
@@ -737,20 +768,27 @@ export default function ProjectShow({ auth, id }) {
       okText: 'Delete',
       okButtonProps: { danger: true },
       onOk: async () => {
-        await axios.delete(api(`${meta.endpoint}/${row.id}`));
+        try {
+          await axios.delete(api(`${meta.endpoint}/${row.id}`));
 
-        message.success(`${meta.title} deleted.`);
+          message.success(`${meta.title} deleted.`);
 
-        if (type === 'task' && selectedTask?.id === row.id) {
-          setSelectedTask(null);
+          if (type === 'task' && selectedTask?.id === row.id) {
+            setSelectedTask(null);
+          }
+
+          loadProject();
+        } catch (error) {
+          message.error(apiErrorMessage(error, `Unable to delete ${meta.title.toLowerCase()}.`));
+          throw error;
         }
-
-        loadProject();
       },
     });
   };
 
   const moveTaskStatus = async (row, direction) => {
+    if (projectInactive) return;
+
     const ordered = taskStatuses.map((status, index) => ({
       ...status,
       sort_order: statusOrderOf(status, index + 1),
@@ -788,7 +826,7 @@ export default function ProjectShow({ auth, id }) {
       loadProject();
     } catch (error) {
       updateProjectTaskStatuses(() => previousStatuses);
-      message.error(error?.response?.data?.message || 'Unable to update status order.');
+      message.error(apiErrorMessage(error, 'Unable to update status order.'));
     }
   };
 
@@ -798,32 +836,33 @@ export default function ProjectShow({ auth, id }) {
     const data = over.data?.current;
 
     if (data?.type === 'column') {
-      return normalizeDropStatusId(data.statusId);
+      return data.statusId ? String(data.statusId) : null;
     }
 
     if (data?.type === 'task') {
       const overTask = tasks.find((task) => String(task.id) === String(data.taskId));
 
-      return normalizeDropStatusId(statusIdOf(overTask));
+      return statusIdOf(overTask) ? String(statusIdOf(overTask)) : null;
     }
 
     const idValue = String(over.id || '');
 
     if (idValue.startsWith('column-')) {
-      return normalizeDropStatusId(idValue.replace('column-', ''));
+      return idValue.replace('column-', '');
     }
 
     if (idValue.startsWith('task-')) {
       const overTaskId = idValue.replace('task-', '');
       const overTask = tasks.find((task) => String(task.id) === String(overTaskId));
 
-      return normalizeDropStatusId(statusIdOf(overTask));
+      return statusIdOf(overTask) ? String(statusIdOf(overTask)) : null;
     }
 
     return null;
   };
 
   const handleDragEnd = async ({ active, over }) => {
+    if (projectInactive) return;
     if (!over) return;
 
     const taskId = String(active.id).replace('task-', '');
@@ -835,20 +874,18 @@ export default function ProjectShow({ auth, id }) {
 
     if (!targetStatus) return;
 
-    const oldStatusId = normalizeDropStatusId(statusIdOf(task));
+    const oldStatusId = statusIdOf(task) ? String(statusIdOf(task)) : null;
 
     if (oldStatusId === targetStatus) return;
 
-    const newStatus = targetStatus === UNASSIGNED_STATUS_ID
-      ? null
-      : taskStatuses.find((status) => String(status.id) === String(targetStatus));
+    const newStatus = taskStatuses.find((status) => String(status.id) === String(targetStatus));
 
-    if (targetStatus !== UNASSIGNED_STATUS_ID && !newStatus) {
+    if (!newStatus) {
       message.error('Invalid target status.');
       return;
     }
 
-    const newStatusId = newStatus?.id ?? null;
+    const newStatusId = newStatus.id;
     const previousTasks = tasks;
 
     setLocalTasks((current) => current.map((item) => (
@@ -872,18 +909,7 @@ export default function ProjectShow({ auth, id }) {
     } catch (error) {
       setLocalTasks(previousTasks);
 
-      const data = error?.response?.data;
-      const firstFieldError = data && typeof data === 'object'
-        ? Object.entries(data)?.[0]
-        : null;
-
-      const errorMessage =
-        data?.message ||
-        data?.detail ||
-        (firstFieldError ? `${firstFieldError[0]}: ${Array.isArray(firstFieldError[1]) ? firstFieldError[1].join(', ') : firstFieldError[1]}` : null) ||
-        'Unable to move task.';
-
-      message.error(errorMessage);
+      message.error(apiErrorMessage(error, 'Unable to move task.'));
     }
   };
 
@@ -913,7 +939,7 @@ export default function ProjectShow({ auth, id }) {
             <Select options={MILESTONE_STATUSES.map((value) => ({ label: humanize(value), value }))} />
           </Form.Item>
 
-          <Form.Item name="description" label="Description" rules={[{ required: true }]}>
+          <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
           </Form.Item>
 
@@ -961,14 +987,14 @@ export default function ProjectShow({ auth, id }) {
 
           <Row gutter={12}>
             <Col xs={24} md={8}>
-              <Form.Item name="milestone_id" label="Milestone" rules={[{ required: true }]}>
-                <Select options={optionMilestones} showSearch optionFilterProp="label" />
+              <Form.Item name="milestone_id" label="Milestone">
+                <Select allowClear options={optionMilestones} showSearch optionFilterProp="label" />
               </Form.Item>
             </Col>
 
             <Col xs={24} md={8}>
-              <Form.Item name="priority_id" label="Priority" rules={[{ required: true }]}>
-                <Select options={optionPriorities} showSearch optionFilterProp="label" />
+              <Form.Item name="priority_id" label="Priority">
+                <Select allowClear options={optionPriorities} showSearch optionFilterProp="label" />
               </Form.Item>
             </Col>
 
@@ -993,13 +1019,13 @@ export default function ProjectShow({ auth, id }) {
             </Col>
 
             <Col xs={24} md={8}>
-              <Form.Item name="completion_time" label="Completion Time" rules={[{ required: true }]}>
+              <Form.Item name="completion_time" label="Completion Time">
                 <InputNumber min={0} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item name="description" label="Description" rules={[{ required: true }]}>
+          <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
           </Form.Item>
 
@@ -1139,6 +1165,7 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('milestone', row)}
             onDelete={() => deleteChild('milestone', row)}
+            disabled={projectInactive}
           />
         ),
       },
@@ -1156,7 +1183,7 @@ export default function ProjectShow({ auth, id }) {
               <Button
                 size="small"
                 onClick={() => moveTaskStatus(row, 'up')}
-                disabled={index === 0}
+                disabled={projectInactive || index === 0}
               >
                 Up
               </Button>
@@ -1166,7 +1193,7 @@ export default function ProjectShow({ auth, id }) {
               <Button
                 size="small"
                 onClick={() => moveTaskStatus(row, 'down')}
-                disabled={index === taskStatuses.length - 1}
+                disabled={projectInactive || index === taskStatuses.length - 1}
               >
                 Down
               </Button>
@@ -1198,6 +1225,7 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('taskStatus', row)}
             onDelete={() => deleteChild('taskStatus', row)}
+            disabled={projectInactive}
           />
         ),
       },
@@ -1265,6 +1293,7 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('task', row)}
             onDelete={() => deleteChild('task', row)}
+            disabled={projectInactive}
           />
         ),
       },
@@ -1293,6 +1322,7 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('team', row)}
             onDelete={() => deleteChild('team', row)}
+            disabled={projectInactive}
           />
         ),
       },
@@ -1319,6 +1349,7 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('teamMember', row)}
             onDelete={() => deleteChild('teamMember', row)}
+            disabled={projectInactive}
           />
         ),
       },
@@ -1345,11 +1376,12 @@ export default function ProjectShow({ auth, id }) {
           <ActionMenu
             onEdit={() => openChildEditor('assignee', row)}
             onDelete={() => deleteChild('assignee', row)}
+            disabled={projectInactive}
           />
         ),
       },
     ],
-  }), [tasks, teams, taskStatuses]);
+  }), [tasks, teams, taskStatuses, projectInactive]);
 
   const boardTab = (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -1422,11 +1454,13 @@ export default function ProjectShow({ auth, id }) {
                   column={column}
                   tasks={columnTasks}
                   onAddTask={openTaskForStatus}
+                  disabled={projectInactive}
                 >
                   {columnTasks.map((task) => (
                     <TaskCard
                       key={task.id}
                       task={task}
+                      dragDisabled={projectInactive}
                       onOpen={() => setSelectedTask(task)}
                     />
                   ))}
@@ -1436,7 +1470,16 @@ export default function ProjectShow({ auth, id }) {
           </div>
         </DndContext>
       ) : (
-        <Empty description="Add task statuses to build the board" />
+        <Empty description="Create task statuses first.">
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={projectInactive}
+            onClick={() => openChildEditor('taskStatus')}
+          >
+            Add Status
+          </Button>
+        </Empty>
       )}
     </Space>
   );
@@ -1447,6 +1490,7 @@ export default function ProjectShow({ auth, id }) {
         <Button
           type="primary"
           icon={<PlusOutlined />}
+          disabled={projectInactive}
           onClick={() => openChildEditor('milestone')}
         >
           Add Milestone
@@ -1531,6 +1575,7 @@ export default function ProjectShow({ auth, id }) {
                 size="small"
                 type="primary"
                 icon={<PlusOutlined />}
+                disabled={projectInactive}
                 onClick={() => openChildEditor('team')}
               >
                 Add
@@ -1556,6 +1601,7 @@ export default function ProjectShow({ auth, id }) {
                 size="small"
                 type="primary"
                 icon={<PlusOutlined />}
+                disabled={projectInactive}
                 onClick={() => openChildEditor('teamMember')}
               >
                 Add
@@ -1581,6 +1627,7 @@ export default function ProjectShow({ auth, id }) {
                 size="small"
                 type="primary"
                 icon={<UserAddOutlined />}
+                disabled={projectInactive}
                 onClick={() => openChildEditor('assignee')}
               >
                 Add
@@ -1628,6 +1675,7 @@ export default function ProjectShow({ auth, id }) {
         <Button
           type="primary"
           icon={<PlusOutlined />}
+          disabled={projectInactive}
           onClick={() => openChildEditor('taskStatus')}
         >
           Add Status
@@ -1914,6 +1962,7 @@ export default function ProjectShow({ auth, id }) {
 
                 <StatusTag value={project.status} />
                 <ActiveTag value={project.active} />
+                <Tag color={projectHealth.color}>{projectHealth.label}</Tag>
               </Space>
 
               <Space className="project-show__header-actions" wrap>
@@ -1921,7 +1970,12 @@ export default function ProjectShow({ auth, id }) {
                   Edit Project
                 </Button>
 
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => openChildEditor('task')}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  disabled={projectInactive || !hasTaskStatuses}
+                  onClick={() => openChildEditor('task')}
+                >
                   Add Task
                 </Button>
               </Space>
@@ -2006,6 +2060,7 @@ export default function ProjectShow({ auth, id }) {
                           <Button
                             type="primary"
                             icon={<PlusOutlined />}
+                            disabled={projectInactive || !hasTaskStatuses}
                             onClick={() => openChildEditor('task')}
                           >
                             Add Task
@@ -2019,6 +2074,51 @@ export default function ProjectShow({ auth, id }) {
                           dataSource={tasks}
                           columns={tableColumns.tasks}
                           scroll={{ x: 1100 }}
+                        />
+                      </Card>
+                    ),
+                  },
+                  {
+                    key: 'my-tasks',
+                    label: 'My Tasks',
+                    children: (
+                      <Card bordered={false}>
+                        <Table
+                          size="small"
+                          rowKey="id"
+                          pagination={{ pageSize: 10 }}
+                          dataSource={myTasks}
+                          columns={[
+                            {
+                              title: 'Task',
+                              dataIndex: 'name',
+                              render: (value) => <Text strong>{value}</Text>,
+                            },
+                            {
+                              title: 'Status',
+                              render: (_, row) => getTaskStatus(row)?.name
+                                ? <Tag color={getTaskStatus(row)?.color || 'blue'}>{getTaskStatus(row)?.name}</Tag>
+                                : '-',
+                            },
+                            {
+                              title: 'Priority',
+                              render: (_, row) => row.priority?.name
+                                ? <Tag color={row.priority.color || 'default'}>{row.priority.name}</Tag>
+                                : '-',
+                            },
+                            {
+                              title: 'Due',
+                              dataIndex: 'end_date',
+                              render: (value, row) => (
+                                <Space size={6}>
+                                  <Text type={isOverdueTask(row) ? 'danger' : undefined}>
+                                    {formatDate(value)}
+                                  </Text>
+                                  {isOverdueTask(row) ? <Tag color="red">Overdue</Tag> : null}
+                                </Space>
+                              ),
+                            },
+                          ]}
                         />
                       </Card>
                     ),
@@ -2049,6 +2149,7 @@ export default function ProjectShow({ auth, id }) {
           <Space>
             <Button
               icon={<EditOutlined />}
+              disabled={projectInactive}
               onClick={() => openChildEditor('task', selectedTaskFresh)}
             >
               Edit Task
@@ -2057,6 +2158,7 @@ export default function ProjectShow({ auth, id }) {
             <Button
               danger
               icon={<DeleteOutlined />}
+              disabled={projectInactive}
               onClick={() => deleteChild('task', selectedTaskFresh)}
             >
               Delete
@@ -2171,7 +2273,7 @@ export default function ProjectShow({ auth, id }) {
             </Col>
           </Row>
 
-          <Form.Item name="description" label="Description" rules={[{ required: true }]}>
+          <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} />
           </Form.Item>
 

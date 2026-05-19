@@ -624,7 +624,9 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
 
     Route::prefix('payroll')->name('hrm.payroll.')->group(function () {
         Route::get('dashboard', [PayrollRunController::class, 'dashboard']);
+        Route::post('sync-accounts', [PayrollRunController::class, 'syncAccounts']);
 
+        // payrolls is the canonical payroll run endpoint; runs remains a backward-compatible alias.
         Route::post('payrolls/generate', [PayrollRunController::class, 'generate']);
         Route::post('payrolls/{id}/approve', [PayrollRunController::class, 'approve']);
         Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);

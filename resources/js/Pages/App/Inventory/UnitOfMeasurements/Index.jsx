@@ -49,28 +49,23 @@ export default function UnitOfMeasurements(props) {
       label: 'Unit Name',
       type: 'text',
       required: true,
-      col: 12,
+      col: 24,
       placeholder: 'e.g. Kilogram',
     },
     {
       name: 'short_name',
       label: 'Short Name / Symbol',
       type: 'text',
-      col: 12,
+      col: 24,
       placeholder: 'e.g. kg',
     },
     {
       name: 'accept_fractional',
       label: 'Allow Fractional Quantity',
       type: 'switch',
-      col: 12,
+      col: 24,
     },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-      col: 12,
-    },
+    
   ];
 
   const validationSchema = Yup.object().shape({
@@ -118,7 +113,7 @@ export default function UnitOfMeasurements(props) {
         crudInitialValues={crudInitialValues}
         transformPayload={transformPayload}
         form_ui="modal"
-        modalWidth={700}
+        modalWidth={500}
         searchParam="search"
         pageParam="page"
         pageSizeParam="page_size"

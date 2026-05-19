@@ -26,7 +26,10 @@ use Illuminate\Support\Str;
 
 class PayrollService
 {
-    public function __construct(private readonly PayrollCalculationService $calculator)
+    public function __construct(
+        private readonly PayrollCalculationService $calculator,
+        private readonly PayrollAccountSyncService $accountSync
+    )
     {
     }
 
@@ -340,17 +343,34 @@ class PayrollService
                 return $payroll->journalVoucher;
             }
 
+            $existingVoucher = JournalVoucher::query()
+                ->where('source_type', Payroll::class)
+                ->where('source_id', $payroll->id)
+                ->first();
+
+            if ($existingVoucher) {
+                $payroll->update(['journal_voucher_id' => $existingVoucher->id]);
+                $payroll->payslips()->update(['journal_voucher_id' => $existingVoucher->id]);
+
+                return $existingVoucher->fresh('items.account', 'items.chartOfAccount');
+            }
+
             if (! in_array($payroll->status, ['approved', 'processed'], true)) {
                 abort(422, 'Journal voucher can only be generated for an approved payroll.');
             }
+
+            $this->syncPayrollEmployeeAccounts($payroll);
+            $payroll = Payroll::query()->with(['sourceAccount', 'payslips.employee.payrollAccount.chartOfAccounts', 'payslips.lines.component'])->lockForUpdate()->findOrFail($payroll->id);
 
             $settings = $this->settings($payroll->branch_id);
             if (! $settings->salary_expense_account_id) {
                 abort(422, 'Payroll salary expense account is not configured.');
             }
 
+            $this->assertSourceAccountReady($payroll->sourceAccount);
+            $this->assertPayrollAccountsReady($payroll);
+
             $items = [];
-            $totalDebit = 0.0;
 
             $expenseByChartAccount = $payroll->payslips
                 ->flatMap->lines
@@ -366,19 +386,9 @@ class PayrollService
                 $items[] = [
                     'chart_of_account_id' => $chartAccountId,
                     'description' => "Payroll expense {$payroll->payroll_number}",
-                    'debit' => number_format($amount, 2, '.', ''),
+                    'debit' => $this->baseAmount($amount, $payroll->exchange_rate),
                     'credit' => 0,
                 ];
-                $totalDebit += $amount;
-            }
-
-            foreach ($payroll->payslips as $payslip) {
-                $account = $payslip->employee?->payrollAccount;
-                if (! $account) {
-                    abort(422, "Employee {$payslip->employee?->display_name} is missing payroll account.");
-                }
-
-                $items[] = $this->accountLine($account, "Net salary payable {$payslip->payslip_number}", 0, (float) $payslip->net_payable);
             }
 
             $deductionTotal = (float) $payroll->payslips
@@ -386,26 +396,44 @@ class PayrollService
                 ->where('type', 'deduction')
                 ->sum('amount');
 
-            if ($deductionTotal > 0 && $settings->salary_payable_account_id) {
+            $deductionPayableAccountId = $settings->tax_payable_account_id ?: $settings->salary_payable_account_id;
+            if ($deductionTotal > 0) {
+                if (! $deductionPayableAccountId) {
+                    abort(422, 'Payroll deduction payable account is not configured.');
+                }
+
                 $items[] = [
-                    'chart_of_account_id' => $settings->salary_payable_account_id,
+                    'chart_of_account_id' => $deductionPayableAccountId,
                     'description' => "Payroll deductions payable {$payroll->payroll_number}",
                     'debit' => 0,
-                    'credit' => number_format($deductionTotal, 2, '.', ''),
+                    'credit' => $this->baseAmount($deductionTotal, $payroll->exchange_rate),
                 ];
             }
 
-            $sourceAccount = $payroll->sourceAccount;
-            if (! $sourceAccount) {
-                abort(422, 'Payment From Account is required before payroll journal posting.');
+            $employerContributionTotal = (float) $payroll->payslips
+                ->flatMap->lines
+                ->where('type', 'employer_contribution')
+                ->sum('amount');
+
+            if ($employerContributionTotal > 0) {
+                if (! $settings->benefit_payable_account_id) {
+                    abort(422, 'Payroll employer contribution payable account is not configured.');
+                }
+
+                $items[] = [
+                    'chart_of_account_id' => $settings->benefit_payable_account_id,
+                    'description' => "Employer contributions payable {$payroll->payroll_number}",
+                    'debit' => 0,
+                    'credit' => $this->baseAmount($employerContributionTotal, $payroll->exchange_rate),
+                ];
             }
 
-            foreach ($payroll->payslips as $payslip) {
-                $items[] = $this->accountLine($payslip->employee->payrollAccount, "Salary settlement {$payslip->payslip_number}", (float) $payslip->net_payable, 0);
-                $totalDebit += (float) $payslip->net_payable;
-            }
+            // This application posts payroll processing as one direct-payment voucher:
+            // Dr salary/component expenses, Cr bank for net pay, Cr statutory/payable deductions.
+            $items[] = $this->accountLine($payroll->sourceAccount, "Payroll payment {$payroll->payroll_number}", 0, (float) $payroll->total_net_payable, (float) $payroll->exchange_rate);
 
-            $items[] = $this->accountLine($sourceAccount, "Payroll payment {$payroll->payroll_number}", 0, (float) $payroll->total_net_payable);
+            $items = $this->balanceJournalItems($items);
+            $totalDebit = collect($items)->sum(fn ($item) => (float) $item['debit']);
 
             $voucher = JournalVoucher::query()->create([
                 'branch_id' => $payroll->branch_id,
@@ -533,15 +561,13 @@ class PayrollService
             abort(422, 'Payment From Account is required before processing payroll.');
         }
 
-        $source = Account::query()->find($payroll->source_account_id);
-        if (! $source || ! $source->active || ! in_array($source->nature, ['cash', 'bank'], true)) {
-            abort(422, 'Payment From Account must be an active cash or bank account.');
-        }
+        $this->syncPayrollEmployeeAccounts($payroll);
 
-        $missing = $payroll->payslips()->whereHas('employee', fn ($query) => $query->whereNull('payroll_account_id'))->count();
-        if ($missing > 0) {
-            abort(422, 'Every employee included in payroll must have a payroll account before processing.');
-        }
+        $source = Account::query()->with('chartOfAccounts')->find($payroll->source_account_id);
+        $this->assertSourceAccountReady($source);
+
+        $payroll->load('payslips.employee.payrollAccount.chartOfAccounts');
+        $this->assertPayrollAccountsReady($payroll);
     }
 
     protected function assertReadyToPay(Payroll $payroll): void
@@ -574,7 +600,7 @@ class PayrollService
         return in_array($payroll->status, ['draft', 'generated'], true);
     }
 
-    protected function accountLine(Account $account, string $description, float $debit, float $credit): array
+    protected function accountLine(Account $account, string $description, float $debit, float $credit, float|string|null $exchangeRate = 1): array
     {
         $chart = ChartOfAccount::query()->where('account_id', $account->id)->first();
 
@@ -586,9 +612,81 @@ class PayrollService
             'account_id' => $account->id,
             'chart_of_account_id' => $chart->id,
             'description' => $description,
-            'debit' => number_format($debit, 2, '.', ''),
-            'credit' => number_format($credit, 2, '.', ''),
+            'debit' => $this->baseAmount($debit, $exchangeRate),
+            'credit' => $this->baseAmount($credit, $exchangeRate),
         ];
+    }
+
+    protected function syncPayrollEmployeeAccounts(Payroll $payroll): void
+    {
+        $payroll->loadMissing('payslips.employee.payrollAccount.chartOfAccounts');
+
+        foreach ($payroll->payslips as $payslip) {
+            if ($payslip->employee) {
+                $this->accountSync->syncEmployeePayrollAccount($payslip->employee);
+            }
+        }
+    }
+
+    protected function assertSourceAccountReady(?Account $source): void
+    {
+        if (! $source) {
+            abort(422, 'Payment From Account is required before payroll journal posting.');
+        }
+
+        if (! $source->active || ! in_array($source->nature, ['cash', 'bank'], true)) {
+            abort(422, 'Payment From Account must be an active cash or bank account.');
+        }
+
+        if (! ChartOfAccount::query()->where('account_id', $source->id)->exists()) {
+            abort(422, 'Payment From Account must be linked to a Chart of Account.');
+        }
+    }
+
+    protected function assertPayrollAccountsReady(Payroll $payroll): void
+    {
+        $missing = [];
+
+        foreach ($payroll->payslips as $payslip) {
+            $employee = $payslip->employee;
+            $account = $employee?->payrollAccount;
+
+            if (! $employee || ! $account || ! $account->active || $account->chartOfAccounts->isEmpty()) {
+                $missing[] = $employee?->display_name ?: "Employee #{$payslip->employee_id}";
+            }
+        }
+
+        if ($missing) {
+            abort(422, 'Payroll account sync failed for: ' . implode(', ', $missing));
+        }
+    }
+
+    protected function balanceJournalItems(array $items): array
+    {
+        $totalDebit = round(collect($items)->sum(fn ($item) => (float) $item['debit']), 2);
+        $totalCredit = round(collect($items)->sum(fn ($item) => (float) $item['credit']), 2);
+        $difference = round($totalDebit - $totalCredit, 2);
+
+        if (abs($difference) <= 0.01 && abs($difference) > 0) {
+            $index = collect($items)
+                ->keys()
+                ->sortByDesc(fn ($key) => max((float) $items[$key]['debit'], (float) $items[$key]['credit']))
+                ->first();
+
+            if ((float) $items[$index]['debit'] > 0) {
+                $items[$index]['debit'] = number_format((float) $items[$index]['debit'] - $difference, 2, '.', '');
+            } else {
+                $items[$index]['credit'] = number_format((float) $items[$index]['credit'] + $difference, 2, '.', '');
+            }
+
+            return $items;
+        }
+
+        if (abs($difference) > 0.01) {
+            abort(422, "Payroll journal voucher is not balanced. Debit {$totalDebit}, credit {$totalCredit}.");
+        }
+
+        return $items;
     }
 
     protected function settings(?string $branchId): PayrollSetting
@@ -663,7 +761,7 @@ class PayrollService
             'journalVoucher',
             'additions.component',
             'deductions.component',
-            'payslips.employee.payrollAccount',
+            'payslips.employee.payrollAccount.chartOfAccounts',
             'payslips.lines.component',
         ]);
     }

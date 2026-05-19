@@ -13,7 +13,7 @@ class RoleController extends BaseCrudApiController
 {
     protected string $modelClass = Role::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'hrm.roles';
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;
@@ -120,6 +120,10 @@ class RoleController extends BaseCrudApiController
             : false;
         unset($parentData['permissions']);
 
+        if ($record->is_system_generated) {
+            unset($parentData['name'], $parentData['guard_name']);
+        }
+
         if (array_key_exists('guard_name', $parentData)) {
             $parentData['guard_name'] = $parentData['guard_name'] ?: 'web';
         }
@@ -140,7 +144,21 @@ class RoleController extends BaseCrudApiController
                 app(PermissionRegistrar::class)->forgetCachedPermissions();
             }
         }
-        return $record;
+
+        return $record->load('permissions');
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ($record->is_system_generated) {
+            return response()->json([
+                'message' => 'System generated role cannot be deleted.',
+            ], 422);
+        }
+
+        return parent::destroy($request, $id);
     }
 
     private mixed $pendingPermissions = false;

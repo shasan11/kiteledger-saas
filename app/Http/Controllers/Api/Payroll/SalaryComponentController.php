@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 class SalaryComponentController extends BaseCrudApiController
 {
     protected string $modelClass = SalaryComponent::class;
-    protected ?string $permissionPrefix = 'hrm.payroll';
+    protected ?string $permissionPrefix = 'hrm.payroll.salary_components';
     protected array $relations = ['accountingAccount'];
     protected array $relationDetails = ['accountingAccount' => 'accounting_account_id'];
     protected array $searchable = ['name', 'code', 'type'];
@@ -19,17 +19,24 @@ class SalaryComponentController extends BaseCrudApiController
     protected array $sortable = ['name', 'code', 'type', 'sort_order', 'active', 'created_at'];
     protected string $defaultSort = 'sort_order';
 
-    protected array $storeRules = [
-        'name' => ['required', 'string', 'max:190'],
-        'code' => ['required', 'string', 'max:40', 'unique:salary_components,code'],
-        'type' => ['required', 'in:earning,deduction,employer_contribution'],
-        'calculation_type' => ['required', 'in:fixed,percentage,formula,manual'],
-        'taxable' => ['nullable', 'boolean'],
-        'affects_net_salary' => ['nullable', 'boolean'],
-        'accounting_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
-        'active' => ['nullable', 'boolean'],
-        'sort_order' => ['nullable', 'integer', 'min:0'],
-    ];
+    protected function storeRules(Request $request): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:190'],
+            'code' => ['required', 'string', 'max:40', 'unique:salary_components,code'],
+            'type' => ['required', 'in:earning,deduction,employer_contribution'],
+            'calculation_type' => ['required', 'in:fixed,percentage,formula,manual'],
+            'taxable' => ['nullable', 'boolean'],
+            'affects_net_salary' => ['nullable', 'boolean'],
+            'accounting_account_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('chart_of_accounts', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
+            'active' => ['nullable', 'boolean'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+        ];
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {
@@ -40,7 +47,12 @@ class SalaryComponentController extends BaseCrudApiController
             'calculation_type' => ['sometimes', 'required', 'in:fixed,percentage,formula,manual'],
             'taxable' => ['sometimes', 'nullable', 'boolean'],
             'affects_net_salary' => ['sometimes', 'nullable', 'boolean'],
-            'accounting_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'accounting_account_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                Rule::exists('chart_of_accounts', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'sort_order' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ];

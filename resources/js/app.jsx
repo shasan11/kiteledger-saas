@@ -112,12 +112,18 @@ function RootApp({ App, props }) {
       }
     };
 
+    const handleThemeModeChange = (event) => {
+      setMode(event.detail?.mode || localStorage.getItem('themeMode') || 'light');
+    };
+
     window.addEventListener('storage', handleStorage);
+    window.addEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
 
     return () => {
       mounted = false;
       unsubscribe();
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
     };
   }, []);
 

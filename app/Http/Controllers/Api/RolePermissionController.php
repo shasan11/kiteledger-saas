@@ -11,7 +11,7 @@ class RolePermissionController extends BaseCrudApiController
 {
     protected string $modelClass = RolePermission::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'hrm.role_permissions';
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;

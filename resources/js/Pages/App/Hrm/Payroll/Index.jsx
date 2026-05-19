@@ -49,6 +49,20 @@ const { Text, Title } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const apiErrorMessage = (error, fallback) => {
+  const data = error?.response?.data;
+
+  if (data?.message) return data.message;
+
+  if (data && typeof data === 'object') {
+    const first = Object.values(data)[0];
+    if (Array.isArray(first)) return first[0];
+    if (typeof first === 'string') return first;
+  }
+
+  return fallback;
+};
+
 const statusColor = {
   draft: 'default',
   generated: 'processing',
@@ -306,10 +320,23 @@ function SalaryComponentsCrud() {
 
   {
     type: 'group',
-    label: 'Display Order',
+    label: 'Accounting',
     col: 24,
     accordion: false,
     children: [
+      {
+        name: 'accounting_account_id',
+        label: 'Accounting Account',
+        type: 'fkSelect',
+        col: 12,
+        fkUrl: api('/api/chart-of-accounts'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        fkLabel: (row) => row ? `${row.code ? `${row.code} - ` : ''}${row.name}` : '',
+        help: 'If empty, payroll uses default salary expense account.',
+      },
       {
         name: 'sort_order',
         label: 'Sort Order',
@@ -375,6 +402,18 @@ function SalaryComponentsCrud() {
         options: calculationTypeOptions,
       },
       render: renderCalculationType,
+    },
+    {
+      title: 'Accounting Account',
+      key: 'accounting_account',
+      width: 220,
+      render: (_, record) => {
+        const account = record.accounting_account || record.accountingAccount;
+
+        return account?.name
+          ? <Tag color="blue">{account.code ? `${account.code} - ${account.name}` : account.name}</Tag>
+          : <Tag color="warning">Default Salary Expense</Tag>;
+      },
     },
     {
       title: 'Taxable',
@@ -461,6 +500,7 @@ function SalaryComponentsCrud() {
       .oneOf(['fixed', 'percentage', 'formula', 'manual']),
     taxable: Yup.boolean().nullable(),
     affects_net_salary: Yup.boolean().nullable(),
+    accounting_account_id: Yup.mixed().nullable(),
     sort_order: Yup.number().nullable().min(0),
     active: Yup.boolean().nullable(),
   });
@@ -473,6 +513,7 @@ function SalaryComponentsCrud() {
     taxable: false,
     affects_net_salary: true,
     sort_order: 0,
+    accounting_account_id: null,
     active: true,
   };
 
@@ -482,6 +523,7 @@ function SalaryComponentsCrud() {
     calculation_type: record?.calculation_type || 'fixed',
     taxable: Boolean(record?.taxable),
     affects_net_salary: record?.affects_net_salary ?? true,
+    accounting_account_id: record?.accounting_account_id || record?.accounting_account?.id || record?.accountingAccount?.id || null,
     sort_order: record?.sort_order ?? 0,
     active: record?.active ?? true,
   });
@@ -495,6 +537,9 @@ function SalaryComponentsCrud() {
     payload.calculation_type = payload.calculation_type || 'fixed';
     payload.taxable = Boolean(payload.taxable);
     payload.affects_net_salary = Boolean(payload.affects_net_salary);
+    if (payload.accounting_account_id && typeof payload.accounting_account_id === 'object') {
+      payload.accounting_account_id = payload.accounting_account_id.id ?? payload.accounting_account_id.value;
+    }
     payload.sort_order = Number(payload.sort_order || 0);
     payload.active = Boolean(payload.active);
 
@@ -535,6 +580,160 @@ function SalaryComponentsCrud() {
       canAdd
       canEdit
       canDelete
+      hasActions
+      hasActionColumns
+    />
+  );
+}
+
+function PayrollSettingsCrud() {
+  const chartAccountField = (name, label, help) => ({
+    name,
+    label,
+    type: 'fkSelect',
+    col: 12,
+    fkUrl: api('/api/chart-of-accounts'),
+    fkSearchParam: 'search',
+    fkPageSize: 20,
+    fkValueKey: 'id',
+    fkLabelKey: 'name',
+    fkLabel: (row) => row ? `${row.code ? `${row.code} - ` : ''}${row.name}` : '',
+    help,
+  });
+
+  const fields = [
+    {
+      type: 'group',
+      label: 'Accounting Defaults',
+      col: 24,
+      accordion: false,
+      children: [
+        chartAccountField('salary_expense_account_id', 'Salary Expense Account', 'Default debit account for salary expense.'),
+        chartAccountField('salary_payable_account_id', 'Salary Payable Account', 'Control account used as payroll payable parent.'),
+        chartAccountField('tax_payable_account_id', 'Deduction Payable Account', 'Credit account for payroll deductions.'),
+        chartAccountField('benefit_payable_account_id', 'Employer Contribution Payable', 'Credit account for employer contributions.'),
+      ],
+    },
+    {
+      type: 'group',
+      label: 'Currency & Calculation',
+      col: 24,
+      accordion: false,
+      children: [
+        {
+          name: 'currency_id',
+          label: 'Currency',
+          type: 'fkSelect',
+          col: 12,
+          fkUrl: api('/api/currencies'),
+          fkSearchParam: 'search',
+          fkPageSize: 20,
+          fkValueKey: 'id',
+          fkLabelKey: 'code',
+          fkLabel: (row) => row?.code || row?.name || '',
+        },
+        {
+          name: 'daily_rate_basis',
+          label: 'Daily Rate Basis',
+          type: 'select',
+          required: true,
+          col: 12,
+          options: [
+            { value: 'working_days', label: 'Working Days' },
+            { value: 'calendar_days', label: 'Calendar Days' },
+          ],
+        },
+        {
+          name: 'rounding_method',
+          label: 'Rounding Method',
+          type: 'select',
+          required: true,
+          col: 12,
+          options: [
+            { value: 'nearest', label: 'Nearest' },
+            { value: 'floor', label: 'Floor' },
+            { value: 'ceil', label: 'Ceil' },
+          ],
+        },
+        { name: 'currency_precision', label: 'Currency Precision', type: 'number', col: 12, min: 0 },
+        { name: 'default_overtime_rate', label: 'Default Overtime Rate', type: 'number', col: 12, min: 0 },
+        { name: 'allow_multiple_runs', label: 'Allow Multiple Runs', type: 'switch', col: 12 },
+        { name: 'active', label: 'Active', type: 'switch', col: 12 },
+      ],
+    },
+  ];
+
+  const columns = [
+    { title: 'Branch', render: (_, row) => row.branch?.name || <Text type="secondary">All branches</Text> },
+    { title: 'Salary Expense', render: (_, row) => row.salary_expense_account_id ? <Tag color="blue">Configured</Tag> : <Tag color="warning">Missing</Tag> },
+    { title: 'Salary Payable', render: (_, row) => row.salary_payable_account_id ? <Tag color="blue">Configured</Tag> : <Tag color="warning">Missing</Tag> },
+    { title: 'Deduction Payable', render: (_, row) => row.tax_payable_account_id ? <Tag color="blue">Configured</Tag> : <Tag color="warning">Missing</Tag> },
+    { title: 'Currency', render: (_, row) => row.currency?.code || row.currency?.name || '-' },
+    { title: 'Active', dataIndex: 'active', render: (value) => <Tag color={value !== false ? 'green' : 'red'}>{value !== false ? 'Active' : 'Inactive'}</Tag> },
+  ];
+
+  const validationSchema = Yup.object().shape({
+    daily_rate_basis: Yup.string().required('Daily rate basis is required'),
+    rounding_method: Yup.string().required('Rounding method is required'),
+    currency_precision: Yup.number().required('Currency precision is required').min(0).max(6),
+  });
+
+  const transformPayload = (values) => {
+    const payload = { ...values };
+
+    [
+      'currency_id',
+      'salary_expense_account_id',
+      'salary_payable_account_id',
+      'tax_payable_account_id',
+      'benefit_payable_account_id',
+    ].forEach((key) => {
+      if (payload[key] && typeof payload[key] === 'object') {
+        payload[key] = payload[key].id ?? payload[key].value;
+      }
+    });
+
+    payload.currency_precision = Number(payload.currency_precision ?? 2);
+    payload.default_overtime_rate = payload.default_overtime_rate ?? null;
+    payload.allow_multiple_runs = Boolean(payload.allow_multiple_runs);
+    payload.active = payload.active !== false;
+
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === '') payload[key] = null;
+    });
+
+    return payload;
+  };
+
+  return (
+    <ReusableCrud
+      title="Payroll Settings"
+      icon={<SettingOutlined />}
+      apiUrl={api('/api/hrm/payroll/settings')}
+      fields={fields}
+      columns={columns}
+      validationSchema={validationSchema}
+      crudInitialValues={{
+        daily_rate_basis: 'working_days',
+        rounding_method: 'nearest',
+        currency_precision: 2,
+        allow_multiple_runs: false,
+        active: true,
+      }}
+      transformPayload={transformPayload}
+      form_ui="drawer"
+      drawerWidth={760}
+      searchParam="search"
+      pageParam="page"
+      pageSizeParam="page_size"
+      sortMode="ordering"
+      orderingParam="ordering"
+      activeParam="active"
+      enableServerPagination
+      enableInactiveDrawer
+      canAdd={false}
+      canEdit
+      canDelete={false}
       hasActions
       hasActionColumns
     />
@@ -584,7 +783,7 @@ function PayrollWizard({ lookups, onGenerated, onQuickAddPeriod }) {
       form.resetFields();
       onGenerated?.();
     } catch (error) {
-      message.error(error?.response?.data?.message || 'Payroll generation failed.');
+      message.error(apiErrorMessage(error, 'Payroll generation failed.'));
     } finally {
       setLoading(false);
     }
@@ -949,6 +1148,7 @@ export default function Payroll({ auth }) {
 
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [syncingAccounts, setSyncingAccounts] = useState(false);
 
   const [lookups, setLookups] = useState({
     periods: [],
@@ -1016,8 +1216,24 @@ export default function Payroll({ auth }) {
     try {
       const { data } = await axios.get(api('/api/hrm/payroll/dashboard'));
       setDashboard(data);
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to load payroll dashboard.'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const syncPayrollAccounts = async () => {
+    setSyncingAccounts(true);
+
+    try {
+      const { data } = await axios.post(api('/api/hrm/payroll/sync-accounts'));
+      message.success(data?.message || `Synced ${data?.count || 0} employee payroll account(s).`);
+      await loadDashboard();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to sync payroll accounts.'));
+    } finally {
+      setSyncingAccounts(false);
     }
   };
 
@@ -1135,7 +1351,7 @@ export default function Payroll({ auth }) {
       closePeriodModal();
       await loadLookups();
     } catch (error) {
-      message.error(error?.response?.data?.message || 'Unable to save payroll period.');
+      message.error(apiErrorMessage(error, 'Unable to save payroll period.'));
     } finally {
       setPeriodSaving(false);
     }
@@ -1180,10 +1396,15 @@ export default function Payroll({ auth }) {
       content: `${payroll.payroll_number || payroll.run_number} will move to ${label.toLowerCase()}.`,
       okText: label,
       onOk: async () => {
-        await axios.post(api(`/api/hrm/payroll/payrolls/${payroll.id}/${action}`));
-        message.success(`Payroll ${label.toLowerCase()} complete.`);
-        await loadDashboard();
-        await refreshSelected(payroll.id);
+        try {
+          await axios.post(api(`/api/hrm/payroll/payrolls/${payroll.id}/${action}`));
+          message.success(`Payroll ${label.toLowerCase()} complete.`);
+          await loadDashboard();
+          await refreshSelected(payroll.id);
+        } catch (error) {
+          message.error(apiErrorMessage(error, `Unable to ${label.toLowerCase()} payroll.`));
+          throw error;
+        }
       },
     });
   };
@@ -1191,29 +1412,37 @@ export default function Payroll({ auth }) {
   const saveAdjustment = async () => {
     const values = await form.validateFields();
 
-    await axios.post(
-      api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${adjustmentModal}`),
-      values,
-    );
+    try {
+      await axios.post(
+        api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${adjustmentModal}`),
+        values,
+      );
 
-    message.success(
-      `${adjustmentModal === 'addition' ? 'Addition' : 'Deduction'} applied.`,
-    );
+      message.success(
+        `${adjustmentModal === 'addition' ? 'Addition' : 'Deduction'} applied.`,
+      );
 
-    setAdjustmentModal(null);
-    form.resetFields();
+      setAdjustmentModal(null);
+      form.resetFields();
 
-    await refreshSelected();
+      await refreshSelected();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to save payroll adjustment.'));
+    }
   };
 
   const deleteAdjustment = async (kind, row) => {
-    await axios.delete(
-      api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${kind}/${row.id}`),
-    );
+    try {
+      await axios.delete(
+        api(`/api/hrm/payroll/payrolls/${selectedPayroll.id}/${kind}/${row.id}`),
+      );
 
-    message.success('Adjustment deleted.');
+      message.success('Adjustment deleted.');
 
-    await refreshSelected();
+      await refreshSelected();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to delete adjustment.'));
+    }
   };
 
   const savePayslipLine = async () => {
@@ -1224,30 +1453,38 @@ export default function Payroll({ auth }) {
         ? 'payslip_manual_addition'
         : 'payslip_manual_deduction';
 
-    const { data } = await axios.post(api('/api/hrm/payroll/payslip-lines'), {
-      ...values,
-      source,
-      payslip_id: payslipDrawer.id,
-    });
+    try {
+      const { data } = await axios.post(api('/api/hrm/payroll/payslip-lines'), {
+        ...values,
+        source,
+        payslip_id: payslipDrawer.id,
+      });
 
-    message.success('Payslip line added.');
+      message.success('Payslip line added.');
 
-    setPayslipDrawer(data);
-    lineForm.resetFields();
+      setPayslipDrawer(data);
+      lineForm.resetFields();
 
-    await refreshSelected();
+      await refreshSelected();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to add payslip line.'));
+    }
   };
 
   const deletePayslipLine = async (line) => {
-    const { data } = await axios.delete(
-      api(`/api/hrm/payroll/payslip-lines/${line.id}`),
-    );
+    try {
+      const { data } = await axios.delete(
+        api(`/api/hrm/payroll/payslip-lines/${line.id}`),
+      );
 
-    message.success('Payslip line deleted.');
+      message.success('Payslip line deleted.');
 
-    setPayslipDrawer(data);
+      setPayslipDrawer(data);
 
-    await refreshSelected();
+      await refreshSelected();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to delete payslip line.'));
+    }
   };
 
   const payrollRows = dashboard?.recent_payrolls || dashboard?.recent_runs || [];
@@ -1315,6 +1552,12 @@ export default function Payroll({ auth }) {
       render: (value) => <Text strong>{money(value)}</Text>,
     },
     {
+      title: 'Base Amount',
+      dataIndex: 'total_base_currency_amount',
+      align: 'right',
+      render: money,
+    },
+    {
       title: 'Payment From Account',
       render: (_, record) =>
         record.source_account?.name || (
@@ -1326,6 +1569,13 @@ export default function Payroll({ auth }) {
       dataIndex: 'status',
       width: 110,
       render: (value) => <Tag color={statusColor[value]}>{value}</Tag>,
+    },
+    {
+      title: 'JV',
+      width: 130,
+      render: (_, record) => record.journal_voucher?.voucher_no
+        ? <Tag color="green">{record.journal_voucher.voucher_no}</Tag>
+        : <Tag color="warning">Not posted</Tag>,
     },
     {
       title: '',
@@ -1372,9 +1622,16 @@ export default function Payroll({ auth }) {
     {
       title: 'Employee Payroll Account',
       render: (_, payslip) =>
-        payslip.employee?.payroll_account?.name || (
-          <Tag color="warning">Missing</Tag>
-        ),
+        payslip.employee?.payroll_account?.name
+          ? (
+              <Space direction="vertical" size={0}>
+                <Text>{payslip.employee.payroll_account.name}</Text>
+                {payslip.employee.payroll_account.chart_of_accounts?.length === 0 ? (
+                  <Tag color="warning">Missing COA link</Tag>
+                ) : null}
+              </Space>
+            )
+          : <Tag color="warning">Missing</Tag>,
     },
     {
       title: 'Status',
@@ -1447,6 +1704,14 @@ export default function Payroll({ auth }) {
                     onClick={() => openPeriodModal()}
                   >
                     Add Period
+                  </Button>
+
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={syncingAccounts}
+                    onClick={syncPayrollAccounts}
+                  >
+                    Sync Payroll Accounts
                   </Button>
 
                   <Button
@@ -1567,6 +1832,12 @@ export default function Payroll({ auth }) {
                 label: 'Components',
                 icon: <SettingOutlined />,
                 children: <SalaryComponentsCrud />,
+              },
+              {
+                key: 'settings',
+                label: 'Settings',
+                icon: <SettingOutlined />,
+                children: <PayrollSettingsCrud />,
               },
             ]}
           />
@@ -2111,20 +2382,24 @@ export default function Payroll({ auth }) {
             return;
           }
 
-          await axios.post(
-            api(`/api/hrm/payroll/payrolls/${voidingPayroll.id}/void`),
-            {
-              reason: voidReason,
-            },
-          );
+          try {
+            await axios.post(
+              api(`/api/hrm/payroll/payrolls/${voidingPayroll.id}/void`),
+              {
+                reason: voidReason,
+              },
+            );
 
-          message.success('Payroll voided.');
+            message.success('Payroll voided.');
 
-          setVoidingPayroll(null);
-          setVoidReason('');
+            setVoidingPayroll(null);
+            setVoidReason('');
 
-          await loadDashboard();
-          await refreshSelected(voidingPayroll.id);
+            await loadDashboard();
+            await refreshSelected(voidingPayroll.id);
+          } catch (error) {
+            message.error(apiErrorMessage(error, 'Unable to void payroll.'));
+          }
         }}
       >
         <Input.TextArea

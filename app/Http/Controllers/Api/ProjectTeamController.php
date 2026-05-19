@@ -69,4 +69,17 @@ class ProjectTeamController extends BaseCrudApiController
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
     }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ($record->projectTeamMembers()->exists()) {
+            return response()->json([
+                'message' => 'Cannot delete this team because it has members.',
+            ], 422);
+        }
+
+        return parent::destroy($request, $id);
+    }
 }
