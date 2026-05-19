@@ -238,7 +238,7 @@ export default function BillEdit({ id, ...props }) {
         validationSchema: Yup.object({ name: Yup.string().required('Customer name is required') }),
         fields: [
           { name: 'name', label: 'Customer Name', type: 'text', col: 24, required: true },
-          { name: 'phone', label: 'Phone', type: 'text', col: 12 },
+          { name: 'phone', label: 'Phone', type: 'phone', col: 12, defaultCountryCode: '+977' },
           { name: 'email', label: 'Email', type: 'text', col: 12 },
           { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2 },
         ],

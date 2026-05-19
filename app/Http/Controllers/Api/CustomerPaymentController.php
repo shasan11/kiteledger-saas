@@ -90,15 +90,23 @@ class CustomerPaymentController extends BaseCrudApiController
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'amount' => ['sometimes', 'required', 'numeric', 'min:0'],
             'payment_method' => ['sometimes', 'nullable', 'string', 'max:20'],
-            'bank_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'bank_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'bank_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],
             'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
         ];
+    }
+
+    protected function prepareIncomingPayload(array $data): array
+    {
+        $data['bank_charges'] = (float) ($data['bank_charges'] ?? 0);
+        $data['tds_charges'] = (float) ($data['tds_charges'] ?? 0);
+
+        return parent::prepareIncomingPayload($data);
     }
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array

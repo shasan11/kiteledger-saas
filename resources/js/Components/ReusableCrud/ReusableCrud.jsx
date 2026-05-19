@@ -374,6 +374,8 @@ export default function ReusableCrud({
   const [bulkAddLoading, setBulkAddLoading] = useState(false);
   const [serverPaginated, setServerPaginated] = useState(false);
   const [submitErrors, setSubmitErrors] = useState(EMPTY_ARRAY);
+  const [validationWarnings, setValidationWarnings] = useState(null);
+  const pendingWarningSubmitRef = useRef(null);
   const [quickAddState, setQuickAddState] = useState(null);
   const [transactionVoidState, setTransactionVoidState] = useState({
     open: false,
@@ -1508,10 +1510,14 @@ export default function ReusableCrud({
         ? transformPayload(uploadSafeValues, { isEditMode, editingRecord: originalRecord })
         : uploadSafeValues;
 
-    const payload = normalizeFileValuesForSubmit(transformedPayload, {
+    let payload = normalizeFileValuesForSubmit(transformedPayload, {
       isEditMode,
       originalRecord,
     });
+
+    if (values.validation_overrides && typeof values.validation_overrides === "object") {
+      payload = { ...payload, validation_overrides: values.validation_overrides };
+    }
 
     const containsFile = hasAnyFile(payload);
     const method = isEditMode ? String(updateMethod || "patch").toLowerCase() : "post";
@@ -4150,7 +4156,13 @@ export default function ReusableCrud({
                 resetForm();
               }
             } catch (err) {
-              const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
+              const { fieldErrors, globalErrors, allErrors, validationWarnings: warnings } = parseBackendErrors(err, values);
+
+              if (warnings) {
+                pendingWarningSubmitRef.current = { values, setErrors, resetForm };
+                setValidationWarnings(warnings);
+                return;
+              }
 
               if (Object.keys(fieldErrors).length) {
                 setErrors(fieldErrors);
@@ -4304,7 +4316,13 @@ export default function ReusableCrud({
           setVisible(false);
           resetForm();
         } catch (err) {
-          const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
+          const { fieldErrors, globalErrors, allErrors, validationWarnings: warnings } = parseBackendErrors(err, values);
+
+          if (warnings) {
+            pendingWarningSubmitRef.current = { values, setErrors, resetForm };
+            setValidationWarnings(warnings);
+            return;
+          }
 
           if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
 
@@ -4889,6 +4907,142 @@ export default function ReusableCrud({
       )}
 
       {renderQuickAddModal()}
+
+      {validationWarnings && (
+        <ValidationWarningModal
+          warnings={validationWarnings}
+          onConfirm={async () => {
+            const pending = pendingWarningSubmitRef.current;
+            if (!pending) { setValidationWarnings(null); return; }
+            const { values, setErrors, resetForm } = pending;
+            pendingWarningSubmitRef.current = null;
+            setValidationWarnings(null);
+
+            const overrides = {};
+            if (validationWarnings.credit_limit) overrides.credit_limit = true;
+            if (validationWarnings.negative_cash_balance) overrides.negative_cash_balance = true;
+            if (validationWarnings.negative_stock) overrides.negative_stock = true;
+
+            const valuesWithOverrides = { ...values, validation_overrides: overrides };
+            try {
+              setSubmitErrors(EMPTY_ARRAY);
+              const isEditMode = ui_type === "edit form";
+              const id = values.id || look_up_var;
+              const savedRecord = await submitRecord(valuesWithOverrides, isEditMode, id);
+              message.success("Saved successfully");
+              setSubmitErrors(EMPTY_ARRAY);
+              upsertSavedRecord(savedRecord);
+              await refreshAfterSubmit();
+              if (isEditMode) {
+                if (typeof onEditSuccess === "function") await onEditSuccess(savedRecord, values);
+              } else {
+                if (typeof onAddSuccess === "function") await onAddSuccess(savedRecord, values);
+                if (typeof handleAddedData === "function") await handleAddedData(savedRecord, values);
+                resetForm();
+              }
+            } catch (err) {
+              const { fieldErrors, globalErrors, allErrors } = parseBackendErrors(err, values);
+              if (Object.keys(fieldErrors).length) setErrors(fieldErrors);
+              setSubmitErrors(allErrors);
+              if (globalErrors.length) showGlobalErrorsNotification(globalErrors);
+              else message.error("Validation failed");
+            }
+          }}
+          onCancel={() => {
+            pendingWarningSubmitRef.current = null;
+            setValidationWarnings(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ValidationWarningModal({ warnings, onConfirm, onCancel }) {
+  const [confirming, setConfirming] = React.useState(false);
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try { await onConfirm(); } finally { setConfirming(false); }
+  };
+
+  const sections = [];
+
+  if (warnings.credit_limit) {
+    const w = warnings.credit_limit;
+    sections.push(
+      <div key="credit_limit" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, color: "#d97706", marginBottom: 6 }}>Credit Limit Exceeded</div>
+        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <tbody>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Customer</td><td style={{ fontWeight: 600 }}>{w.customer_name}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Credit Limit</td><td>{Number(w.credit_limit).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Outstanding Balance</td><td>{Number(w.outstanding_balance).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>This Transaction</td><td>{Number(w.transaction_amount).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>New Expected Balance</td><td>{Number(w.projected_balance).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#dc2626" }}>Exceeded By</td><td style={{ color: "#dc2626", fontWeight: 700 }}>{Number(w.exceeded_amount).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (warnings.negative_cash_balance) {
+    const w = warnings.negative_cash_balance;
+    sections.push(
+      <div key="negative_cash_balance" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, color: "#d97706", marginBottom: 6 }}>Negative Cash/Bank Balance</div>
+        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+          <tbody>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Account</td><td style={{ fontWeight: 600 }}>{w.account_name}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Available Balance</td><td>{Number(w.current_balance).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#6b7280" }}>Outgoing Amount</td><td>{Number(w.outgoing_amount).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#dc2626" }}>New Expected Balance</td><td style={{ color: "#dc2626", fontWeight: 700 }}>{Number(w.projected_balance).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+            <tr><td style={{ padding: "2px 8px 2px 0", color: "#dc2626" }}>Negative Amount</td><td style={{ color: "#dc2626", fontWeight: 700 }}>{Number(w.negative_amount).toLocaleString("en-NP", { minimumFractionDigits: 2 })}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (warnings.negative_stock) {
+    const items = warnings.negative_stock.items || [];
+    sections.push(
+      <div key="negative_stock" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, color: "#d97706", marginBottom: 6 }}>Negative Stock</div>
+        {items.map((item, idx) => (
+          <div key={idx} style={{ marginBottom: 8, padding: "8px 10px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4 }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.product_name} — {item.warehouse}</div>
+            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <tbody>
+                <tr><td style={{ padding: "1px 8px 1px 0", color: "#6b7280" }}>Available Stock</td><td>{item.available_stock}</td></tr>
+                <tr><td style={{ padding: "1px 8px 1px 0", color: "#6b7280" }}>Required Quantity</td><td>{item.required_qty}</td></tr>
+                <tr><td style={{ padding: "1px 8px 1px 0", color: "#dc2626" }}>Shortage</td><td style={{ color: "#dc2626", fontWeight: 700 }}>{item.shortage_qty}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      title={<span style={{ color: "#d97706" }}>⚠ Validation Warning</span>}
+      onCancel={onCancel}
+      footer={[
+        <Button key="cancel" onClick={onCancel} disabled={confirming}>Cancel</Button>,
+        <Button key="confirm" type="primary" danger loading={confirming} onClick={handleConfirm}>
+          Continue Anyway
+        </Button>,
+      ]}
+      width={520}
+    >
+      <p style={{ marginBottom: 16, color: "#374151" }}>
+        The following conditions were detected. Do you want to continue saving?
+      </p>
+      {sections}
+    </Modal>
   );
 }

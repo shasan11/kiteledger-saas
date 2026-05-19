@@ -105,9 +105,9 @@ class SupplierPaymentController extends BaseCrudApiController
             'method' => ['sometimes', 'nullable', 'string', 'max:20'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
-            'bank_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'bank_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'bank_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
-            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],
             'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
@@ -121,6 +121,9 @@ class SupplierPaymentController extends BaseCrudApiController
         if (($data['payment_no'] ?? null) === 'DRAFT') {
             $data['payment_no'] = null;
         }
+
+        $data['bank_charges'] = (float) ($data['bank_charges'] ?? 0);
+        $data['tds_charges'] = (float) ($data['tds_charges'] ?? 0);
 
         return parent::prepareIncomingPayload($data);
     }
