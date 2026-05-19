@@ -68,17 +68,23 @@ class PrintingTemplateSeeder extends Seeder
             'customer_payment' => 'Customer Payment Receipt',
             'sales_return' => 'Sales Return',
             'credit_note' => 'Credit Note',
+
+            // Purchase / payment-out module
             'purchase_order' => 'Purchase Order',
             'purchase_bill' => 'Purchase Bill',
             'expense' => 'Expense Voucher',
             'supplier_payment' => 'Supplier Payment Voucher',
             'debit_note' => 'Debit Note',
+
+            // Accounting module
             'journal_voucher' => 'Journal Voucher',
             'cash_transfer' => 'Cash Transfer Voucher',
             'cheque_register' => 'Cheque Register',
             'loan_account' => 'Loan Account',
             'loan_topup' => 'Loan Top Up',
             'loan_charge' => 'Loan Charge',
+
+            // Inventory / warehouse module
             'warehouse_transfer' => 'Warehouse Transfer',
             'inventory_adjustment' => 'Inventory Adjustment',
             'product' => 'Product Sheet',
