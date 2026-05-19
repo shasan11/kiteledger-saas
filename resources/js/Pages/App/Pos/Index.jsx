@@ -41,6 +41,7 @@ import {
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosTopBar from '@/Components/Pos/PosTopBar';
 import { api, fetchList, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 
 const { Text, Title } = Typography;
@@ -73,6 +74,9 @@ export default function PosIndex() {
     const can = (permission) => permissions.includes(permission);
 
     const canViewAllBranches = !!branchContext.canViewAllBranches;
+    const queryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+    const requestedTerminalId = queryParams.get('pos_terminal_id');
+    const requestedShiftId = queryParams.get('pos_shift_id');
 
     const userDefaultBranchId =
         branchContext.selectedBranchId ||
@@ -168,13 +172,34 @@ export default function PosIndex() {
         if (!selectedTerminal) return ['No terminal selected.'];
 
         const warnings = [];
-        if (!selectedTerminal.warehouse_id) warnings.push('Terminal missing warehouse.');
-        if (!selectedTerminal.cash_account_id) warnings.push('Terminal missing cash account.');
-        if (!selectedTerminal.card_account_id) warnings.push('Terminal missing card account.');
-        if (!selectedTerminal.online_account_id) warnings.push('Terminal missing online/wallet/bank account.');
+        const hasTrackedItem = cart.some((item) => item.track_inventory);
+        const selectedPaymentMethods = new Set(
+            payments
+                .filter((payment) => payment.payment_method !== 'credit' && Number(payment.amount || 0) > 0)
+                .map((payment) => payment.payment_method),
+        );
+
+        if (hasTrackedItem && !selectedTerminal.warehouse_id) {
+            warnings.push('Warehouse is required for inventory-tracked products.');
+        }
+
+        if (selectedPaymentMethods.has('cash') && !selectedTerminal.cash_account_id) {
+            warnings.push('Cash account is required for cash payments.');
+        }
+
+        if (selectedPaymentMethods.has('card') && !selectedTerminal.card_account_id) {
+            warnings.push('Card account is required for card payments.');
+        }
+
+        if (
+            ['online', 'wallet', 'bank_transfer'].some((method) => selectedPaymentMethods.has(method)) &&
+            !selectedTerminal.online_account_id
+        ) {
+            warnings.push('Online account is required for online, wallet, or bank transfer payments.');
+        }
 
         return warnings;
-    }, [selectedTerminal]);
+    }, [cart, payments, selectedTerminal]);
 
     const checkoutError = useMemo(() => {
         if (!can('pos.sale.create')) return 'No permission to create POS sales.';
@@ -231,6 +256,11 @@ export default function PosIndex() {
     };
 
     useEffect(() => {
+        if (!requestedTerminalId || !requestedShiftId) {
+            router.visit(route('pos.index'));
+            return;
+        }
+
         void bootstrap();
     }, []);
 
@@ -246,7 +276,7 @@ export default function PosIndex() {
             return;
         }
 
-        void loadCurrentShift();
+        void loadCurrentShift(terminalId, { enforceSelection: true });
         void loadHeldSales();
     }, [terminalId]);
 
@@ -303,6 +333,7 @@ export default function PosIndex() {
 
             await loadTerminalsForBranch(fallbackBranchId, {
                 silent: true,
+                requestedTerminalId,
             });
         } catch (error) {
             showApiError(message, error, 'Failed to load POS screen.');
@@ -333,6 +364,7 @@ export default function PosIndex() {
                 : terminalRows;
 
             const defaultTerminal =
+                scopedTerminals.find((terminal) => String(terminal.id) === String(options.requestedTerminalId)) ||
                 scopedTerminals.find((terminal) => terminal.is_default) ||
                 scopedTerminals[0] ||
                 null;
@@ -395,7 +427,7 @@ export default function PosIndex() {
         }
     }
 
-    async function loadCurrentShift(targetTerminalId = terminalId) {
+    async function loadCurrentShift(targetTerminalId = terminalId, options = {}) {
         if (!targetTerminalId) {
             setCurrentShift(null);
             return null;
@@ -413,9 +445,17 @@ export default function PosIndex() {
                 },
             });
 
-            setCurrentShift(response.data || null);
+            const shift = response.data || null;
 
-            if (!response.data) {
+            if (options.enforceSelection && (!shift?.id || (requestedShiftId && String(shift.id) !== String(requestedShiftId)))) {
+                message.warning('Select an open terminal shift before selling.');
+                router.visit(route('pos.index'));
+                return null;
+            }
+
+            setCurrentShift(shift);
+
+            if (!shift) {
                 shiftForm.setFieldsValue({
                     terminal_id: targetTerminalId,
                     branch_id: targetTerminal?.branch_id || activeBranchId,
@@ -424,7 +464,7 @@ export default function PosIndex() {
                 });
             }
 
-            return response.data || null;
+            return shift;
         } catch (error) {
             setCurrentShift(null);
             showApiError(message, error, 'Failed to load current shift.');
@@ -918,11 +958,22 @@ export default function PosIndex() {
     async function closeShift() {
         if (!currentShift) return;
 
-        closeShiftForm.setFieldsValue({
-            counted_cash: null,
-            closing_notes: '',
+        Modal.confirm({
+            title: 'End this POS shift?',
+            content: 'You will reconcile counted cash and close the shift for this terminal.',
+            okText: 'Continue',
+            cancelText: 'Cancel',
+            okButtonProps: {
+                danger: true,
+            },
+            onOk: () => {
+                closeShiftForm.setFieldsValue({
+                    counted_cash: Number(currentShift.expected_cash || 0),
+                    closing_notes: '',
+                });
+                setCloseShiftOpen(true);
+            },
         });
-        setCloseShiftOpen(true);
     }
 
     async function submitCloseShift(values) {
@@ -940,11 +991,13 @@ export default function PosIndex() {
         setCloseShiftLoading(true);
 
         try {
-            await axios.post(api(`/api/pos-shifts/${currentShift.id}/close`), {
+            const response = await axios.post(api(`/api/pos-shifts/${currentShift.id}/close`), {
                 counted_cash: countedCash,
                 closing_notes: values.closing_notes || null,
                 has_cash_difference: difference !== 0,
             });
+
+            const closedShiftId = response.data?.id || currentShift.id;
 
             setCurrentShift(null);
             setProducts([]);
@@ -953,6 +1006,7 @@ export default function PosIndex() {
             clearSale();
 
             message.success('Shift closed.');
+            router.visit(route('pos.shifts.closing-summary', closedShiftId));
         } catch (error) {
             showApiError(message, error, 'Unable to close shift.');
         } finally {
@@ -1129,54 +1183,9 @@ export default function PosIndex() {
                     Point of Sale
                 </Title>
 
-                {canViewAllBranches && (
-                    <Select
-                        style={{ width: 220 }}
-                        value={activeBranchId}
-                        options={branchOptions}
-                        onChange={handleBranchChange}
-                        placeholder="Select branch"
-                    />
-                )}
-
-                <Space.Compact>
-                    <Select
-                        style={{ width: 220 }}
-                        value={terminalId}
-                        options={terminalOptions}
-                        loading={terminalLoading}
-                        onChange={(value) => {
-                            setTerminalId(value);
-                            setCurrentShift(null);
-                            setProducts([]);
-                            clearSale();
-                        }}
-                        placeholder="Select terminal"
-                    />
-
-                    {can('pos.terminal.create') && (
-                        <Button
-                            icon={<PlusOutlined />}
-                            title="Create new terminal"
-                            onClick={() => setAddTerminalOpen(true)}
-                        />
-                    )}
-                </Space.Compact>
-
-                <Tag>
-                    {selectedTerminal?.branch?.name ||
-                        selectedTerminal?.branch_name ||
-                        selectedBranch?.name ||
-                        'Branch'}
-                </Tag>
-
-                <Tag icon={<ClockCircleOutlined />} color={currentShift ? 'green' : 'red'}>
-                    {currentShift ? currentShift.shift_no : 'No open shift'}
-                </Tag>
-
-                <Tag>
-                    {currentShift?.cashier?.display_name || currentShift?.cashier?.name || 'Cashier'}
-                </Tag>
+                <Button onClick={() => router.visit(route('pos.index'))}>
+                    Terminals
+                </Button>
             </Space>
 
             <Space wrap>
@@ -1201,12 +1210,6 @@ export default function PosIndex() {
                 {can('pos.sale.view') && (
                     <Button onClick={() => router.visit(route('pos.sales.index'))}>
                         Sales History
-                    </Button>
-                )}
-
-                {currentShift && can('pos.shift.close') && (
-                    <Button danger onClick={closeShift}>
-                        Close Shift
                     </Button>
                 )}
             </Space>
@@ -1281,6 +1284,13 @@ export default function PosIndex() {
                     </div>
                 ) : (
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <PosTopBar
+                            terminal={selectedTerminal}
+                            shift={currentShift}
+                            canCloseShift={can('pos.shift.close')}
+                            onCloseShift={closeShift}
+                        />
+
                         {(terminalWarnings.length > 0 || checkoutError) && (
                             <Alert
                                 type={checkoutError ? 'warning' : 'info'}
@@ -1495,7 +1505,7 @@ export default function PosIndex() {
 
             <Modal
                 title="Open POS Shift"
-                open={!loading && !shiftLoading && !terminalLoading && terminals.length > 0 && !currentShift}
+                open={false}
                 closable={false}
                 maskClosable={false}
                 keyboard={false}
@@ -2032,8 +2042,11 @@ export default function PosIndex() {
                         items={[
                             { key: 'opening', label: 'Opening Cash', children: `Rs. ${money(currentShift?.opening_cash)}` },
                             { key: 'cashSales', label: 'Cash Sales', children: `Rs. ${money(currentShift?.total_cash_sales)}` },
+                            { key: 'cardSales', label: 'Card Sales', children: `Rs. ${money(currentShift?.total_card_sales)}` },
+                            { key: 'onlineSales', label: 'Online Sales', children: `Rs. ${money(currentShift?.total_online_sales)}` },
                             { key: 'refunds', label: 'Refunds', children: `Rs. ${money(currentShift?.total_refunds)}` },
                             { key: 'expenses', label: 'Cash Out / Expenses / Drop', children: `Rs. ${money(currentShift?.total_expenses)}` },
+                            { key: 'totalSales', label: 'Total Sales', children: `Rs. ${money(currentShift?.total_sales)}` },
                             { key: 'expected', label: 'Expected Cash', children: <Text strong>Rs. {money(currentShift?.expected_cash)}</Text> },
                         ]}
                     />

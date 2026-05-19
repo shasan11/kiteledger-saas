@@ -101,9 +101,9 @@ export default function AuthenticatedLayout({ header, children }) {
                           icon: <ShopOutlined />,
                           label: 'POS',
                           children: [
-                              can('pos.sale.create') && {
+                              can('pos.terminal.view') && {
                                   key: 'pos-screen',
-                                  label: 'POS Screen',
+                                  label: 'Terminal Selection',
                                   onClick: () => visit('pos.index', '/pos'),
                               },
                               can('pos.sale.view') && {

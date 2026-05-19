@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\View;
 use App\Support\Branding;
 
 use App\Models\{
-    ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
+    Branch, ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
     JournalVoucher, JournalVoucherLine, ChequeRegister,
     LoanAccount, LoanTopUp, LoanCharge,
     Invoice, CustomerPayment, PurchaseBill, SupplierPayment, SupplierPaymentLine,
@@ -19,7 +19,7 @@ use App\Models\{
 };
 
 use App\Observers\{
-    ChartOfAccountObserver, BankAccountObserver,
+    BranchObserver, ChartOfAccountObserver, BankAccountObserver,
     CashTransferObserver, CashTransferLineObserver,
     JournalVoucherObserver, JournalVoucherLineObserver,
     ChequeRegisterObserver,
@@ -74,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
 
         ChartOfAccount::observe(ChartOfAccountObserver::class);
         BankAccount::observe(BankAccountObserver::class);
+        Branch::observe(BranchObserver::class);
 
         CashTransfer::observe(CashTransferObserver::class);
         CashTransferLine::observe(CashTransferLineObserver::class);

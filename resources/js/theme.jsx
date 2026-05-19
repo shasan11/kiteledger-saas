@@ -1,8 +1,8 @@
 import { theme } from 'antd';
 
 const DEFAULT_BRAND = {
-  primary: '#16a34a',
-  success: '#16a34a',
+  primary: '#10b981',
+  success: '#10b981',
   warning: '#f59e0b',
   error: '#ef4444',
   info: '#0ea5e9',

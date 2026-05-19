@@ -164,7 +164,7 @@ export default function AppNavbar({
 
     const dark = useMemo(() => {
         const nav = isHexColor(brandSettings?.brand_sidebar_color)
-            ? brandSettings.brand_sidebar_color.trim()
+            ? '#0b1220'
             : '#0b1220';
         const primary = isHexColor(brandSettings?.brand_primary_color)
             ? brandSettings.brand_primary_color.trim()

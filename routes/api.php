@@ -547,6 +547,7 @@ Route::apiResource('product-variants', ProductVariantItemController::class);
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('pos/dashboard', [PosSaleController::class, 'dashboard']);
     Route::get('pos/products/search', [PosSaleController::class, 'productSearch']);
+    Route::get('pos/terminals/overview', [PosTerminalController::class, 'overview']);
 
     Route::apiResource('pos-terminals', PosTerminalController::class);
 
