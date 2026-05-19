@@ -65,6 +65,8 @@ class FullPermissionUserSeeder extends Seeder
                 'last_name' => env('SEED_FULL_ACCESS_LAST_NAME', 'Admin'),
                 'username' => env('SEED_FULL_ACCESS_USERNAME', 'fulladmin'),
                 'branch_id' => $branchId,
+                'employee_id' => env('SEED_FULL_ACCESS_EMPLOYEE_ID', 'EMP-ADMIN'),
+                'shift_id' => null,
                 'password' => Hash::make($password),
                 'email_verified_at' => now(),
                 'active' => true,

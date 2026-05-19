@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Payroll;
 
 use App\Http\Controllers\Api\BaseCrudApiController;
 use App\Models\AttendanceSummary;
+use App\Models\PayrollPeriod;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -38,6 +39,33 @@ class AttendanceSummaryController extends BaseCrudApiController
             abort(422, 'Attendance summary is locked by approved payroll.');
         }
 
+        $this->assertPeriodAcceptsAttendance($parentData['payroll_period_id'] ?? $record->payroll_period_id);
+
         return parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $this->assertPeriodAcceptsAttendance($parentData['payroll_period_id']);
+
+        $existing = AttendanceSummary::query()
+            ->where('employee_id', $parentData['employee_id'])
+            ->where('payroll_period_id', $parentData['payroll_period_id'])
+            ->first();
+
+        if ($existing?->locked) {
+            abort(422, 'Attendance summary is locked by approved payroll.');
+        }
+
+        return parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+    }
+
+    protected function assertPeriodAcceptsAttendance(string $periodId): void
+    {
+        $period = PayrollPeriod::query()->find($periodId);
+
+        if ($period && in_array($period->status, ['closed', 'locked'], true)) {
+            abort(422, 'Closed or locked payroll periods cannot accept attendance changes.');
+        }
     }
 }

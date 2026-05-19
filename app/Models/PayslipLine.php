@@ -20,6 +20,7 @@ class PayslipLine extends Model
         'base_currency_amount',
         'calculation_type',
         'source',
+        'meta',
         'remarks',
     ];
 
@@ -28,6 +29,7 @@ class PayslipLine extends Model
         return [
             'amount' => 'decimal:2',
             'base_currency_amount' => 'decimal:2',
+            'meta' => 'array',
         ];
     }
 

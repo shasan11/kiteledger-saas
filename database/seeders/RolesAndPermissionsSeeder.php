@@ -666,6 +666,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'delete',
                     'approve',
                     'reject',
+                    'lock',
                     'export',
                 ],
             ],
@@ -822,6 +823,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'reject',
                     'download',
                     'print',
+                    'email',
                     'export',
                 ],
 
@@ -1111,10 +1113,16 @@ class RolesAndPermissionsSeeder extends Seeder
             'hrm.payroll.salary_structures.create',
             'hrm.payroll.salary_structures.update',
             'hrm.payroll.salary_structures.delete',
+            'hrm.payroll.salary_structures.approve',
             'hrm.payslips.view',
             'hrm.payslips.create',
             'hrm.payslips.update',
             'hrm.payslips.delete',
+            'hrm.payslips.print',
+            'hrm.payslips.download',
+            'hrm.payslips.email',
+            'hrm.payslips.view-own',
+            'hrm.attendance.lock',
             'branches.view-all',
             'settings.view',
             'settings.update',
@@ -1997,7 +2005,9 @@ class RolesAndPermissionsSeeder extends Seeder
             return;
         }
 
-        $user = DB::table('users')->orderBy('id')->first();
+        $user = DB::table('users')
+            ->where('email', env('SEED_FULL_ACCESS_USER_EMAIL', 'admin@kiteledger.test'))
+            ->first();
 
         if (! $user) {
             return;

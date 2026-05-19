@@ -94,19 +94,61 @@ export default function AuthenticatedLayout({ header, children }) {
                 'pos.terminal.view',
                 'pos.cash_movement.view',
                 'pos.return.view',
-            ].some((permission) => can(permission)) ? [{
-                key: 'pos',
-                icon: <ShopOutlined />,
-                label: 'POS',
-                children: [
-                    can('pos.sale.create') && { key: 'pos-screen', label: 'POS Screen', onClick: () => visit('pos.index', '/pos') },
-                    can('pos.sale.view') && { key: 'pos-sales', label: 'Sales', onClick: () => visit('pos.sales.index', '/pos/sales') },
-                    can('pos.shift.view') && { key: 'pos-shifts', label: 'Shifts', onClick: () => visit('pos.shifts.index', '/pos/shifts') },
-                    can('pos.terminal.view') && { key: 'pos-terminals', label: 'Terminals', onClick: () => visit('pos.terminals.index', '/pos/terminals') },
-                    can('pos.cash_movement.view') && { key: 'pos-cash-movements', label: 'Cash Movements', onClick: () => visit('pos.cash-movements.index', '/pos/cash-movements') },
-                    can('pos.return.view') && { key: 'pos-returns', label: 'Returns', onClick: () => visit('pos.returns.index', '/pos/returns') },
-                ].filter(Boolean),
-            }] : []),
+            ].some((permission) => can(permission))
+                ? [
+                      {
+                          key: 'pos',
+                          icon: <ShopOutlined />,
+                          label: 'POS',
+                          children: [
+                              can('pos.sale.create') && {
+                                  key: 'pos-screen',
+                                  label: 'POS Screen',
+                                  onClick: () => visit('pos.index', '/pos'),
+                              },
+                              can('pos.sale.view') && {
+                                  key: 'pos-sales',
+                                  label: 'Sales',
+                                  onClick: () =>
+                                      visit('pos.sales.index', '/pos/sales'),
+                              },
+                              can('pos.shift.view') && {
+                                  key: 'pos-shifts',
+                                  label: 'Shifts',
+                                  onClick: () =>
+                                      visit('pos.shifts.index', '/pos/shifts'),
+                              },
+                              can('pos.terminal.view') && {
+                                  key: 'pos-terminals',
+                                  label: 'Terminals',
+                                  onClick: () =>
+                                      visit(
+                                          'pos.terminals.index',
+                                          '/pos/terminals',
+                                      ),
+                              },
+                              can('pos.cash_movement.view') && {
+                                  key: 'pos-cash-movements',
+                                  label: 'Cash Movements',
+                                  onClick: () =>
+                                      visit(
+                                          'pos.cash-movements.index',
+                                          '/pos/cash-movements',
+                                      ),
+                              },
+                              can('pos.return.view') && {
+                                  key: 'pos-returns',
+                                  label: 'Returns',
+                                  onClick: () =>
+                                      visit(
+                                          'pos.returns.index',
+                                          '/pos/returns',
+                                      ),
+                              },
+                          ].filter(Boolean),
+                      },
+                  ]
+                : []),
             {
                 key: 'crm',
                 icon: <ContactsOutlined />,
@@ -130,39 +172,76 @@ export default function AuthenticatedLayout({ header, children }) {
                     {
                         key: 'activity-inbox',
                         label: 'Activity Inbox',
-                        onClick: () => visit('crm.activity-inbox.index', '/crm/activity-inbox'),
+                        onClick: () =>
+                            visit(
+                                'crm.activity-inbox.index',
+                                '/crm/activity-inbox',
+                            ),
                     },
                     {
                         key: 'activities',
                         label: 'Activities',
-                        onClick: () => visit('crm.activities.index', '/crm/activities'),
+                        onClick: () =>
+                            visit('crm.activities.index', '/crm/activities'),
                     },
                 ],
             },
-            // {
-            //     key: 'sales',
-            //     icon: <FileTextOutlined />,
-            //     label: 'Receivables',
-            //     children: [
-            //         { key: 'sales-quotations', label: 'Quotations', onClick: () => visit('sales.quotations.index', '/sales/quotations') },
-            //         { key: 'sales-sales-orders', label: 'Sales Orders', onClick: () => visit('sales.sales-orders.index', '/sales/sales-orders') },
-            //         { key: 'sales-proforma-invoices', label: 'Proforma Invoices', onClick: () => visit('sales.proforma-invoices.index', '/sales/proforma-invoices') },
-            //         { key: 'sales-invoices', label: 'Invoices', onClick: () => visit('sales.invoices.index', '/sales/invoices') },
-            //         { key: 'sales-customer-payments', label: 'Customer Payments', onClick: () => visit('sales.customer-payments.index', '/sales/customer-payments') },
-            //         { key: 'sales-sales-returns', label: 'Sales Returns', onClick: () => visit('sales.sales-returns.index', '/sales/sales-returns') },
-            //     ],
-            // },
             {
                 key: 'payment-in',
                 icon: <CreditCardOutlined />,
                 label: 'Payment In',
                 children: [
-                    { key: 'pi-quotations', label: 'Quotations', onClick: () => visit('payment-in.quotations.index', '/payment-in/quotations') },
-                    { key: 'pi-sales-orders', label: 'Sales Order', onClick: () => visit('payment-in.sales-orders.index', '/payment-in/sales-orders') },
-                    { key: 'pi-invoices', label: 'Invoices', onClick: () => visit('payment-in.invoices.index', '/payment-in/invoices') },
-                    { key: 'pi-bills', label: 'Bills', onClick: () => visit('payment-in.bills.index', '/payment-in/bills') },
-                    { key: 'pi-payment', label: 'Payment', onClick: () => visit('payment-in.payments.index', '/payment-in/payments') },
-                    { key: 'pi-credit-notes', label: 'Credit Notes', onClick: () => visit('payment-in.credit-notes.index', '/payment-in/credit-notes') },
+                    {
+                        key: 'pi-quotations',
+                        label: 'Quotations',
+                        onClick: () =>
+                            visit(
+                                'payment-in.quotations.index',
+                                '/payment-in/quotations',
+                            ),
+                    },
+                    {
+                        key: 'pi-sales-orders',
+                        label: 'Sales Order',
+                        onClick: () =>
+                            visit(
+                                'payment-in.sales-orders.index',
+                                '/payment-in/sales-orders',
+                            ),
+                    },
+                    {
+                        key: 'pi-invoices',
+                        label: 'Invoices',
+                        onClick: () =>
+                            visit(
+                                'payment-in.invoices.index',
+                                '/payment-in/invoices',
+                            ),
+                    },
+                    {
+                        key: 'pi-bills',
+                        label: 'Bills',
+                        onClick: () =>
+                            visit('payment-in.bills.index', '/payment-in/bills'),
+                    },
+                    {
+                        key: 'pi-payment',
+                        label: 'Payment',
+                        onClick: () =>
+                            visit(
+                                'payment-in.payments.index',
+                                '/payment-in/payments',
+                            ),
+                    },
+                    {
+                        key: 'pi-credit-notes',
+                        label: 'Credit Notes',
+                        onClick: () =>
+                            visit(
+                                'payment-in.credit-notes.index',
+                                '/payment-in/credit-notes',
+                            ),
+                    },
                 ],
             },
             {
@@ -170,11 +249,51 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <WalletOutlined />,
                 label: 'Payables',
                 children: [
-                    { key: 'po-purchase-order', label: 'Purchase Order', onClick: () => visit('payment-out.purchase-orders.index', '/payment-out/purchase-orders') },
-                    { key: 'po-purchase-bills', label: 'Purchase Bills', onClick: () => visit('payment-out.purchase-bills.index', '/payment-out/purchase-bills') },
-                    { key: 'po-expenses', label: 'Expenses', onClick: () => visit('payment-out.expenses.index', '/payment-out/expenses') },
-                    { key: 'po-debit-note', label: 'Debit Note', onClick: () => visit('payment-out.debit-notes.index', '/payment-out/debit-notes') },
-                    { key: 'po-payment-out', label: 'Supplier Payments', onClick: () => visit('payment-out.payments.index', '/payment-out/payments') },
+                    {
+                        key: 'po-purchase-order',
+                        label: 'Purchase Order',
+                        onClick: () =>
+                            visit(
+                                'payment-out.purchase-orders.index',
+                                '/payment-out/purchase-orders',
+                            ),
+                    },
+                    {
+                        key: 'po-purchase-bills',
+                        label: 'Purchase Bills',
+                        onClick: () =>
+                            visit(
+                                'payment-out.purchase-bills.index',
+                                '/payment-out/purchase-bills',
+                            ),
+                    },
+                    {
+                        key: 'po-expenses',
+                        label: 'Expenses',
+                        onClick: () =>
+                            visit(
+                                'payment-out.expenses.index',
+                                '/payment-out/expenses',
+                            ),
+                    },
+                    {
+                        key: 'po-debit-note',
+                        label: 'Debit Note',
+                        onClick: () =>
+                            visit(
+                                'payment-out.debit-notes.index',
+                                '/payment-out/debit-notes',
+                            ),
+                    },
+                    {
+                        key: 'po-payment-out',
+                        label: 'Supplier Payments',
+                        onClick: () =>
+                            visit(
+                                'payment-out.payments.index',
+                                '/payment-out/payments',
+                            ),
+                    },
                 ],
             },
             {
@@ -182,12 +301,60 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <CalculatorOutlined />,
                 label: 'Accounting',
                 children: [
-                    { key: 'chart-of-accounts', label: 'Chart of Accounts', onClick: () => visit('accounting.chart-of-accounts.index', '/accounting/chart-of-accounts') },
-                    { key: 'bank-accounts', label: 'Bank Accounts', onClick: () => visit('accounting.bank-accounts.index', '/accounting/bank-accounts') },
-                    { key: 'cash-transfer', label: 'Cash Transfer', onClick: () => visit('accounting.cash-transfers.index', '/accounting/cash-transfers') },
-                    { key: 'cheque-register', label: 'Cheque Register', onClick: () => visit('accounting.cheque-registers.index', '/accounting/cheque-registers') },
-                    { key: 'journal-voucher', label: 'Journal Voucher', onClick: () => visit('accounting.journal-vouchers.index', '/accounting/journal-vouchers') },
-                    { key: 'loan-accounts', label: 'Loan Accounts', onClick: () => visit('accounting.loan-accounts.index', '/accounting/loan-accounts') },
+                    {
+                        key: 'chart-of-accounts',
+                        label: 'Chart of Accounts',
+                        onClick: () =>
+                            visit(
+                                'accounting.chart-of-accounts.index',
+                                '/accounting/chart-of-accounts',
+                            ),
+                    },
+                    {
+                        key: 'bank-accounts',
+                        label: 'Bank Accounts',
+                        onClick: () =>
+                            visit(
+                                'accounting.bank-accounts.index',
+                                '/accounting/bank-accounts',
+                            ),
+                    },
+                    {
+                        key: 'cash-transfer',
+                        label: 'Cash Transfer',
+                        onClick: () =>
+                            visit(
+                                'accounting.cash-transfers.index',
+                                '/accounting/cash-transfers',
+                            ),
+                    },
+                    {
+                        key: 'cheque-register',
+                        label: 'Cheque Register',
+                        onClick: () =>
+                            visit(
+                                'accounting.cheque-registers.index',
+                                '/accounting/cheque-registers',
+                            ),
+                    },
+                    {
+                        key: 'journal-voucher',
+                        label: 'Journal Voucher',
+                        onClick: () =>
+                            visit(
+                                'accounting.journal-vouchers.index',
+                                '/accounting/journal-vouchers',
+                            ),
+                    },
+                    {
+                        key: 'loan-accounts',
+                        label: 'Loan Accounts',
+                        onClick: () =>
+                            visit(
+                                'accounting.loan-accounts.index',
+                                '/accounting/loan-accounts',
+                            ),
+                    },
                 ],
             },
             {
@@ -195,24 +362,99 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <ApartmentOutlined />,
                 label: 'Tax',
                 children: [
-                    { key: 'tax-dashboard', label: 'Dashboard',      onClick: () => visit('tax.dashboard', '/tax/dashboard') },
-                    { key: 'tax-settings',  label: 'Tax Settings',   onClick: () => visit('tax.settings', '/tax/settings') },
-                    { key: 'tax-reports',   label: 'Tax Reports',    onClick: () => visit('reports.index', '/reports') },
+                    {
+                        key: 'tax-dashboard',
+                        label: 'Dashboard',
+                        onClick: () => visit('tax.dashboard', '/tax/dashboard'),
+                    },
+                    {
+                        key: 'tax-settings',
+                        label: 'Tax Settings',
+                        onClick: () => visit('tax.settings', '/tax/settings'),
+                    },
+                    {
+                        key: 'tax-reports',
+                        label: 'Tax Reports',
+                        onClick: () => visit('reports.index', '/reports'),
+                    },
                     ...(permissions.includes('tax.advanced.manage') || true
-                        ? [{
-                            key: 'tax-advanced',
-                            label: 'Advanced Setup',
-                            children: [
-                                { key: 'tax-advanced-hub',         label: 'Advanced Overview',      onClick: () => visit('tax.advanced', '/tax/advanced') },
-                                { key: 'tax-classes',              label: 'Tax Groups',             onClick: () => visit('tax.tax-classes.index', '/tax/tax-classes') },
-                                { key: 'tax-rates',                label: 'Tax Rates',              onClick: () => visit('tax.tax-rates.index', '/tax/tax-rates') },
-                                { key: 'tax-rules',                label: 'When to Apply Tax',      onClick: () => visit('tax.tax-rules.index', '/tax/tax-rules') },
-                                { key: 'tax-registrations',        label: 'Tax Registrations',      onClick: () => visit('tax.tax-registrations.index', '/tax/tax-registrations') },
-                                { key: 'tax-exemptions',           label: 'Tax Free Reasons',       onClick: () => visit('tax.tax-exemptions.index', '/tax/tax-exemptions') },
-                                { key: 'tax-jurisdictions',        label: 'Where Tax Applies',      onClick: () => visit('tax.tax-jurisdictions.index', '/tax/tax-jurisdictions') },
-                                { key: 'product-tax-categories',   label: 'Product Tax Types',      onClick: () => visit('tax.product-tax-categories.index', '/tax/product-tax-categories') },
-                            ],
-                        }]
+                        ? [
+                              {
+                                  key: 'tax-advanced',
+                                  label: 'Advanced Setup',
+                                  children: [
+                                      {
+                                          key: 'tax-advanced-hub',
+                                          label: 'Advanced Overview',
+                                          onClick: () =>
+                                              visit('tax.advanced', '/tax/advanced'),
+                                      },
+                                      {
+                                          key: 'tax-classes',
+                                          label: 'Tax Groups',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-classes.index',
+                                                  '/tax/tax-classes',
+                                              ),
+                                      },
+                                      {
+                                          key: 'tax-rates',
+                                          label: 'Tax Rates',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-rates.index',
+                                                  '/tax/tax-rates',
+                                              ),
+                                      },
+                                      {
+                                          key: 'tax-rules',
+                                          label: 'When to Apply Tax',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-rules.index',
+                                                  '/tax/tax-rules',
+                                              ),
+                                      },
+                                      {
+                                          key: 'tax-registrations',
+                                          label: 'Tax Registrations',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-registrations.index',
+                                                  '/tax/tax-registrations',
+                                              ),
+                                      },
+                                      {
+                                          key: 'tax-exemptions',
+                                          label: 'Tax Free Reasons',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-exemptions.index',
+                                                  '/tax/tax-exemptions',
+                                              ),
+                                      },
+                                      {
+                                          key: 'tax-jurisdictions',
+                                          label: 'Where Tax Applies',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.tax-jurisdictions.index',
+                                                  '/tax/tax-jurisdictions',
+                                              ),
+                                      },
+                                      {
+                                          key: 'product-tax-categories',
+                                          label: 'Product Tax Types',
+                                          onClick: () =>
+                                              visit(
+                                                  'tax.product-tax-categories.index',
+                                                  '/tax/product-tax-categories',
+                                              ),
+                                      },
+                                  ],
+                              },
+                          ]
                         : []),
                 ],
             },
@@ -221,18 +463,133 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <InboxOutlined />,
                 label: 'Inventory',
                 children: [
-                    { key: 'inventory-product-categories', label: 'Product Category', onClick: () => visit('inventory.product-categories.index', '/inventory/product-categories') },
-                    { key: 'inventory-products', label: 'Products', onClick: () => visit('inventory.products.index', '/inventory/products') },
-                    { key: 'inventory-variant-products', label: 'Variant Products', onClick: () => visit('inventory.variant-products.index', '/inventory/variant-products') },
-                    { key: 'inventory-warehouse-items', label: 'Warehouse Stock', onClick: () => visit('inventory.warehouse-items.index', '/inventory/warehouse-items') },
-                    { key: 'inventory-variant-attributes', label: 'Variant Attributes', onClick: () => visit('inventory.variant-attributes.index', '/inventory/variant-attributes') },
-                    { key: 'inventory-unit-of-measurement', label: 'Unit of Measurement', onClick: () => visit('inventory.unit-of-measurements.index', '/inventory/unit-of-measurements') },
-                    { key: 'warehouse', label: 'Warehouses', onClick: () => visit('warehouse.index', '/warehouse') },
-                    { key: 'inventory-warehouse-transfer', label: 'Warehouse Transfer', onClick: () => visit('inventory.warehouse-transfers.index', '/inventory/warehouse-transfers') },
-                    { key: 'inventory-adjustment', label: 'Inventory Adjustment', onClick: () => visit('inventory.adjustments.index', '/inventory/adjustments') },
-                    { key: 'inventory-bill-of-materials', label: 'Bill of Materials', onClick: () => visit('inventory.bill-of-materials.index', '/inventory/bill-of-materials') },
-                    { key: 'inventory-production-order', label: 'Production Order', onClick: () => visit('inventory.production-orders.index', '/inventory/production-orders') },
-                    { key: 'inventory-production-journal', label: 'Production Journal', onClick: () => visit('inventory.production-journals.index', '/inventory/production-journals') },
+                    {
+                        key: 'warehouse',
+                        label: 'Warehouses',
+                        onClick: () => visit('warehouse.index', '/warehouse'),
+                    },
+                    {
+                        key: 'inventory-warehouse-items',
+                        label: 'Warehouse Stock',
+                        onClick: () =>
+                            visit(
+                                'inventory.warehouse-items.index',
+                                '/inventory/warehouse-items',
+                            ),
+                    },
+                    {
+                        key: 'inventory-warehouse-transfer',
+                        label: 'Warehouse Transfer',
+                        onClick: () =>
+                            visit(
+                                'inventory.warehouse-transfers.index',
+                                '/inventory/warehouse-transfers',
+                            ),
+                    },
+                    {
+                        key: 'inventory-adjustment',
+                        label: 'Inventory Adjustment',
+                        onClick: () =>
+                            visit(
+                                'inventory.adjustments.index',
+                                '/inventory/adjustments',
+                            ),
+                    },
+                ],
+            },
+            {
+                key: 'products-services',
+                icon: <ShopOutlined />,
+                label: 'Products and Services',
+                children: [
+                    {
+                        key: 'inventory-product-categories',
+                        label: 'Product Categories',
+                        onClick: () =>
+                            visit(
+                                'inventory.product-categories.index',
+                                '/inventory/product-categories',
+                            ),
+                    },
+                    {
+                        key: 'inventory-products',
+                        label: 'Products',
+                        onClick: () =>
+                            visit(
+                                'inventory.products.index',
+                                '/inventory/products',
+                            ),
+                    },
+                    {
+                        key: 'inventory-services',
+                        label: 'Services',
+                        onClick: () =>
+                            visit(
+                                'inventory.services.index',
+                                '/inventory/services',
+                            ),
+                    },
+                    {
+                        key: 'inventory-variant-products',
+                        label: 'Variant Products',
+                        onClick: () =>
+                            visit(
+                                'inventory.variant-products.index',
+                                '/inventory/variant-products',
+                            ),
+                    },
+                    {
+                        key: 'inventory-variant-attributes',
+                        label: 'Variant Attributes',
+                        onClick: () =>
+                            visit(
+                                'inventory.variant-attributes.index',
+                                '/inventory/variant-attributes',
+                            ),
+                    },
+                    {
+                        key: 'inventory-unit-of-measurement',
+                        label: 'Unit of Measurement',
+                        onClick: () =>
+                            visit(
+                                'inventory.unit-of-measurements.index',
+                                '/inventory/unit-of-measurements',
+                            ),
+                    },
+                ],
+            },
+            {
+                key: 'manufacturing',
+                icon: <ApartmentOutlined />,
+                label: 'Manufacturing',
+                children: [
+                    {
+                        key: 'inventory-bill-of-materials',
+                        label: 'Bill of Materials',
+                        onClick: () =>
+                            visit(
+                                'inventory.bill-of-materials.index',
+                                '/inventory/bill-of-materials',
+                            ),
+                    },
+                    {
+                        key: 'inventory-production-order',
+                        label: 'Production Order',
+                        onClick: () =>
+                            visit(
+                                'inventory.production-orders.index',
+                                '/inventory/production-orders',
+                            ),
+                    },
+                    {
+                        key: 'inventory-production-journal',
+                        label: 'Production Journal',
+                        onClick: () =>
+                            visit(
+                                'inventory.production-journals.index',
+                                '/inventory/production-journals',
+                            ),
+                    },
                 ],
             },
             {
@@ -240,20 +597,82 @@ export default function AuthenticatedLayout({ header, children }) {
                 icon: <TeamOutlined />,
                 label: 'HRM',
                 children: [
-                    { key: 'hrm-users',      label: 'Employees',           onClick: () => visit('hrm.users.index', '/hrm/users') },
-                    { key: 'hrm-attendance', label: 'Attendance',          onClick: () => visit('hrm.attendance.index', '/hrm/attendance') },
-                    { key: 'hrm-leaves',     label: 'Leave Applications',  onClick: () => visit('hrm.leave-applications.index', '/hrm/leave-applications') },
-                    { key: 'hrm-payroll',    label: 'Payroll',             onClick: () => visit('hrm.payroll.index', '/hrm/payroll') },
-                    { key: 'hrm-payslips',   label: 'Payslips',            onClick: () => visit('hrm.payslips.index', '/hrm/payslips') },
-                    { key: 'hrm-emp-docs',   label: 'Employee Documents',  onClick: () => visit('hrm.employee-documents.index', '/hrm/employee-documents') },
-                    { key: 'hrm-onboarding', label: 'Onboarding',          onClick: () => visit('hrm.onboarding.index', '/hrm/onboarding') },
+                    {
+                        key: 'hrm-users',
+                        label: 'Employees',
+                        onClick: () => visit('hrm.users.index', '/hrm/users'),
+                    },
+                    {
+                        key: 'hrm-attendance',
+                        label: 'Attendance',
+                        onClick: () =>
+                            visit('hrm.attendance.index', '/hrm/attendance'),
+                    },
+                    {
+                        key: 'hrm-leaves',
+                        label: 'Leave Applications',
+                        onClick: () =>
+                            visit(
+                                'hrm.leave-applications.index',
+                                '/hrm/leave-applications',
+                            ),
+                    },
+                    {
+                        key: 'hrm-payroll',
+                        label: 'Payroll',
+                        onClick: () => visit('hrm.payroll.index', '/hrm/payroll'),
+                    },
+                    {
+                        key: 'hrm-payslips',
+                        label: 'Payslips',
+                        onClick: () => visit('hrm.payslips.index', '/hrm/payslips'),
+                    },
+                    {
+                        key: 'hrm-emp-docs',
+                        label: 'Employee Documents',
+                        onClick: () =>
+                            visit(
+                                'hrm.employee-documents.index',
+                                '/hrm/employee-documents',
+                            ),
+                    },
+                    {
+                        key: 'hrm-onboarding',
+                        label: 'Onboarding',
+                        onClick: () =>
+                            visit('hrm.onboarding.index', '/hrm/onboarding'),
+                    },
                     {
                         key: 'hrm-histories',
                         label: 'Histories',
                         children: [
-                            { key: 'hrm-salary-hist', label: 'Salary History', onClick: () => visit('hrm.salary-histories.index', '/hrm/salary-histories') },
-                            { key: 'hrm-desig-hist', label: 'Designation History', onClick: () => visit('hrm.designation-histories.index', '/hrm/designation-histories') },
-                            { key: 'hrm-award-hist', label: 'Award History', onClick: () => visit('hrm.award-histories.index', '/hrm/award-histories') },
+                            {
+                                key: 'hrm-salary-hist',
+                                label: 'Salary History',
+                                onClick: () =>
+                                    visit(
+                                        'hrm.salary-histories.index',
+                                        '/hrm/salary-histories',
+                                    ),
+                            },
+                            {
+                                key: 'hrm-desig-hist',
+                                label: 'Designation History',
+                                onClick: () =>
+                                    visit(
+                                        'hrm.designation-histories.index',
+                                        '/hrm/designation-histories',
+                                    ),
+                            },
+                            {
+                                key: 'hrm-award-hist',
+                                label: 'Award History',
+                                onClick: () =>
+                                    visit(
+                                        'hrm.award-histories.index',
+                                        '/hrm/award-histories',
+                                    ),
+                            },
                         ],
                     },
                 ],
@@ -275,12 +694,14 @@ export default function AuthenticatedLayout({ header, children }) {
                 'reports.system.view',
                 'reports.analytics.view',
             ].some((permission) => permissions.includes(permission))
-                ? [{
-                    key: 'reports',
-                    icon: <AuditOutlined />,
-                    label: 'Reports',
-                    onClick: () => visit('reports.index', '/reports'),
-                }]
+                ? [
+                      {
+                          key: 'reports',
+                          icon: <AuditOutlined />,
+                          label: 'Reports',
+                          onClick: () => visit('reports.index', '/reports'),
+                      },
+                  ]
                 : []),
             {
                 key: 'settings',
@@ -294,6 +715,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
+
         if (isActive('/pos/returns')) return ['pos-returns'];
         if (isActive('/pos/cash-movements')) return ['pos-cash-movements'];
         if (isActive('/pos/terminals')) return ['pos-terminals'];
@@ -343,30 +765,32 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
         if (isActive('/accounting/loan-accounts')) return ['loan-accounts'];
 
-        if (isActive('/tax/dashboard'))                return ['tax-dashboard'];
-        if (isActive('/tax/settings'))                 return ['tax-settings'];
-        if (isActive('/tax/advanced'))                 return ['tax-advanced-hub'];
-        if (isActive('/tax/tax-classes'))              return ['tax-classes'];
-        if (isActive('/tax/tax-rates'))                return ['tax-rates'];
-        if (isActive('/tax/tax-rules'))                return ['tax-rules'];
-        if (isActive('/tax/tax-registrations'))        return ['tax-registrations'];
-        if (isActive('/tax/tax-exemptions'))           return ['tax-exemptions'];
-        if (isActive('/tax/tax-jurisdictions'))        return ['tax-jurisdictions'];
-        if (isActive('/tax/product-tax-categories'))   return ['product-tax-categories'];
+        if (isActive('/tax/dashboard')) return ['tax-dashboard'];
+        if (isActive('/tax/settings')) return ['tax-settings'];
+        if (isActive('/tax/advanced')) return ['tax-advanced-hub'];
+        if (isActive('/tax/tax-classes')) return ['tax-classes'];
+        if (isActive('/tax/tax-rates')) return ['tax-rates'];
+        if (isActive('/tax/tax-rules')) return ['tax-rules'];
+        if (isActive('/tax/tax-registrations')) return ['tax-registrations'];
+        if (isActive('/tax/tax-exemptions')) return ['tax-exemptions'];
+        if (isActive('/tax/tax-jurisdictions')) return ['tax-jurisdictions'];
+        if (isActive('/tax/product-tax-categories')) return ['product-tax-categories'];
+
+        if (isActive('/warehouse')) return ['warehouse'];
+        if (isActive('/inventory/warehouse-items')) return ['inventory-warehouse-items'];
+        if (isActive('/inventory/warehouse-transfers')) return ['inventory-warehouse-transfer'];
+        if (isActive('/inventory/adjustments')) return ['inventory-adjustment'];
 
         if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
+        if (isActive('/inventory/services')) return ['inventory-services'];
         if (isActive('/inventory/variant-products')) return ['inventory-variant-products'];
-        if (isActive('/inventory/warehouse-items')) return ['inventory-warehouse-items'];
         if (isActive('/inventory/products')) return ['inventory-products'];
         if (isActive('/inventory/variant-attributes')) return ['inventory-variant-attributes'];
         if (isActive('/inventory/unit-of-measurements')) return ['inventory-unit-of-measurement'];
-        if (isActive('/inventory/warehouse-transfers')) return ['inventory-warehouse-transfer'];
-        if (isActive('/inventory/adjustments')) return ['inventory-adjustment'];
+
         if (isActive('/inventory/bill-of-materials')) return ['inventory-bill-of-materials'];
         if (isActive('/inventory/production-orders')) return ['inventory-production-order'];
         if (isActive('/inventory/production-journals')) return ['inventory-production-journal'];
-
-        if (isActive('/warehouse')) return ['warehouse'];
 
         if (isActive('/human-resource/employees')) return ['human-resource-employees'];
         if (isActive('/human-resource/departments')) return ['human-resource-departments'];
@@ -375,41 +799,40 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/human-resource/leaves')) return ['human-resource-leaves'];
         if (isActive('/human-resource/payroll')) return ['human-resource-payroll'];
 
-        // HRM full module
-        if (isActive('/hrm/users/'))                  return ['hrm-users']; // show pages
-        if (isActive('/hrm/users'))                   return ['hrm-users'];
-        if (isActive('/hrm/attendance'))              return ['hrm-attendance'];
-        if (isActive('/hrm/leave-applications'))      return ['hrm-leaves'];
-        if (isActive('/hrm/payroll'))                 return ['hrm-payroll'];
-        if (isActive('/hrm/payslips'))                return ['hrm-payslips'];
-        if (isActive('/hrm/employee-documents'))      return ['hrm-emp-docs'];
-        if (isActive('/hrm/onboarding'))              return ['hrm-onboarding'];
-        if (isActive('/hrm/departments'))             return ['settings-hrm-setup'];
-        if (isActive('/hrm/designations'))            return ['settings-hrm-setup'];
-        if (isActive('/hrm/employment-statuses'))     return ['settings-hrm-setup'];
-        if (isActive('/hrm/leave-policies'))          return ['settings-hrm-setup'];
-        if (isActive('/hrm/leave-types'))             return ['settings-hrm-setup'];
-        if (isActive('/hrm/weekly-holidays'))         return ['settings-hrm-setup'];
-        if (isActive('/hrm/shifts'))                  return ['settings-hrm-setup'];
-        if (isActive('/hrm/public-holidays'))         return ['settings-hrm-setup'];
-        if (isActive('/hrm/awards'))                  return ['settings-hrm-setup'];
-        if (isActive('/hrm/priorities'))              return ['settings-hrm-setup'];
-        if (isActive('/hrm/salary-histories'))        return ['hrm-salary-hist'];
-        if (isActive('/hrm/designation-histories'))   return ['hrm-desig-hist'];
-        if (isActive('/hrm/award-histories'))         return ['hrm-award-hist'];
-        if (isActive('/hrm/educations'))              return ['settings-hrm-setup'];
-        if (isActive('/hrm/roles'))                   return ['hrm-roles'];
-        if (isActive('/hrm/permissions'))             return ['hrm-permissions'];
-        if (isActive('/hrm/role-permissions'))        return ['hrm-role-perms'];
-        if (isActive('/hrm/projects'))                return ['hrm-projects-list'];
-        if (isActive('/hrm/milestones'))              return ['hrm-milestones'];
-        if (isActive('/hrm/tasks'))                   return ['hrm-tasks'];
-        if (isActive('/hrm/task-statuses'))           return ['hrm-task-statuses'];
-        if (isActive('/hrm/assigned-tasks'))          return ['hrm-assigned-tasks'];
-        if (isActive('/hrm/project-teams'))           return ['hrm-project-teams'];
-        if (isActive('/hrm/project-team-members'))    return ['hrm-team-members'];
-        if (isActive('/hrm/email-configs'))           return ['hrm-email-configs'];
-        if (isActive('/hrm/emails'))                  return ['hrm-emails'];
+        if (isActive('/hrm/users/')) return ['hrm-users'];
+        if (isActive('/hrm/users')) return ['hrm-users'];
+        if (isActive('/hrm/attendance')) return ['hrm-attendance'];
+        if (isActive('/hrm/leave-applications')) return ['hrm-leaves'];
+        if (isActive('/hrm/payroll')) return ['hrm-payroll'];
+        if (isActive('/hrm/payslips')) return ['hrm-payslips'];
+        if (isActive('/hrm/employee-documents')) return ['hrm-emp-docs'];
+        if (isActive('/hrm/onboarding')) return ['hrm-onboarding'];
+        if (isActive('/hrm/departments')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/designations')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/employment-statuses')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/leave-policies')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/leave-types')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/weekly-holidays')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/shifts')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/public-holidays')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/awards')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/priorities')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/salary-histories')) return ['hrm-salary-hist'];
+        if (isActive('/hrm/designation-histories')) return ['hrm-desig-hist'];
+        if (isActive('/hrm/award-histories')) return ['hrm-award-hist'];
+        if (isActive('/hrm/educations')) return ['settings-hrm-setup'];
+        if (isActive('/hrm/roles')) return ['hrm-roles'];
+        if (isActive('/hrm/permissions')) return ['hrm-permissions'];
+        if (isActive('/hrm/role-permissions')) return ['hrm-role-perms'];
+        if (isActive('/hrm/projects')) return ['hrm-projects-list'];
+        if (isActive('/hrm/milestones')) return ['hrm-milestones'];
+        if (isActive('/hrm/tasks')) return ['hrm-tasks'];
+        if (isActive('/hrm/task-statuses')) return ['hrm-task-statuses'];
+        if (isActive('/hrm/assigned-tasks')) return ['hrm-assigned-tasks'];
+        if (isActive('/hrm/project-teams')) return ['hrm-project-teams'];
+        if (isActive('/hrm/project-team-members')) return ['hrm-team-members'];
+        if (isActive('/hrm/email-configs')) return ['hrm-email-configs'];
+        if (isActive('/hrm/emails')) return ['hrm-emails'];
 
         if (isActive('/reports')) return ['reports'];
 
@@ -576,9 +999,8 @@ export default function AuthenticatedLayout({ header, children }) {
                     {header && (
                         <div
                             style={{
-                                 padding: '9px 18px',
+                                padding: '9px 18px',
                                 background: colorBgContainer,
-                               
                                 border: `1px solid ${colorBorderSecondary}`,
                             }}
                         >
@@ -590,9 +1012,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         style={{
                             minHeight: 'calc(100vh - 100px)',
                             minWidth: 0,
-                             
-                            
-                             
                         }}
                     >
                         {children}

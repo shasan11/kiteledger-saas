@@ -12,19 +12,54 @@ use Illuminate\Support\Str;
 
 class PayrollAccountSyncService
 {
+    public function shouldSyncPayrollAccount(User $user): bool
+    {
+        if (! $user->active) {
+            return false;
+        }
+
+        if (filled($user->employee_id)) {
+            return true;
+        }
+
+        if ($user->employment_status_id || $user->department_id || $user->shift_id || $user->leave_policy_id || $user->weekly_holiday_id) {
+            return true;
+        }
+
+        if ($user->relationLoaded('roles') || method_exists($user, 'roles')) {
+            try {
+                return $user->roles()->whereIn('name', ['Employee', 'HR Employee', 'Staff'])->exists();
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
     public function syncEmployeePayrollAccount(User $employee): Account
     {
+        abort_unless($this->shouldSyncPayrollAccount($employee), 422, 'Payroll account sync is only available for employee users.');
+
         return DB::transaction(function () use ($employee) {
             $employee = User::query()->lockForUpdate()->findOrFail($employee->id);
 
             $account = $this->findExistingEmployeeAccount($employee)
                 ?: $this->createEmployeeAccount($employee);
 
+            if ($account->nature !== 'employee') {
+                $account->forceFill(['nature' => 'employee'])->save();
+            }
+
             if (! $account->active) {
                 $account->forceFill(['active' => true])->save();
             }
 
             $this->ensureChartAccountForPayrollAccount($account, $employee);
+
+            if ($account->fresh()->nature !== 'employee') {
+                DB::table('accounts')->where('id', $account->id)->update(['nature' => 'employee', 'updated_at' => now()]);
+            }
 
             if ($employee->payroll_account_id !== $account->id) {
                 $employee->forceFill(['payroll_account_id' => $account->id])->save();
@@ -70,6 +105,16 @@ class PayrollAccountSyncService
 
         User::query()
             ->where('active', true)
+            ->where(function ($query) {
+                $query
+                    ->whereNotNull('employee_id')
+                    ->orWhereNotNull('employment_status_id')
+                    ->orWhereNotNull('department_id')
+                    ->orWhereNotNull('shift_id')
+                    ->orWhereNotNull('leave_policy_id')
+                    ->orWhereNotNull('weekly_holiday_id')
+                    ->orWhereHas('roles', fn ($roles) => $roles->whereIn('name', ['Employee', 'HR Employee', 'Staff']));
+            })
             ->when($branchId, fn ($query) => $query->where('branch_id', $branchId))
             ->where(function ($query) {
                 $query

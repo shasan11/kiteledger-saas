@@ -15,8 +15,7 @@ class PosSeeder extends Seeder
     public function run(): void
     {
         $this->seedNumbering();
-        $walkInCustomer = $this->seedWalkInCustomer();
-        $this->seedTerminals($walkInCustomer);
+        $this->seedWalkInCustomer();
     }
 
     private function seedNumbering(): void

@@ -37,6 +37,7 @@ class Payslip extends Model
         'overtime_hours',
         'journal_voucher_id',
         'payment_reference',
+        'calculation_snapshot',
         'remarks',
         'user_id',
         'salary_month',
@@ -95,6 +96,7 @@ class Payslip extends Model
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
+            'calculation_snapshot' => 'array',
         ];
     }
 

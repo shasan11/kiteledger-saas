@@ -28,6 +28,10 @@ class Payroll extends Model
         'total_net_payable',
         'total_base_currency_amount',
         'journal_voucher_id',
+        'payment_journal_voucher_id',
+        'reversal_journal_voucher_id',
+        'payment_reversal_journal_voucher_id',
+        'preview_snapshot',
         'generated_by',
         'generated_at',
         'approved_by',
@@ -63,6 +67,7 @@ class Payroll extends Model
             'locked_at' => 'datetime',
             'voided_at' => 'datetime',
             'reopened_at' => 'datetime',
+            'preview_snapshot' => 'array',
         ];
     }
 
@@ -104,5 +109,20 @@ class Payroll extends Model
     public function journalVoucher(): BelongsTo
     {
         return $this->belongsTo(JournalVoucher::class);
+    }
+
+    public function paymentJournalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class, 'payment_journal_voucher_id');
+    }
+
+    public function reversalJournalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class, 'reversal_journal_voucher_id');
+    }
+
+    public function paymentReversalJournalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class, 'payment_reversal_journal_voucher_id');
     }
 }
