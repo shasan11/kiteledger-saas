@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AuthorizesProjectResources;
 use App\Models\Milestone;
 use App\Models\Project;
 use App\Models\ProjectTeam;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 
 class ProjectController extends BaseCrudApiController
 {
+    use AuthorizesProjectResources;
  
     protected string $modelClass = Project::class;
 
@@ -187,11 +189,23 @@ class ProjectController extends BaseCrudApiController
 
     protected function updateRules(Request $request, Model $record): array
     {
+        $startDate = $request->input('start_date', $record->start_date?->format('Y-m-d'));
+        $endDate = $request->input('end_date', $record->end_date?->format('Y-m-d'));
+
         return [
             'project_manager_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
-            'start_date' => ['sometimes', 'required', 'date'],
-            'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:start_date'],
+            'start_date' => [
+                'sometimes',
+                'required',
+                'date',
+                function ($attribute, $value, $fail) use ($endDate) {
+                    if ($endDate && strtotime((string) $value) > strtotime((string) $endDate)) {
+                        $fail('The start date must be before or equal to the end date.');
+                    }
+                },
+            ],
+            'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:' . $startDate],
             'description' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'string', 'in:PENDING,IN_PROGRESS,COMPLETED,CANCELLED,ON_HOLD'],
             'active' => ['sometimes', 'nullable', 'boolean'],
@@ -235,5 +249,24 @@ class ProjectController extends BaseCrudApiController
         }
 
         return $parentData;
+    }
+
+    protected function afterSave(
+        Model $record,
+        array $parentData,
+        array $nestedData,
+        bool $isUpdate
+    ): Model {
+        $record = parent::afterSave($record, $parentData, $nestedData, $isUpdate);
+
+        if (!$isUpdate && empty($nestedData['task_statuses']) && !$record->taskStatuses()->exists()) {
+            $record->taskStatuses()->createMany([
+                ['name' => 'To Do', 'color' => 'default', 'sort_order' => 1, 'active' => true],
+                ['name' => 'In Progress', 'color' => 'blue', 'sort_order' => 2, 'active' => true],
+                ['name' => 'Done', 'color' => 'green', 'sort_order' => 3, 'active' => true],
+            ]);
+        }
+
+        return $record;
     }
 }

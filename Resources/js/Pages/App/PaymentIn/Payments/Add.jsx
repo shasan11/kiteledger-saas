@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Col, Row } from 'antd';
+import { Col, Row, Space, Switch, Typography } from 'antd';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -73,6 +73,8 @@ const getCurrencySymbol = (values = {}) => {
 
 const moneyWithSymbol = (value, symbol = 'रू') =>
   `${symbol ? `${symbol} ` : ''}${money(value)}`;
+
+const { Text } = Typography;
 
 const asId = (value) => {
   if (value === undefined || value === null || value === '') return null;
@@ -171,8 +173,8 @@ const normalizeAllocation = (line = {}) => {
 
 const calculatePaymentSummary = (values = {}) => {
   const paymentAmount = roundMoney(values.amount);
-  const bankCharges = roundMoney(values.bank_charges);
-  const tdsCharges = roundMoney(values.tds_charges);
+  const bankCharges = values._bank_charges_applicable ? roundMoney(values.bank_charges) : 0;
+  const tdsCharges = values._tds_applicable ? roundMoney(values.tds_charges) : 0;
 
   const settlementTotal = roundMoney(paymentAmount + bankCharges + tdsCharges);
 
@@ -338,8 +340,9 @@ export default function PaymentAdd(props) {
             {
               name: 'phone',
               label: 'Phone',
-              type: 'text',
+              type: 'phone',
               col: 12,
+              defaultCountryCode: '+977',
             },
             {
               name: 'email',
@@ -368,6 +371,7 @@ export default function PaymentAdd(props) {
         label: 'Payment No',
         type: 'text',
         col: 8,
+        readOnly: true,
         placeholder: 'Auto-generated',
         disabled: true,
       },
@@ -386,7 +390,7 @@ export default function PaymentAdd(props) {
         required: true,
         col: 8,
         placeholder: 'Select Account',
-        fkUrl: api('/api/accounts/'),
+        fkUrl: api('/api/accounts/?nature=bank&active=true'),
         fkSearchParam: 'search',
         fkPageSize: 20,
         fkValueKey: 'id',
@@ -432,12 +436,57 @@ export default function PaymentAdd(props) {
         prefix: ({ values }) => getCurrencySymbol(values),
       },
       {
+        name: '_bank_charges_applicable',
+        label: 'Bank Charges',
+        type: 'custom',
+        col: 8,
+        render: ({ values, setFieldValue }) => (
+          <Space align="center">
+            <Switch
+              checked={!!values._bank_charges_applicable}
+              onChange={(checked) => {
+                setFieldValue('_bank_charges_applicable', checked);
+                if (!checked) {
+                  setFieldValue('bank_charges_account_id', null);
+                  setFieldValue('bank_charges_account_id_detail', null, false);
+                  setFieldValue('bank_charges', 0);
+                }
+              }}
+            />
+            <Text>Bank Charges Applicable</Text>
+          </Space>
+        ),
+      },
+      {
+        name: '_tds_applicable',
+        label: 'TDS',
+        type: 'custom',
+        col: 8,
+        render: ({ values, setFieldValue }) => (
+          <Space align="center">
+            <Switch
+              checked={!!values._tds_applicable}
+              onChange={(checked) => {
+                setFieldValue('_tds_applicable', checked);
+                if (!checked) {
+                  setFieldValue('tds_charges_account_id', null);
+                  setFieldValue('tds_charges_account_id_detail', null, false);
+                  setFieldValue('tds_charges', 0);
+                }
+              }}
+            />
+            <Text>TDS Applicable</Text>
+          </Space>
+        ),
+      },
+      {
         name: 'bank_charges_account_id',
         label: 'Bank Charges Account',
         type: 'fkSelect',
         col: 8,
+        condition: (values) => !!values._bank_charges_applicable,
         placeholder: 'Select Account',
-        fkUrl: api('/api/accounts/'),
+        fkUrl: api('/api/accounts/?active=true'),
         fkSearchParam: 'search',
         fkPageSize: 20,
         fkValueKey: 'id',
@@ -450,6 +499,7 @@ export default function PaymentAdd(props) {
         type: 'number',
         col: 8,
         min: 0,
+        condition: (values) => !!values._bank_charges_applicable,
         addonBefore: ({ values }) => getCurrencySymbol(values),
         prefix: ({ values }) => getCurrencySymbol(values),
       },
@@ -458,8 +508,9 @@ export default function PaymentAdd(props) {
         label: 'TDS Account',
         type: 'fkSelect',
         col: 8,
+        condition: (values) => !!values._tds_applicable,
         placeholder: 'Select Account',
-        fkUrl: api('/api/accounts/'),
+        fkUrl: api('/api/accounts/?active=true'),
         fkSearchParam: 'search',
         fkPageSize: 20,
         fkValueKey: 'id',
@@ -472,6 +523,7 @@ export default function PaymentAdd(props) {
         type: 'number',
         col: 8,
         min: 0,
+        condition: (values) => !!values._tds_applicable,
         addonBefore: ({ values }) => getCurrencySymbol(values),
         prefix: ({ values }) => getCurrencySymbol(values),
       },
@@ -661,8 +713,10 @@ export default function PaymentAdd(props) {
       currency_id: baseCurrency,
       amount: 0,
       payment_method: 'cash',
+      _bank_charges_applicable: false,
       bank_charges_account_id: null,
       bank_charges: 0,
+      _tds_applicable: false,
       tds_charges_account_id: null,
       tds_charges: 0,
       reference: '',
@@ -714,17 +768,17 @@ export default function PaymentAdd(props) {
       amount: roundMoney(values.amount),
       payment_method: nullIfEmpty(values.payment_method),
 
-      bank_charges_account_id: asId(
-        values.bank_charges_account_id ?? values.bankChargesAccount
-      ),
-      bank_charges: toNumber(values.bank_charges)
+      bank_charges_account_id: values._bank_charges_applicable
+        ? asId(values.bank_charges_account_id ?? values.bankChargesAccount)
+        : null,
+      bank_charges: values._bank_charges_applicable && toNumber(values.bank_charges)
         ? roundMoney(values.bank_charges)
         : null,
 
-      tds_charges_account_id: asId(
-        values.tds_charges_account_id ?? values.tdsChargesAccount
-      ),
-      tds_charges: toNumber(values.tds_charges)
+      tds_charges_account_id: values._tds_applicable
+        ? asId(values.tds_charges_account_id ?? values.tdsChargesAccount)
+        : null,
+      tds_charges: values._tds_applicable && toNumber(values.tds_charges)
         ? roundMoney(values.tds_charges)
         : null,
 

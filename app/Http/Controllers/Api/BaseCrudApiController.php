@@ -1995,6 +1995,18 @@ abstract class BaseCrudApiController extends Controller
         );
     }
 
+    protected function throwValidationWarning(array $warnings): void
+    {
+        throw new HttpResponseException(
+            response()->json(['__validation_warnings' => $warnings], 422)
+        );
+    }
+
+    protected function isValidationOverrideConfirmed(string $warningType): bool
+    {
+        return !empty(request()->input("validation_overrides.{$warningType}"));
+    }
+
     protected function makeRulesPartial(array $rules): array
     {
         $partial = [];

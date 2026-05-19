@@ -17,6 +17,12 @@ export default function Roles(props) {
   const columns = [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (value) => <strong>{value}</strong> },
     {
+      title: 'Branch',
+      key: 'branch',
+      width: 140,
+      render: (_, record) => record.branch?.name || <span style={{ color: '#999' }}>All branches</span>,
+    },
+    {
       title: 'Description',
       dataIndex: 'description',
       key: 'description',
@@ -32,20 +38,10 @@ export default function Roles(props) {
     {
       title: 'Permissions',
       key: 'permissions',
+      width: 180,
       render: (_, record) => {
         const permissions = record.permissions || [];
-        if (!permissions.length) return <span style={{ color: '#bbb' }}>-</span>;
-
-        return (
-          <span>
-            {permissions.slice(0, 3).map((permission) => (
-              <Tag key={permission.id} style={{ fontSize: 11, marginBottom: 2 }}>
-                {permission.name}
-              </Tag>
-            ))}
-            {permissions.length > 3 && <Tag style={{ fontSize: 11 }}>+{permissions.length - 3} more</Tag>}
-          </span>
-        );
+        return permissions.length ? <Tag color="blue">{permissions.length} permissions</Tag> : <span style={{ color: '#bbb' }}>-</span>;
       },
     },
     {

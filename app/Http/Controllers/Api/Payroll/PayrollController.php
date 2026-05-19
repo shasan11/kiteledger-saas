@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BaseCrudApiController;
 use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\User;
+use App\Services\Payroll\PayrollAccountSyncService;
 use App\Services\Payroll\PayrollService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class PayrollController extends BaseCrudApiController
         'journalVoucher',
         'additions.component',
         'deductions.component',
-        'payslips.employee.payrollAccount',
+        'payslips.employee.payrollAccount.chartOfAccounts',
         'payslips.lines.component',
     ];
     protected array $relationDetails = [
@@ -152,6 +153,22 @@ class PayrollController extends BaseCrudApiController
         $this->requirePermission($request, 'approve');
 
         return response()->json($service->generateJournalVoucher(Payroll::query()->findOrFail($id), $request->user()));
+    }
+
+    public function syncAccounts(Request $request, PayrollAccountSyncService $service)
+    {
+        $this->requirePermission($request, 'update');
+
+        $data = $request->validate([
+            'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        ]);
+
+        $count = $service->syncEmployeesMissingPayrollAccounts($data['branch_id'] ?? null);
+
+        return response()->json([
+            'message' => "Synced {$count} employee payroll account(s).",
+            'count' => $count,
+        ]);
     }
 
     public function storeAdjustment(Request $request, string $id, string $kind, PayrollService $service)

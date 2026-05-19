@@ -207,25 +207,19 @@ class InvoiceController extends BaseCrudApiController
 
     private function checkNegativeItemBalance(?AppSetting $config, Model $record, \Illuminate\Support\Collection $lines): void
     {
-        if (!$config || !in_array(($config->negative_item_balance ?? 'warn'), ['block', 'reject'], true)) {
-            return;
-        }
+        $mode = $config?->negative_item_balance ?? 'warn';
+        if ($mode === 'allow') return;
+        if ($this->isValidationOverrideConfirmed('negative_stock')) return;
 
         $warehouseId = $record->warehouse_id;
-        if (!$warehouseId) {
-            return;
-        }
+        if (!$warehouseId) return;
 
-        $errors = [];
+        $shortages = [];
         foreach ($lines as $line) {
-            if (!$line->product_id) {
-                continue;
-            }
+            if (!$line->product_id) continue;
 
             $product = $line->product ?? $line->load('product')->product;
-            if (!$product || !$product->track_inventory) {
-                continue;
-            }
+            if (!$product || !$product->track_inventory) continue;
 
             $stock = WarehouseItem::where('product_id', $line->product_id)
                 ->where('warehouse_id', $warehouseId)
@@ -234,42 +228,65 @@ class InvoiceController extends BaseCrudApiController
             $available = (float) $stock + (float) ($this->stockAllowanceByLineId[$line->id] ?? 0);
             $requested = (float) $line->qty;
 
-            // When updating, allow for the qty already on this line previously saved.
             if ($available < $requested) {
                 $name = $product->name ?? $line->product_name ?? $line->product_id;
-                $errors[] = "Insufficient stock for \"{$name}\": available {$available}, requested {$requested}.";
+                $warehouseName = $record->warehouse?->name ?? $warehouseId;
+                $shortages[] = [
+                    'product_name' => $name,
+                    'warehouse' => $warehouseName,
+                    'available_stock' => $available,
+                    'required_qty' => $requested,
+                    'projected_stock' => $available - $requested,
+                    'shortage_qty' => $requested - $available,
+                ];
             }
         }
 
-        if ($errors) {
-            $this->throwValidation(['items' => $errors]);
+        if (empty($shortages)) return;
+
+        if (in_array($mode, ['block', 'reject'], true)) {
+            $messages = array_map(fn ($s) =>
+                "Insufficient stock for \"{$s['product_name']}\": available {$s['available_stock']}, requested {$s['required_qty']}.",
+                $shortages
+            );
+            $this->throwValidation(['items' => $messages]);
+        } else {
+            $this->throwValidationWarning(['negative_stock' => ['items' => $shortages]]);
         }
     }
 
     private function checkCreditLimitExceed(?AppSetting $config, Model $record): void
     {
-        if (!$config || !in_array(($config->credit_limit_exceed ?? 'warn'), ['block', 'reject'], true)) {
-            return;
-        }
+        $mode = $config?->credit_limit_exceed ?? 'warn';
+        if ($mode === 'allow') return;
+        if ($this->isValidationOverrideConfirmed('credit_limit')) return;
 
         $contact = $record->contact ?? $record->load('contact')->contact;
-        if (!$contact) {
-            return;
-        }
+        if (!$contact) return;
 
         $creditLimit = (float) ($contact->credit_limit ?? 0);
-        if ($creditLimit <= 0) {
-            return;
-        }
+        if ($creditLimit <= 0) return;
 
         $outstanding = Invoice::where('contact_id', $contact->id)
             ->where('id', '!=', $record->id)
             ->whereNotIn('status', ['paid', 'void'])
             ->sum('balance_due');
 
-        $projected = (float) $outstanding + (float) $record->total;
+        $transactionAmount = (float) $record->total;
+        $projected = (float) $outstanding + $transactionAmount;
 
-        if ($projected > $creditLimit) {
+        if ($projected <= $creditLimit) return;
+
+        $warningData = [
+            'customer_name' => $contact->name,
+            'credit_limit' => $creditLimit,
+            'outstanding_balance' => (float) $outstanding,
+            'transaction_amount' => $transactionAmount,
+            'projected_balance' => $projected,
+            'exceeded_amount' => round($projected - $creditLimit, 2),
+        ];
+
+        if (in_array($mode, ['block', 'reject'], true)) {
             $this->throwValidation([
                 'contact_id' => [
                     sprintf(
@@ -277,10 +294,12 @@ class InvoiceController extends BaseCrudApiController
                         $contact->name,
                         $creditLimit,
                         (float) $outstanding,
-                        (float) $record->total
+                        $transactionAmount
                     ),
                 ],
             ]);
+        } else {
+            $this->throwValidationWarning(['credit_limit' => $warningData]);
         }
     }
 }

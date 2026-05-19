@@ -10,7 +10,9 @@ const api = (p) => `${BACKEND}${p}`;
 
 export default function Permissions(props) {
   const columns = [
+    { title: 'Module', key: 'module', width: 140, render: (_, record) => <Tag>{String(record.name || '').split('.')[0] || '-'}</Tag> },
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 3, fontSize: 12 }}>{v}</code> },
+    { title: 'Guard', dataIndex: 'guard_name', key: 'guard_name', width: 90, render: (v) => <Tag>{v || 'web'}</Tag> },
     { title: 'Description', dataIndex: 'description', key: 'description', render: (v) => v ? <Tooltip title={v}><span style={{ fontSize: 12, color: '#555' }}>{v.length > 70 ? v.slice(0,70)+'…' : v}</span></Tooltip> : '-' },
     { title: 'System', dataIndex: 'is_system_generated', key: 'is_system_generated', width: 80, render: (v) => v ? <Tag color="purple">System</Tag> : '-' },
     { title: 'Status', dataIndex: 'active', key: 'active', sorter: true, width: 80, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Active' : 'Inactive'}</Tag> },
@@ -35,7 +37,7 @@ export default function Permissions(props) {
         columns={columns} fields={fields} validationSchema={validationSchema} crudInitialValues={initialValues}
         transformPayload={transformPayload} form_ui="modal" modalWidth={600}
         searchParam="search" pageParam="page" pageSizeParam="page_size" sortMode="ordering" orderingParam="ordering"
-        activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd canEdit canDelete hasActions hasActionColumns />
+        activeParam="active" enableServerPagination enableInactiveDrawer showSearch canAdd={false} canEdit={false} canDelete={false} hasActions={false} hasActionColumns={false} />
     </>
   );
 }

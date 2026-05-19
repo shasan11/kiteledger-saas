@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 class SalaryStructureController extends BaseCrudApiController
 {
     protected string $modelClass = SalaryStructure::class;
-    protected ?string $permissionPrefix = 'hrm.salary_structure';
+    protected ?string $permissionPrefix = 'hrm.payroll.salary_structures';
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected array $relations = ['employee', 'branch', 'currency', 'lines.component'];

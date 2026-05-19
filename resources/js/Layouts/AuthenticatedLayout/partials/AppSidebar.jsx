@@ -175,10 +175,10 @@ export default function AppSidebar({
         setOpenKeys(keys);
     };
 
-    return (
+    const sidebarNode = (
         <Sider
             width={212}
-            collapsedWidth={84}
+            collapsedWidth={isMobile ? 0 : 84}
             collapsed={collapsed}
             trigger={null}
             className="app-sidebar app-sidebar-light"
@@ -205,6 +205,8 @@ export default function AppSidebar({
                 top: navbarHeight,
                 left: 0,
                 overflow: 'hidden',
+                transform: isMobile && collapsed ? 'translateX(-100%)' : 'translateX(0)',
+                transition: `transform ${token.motionDurationMid} ${token.motionEaseInOut}, width ${token.motionDurationMid} ${token.motionEaseInOut}`,
                 boxShadow: token.boxShadowTertiary,
                 zIndex: isMobile ? 120 : 90,
             }}
@@ -478,6 +480,9 @@ export default function AppSidebar({
                     @media (max-width: 767.98px) {
                         .app-sidebar {
                             height: calc(100vh - ${navbarHeight}px) !important;
+                            max-width: min(86vw, 312px) !important;
+                            width: min(86vw, 312px) !important;
+                            flex: 0 0 min(86vw, 312px) !important;
                         }
                     }
                 `}
@@ -491,6 +496,11 @@ export default function AppSidebar({
                         selectedKeys={selectedKeys}
                         openKeys={collapsed ? [] : openKeys}
                         onOpenChange={handleOpenChange}
+                        onClick={() => {
+                            if (isMobile) {
+                                setCollapsed(true);
+                            }
+                        }}
                         inlineCollapsed={collapsed}
                         items={coloredMenuItems}
                         style={{
@@ -529,5 +539,36 @@ export default function AppSidebar({
                 />
             </div>
         </Sider>
+    );
+
+    if (!isMobile) {
+        return sidebarNode;
+    }
+
+    return (
+        <>
+            {!collapsed && (
+                <button
+                    type="button"
+                    aria-label="Close navigation"
+                    className="app-sidebar-backdrop"
+                    onClick={() => setCollapsed(true)}
+                />
+            )}
+            {sidebarNode}
+            <style>
+                {`
+                    .app-sidebar-backdrop {
+                        position: fixed;
+                        inset: ${navbarHeight}px 0 0 0;
+                        border: 0;
+                        padding: 0;
+                        margin: 0;
+                        background: rgba(15, 23, 42, 0.42);
+                        z-index: 119;
+                    }
+                `}
+            </style>
+        </>
     );
 }

@@ -18,13 +18,14 @@ import {
     UserOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
-import { Layout, theme } from 'antd';
+import { Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
 
 const { Content } = Layout;
+const { useBreakpoint } = Grid;
 
 export default function AuthenticatedLayout({ header, children }) {
     const page = usePage();
@@ -32,6 +33,8 @@ export default function AuthenticatedLayout({ header, children }) {
     const permissions = page.props.auth?.permissions || [];
     const branchContext = page.props.branchContext || {};
     const can = (permission) => permissions.includes(permission);
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
 
     const [collapsed, setCollapsed] = useState(false);
     const [branch, setBranch] = useState(branchContext.selectedBranchId || null);
@@ -43,7 +46,7 @@ export default function AuthenticatedLayout({ header, children }) {
     }, [branchContext.selectedBranchId]);
 
     const {
-        token: { colorBgContainer, borderRadiusLG, colorBorderSecondary },
+        token: { colorBgContainer, colorBgLayout, colorBorderSecondary },
     } = theme.useToken();
 
     const hasRoute = (name) => {
@@ -538,7 +541,7 @@ export default function AuthenticatedLayout({ header, children }) {
     ];
 
     return (
-        <Layout style={{ minHeight: '100vh', background: '#f5f7fb' }}>
+        <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
             <AppNavbar
                 user={user}
                 branch={branch}
@@ -548,11 +551,12 @@ export default function AuthenticatedLayout({ header, children }) {
                 quickAddItems={quickAddItems}
                 profileItems={profileItems}
                 getUrl={getUrl}
+                onSidebarToggle={() => setCollapsed((current) => !current)}
                 colorBgContainer={colorBgContainer}
                 colorBorderSecondary={colorBorderSecondary}
             />
 
-            <Layout style={{ marginTop: 0 }}>
+            <Layout style={{ marginTop: 0, background: colorBgLayout }}>
                 <AppSidebar
                     collapsed={collapsed}
                     setCollapsed={setCollapsed}
@@ -564,8 +568,9 @@ export default function AuthenticatedLayout({ header, children }) {
 
                 <Layout
                     style={{
-                        
-                        background: '#f5f7fb',
+                        background: colorBgLayout,
+                        minWidth: 0,
+                        width: isMobile ? '100%' : undefined,
                     }}
                 >
                     {header && (
@@ -584,6 +589,7 @@ export default function AuthenticatedLayout({ header, children }) {
                     <Content
                         style={{
                             minHeight: 'calc(100vh - 100px)',
+                            minWidth: 0,
                              
                             
                              

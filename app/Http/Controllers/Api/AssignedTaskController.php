@@ -75,4 +75,49 @@ class AssignedTaskController extends BaseCrudApiController
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
     }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $this->ensureUniqueAssignee($parentData['task_id'] ?? null, $parentData['user_id'] ?? null);
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+
+        $this->ensureUniqueAssignee(
+            $parentData['task_id'] ?? $record->task_id,
+            $parentData['user_id'] ?? $record->user_id,
+            $record->getKey()
+        );
+
+        return $parentData;
+    }
+
+    protected function ensureUniqueAssignee(?string $taskId, ?int $userId, ?string $ignoreId = null): void
+    {
+        if (!$taskId || !$userId) {
+            return;
+        }
+
+        $query = AssignedTask::query()
+            ->where('task_id', $taskId)
+            ->where('user_id', $userId);
+
+        if ($ignoreId) {
+            $query->whereKeyNot($ignoreId);
+        }
+
+        if ($query->exists()) {
+            $this->throwValidation([
+                'user_id' => ['This user is already assigned to this task.'],
+            ]);
+        }
+    }
 }

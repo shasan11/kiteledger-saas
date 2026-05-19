@@ -75,4 +75,49 @@ class ProjectTeamMemberController extends BaseCrudApiController
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
     }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $this->ensureUniqueTeamMember($parentData['project_team_id'] ?? null, $parentData['user_id'] ?? null);
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+
+        $this->ensureUniqueTeamMember(
+            $parentData['project_team_id'] ?? $record->project_team_id,
+            $parentData['user_id'] ?? $record->user_id,
+            $record->getKey()
+        );
+
+        return $parentData;
+    }
+
+    protected function ensureUniqueTeamMember(?string $projectTeamId, ?int $userId, ?string $ignoreId = null): void
+    {
+        if (!$projectTeamId || !$userId) {
+            return;
+        }
+
+        $query = ProjectTeamMember::query()
+            ->where('project_team_id', $projectTeamId)
+            ->where('user_id', $userId);
+
+        if ($ignoreId) {
+            $query->whereKeyNot($ignoreId);
+        }
+
+        if ($query->exists()) {
+            $this->throwValidation([
+                'user_id' => ['This user is already a member of this team.'],
+            ]);
+        }
+    }
 }

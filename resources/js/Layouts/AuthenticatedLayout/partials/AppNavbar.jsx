@@ -5,9 +5,12 @@ import { Link } from '@inertiajs/react';
 import {
     BranchesOutlined,
     LogoutOutlined,
+    MenuOutlined,
+    MoonOutlined,
     PlusOutlined,
     ProfileOutlined,
     QuestionCircleOutlined,
+    SunOutlined,
     UserOutlined,
 } from '@ant-design/icons';
 import {
@@ -18,6 +21,7 @@ import {
     Layout,
     Select,
     Space,
+    Switch,
     theme,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -65,10 +69,12 @@ export default function AppNavbar({
     quickAddItems = [],
     profileItems = [],
     getUrl,
+    onSidebarToggle,
 }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
     const [brandSettings, setBrandSettings] = useState(null);
+    const [themeMode, setThemeMode] = useState(() => localStorage.getItem('themeMode') || 'light');
 
     useEffect(() => {
         let mounted = true;
@@ -87,8 +93,29 @@ export default function AppNavbar({
         };
     }, []);
 
+    useEffect(() => {
+        const handleThemeModeChange = (event) => {
+            setThemeMode(event.detail?.mode || localStorage.getItem('themeMode') || 'light');
+        };
+
+        const handleStorage = (event) => {
+            if (event.key === 'themeMode') {
+                setThemeMode(event.newValue || 'light');
+            }
+        };
+
+        window.addEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
+        window.addEventListener('storage', handleStorage);
+
+        return () => {
+            window.removeEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
+            window.removeEventListener('storage', handleStorage);
+        };
+    }, []);
+
     const isMobile = !screens.md;
     const isTablet = !screens.lg;
+    const isDarkMode = themeMode === 'dark';
 
     const controlHeight = 38;
     const radius = token.borderRadiusLG;
@@ -157,6 +184,14 @@ export default function AppNavbar({
         };
     }, [brandSettings?.brand_primary_color, brandSettings?.brand_sidebar_color, token.colorPrimary]);
 
+    const toggleThemeMode = (checked) => {
+        const nextMode = checked ? 'dark' : 'light';
+        setThemeMode(nextMode);
+        localStorage.setItem('themeMode', nextMode);
+        localStorage.setItem('theme_mode', nextMode);
+        window.dispatchEvent(new CustomEvent('kiteledger-theme-mode-change', { detail: { mode: nextMode } }));
+    };
+
     return (
         <>
             <Header
@@ -181,6 +216,17 @@ export default function AppNavbar({
                 }}
             >
                 <div className="app-navbar__left">
+                    {isMobile && (
+                        <Button
+                            type="text"
+                            icon={<MenuOutlined />}
+                            className="app-navbar__soft-btn"
+                            shape="circle"
+                            onClick={onSidebarToggle}
+                            aria-label="Open navigation"
+                        />
+                    )}
+
                     <Link
                         href={getUrl('dashboard', '/dashboard')}
                         className="app-navbar__brand-link"
@@ -262,6 +308,15 @@ export default function AppNavbar({
                 </div>
 
                 <div className="app-navbar__right">
+                    <Switch
+                        checked={isDarkMode}
+                        checkedChildren={<MoonOutlined />}
+                        unCheckedChildren={<SunOutlined />}
+                        onChange={toggleThemeMode}
+                        aria-label="Toggle between light and dark mode"
+                        className="app-navbar__theme-switch"
+                    />
+
                     {!isMobile && (
                         <Button
                             icon={<QuestionCircleOutlined />}
@@ -390,6 +445,10 @@ export default function AppNavbar({
                         display: inline-flex;
                         align-items: center;
                         background: transparent !important;
+                    }
+
+                    .app-navbar__theme-switch {
+                        flex-shrink: 0;
                     }
 
                     .app-navbar__profile-btn:hover {

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
 import dayjs from 'dayjs';
 import axios from 'axios';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import {
   App,
   Avatar,
@@ -46,6 +47,18 @@ const STATUS_OPTIONS = [
 ];
 
 const NO_TIME_STATUSES = ['ABSENT', 'HOLIDAY', 'ON_LEAVE'];
+
+const getErrorMessage = (error) => {
+  const data = error?.response?.data;
+  if (typeof data?.message === 'string' && data.message) return data.message;
+  if (typeof data?.detail === 'string' && data.detail) return data.detail;
+  if (data?.errors && typeof data.errors === 'object') {
+    const first = Object.values(data.errors)[0];
+    if (Array.isArray(first) && first.length) return first[0];
+    if (typeof first === 'string') return first;
+  }
+  return error?.message || 'Request failed.';
+};
 
 export default function Attendance({ auth }) {
   const { message } = App.useApp();
@@ -134,10 +147,7 @@ export default function Attendance({ auth }) {
     if (!dirty.length) { message.info('No changes to save.'); return; }
 
     setSaving(true);
-    let saved = 0;
-    let failed = 0;
-
-    await Promise.all(
+    const results = await Promise.all(
       dirty.map(async ([userId, edit]) => {
         try {
           const noTime = NO_TIME_STATUSES.includes(edit.status);
@@ -154,16 +164,20 @@ export default function Attendance({ auth }) {
           } else {
             await axios.post(api('/api/hrm/attendances/'), payload);
           }
-          saved++;
-        } catch {
-          failed++;
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, error: getErrorMessage(error) };
         }
       }),
     );
 
+    const saved = results.filter((result) => result.ok).length;
+    const failed = results.length - saved;
+    const firstError = results.find((result) => !result.ok)?.error;
+
     setSaving(false);
     if (failed > 0) {
-      message.warning(`${saved} saved, ${failed} failed.`);
+      message.warning(`${saved} saved, ${failed} failed. ${firstError || ''}`.trim());
     } else {
       message.success(`${saved} attendance record${saved !== 1 ? 's' : ''} saved.`);
     }
@@ -297,6 +311,9 @@ export default function Attendance({ auth }) {
     { label: 'Unmarked', value: stats.unmarked, color: '#8c8c8c', icon: <FieldTimeOutlined /> },
   ];
 
+  const reportTitle = `Daily Attendance Report - ${date.format('DD MMM YYYY')}`;
+  const reportFileName = `daily-attendance-${date.format('YYYY-MM-DD')}.pdf`;
+
   return (
     <AuthenticatedLayout auth={auth}>
       <Head title="Attendance" />
@@ -407,53 +424,138 @@ export default function Attendance({ auth }) {
           </Card>
 
           <Drawer
-            title={`Daily Attendance Report - ${date.format('DD MMM YYYY')}`}
+            title={reportTitle}
             open={reportOpen}
             onClose={() => setReportOpen(false)}
-            width={860}
+            width={960}
           >
-            <Space direction="vertical" size={12} style={{ display: 'flex' }}>
-              <Row gutter={[10, 10]}>
-                {statItems.map(({ label, value, color, icon }) => (
-                  <Col xs={12} md={8} key={label}>
-                    <Card bordered={false} style={{ borderRadius: 10 }} styles={{ body: { padding: 12 } }}>
-                      <Space size={10}>
-                        <span style={{ color, fontSize: 17 }}>{icon}</span>
-                        <Statistic title={label} value={value} valueStyle={{ fontSize: 18, fontWeight: 700 }} />
-                      </Space>
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-              <Table
-                rowKey="id"
-                size="small"
-                dataSource={reportRows}
-                pagination={{ pageSize: 20, showSizeChanger: true }}
-                columns={[
-                  {
-                    title: 'Employee',
-                    dataIndex: 'employee',
-                    render: (value, row) => (
-                      <div>
-                        <Text strong>{value}</Text>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: 12 }}>{row.code}</Text>
-                      </div>
-                    ),
-                  },
-                  {
-                    title: 'Status',
-                    dataIndex: 'status',
-                    width: 130,
-                    render: (value) => <Tag color={value === 'UNMARKED' ? 'default' : 'blue'}>{value.replace('_', ' ')}</Tag>,
-                  },
-                  { title: 'In', dataIndex: 'in_time', width: 90 },
-                  { title: 'Out', dataIndex: 'out_time', width: 90 },
-                  { title: 'Hours', dataIndex: 'hours', width: 90, align: 'right' },
-                ]}
-              />
-            </Space>
+            <PrintablePdfEmailWrapper
+              title={reportTitle}
+              subTitle={`Generated ${dayjs().format('DD MMM YYYY, HH:mm')}`}
+              fileName={reportFileName}
+              printButtonText="Print"
+              downloadButtonText="Download"
+              emailButtonText="Email"
+              defaultEmailValues={{
+                subject: reportTitle,
+                body: `Please find attached the attendance report for ${date.format('DD MMM YYYY')}.`,
+              }}
+              contentStyle={{ padding: 24 }}
+            >
+              <div className="attendance-report-print">
+                <style>{`
+                  .attendance-report-print {
+                    color: #1f2937;
+                    font-family: Arial, sans-serif;
+                    font-size: 12px;
+                  }
+                  .attendance-report-print__header {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 16px;
+                    border-bottom: 1px solid #d9d9d9;
+                    padding-bottom: 12px;
+                    margin-bottom: 14px;
+                  }
+                  .attendance-report-print__header h2 {
+                    margin: 0 0 4px;
+                    font-size: 20px;
+                    line-height: 1.25;
+                  }
+                  .attendance-report-print__header p {
+                    margin: 0;
+                    color: #6b7280;
+                  }
+                  .attendance-report-print__stats {
+                    display: grid;
+                    grid-template-columns: repeat(6, 1fr);
+                    gap: 8px;
+                    margin-bottom: 14px;
+                  }
+                  .attendance-report-print__stat {
+                    border: 1px solid #e5e7eb;
+                    padding: 8px;
+                    border-radius: 6px;
+                  }
+                  .attendance-report-print__stat span {
+                    display: block;
+                    color: #6b7280;
+                    font-size: 11px;
+                  }
+                  .attendance-report-print__stat strong {
+                    display: block;
+                    font-size: 18px;
+                    line-height: 1.2;
+                  }
+                  .attendance-report-print table {
+                    width: 100%;
+                    border-collapse: collapse;
+                  }
+                  .attendance-report-print th,
+                  .attendance-report-print td {
+                    border: 1px solid #e5e7eb;
+                    padding: 7px 8px;
+                    text-align: left;
+                    vertical-align: top;
+                  }
+                  .attendance-report-print th {
+                    background: #f3f4f6;
+                    font-weight: 700;
+                  }
+                  .attendance-report-print td:last-child,
+                  .attendance-report-print th:last-child {
+                    text-align: right;
+                  }
+                  @media print {
+                    .attendance-report-print__stats {
+                      grid-template-columns: repeat(6, 1fr);
+                    }
+                  }
+                `}</style>
+
+                <div className="attendance-report-print__header">
+                  <div>
+                    <h2>Daily Attendance Report</h2>
+                    <p>{date.format('DD MMM YYYY')}</p>
+                  </div>
+                  <p>Generated {dayjs().format('DD MMM YYYY, HH:mm')}</p>
+                </div>
+
+                <div className="attendance-report-print__stats">
+                  {statItems.map(({ label, value }) => (
+                    <div className="attendance-report-print__stat" key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Code</th>
+                      <th>Status</th>
+                      <th>In</th>
+                      <th>Out</th>
+                      <th>Hours</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.employee}</td>
+                        <td>{row.code}</td>
+                        <td>{row.status.replace('_', ' ')}</td>
+                        <td>{row.in_time}</td>
+                        <td>{row.out_time}</td>
+                        <td>{row.hours}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </PrintablePdfEmailWrapper>
           </Drawer>
         </Space>
       </div>

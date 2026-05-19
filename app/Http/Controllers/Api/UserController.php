@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\User;
 use App\Models\Role;
+use App\Services\Payroll\PayrollAccountSyncService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -14,7 +15,7 @@ class UserController extends BaseCrudApiController
 {
     protected string $modelClass = User::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'hrm.users';
 
     protected bool $usePolicyAuthorization = false;
 
@@ -257,8 +258,10 @@ class UserController extends BaseCrudApiController
     {
         if ($this->pendingRoleId !== false) {
             if ($this->pendingRoleId) {
-                $role = Role::query()->find($this->pendingRoleId);
-                $record->syncRoles($role ? [$role] : []);
+                $role = Role::query()
+                    ->where('guard_name', 'web')
+                    ->find($this->pendingRoleId);
+                $record->syncRoles($role ? [$role->name] : []);
             } else {
                 $record->syncRoles([]);
             }
@@ -266,7 +269,12 @@ class UserController extends BaseCrudApiController
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
 
-        return $record;
+        if ($record->active) {
+            app(PayrollAccountSyncService::class)->syncEmployeePayrollAccount($record);
+            $record->refresh();
+        }
+
+        return $record->load(['role', 'roles', 'payrollAccount.chartOfAccounts']);
     }
 
     protected function mutateSerializedRecord(array $data, Model $record): array

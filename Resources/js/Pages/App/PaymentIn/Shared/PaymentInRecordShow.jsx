@@ -45,6 +45,7 @@ const APPROVED_STATUSES = new Set([
     'approved',
     'issued',
     'confirmed',
+    'sent',
     'accepted',
     'fulfilled',
     'paid',
@@ -2206,7 +2207,7 @@ export default function PaymentInRecordShow({
                                         showIcon
                                         icon={<ExclamationCircleOutlined />}
                                         message="This transaction is still in draft and has not been approved."
-                                        description="Approve it to assign the final document number and post it."
+                                        description="Approve it to assign the final document number and finalize it."
                                         action={
                                             <Button
                                                 size="small"
@@ -2243,7 +2244,7 @@ export default function PaymentInRecordShow({
                 okButtonProps={{ type: 'primary' }}
             >
                 <p>Are you sure you want to approve this transaction?</p>
-                <p>The final document number will be assigned after approval and the transaction will be posted.</p>
+                <p>The final document number will be assigned after approval and the transaction will be finalized.</p>
             </Modal>
 
             <Drawer

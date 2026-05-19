@@ -24,10 +24,6 @@ class DatabaseSeeder extends Seeder
             MasterDocumentNumberingSeeder::class,
             DocumentNumberingSeeder::class,
             MasterChartOfAccountSeeder::class,
-            MasterBankAccountSeeder::class,
-            AccountingModuleSeeder::class,
-            MasterContactDataSeeder::class,
-            MasterProductDataSeeder::class,
             MasterHRMDataSeeder::class,
             MasterHRMAdditionalSeeder::class,
             HRMTransactionalSeeder::class,
@@ -50,7 +46,6 @@ class DatabaseSeeder extends Seeder
             PosSeeder::class,
             RolesAndPermissionsSeeder::class,
             FullPermissionUserSeeder::class,
-            PayrollSeeder::class,
-        ]);
+         ]);
     }
 }

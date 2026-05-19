@@ -62,16 +62,26 @@ export const parseBackendErrors = (err, formValues) => {
       fieldErrors: {},
       globalErrors: ["Request failed."],
       allErrors: ["Request failed."],
+      validationWarnings: null,
+    };
+  }
+
+  if (data?.__validation_warnings) {
+    return {
+      fieldErrors: {},
+      globalErrors: [],
+      allErrors: [],
+      validationWarnings: data.__validation_warnings,
     };
   }
 
   if (typeof data === "string") {
-    return { fieldErrors: {}, globalErrors: [data], allErrors: [data] };
+    return { fieldErrors: {}, globalErrors: [data], allErrors: [data], validationWarnings: null };
   }
 
   if (data?.detail) {
     const msg = String(data.detail);
-    return { fieldErrors: {}, globalErrors: [msg], allErrors: [msg] };
+    return { fieldErrors: {}, globalErrors: [msg], allErrors: [msg], validationWarnings: null };
   }
 
   const flat = flattenDrfErrors(data);
@@ -102,7 +112,7 @@ export const parseBackendErrors = (err, formValues) => {
     ...Object.entries(fieldErrors).map(([k, v]) => `${k}: ${v}`),
   ];
 
-  return { fieldErrors, globalErrors, allErrors };
+  return { fieldErrors, globalErrors, allErrors, validationWarnings: null };
 };
 
 export const showGlobalErrorsNotification = (globalErrors) => {

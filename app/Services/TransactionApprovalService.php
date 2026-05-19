@@ -178,13 +178,20 @@ class TransactionApprovalService
     public function markPostedIfSupported(Model $transaction): void
     {
         if ($this->validationService->hasStatusField($transaction) && $transaction->status === 'draft') {
-            if ($transaction instanceof \App\Models\PurchaseOrder) {
-                $transaction->status = 'confirmed';
-                return;
-            }
-
-            $transaction->status = 'posted';
+            $transaction->status = $this->approvedStatusFor($transaction);
         }
+    }
+
+    protected function approvedStatusFor(Model $transaction): string
+    {
+        return match (true) {
+            $transaction instanceof \App\Models\Quotation => 'sent',
+            $transaction instanceof \App\Models\SalesOrder => 'confirmed',
+            $transaction instanceof \App\Models\ProformaInvoice => 'issued',
+            $transaction instanceof \App\Models\PurchaseOrder => 'confirmed',
+            $transaction instanceof \App\Models\ProductionOrder => 'approved',
+            default => 'posted',
+        };
     }
 
     protected function getNumberField(Model $transaction): ?string

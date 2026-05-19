@@ -349,8 +349,18 @@ trait AuthorizesProjectResources
             return true;
         }
 
-        return $task->assignedTasks()
+        $isAssigned = $task->assignedTasks()
             ->where('user_id', $user->id)
             ->exists();
+
+        if (!$isAssigned) {
+            return false;
+        }
+
+        $allowedFields = ['task_status_id', 'completion_time', 'description'];
+        $requestedFields = array_keys($request->all());
+        $structuralFields = array_diff($requestedFields, $allowedFields);
+
+        return empty($structuralFields);
     }
 }
