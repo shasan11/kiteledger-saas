@@ -21,7 +21,7 @@ import {
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, defaultRangeForKey, fetchList, money, rangeParams } from './Shared/posHelpers';
+import { api, defaultRangeForKey, fetchList, money, rangeParams, showApiError } from './Shared/posHelpers';
 
 const { Title, Text } = Typography;
 
@@ -123,7 +123,7 @@ export default function PosShiftsPage() {
             setBranches(scopedBranches);
             setOpenShift(currentResponse.data || null);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to load POS shifts.');
+            showApiError(message, error, 'Failed to load POS shifts.');
         } finally {
             setLoading(false);
         }
@@ -139,7 +139,7 @@ export default function PosShiftsPage() {
 
             setRows(payload.results || []);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to refresh POS shifts.');
+            showApiError(message, error, 'Failed to refresh POS shifts.');
         }
     }
 
@@ -168,7 +168,7 @@ export default function PosShiftsPage() {
 
             message.success('Shift opened.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to open shift.');
+            showApiError(message, error, 'Failed to open shift.');
         } finally {
             setOpening(false);
         }
@@ -217,7 +217,7 @@ export default function PosShiftsPage() {
 
             message.success('Shift ended successfully.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to end shift.');
+            showApiError(message, error, 'Failed to end shift.');
         } finally {
             setClosing(false);
         }

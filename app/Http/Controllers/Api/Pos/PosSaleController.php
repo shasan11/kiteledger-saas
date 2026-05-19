@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Pos\Concerns\AuthorizesPosAccess;
 use App\Http\Requests\Pos\CompletePosSaleRequest;
 use App\Http\Requests\Pos\StorePosSaleRequest;
 use App\Models\PosSale;
+use App\Models\PosReturn;
 use App\Models\PosShift;
 use App\Models\PosTerminal;
 use App\Models\Product;
@@ -226,7 +227,11 @@ class PosSaleController extends Controller
         $sales = $salesQuery->get();
 
         $todaySales = round($sales->sum('grand_total'), 2);
-        $todayRefunds = round($sales->whereIn('status', ['part_refunded', 'refunded'])->sum('change_amount'), 2);
+        $returnQuery = PosReturn::query()
+            ->whereDate('return_date', $today)
+            ->where('status', 'completed');
+        $this->applyBranchScope($returnQuery, $request);
+        $todayRefunds = round($returnQuery->sum('refund_amount'), 2);
         $payments = $sales->flatMap->posPayments;
         $topProducts = Product::query()
             ->whereIn('id', function ($query) use ($salesQuery) {

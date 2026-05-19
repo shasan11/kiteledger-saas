@@ -55,7 +55,9 @@ class PosCartCalculatorService
         $discountTotal = round($lineItems->sum('discount_amount'), 2);
         $taxTotal = round($lineItems->sum('tax_amount'), 2);
         $grandTotal = round($lineItems->sum('line_total') + $roundOff, 2);
-        $paidTotal = round(collect($payments)->sum(fn (array $payment) => (float) ($payment['amount'] ?? 0)), 2);
+        $paidTotal = round(collect($payments)
+            ->reject(fn (array $payment) => ($payment['payment_method'] ?? null) === 'credit')
+            ->sum(fn (array $payment) => (float) ($payment['amount'] ?? 0)), 2);
         $balanceDue = max(round($grandTotal - $paidTotal, 2), 0);
         $changeAmount = max(round($paidTotal - $grandTotal, 2), 0);
 

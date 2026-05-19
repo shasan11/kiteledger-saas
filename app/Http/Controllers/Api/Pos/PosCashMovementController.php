@@ -48,6 +48,7 @@ class PosCashMovementController extends Controller
         $this->assertShiftAccess($request, $shift);
         abort_unless((string) $shift->pos_terminal_id === (string) $terminal->id, 422, 'The selected shift does not belong to the selected terminal.');
         abort_unless((string) $shift->branch_id === (string) $terminal->branch_id, 422, 'The selected shift does not belong to the selected terminal branch.');
+        abort_unless($shift->status === 'open', 422, 'Cash movements can only be recorded on an open POS shift.');
 
         $movement = PosCashMovement::create([
             ...$validated,
@@ -102,6 +103,8 @@ class PosCashMovementController extends Controller
         $this->assertTerminalAccess($request, $terminal);
         $this->assertShiftAccess($request, $shift);
         abort_unless((string) $shift->pos_terminal_id === (string) $terminal->id, 422, 'The selected shift does not belong to the selected terminal.');
+        abort_unless((string) $shift->branch_id === (string) $terminal->branch_id, 422, 'The selected shift does not belong to the selected terminal branch.');
+        abort_unless($shift->status === 'open', 422, 'Cash movements can only be edited on an open POS shift.');
 
         $pos_cash_movement->update([
             ...$validated,

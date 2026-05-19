@@ -17,7 +17,7 @@ import { ArrowLeftOutlined, PrinterOutlined, RollbackOutlined } from '@ant-desig
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, money, saleStatusColor } from './Shared/posHelpers';
+import { api, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 import PosReturnModal from './Shared/PosReturnModal';
 
 const { Text, Title } = Typography;
@@ -42,7 +42,7 @@ export default function PosSaleShow({ id }) {
             const response = await axios.get(api(`/api/pos-sales/${id}`));
             setRecord(response.data);
         } catch {
-            message.error('Failed to load POS sale.');
+            showApiError(message, error, 'Failed to load POS sale.');
         } finally {
             setLoading(false);
         }

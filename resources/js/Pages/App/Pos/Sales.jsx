@@ -4,7 +4,7 @@ import { Button, Card, DatePicker, Row, Col, Select, Space, Table, Tag, Typograp
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, defaultRangeForKey, fetchList, money, rangeParams, saleStatusColor } from './Shared/posHelpers';
+import { api, defaultRangeForKey, fetchList, money, rangeParams, saleStatusColor, showApiError } from './Shared/posHelpers';
 import PosReturnModal from './Shared/PosReturnModal';
 
 const { Text, Title } = Typography;
@@ -40,7 +40,7 @@ export default function PosSalesPage() {
             setRows(salesPayload.results || []);
             setTerminals(terminalPayload.results || []);
         } catch (error) {
-            message.error('Failed to load POS sales.');
+            showApiError(message, error, 'Failed to load POS sales.');
         } finally {
             setLoading(false);
         }
@@ -55,7 +55,7 @@ export default function PosSalesPage() {
             });
             setRows(payload.results || []);
         } catch (error) {
-            message.error('Failed to refresh POS sales.');
+            showApiError(message, error, 'Failed to refresh POS sales.');
         }
     }
 

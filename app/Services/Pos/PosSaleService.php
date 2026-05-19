@@ -125,15 +125,20 @@ class PosSaleService
     public function completeSale(PosSale $sale, array $payload): PosSale
     {
         return DB::transaction(function () use ($sale, $payload) {
-            if (!in_array($sale->status, ['draft', 'held'], true)) {
+            $lockedSale = PosSale::query()
+                ->whereKey($sale->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!in_array($lockedSale->status, ['draft', 'held'], true)) {
                 throw new InvalidArgumentException('Only draft or held sales can be completed.');
             }
 
-            $draft = $this->createOrUpdateDraft($sale, [
+            $draft = $this->createOrUpdateDraft($lockedSale, [
                 ...$payload,
-                'pos_terminal_id' => $sale->pos_terminal_id,
-                'pos_shift_id' => $sale->pos_shift_id,
-                'warehouse_id' => $payload['warehouse_id'] ?? $sale->warehouse_id,
+                'pos_terminal_id' => $lockedSale->pos_terminal_id,
+                'pos_shift_id' => $lockedSale->pos_shift_id,
+                'warehouse_id' => $payload['warehouse_id'] ?? $lockedSale->warehouse_id,
                 'status' => 'draft',
             ]);
 
@@ -141,9 +146,9 @@ class PosSaleService
                 throw new InvalidArgumentException('Cannot complete an empty cart.');
             }
 
-            $allowCreditSale = (bool) ($payload['allow_credit_sale'] ?? false);
+            $this->assertCheckoutRules($draft, $payload);
 
-            if (!$allowCreditSale && $draft->posPayments()->sum('amount') <= 0) {
+            if ($draft->paid_total <= 0 && $draft->balance_due <= 0) {
                 throw new InvalidArgumentException('At least one payment is required before completing the sale.');
             }
 
@@ -160,6 +165,10 @@ class PosSaleService
 
                 if (!$product->allow_sale) {
                     throw new InvalidArgumentException("Product {$product->name} is not allowed for sale.");
+                }
+
+                if ($product->track_inventory && !$draft->warehouse_id) {
+                    throw new InvalidArgumentException("Warehouse is required for inventory-tracked product {$product->name}.");
                 }
 
                 $this->inventoryService->validateStock($product->id, (float) $line->qty, $draft->warehouse_id);
@@ -208,6 +217,10 @@ class PosSaleService
     {
         if (!in_array($sale->status, ['completed', 'part_refunded'], true)) {
             throw new InvalidArgumentException('Only completed sales can be voided.');
+        }
+
+        if ($sale->invoice_id || $sale->customer_payment_id || $sale->posReturns()->exists()) {
+            throw new InvalidArgumentException('This POS sale has accounting or return records and cannot be voided until reversal workflow is implemented.');
         }
 
         $sale->forceFill([
@@ -288,6 +301,10 @@ class PosSaleService
         $existingIds = [];
 
         foreach ($payments as $payment) {
+            if (($payment['payment_method'] ?? null) === 'credit' || round((float) ($payment['amount'] ?? 0), 2) <= 0) {
+                continue;
+            }
+
             $row = !empty($payment['id'])
                 ? PosPayment::query()->where('pos_sale_id', $sale->id)->find($payment['id'])
                 : new PosPayment(['pos_sale_id' => $sale->id]);
@@ -473,6 +490,59 @@ class PosSaleService
             'online', 'wallet', 'bank_transfer' => $terminal?->online_account_id,
             default => null,
         };
+    }
+
+    private function assertCheckoutRules(PosSale $sale, array $payload): void
+    {
+        $sale->loadMissing(['posTerminal', 'contact', 'posPayments', 'posSaleLines.product']);
+
+        if (!$sale->posShift || $sale->posShift->status !== 'open') {
+            throw new InvalidArgumentException('An open shift is required before completing a POS sale.');
+        }
+
+        $payments = collect($payload['payments'] ?? []);
+        $moneyPayments = $payments
+            ->reject(fn (array $payment) => ($payment['payment_method'] ?? null) === 'credit')
+            ->filter(fn (array $payment) => round((float) ($payment['amount'] ?? 0), 2) > 0)
+            ->values();
+
+        $hasCredit = $payments->contains(fn (array $payment) => ($payment['payment_method'] ?? null) === 'credit')
+            || (float) $sale->balance_due > 0;
+
+        $hasCustomer = !empty($payload['contact_id']);
+        $user = request()->user();
+
+        if ($hasCredit) {
+            if (!$hasCustomer) {
+                throw new InvalidArgumentException('Customer is required for credit sale.');
+            }
+
+            if (!$user || !$user->can('pos.sale.credit')) {
+                throw new AuthorizationException('You do not have permission to complete POS credit sales.');
+            }
+        }
+
+        if (!$hasCredit && round((float) $sale->paid_total, 2) + 0.009 < round((float) $sale->grand_total, 2)) {
+            throw new InvalidArgumentException('Amount received is less than grand total.');
+        }
+
+        $overpaid = round((float) $sale->paid_total - (float) $sale->grand_total, 2);
+        if ($overpaid > 0.009 && $moneyPayments->contains(fn (array $payment) => ($payment['payment_method'] ?? null) !== 'cash')) {
+            throw new InvalidArgumentException('Overpayment is allowed only for cash sales.');
+        }
+
+        foreach ($moneyPayments as $payment) {
+            $method = $payment['payment_method'] ?? null;
+            if (!$this->defaultAccountIdForMethod($sale, $method) && empty($payment['account_id'])) {
+                throw new InvalidArgumentException('Terminal account is missing for selected payment method.');
+            }
+        }
+
+        foreach ($sale->posSaleLines as $line) {
+            if ($line->product?->track_inventory && !$sale->warehouse_id) {
+                throw new InvalidArgumentException("Warehouse is required for inventory-tracked product {$line->product->name}.");
+            }
+        }
     }
 
     private function ensureCashSaleMovements(PosSale $sale): void

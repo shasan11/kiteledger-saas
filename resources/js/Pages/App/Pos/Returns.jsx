@@ -4,7 +4,7 @@ import { App, Button, Card, Descriptions, Empty, Form, Input, InputNumber, Modal
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, fetchList, money, saleStatusColor } from './Shared/posHelpers';
+import { api, fetchList, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 
 const { Text, Title } = Typography;
 
@@ -43,7 +43,7 @@ export default function PosReturnsPage() {
             setRows(returnPayload.results || []);
             setSales(salesPayload.results || []);
         } catch {
-            message.error('Failed to load POS returns.');
+            showApiError(message, error, 'Failed to load POS returns.');
         }
     }
 
@@ -63,7 +63,7 @@ export default function PosReturnsPage() {
             });
             setCurrentShift(shiftResponse.data || null);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to load refundable sale.');
+            showApiError(message, error, 'Failed to load refundable sale.');
         } finally {
             setLoading(false);
         }
@@ -143,7 +143,7 @@ export default function PosReturnsPage() {
             await bootstrap();
             message.success('Return completed.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to create return.');
+            showApiError(message, error, 'Failed to create return.');
         } finally {
             setLoading(false);
         }

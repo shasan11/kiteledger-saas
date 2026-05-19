@@ -3,7 +3,7 @@ import { App, Button, Descriptions, Empty, Form, Input, InputNumber, Modal, Sele
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { RollbackOutlined } from '@ant-design/icons';
-import { api, money, saleStatusColor } from './posHelpers';
+import { api, money, saleStatusColor, showApiError } from './posHelpers';
 
 const { Text } = Typography;
 
@@ -51,7 +51,7 @@ export default function PosReturnModal({ open, saleId, sale: initialSale = null,
             setSale(response.data);
             await loadCurrentShift(response.data);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to load refundable sale.');
+            showApiError(message, error, 'Failed to load refundable sale.');
         } finally {
             setLoading(false);
         }
@@ -68,7 +68,7 @@ export default function PosReturnModal({ open, saleId, sale: initialSale = null,
             setCurrentShift(response.data || null);
         } catch (error) {
             setCurrentShift(null);
-            message.error(error?.response?.data?.message || 'Failed to load current POS shift.');
+            showApiError(message, error, 'Failed to load current POS shift.');
         }
     }
 
@@ -153,7 +153,7 @@ export default function PosReturnModal({ open, saleId, sale: initialSale = null,
             onSuccess?.(draftResponse.data);
             handleClose();
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to process return.');
+            showApiError(message, error, 'Failed to process return.');
         } finally {
             setSubmitting(false);
         }
