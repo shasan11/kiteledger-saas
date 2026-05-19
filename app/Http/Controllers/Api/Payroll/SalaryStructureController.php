@@ -7,6 +7,7 @@ use App\Models\SalaryStructure;
 use App\Models\SalaryStructureLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class SalaryStructureController extends BaseCrudApiController
 {
@@ -58,12 +59,8 @@ class SalaryStructureController extends BaseCrudApiController
         $parentData['created_by'] = request()->user()?->id;
         $parentData['exchange_rate'] = $parentData['exchange_rate'] ?? 1;
 
-        if (($parentData['active'] ?? true) === true) {
-            SalaryStructure::query()
-                ->where('employee_id', $parentData['employee_id'])
-                ->where('active', true)
-                ->update(['active' => false, 'effective_to' => now()->subDay()->toDateString()]);
-        }
+        $this->closePreviousOpenStructure($parentData);
+        $this->assertNoOverlappingStructure($parentData);
 
         return $parentData;
     }
@@ -71,8 +68,73 @@ class SalaryStructureController extends BaseCrudApiController
     protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
     {
         $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+        $this->assertStructureNotUsedInPostedPayroll($record);
+
+        $merged = array_merge($record->only([
+            'employee_id',
+            'branch_id',
+            'effective_from',
+            'effective_to',
+            'active',
+        ]), $parentData);
+
+        $this->assertNoOverlappingStructure($merged, $record);
         $parentData['updated_by'] = request()->user()?->id;
 
         return $parentData;
+    }
+
+    protected function assertNoOverlappingStructure(array $data, ?SalaryStructure $ignore = null): void
+    {
+        if (($data['active'] ?? true) !== true) {
+            return;
+        }
+
+        $from = Carbon::parse($data['effective_from'])->toDateString();
+        $to = ! empty($data['effective_to']) ? Carbon::parse($data['effective_to'])->toDateString() : null;
+
+        $overlap = SalaryStructure::query()
+            ->where('employee_id', $data['employee_id'])
+            ->where('active', true)
+            ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
+            ->whereDate('effective_from', '<=', $to ?: '9999-12-31')
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhereDate('effective_to', '>=', $from))
+            ->exists();
+
+        if ($overlap) {
+            abort(422, 'Salary structure overlaps an existing active structure for this employee.');
+        }
+    }
+
+    protected function closePreviousOpenStructure(array $data): void
+    {
+        if (($data['active'] ?? true) !== true || ! empty($data['effective_to'])) {
+            return;
+        }
+
+        $from = Carbon::parse($data['effective_from']);
+
+        SalaryStructure::query()
+            ->where('employee_id', $data['employee_id'])
+            ->where('active', true)
+            ->whereNull('effective_to')
+            ->whereDate('effective_from', '<', $from->toDateString())
+            ->latest('effective_from')
+            ->limit(1)
+            ->update(['effective_to' => $from->copy()->subDay()->toDateString()]);
+    }
+
+    protected function assertStructureNotUsedInPostedPayroll(SalaryStructure $structure): void
+    {
+        $used = $structure->employee
+            ? $structure->employee->generatedPayslips()
+                ->whereIn('status', ['processed', 'paid', 'locked'])
+                ->where('salary_year', '>=', (int) $structure->effective_from->format('Y'))
+                ->exists()
+            : false;
+
+        if ($used) {
+            abort(422, 'Salary structure is already used in posted payroll. Create a new version instead of editing it.');
+        }
     }
 }

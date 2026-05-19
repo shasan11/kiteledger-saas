@@ -49,6 +49,7 @@ class JournalVoucherController extends BaseCrudApiController
 
     protected array $filterable = [
         'branch_id',
+        "is_system_generated",
         'currency_id',
         'status',
     ];

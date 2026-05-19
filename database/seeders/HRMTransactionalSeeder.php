@@ -73,6 +73,9 @@ class HRMTransactionalSeeder extends Seeder
         }
 
         // ── Demo Employees ─────────────────────────────────────────────────
+        // Keep demo seeding lean: the full-access admin is the only seeded employee.
+        return;
+
         $employees = [
             [
                 'first_name' => 'Sarah', 'last_name' => 'Johnson',

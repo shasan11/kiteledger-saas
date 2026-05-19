@@ -46,7 +46,7 @@ class StorePosSaleRequest extends FormRequest
             'payments.*.payment_date' => ['nullable', 'date'],
             'payments.*.payment_method' => ['required_with:payments', 'in:cash,card,online,wallet,bank_transfer,credit,mixed'],
             'payments.*.account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
-            'payments.*.amount' => ['required_with:payments', 'numeric', 'gt:0'],
+            'payments.*.amount' => ['required_with:payments', 'numeric', 'min:0'],
             'payments.*.reference' => ['nullable', 'string', 'max:120'],
             'payments.*.card_last_four' => ['nullable', 'string', 'max:4'],
             'payments.*.transaction_no' => ['nullable', 'string', 'max:120'],

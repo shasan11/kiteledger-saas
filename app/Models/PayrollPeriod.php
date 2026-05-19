@@ -12,7 +12,7 @@ class PayrollPeriod extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['month', 'year', 'start_date', 'end_date', 'branch_id', 'status'];
+    protected $fillable = ['month', 'year', 'start_date', 'end_date', 'branch_id', 'status', 'locked_at', 'locked_by'];
 
     protected function casts(): array
     {
@@ -21,6 +21,7 @@ class PayrollPeriod extends Model
             'year' => 'integer',
             'start_date' => 'date',
             'end_date' => 'date',
+            'locked_at' => 'datetime',
         ];
     }
 
@@ -37,5 +38,10 @@ class PayrollPeriod extends Model
     public function payrolls(): HasMany
     {
         return $this->hasMany(Payroll::class);
+    }
+
+    public function lockedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'locked_by');
     }
 }

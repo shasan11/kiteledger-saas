@@ -271,7 +271,7 @@ export default function PurchaseOrderEdit({ id, ...props }) {
       columns: [
         {
           key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
-          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=purchase'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
+          placeholder: 'Add Code or Product', fkUrl: api('/api/products/search'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
           fkOptionRender: (r) => (

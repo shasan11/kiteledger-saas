@@ -109,10 +109,13 @@ class PayrollCalculationService
             $lines[] = $this->line($deduction->component, $deduction->name, $amount, $exchangeRate, 'deduction', $precision, $settings->rounding_method, $deduction->remarks);
         }
 
-        $tax = $this->calculateTax($lines, $precision, $settings->rounding_method);
+        $taxBreakdown = $this->calculateTaxBreakdown($lines, $precision, $settings->rounding_method);
+        $tax = $taxBreakdown['total_tax'];
         if (! $this->isZero($tax)) {
             $component = SalaryComponent::query()->where('code', 'TAX')->first();
-            $lines[] = $this->line($component, 'Tax Deduction', $tax, $exchangeRate, 'tax', $precision, $settings->rounding_method);
+            $taxLine = $this->line($component, 'Tax Deduction', $tax, $exchangeRate, 'tax', $precision, $settings->rounding_method);
+            $taxLine['meta'] = ['tax_breakdown' => $taxBreakdown];
+            $lines[] = $taxLine;
         }
 
         foreach ($this->benefitLines($lines, $exchangeRate, $precision, $settings->rounding_method) as $benefitLine) {
@@ -135,16 +138,28 @@ class PayrollCalculationService
             'unpaid_leave_days' => (string) $attendance->unpaid_leave_days,
             'overtime_hours' => (string) $attendance->overtime_hours,
             'lines' => $lines,
+            'snapshot' => [
+                'tax' => $taxBreakdown,
+                'daily_rate_basis' => $settings->daily_rate_basis,
+                'rounding_method' => $settings->rounding_method,
+                'currency_precision' => $precision,
+            ],
         ];
     }
 
     public function calculateTax(array $lines, int $precision = 2, string $rounding = 'nearest'): string
     {
+        return $this->calculateTaxBreakdown($lines, $precision, $rounding)['total_tax'];
+    }
+
+    public function calculateTaxBreakdown(array $lines, int $precision = 2, string $rounding = 'nearest'): array
+    {
         $taxableIncome = collect($lines)
-            ->filter(fn (array $line) => $line['type'] === 'earning' && $this->componentTaxable($line['component_id'] ?? null))
+            ->filter(fn (array $line) => $line['type'] === 'earning' && $this->componentTaxable($line['component_id'] ?? null, $line['source'] ?? null))
             ->reduce(fn (string $sum, array $line) => $this->add($sum, (string) $line['amount']), '0');
 
         $tax = '0';
+        $breakdown = [];
         $slabs = TaxSlab::query()->where('active', true)->orderBy('income_from')->get();
 
         foreach ($slabs as $slab) {
@@ -154,11 +169,28 @@ class PayrollCalculationService
 
             $upper = $slab->income_to ? min((float) $taxableIncome, (float) $slab->income_to) : (float) $taxableIncome;
             $portion = max(0, $upper - (float) $slab->income_from);
-            $tax = $this->add($tax, (string) $slab->fixed_amount);
-            $tax = $this->add($tax, $this->mul((string) $portion, $this->div((string) $slab->rate, '100', 8), 6));
+            $rateTax = $this->mul((string) $portion, $this->div((string) $slab->rate, '100', 8), 6);
+            $slabTax = $this->add((string) $slab->fixed_amount, $rateTax);
+            $tax = $this->add($tax, $slabTax);
+            $breakdown[] = [
+                'slab_id' => $slab->id,
+                'income_from' => (float) $slab->income_from,
+                'income_to' => $slab->income_to === null ? null : (float) $slab->income_to,
+                'taxable_portion' => round($portion, $precision),
+                'fixed_tax' => (float) $slab->fixed_amount,
+                'rate' => (float) $slab->rate,
+                'rate_tax' => (float) $this->round($rateTax, $precision, $rounding),
+                'total_tax' => (float) $this->round($slabTax, $precision, $rounding),
+            ];
         }
 
-        return $this->round($tax, $precision, $rounding);
+        return [
+            'basis' => 'monthly',
+            'taxable_income' => (float) $this->round($taxableIncome, $precision, $rounding),
+            'slabs' => $breakdown,
+            'total_tax' => $this->round($tax, $precision, $rounding),
+            'note' => 'Tax is calculated from configured monthly taxable earnings. Annualized/YTD tax is not enabled in this tenant.',
+        ];
     }
 
     protected function benefitLines(array $lines, string $exchangeRate, int $precision, string $rounding): array
@@ -183,6 +215,7 @@ class PayrollCalculationService
                     'base_currency_amount' => $this->base($employeeAmount, $exchangeRate, $precision, $rounding),
                     'calculation_type' => 'percentage',
                     'source' => 'benefit',
+                    'meta' => ['benefit_rule_id' => $rule->id, 'payable_account_id' => $rule->accounting_account_id],
                     'remarks' => $rule->code,
                 ];
             }
@@ -196,6 +229,7 @@ class PayrollCalculationService
                     'base_currency_amount' => $this->base($employerAmount, $exchangeRate, $precision, $rounding),
                     'calculation_type' => 'percentage',
                     'source' => 'benefit',
+                    'meta' => ['benefit_rule_id' => $rule->id, 'payable_account_id' => $rule->accounting_account_id],
                     'remarks' => $rule->code,
                 ];
             }
@@ -232,8 +266,12 @@ class PayrollCalculationService
             : (string) $adjustment->amount;
     }
 
-    protected function componentTaxable(?string $componentId): bool
+    protected function componentTaxable(?string $componentId, ?string $source = null): bool
     {
+        if ($source === 'reimbursement') {
+            return false;
+        }
+
         if (! $componentId) {
             return true;
         }

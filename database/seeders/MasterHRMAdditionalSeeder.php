@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Award;
 use App\Models\LeavePolicy;
-use App\Models\Shift;
 use App\Models\WeeklyHoliday;
 use Illuminate\Database\Seeder;
 
@@ -26,17 +25,6 @@ class MasterHRMAdditionalSeeder extends Seeder
             [
                 'start_day' => 'Saturday',
                 'end_day' => 'Saturday',
-                'active' => true,
-                'is_system_generated' => true,
-            ]
-        );
-
-        Shift::updateOrCreate(
-            ['name' => 'General Shift'],
-            [
-                'start_time' => '09:00:00',
-                'end_time' => '18:00:00',
-                'work_hour' => 8,
                 'active' => true,
                 'is_system_generated' => true,
             ]

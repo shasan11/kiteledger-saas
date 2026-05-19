@@ -59,7 +59,7 @@ class ParallelJournalVoucherService
 
         $arAccount = $this->accountResolver->getAccountsReceivableAccount();
         if ($invoice->contact_id && $invoice->contact?->account_id) {
-            $arAccount = $invoice->contact->account->chartOfAccount ?? $arAccount;
+            $arAccount = $this->resolveChartAccount($invoice->contact->account_id, $arAccount);
         }
 
         foreach ($invoice->invoiceLines as $line) {
@@ -120,7 +120,7 @@ class ParallelJournalVoucherService
         $lines = [];
 
         $bankAccount = $payment->account_id
-            ? $this->resolveChartOfAccountFromAccount($payment->account_id)
+            ? $this->resolveChartAccount($payment->account_id)
             : $this->accountResolver->getDefaultBankAccount();
 
         $lines[] = [
@@ -132,7 +132,7 @@ class ParallelJournalVoucherService
 
         if ($payment->bank_charges > 0) {
             $bankChargesAccount = $payment->bank_charges_account_id
-                ? $this->resolveChartOfAccountFromAccount($payment->bank_charges_account_id)
+                ? $this->resolveChartAccount($payment->bank_charges_account_id)
                 : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
                 'chart_of_account_id' => $bankChargesAccount->id,
@@ -144,7 +144,7 @@ class ParallelJournalVoucherService
 
         if ($payment->tds_charges > 0) {
             $tdsReceivableAccount = $payment->tds_charges_account_id
-                ? $this->resolveChartOfAccountFromAccount($payment->tds_charges_account_id)
+                ? $this->resolveChartAccount($payment->tds_charges_account_id)
                 : $this->accountResolver->getTdsReceivableAccount();
             $lines[] = [
                 'chart_of_account_id' => $tdsReceivableAccount->id,
@@ -156,7 +156,7 @@ class ParallelJournalVoucherService
 
         $arAccount = $this->accountResolver->getAccountsReceivableAccount();
         if ($payment->contact_id && $payment->contact?->account_id) {
-            $arAccount = $payment->contact->account->chartOfAccount ?? $arAccount;
+            $arAccount = $this->resolveChartAccount($payment->contact->account_id, $arAccount);
         }
 
         $totalDebit = round(array_sum(array_column($lines, 'debit')), 2);
@@ -194,7 +194,7 @@ class ParallelJournalVoucherService
         foreach ($bill->purchaseBillLines as $line) {
             $account = $this->accountResolver->getPurchaseExpenseAccount();
             if ($line->product_id && $line->product?->purchase_account_id) {
-                $account = ChartOfAccount::find($line->product->purchase_account_id);
+                $account = $this->resolveChartAccount($line->product->purchase_account_id, $account);
             }
 
             $lines[] = [
@@ -217,7 +217,7 @@ class ParallelJournalVoucherService
 
         $apAccount = $this->accountResolver->getAccountsPayableAccount();
         if ($bill->contact_id && $bill->contact?->account_id) {
-            $apAccount = $bill->contact->account->chartOfAccount ?? $apAccount;
+            $apAccount = $this->resolveChartAccount($bill->contact->account_id, $apAccount);
         }
 
         $lines[] = [
@@ -247,7 +247,7 @@ class ParallelJournalVoucherService
 
         $apAccount = $this->accountResolver->getAccountsPayableAccount();
         if ($payment->contact_id && $payment->contact?->account_id) {
-            $apAccount = $payment->contact->account->chartOfAccount ?? $apAccount;
+            $apAccount = $this->resolveChartAccount($payment->contact->account_id, $apAccount);
         }
 
         $tdsCharges = (float) ($payment->tds_charges ?? 0);
@@ -261,7 +261,7 @@ class ParallelJournalVoucherService
 
         if ($payment->bank_charges > 0) {
             $bankChargesAccount = $payment->bank_charges_account_id
-                ? $this->resolveChartOfAccountFromAccount($payment->bank_charges_account_id)
+                ? $this->resolveChartAccount($payment->bank_charges_account_id)
                 : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
                 'chart_of_account_id' => $bankChargesAccount->id,
@@ -272,7 +272,7 @@ class ParallelJournalVoucherService
         }
 
         $bankAccount = $payment->account_id
-            ? $this->resolveChartOfAccountFromAccount($payment->account_id)
+            ? $this->resolveChartAccount($payment->account_id)
             : $this->accountResolver->getDefaultBankAccount();
 
         $totalCredit = (float) $payment->amount + (float) ($payment->bank_charges ?? 0);
@@ -285,7 +285,7 @@ class ParallelJournalVoucherService
 
         if ($tdsCharges > 0) {
             $tdsPayableAccount = $payment->tds_charges_account_id
-                ? $this->resolveChartOfAccountFromAccount($payment->tds_charges_account_id)
+                ? $this->resolveChartAccount($payment->tds_charges_account_id)
                 : $this->accountResolver->getTdsPayableAccount();
             $lines[] = [
                 'chart_of_account_id' => $tdsPayableAccount->id,
@@ -330,7 +330,7 @@ class ParallelJournalVoucherService
         if ($expense->contact_id) {
             $creditAccount = $this->accountResolver->getAccountsPayableAccount();
             if ($expense->contact?->account_id) {
-                $creditAccount = $expense->contact->account->chartOfAccount ?? $creditAccount;
+                $creditAccount = $this->resolveChartAccount($expense->contact->account_id, $creditAccount);
             }
         } else {
             $creditAccount = $this->accountResolver->getCashAccount();
@@ -363,10 +363,10 @@ class ParallelJournalVoucherService
 
         // from_account_id is on the header (cash_transfers), to_account_id is on each line (cash_transfer_lines)
         // Both are FKs to accounts table — resolve ChartOfAccount via the account relationship
-        $fromCoa = $this->resolveChartOfAccountFromAccount($transfer->from_account_id);
+        $fromCoa = $this->resolveChartAccount($transfer->from_account_id);
 
         foreach ($transfer->cashTransferLines as $line) {
-            $toCoa = $this->resolveChartOfAccountFromAccount($line->to_account_id);
+            $toCoa = $this->resolveChartAccount($line->to_account_id);
 
             $lines[] = [
                 'chart_of_account_id' => $toCoa->id,
@@ -399,11 +399,11 @@ class ParallelJournalVoucherService
 
     public function createForChequeRegister($cheque): JournalVoucher
     {
-        $bankAccount = $this->resolveChartOfAccountFromAccount($cheque->account_id);
+        $bankAccount = $this->resolveChartAccount($cheque->account_id);
         $relatedAccountId = $cheque->direction === 'received'
             ? ($cheque->receiver_related_account_id ?: $cheque->related_account_id)
             : $cheque->related_account_id;
-        $relatedAccount = $this->resolveChartOfAccountFromAccount($relatedAccountId);
+        $relatedAccount = $this->resolveChartAccount($relatedAccountId);
 
         $amount = (float) $cheque->amount;
 
@@ -478,7 +478,7 @@ class ParallelJournalVoucherService
 
         $arAccount = $this->accountResolver->getAccountsReceivableAccount();
         if ($return->contact_id && $return->contact?->account_id) {
-            $arAccount = $return->contact->account->chartOfAccount ?? $arAccount;
+            $arAccount = $this->resolveChartAccount($return->contact->account_id, $arAccount);
         }
 
         $totalDebit = round(array_sum(array_column($debitLines, 'debit')), 2);
@@ -520,7 +520,7 @@ class ParallelJournalVoucherService
 
         $apAccount = $this->accountResolver->getAccountsPayableAccount();
         if ($debitNote->contact_id && $debitNote->contact?->account_id) {
-            $apAccount = $debitNote->contact->account->chartOfAccount ?? $apAccount;
+            $apAccount = $this->resolveChartAccount($debitNote->contact->account_id, $apAccount);
         }
 
         $lines[] = [
@@ -532,6 +532,13 @@ class ParallelJournalVoucherService
 
         foreach ($debitNote->debitNoteLines as $line) {
             $purchaseAccount = $this->accountResolver->getPurchaseExpenseAccount();
+            $productAccountId = $line->product?->purchase_return_account_id
+                ?: $line->product?->purchase_account_id;
+
+            if ($productAccountId) {
+                $purchaseAccount = $this->resolveChartAccount($productAccountId, $purchaseAccount);
+            }
+
             $lines[] = [
                 'chart_of_account_id' => $purchaseAccount->id,
                 'debit' => 0,
@@ -797,11 +804,11 @@ class ParallelJournalVoucherService
     public function createForLoanTopUp($topUp): JournalVoucher
     {
         // loan_received_in_account_id is FK to accounts table, not chart_of_accounts
-        $receivedCoa = $this->resolveChartOfAccountFromAccount($topUp->loan_received_in_account_id);
+        $receivedCoa = $this->resolveChartAccount($topUp->loan_received_in_account_id);
 
         // loanAccount->related_account_id is also FK to accounts
         $loanCoa = $topUp->loanAccount?->related_account_id
-            ? $this->resolveChartOfAccountFromAccount($topUp->loanAccount->related_account_id)
+            ? $this->resolveChartAccount($topUp->loanAccount->related_account_id)
             : $this->accountResolver->getLoanPayableAccount();
 
         $lines = [
@@ -841,7 +848,7 @@ class ParallelJournalVoucherService
         }
 
         // charges_paid_from_account_id is FK to accounts table, not chart_of_accounts
-        $paidCoa = $this->resolveChartOfAccountFromAccount($charge->charges_paid_from_account_id);
+        $paidCoa = $this->resolveChartAccount($charge->charges_paid_from_account_id);
 
         $lines = [
             [
@@ -891,20 +898,86 @@ class ParallelJournalVoucherService
         );
     }
 
-    /**
-     * Resolves a ChartOfAccount via its linked Account record.
-     * Used when the FK points to the accounts table, not chart_of_accounts.
-     */
-    protected function resolveChartOfAccountFromAccount(string $accountId): ChartOfAccount
+    protected function resolveChartAccount(?string $accountOrChartId, ?ChartOfAccount $fallback = null): ChartOfAccount
+    {
+        if (!$accountOrChartId) {
+            return $fallback ?: $this->accountResolver->getDefaultBankAccount();
+        }
+
+        $chartAccount = ChartOfAccount::find($accountOrChartId);
+        if ($chartAccount) {
+            return $this->ensureChartAccountIsActive($chartAccount);
+        }
+
+        return $this->resolveChartOfAccountFromAccount($accountOrChartId, $fallback);
+    }
+
+    protected function resolveChartOfAccountFromAccount(string $accountId, ?ChartOfAccount $fallback = null): ChartOfAccount
     {
         $account = Account::findOrFail($accountId);
         $coa = ChartOfAccount::where('account_id', $account->id)->first();
 
-        if (!$coa) {
-            throw new \RuntimeException("No ChartOfAccount linked to Account [{$account->id}] ({$account->name})");
+        if ($coa) {
+            return $this->ensureChartAccountIsActive($coa);
         }
 
-        return $coa;
+        return $this->createLinkedChartAccountForAccount($account, $fallback);
+    }
+
+    protected function ensureChartAccountIsActive(ChartOfAccount $chartAccount): ChartOfAccount
+    {
+        if (! (bool) $chartAccount->active) {
+            $chartAccount->forceFill(['active' => true])->saveQuietly();
+        }
+
+        return $chartAccount;
+    }
+
+    protected function createLinkedChartAccountForAccount(Account $account, ?ChartOfAccount $fallback = null): ChartOfAccount
+    {
+        $type = $this->chartTypeForAccount($account, $fallback);
+        $parent = $this->parentChartAccountForAccount($account, $type, $fallback);
+        $code = $account->code && ! ChartOfAccount::where('code', $account->code)->exists()
+            ? $account->code
+            : null;
+
+        return ChartOfAccount::withoutEvents(function () use ($account, $type, $parent, $code) {
+            return ChartOfAccount::create([
+                'account_id' => $account->id,
+                'branch_id' => null,
+                'type' => $type,
+                'code' => $code,
+                'name' => $account->name,
+                'parent_id' => $parent?->id,
+                'description' => "Auto-linked chart account for {$account->nature} account.",
+                'active' => true,
+                'is_system_generated' => (bool) $account->is_system_generated,
+                'user_add_id' => auth()->id(),
+            ]);
+        });
+    }
+
+    protected function chartTypeForAccount(Account $account, ?ChartOfAccount $fallback = null): string
+    {
+        return match ($account->nature) {
+            'bank', 'cash' => 'asset',
+            'employee' => $fallback?->type ?: 'liability',
+            'actor' => $fallback?->type ?: 'asset',
+            default => $fallback?->type ?: 'asset',
+        };
+    }
+
+    protected function parentChartAccountForAccount(Account $account, string $type, ?ChartOfAccount $fallback = null): ?ChartOfAccount
+    {
+        if ($fallback && $fallback->type === $type) {
+            return $fallback;
+        }
+
+        return match ($account->nature) {
+            'bank' => $this->accountResolver->getDefaultBankAccount(),
+            'cash' => $this->accountResolver->getCashAccount(),
+            default => null,
+        };
     }
 
     protected function createJournal(

@@ -269,8 +269,9 @@ class UserController extends BaseCrudApiController
             app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
 
-        if ($record->active) {
-            app(PayrollAccountSyncService::class)->syncEmployeePayrollAccount($record);
+        $payrollSync = app(PayrollAccountSyncService::class);
+        if ($payrollSync->shouldSyncPayrollAccount($record)) {
+            $payrollSync->syncEmployeePayrollAccount($record);
             $record->refresh();
         }
 

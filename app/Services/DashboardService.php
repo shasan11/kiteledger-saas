@@ -92,7 +92,13 @@ class DashboardService
 
     public function getAccountingHealth(array $filters): array
     {
+        $criticalIssues = $this->approvedButJvMissingCount($filters)
+            + $this->journalVoucherNullCount($filters)
+            + count($this->unbalancedJournalVouchers($filters));
+        $warningIssues = $this->approvedButNumberMissingCount($filters);
+
         return [
+            'score' => max(0, 100 - ($criticalIssues * 12) - ($warningIssues * 5)),
             'approved_jv_missing' => $this->approvedButJvMissingCount($filters),
             'approved_number_missing' => $this->approvedButNumberMissingCount($filters),
             'journal_voucher_id_null' => $this->journalVoucherNullCount($filters),
@@ -100,6 +106,49 @@ class DashboardService
             'unbalanced_jvs' => count($this->unbalancedJournalVouchers($filters)),
             'voided_this_month' => $this->voidedThisMonth($filters),
             'reversal_jvs_this_month' => $this->reversalJvsThisMonth($filters),
+        ];
+    }
+
+    public function getBusinessHealth(array $filters): array
+    {
+        $summary = $this->getSummary($filters);
+        $revenue = (float) ($summary['sales_this_month'] ?? 0);
+        $expenses = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString())
+            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString());
+        $profit = $revenue - $expenses;
+        $overdueReceivables = (float) collect($this->getReceivableAgeing($filters))
+            ->reject(fn ($bucket) => $bucket['bucket'] === 'Current')
+            ->sum('amount');
+        $payablesDueSoon = $this->overdueCount('purchase_bills', 'due_date', 'balance_due', $filters, false);
+        $lowStock = $this->lowStockCount();
+        $crmFollowups = count($this->crmFollowups());
+        $accountingScore = (float) ($this->getAccountingHealth($filters)['score'] ?? 100);
+
+        $score = 100;
+        if ($revenue > 0 && $profit < 0) {
+            $score -= 18;
+        }
+        if (($summary['cash_bank_balance'] ?? 0) < 0) {
+            $score -= 20;
+        }
+        if ($overdueReceivables > 0) {
+            $score -= min(18, 6 + ($overdueReceivables / max(1, (float) ($summary['receivables'] ?? 1))) * 12);
+        }
+        $score -= min(12, $payablesDueSoon * 3);
+        $score -= min(10, $lowStock * 2);
+        $score -= min(8, $crmFollowups * 2);
+        $score -= max(0, (100 - $accountingScore) * 0.35);
+        $score = (int) round(max(0, min(100, $score)));
+
+        return [
+            'score' => $score,
+            'status' => $score >= 85 ? 'Strong' : ($score >= 70 ? 'Stable' : ($score >= 50 ? 'Needs attention' : 'At risk')),
+            'message' => $this->businessHealthMessage($score, $profit, (float) ($summary['cash_bank_balance'] ?? 0), $overdueReceivables),
+            'profit' => $profit,
+            'overdue_receivables' => $overdueReceivables,
+            'payables_due_soon' => $payablesDueSoon,
+            'low_stock' => $lowStock,
+            'crm_followups' => $crmFollowups,
         ];
     }
 
@@ -186,7 +235,41 @@ class DashboardService
                 'upcoming_payables' => $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString()),
             ],
             'chart' => $rows,
+            'forecast' => $this->cashFlowForecast($filters),
         ];
+    }
+
+    public function getRevenueExpenseChart(array $filters): array
+    {
+        $start = $this->filterStart($filters, now()->subDays(29));
+        $end = $this->filterEnd($filters, now());
+        $revenue = $this->dailySums('invoices', 'total', 'invoice_date', $filters, $start, $end);
+        $bills = $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
+        $expenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+
+        $rows = [];
+        foreach (CarbonPeriod::create($start, $end) as $date) {
+            $key = $date->toDateString();
+            $expenseTotal = (float) ($bills[$key] ?? 0) + (float) ($expenses[$key] ?? 0);
+            $rows[] = [
+                'date' => $key,
+                'revenue' => (float) ($revenue[$key] ?? 0),
+                'expenses' => $expenseTotal,
+                'profit' => (float) ($revenue[$key] ?? 0) - $expenseTotal,
+            ];
+        }
+
+        return $rows;
+    }
+
+    public function getReceivableAgeing(array $filters): array
+    {
+        return $this->ageingBuckets('invoices', 'due_date', 'balance_due', $filters, '/payment-in/invoices');
+    }
+
+    public function getPayableAgeing(array $filters): array
+    {
+        return $this->ageingBuckets('purchase_bills', 'due_date', 'balance_due', $filters, '/payment-out/purchase-bills');
     }
 
     public function getSalesPurchase(array $filters): array
@@ -228,14 +311,19 @@ class DashboardService
 
         $stockColumn = $this->firstExistingColumn('products', ['current_stock', 'stock', 'quantity', 'opening_stock']);
         $valueColumn = $this->firstExistingColumn('products', ['inventory_value', 'stock_value']);
+        $reorderColumn = $this->hasColumn('products', 'reorder_level') ? 'reorder_level' : null;
+        $nameColumn = $this->hasColumn('products', 'name') ? 'name' : 'id';
         $stockExpr = $stockColumn ?: '0';
+        $selects = ['id', DB::raw($nameColumn . ' as name'), DB::raw(($reorderColumn ?: '0') . ' as reorder_level'), DB::raw(($stockColumn ?: '0') . ' as current_stock')];
+        $selects[] = $this->hasColumn('products', 'sku') ? 'sku' : DB::raw('NULL as sku');
+        $selects[] = $this->hasColumn('products', 'code') ? 'code' : DB::raw('NULL as code');
 
         $products = DB::table('products')
-            ->select('id', 'name', 'sku', 'code', 'reorder_level', DB::raw(($stockColumn ?: '0') . ' as current_stock'))
-            ->where('active', true)
-            ->orderBy('name')
-            ->limit(300)
-            ->get();
+            ->select($selects);
+        if ($this->hasColumn('products', 'active')) {
+            $products->where('active', true);
+        }
+        $products = $products->orderBy($nameColumn)->limit(300)->get();
 
         $warnings = $products->filter(fn ($product) => (float) $product->current_stock <= (float) $product->reorder_level)
             ->take(20)
@@ -257,10 +345,10 @@ class DashboardService
 
         return [
             'summary' => [
-                'total_products' => DB::table('products')->where('active', true)->count(),
+                'total_products' => $this->activeProductsQuery()->count(),
                 'low_stock_products' => count($warnings),
                 'negative_stock_warnings' => $products->filter(fn ($product) => (float) $product->current_stock < 0)->count(),
-                'inventory_value' => $valueColumn ? (float) DB::table('products')->sum($valueColumn) : (float) DB::table('products')->sum(DB::raw("COALESCE($stockExpr, 0) * COALESCE(purchase_price, 0)")),
+                'inventory_value' => $valueColumn ? (float) DB::table('products')->sum($valueColumn) : ($this->hasColumn('products', 'purchase_price') ? (float) DB::table('products')->sum(DB::raw("COALESCE($stockExpr, 0) * COALESCE(purchase_price, 0)")) : 0),
                 'pending_warehouse_transfers' => $this->pendingCount('warehouse_transfers'),
                 'pending_inventory_adjustments' => $this->pendingCount('inventory_adjustments'),
             ],
@@ -335,7 +423,27 @@ class DashboardService
             ];
         }
 
+        foreach ($this->crmFollowups() as $followup) {
+            $alerts[] = [
+                'severity' => !empty($followup['next_follow_up']) && Carbon::parse($followup['next_follow_up'])->isPast() ? 'warning' : 'info',
+                'title' => 'CRM follow-up due',
+                'description' => ($followup['name'] ?? 'Activity') . ' needs a response.',
+                'module' => 'CRM',
+                'action_url' => $followup['action_url'] ?? '/crm/activities',
+            ];
+        }
+
         return collect($alerts)->take(20)->values()->all();
+    }
+
+    public function getTopCustomers(array $filters): array
+    {
+        return $this->topParties('invoices', 'invoice_date', 'total', $filters);
+    }
+
+    public function getTopSuppliers(array $filters): array
+    {
+        return $this->topParties('purchase_bills', 'bill_date', 'total', $filters);
     }
 
     public function getRecentActivity(array $filters): array
@@ -678,14 +786,15 @@ class DashboardService
 
     protected function lowStockCount(): int
     {
-        if (!$this->tableExists('products')) {
+        if (!$this->tableExists('products') || !$this->hasColumn('products', 'reorder_level')) {
             return 0;
         }
         $stockColumn = $this->firstExistingColumn('products', ['current_stock', 'stock', 'quantity', 'opening_stock']);
         if (!$stockColumn) {
             return 0;
         }
-        return DB::table('products')->whereColumn($stockColumn, '<=', 'reorder_level')->count();
+        $query = $this->activeProductsQuery();
+        return $query->whereColumn($stockColumn, '<=', 'reorder_level')->count();
     }
 
     protected function overdueCount(string $table, string $dateColumn, string $balanceColumn, array $filters, bool $past = true): int
@@ -704,7 +813,7 @@ class DashboardService
 
     protected function topParties(string $table, string $dateColumn, string $amountColumn, array $filters): array
     {
-        if (!$this->tableExists($table) || !$this->tableExists('contacts') || !$this->hasColumn($table, 'contact_id')) {
+        if (!$this->tableExists($table) || !$this->tableExists('contacts') || !$this->hasColumn($table, 'contact_id') || !$this->hasColumn($table, $amountColumn) || !$this->hasColumn('contacts', 'name')) {
             return [];
         }
         $query = DB::table($table)
@@ -726,7 +835,7 @@ class DashboardService
 
     protected function sumWhere(string $table, string $amount, string $column, string $value): float
     {
-        return $this->tableExists($table) && $this->hasColumn($table, $amount) ? (float) DB::table($table)->where($column, $value)->sum($amount) : 0;
+        return $this->tableExists($table) && $this->hasColumn($table, $amount) && $this->hasColumn($table, $column) ? (float) DB::table($table)->where($column, $value)->sum($amount) : 0;
     }
 
     protected function dateDueCount(string $table, string $column, Carbon $from, Carbon $to): int
@@ -736,45 +845,77 @@ class DashboardService
 
     protected function overdueActivities(): int
     {
-        return $this->tableExists('crm_activities') ? DB::table('crm_activities')->whereNull('completed_at')->where('due_at', '<', now())->count() : 0;
+        if (!$this->tableExists('crm_activities') || !$this->hasColumn('crm_activities', 'due_at')) {
+            return 0;
+        }
+        $query = DB::table('crm_activities')->where('due_at', '<', now());
+        if ($this->hasColumn('crm_activities', 'completed_at')) {
+            $query->whereNull('completed_at');
+        }
+        return $query->count();
     }
 
     protected function monthlyDealCount(string $status): int
     {
-        return $this->tableExists('deals') ? DB::table('deals')->where('status', $status)->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()])->count() : 0;
+        return $this->tableExists('deals') && $this->hasColumn('deals', 'status') && $this->hasColumn('deals', 'updated_at')
+            ? DB::table('deals')->where('status', $status)->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()])->count()
+            : 0;
     }
 
     protected function pipeline(): array
     {
         $defaultStages = ['New', 'Contacted', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost'];
-        if (!$this->tableExists('deal_stages')) {
+        if (!$this->tableExists('deal_stages') || !$this->tableExists('deals') || !$this->hasColumn('deals', 'deal_stage_id') || !$this->hasColumn('deal_stages', 'name')) {
             return collect($defaultStages)->map(fn ($stage) => ['stage' => $stage, 'count' => 0, 'amount' => 0])->all();
         }
 
-        return DB::table('deal_stages')
+        $query = DB::table('deal_stages')
             ->leftJoin('deals', 'deal_stages.id', '=', 'deals.deal_stage_id')
             ->select('deal_stages.name as stage', DB::raw('COUNT(deals.id) as count'), DB::raw('COALESCE(SUM(deals.amount), 0) as amount'))
-            ->groupBy('deal_stages.id', 'deal_stages.name', 'deal_stages.sort_order')
-            ->orderBy('deal_stages.sort_order')
-            ->get()
+            ->groupBy('deal_stages.id', 'deal_stages.name');
+        if ($this->hasColumn('deal_stages', 'sort_order')) {
+            $query->addSelect('deal_stages.sort_order')->groupBy('deal_stages.sort_order')->orderBy('deal_stages.sort_order');
+        } else {
+            $query->orderBy('deal_stages.name');
+        }
+
+        return $query->get()
             ->map(fn ($row) => ['stage' => $row->stage, 'count' => (int) $row->count, 'amount' => (float) $row->amount])
             ->all();
     }
 
     protected function crmFollowups(): array
     {
-        if (!$this->tableExists('crm_activities')) {
+        if (!$this->tableExists('crm_activities') || !$this->hasColumn('crm_activities', 'due_at')) {
             return [];
         }
 
-        return DB::table('crm_activities')
-            ->leftJoin('leads', 'crm_activities.lead_id', '=', 'leads.id')
-            ->leftJoin('deals', 'crm_activities.deal_id', '=', 'deals.id')
-            ->leftJoin('contacts', 'crm_activities.contact_id', '=', 'contacts.id')
-            ->leftJoin('users', 'crm_activities.assigned_to_id', '=', 'users.id')
-            ->select('crm_activities.*', 'leads.name as lead_name', 'deals.title as deal_title', 'deals.amount as deal_amount', 'contacts.name as contact_name', 'users.name as assigned_to')
-            ->whereNull('crm_activities.completed_at')
-            ->where('crm_activities.due_at', '<=', now()->endOfDay())
+        $query = DB::table('crm_activities')->select('crm_activities.*');
+        if ($this->tableExists('leads') && $this->hasColumn('crm_activities', 'lead_id')) {
+            $query->leftJoin('leads', 'crm_activities.lead_id', '=', 'leads.id')->addSelect('leads.name as lead_name');
+        } else {
+            $query->addSelect(DB::raw('NULL as lead_name'));
+        }
+        if ($this->tableExists('deals') && $this->hasColumn('crm_activities', 'deal_id')) {
+            $query->leftJoin('deals', 'crm_activities.deal_id', '=', 'deals.id')->addSelect('deals.title as deal_title', 'deals.amount as deal_amount');
+        } else {
+            $query->addSelect(DB::raw('NULL as deal_title'), DB::raw('0 as deal_amount'));
+        }
+        if ($this->tableExists('contacts') && $this->hasColumn('crm_activities', 'contact_id')) {
+            $query->leftJoin('contacts', 'crm_activities.contact_id', '=', 'contacts.id')->addSelect('contacts.name as contact_name');
+        } else {
+            $query->addSelect(DB::raw('NULL as contact_name'));
+        }
+        if ($this->tableExists('users') && $this->hasColumn('crm_activities', 'assigned_to_id')) {
+            $query->leftJoin('users', 'crm_activities.assigned_to_id', '=', 'users.id')->addSelect('users.name as assigned_to');
+        } else {
+            $query->addSelect(DB::raw('NULL as assigned_to'));
+        }
+        if ($this->hasColumn('crm_activities', 'completed_at')) {
+            $query->whereNull('crm_activities.completed_at');
+        }
+
+        return $query->where('crm_activities.due_at', '<=', now()->endOfDay())
             ->orderBy('crm_activities.due_at')
             ->limit(15)
             ->get()
@@ -791,16 +932,128 @@ class DashboardService
             ->all();
     }
 
+    protected function cashFlowForecast(array $filters): array
+    {
+        $opening = $this->cashBankBalance($filters);
+        $closing = $opening;
+        $rows = [];
+
+        foreach ([0, 7, 14, 21, 30] as $offset) {
+            $from = $offset === 0 ? now()->toDateString() : now()->addDays($offset - 6)->toDateString();
+            $to = now()->addDays($offset)->toDateString();
+            $receivables = $this->sumApproved('invoices', 'balance_due', 'due_date', $filters, $from, $to);
+            $payables = $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, $from, $to);
+            $closing += $receivables - $payables;
+            $rows[] = [
+                'date' => $to,
+                'cash_in' => $receivables,
+                'cash_out' => $payables,
+                'projected_cash' => $closing,
+            ];
+        }
+
+        return $rows;
+    }
+
+    protected function ageingBuckets(string $table, string $dateColumn, string $balanceColumn, array $filters, string $route): array
+    {
+        $labels = [
+            'Current' => ['amount' => 0.0, 'count' => 0],
+            '1-30' => ['amount' => 0.0, 'count' => 0],
+            '31-60' => ['amount' => 0.0, 'count' => 0],
+            '61-90' => ['amount' => 0.0, 'count' => 0],
+            '90+' => ['amount' => 0.0, 'count' => 0],
+        ];
+
+        if (!$this->tableExists($table) || !$this->hasColumn($table, $dateColumn) || !$this->hasColumn($table, $balanceColumn)) {
+            return $this->formatAgeingBuckets($labels, $route);
+        }
+
+        $query = DB::table($table)
+            ->select('id', $dateColumn, $balanceColumn)
+            ->where($balanceColumn, '>', 0);
+        if ($this->hasColumn($table, 'approved')) {
+            $query->where('approved', true);
+        }
+        if ($this->hasColumn($table, 'void')) {
+            $query->where('void', false);
+        }
+        $this->applyBranch($query, $table, $filters);
+
+        foreach ($query->get() as $row) {
+            $bucket = 'Current';
+            if (!empty($row->{$dateColumn})) {
+                $days = Carbon::parse($row->{$dateColumn})->diffInDays(now(), false);
+                $bucket = $days <= 0 ? 'Current' : ($days <= 30 ? '1-30' : ($days <= 60 ? '31-60' : ($days <= 90 ? '61-90' : '90+')));
+            }
+            $labels[$bucket]['amount'] += (float) $row->{$balanceColumn};
+            $labels[$bucket]['count']++;
+        }
+
+        return $this->formatAgeingBuckets($labels, $route);
+    }
+
+    protected function formatAgeingBuckets(array $buckets, string $route): array
+    {
+        return collect($buckets)
+            ->map(fn ($values, $bucket) => [
+                'bucket' => $bucket,
+                'amount' => round((float) $values['amount'], 2),
+                'count' => (int) $values['count'],
+                'action_url' => $route,
+            ])
+            ->values()
+            ->all();
+    }
+
+    protected function filterStart(array $filters, Carbon $fallback): Carbon
+    {
+        return !empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : $fallback->copy()->startOfDay();
+    }
+
+    protected function filterEnd(array $filters, Carbon $fallback): Carbon
+    {
+        return !empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : $fallback->copy()->endOfDay();
+    }
+
+    protected function activeProductsQuery(): Builder
+    {
+        $query = DB::table('products');
+        if ($this->hasColumn('products', 'active')) {
+            $query->where('active', true);
+        }
+
+        return $query;
+    }
+
+    protected function businessHealthMessage(int $score, float $profit, float $cash, float $overdueReceivables): string
+    {
+        if ($score >= 85) {
+            return 'Healthy cash, clean books, and no major blockers in the current view.';
+        }
+        if ($cash < 0) {
+            return 'Cash needs attention before the next payable cycle.';
+        }
+        if ($profit < 0) {
+            return 'Revenue is not covering expenses in the selected period.';
+        }
+        if ($overdueReceivables > 0) {
+            return 'Collections are the biggest lever today.';
+        }
+
+        return 'A few operational items need review today.';
+    }
+
     protected function weeklyLeadCount(): int
     {
-        return $this->tableExists('leads')
+        return $this->tableExists('leads') && $this->hasColumn('leads', 'created_at')
             ? DB::table('leads')->where('created_at', '>=', now()->startOfWeek())->count()
             : 0;
     }
 
     protected function weightedForecastThisMonth(): float
     {
-        if (!$this->tableExists('deals')) {
+        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'expected_close_date') || !$this->hasColumn('deals', 'amount') || !$this->hasColumn('deals', 'probability')) {
             return 0;
         }
 
@@ -815,22 +1068,26 @@ class DashboardService
 
     protected function dealsAtRiskCount(int $days): int
     {
-        if (!$this->tableExists('deals')) {
+        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || (!$this->hasColumn('deals', 'expected_close_date') && !$this->hasColumn('deals', 'updated_at'))) {
             return 0;
         }
 
-        return DB::table('deals')
-            ->where('status', 'open')
-            ->where(function (Builder $query) use ($days) {
-                $query->where('expected_close_date', '<', now()->toDateString())
-                    ->orWhere('updated_at', '<', now()->subDays($days));
-            })
-            ->count();
+        $query = DB::table('deals')->where('status', 'open');
+        $query->where(function (Builder $query) use ($days) {
+            if ($this->hasColumn('deals', 'expected_close_date')) {
+                $query->where('expected_close_date', '<', now()->toDateString());
+            }
+            if ($this->hasColumn('deals', 'updated_at')) {
+                $query->orWhere('updated_at', '<', now()->subDays($days));
+            }
+        });
+
+        return $query->count();
     }
 
     protected function winRateThisMonth(): float
     {
-        if (!$this->tableExists('deals')) {
+        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'closed_date')) {
             return 0;
         }
 
@@ -843,7 +1100,7 @@ class DashboardService
 
     protected function winRateBySource(): array
     {
-        if (!$this->tableExists('deals')) {
+        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'source')) {
             return [];
         }
 

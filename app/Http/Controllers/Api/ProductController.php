@@ -106,7 +106,7 @@ class ProductController extends BaseCrudApiController
         'description' => ['nullable', 'string'],
         'product_unit_id' => ['nullable', 'uuid', 'exists:product_units,id'],
         'tax_class_id' => ['nullable', 'uuid', 'exists:tax_classes,id'],
-        'product_type' => ['required', 'in:simple,variant_parent,variant'],
+        'product_type' => ['required', 'in:simple,service,variant_parent,variant'],
         'variant_signature' => ['nullable', 'string', 'max:1000'],
         'sales_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'purchase_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
@@ -267,7 +267,7 @@ class ProductController extends BaseCrudApiController
     {
         $query = $this->baseQuery()
             ->where('active', true)
-            ->whereIn('product_type', ['simple', 'variant']);
+            ->whereIn('product_type', ['simple', 'service', 'variant']);
 
         $transaction = $request->query('transaction');
 
@@ -310,11 +310,11 @@ class ProductController extends BaseCrudApiController
         }
 
         if ($request->boolean('sellable')) {
-            $query->whereIn('product_type', ['simple', 'variant'])->where('allow_sale', true);
+            $query->whereIn('product_type', ['simple', 'service', 'variant'])->where('allow_sale', true);
         }
 
         if ($request->boolean('purchasable')) {
-            $query->whereIn('product_type', ['simple', 'variant'])->where('allow_purchase', true);
+            $query->whereIn('product_type', ['simple', 'service', 'variant'])->where('allow_purchase', true);
         }
     }
 
@@ -369,7 +369,8 @@ class ProductController extends BaseCrudApiController
         $legacyProductTypes = [
             'goods' => 'simple',
             'services' => 'simple',
-            'service' => 'simple',
+            'service' => 'service',
+            'services' => 'service',
             'composite' => 'variant_parent',
         ];
 
@@ -413,6 +414,16 @@ class ProductController extends BaseCrudApiController
             $data['variant_signature'] = null;
         }
 
+        if (($data['product_type'] ?? 'simple') === 'service') {
+            $data['parent_id'] = null;
+            $data['variant_signature'] = null;
+            $data['track_inventory'] = false;
+            $data['valuation_method'] = $data['valuation_method'] ?? null;
+            $data['reorder_level'] = 0;
+            $data['sku'] = $data['sku'] ?? null;
+            $data['barcode'] = $data['barcode'] ?? null;
+        }
+
         return $data;
     }
 
@@ -430,6 +441,10 @@ class ProductController extends BaseCrudApiController
 
         if ($type === 'variant_parent' && !empty($data['parent_id'])) {
             throw ValidationException::withMessages(['parent_id' => ['Variant parent products cannot have a parent.']]);
+        }
+
+        if ($type === 'service' && ! empty($data['track_inventory'])) {
+            throw ValidationException::withMessages(['track_inventory' => ['Services cannot track inventory.']]);
         }
 
         $ignore = $record?->id;

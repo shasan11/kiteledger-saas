@@ -61,6 +61,42 @@ export async function fetchList(path, params = {}) {
     return { results: [], count: 0 };
 }
 
+export function getApiValidationErrors(error) {
+    const errors = error?.response?.data?.errors || {};
+
+    return Object.entries(errors).reduce((messages, [field, value]) => {
+        if (Array.isArray(value) && value.length > 0) {
+            messages[field] = value[0];
+        } else if (typeof value === 'string') {
+            messages[field] = value;
+        }
+
+        return messages;
+    }, {});
+}
+
+export function getApiError(error, fallback = 'Something went wrong.') {
+    const status = error?.response?.status;
+    const data = error?.response?.data || {};
+    const validationErrors = getApiValidationErrors(error);
+    const firstValidationError = Object.values(validationErrors)[0];
+
+    if (data.message) return data.message;
+    if (firstValidationError) return firstValidationError;
+    if (status === 403) return 'You do not have permission to perform this action.';
+    if (status === 422) return 'Please correct the highlighted POS details and try again.';
+    if (status >= 500) return 'The server could not complete this POS action. Please try again or contact support.';
+    if (error?.request && !error?.response) return 'Network error. Please check your connection and try again.';
+
+    return fallback;
+}
+
+export function showApiError(messageApi, error, fallback = 'Something went wrong.') {
+    const text = getApiError(error, fallback);
+    messageApi.error(text);
+    return text;
+}
+
 export function saleStatusColor(status) {
     if (['completed', 'paid'].includes(status)) return 'green';
     if (['held'].includes(status)) return 'gold';

@@ -13,6 +13,21 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
 const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
+const transferTotal = (items = []) => (Array.isArray(items) ? items : []).reduce((sum, row) => sum + toNumber(row?.amount), 0);
+const currencyLabel = (values = {}) => (
+    values.currency_id_detail?.code ||
+    values.currency_id_detail?.name ||
+    values.currency?.code ||
+    values.currency?.name ||
+    values.currency_name ||
+    ''
+);
+const formatMoney = (amount) => Number(toNumber(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const TransferTotal = ({ values }) => (
+    <div style={{ marginTop: -4, fontWeight: 700, color: '#111827' }}>
+        Total {currencyLabel(values)} {formatMoney(transferTotal(values?.items))}
+    </div>
+);
 const formatDate = (v) => {
     if (!v) return null;
     if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
@@ -27,6 +42,8 @@ export default function CashTransferEdit({ id, ...props }) {
         { name: 'from_account_id', label: 'From Account', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'transfer_no', label: 'Transfer No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
         { name: 'transfer_date', label: 'Transfer Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
+        { name: 'currency_id', label: 'Currency', type: 'fkSelect', required: true, col: 8, placeholder: 'Select Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
+        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0 },
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         {
             name: 'items', label: 'Transfer Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { to_account_id: null, amount: 0, description: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
@@ -36,12 +53,14 @@ export default function CashTransferEdit({ id, ...props }) {
                 { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
             ],
         },
+        { name: 'transfer_total', label: '', type: 'custom', col: 24, render: TransferTotal },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
     ], []);
 
     const validationSchema = useMemo(() => Yup.object().shape({
         from_account_id: Yup.mixed().test('req', 'From Account is required', (v) => !!asId(v)).required(),
         transfer_date: Yup.mixed().required('Date is required'),
+        currency_id: Yup.mixed().test('req', 'Currency is required', (v) => !!asId(v)).required(),
         items: Yup.array().min(1, 'At least one transfer line is required').required(),
     }), []);
 
@@ -51,6 +70,8 @@ export default function CashTransferEdit({ id, ...props }) {
             transfer_no: nullIfEmpty(values.transfer_no),
             transfer_date: formatDate(values.transfer_date),
             from_account_id: asId(values.from_account_id ?? values.fromAccount),
+            currency_id: asId(values.currency_id ?? values.currency),
+            exchange_rate: toNumber(values.exchange_rate) || 1,
             reference: nullIfEmpty(values.reference),
             notes: nullIfEmpty(values.notes),
             items,

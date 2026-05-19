@@ -29,7 +29,7 @@ class PosShiftService
             if ($actorId && (int) $cashierId !== (int) $actorId) {
                 $user = request()->user();
 
-                if (!$user || !$user->can('pos.shift.update')) {
+                if (!$user || !$user->can('pos.shift.manage')) {
                     throw new InvalidArgumentException('You cannot open a shift for another cashier.');
                 }
             }
@@ -65,7 +65,7 @@ class PosShiftService
         if ($shift->cashier_id && auth()->id() && (int) $shift->cashier_id !== (int) auth()->id()) {
             $user = request()->user();
 
-            if (!$user || !$user->can('pos.shift.update')) {
+            if (!$user || !$user->can('pos.shift.manage')) {
                 throw new InvalidArgumentException('You cannot close another cashier shift.');
             }
         }
@@ -93,15 +93,14 @@ class PosShiftService
             throw new InvalidArgumentException('This terminal already has an open shift.');
         }
 
-        if ($cashierId) {
+        if ($cashierId && !request()->user()?->can('pos.shift.manage')) {
             $openCashierShift = PosShift::query()
-                ->where('pos_terminal_id', $terminalId)
                 ->where('cashier_id', $cashierId)
                 ->where('status', 'open')
                 ->exists();
 
             if ($openCashierShift) {
-                throw new InvalidArgumentException('This cashier already has an open shift on the selected terminal.');
+                throw new InvalidArgumentException('This cashier already has an open shift.');
             }
         }
     }

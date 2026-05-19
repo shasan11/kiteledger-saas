@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
     App,
+    Alert,
     Badge,
     Button,
     Card,
@@ -40,7 +41,8 @@ import {
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, fetchList, money, saleStatusColor } from './Shared/posHelpers';
+import PosTopBar from '@/Components/Pos/PosTopBar';
+import { api, fetchList, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 
 const { Text, Title } = Typography;
 
@@ -72,6 +74,9 @@ export default function PosIndex() {
     const can = (permission) => permissions.includes(permission);
 
     const canViewAllBranches = !!branchContext.canViewAllBranches;
+    const queryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+    const requestedTerminalId = queryParams.get('pos_terminal_id');
+    const requestedShiftId = queryParams.get('pos_shift_id');
 
     const userDefaultBranchId =
         branchContext.selectedBranchId ||
@@ -130,6 +135,9 @@ export default function PosIndex() {
     const [cashMovementType, setCashMovementType] = useState('cash_in');
     const [cashMovementForm] = Form.useForm();
     const [cashMovementLoading, setCashMovementLoading] = useState(false);
+    const [closeShiftOpen, setCloseShiftOpen] = useState(false);
+    const [closeShiftForm] = Form.useForm();
+    const [closeShiftLoading, setCloseShiftLoading] = useState(false);
 
     const selectedTerminal = useMemo(() => {
         return terminals.find((terminal) => terminal.id === terminalId) || null;
@@ -160,6 +168,66 @@ export default function PosIndex() {
         }));
     }, [contacts]);
 
+    const terminalWarnings = useMemo(() => {
+        if (!selectedTerminal) return ['No terminal selected.'];
+
+        const warnings = [];
+        const hasTrackedItem = cart.some((item) => item.track_inventory);
+        const selectedPaymentMethods = new Set(
+            payments
+                .filter((payment) => payment.payment_method !== 'credit' && Number(payment.amount || 0) > 0)
+                .map((payment) => payment.payment_method),
+        );
+
+        if (hasTrackedItem && !selectedTerminal.warehouse_id) {
+            warnings.push('Warehouse is required for inventory-tracked products.');
+        }
+
+        if (selectedPaymentMethods.has('cash') && !selectedTerminal.cash_account_id) {
+            warnings.push('Cash account is required for cash payments.');
+        }
+
+        if (selectedPaymentMethods.has('card') && !selectedTerminal.card_account_id) {
+            warnings.push('Card account is required for card payments.');
+        }
+
+        if (
+            ['online', 'wallet', 'bank_transfer'].some((method) => selectedPaymentMethods.has(method)) &&
+            !selectedTerminal.online_account_id
+        ) {
+            warnings.push('Online account is required for online, wallet, or bank transfer payments.');
+        }
+
+        return warnings;
+    }, [cart, payments, selectedTerminal]);
+
+    const checkoutError = useMemo(() => {
+        if (!can('pos.sale.create')) return 'No permission to create POS sales.';
+        if (!selectedTerminal) return 'No terminal selected.';
+        if (!currentShift?.id) return 'No open shift.';
+        if (cart.length < 1) return 'Cart is empty.';
+
+        const hasTrackedItem = cart.some((item) => item.track_inventory);
+        if (hasTrackedItem && !selectedTerminal?.warehouse_id) return 'Warehouse is required for inventory-tracked products.';
+
+        const missingStock = cart.find((item) => item.track_inventory && item.available_stock !== null && item.available_stock !== undefined && Number(item.qty || 0) > Number(item.available_stock || 0));
+        if (missingStock) return `${missingStock.product_name} has only ${missingStock.available_stock} available.`;
+
+        const moneyPayments = payments.filter((payment) => payment.payment_method !== 'credit' && Number(payment.amount || 0) > 0);
+        const hasCredit = payments.some((payment) => payment.payment_method === 'credit') || summary.balance_due > 0;
+        const hasNonCash = moneyPayments.some((payment) => payment.payment_method !== 'cash');
+
+        if (moneyPayments.some((payment) => payment.payment_method === 'cash' && !selectedTerminal?.cash_account_id)) return 'Terminal account is missing for selected payment method.';
+        if (moneyPayments.some((payment) => payment.payment_method === 'card' && !selectedTerminal?.card_account_id)) return 'Terminal account is missing for selected payment method.';
+        if (moneyPayments.some((payment) => ['online', 'wallet', 'bank_transfer'].includes(payment.payment_method) && !selectedTerminal?.online_account_id)) return 'Terminal account is missing for selected payment method.';
+        if (hasCredit && !customerId) return 'Customer is required for credit sale.';
+        if (hasCredit && !can('pos.sale.credit')) return 'No permission to complete credit sales.';
+        if (!hasCredit && summary.paid_total + 0.009 < summary.grand_total) return 'Amount received is less than grand total.';
+        if (summary.change_amount > 0.009 && hasNonCash) return 'Overpayment is allowed only for cash sales.';
+
+        return null;
+    }, [cart, currentShift, customerId, payments, selectedTerminal, summary, permissions]);
+
     const pageStyle = {
         padding: 16,
         background: token.colorBgLayout,
@@ -188,6 +256,11 @@ export default function PosIndex() {
     };
 
     useEffect(() => {
+        if (!requestedTerminalId || !requestedShiftId) {
+            router.visit(route('pos.index'));
+            return;
+        }
+
         void bootstrap();
     }, []);
 
@@ -203,7 +276,7 @@ export default function PosIndex() {
             return;
         }
 
-        void loadCurrentShift();
+        void loadCurrentShift(terminalId, { enforceSelection: true });
         void loadHeldSales();
     }, [terminalId]);
 
@@ -260,9 +333,10 @@ export default function PosIndex() {
 
             await loadTerminalsForBranch(fallbackBranchId, {
                 silent: true,
+                requestedTerminalId,
             });
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to load POS screen.');
+            showApiError(message, error, 'Failed to load POS screen.');
         } finally {
             setLoading(false);
         }
@@ -290,6 +364,7 @@ export default function PosIndex() {
                 : terminalRows;
 
             const defaultTerminal =
+                scopedTerminals.find((terminal) => String(terminal.id) === String(options.requestedTerminalId)) ||
                 scopedTerminals.find((terminal) => terminal.is_default) ||
                 scopedTerminals[0] ||
                 null;
@@ -304,7 +379,7 @@ export default function PosIndex() {
             return defaultTerminal;
         } catch (error) {
             if (!options.silent) {
-                message.error(error?.response?.data?.message || 'Failed to load POS terminals.');
+                showApiError(message, error, 'Failed to load POS terminals.');
             }
 
             setTerminals([]);
@@ -335,19 +410,24 @@ export default function PosIndex() {
     async function loadProducts(query = '') {
         if (!terminalId || !currentShift?.id) return;
 
-        const response = await axios.get(api('/api/pos/products/search'), {
-            params: {
-                q: query || undefined,
-                warehouse_id: selectedTerminal?.warehouse_id,
-                branch_id: selectedTerminal?.branch_id || activeBranchId,
-                limit: 40,
-            },
-        });
+        try {
+            const response = await axios.get(api('/api/pos/products/search'), {
+                params: {
+                    q: query || undefined,
+                    warehouse_id: selectedTerminal?.warehouse_id,
+                    branch_id: selectedTerminal?.branch_id || activeBranchId,
+                    limit: 40,
+                },
+            });
 
-        setProducts(response.data || []);
+            setProducts(response.data || []);
+        } catch (error) {
+            setProducts([]);
+            showApiError(message, error, 'Failed to load POS products.');
+        }
     }
 
-    async function loadCurrentShift(targetTerminalId = terminalId) {
+    async function loadCurrentShift(targetTerminalId = terminalId, options = {}) {
         if (!targetTerminalId) {
             setCurrentShift(null);
             return null;
@@ -365,9 +445,17 @@ export default function PosIndex() {
                 },
             });
 
-            setCurrentShift(response.data || null);
+            const shift = response.data || null;
 
-            if (!response.data) {
+            if (options.enforceSelection && (!shift?.id || (requestedShiftId && String(shift.id) !== String(requestedShiftId)))) {
+                message.warning('Select an open terminal shift before selling.');
+                router.visit(route('pos.index'));
+                return null;
+            }
+
+            setCurrentShift(shift);
+
+            if (!shift) {
                 shiftForm.setFieldsValue({
                     terminal_id: targetTerminalId,
                     branch_id: targetTerminal?.branch_id || activeBranchId,
@@ -376,10 +464,10 @@ export default function PosIndex() {
                 });
             }
 
-            return response.data || null;
+            return shift;
         } catch (error) {
             setCurrentShift(null);
-            message.error(error?.response?.data?.message || 'Failed to load current shift.');
+            showApiError(message, error, 'Failed to load current shift.');
             return null;
         } finally {
             setShiftLoading(false);
@@ -389,14 +477,19 @@ export default function PosIndex() {
     async function loadHeldSales() {
         if (!terminalId) return;
 
-        const payload = await fetchList('/api/pos-sales', {
-            pos_terminal_id: terminalId,
-            branch_id: selectedTerminal?.branch_id || activeBranchId,
-            status: 'held',
-            page_size: 50,
-        });
+        try {
+            const payload = await fetchList('/api/pos-sales', {
+                pos_terminal_id: terminalId,
+                branch_id: selectedTerminal?.branch_id || activeBranchId,
+                status: 'held',
+                page_size: 50,
+            });
 
-        setHeldSales(payload.results || []);
+            setHeldSales(payload.results || []);
+        } catch (error) {
+            setHeldSales([]);
+            showApiError(message, error, 'Failed to load held POS sales.');
+        }
     }
 
     function calculateCart() {
@@ -431,6 +524,10 @@ export default function PosIndex() {
         const grandTotal = subtotal - discountTotal + taxTotal;
 
         const paidTotal = payments.reduce((sum, payment) => {
+            if (payment.payment_method === 'credit') {
+                return sum;
+            }
+
             return sum + Number(payment.amount || 0);
         }, 0);
 
@@ -457,6 +554,11 @@ export default function PosIndex() {
             const existing = current.find((item) => item.product_id === product.id);
 
             if (existing) {
+                if (product.track_inventory && product.available_stock !== null && product.available_stock !== undefined && Number(existing.qty || 0) + 1 > Number(product.available_stock || 0)) {
+                    message.warning(`${product.name} has only ${product.available_stock} available.`);
+                    return current;
+                }
+
                 return current.map((item) =>
                     item.product_id === product.id
                         ? {
@@ -525,7 +627,10 @@ export default function PosIndex() {
                 itemIndex === index
                     ? {
                           ...item,
-                          [key]: value,
+                          [key]:
+                              key === 'qty' && item.track_inventory && item.available_stock !== null && item.available_stock !== undefined
+                                  ? Math.min(Number(value || 1), Number(item.available_stock || 0))
+                                  : value,
                       }
                     : item,
             ),
@@ -593,7 +698,7 @@ export default function PosIndex() {
                 barcodeRef.current?.focus();
             }, 80);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to open shift.');
+            showApiError(message, error, 'Failed to open shift.');
         } finally {
             setProcessing(false);
         }
@@ -649,7 +754,7 @@ export default function PosIndex() {
             clearSale();
             message.success('Sale held successfully.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Unable to hold sale.');
+            showApiError(message, error, 'Unable to hold sale.');
         } finally {
             setProcessing(false);
         }
@@ -662,6 +767,11 @@ export default function PosIndex() {
 
         if (cart.length < 1) {
             message.warning('Cart is empty.');
+            return;
+        }
+
+        if (checkoutError) {
+            message.error(checkoutError);
             return;
         }
 
@@ -681,7 +791,7 @@ export default function PosIndex() {
             const response = await axios.post(api(`/api/pos-sales/${saleId}/complete`), {
                 ...payload,
                 approved: true,
-                allow_credit_sale: payments.every((payment) => payment.payment_method === 'credit'),
+                allow_credit_sale: payments.some((payment) => payment.payment_method === 'credit') || summary.balance_due > 0,
             });
 
             setSaleReceipt(response.data);
@@ -697,7 +807,7 @@ export default function PosIndex() {
 
             message.success('Sale completed.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Unable to complete sale.');
+            showApiError(message, error, 'Unable to complete sale.');
         } finally {
             setProcessing(false);
         }
@@ -726,10 +836,10 @@ export default function PosIndex() {
                 remarks: item.remarks || null,
             })),
             payments: payments
-                .filter((payment) => Number(payment.amount || 0) > 0)
+                .filter((payment) => payment.payment_method === 'credit' || Number(payment.amount || 0) > 0)
                 .map((payment) => ({
                     payment_method: payment.payment_method,
-                    amount: Number(payment.amount || 0),
+                    amount: payment.payment_method === 'credit' ? 0 : Number(payment.amount || 0),
                     payment_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                     reference: payment.reference || null,
                     transaction_no: payment.transaction_no || null,
@@ -793,7 +903,7 @@ export default function PosIndex() {
 
             message.success(`Terminal "${newTerminal.name}" created and selected.`);
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to create terminal.');
+            showApiError(message, error, 'Failed to create terminal.');
         } finally {
             setAddTerminalLoading(false);
         }
@@ -839,7 +949,7 @@ export default function PosIndex() {
 
             message.success('Cash movement recorded.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to record cash movement.');
+            showApiError(message, error, 'Failed to record cash movement.');
         } finally {
             setCashMovementLoading(false);
         }
@@ -849,25 +959,59 @@ export default function PosIndex() {
         if (!currentShift) return;
 
         Modal.confirm({
-            title: 'Close shift',
-            content: `Expected cash is Rs. ${money(currentShift.expected_cash)}. Close the current shift now?`,
-            okText: 'Close Shift',
-            onOk: async () => {
-                try {
-                    await axios.post(api(`/api/pos-shifts/${currentShift.id}/close`), {
-                        counted_cash: currentShift.expected_cash || 0,
-                    });
-
-                    setCurrentShift(null);
-                    setProducts([]);
-                    clearSale();
-
-                    message.success('Shift closed.');
-                } catch (error) {
-                    message.error(error?.response?.data?.message || 'Unable to close shift.');
-                }
+            title: 'End this POS shift?',
+            content: 'You will reconcile counted cash and close the shift for this terminal.',
+            okText: 'Continue',
+            cancelText: 'Cancel',
+            okButtonProps: {
+                danger: true,
+            },
+            onOk: () => {
+                closeShiftForm.setFieldsValue({
+                    counted_cash: Number(currentShift.expected_cash || 0),
+                    closing_notes: '',
+                });
+                setCloseShiftOpen(true);
             },
         });
+    }
+
+    async function submitCloseShift(values) {
+        if (!currentShift) return;
+
+        const expectedCash = Number(currentShift.expected_cash || 0);
+        const countedCash = Number(values.counted_cash || 0);
+        const difference = Number((countedCash - expectedCash).toFixed(2));
+
+        if (difference !== 0 && !values.closing_notes) {
+            message.error('Closing note is required when cash difference is not zero.');
+            return;
+        }
+
+        setCloseShiftLoading(true);
+
+        try {
+            const response = await axios.post(api(`/api/pos-shifts/${currentShift.id}/close`), {
+                counted_cash: countedCash,
+                closing_notes: values.closing_notes || null,
+                has_cash_difference: difference !== 0,
+            });
+
+            const closedShiftId = response.data?.id || currentShift.id;
+
+            setCurrentShift(null);
+            setProducts([]);
+            setCloseShiftOpen(false);
+            closeShiftForm.resetFields();
+            clearSale();
+
+            message.success('Shift closed.');
+            router.visit(route('pos.shifts.closing-summary', closedShiftId));
+        } catch (error) {
+            showApiError(message, error, 'Unable to close shift.');
+        } finally {
+            setCloseShiftLoading(false);
+        }
     }
 
     const cartColumns = [
@@ -1039,54 +1183,9 @@ export default function PosIndex() {
                     Point of Sale
                 </Title>
 
-                {canViewAllBranches && (
-                    <Select
-                        style={{ width: 220 }}
-                        value={activeBranchId}
-                        options={branchOptions}
-                        onChange={handleBranchChange}
-                        placeholder="Select branch"
-                    />
-                )}
-
-                <Space.Compact>
-                    <Select
-                        style={{ width: 220 }}
-                        value={terminalId}
-                        options={terminalOptions}
-                        loading={terminalLoading}
-                        onChange={(value) => {
-                            setTerminalId(value);
-                            setCurrentShift(null);
-                            setProducts([]);
-                            clearSale();
-                        }}
-                        placeholder="Select terminal"
-                    />
-
-                    {can('pos.terminal.create') && (
-                        <Button
-                            icon={<PlusOutlined />}
-                            title="Create new terminal"
-                            onClick={() => setAddTerminalOpen(true)}
-                        />
-                    )}
-                </Space.Compact>
-
-                <Tag>
-                    {selectedTerminal?.branch?.name ||
-                        selectedTerminal?.branch_name ||
-                        selectedBranch?.name ||
-                        'Branch'}
-                </Tag>
-
-                <Tag icon={<ClockCircleOutlined />} color={currentShift ? 'green' : 'red'}>
-                    {currentShift ? currentShift.shift_no : 'No open shift'}
-                </Tag>
-
-                <Tag>
-                    {currentShift?.cashier?.display_name || currentShift?.cashier?.name || 'Cashier'}
-                </Tag>
+                <Button onClick={() => router.visit(route('pos.index'))}>
+                    Terminals
+                </Button>
             </Space>
 
             <Space wrap>
@@ -1111,12 +1210,6 @@ export default function PosIndex() {
                 {can('pos.sale.view') && (
                     <Button onClick={() => router.visit(route('pos.sales.index'))}>
                         Sales History
-                    </Button>
-                )}
-
-                {currentShift && can('pos.shift.close') && (
-                    <Button danger onClick={closeShift}>
-                        Close Shift
                     </Button>
                 )}
             </Space>
@@ -1173,14 +1266,42 @@ export default function PosIndex() {
                     noTerminalView
                 ) : !currentShift ? (
                     <div style={centerShellStyle}>
-                        <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description="Open a POS shift to start selling."
-                        />
+                        <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 620 }}>
+                            {terminalWarnings.length > 0 && (
+                                <Alert
+                                    type="warning"
+                                    showIcon
+                                    message="Terminal setup needs attention"
+                                    description={terminalWarnings.join(' ')}
+                                />
+                            )}
+
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="Open a POS shift to start selling."
+                            />
+                        </Space>
                     </div>
                 ) : (
-                    <Row gutter={12} align="stretch">
-                        <Col xs={24} xl={15}>
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <PosTopBar
+                            terminal={selectedTerminal}
+                            shift={currentShift}
+                            canCloseShift={can('pos.shift.close')}
+                            onCloseShift={closeShift}
+                        />
+
+                        {(terminalWarnings.length > 0 || checkoutError) && (
+                            <Alert
+                                type={checkoutError ? 'warning' : 'info'}
+                                showIcon
+                                message={checkoutError || 'Terminal setup warning'}
+                                description={terminalWarnings.join(' ')}
+                            />
+                        )}
+
+                        <Row gutter={12} align="stretch">
+                            <Col xs={24} xl={15}>
                             <Card bordered={false} style={cardStyle} bodyStyle={{ padding: 14 }}>
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                                     <Space.Compact style={{ width: '100%' }}>
@@ -1249,9 +1370,9 @@ export default function PosIndex() {
                                     )}
                                 </Space>
                             </Card>
-                        </Col>
+                            </Col>
 
-                        <Col xs={24} xl={9}>
+                            <Col xs={24} xl={9}>
                             <Card bordered={false} style={cardStyle} bodyStyle={{ padding: 14 }}>
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                                     <Select
@@ -1339,7 +1460,7 @@ export default function PosIndex() {
                                             type="primary"
                                             icon={<CreditCardOutlined />}
                                             onClick={() => setCheckoutOpen(true)}
-                                            disabled={cart.length < 1}
+                                            disabled={!!checkoutError}
                                         >
                                             Checkout
                                         </Button>
@@ -1376,14 +1497,15 @@ export default function PosIndex() {
                                     </Row>
                                 </Card>
                             )}
-                        </Col>
-                    </Row>
+                            </Col>
+                        </Row>
+                    </Space>
                 )}
             </div>
 
             <Modal
                 title="Open POS Shift"
-                open={!loading && !shiftLoading && !terminalLoading && terminals.length > 0 && !currentShift}
+                open={false}
                 closable={false}
                 maskClosable={false}
                 keyboard={false}
@@ -1516,6 +1638,10 @@ export default function PosIndex() {
                 footer={null}
             >
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    {checkoutError && (
+                        <Alert type="warning" showIcon message={checkoutError} />
+                    )}
+
                     {payments.map((payment, index) => (
                         <Card key={index} size="small">
                             <Space direction="vertical" style={{ width: '100%' }}>
@@ -1550,6 +1676,7 @@ export default function PosIndex() {
                                     style={{ width: '100%' }}
                                     min={0}
                                     value={payment.amount}
+                                    disabled={payment.payment_method === 'credit'}
                                     onChange={(value) =>
                                         setPayments((current) =>
                                             current.map((row, rowIndex) =>
@@ -1645,8 +1772,7 @@ export default function PosIndex() {
                         onClick={completeSale}
                         loading={processing}
                         disabled={
-                            summary.balance_due > 0 &&
-                            !payments.some((payment) => payment.payment_method === 'credit')
+                            !!checkoutError
                         }
                         block
                     >
@@ -1894,6 +2020,66 @@ export default function PosIndex() {
                             </Space>
                         </div>
                     )}
+                </Form>
+            </Modal>
+
+            <Modal
+                title="Close POS Shift"
+                open={closeShiftOpen}
+                onCancel={() => {
+                    setCloseShiftOpen(false);
+                    closeShiftForm.resetFields();
+                }}
+                onOk={() => closeShiftForm.submit()}
+                confirmLoading={closeShiftLoading}
+                okText="Close Shift"
+                destroyOnClose
+            >
+                <Form form={closeShiftForm} layout="vertical" onFinish={submitCloseShift}>
+                    <Descriptions
+                        size="small"
+                        column={1}
+                        items={[
+                            { key: 'opening', label: 'Opening Cash', children: `Rs. ${money(currentShift?.opening_cash)}` },
+                            { key: 'cashSales', label: 'Cash Sales', children: `Rs. ${money(currentShift?.total_cash_sales)}` },
+                            { key: 'cardSales', label: 'Card Sales', children: `Rs. ${money(currentShift?.total_card_sales)}` },
+                            { key: 'onlineSales', label: 'Online Sales', children: `Rs. ${money(currentShift?.total_online_sales)}` },
+                            { key: 'refunds', label: 'Refunds', children: `Rs. ${money(currentShift?.total_refunds)}` },
+                            { key: 'expenses', label: 'Cash Out / Expenses / Drop', children: `Rs. ${money(currentShift?.total_expenses)}` },
+                            { key: 'totalSales', label: 'Total Sales', children: `Rs. ${money(currentShift?.total_sales)}` },
+                            { key: 'expected', label: 'Expected Cash', children: <Text strong>Rs. {money(currentShift?.expected_cash)}</Text> },
+                        ]}
+                    />
+
+                    <Form.Item
+                        name="counted_cash"
+                        label="Counted Cash"
+                        rules={[
+                            { required: true, message: 'Counted cash is required.' },
+                            { type: 'number', min: 0, message: 'Counted cash cannot be negative.' },
+                        ]}
+                    >
+                        <InputNumber style={{ width: '100%' }} min={0} prefix="Rs." placeholder="0.00" />
+                    </Form.Item>
+
+                    <Form.Item shouldUpdate noStyle>
+                        {({ getFieldValue }) => {
+                            const difference = Number(Number(getFieldValue('counted_cash') || 0) - Number(currentShift?.expected_cash || 0));
+
+                            return (
+                                <Alert
+                                    type={Math.abs(difference) < 0.01 ? 'success' : 'warning'}
+                                    showIcon
+                                    message={`Difference: Rs. ${money(difference)}`}
+                                    style={{ marginBottom: 12 }}
+                                />
+                            );
+                        }}
+                    </Form.Item>
+
+                    <Form.Item name="closing_notes" label="Closing Note">
+                        <Input.TextArea rows={3} placeholder="Required if cash difference is not zero" />
+                    </Form.Item>
                 </Form>
             </Modal>
 

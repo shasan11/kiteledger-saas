@@ -222,6 +222,11 @@ class User extends Authenticatable
         return $this->belongsTo(Account::class, 'payroll_account_id');
     }
 
+    public function shouldSyncPayrollAccount(): bool
+    {
+        return app(\App\Services\Payroll\PayrollAccountSyncService::class)->shouldSyncPayrollAccount($this);
+    }
+
     public function awardHistories(): HasMany
     {
         return $this->hasMany(AwardHistory::class);

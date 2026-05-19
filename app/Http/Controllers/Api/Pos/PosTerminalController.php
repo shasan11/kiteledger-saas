@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Pos\Concerns\AuthorizesPosAccess;
 use App\Http\Requests\Pos\StorePosTerminalRequest;
 use App\Http\Requests\Pos\UpdatePosTerminalRequest;
+use App\Models\PosSale;
+use App\Models\PosShift;
 use App\Models\PosTerminal;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class PosTerminalController extends Controller
 {
@@ -35,6 +38,125 @@ class PosTerminalController extends Controller
         $this->applyBranchScope($query, $request);
 
         return response()->json($query->paginate((int) $request->input('page_size', 20)));
+    }
+
+    public function overview(Request $request): JsonResponse
+    {
+        $this->authorizePos('pos.terminal.view');
+
+        $query = PosTerminal::query()
+            ->with(['branch', 'warehouse'])
+            ->where('active', true)
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $search = trim((string) $request->input('search'));
+
+                $q->where(function ($inner) use ($search) {
+                    $inner->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%")
+                        ->orWhereHas('branch', fn ($branch) => $branch->where('name', 'like', "%{$search}%"))
+                        ->orWhereHas('warehouse', fn ($warehouse) => $warehouse->where('name', 'like', "%{$search}%"));
+                });
+            })
+            ->orderByDesc('is_default')
+            ->orderBy('name');
+
+        $this->applyBranchScope($query, $request);
+
+        $terminals = $query->get();
+        $terminalIds = $terminals->pluck('id')->all();
+
+        $openShifts = PosShift::query()
+            ->with(['cashier'])
+            ->whereIn('pos_terminal_id', $terminalIds)
+            ->where('status', 'open')
+            ->latest('opened_at')
+            ->get()
+            ->keyBy('pos_terminal_id');
+
+        $todaySales = PosSale::query()
+            ->whereIn('pos_terminal_id', $terminalIds)
+            ->whereDate('sale_date', Carbon::today())
+            ->whereIn('status', ['completed', 'part_refunded', 'refunded'])
+            ->selectRaw('pos_terminal_id, COALESCE(SUM(grand_total), 0) as total_sales, COUNT(*) as transaction_count')
+            ->groupBy('pos_terminal_id')
+            ->get()
+            ->keyBy('pos_terminal_id');
+
+        $terminals = $terminals->map(function (PosTerminal $terminal) use ($openShifts, $todaySales) {
+            $shift = $openShifts->get($terminal->id);
+            $sales = $todaySales->get($terminal->id);
+            $status = 'closed';
+            $statusLabel = 'No Shift';
+            $statusColor = 'default';
+
+            if ($shift) {
+                $cashDifference = round((float) ($shift->cash_difference ?? 0), 2);
+                $hoursOpen = $shift->opened_at ? $shift->opened_at->diffInHours(now()) : 0;
+
+                if (abs($cashDifference) >= 0.01) {
+                    $status = 'risk';
+                    $statusLabel = 'Needs Review';
+                    $statusColor = 'red';
+                } elseif ($hoursOpen >= 12) {
+                    $status = 'attention';
+                    $statusLabel = 'Needs Attention';
+                    $statusColor = 'gold';
+                } else {
+                    $status = 'open';
+                    $statusLabel = 'Open Shift';
+                    $statusColor = 'green';
+                }
+            }
+
+            return [
+                'id' => $terminal->id,
+                'name' => $terminal->name,
+                'code' => $terminal->code,
+                'branch_id' => $terminal->branch_id,
+                'warehouse_id' => $terminal->warehouse_id,
+                'branch' => $terminal->branch ? [
+                    'id' => $terminal->branch->id,
+                    'name' => $terminal->branch->name,
+                    'code' => $terminal->branch->code ?? null,
+                ] : null,
+                'warehouse' => $terminal->warehouse ? [
+                    'id' => $terminal->warehouse->id,
+                    'name' => $terminal->warehouse->name,
+                    'code' => $terminal->warehouse->code ?? null,
+                ] : null,
+                'location' => $terminal->location,
+                'active' => (bool) $terminal->active,
+                'is_default' => (bool) $terminal->is_default,
+                'today_sales' => round((float) ($sales?->total_sales ?? 0), 2),
+                'today_transaction_count' => (int) ($sales?->transaction_count ?? 0),
+                'current_shift' => $shift ? [
+                    'id' => $shift->id,
+                    'shift_no' => $shift->shift_no,
+                    'status' => $shift->status,
+                    'cashier' => $shift->cashier ? [
+                        'id' => $shift->cashier->id,
+                        'name' => $shift->cashier->display_name ?? $shift->cashier->name ?? $shift->cashier->username,
+                    ] : null,
+                    'opened_at' => optional($shift->opened_at)->toJSON(),
+                    'opening_cash' => (float) $shift->opening_cash,
+                    'expected_cash' => (float) $shift->expected_cash,
+                    'total_sales' => (float) $shift->total_sales,
+                    'cash_sales' => (float) $shift->total_cash_sales,
+                    'card_sales' => (float) $shift->total_card_sales,
+                    'online_sales' => (float) $shift->total_online_sales,
+                    'total_refunds' => (float) $shift->total_refunds,
+                    'cash_difference' => (float) $shift->cash_difference,
+                ] : null,
+                'status' => $status,
+                'status_label' => $statusLabel,
+                'status_color' => $statusColor,
+            ];
+        })->values();
+
+        return response()->json([
+            'terminals' => $terminals,
+        ]);
     }
 
     public function store(StorePosTerminalRequest $request): JsonResponse

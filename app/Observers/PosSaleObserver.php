@@ -5,14 +5,12 @@ namespace App\Observers;
 use App\Models\PosSale;
 use App\Services\DocumentNumberingService;
 use App\Services\Pos\PosCartCalculatorService;
-use App\Services\Pos\PosSaleService;
 
 class PosSaleObserver
 {
     public function __construct(
         protected DocumentNumberingService $numberingService,
         protected PosCartCalculatorService $calculator,
-        protected PosSaleService $saleService,
     ) {
     }
 
@@ -45,17 +43,6 @@ class PosSaleObserver
                 $sale->change_amount = $totals['change_amount'];
                 $sale->payment_status = $totals['payment_status'];
             }
-        }
-    }
-
-    public function updated(PosSale $sale): void
-    {
-        if ($sale->wasChanged('status') && $sale->status === 'completed') {
-            $this->saleService->processCompletedSale($sale);
-        }
-
-        if ($sale->wasChanged('approved') && (bool) $sale->approved === true && $sale->status === 'completed') {
-            $this->saleService->processCompletedSale($sale);
         }
     }
 }

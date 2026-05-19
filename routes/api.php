@@ -547,6 +547,7 @@ Route::apiResource('product-variants', ProductVariantItemController::class);
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('pos/dashboard', [PosSaleController::class, 'dashboard']);
     Route::get('pos/products/search', [PosSaleController::class, 'productSearch']);
+    Route::get('pos/terminals/overview', [PosTerminalController::class, 'overview']);
 
     Route::apiResource('pos-terminals', PosTerminalController::class);
 
@@ -627,6 +628,7 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
         Route::post('sync-accounts', [PayrollRunController::class, 'syncAccounts']);
 
         // payrolls is the canonical payroll run endpoint; runs remains a backward-compatible alias.
+        Route::match(['get', 'post'], 'payrolls/preview', [PayrollRunController::class, 'preview']);
         Route::post('payrolls/generate', [PayrollRunController::class, 'generate']);
         Route::post('payrolls/{id}/approve', [PayrollRunController::class, 'approve']);
         Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);
@@ -641,6 +643,7 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
         Route::delete('payrolls/{id}/{kind}/{adjustmentId}', [PayrollRunController::class, 'destroyAdjustment'])
             ->whereIn('kind', ['addition', 'deduction']);
 
+        Route::match(['get', 'post'], 'runs/preview', [PayrollRunController::class, 'preview']);
         Route::post('runs/generate', [PayrollRunController::class, 'generate']);
         Route::post('runs/{id}/review', [PayrollRunController::class, 'review']);
         Route::post('runs/{id}/approve', [PayrollRunController::class, 'approve']);

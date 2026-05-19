@@ -146,7 +146,7 @@ class AccountingAccountResolverService
 
     protected function resolveAccount(string $accountType): ChartOfAccount
     {
-        return Cache::remember("accounting_account_{$accountType}", 3600, function () use ($accountType) {
+        $id = Cache::remember("accounting_account_{$accountType}_id", 3600, function () use ($accountType) {
             $mapping = $this->accountMapping[$accountType] ?? null;
 
             if (!$mapping) {
@@ -159,18 +159,27 @@ class AccountingAccountResolverService
             if ($codes) {
                 $account = ChartOfAccount::whereIn('code', $codes)->first();
                 if ($account) {
-                    return $account;
+                    return $account->id;
                 }
             }
 
             if ($names) {
                 $account = ChartOfAccount::whereIn('name', $names)->first();
                 if ($account) {
-                    return $account;
+                    return $account->id;
                 }
             }
 
             throw new InvalidArgumentException("Required account '{$accountType}' not found. Please seed your chart of accounts.");
         });
+
+        $account = ChartOfAccount::find($id);
+
+        if (!$account) {
+            Cache::forget("accounting_account_{$accountType}_id");
+            throw new InvalidArgumentException("Required account '{$accountType}' not found. Please seed your chart of accounts.");
+        }
+
+        return $account;
     }
 }

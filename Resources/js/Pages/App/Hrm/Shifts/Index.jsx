@@ -7,6 +7,17 @@ import { ClockCircleOutlined } from '@ant-design/icons';
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const formatTimeValue = (value) => {
+  if (!value) return null;
+  if (typeof value?.format === 'function') return value.format('HH:mm:ss');
+
+  const stringValue = String(value);
+  if (/^\d{2}:\d{2}:\d{2}$/.test(stringValue)) return stringValue;
+  if (/^\d{2}:\d{2}$/.test(stringValue)) return `${stringValue}:00`;
+
+  return stringValue;
+};
+
 export default function Shifts({ auth, embedded = false }) {
   const columns = useMemo(() => [
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
@@ -29,6 +40,12 @@ export default function Shifts({ auth, embedded = false }) {
     end_time: Yup.string().required('End time is required'),
   });
   const crudInitialValues = { name: '', start_time: null, end_time: null, work_hour: 8, description: '' };
+  const transformPayload = (values) => ({
+    ...values,
+    start_time: formatTimeValue(values.start_time),
+    end_time: formatTimeValue(values.end_time),
+    work_hour: values.work_hour === '' || values.work_hour === null ? null : Number(values.work_hour),
+  });
 
   const crud = (
     <ReusableCrud
@@ -39,6 +56,7 @@ export default function Shifts({ auth, embedded = false }) {
       fields={fields}
       validationSchema={validationSchema}
       crudInitialValues={crudInitialValues}
+      transformPayload={transformPayload}
       form_ui="drawer"
       searchParam="search" pageParam="page" pageSizeParam="page_size"
       sortMode="ordering" orderingParam="ordering" enableServerPagination={true}

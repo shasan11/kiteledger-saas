@@ -161,7 +161,7 @@ export default function Warehouses(props) {
   };
 
   return (
-    <>
+    <AuthenticatedLayout user={props.auth?.user}>
       <Head title="Warehouses" />
       <ReusableCrud
         icon={<HomeOutlined />}
@@ -217,6 +217,6 @@ export default function Warehouses(props) {
         hasActionColumns={true}
         showRowActionMenu={true}
       />
-    </>
+    </AuthenticatedLayout>
   );
 }

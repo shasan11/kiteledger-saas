@@ -349,7 +349,7 @@ export default function PurchaseOrders({ auth }) {
             type: 'fkSelect',
             width: 'minmax(340px, 3fr)',
             placeholder: 'Add Code or Product',
-            fkUrl: api('/api/products/search?transaction=purchase'),
+            fkUrl: api('/api/products/search'),
             fkSearchParam: 'search',
             fkPageSize: 20,
             fkValueKey: 'id',

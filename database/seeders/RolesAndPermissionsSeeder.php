@@ -18,6 +18,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'delete',
         'manage',
         'approve',
+        'reject',
         'void',
         'generate',
         'process',
@@ -26,6 +27,29 @@ class RolesAndPermissionsSeeder extends Seeder
         'lock',
         'export',
         'download',
+        'print',
+        'email',
+        'import',
+        'open',
+        'close',
+        'use',
+        'assign',
+        'assign_role',
+        'assign_permission',
+        'reset_password',
+        'change_status',
+        'set_current',
+        'statement',
+        'reconcile',
+        'clear',
+        'cancel',
+        'convert',
+        'mark_won',
+        'mark_lost',
+        'change_stage',
+        'complete',
+        'assign_manager',
+        'assign_member',
         'view-own',
     ];
 
@@ -597,6 +621,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'close',
                     'update',
                     'export',
+                    'manage',
                 ],
 
                 'sale' => [
@@ -610,6 +635,9 @@ class RolesAndPermissionsSeeder extends Seeder
                     'print',
                     'email',
                     'export',
+                    'credit',
+                    'discount',
+                    'complimentary',
                 ],
 
                 'payment' => [
@@ -638,6 +666,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'delete',
                     'approve',
                     'reject',
+                    'lock',
                     'export',
                 ],
             ],
@@ -794,6 +823,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'reject',
                     'download',
                     'print',
+                    'email',
                     'export',
                 ],
 
@@ -1083,10 +1113,16 @@ class RolesAndPermissionsSeeder extends Seeder
             'hrm.payroll.salary_structures.create',
             'hrm.payroll.salary_structures.update',
             'hrm.payroll.salary_structures.delete',
+            'hrm.payroll.salary_structures.approve',
             'hrm.payslips.view',
             'hrm.payslips.create',
             'hrm.payslips.update',
             'hrm.payslips.delete',
+            'hrm.payslips.print',
+            'hrm.payslips.download',
+            'hrm.payslips.email',
+            'hrm.payslips.view-own',
+            'hrm.attendance.lock',
             'branches.view-all',
             'settings.view',
             'settings.update',
@@ -1283,6 +1319,15 @@ class RolesAndPermissionsSeeder extends Seeder
                     'accounting.expense.*',
                     'receivable.customer_payment.*',
                     'payable.supplier_payment.*',
+                    'pos.sale.view',
+                    'pos.sale.export',
+                    'pos.payment.view',
+                    'pos.return.view',
+                    'pos.return.export',
+                    'pos.cash_movement.view',
+                    'pos.cash_movement.export',
+                    'pos.shift.view',
+                    'pos.shift.export',
                     'report.accounting.*',
                     'report.receivable.customer_statement.*',
                     'report.payable.supplier_statement.*',
@@ -1568,14 +1613,17 @@ class RolesAndPermissionsSeeder extends Seeder
                     'master.product.view',
                     'master.contact.view',
                 ],
+                'deny' => [
+                    'pos.*.delete',
+                ],
             ],
 
             'Cashier' => [
                 'allow' => [
                     'pos.sale.view',
                     'pos.sale.create',
+                    'pos.sale.update',
                     'pos.sale.print',
-                    'pos.sale.email',
                     'pos.payment.view',
                     'pos.payment.create',
                     'pos.shift.view',
@@ -1583,6 +1631,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'pos.shift.close',
                     'pos.cash_movement.view',
                     'pos.cash_movement.create',
+                    'pos.return.view',
+                    'pos.return.create',
                     'master.product.view',
                     'master.contact.view',
                 ],
@@ -1593,6 +1643,9 @@ class RolesAndPermissionsSeeder extends Seeder
                     'pos.*.view',
                     'pos.return.*',
                     'pos.sale.void',
+                    'pos.sale.credit',
+                    'pos.sale.discount',
+                    'pos.sale.complimentary',
                     'pos.cash_movement.*',
                     'pos.shift.*',
                     'report.sales.*',
@@ -1952,7 +2005,9 @@ class RolesAndPermissionsSeeder extends Seeder
             return;
         }
 
-        $user = DB::table('users')->orderBy('id')->first();
+        $user = DB::table('users')
+            ->where('email', env('SEED_FULL_ACCESS_USER_EMAIL', 'admin@kiteledger.test'))
+            ->first();
 
         if (! $user) {
             return;

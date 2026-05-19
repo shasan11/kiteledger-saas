@@ -24,7 +24,7 @@ class PosReturnService
     public function createDraft(array $payload): PosReturn
     {
         return DB::transaction(function () use ($payload) {
-            $sale = PosSale::query()->with('posSaleLines.product')->findOrFail($payload['pos_sale_id']);
+            $sale = PosSale::query()->with('posSaleLines.product')->lockForUpdate()->findOrFail($payload['pos_sale_id']);
 
             if (!in_array($sale->status, ['completed', 'part_refunded'], true)) {
                 throw new InvalidArgumentException('Returns can only be created from completed sales.');
@@ -80,6 +80,7 @@ class PosReturnService
             }
 
             $return->forceFill(['refund_amount' => round($refundAmount, 2)])->save();
+            $this->assertCashRefundCapacity($return->fresh(['posShift']), $shift);
 
             return $return->fresh(['posSale', 'posReturnLines.posSaleLine.product']);
         });
@@ -92,6 +93,11 @@ class PosReturnService
                 throw new InvalidArgumentException('Only draft returns can be completed.');
             }
 
+            $shift = $return->posShift;
+            if (!$shift || $shift->status !== 'open') {
+                throw new InvalidArgumentException('An open shift is required before completing a POS return.');
+            }
+
             $return->forceFill([
                 'approved' => (bool) ($payload['approved'] ?? true),
                 'approved_at' => ($payload['approved'] ?? true) ? now() : null,
@@ -101,6 +107,8 @@ class PosReturnService
                 'notes' => $payload['notes'] ?? $return->notes,
                 'status' => 'completed',
             ])->save();
+
+            $this->assertCashRefundCapacity($return->fresh(['posShift']), $shift);
 
             $this->ensureSalesReturn($return->fresh(['posSale.contact', 'posSale.posSaleLines', 'posReturnLines.posSaleLine']));
             $this->updateSale($return);
@@ -229,7 +237,11 @@ class PosReturnService
         }
 
         if ((string) $shift->pos_terminal_id !== (string) $sale->pos_terminal_id) {
-            throw new InvalidArgumentException('The return shift must belong to the original sale terminal.');
+            $user = request()->user();
+
+            if (!$user || !$user->can('pos.shift.manage')) {
+                throw new InvalidArgumentException('Manager permission is required to refund a sale from another terminal.');
+            }
         }
 
         if ($shift->cashier_id && auth()->id() && (int) $shift->cashier_id !== (int) auth()->id()) {
@@ -273,5 +285,19 @@ class PosReturnService
                 'user_add_id' => auth()->id(),
             ]
         );
+    }
+
+    private function assertCashRefundCapacity(PosReturn $return, PosShift $shift): void
+    {
+        if ($return->refund_method !== 'cash') {
+            return;
+        }
+
+        $expectedCash = round((float) $this->shiftService->recalculate($shift)->expected_cash, 2);
+        $refundAmount = round((float) $return->refund_amount, 2);
+
+        if ($refundAmount > $expectedCash && !request()->user()?->can('pos.shift.manage')) {
+            throw new InvalidArgumentException('Cash refund exceeds expected cash. Manager permission is required.');
+        }
     }
 }

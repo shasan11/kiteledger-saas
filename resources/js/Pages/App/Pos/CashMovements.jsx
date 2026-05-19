@@ -4,7 +4,7 @@ import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Tabl
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { api, fetchList, money } from './Shared/posHelpers';
+import { api, fetchList, money, showApiError } from './Shared/posHelpers';
 
 const { Title } = Typography;
 
@@ -34,7 +34,7 @@ export default function PosCashMovementsPage() {
             setShifts(shiftPayload.results || []);
             setTerminals(terminalPayload.results || []);
         } catch {
-            message.error('Failed to load cash movements.');
+            showApiError(message, error, 'Failed to load cash movements.');
         }
     }
 
@@ -46,7 +46,7 @@ export default function PosCashMovementsPage() {
             await bootstrap();
             message.success('Cash movement saved.');
         } catch (error) {
-            message.error(error?.response?.data?.message || 'Failed to save cash movement.');
+            showApiError(message, error, 'Failed to save cash movement.');
         }
     }
 

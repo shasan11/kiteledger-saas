@@ -145,12 +145,39 @@ const renderPasswordInput = ({ field, value, setFieldValue, readOnly }) => (
 const renderTimeInput = ({ field, value, setFieldValue, readOnly }) => (
   <Input
     type="time"
-    value={value || ''}
+    value={formatTimeValue(value, false) || ''}
     disabled={readOnly}
     placeholder={field.placeholder || ''}
     onChange={(event) => setFieldValue(field.name, event.target.value)}
   />
 );
+
+const formatTimeValue = (value, withSeconds = true) => {
+  if (!value) return null;
+  if (typeof value?.format === 'function') return value.format(withSeconds ? 'HH:mm:ss' : 'HH:mm');
+
+  const stringValue = String(value);
+  if (/^\d{2}:\d{2}:\d{2}$/.test(stringValue)) return withSeconds ? stringValue : stringValue.slice(0, 5);
+  if (/^\d{2}:\d{2}$/.test(stringValue)) return withSeconds ? `${stringValue}:00` : stringValue;
+
+  return stringValue;
+};
+
+const shiftWorkHours = (startTime, endTime) => {
+  const start = formatTimeValue(startTime, false);
+  const end = formatTimeValue(endTime, false);
+  if (!start || !end) return null;
+
+  const [startHour, startMinute] = start.split(':').map(Number);
+  const [endHour, endMinute] = end.split(':').map(Number);
+  if ([startHour, startMinute, endHour, endMinute].some(Number.isNaN)) return null;
+
+  const startMinutes = startHour * 60 + startMinute;
+  let endMinutes = endHour * 60 + endMinute;
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+
+  return Number(((endMinutes - startMinutes) / 60).toFixed(2));
+};
 
 const renderWeekDaysSelect = ({ field, value, setFieldValue, readOnly }) => (
   <Select
@@ -375,8 +402,9 @@ const quickAddShift = {
   }),
   transformPayload: (values) => ({
     name: values.name?.trim(),
-    start_time: values.start_time,
-    end_time: values.end_time,
+    start_time: formatTimeValue(values.start_time),
+    end_time: formatTimeValue(values.end_time),
+    work_hour: shiftWorkHours(values.start_time, values.end_time),
     active: Boolean(values.active),
   }),
 };
