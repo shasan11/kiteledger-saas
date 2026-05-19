@@ -95,12 +95,12 @@ class CustomerPayment extends Model
 
     public function bankChargesAccount(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 
     public function tdsChargesAccount(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 
     public function approvedBy(): BelongsTo

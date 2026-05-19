@@ -132,9 +132,8 @@ class ParallelJournalVoucherService
 
         if ($payment->bank_charges > 0) {
             $bankChargesAccount = $payment->bank_charges_account_id
-                ? ChartOfAccount::find($payment->bank_charges_account_id)
-                : null;
-            $bankChargesAccount ??= $this->accountResolver->getBankChargesExpenseAccount();
+                ? $this->resolveChartOfAccountFromAccount($payment->bank_charges_account_id)
+                : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
                 'chart_of_account_id' => $bankChargesAccount->id,
                 'debit' => round($this->convertToBase($payment->bank_charges, $rate), 2),
@@ -144,7 +143,9 @@ class ParallelJournalVoucherService
         }
 
         if ($payment->tds_charges > 0) {
-            $tdsReceivableAccount = $this->accountResolver->getTdsReceivableAccount();
+            $tdsReceivableAccount = $payment->tds_charges_account_id
+                ? $this->resolveChartOfAccountFromAccount($payment->tds_charges_account_id)
+                : $this->accountResolver->getTdsReceivableAccount();
             $lines[] = [
                 'chart_of_account_id' => $tdsReceivableAccount->id,
                 'debit' => round($this->convertToBase($payment->tds_charges, $rate), 2),
@@ -259,10 +260,12 @@ class ParallelJournalVoucherService
         ];
 
         if ($payment->bank_charges > 0) {
-            $bankChargesAccount = $this->accountResolver->getBankChargesExpenseAccount();
+            $bankChargesAccount = $payment->bank_charges_account_id
+                ? $this->resolveChartOfAccountFromAccount($payment->bank_charges_account_id)
+                : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
                 'chart_of_account_id' => $bankChargesAccount->id,
-                'debit' => $payment->bank_charges,
+                'debit' => (float) $payment->bank_charges,
                 'credit' => 0,
                 'description' => 'Bank Charges',
             ];
@@ -272,7 +275,7 @@ class ParallelJournalVoucherService
             ? $this->resolveChartOfAccountFromAccount($payment->account_id)
             : $this->accountResolver->getDefaultBankAccount();
 
-        $totalCredit = $payment->amount + ($payment->bank_charges ?? 0);
+        $totalCredit = (float) $payment->amount + (float) ($payment->bank_charges ?? 0);
         $lines[] = [
             'chart_of_account_id' => $bankAccount->id,
             'debit' => 0,
@@ -282,9 +285,8 @@ class ParallelJournalVoucherService
 
         if ($tdsCharges > 0) {
             $tdsPayableAccount = $payment->tds_charges_account_id
-                ? ChartOfAccount::find($payment->tds_charges_account_id)
-                : null;
-            $tdsPayableAccount ??= $this->accountResolver->getTdsPayableAccount();
+                ? $this->resolveChartOfAccountFromAccount($payment->tds_charges_account_id)
+                : $this->accountResolver->getTdsPayableAccount();
             $lines[] = [
                 'chart_of_account_id' => $tdsPayableAccount->id,
                 'debit' => 0,

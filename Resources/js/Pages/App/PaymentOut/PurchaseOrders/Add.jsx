@@ -248,14 +248,14 @@ export default function PurchaseOrderAdd(props) {
   const fields = useMemo(() => [
     {
       name: 'contact_id', label: 'Supplier', type: 'fkSelect', required: true, col: 16,
-      placeholder: 'Select Supplier', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
+      placeholder: 'Select Supplier', fkUrl: api('/api/contacts/?contact_type=supplier'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
       quickAdd: {
         title: 'Supplier', buttonLabel: 'Add New Supplier', apiUrl: api('/api/contacts/'),
         initialValues: { contact_type: 'supplier', type: 'supplier', name: '', phone: '', email: '', address: '', active: true },
         validationSchema: Yup.object({ name: Yup.string().required('Supplier name is required') }),
         fields: [
           { name: 'name', label: 'Supplier Name', type: 'text', col: 24, required: true },
-          { name: 'phone', label: 'Phone', type: 'text', col: 12 },
+          { name: 'phone', label: 'Phone', type: 'phone', col: 12, defaultCountryCode: '+977' },
           { name: 'email', label: 'Email', type: 'text', col: 12 },
           { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2 },
         ],

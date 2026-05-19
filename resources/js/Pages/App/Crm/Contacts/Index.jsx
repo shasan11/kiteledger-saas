@@ -8,35 +8,47 @@ import {
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
 import * as Yup from 'yup';
-import { Avatar, Space, Tag, Typography } from 'antd';
+import { Avatar, Radio, Space, Tag, Typography } from 'antd';
 
 const { Text } = Typography;
+
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
 const avatarColors = [
-  '#1677ff', '#52c41a', '#fa8c16', '#722ed1',
-  '#eb2f96', '#13c2c2', '#fa541c', '#2f54eb',
+  '#1677ff',
+  '#52c41a',
+  '#fa8c16',
+  '#722ed1',
+  '#eb2f96',
+  '#13c2c2',
+  '#fa541c',
+  '#2f54eb',
 ];
 
 const getInitials = (name = '') => {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
+
   if (!parts.length) return '?';
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 };
 
 const getAvatarColor = (id = '') => {
   const text = String(id || '');
   let hash = 0;
+
   for (let i = 0; i < text.length; i += 1) {
     hash = text.charCodeAt(i) + ((hash << 5) - hash);
   }
+
   return avatarColors[Math.abs(hash) % avatarColors.length];
 };
 
 const capitalizeFirst = (value) => {
   if (!value) return '-';
+
   const text = String(value).trim();
   return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 };
@@ -45,7 +57,14 @@ const contactGroupQuickAdd = {
   title: 'Contact Group',
   apiUrl: api('/api/contact-groups/'),
   fields: [
-    { name: 'name', label: 'Group Name', type: 'text', required: true, col: 24, placeholder: 'Group name' },
+    {
+      name: 'name',
+      label: 'Group Name',
+      type: 'text',
+      required: true,
+      col: 24,
+      placeholder: 'Group name',
+    },
     {
       name: 'parent_id',
       label: 'Parent Group',
@@ -59,10 +78,26 @@ const contactGroupQuickAdd = {
       fkLabelKey: 'name',
       allowClear: true,
     },
-    { name: 'active', label: 'Active', type: 'switch', col: 24 },
-    { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 },
+    {
+      name: 'active',
+      label: 'Active',
+      type: 'switch',
+      col: 24,
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      col: 24,
+      rows: 2,
+    },
   ],
-  initialValues: { name: '', parent_id: null, active: true, description: '' },
+  initialValues: {
+    name: '',
+    parent_id: null,
+    active: true,
+    description: '',
+  },
   validationSchema: Yup.object({
     name: Yup.string().required('Group name is required').max(120),
     parent_id: Yup.string().nullable(),
@@ -79,12 +114,11 @@ const contactGroupQuickAdd = {
 
 export default function Contacts(props) {
   const columns = [
-   
     {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      width:200,
+      width: 200,
       sorter: true,
       render: (val, record) => (
         <Space size={10}>
@@ -98,6 +132,7 @@ export default function Contacts(props) {
           >
             {getInitials(val)}
           </Avatar>
+
           <Text strong>{val || '-'}</Text>
         </Space>
       ),
@@ -107,74 +142,86 @@ export default function Contacts(props) {
       dataIndex: 'contact_type',
       key: 'contact_type',
       sorter: true,
-      width:100,
+      width: 100,
       render: (val) => {
-        const colors = { customer: 'green', supplier: 'orange', lead: 'blue' };
-        return val ? (
-          <Tag color={colors[val] || 'default'}>{capitalizeFirst(val)}</Tag>
-        ) : '-';
+        const colors = {
+          customer: 'green',
+          supplier: 'orange',
+          lead: 'blue',
+        };
+
+        return val ? <Tag color={colors[val] || 'default'}>{capitalizeFirst(val)}</Tag> : '-';
       },
     },
     {
       title: 'Phone',
       dataIndex: 'phone',
       key: 'phone',
-      width:100,
+      width: 100,
       render: (val) => val || '-',
     },
     {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
-      width:150,
+      width: 150,
       render: (val) => val || '-',
     },
     {
       title: 'Group',
       dataIndex: 'contact_group_name',
       key: 'contact_group_name',
-      width:100,
+      width: 100,
       render: (val) => val || '-',
     },
   ];
 
   const fields = [
     {
-  name: 'contact_type',
-  label: 'Contact Type',
-  type: 'radio',
-  col: 24,
-  placeholder: 'Select type',
-  options: [
-    {
-      value: 'customer',
-      label: (
-        <Space size={6}>
-          <UserOutlined />
-          <span>Customer</span>
-        </Space>
+      name: 'contact_type',
+      label: 'Contact Type',
+      type: 'custom',
+      col: 24,
+      render: ({ values, setFieldValue }) => (
+        <Radio.Group
+          block
+          size="medium"
+          optionType="button"
+          buttonStyle="solid"
+          value={values?.contact_type}
+          onChange={(e) => {
+            const nextType = e.target.value;
+
+            setFieldValue('contact_type', nextType);
+
+            if (nextType === 'supplier') {
+              setFieldValue('accept_purchase', true);
+            }
+          }}
+        >
+          <Radio value="customer">
+            <Space size={6}>
+              <UserOutlined />
+              <span>Customer</span>
+            </Space>
+          </Radio>
+
+          <Radio value="supplier">
+            <Space size={6}>
+              <ShopOutlined />
+              <span>Supplier</span>
+            </Space>
+          </Radio>
+
+          <Radio value="lead">
+            <Space size={6}>
+              <BulbOutlined />
+              <span>Lead</span>
+            </Space>
+          </Radio>
+        </Radio.Group>
       ),
     },
-    {
-      value: 'supplier',
-      label: (
-        <Space size={6}>
-          <ShopOutlined />
-          <span>Supplier</span>
-        </Space>
-      ),
-    },
-    {
-      value: 'lead',
-      label: (
-        <Space size={6}>
-          <BulbOutlined />
-          <span>Lead</span>
-        </Space>
-      ),
-    },
-  ],
-},
     {
       name: 'name',
       label: 'Contact Name',
@@ -190,7 +237,6 @@ export default function Contacts(props) {
       col: 8,
       placeholder: 'Blank to auto-generate',
     },
-   
     {
       name: 'phone',
       label: 'Phone',
@@ -220,7 +266,6 @@ export default function Contacts(props) {
       quickAdd: contactGroupQuickAdd,
       allowClear: true,
     },
-    
     {
       name: 'tax_registration_no',
       label: 'Tax Registration No',
@@ -235,9 +280,18 @@ export default function Contacts(props) {
       col: 12,
       placeholder: 'Select type',
       options: [
-        { value: 'pan', label: 'PAN' },
-        { value: 'vat', label: 'VAT' },
-        { value: 'none', label: 'None' },
+        {
+          value: 'pan',
+          label: 'PAN',
+        },
+        {
+          value: 'vat',
+          label: 'VAT',
+        },
+        {
+          value: 'none',
+          label: 'None',
+        },
       ],
     },
     {
@@ -265,6 +319,10 @@ export default function Contacts(props) {
       label: 'Accept Purchase',
       type: 'switch',
       col: 8,
+
+      // Your ReusableCrud supports condition().
+      // This hides Accept Purchase when Supplier is selected.
+      condition: (values) => values?.contact_type !== 'supplier',
     },
     {
       name: 'address',
@@ -312,6 +370,7 @@ export default function Contacts(props) {
 
   const transformPayload = (values) => {
     const p = { ...values };
+
     p.name = p.name?.trim() || null;
     p.code = p.code?.trim() || null;
     p.pan = p.pan?.trim() || null;
@@ -319,18 +378,30 @@ export default function Contacts(props) {
     p.email = p.email?.trim() || null;
     p.address = p.address?.trim() || null;
     p.tax_registration_no = p.tax_registration_no?.trim() || null;
+
     p.contact_group_id = p.contact_group_id || null;
     p.account_id = p.account_id || null;
     p.credit_term_id = p.credit_term_id || null;
-    p.credit_limit = p.credit_limit != null ? Number(p.credit_limit) : null;
-    p.accept_purchase = Boolean(p.accept_purchase);
-    Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
+
+    p.credit_limit = p.credit_limit != null && p.credit_limit !== '' ? Number(p.credit_limit) : null;
+
+    // Final backend safety:
+    // Supplier must always be saved with accept_purchase = true.
+    p.accept_purchase = p.contact_type === 'supplier' ? true : Boolean(p.accept_purchase);
+
+    Object.keys(p).forEach((k) => {
+      if (p[k] === '') {
+        p[k] = null;
+      }
+    });
+
     return p;
   };
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
       <Head title="Contacts" />
+
       <ReusableCrud
         icon={<ContactsOutlined />}
         title="Contacts"
@@ -352,10 +423,19 @@ export default function Contacts(props) {
         canView={true}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
-            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            if (
+              event.target.closest(
+                'button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger'
+              )
+            ) {
+              return;
+            }
+
             router.visit(route('crm.contacts.show', record.id));
           },
-          style: { cursor: 'pointer' },
+          style: {
+            cursor: 'pointer',
+          },
         })}
         canAdd={true}
         canEdit={true}
@@ -363,10 +443,36 @@ export default function Contacts(props) {
         hasActions={true}
         hasActionColumns={true}
         anchorFilters={[
-          { key: 'all', label: 'All', title: 'Contacts', params: {} },
-          { key: 'customer', label: 'Customers', title: 'Customers', params: { contact_type: 'customer' } },
-          { key: 'supplier', label: 'Suppliers', title: 'Suppliers', params: { contact_type: 'supplier' } },
-          { key: 'lead', label: 'Leads', title: 'Lead Contacts', params: { contact_type: 'lead' } },
+          {
+            key: 'all',
+            label: 'All',
+            title: 'Contacts',
+            params: {},
+          },
+          {
+            key: 'customer',
+            label: 'Customers',
+            title: 'Customers',
+            params: {
+              contact_type: 'customer',
+            },
+          },
+          {
+            key: 'supplier',
+            label: 'Suppliers',
+            title: 'Suppliers',
+            params: {
+              contact_type: 'supplier',
+            },
+          },
+          {
+            key: 'lead',
+            label: 'Leads',
+            title: 'Lead Contacts',
+            params: {
+              contact_type: 'lead',
+            },
+          },
         ]}
         defaultAnchorKey="all"
         anchorSyncWithHash
