@@ -758,8 +758,9 @@ export default function SalesOrderAdd(props) {
             {
               name: 'phone',
               label: 'Phone',
-              type: 'text',
+              type: 'phone',
               col: 12,
+              defaultCountryCode: '+977',
             },
             {
               name: 'email',
