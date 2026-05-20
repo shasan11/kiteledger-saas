@@ -15,6 +15,8 @@ class WarehouseTransferController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'transfer_date';
     protected array $relations = ['branch', 'fromWarehouse', 'toWarehouse'];
     protected array $relationDetails = ['branch' => 'branch_id', 'fromWarehouse' => 'from_warehouse_id', 'toWarehouse' => 'to_warehouse_id'];
     protected array $searchable = ['transfer_no', 'notes', 'status'];

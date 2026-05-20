@@ -17,6 +17,8 @@ class PurchaseBillController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'bill_date';
 
     protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];

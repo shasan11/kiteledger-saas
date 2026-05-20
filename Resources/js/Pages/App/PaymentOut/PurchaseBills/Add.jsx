@@ -280,6 +280,7 @@ export default function PurchaseBillAdd(props) {
       name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', col: 8,
       placeholder: 'Select Warehouse', fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true,
       quickAdd: warehouseQuickAdd,
+      help: 'Selecting a warehouse will add stock to this warehouse when the purchase bill is approved.',
     },
     {
       name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8,

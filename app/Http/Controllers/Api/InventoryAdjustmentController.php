@@ -20,6 +20,8 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'adjustment_date';
     protected array $relations = ['branch','warehouse'];
     protected array $relationDetails = ['branch'=>'branch_id','warehouse'=>'warehouse_id'];
     protected array $searchable = ['adjustment_no','reason','notes','status'];

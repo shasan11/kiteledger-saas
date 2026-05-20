@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\AppContextController;
 use App\Http\Controllers\Api\AppSettingController;
 use App\Http\Controllers\Api\ApplicationSettingController;
 use App\Http\Controllers\Api\ApprovalWorkflowController;
@@ -130,6 +131,12 @@ use App\Http\Controllers\Api\Payroll\TaxSlabController;
 
 Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearchController::class)
     ->name('api.global-search');
+
+Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api.app.context.')->group(function () {
+    Route::get('/', [AppContextController::class, 'show'])->name('show');
+    Route::post('/branch', [AppContextController::class, 'setBranch'])->name('branch');
+    Route::post('/fiscal-year', [AppContextController::class, 'setFiscalYear'])->name('fiscal-year');
+});
 
 /*
 |--------------------------------------------------------------------------

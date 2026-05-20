@@ -23,7 +23,6 @@ import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text, Title } = Typography;
-const STORAGE_KEY = 'kiteledger.global-search.branch';
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 
 const GROUP_ICONS = {
@@ -81,6 +80,7 @@ const authHeaders = () => {
 };
 
 export default function GlobalSearchCommand({
+    appContext = null,
     branchContext = {},
     compact = false,
     className,
@@ -92,11 +92,19 @@ export default function GlobalSearchCommand({
     const requestRef = useRef(null);
     const debounceRef = useRef(null);
 
-    const canViewAllBranches = Boolean(branchContext?.canViewAllBranches);
-    const branchOptions = Array.isArray(branchContext?.branches)
-        ? branchContext.branches
+    const canViewAllBranches = Boolean(
+        appContext?.permissions?.view_all_branches || branchContext?.canViewAllBranches,
+    );
+    const branchOptions = Array.isArray(appContext?.accessibleBranches)
+        ? appContext.accessibleBranches
+        : Array.isArray(branchContext?.branches)
+          ? branchContext.branches
         : [];
-    const defaultBranchId = branchContext?.selectedBranchId || branchOptions[0]?.id || null;
+    const defaultBranchId =
+        appContext?.currentBranchId ||
+        branchContext?.selectedBranchId ||
+        branchOptions[0]?.id ||
+        null;
     const allBranchOption = canViewAllBranches
         ? [{ id: 'all', name: 'All Branches', code: 'ALL', active: true }]
         : [];
@@ -107,35 +115,15 @@ export default function GlobalSearchCommand({
     const [groups, setGroups] = useState([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [error, setError] = useState('');
-    const [selectedBranchId, setSelectedBranchId] = useState(() => {
-        if (typeof window === 'undefined') {
-            return canViewAllBranches ? defaultBranchId || 'all' : defaultBranchId;
-        }
-
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-
-        if (saved === 'all' && canViewAllBranches) {
-            return 'all';
-        }
-
-        if (saved && branchOptions.some((branch) => branch.id === saved)) {
-            return saved;
-        }
-
-        return canViewAllBranches ? defaultBranchId || 'all' : defaultBranchId;
-    });
+    const [selectedBranchId, setSelectedBranchId] = useState(defaultBranchId);
 
     const flatItems = useMemo(() => flattenGroups(groups), [groups]);
     const selectedItem = flatItems[selectedIndex] || null;
     const searchHint = shortcutLabel();
 
     useEffect(() => {
-        if (typeof window === 'undefined' || !selectedBranchId) {
-            return;
-        }
-
-        window.localStorage.setItem(STORAGE_KEY, selectedBranchId);
-    }, [selectedBranchId]);
+        setSelectedBranchId(defaultBranchId);
+    }, [defaultBranchId]);
 
     useEffect(() => {
         const onKeyDown = (event) => {
@@ -211,6 +199,10 @@ export default function GlobalSearchCommand({
                     params.branch_id = selectedBranchId;
                 }
 
+                if (appContext?.currentFiscalYearId) {
+                    params.fiscal_year_id = appContext.currentFiscalYearId;
+                }
+
                 const response = await axios.get(api('/api/global-search'), {
                     headers: authHeaders(),
                     params,
@@ -246,7 +238,7 @@ export default function GlobalSearchCommand({
                 window.clearTimeout(debounceRef.current);
             }
         };
-    }, [open, query, selectedBranchId]);
+    }, [open, query, selectedBranchId, appContext?.currentFiscalYearId]);
 
     useEffect(() => {
         return () => {
@@ -379,19 +371,12 @@ export default function GlobalSearchCommand({
                             className="global-search-command__input"
                         />
 
-                        {canViewAllBranches && (
-                            <select
-                                value={selectedBranchId || 'all'}
-                                onChange={(event) => setSelectedBranchId(event.target.value)}
-                                className="global-search-command__branch-select"
-                            >
-                                {allBranchOption.concat(branchOptions).map((branch) => (
-                                    <option key={branch.id} value={branch.id}>
-                                        {branch.name}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
+                        <div className="global-search-command__context">
+                            <Tag>{selectedBranchId === 'all' ? 'All Branches' : appContext?.currentBranch?.name || 'Current Branch'}</Tag>
+                            {appContext?.currentFiscalYear && (
+                                <Tag>{appContext.currentFiscalYear.code || appContext.currentFiscalYear.name}</Tag>
+                            )}
+                        </div>
                     </div>
 
                     <div className="global-search-command__status">
@@ -441,7 +426,7 @@ export default function GlobalSearchCommand({
                                                 {GROUP_ICONS[group.key] || <FileSearchOutlined />}
                                             </span>
                                             <Title level={5} style={{ margin: 0 }}>
-                                                {group.module}
+                                                {group.label || group.module}
                                             </Title>
                                         </Space>
                                     </div>
@@ -477,6 +462,9 @@ export default function GlobalSearchCommand({
                                                                 {item.branch && selectedBranchId === 'all' && (
                                                                     <Tag>{item.branch}</Tag>
                                                                 )}
+                                                                {item.fiscal_year && (
+                                                                    <Tag>{item.fiscal_year}</Tag>
+                                                                )}
                                                             </Space>
 
                                                             {item.subtitle && (
@@ -489,7 +477,7 @@ export default function GlobalSearchCommand({
 
                                                     <div className="global-search-command__item-meta">
                                                         <Text type="secondary">
-                                                            {item.date ? formatDate(item.date) : item.type}
+                                                            {item.date ? formatDate(item.date) : item.kind || item.type}
                                                         </Text>
                                                     </div>
                                                 </button>
@@ -595,6 +583,15 @@ export default function GlobalSearchCommand({
                     outline: none;
                 }
 
+                .global-search-command__context {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: flex-end;
+                    gap: 6px;
+                    min-width: 190px;
+                    flex-wrap: wrap;
+                }
+
                 .global-search-command__status {
                     display: flex;
                     align-items: center;
@@ -677,7 +674,8 @@ export default function GlobalSearchCommand({
                         align-items: stretch;
                     }
 
-                    .global-search-command__branch-select {
+                    .global-search-command__branch-select,
+                    .global-search-command__context {
                         min-width: 0;
                         width: 100%;
                     }

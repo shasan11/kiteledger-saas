@@ -770,6 +770,7 @@ export default function InvoiceAdd(props) {
         fkValueKey: 'id',
         fkLabelKey: 'name',
         allowClear: true,
+        help: 'Selecting a warehouse will deduct stock from this warehouse when the invoice is approved.',
       },
       {
         name: 'credit_term_id',

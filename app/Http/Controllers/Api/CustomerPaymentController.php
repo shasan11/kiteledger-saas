@@ -18,6 +18,8 @@ class CustomerPaymentController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'payment_date';
 
     protected array $relations = ['branch', 'contact', 'account', 'currency', 'bankChargesAccount', 'tdsChargesAccount', 'customerPaymentLines', 'customerPaymentLines.invoice'];
     protected array $relationDetails = [

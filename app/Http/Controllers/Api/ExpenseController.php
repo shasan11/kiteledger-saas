@@ -16,6 +16,8 @@ class ExpenseController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'expense_date';
 
     protected array $relations = ['branch', 'contact', 'currency', 'tdsChargesAccount'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'currency' => 'currency_id', 'tdsChargesAccount' => 'tds_charges_account_id'];

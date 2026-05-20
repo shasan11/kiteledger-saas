@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payslip extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,6 +20,7 @@ class Payslip extends Model
      */
     protected $fillable = [
         'branch_id',
+        'fiscal_year_id',
         'payroll_id',
         'payroll_run_id',
         'employee_id',

@@ -20,6 +20,8 @@ class QuotationController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
 
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'quotation_date';
 
     protected array $relations = [
         'branch',

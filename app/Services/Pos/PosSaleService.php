@@ -16,7 +16,9 @@ use App\Models\PosSaleLine;
 use App\Models\PosShift;
 use App\Models\PosTerminal;
 use App\Models\Product;
+use App\Services\AppContextService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Auth\Access\AuthorizationException;
 use InvalidArgumentException;
 
@@ -63,6 +65,7 @@ class PosSaleService
 
             $sale->fill([
                 'branch_id' => $terminal->branch_id,
+                ...$this->fiscalYearPayload(),
                 'pos_terminal_id' => $terminal->id,
                 'pos_shift_id' => $shift->id,
                 'warehouse_id' => $payload['warehouse_id'] ?? $terminal->warehouse_id,
@@ -212,6 +215,21 @@ class PosSaleService
         $sale->forceFill(['status' => 'cancelled'])->save();
 
         return $sale->refresh();
+    }
+
+    private function fiscalYearPayload(): array
+    {
+        if (!Schema::hasColumn('pos_sales', 'fiscal_year_id')) {
+            return [];
+        }
+
+        try {
+            $fiscalYear = app(AppContextService::class)->resolveFiscalYearForRequest(request());
+
+            return $fiscalYear ? ['fiscal_year_id' => $fiscalYear->id] : [];
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     public function void(PosSale $sale, string $reason): PosSale

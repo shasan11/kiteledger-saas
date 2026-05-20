@@ -22,6 +22,8 @@ class JournalVoucherController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
 
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'voucher_date';
 
     protected array $relations = [
         'branch',

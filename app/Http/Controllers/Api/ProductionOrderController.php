@@ -26,6 +26,8 @@ class ProductionOrderController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'date';
 
     protected array $relations = [
         'branch', 'finishedProduct', 'warehouse', 'productUnit',

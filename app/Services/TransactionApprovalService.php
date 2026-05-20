@@ -4,10 +4,14 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Models\Invoice;
+use App\Models\PurchaseBill;
 use App\Models\InventoryAdjustment;
 use App\Models\ProductionOrder;
 use App\Models\ProductionJournal;
 use App\Services\Inventory\WarehouseStockService;
+use App\Services\Inventory\InvoiceStockPostingService;
+use App\Services\Inventory\PurchaseBillStockPostingService;
 
 class TransactionApprovalService
 {
@@ -33,6 +37,8 @@ class TransactionApprovalService
         protected LedgerValidationService $validationService,
         protected ParallelJournalVoucherService $jvService,
         protected WarehouseStockService $warehouseStockService,
+        protected InvoiceStockPostingService $invoiceStockService,
+        protected PurchaseBillStockPostingService $purchaseBillStockService,
     ) {
     }
 
@@ -70,12 +76,14 @@ class TransactionApprovalService
 
             $fresh->saveQuietly();
 
-            if ($fresh instanceof \App\Models\Invoice) {
+            if ($fresh instanceof Invoice) {
                 $fresh->recalculatePaymentTotals();
+                $this->invoiceStockService->post($fresh);
             }
 
-            if ($fresh instanceof \App\Models\PurchaseBill) {
+            if ($fresh instanceof PurchaseBill) {
                 $fresh->recalculatePaymentTotals();
+                $this->purchaseBillStockService->post($fresh);
             }
 
             if ($fresh instanceof InventoryAdjustment) {
@@ -99,11 +107,11 @@ class TransactionApprovalService
             }
 
             if ($fresh instanceof \App\Models\CustomerPayment) {
-                \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+                Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             if ($fresh instanceof \App\Models\SupplierPayment) {
-                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+                PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             return $fresh->refresh();
@@ -129,20 +137,20 @@ class TransactionApprovalService
                 $this->jvService->createForApprovedSource($transaction);
             }
 
-            if ($transaction instanceof \App\Models\Invoice) {
+            if ($transaction instanceof Invoice) {
                 $transaction->recalculatePaymentTotals();
             }
 
-            if ($transaction instanceof \App\Models\PurchaseBill) {
+            if ($transaction instanceof PurchaseBill) {
                 $transaction->recalculatePaymentTotals();
             }
 
             if ($transaction instanceof \App\Models\CustomerPayment) {
-                \App\Models\Invoice::recalculatePaymentTotalsForContact($transaction->contact_id);
+                Invoice::recalculatePaymentTotalsForContact($transaction->contact_id);
             }
 
             if ($transaction instanceof \App\Models\SupplierPayment) {
-                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($transaction->contact_id);
+                PurchaseBill::recalculatePaymentTotalsForContact($transaction->contact_id);
             }
 
             if ($transaction instanceof InventoryAdjustment) {

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ChequeRegister extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -18,6 +19,7 @@ class ChequeRegister extends Model
      */
     protected $fillable = [
         'branch_id',
+        'fiscal_year_id',
         'cheque_no',
         'cheque_date',
         'issued_date',

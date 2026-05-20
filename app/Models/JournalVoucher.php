@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class JournalVoucher extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,6 +20,7 @@ class JournalVoucher extends Model
      */
     protected $fillable = [
         'branch_id',
+        'fiscal_year_id',
         'voucher_no',
         'voucher_date',
         'currency_id',

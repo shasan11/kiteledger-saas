@@ -19,6 +19,9 @@ class PayrollController extends BaseCrudApiController
     protected string $modelClass = Payroll::class;
     protected ?string $permissionPrefix = 'hrm.payroll';
     protected bool $branchScoped = true;
+    protected bool $autoFillBranchOnCreate = true;
+    protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
 
     protected array $relations = [
         'payrollPeriod',

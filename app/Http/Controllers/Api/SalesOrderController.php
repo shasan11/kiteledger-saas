@@ -21,6 +21,8 @@ class SalesOrderController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
 
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'sales_order_date';
 
     protected array $relations = [
         'branch',

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,10 +10,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PayrollPayment extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     protected $fillable = [
         'payroll_run_id',
+        'fiscal_year_id',
         'payroll_id',
         'payslip_id',
         'employee_id',

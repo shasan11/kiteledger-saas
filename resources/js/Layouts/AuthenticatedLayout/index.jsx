@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
+import { AppContextProvider } from '@/Contexts/AppContext';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -964,13 +965,11 @@ export default function AuthenticatedLayout({ header, children }) {
     ];
 
     return (
+        <AppContextProvider initialContext={branchContext}>
         <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
             <AppNavbar
                 user={user}
-                branch={branch}
-                setBranch={setBranch}
                 branchContext={branchContext}
-                branchOptions={branchOptions}
                 quickAddItems={quickAddItems}
                 profileItems={profileItems}
                 getUrl={getUrl}
@@ -1019,5 +1018,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 </Layout>
             </Layout>
         </Layout>
+        </AppContextProvider>
     );
 }

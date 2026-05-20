@@ -21,6 +21,8 @@ class CashTransferController extends BaseCrudApiController
     protected bool $autoFillBranchOnCreate = true;
 
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'transfer_date';
 
     protected array $relations = [
         'branch',
