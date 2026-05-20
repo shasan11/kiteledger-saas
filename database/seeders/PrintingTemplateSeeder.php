@@ -94,6 +94,8 @@ class PrintingTemplateSeeder extends Seeder
             'payslip' => 'Payslip',
             'project' => 'Project Sheet',
             'task' => 'Task Sheet',
+
+            'pos_sale' => 'POS Sales Receipt',
         ];
     }
 
@@ -125,6 +127,7 @@ class PrintingTemplateSeeder extends Seeder
             'leave_application' => $this->leaveApplicationHtml(),
             'project' => $this->projectHtml(),
             'task' => $this->taskHtml(),
+            'pos_sale' => $this->posSalesReceiptHtml(),
             default => $this->simpleMasterTemplateHtml($label),
         };
     }
@@ -377,6 +380,135 @@ HTML);
 {$this->twoColumnDetails('Record Details', [['Record No.', '{{document.number}}'], ['Date', '{{document.date}}'], ['Reference', '{{document.reference}}'], ['Status', '{{document.status}}']], 'Related Party / Account', [['Name', '{{party.name}}'], ['Account', '{{account.name}}'], ['Phone', '{{party.phone}}'], ['Email', '{{party.email}}']])}
 {$this->simpleLinesTable('Record Lines / Attributes', ['#', 'Name', 'Description', 'Quantity / Value', 'Amount / Status'])}
 {$this->notesTermsHtml()}
+HTML);
+    }
+
+    private function posSalesReceiptHtml(): string
+    {
+        return trim(<<<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    color: #111;
+    background: #fff;
+    width: 80mm;
+    max-width: 80mm;
+    padding: 8px 6px;
+  }
+  .center { text-align: center; }
+  .right  { text-align: right; }
+  .left   { text-align: left; }
+  .bold   { font-weight: 700; }
+  .company-name { font-size: 15px; font-weight: 800; margin-bottom: 2px; }
+  .company-sub  { font-size: 11px; color: #444; }
+  .sep  { border: none; border-top: 1px dashed #999; margin: 6px 0; }
+  .sep-solid { border: none; border-top: 2px solid #111; margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  table td { padding: 2px 0; vertical-align: top; font-size: 12px; }
+  .item-name  { width: 52%; }
+  .item-qty   { width: 10%; text-align: center; }
+  .item-rate  { width: 18%; text-align: right; }
+  .item-amt   { width: 20%; text-align: right; font-weight: 600; }
+  .th { font-weight: 700; font-size: 11px; border-bottom: 1px solid #999; padding-bottom: 3px; margin-bottom: 2px; }
+  .total-row td { padding: 2px 0; }
+  .total-row .label { font-weight: 600; }
+  .total-row .amount { text-align: right; font-weight: 600; }
+  .grand-total td { font-size: 14px; font-weight: 800; padding: 4px 0; border-top: 2px solid #111; border-bottom: 2px solid #111; }
+  .footer { text-align: center; font-size: 11px; color: #555; margin-top: 8px; }
+  .receipt-meta td { font-size: 11px; color: #444; padding: 1px 0; }
+  .receipt-meta .key { width: 44%; }
+  .receipt-meta .val { text-align: right; font-weight: 600; color: #111; }
+</style>
+</head>
+<body>
+
+{{! ===================== COMPANY HEADER ===================== }}
+<div class="center">
+  <div class="company-name">{{company.name}}</div>
+  {{#company.legal_name}}<div class="company-sub">{{company.legal_name}}</div>{{/company.legal_name}}
+  {{#company.address}}<div class="company-sub">{{company.address}}</div>{{/company.address}}
+  {{#company.phone}}<div class="company-sub">Tel: {{company.phone}}</div>{{/company.phone}}
+  {{#company.pan_or_vat}}<div class="company-sub">PAN/VAT: <strong>{{company.pan_or_vat}}</strong></div>{{/company.pan_or_vat}}
+</div>
+
+<hr class="sep-solid">
+
+{{! ===================== RECEIPT DETAILS ===================== }}
+<table class="receipt-meta">
+  <tr><td class="key">Receipt No.</td><td class="val">{{document.number}}</td></tr>
+  <tr><td class="key">Date</td><td class="val">{{document.date}}</td></tr>
+  {{#terminal.name}}<tr><td class="key">Terminal</td><td class="val">{{terminal.name}}</td></tr>{{/terminal.name}}
+  {{#cashier.name}}<tr><td class="key">Cashier</td><td class="val">{{cashier.name}}</td></tr>{{/cashier.name}}
+  {{#customer.name}}<tr><td class="key">Customer</td><td class="val">{{customer.name}}</td></tr>{{/customer.name}}
+  {{^customer.name}}<tr><td class="key">Customer</td><td class="val">Walk-in Customer</td></tr>{{/customer.name}}
+</table>
+
+<hr class="sep">
+
+{{! ===================== ITEMS TABLE ===================== }}
+<table>
+  <tr class="th">
+    <td class="item-name">Item</td>
+    <td class="item-qty">Qty</td>
+    <td class="item-rate">Rate</td>
+    <td class="item-amt">Amt</td>
+  </tr>
+  {{#items}}
+  <tr>
+    <td class="item-name">{{product_name}}</td>
+    <td class="item-qty">{{qty}}</td>
+    <td class="item-rate">{{unit_price}}</td>
+    <td class="item-amt">{{line_total}}</td>
+  </tr>
+  {{#description}}
+  <tr>
+    <td colspan="4" style="font-size:10px; color:#666; padding-left:4px;">{{description}}</td>
+  </tr>
+  {{/description}}
+  {{/items}}
+</table>
+
+<hr class="sep">
+
+{{! ===================== TOTALS ===================== }}
+<table class="total-row">
+  <tr><td class="label">Subtotal</td><td class="amount">{{totals.subtotal}}</td></tr>
+  {{#totals.discount}}<tr><td class="label">Discount</td><td class="amount">{{totals.discount}}</td></tr>{{/totals.discount}}
+  {{#totals.tax}}<tr><td class="label">Tax (VAT)</td><td class="amount">{{totals.tax}}</td></tr>{{/totals.tax}}
+</table>
+
+<table class="grand-total">
+  <tr><td class="bold">TOTAL</td><td class="right bold">{{totals.grand_total}}</td></tr>
+</table>
+
+{{! ===================== PAYMENT BREAKDOWN ===================== }}
+{{#totals.paid_amount}}
+<table class="total-row" style="margin-top:4px;">
+  {{#payment.cash}}<tr><td class="label">Cash</td><td class="amount">{{payment.cash}}</td></tr>{{/payment.cash}}
+  {{#payment.card}}<tr><td class="label">Card</td><td class="amount">{{payment.card}}</td></tr>{{/payment.card}}
+  {{#payment.online}}<tr><td class="label">Online</td><td class="amount">{{payment.online}}</td></tr>{{/payment.online}}
+  <tr><td class="label">Paid</td><td class="amount">{{totals.paid_amount}}</td></tr>
+  {{#totals.change_amount}}<tr><td class="label bold">Change</td><td class="amount bold">{{totals.change_amount}}</td></tr>{{/totals.change_amount}}
+</table>
+{{/totals.paid_amount}}
+
+<hr class="sep">
+
+{{! ===================== FOOTER ===================== }}
+<div class="footer">
+  {{document.notes}}{{^document.notes}}Thank you for your purchase. Please visit again!{{/document.notes}}
+  <br>
+  <span style="font-size:10px; color:#999;">Printed: {{printed_at}}</span>
+</div>
+
+</body>
+</html>
 HTML);
     }
 

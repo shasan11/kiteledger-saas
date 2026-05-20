@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
-  Button,
   Col,
   Divider,
   Form,
   Input,
-  InputNumber,
   Modal,
   Row,
-  Select,
   Space,
   Switch,
   Tag,
@@ -18,23 +15,15 @@ import {
 import {
   BankOutlined,
   HomeOutlined,
-  PlusOutlined,
   ShopOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
-import { api, showApiError } from '@/Pages/App/Pos/Shared/posHelpers';
+import QuickAddRemoteSelect from '@/Components/QuickAddRemoteSelect';
 
 const { Text } = Typography;
 
-const EMPTY_ARRAY = [];
-
-const normalizeRows = (payload) => {
-  if (Array.isArray(payload?.results)) return payload.results;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload)) return payload;
-  return EMPTY_ARRAY;
-};
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
 
 const safeTrim = (value) => {
   if (value === undefined || value === null) return null;
@@ -42,274 +31,9 @@ const safeTrim = (value) => {
   return text || null;
 };
 
-const getRecordId = (record) => record?.id ?? record?.value ?? null;
-
-const defaultLabelBuilder = (row) => {
-  if (!row) return '';
-
-  const main =
-    row.name ||
-    row.title ||
-    row.company_name ||
-    row.display_name ||
-    row.email ||
-    row.code ||
-    String(row.id || '');
-
-  if (row.code && row.name) return `${row.name} (${row.code})`;
-
-  return main;
-};
-
-function QuickAddFormField({ field }) {
-  if (field.type === 'number') {
-    return (
-      <InputNumber
-        min={field.min}
-        max={field.max}
-        precision={field.precision}
-        placeholder={field.placeholder}
-        style={{ width: '100%' }}
-      />
-    );
-  }
-
-  if (field.type === 'switch') {
-    return <Switch />;
-  }
-
-  if (field.type === 'textarea') {
-    return <Input.TextArea rows={field.rows || 3} placeholder={field.placeholder} />;
-  }
-
-  if (field.type === 'select') {
-    return (
-      <Select
-        allowClear={field.allowClear !== false}
-        placeholder={field.placeholder}
-        options={field.options || EMPTY_ARRAY}
-      />
-    );
-  }
-
-  return <Input placeholder={field.placeholder} />;
-}
-
-function QuickAddRemoteSelect({
-  name,
-  label,
-  icon = null,
-  required = false,
-  disabled = false,
-  placeholder = 'Search and select',
-  apiUrl,
-  params = {},
-  valueKey = 'id',
-  labelBuilder = defaultLabelBuilder,
-  quickAddTitle,
-  quickAddIcon = null,
-  quickAddFields = EMPTY_ARRAY,
-  quickAddInitialValues = {},
-  createPayload,
-  createUrl,
-  messageApi,
-  afterCreate,
-}) {
-  const { token } = theme.useToken();
-  const form = Form.useFormInstance();
-  const [quickForm] = Form.useForm();
-
-  const [options, setOptions] = useState(EMPTY_ARRAY);
-  const [loading, setLoading] = useState(false);
-  const [quickOpen, setQuickOpen] = useState(false);
-  const [quickSaving, setQuickSaving] = useState(false);
-
-  const searchTimerRef = useRef(null);
-  const paramsKey = useMemo(() => JSON.stringify(params || {}), [params]);
-
-  const loadOptions = useCallback(
-    async (search = '') => {
-      if (!apiUrl) return;
-
-      setLoading(true);
-
-      try {
-        const response = await axios.get(apiUrl, {
-          params: {
-            page: 1,
-            page_size: 30,
-            search,
-            ...(params || {}),
-          },
-        });
-
-        const rows = normalizeRows(response.data);
-
-        setOptions(
-          rows
-            .filter((row) => getRecordId(row) !== null)
-            .map((row) => ({
-              value: row?.[valueKey] ?? row?.id,
-              label: labelBuilder(row),
-              raw: row,
-            })),
-        );
-      } catch {
-        setOptions(EMPTY_ARRAY);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [apiUrl, paramsKey, valueKey, labelBuilder],
-  );
-
-  useEffect(() => {
-    void loadOptions('');
-  }, [loadOptions]);
-
-  const openQuickAdd = () => {
-    quickForm.resetFields();
-    quickForm.setFieldsValue(quickAddInitialValues || {});
-    setQuickOpen(true);
-  };
-
-  const submitQuickAdd = async () => {
-    const values = await quickForm.validateFields();
-
-    setQuickSaving(true);
-
-    try {
-      const payload =
-        typeof createPayload === 'function'
-          ? createPayload(values)
-          : {
-              ...values,
-              active: values.active !== false,
-            };
-
-      const response = await axios.post(createUrl || apiUrl, payload);
-      const saved = response.data;
-      const savedId = saved?.[valueKey] ?? saved?.id;
-
-      if (!savedId) {
-        messageApi?.error(`${quickAddTitle || label} was created but no ID was returned.`);
-        return;
-      }
-
-      const newOption = {
-        value: savedId,
-        label: labelBuilder(saved),
-        raw: saved,
-      };
-
-      setOptions((prev) => {
-        const exists = prev.some((item) => String(item.value) === String(savedId));
-        return exists ? prev : [newOption, ...prev];
-      });
-
-      form.setFieldValue(name, savedId);
-
-      if (typeof afterCreate === 'function') {
-        afterCreate(saved, form);
-      }
-
-      setQuickOpen(false);
-      quickForm.resetFields();
-      messageApi?.success(`${quickAddTitle || label} added.`);
-    } catch (error) {
-      showApiError(messageApi, error, `Failed to add ${String(quickAddTitle || label).toLowerCase()}.`);
-    } finally {
-      setQuickSaving(false);
-    }
-  };
-
-  return (
-    <>
-      <Form.Item
-        name={name}
-        label={
-          <Space size={6}>
-            {icon}
-            <span>{label}</span>
-          </Space>
-        }
-        rules={required ? [{ required: true, message: `${label} is required` }] : []}
-      >
-        <Space.Compact block>
-          <Select
-            showSearch
-            allowClear
-            disabled={disabled}
-            loading={loading}
-            placeholder={placeholder}
-            filterOption={false}
-            options={options}
-            onFocus={() => {
-              if (!options.length) void loadOptions('');
-            }}
-            onSearch={(value) => {
-              if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-              searchTimerRef.current = setTimeout(() => {
-                void loadOptions(value || '');
-              }, 350);
-            }}
-            style={{ width: '100%' }}
-          />
-
-          <Button
-            icon={<PlusOutlined />}
-            disabled={disabled}
-            onClick={openQuickAdd}
-            title={`Quick add ${quickAddTitle || label}`}
-          />
-        </Space.Compact>
-      </Form.Item>
-
-      <Modal
-        title={
-          <Space>
-            {quickAddIcon}
-            <span>Quick Add {quickAddTitle || label}</span>
-          </Space>
-        }
-        open={quickOpen}
-        onCancel={() => setQuickOpen(false)}
-        onOk={submitQuickAdd}
-        confirmLoading={quickSaving}
-        destroyOnClose
-        okText="Save"
-        width={620}
-      >
-        <Form
-          form={quickForm}
-          layout="vertical"
-          initialValues={quickAddInitialValues}
-          style={{ marginTop: token.marginMD }}
-        >
-          <Row gutter={[12, 0]}>
-            {quickAddFields.map((field) => (
-              <Col xs={24} md={field.col || 24} key={field.name}>
-                <Form.Item
-                  name={field.name}
-                  label={field.label}
-                  valuePropName={field.type === 'switch' ? 'checked' : 'value'}
-                  rules={field.rules || EMPTY_ARRAY}
-                >
-                  <QuickAddFormField field={field} />
-                </Form.Item>
-              </Col>
-            ))}
-          </Row>
-        </Form>
-      </Modal>
-    </>
-  );
-}
-
 export default function AddTerminalModal({
   open,
   loading = false,
-  messageApi,
   defaultBranchId = null,
   canViewAllBranches = false,
   onCancel,
@@ -318,13 +42,14 @@ export default function AddTerminalModal({
   const { token } = theme.useToken();
   const [form] = Form.useForm();
 
-  const selectedBranchId = Form.useWatch('branch_id', form) || defaultBranchId;
+  // Track branch selection so we can filter warehouses and disable quick-add
+  // when no branch is chosen. Form.useWatch works correctly because QuickAddRemoteSelect
+  // now uses a proper controlled CompactSelect that bridges Form.Item value/onChange.
+  const selectedBranchId = Form.useWatch('branch_id', form) ?? defaultBranchId;
 
   useEffect(() => {
     if (!open) return;
-
     form.resetFields();
-
     form.setFieldsValue({
       name: '',
       code: '',
@@ -341,6 +66,23 @@ export default function AddTerminalModal({
     });
   }, [open, form, defaultBranchId, canViewAllBranches]);
 
+  // Memoize params objects so QuickAddRemoteSelect's paramsKey doesn't
+  // regenerate on every render when content hasn't changed.
+  const branchParams = useMemo(() => ({ active: true }), []);
+
+  const warehouseParams = useMemo(
+    () => ({
+      active: true,
+      ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
+    }),
+    [selectedBranchId],
+  );
+
+  const cashParams = useMemo(() => ({ active: true, nature: 'cash' }), []);
+  const bankParams = useMemo(() => ({ active: true, nature: 'bank' }), []);
+  const customerParams = useMemo(() => ({ active: true, contact_type: 'customer' }), []);
+
+  // Quick-add field definitions
   const branchQuickFields = useMemo(
     () => [
       {
@@ -349,49 +91,13 @@ export default function AddTerminalModal({
         placeholder: 'Main Branch',
         rules: [{ required: true, message: 'Branch name is required' }],
       },
-      {
-        name: 'code',
-        label: 'Code',
-        col: 12,
-        placeholder: 'HO',
-        rules: [{ required: true, message: 'Code is required' }],
-      },
-      {
-        name: 'phone',
-        label: 'Phone',
-        col: 12,
-        placeholder: '+977...',
-      },
-      {
-        name: 'email',
-        label: 'Email',
-        col: 12,
-        placeholder: 'branch@example.com',
-      },
-      {
-        name: 'address',
-        label: 'Address',
-        col: 12,
-        placeholder: 'Kathmandu',
-      },
-      {
-        name: 'is_pos_enabled',
-        label: 'POS Enabled',
-        type: 'switch',
-        col: 12,
-      },
-      {
-        name: 'is_warehouse_enabled',
-        label: 'Warehouse Enabled',
-        type: 'switch',
-        col: 12,
-      },
-      {
-        name: 'active',
-        label: 'Active',
-        type: 'switch',
-        col: 12,
-      },
+      { name: 'code', label: 'Code', col: 12, placeholder: 'HO', rules: [{ required: true, message: 'Code is required' }] },
+      { name: 'phone', label: 'Phone', col: 12, placeholder: '+977...' },
+      { name: 'email', label: 'Email', col: 12, placeholder: 'branch@example.com' },
+      { name: 'address', label: 'Address', col: 12, placeholder: 'Kathmandu' },
+      { name: 'is_pos_enabled', label: 'POS Enabled', type: 'switch', col: 12 },
+      { name: 'is_warehouse_enabled', label: 'Warehouse Enabled', type: 'switch', col: 12 },
+      { name: 'active', label: 'Active', type: 'switch', col: 12 },
     ],
     [],
   );
@@ -404,24 +110,9 @@ export default function AddTerminalModal({
         placeholder: 'Main Warehouse',
         rules: [{ required: true, message: 'Warehouse name is required' }],
       },
-      {
-        name: 'code',
-        label: 'Code',
-        col: 12,
-        placeholder: 'WH-001',
-      },
-      {
-        name: 'address',
-        label: 'Address',
-        col: 12,
-        placeholder: 'Warehouse address',
-      },
-      {
-        name: 'active',
-        label: 'Active',
-        type: 'switch',
-        col: 12,
-      },
+      { name: 'code', label: 'Code', col: 12, placeholder: 'WH-001' },
+      { name: 'address', label: 'Address', col: 12, placeholder: 'Warehouse address' },
+      { name: 'active', label: 'Active', type: 'switch', col: 12 },
     ],
     [],
   );
@@ -431,28 +122,12 @@ export default function AddTerminalModal({
       {
         name: 'name',
         label: 'Account Name',
-        placeholder: 'POS Cash Account',
+        placeholder: 'POS Account',
         rules: [{ required: true, message: 'Account name is required' }],
       },
-      {
-        name: 'code',
-        label: 'Code',
-        col: 12,
-        placeholder: 'POS-CASH',
-      },
-      {
-        name: 'opening_balance',
-        label: 'Opening Balance',
-        type: 'number',
-        col: 12,
-        min: 0,
-      },
-      {
-        name: 'active',
-        label: 'Active',
-        type: 'switch',
-        col: 12,
-      },
+      { name: 'code', label: 'Code', col: 12, placeholder: 'POS-CASH' },
+      { name: 'opening_balance', label: 'Opening Balance', type: 'number', col: 12, min: 0 },
+      { name: 'active', label: 'Active', type: 'switch', col: 12 },
     ],
     [],
   );
@@ -465,65 +140,39 @@ export default function AddTerminalModal({
         placeholder: 'Walk-in Customer',
         rules: [{ required: true, message: 'Customer name is required' }],
       },
-      {
-        name: 'code',
-        label: 'Code',
-        col: 12,
-        placeholder: 'WALK-IN',
-      },
-      {
-        name: 'phone',
-        label: 'Phone',
-        col: 12,
-        placeholder: '+977...',
-      },
-      {
-        name: 'email',
-        label: 'Email',
-        col: 12,
-        placeholder: 'customer@example.com',
-      },
-      {
-        name: 'credit_limit',
-        label: 'Credit Limit',
-        type: 'number',
-        col: 12,
-        min: 0,
-      },
-      {
-        name: 'address',
-        label: 'Address',
-        type: 'textarea',
-        col: 24,
-        placeholder: 'Customer address',
-      },
-      {
-        name: 'active',
-        label: 'Active',
-        type: 'switch',
-        col: 12,
-      },
+      { name: 'code', label: 'Code', col: 12, placeholder: 'WALK-IN' },
+      { name: 'phone', label: 'Phone', col: 12, placeholder: '+977...' },
+      { name: 'email', label: 'Email', col: 12, placeholder: 'customer@example.com' },
+      { name: 'credit_limit', label: 'Credit Limit', type: 'number', col: 12, min: 0 },
+      { name: 'address', label: 'Address', type: 'textarea', col: 24, placeholder: 'Customer address' },
+      { name: 'active', label: 'Active', type: 'switch', col: 12 },
     ],
     [],
   );
 
-  const createBranchPayload = (values) => ({
-    name: safeTrim(values.name),
-    code: safeTrim(values.code),
-    phone: safeTrim(values.phone),
-    email: safeTrim(values.email),
-    address: safeTrim(values.address),
-    is_head_office: false,
-    is_transaction_enabled: true,
-    is_pos_enabled: values.is_pos_enabled !== false,
-    is_warehouse_enabled: values.is_warehouse_enabled !== false,
-    is_ai_enabled: false,
-    is_billing_location_enabled: false,
-    abbreviated_tax_enabled: false,
-    track_location: false,
-    active: values.active !== false,
-  });
+  // Payload factories — called inside QuickAddRemoteSelect.submitQuickAdd
+  const createBranchPayload = useMemo(
+    () => (values) => ({
+      name: safeTrim(values.name),
+      code: safeTrim(values.code),
+      phone: safeTrim(values.phone),
+      email: safeTrim(values.email),
+      address: safeTrim(values.address),
+      is_head_office: false,
+      is_transaction_enabled: true,
+      is_pos_enabled: values.is_pos_enabled !== false,
+      is_warehouse_enabled: values.is_warehouse_enabled !== false,
+      is_ai_enabled: false,
+      is_billing_location_enabled: false,
+      abbreviated_tax_enabled: false,
+      track_location: false,
+      active: values.active !== false,
+    }),
+    [],
+  );
 
+  // createWarehousePayload is NOT memoized because it reads selectedBranchId
+  // which can change. We want the latest value each time the quick-add fires.
   const createWarehousePayload = (values) => ({
     branch_id: selectedBranchId,
     name: safeTrim(values.name),
@@ -532,35 +181,49 @@ export default function AddTerminalModal({
     active: values.active !== false,
   });
 
-  const createAccountPayload = (values, nature) => {
-    const openingBalance = Number(values.opening_balance || 0);
-
-    return {
+  const createCashAccountPayload = useMemo(
+    () => (values) => ({
       name: safeTrim(values.name),
       code: safeTrim(values.code),
-      nature,
-      dr_amount: openingBalance,
+      nature: 'cash',
+      dr_amount: Number(values.opening_balance || 0),
       cr_amount: 0,
-      balance: openingBalance,
+      balance: Number(values.opening_balance || 0),
       active: values.active !== false,
-    };
-  };
+    }),
+    [],
+  );
 
-  const createCustomerPayload = (values) => ({
-    contact_type: 'customer',
-    name: safeTrim(values.name),
-    code: safeTrim(values.code),
-    phone: safeTrim(values.phone),
-    email: safeTrim(values.email),
-    address: safeTrim(values.address),
-    accept_purchase: false,
-    credit_limit: Number(values.credit_limit || 0),
-    active: values.active !== false,
-  });
+  const createBankAccountPayload = useMemo(
+    () => (values) => ({
+      name: safeTrim(values.name),
+      code: safeTrim(values.code),
+      nature: 'bank',
+      dr_amount: Number(values.opening_balance || 0),
+      cr_amount: 0,
+      balance: Number(values.opening_balance || 0),
+      active: values.active !== false,
+    }),
+    [],
+  );
+
+  const createCustomerPayload = useMemo(
+    () => (values) => ({
+      contact_type: 'customer',
+      name: safeTrim(values.name),
+      code: safeTrim(values.code),
+      phone: safeTrim(values.phone),
+      email: safeTrim(values.email),
+      address: safeTrim(values.address),
+      accept_purchase: false,
+      credit_limit: Number(values.credit_limit || 0),
+      active: values.active !== false,
+    }),
+    [],
+  );
 
   const handleSubmit = async () => {
     const values = await form.validateFields();
-
     await onSubmit?.(
       {
         ...values,
@@ -595,16 +258,7 @@ export default function AddTerminalModal({
         form={form}
         layout="vertical"
         initialValues={{
-          name: '',
-          code: '',
           branch_id: canViewAllBranches ? undefined : defaultBranchId,
-          warehouse_id: undefined,
-          location: '',
-          receipt_printer_name: '',
-          cash_account_id: undefined,
-          card_account_id: undefined,
-          online_account_id: undefined,
-          default_customer_id: undefined,
           is_default: false,
           active: true,
         }}
@@ -637,18 +291,18 @@ export default function AddTerminalModal({
               disabled={!canViewAllBranches}
               apiUrl={api('/api/branches')}
               createUrl={api('/api/branches')}
-              params={{ active: true }}
-              messageApi={messageApi}
+              params={branchParams}
               quickAddTitle="Branch"
               quickAddFields={branchQuickFields}
-              quickAddInitialValues={{
-                is_pos_enabled: true,
-                is_warehouse_enabled: true,
-                active: true,
-              }}
+              quickAddInitialValues={{ is_pos_enabled: true, is_warehouse_enabled: true, active: true }}
               createPayload={createBranchPayload}
               afterCreate={(branch) => {
                 form.setFieldValue('branch_id', branch?.id);
+                form.setFieldValue('warehouse_id', undefined);
+              }}
+              onSelectChange={() => {
+                // When user selects a different branch from the dropdown,
+                // the warehouse for the old branch is no longer valid.
                 form.setFieldValue('warehouse_id', undefined);
               }}
             />
@@ -662,18 +316,13 @@ export default function AddTerminalModal({
               quickAddIcon={<ShopOutlined />}
               required
               disabled={!selectedBranchId}
+              placeholder={selectedBranchId ? 'Search warehouse' : 'Select branch first'}
               apiUrl={api('/api/warehouses')}
               createUrl={api('/api/warehouses')}
-              params={{
-                active: true,
-                ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
-              }}
-              messageApi={messageApi}
+              params={warehouseParams}
               quickAddTitle="Warehouse"
               quickAddFields={warehouseQuickFields}
-              quickAddInitialValues={{
-                active: true,
-              }}
+              quickAddInitialValues={{ active: true }}
               createPayload={createWarehousePayload}
             />
           </Col>
@@ -702,18 +351,13 @@ export default function AddTerminalModal({
               label="Cash Account"
               icon={<BankOutlined />}
               quickAddIcon={<BankOutlined />}
-              required
-              apiUrl={api('/api/accounts')}
+               apiUrl={api('/api/accounts')}
               createUrl={api('/api/accounts')}
-              params={{ active: true, nature: 'cash' }}
-              messageApi={messageApi}
+              params={cashParams}
               quickAddTitle="Cash Account"
               quickAddFields={accountQuickFields}
-              quickAddInitialValues={{
-                opening_balance: 0,
-                active: true,
-              }}
-              createPayload={(values) => createAccountPayload(values, 'cash')}
+              quickAddInitialValues={{ opening_balance: 0, active: true }}
+              createPayload={createCashAccountPayload}
             />
           </Col>
 
@@ -725,15 +369,11 @@ export default function AddTerminalModal({
               quickAddIcon={<BankOutlined />}
               apiUrl={api('/api/accounts')}
               createUrl={api('/api/accounts')}
-              params={{ active: true, nature: 'bank' }}
-              messageApi={messageApi}
+              params={bankParams}
               quickAddTitle="Card / Bank Account"
               quickAddFields={accountQuickFields}
-              quickAddInitialValues={{
-                opening_balance: 0,
-                active: true,
-              }}
-              createPayload={(values) => createAccountPayload(values, 'bank')}
+              quickAddInitialValues={{ opening_balance: 0, active: true }}
+              createPayload={createBankAccountPayload}
             />
           </Col>
 
@@ -745,15 +385,11 @@ export default function AddTerminalModal({
               quickAddIcon={<BankOutlined />}
               apiUrl={api('/api/accounts')}
               createUrl={api('/api/accounts')}
-              params={{ active: true, nature: 'bank' }}
-              messageApi={messageApi}
+              params={bankParams}
               quickAddTitle="Online / Bank Account"
               quickAddFields={accountQuickFields}
-              quickAddInitialValues={{
-                opening_balance: 0,
-                active: true,
-              }}
-              createPayload={(values) => createAccountPayload(values, 'bank')}
+              quickAddInitialValues={{ opening_balance: 0, active: true }}
+              createPayload={createBankAccountPayload}
             />
           </Col>
 
@@ -772,16 +408,10 @@ export default function AddTerminalModal({
               required
               apiUrl={api('/api/contacts')}
               createUrl={api('/api/contacts')}
-              params={{ active: true, contact_type: 'customer' }}
-              messageApi={messageApi}
+              params={customerParams}
               quickAddTitle="Customer"
               quickAddFields={customerQuickFields}
-              quickAddInitialValues={{
-                name: 'Walk-in Customer',
-                code: 'WALK-IN',
-                credit_limit: 0,
-                active: true,
-              }}
+              quickAddInitialValues={{ name: 'Walk-in Customer', code: 'WALK-IN', credit_limit: 0, active: true }}
               createPayload={createCustomerPayload}
             />
           </Col>
@@ -811,7 +441,8 @@ export default function AddTerminalModal({
               <Space direction="vertical" size={2}>
                 <Text strong>Quick add enabled</Text>
                 <Text type="secondary">
-                  Branch, Warehouse, Cash Account, Card Account, Online Account, and Default Customer can be created directly from this terminal form.
+                  Branch, Warehouse, Cash Account, Card Account, Online Account, and Default
+                  Customer can be created directly from this form using the + button.
                 </Text>
               </Space>
             </div>

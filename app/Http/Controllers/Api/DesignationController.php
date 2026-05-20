@@ -13,63 +13,93 @@ class DesignationController extends BaseCrudApiController
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
 
-    protected bool $branchScoped = true;
-    protected bool $autoFillBranchOnCreate = true;
-    protected bool $preventBranchChangeOnUpdate = true;
+    // Designations are global masters — not branch-scoped.
+    protected bool $branchScoped = false;
+    protected bool $autoFillBranchOnCreate = false;
+    protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
-        'branch',
+        'department',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
+        'department' => 'department_id',
     ];
 
     protected array $searchable = [
         'name',
+        'code',
+        'level',
+        'grade',
         'description',
-        'branch.name',
-        'branch.code',
+        'department.name',
     ];
 
     protected array $filterable = [
-        'branch_id',
+        'department_id',
+        'salary_frequency',
     ];
 
     protected array $booleanFilters = [
         'active',
+        'overtime_eligible',
+        'taxable',
         'is_system_generated',
     ];
 
     protected array $sortable = [
         'id',
         'name',
-        'branch_id',
+        'code',
+        'sort_order',
+        'department_id',
+        'default_basic_salary',
+        'salary_frequency',
         'active',
         'created_at',
         'updated_at',
     ];
 
-    protected string $defaultSort = 'name';
+    // Default sort: sort_order ascending, then name ascending.
+    // The base controller handles a single ordering string; use sort_order.
+    protected string $defaultSort = 'sort_order';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-        'name' => ['required', 'string', 'max:120', 'unique:designations,name'],
-        'description' => ['nullable', 'string', 'max:255'],
-        'active' => ['nullable', 'boolean'],
-        'is_system_generated' => ['nullable', 'boolean'],
-        'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
+        'department_id'               => ['nullable', 'uuid', 'exists:departments,id'],
+        'name'                        => ['required', 'string', 'max:120', 'unique:designations,name'],
+        'code'                        => ['nullable', 'string', 'max:40', 'unique:designations,code'],
+        'level'                       => ['nullable', 'string', 'max:50'],
+        'grade'                       => ['nullable', 'string', 'max:50'],
+        'sort_order'                  => ['nullable', 'integer', 'min:0', 'max:9999'],
+        'default_basic_salary'        => ['nullable', 'numeric', 'min:0'],
+        'salary_frequency'            => ['nullable', 'string', 'in:monthly,weekly,daily,hourly'],
+        'default_salary_structure_id' => ['nullable', 'uuid', 'exists:salary_structures,id'],
+        'overtime_eligible'           => ['nullable', 'boolean'],
+        'taxable'                     => ['nullable', 'boolean'],
+        'description'                 => ['nullable', 'string', 'max:500'],
+        'active'                      => ['nullable', 'boolean'],
+        'is_system_generated'         => ['nullable', 'boolean'],
+        'user_add_id'                 => ['nullable', 'integer', 'exists:users,id'],
     ];
 
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-            'name' => ['sometimes', 'required', 'string', 'max:120', 'unique:designations,name,' . $record->id . ',id'],
-            'description' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'active' => ['sometimes', 'nullable', 'boolean'],
-            'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
-            'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'department_id'               => ['sometimes', 'nullable', 'uuid', 'exists:departments,id'],
+            'name'                        => ['sometimes', 'required', 'string', 'max:120', 'unique:designations,name,' . $record->id . ',id'],
+            'code'                        => ['sometimes', 'nullable', 'string', 'max:40', 'unique:designations,code,' . $record->id . ',id'],
+            'level'                       => ['sometimes', 'nullable', 'string', 'max:50'],
+            'grade'                       => ['sometimes', 'nullable', 'string', 'max:50'],
+            'sort_order'                  => ['sometimes', 'nullable', 'integer', 'min:0', 'max:9999'],
+            'default_basic_salary'        => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'salary_frequency'            => ['sometimes', 'nullable', 'string', 'in:monthly,weekly,daily,hourly'],
+            'default_salary_structure_id' => ['sometimes', 'nullable', 'uuid', 'exists:salary_structures,id'],
+            'overtime_eligible'           => ['sometimes', 'nullable', 'boolean'],
+            'taxable'                     => ['sometimes', 'nullable', 'boolean'],
+            'description'                 => ['sometimes', 'nullable', 'string', 'max:500'],
+            'active'                      => ['sometimes', 'nullable', 'boolean'],
+            'is_system_generated'         => ['sometimes', 'nullable', 'boolean'],
+            'user_add_id'                 => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
     }
 }

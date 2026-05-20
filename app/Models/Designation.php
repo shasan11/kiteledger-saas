@@ -11,35 +11,49 @@ class Designation extends Model
 {
     use HasFactory, HasUuids;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
     protected $fillable = [
+        'department_id',
         'name',
+        'code',
+        'level',
+        'grade',
+        'sort_order',
+        'default_basic_salary',
+        'salary_frequency',
+        'default_salary_structure_id',
+        'overtime_eligible',
+        'taxable',
         'description',
         'active',
         'is_system_generated',
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'active' => 'boolean',
-            'is_system_generated' => 'boolean',
-            'user_add_id' => 'integer',
+            'sort_order'           => 'integer',
+            'default_basic_salary' => 'decimal:2',
+            'overtime_eligible'    => 'boolean',
+            'taxable'              => 'boolean',
+            'active'               => 'boolean',
+            'is_system_generated'  => 'boolean',
+            'user_add_id'          => 'integer',
         ];
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function defaultSalaryStructure(): BelongsTo
+    {
+        return $this->belongsTo(SalaryStructure::class, 'default_salary_structure_id');
     }
 
     public function userAdd(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_add_id');
     }
 }
