@@ -4,12 +4,15 @@ namespace Database\Seeders;
 
 use App\Models\Account;
 use App\Models\Branch;
+use App\Models\InventoryAdjustment;
+use App\Models\InventoryAdjustmentLine;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductTaxCategory;
 use App\Models\ProductUnit;
 use App\Models\TaxClass;
 use App\Models\TaxJurisdiction;
+use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
@@ -17,7 +20,15 @@ class ProductSeeder extends Seeder
 {
     public function run(): void
     {
-        $branch = Branch::where('code', 'HO')->first();
+        $branch = Branch::where('code', env('SEED_MAIN_BRANCH_CODE', 'MAIN'))->first()
+            ?: Branch::query()->where('is_head_office', true)->first()
+            ?: Branch::query()->first();
+        $warehouse = Warehouse::query()
+            ->when($branch, fn ($query) => $query->where('branch_id', $branch->id))
+            ->where('active', true)
+            ->orderBy('name')
+            ->first()
+            ?: Warehouse::query()->where('active', true)->first();
 
         $salesAccount = $this->account('4100', 'Sales Income', 'coa');
         $purchaseAccount = $this->account('5100', 'Purchase Expense', 'coa');
@@ -127,6 +138,7 @@ class ProductSeeder extends Seeder
                 'tax_class_id' => $standardTaxClass->id,
                 'track_inventory' => false,
                 'allow_purchase' => false,
+                'product_type' => 'service',
                 'purchase_price' => 0,
                 'selling_price' => 3500,
             ],
@@ -140,6 +152,7 @@ class ProductSeeder extends Seeder
                 'tax_class_id' => $standardTaxClass->id,
                 'track_inventory' => false,
                 'allow_purchase' => false,
+                'product_type' => 'service',
                 'purchase_price' => 0,
                 'selling_price' => 2500,
             ],
@@ -153,6 +166,7 @@ class ProductSeeder extends Seeder
                 'tax_class_id' => $standardTaxClass->id,
                 'track_inventory' => false,
                 'allow_purchase' => false,
+                'product_type' => 'service',
                 'purchase_price' => 0,
                 'selling_price' => 500,
             ],
@@ -166,16 +180,19 @@ class ProductSeeder extends Seeder
                 'tax_class_id' => $exemptTaxClass->id,
                 'track_inventory' => false,
                 'allow_purchase' => false,
+                'product_type' => 'service',
                 'purchase_price' => 0,
                 'selling_price' => 0,
             ],
         ];
 
+        $seededProducts = collect();
+
         foreach ($products as $product) {
             $category = $this->category($product['category']);
             $unit = $this->unit($product['unit']);
 
-            Product::updateOrCreate(
+            $seededProducts->push(Product::updateOrCreate(
                 ['code' => $product['code']],
                 $this->productPayload([
                     'branch_id' => $branch?->id,
@@ -202,8 +219,10 @@ class ProductSeeder extends Seeder
                     'active' => true,
                     'is_system_generated' => true,
                 ])
-            );
+            ));
         }
+
+        $this->seedOpeningStock($branch, $warehouse, $seededProducts);
     }
 
     private function productPayload(array $payload): array
@@ -279,5 +298,72 @@ class ProductSeeder extends Seeder
                 'is_system_generated' => true,
             ]
         );
+    }
+
+    private function seedOpeningStock(?Branch $branch, ?Warehouse $warehouse, $products): void
+    {
+        if (!$warehouse || !Schema::hasTable('inventory_adjustments') || !Schema::hasTable('inventory_adjustment_lines')) {
+            return;
+        }
+
+        $stockedProducts = collect($products)
+            ->filter(fn (Product $product) => $product->track_inventory && $product->allow_sale && $product->product_type !== 'variant_parent')
+            ->values();
+
+        if ($stockedProducts->isEmpty()) {
+            return;
+        }
+
+        InventoryAdjustment::withoutEvents(function () use ($branch, $warehouse, $stockedProducts) {
+            $adjustment = InventoryAdjustment::query()->updateOrCreate(
+                ['adjustment_no' => 'SEED-POS-OPENING-STOCK'],
+                $this->inventoryAdjustmentPayload([
+                    'branch_id' => $branch?->id,
+                    'adjustment_date' => now()->toDateString(),
+                    'warehouse_id' => $warehouse->id,
+                    'reason' => 'Opening stock for seeded products',
+                    'notes' => 'System seeded stock so POS products can be sold immediately.',
+                    'status' => 'posted',
+                    'active' => true,
+                    'approved' => true,
+                    'approved_at' => now(),
+                    'exchange_rate' => 1,
+                    'total' => 0,
+                    'stock_posted' => true,
+                    'stock_posted_at' => now(),
+                ])
+            );
+
+            InventoryAdjustmentLine::query()
+                ->where('inventory_adjustment_id', $adjustment->id)
+                ->delete();
+
+            $total = 0;
+
+            foreach ($stockedProducts as $index => $product) {
+                $qty = [20, 15, 10, 40, 30, 100, 250][$index] ?? 20;
+                $unitCost = (float) ($product->purchase_price ?: 0);
+                $total += $qty * $unitCost;
+
+                InventoryAdjustmentLine::query()->create([
+                    'inventory_adjustment_id' => $adjustment->id,
+                    'product_id' => $product->id,
+                    'adjustment_type' => 'increase',
+                    'qty' => $qty,
+                    'unit_cost' => $unitCost,
+                    'remarks' => 'Seed opening balance',
+                    'active' => true,
+                ]);
+            }
+
+            $adjustment->forceFill($this->inventoryAdjustmentPayload(['total' => $total]))->saveQuietly();
+        });
+    }
+
+    private function inventoryAdjustmentPayload(array $payload): array
+    {
+        return collect($payload)
+            ->filter(fn ($value, $column) => Schema::hasColumn('inventory_adjustments', $column))
+            ->all();
     }
 }

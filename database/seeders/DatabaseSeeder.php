@@ -30,6 +30,8 @@ class DatabaseSeeder extends Seeder
             MasterDealDataSeeder::class,
             MasterDataTypesSeeder::class,
             MasterTaxJurisdictionSeeder::class,
+            MasterProductDataSeeder::class,
+            ProductSeeder::class,
             TaxRateSeeder::class,
             SettingsPermissionSeeder::class,
             PermissionSeeder::class,

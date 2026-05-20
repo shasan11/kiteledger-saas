@@ -37,10 +37,37 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $user,
                 'permissions' => fn () => $user?->getAllPermissions()->pluck('name')->values()->all() ?? [],
+                'canBypassPermissions' => fn () => $this->canBypassPermissions($user),
                 'currentBranchId' => fn () => $this->selectedBranchId($user),
             ],
             'branchContext' => fn () => $this->branchContext($request),
         ];
+    }
+
+    protected function canBypassPermissions($user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        if (!method_exists($user, 'hasAnyRole')) {
+            return false;
+        }
+
+        return $user->hasAnyRole([
+            'Super Admin',
+            'Company Owner',
+            'Admin',
+            'Branch Admin',
+            'Full Access User',
+            'Full Access Admin',
+            'super-admin',
+            'admin',
+        ]);
     }
 
     protected function branchContext(Request $request): array

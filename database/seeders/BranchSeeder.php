@@ -10,8 +10,14 @@ class BranchSeeder extends Seeder
     public function run(): void
     {
         foreach ([
-            ['code' => 'HO', 'name' => 'Head Office', 'phone' => '+977-01-5970000', 'email' => 'info@kiteledger.local', 'address' => 'Kamaladi, Kathmandu, Nepal', 'is_head_office' => true],
-            ['code' => 'PKR', 'name' => 'Pokhara Branch', 'phone' => '+977-061-520000', 'email' => 'pokhara@kiteledger.local', 'address' => 'Lakeside, Pokhara, Nepal', 'is_head_office' => false],
+            [
+                'code' => env('SEED_MAIN_BRANCH_CODE', 'MAIN'),
+                'name' => env('SEED_MAIN_BRANCH_NAME', 'Main Branch'),
+                'phone' => null,
+                'email' => env('SEED_MAIN_USER_EMAIL', 'shasandhakal1105@gmail.com'),
+                'address' => null,
+                'is_head_office' => true,
+            ],
         ] as $branch) {
             Branch::query()->updateOrCreate(
                 ['code' => $branch['code']],

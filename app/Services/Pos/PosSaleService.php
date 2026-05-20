@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\Currency;
 use App\Models\CustomerPayment;
 use App\Models\CustomerPaymentLine;
+use App\Models\Account;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\PosCashMovement;
@@ -348,9 +349,9 @@ class PosSaleService
             'paid_total' => $sale->paid_total,
             'balance_due' => $sale->balance_due,
             'status' => $sale->balance_due > 0 ? 'part_paid' : 'paid',
-            'approved' => $sale->approved,
-            'approved_at' => $sale->approved ? ($sale->approved_at ?? now()) : null,
-            'approved_by_id' => $sale->approved ? ($sale->approved_by_id ?? auth()->id()) : null,
+            'approved' => false,
+            'approved_at' => null,
+            'approved_by_id' => null,
             'exchange_rate' => 1,
             'total' => $sale->grand_total,
             'user_add_id' => auth()->id(),
@@ -396,9 +397,9 @@ class PosSaleService
             'reference' => $sale->sale_no,
             'notes' => $sale->notes,
             'status' => 'posted',
-            'approved' => $sale->approved,
-            'approved_at' => $sale->approved ? ($sale->approved_at ?? now()) : null,
-            'approved_by_id' => $sale->approved ? ($sale->approved_by_id ?? auth()->id()) : null,
+            'approved' => false,
+            'approved_at' => null,
+            'approved_by_id' => null,
             'exchange_rate' => 1,
             'total' => $sale->paid_total,
             'user_add_id' => auth()->id(),
@@ -484,12 +485,75 @@ class PosSaleService
     {
         $terminal = $sale->posTerminal ?: PosTerminal::query()->find($sale->pos_terminal_id);
 
-        return match ($method) {
+        $terminalAccountId = match ($method) {
             'cash' => $terminal?->cash_account_id,
             'card' => $terminal?->card_account_id,
             'online', 'wallet', 'bank_transfer' => $terminal?->online_account_id,
             default => null,
         };
+
+        if ($terminalAccountId) {
+            return $terminalAccountId;
+        }
+
+        $fallbackAccountId = $this->fallbackAccountIdForMethod($method);
+
+        if ($terminal && $fallbackAccountId) {
+            $column = match ($method) {
+                'cash' => 'cash_account_id',
+                'card' => 'card_account_id',
+                'online', 'wallet', 'bank_transfer' => 'online_account_id',
+                default => null,
+            };
+
+            if ($column && !$terminal->{$column}) {
+                $terminal->forceFill([$column => $fallbackAccountId])->saveQuietly();
+            }
+        }
+
+        return $fallbackAccountId;
+    }
+
+    private function fallbackAccountIdForMethod(string $method): ?string
+    {
+        $preferredNatures = match ($method) {
+            'cash' => ['cash'],
+            'card', 'online', 'wallet', 'bank_transfer' => ['bank'],
+            default => ['cash'],
+        };
+
+        $accountId = Account::query()
+            ->where('active', true)
+            ->whereIn('nature', $preferredNatures)
+            ->orderBy('name')
+            ->value('id');
+
+        if ($accountId) {
+            return $accountId;
+        }
+
+        $nature = $preferredNatures[0];
+
+        $account = Account::query()->firstOrCreate(
+            ['code' => $nature === 'cash' ? 'POS-CASH' : 'POS-BANK'],
+            [
+                'name' => $nature === 'cash' ? 'POS Cash Account' : 'POS Bank Account',
+                'nature' => $nature,
+                'active' => true,
+                'is_system_generated' => true,
+                'user_add_id' => auth()->id(),
+            ]
+        );
+
+        if (!$account->active || $account->nature !== $nature) {
+            $account->forceFill([
+                'nature' => $nature,
+                'active' => true,
+                'is_system_generated' => true,
+            ])->save();
+        }
+
+        return $account->id;
     }
 
     private function assertCheckoutRules(PosSale $sale, array $payload): void
@@ -509,7 +573,7 @@ class PosSaleService
         $hasCredit = $payments->contains(fn (array $payment) => ($payment['payment_method'] ?? null) === 'credit')
             || (float) $sale->balance_due > 0;
 
-        $hasCustomer = !empty($payload['contact_id']);
+        $hasCustomer = !empty($payload['contact_id']) || !empty($sale->contact_id);
         $user = request()->user();
 
         if ($hasCredit) {
@@ -534,7 +598,7 @@ class PosSaleService
         foreach ($moneyPayments as $payment) {
             $method = $payment['payment_method'] ?? null;
             if (!$this->defaultAccountIdForMethod($sale, $method) && empty($payment['account_id'])) {
-                throw new InvalidArgumentException('Terminal account is missing for selected payment method.');
+                throw new InvalidArgumentException('No active cash or bank account is available for the selected payment method.');
             }
         }
 

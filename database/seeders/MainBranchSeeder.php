@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Branch;
 use App\Models\User;
+use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -44,5 +45,25 @@ class MainBranchSeeder extends Seeder
         if ($user->branch_id !== $branch->id) {
             $user->forceFill(['branch_id' => $branch->id])->save();
         }
+
+        $warehouse = Warehouse::query()->updateOrCreate(
+            [
+                'branch_id' => $branch->id,
+                'code' => env('SEED_MAIN_WAREHOUSE_CODE', 'MAIN-WH'),
+            ],
+            [
+                'name' => env('SEED_MAIN_WAREHOUSE_NAME', $branch->name . ' Warehouse'),
+                'address' => $branch->address,
+                'active' => true,
+                'is_system_generated' => true,
+                'user_add_id' => $user->id,
+            ]
+        );
+
+        Warehouse::query()
+            ->where('branch_id', $branch->id)
+            ->where('is_system_generated', true)
+            ->whereKeyNot($warehouse->id)
+            ->delete();
     }
 }

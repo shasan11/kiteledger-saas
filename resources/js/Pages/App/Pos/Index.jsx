@@ -35,12 +35,12 @@ import {
     MinusOutlined,
     PauseCircleOutlined,
     PlusOutlined,
-    PrinterOutlined,
     SearchOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import PosTopBar from '@/Components/Pos/PosTopBar';
 import { api, fetchList, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 
@@ -62,6 +62,221 @@ const emptyPayment = {
     transaction_no: '',
 };
 
+const isWalkInCustomer = (contact) =>
+    String(contact?.code || '').toUpperCase() === 'WALK-IN' || /walk[-\s]?in/i.test(contact?.name || '');
+
+const firstPresent = (...values) => values.find((value) => value !== undefined && value !== null && value !== '') ?? '';
+
+const numeric = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatQty = (value) =>
+    numeric(value).toLocaleString('en-NP', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+    });
+
+const formatDateTime = (value) => {
+    if (!value) return '';
+
+    const date = dayjs(value);
+    return date.isValid() ? date.format('YYYY-MM-DD HH:mm') : String(value);
+};
+
+const humanize = (value = '') =>
+    String(value || '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, (match) => match.toUpperCase());
+
+const escapeHtml = (value) =>
+    String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+const getPath = (object, path, fallback = '') => {
+    if (!path) return fallback;
+
+    return String(path)
+        .split('.')
+        .reduce((current, key) => {
+            if (current === null || current === undefined) return fallback;
+            return current[key];
+        }, object) ?? fallback;
+};
+
+const renderPrintTemplate = (templateHtml, context) => {
+    const resolve = (scope, path, fallback = '') => {
+        const scoped = getPath(scope, path, undefined);
+        return scoped !== undefined && scoped !== null ? scoped : getPath(context, path, fallback);
+    };
+
+    const render = (template, scope = context) =>
+        String(template || '')
+            .replace(/{{!([\s\S]*?)}}/g, '')
+            .replace(/{{([#^])([\w.]+)}}([\s\S]*?){{\/\2}}/g, (_, mode, path, block) => {
+                const value = resolve(scope, path, null);
+                const truthy = Array.isArray(value) ? value.length > 0 : !!value;
+
+                if (mode === '^') {
+                    return truthy ? '' : render(block, scope);
+                }
+
+                if (Array.isArray(value)) {
+                    return value
+                        .map((item, index) => render(block, { ...context, ...(item || {}), '@index': index + 1 }))
+                        .join('');
+                }
+
+                if (!truthy) return '';
+
+                return render(block, typeof value === 'object' ? { ...context, ...value } : scope);
+            })
+            .replace(/{{\s*([^}]+)\s*}}/g, (_, path) => escapeHtml(resolve(scope, path.trim(), '')));
+
+    return render(templateHtml);
+};
+
+const extractTemplateBody = (html = '') => {
+    let source = String(html || '');
+    const styles = [];
+
+    source = source.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_, styleContent) => {
+        styles.push(styleContent);
+        return '';
+    });
+
+    const bodyMatch = source.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const body = bodyMatch ? bodyMatch[1] : source;
+
+    return {
+        html: body
+            .replace(/<!doctype[^>]*>/gi, '')
+            .replace(/<\/?(html|head|body)[^>]*>/gi, '')
+            .trim(),
+        styles: styles.join('\n'),
+    };
+};
+
+const scopeReceiptStyles = (css = '') =>
+    String(css || '').replace(/(^|})\s*([^@{}][^{}]*)\{/g, (match, boundary, selectorText) => {
+        const scopedSelectors = selectorText
+            .split(',')
+            .map((selector) => {
+                const trimmed = selector.trim();
+
+                if (!trimmed) return '';
+                if (trimmed === 'html' || trimmed === 'body' || trimmed === 'html body') {
+                    return '.pos-receipt-print-document';
+                }
+                if (trimmed.startsWith('.pos-receipt-print-document')) {
+                    return trimmed;
+                }
+
+                return `.pos-receipt-print-document ${trimmed}`;
+            })
+            .filter(Boolean)
+            .join(', ');
+
+        return `${boundary} ${scopedSelectors} {`;
+    });
+
+const compactAddress = (record = null, companyInfo = null) =>
+    firstPresent(
+        companyInfo?.address,
+        [companyInfo?.address_line_1, companyInfo?.address_line_2, companyInfo?.city, companyInfo?.state, companyInfo?.postal_code, companyInfo?.country]
+            .filter(Boolean)
+            .join(', '),
+        record?.branch?.address,
+        ''
+    );
+
+const defaultPosReceiptTemplateHtml = `
+<div class="pos-receipt">
+    <div class="center">
+        <div class="company-name">{{company.name}}</div>
+        {{#company.address}}<div class="muted">{{company.address}}</div>{{/company.address}}
+        {{#company.phone}}<div class="muted">Tel: {{company.phone}}</div>{{/company.phone}}
+        {{#company.pan_or_vat}}<div class="muted">PAN/VAT: {{company.pan_or_vat}}</div>{{/company.pan_or_vat}}
+    </div>
+    <hr>
+    <table class="meta">
+        <tr><td>Receipt No.</td><td>{{document.number}}</td></tr>
+        <tr><td>Date</td><td>{{document.date}}</td></tr>
+        <tr><td>Customer</td><td>{{customer.name}}</td></tr>
+    </table>
+    <hr>
+    <table>
+        <thead>
+            <tr><th>Item</th><th class="center">Qty</th><th class="right">Rate</th><th class="right">Amt</th></tr>
+        </thead>
+        <tbody>
+            {{#items}}
+            <tr><td>{{product_name}}</td><td class="center">{{qty}}</td><td class="right">{{unit_price}}</td><td class="right">{{line_total}}</td></tr>
+            {{/items}}
+        </tbody>
+    </table>
+    <hr>
+    <table class="totals">
+        <tr><td>Subtotal</td><td>{{totals.subtotal}}</td></tr>
+        <tr><td>Discount</td><td>{{totals.discount}}</td></tr>
+        <tr><td>Tax</td><td>{{totals.tax}}</td></tr>
+        <tr class="grand"><td>Total</td><td>{{totals.grand_total}}</td></tr>
+        <tr><td>Paid</td><td>{{totals.paid_amount}}</td></tr>
+        <tr><td>Change</td><td>{{totals.change_amount}}</td></tr>
+    </table>
+    <hr>
+    <div class="center footer">{{document.notes}}{{^document.notes}}Thank you for your purchase. Please visit again!{{/document.notes}}</div>
+</div>
+`.trim();
+
+const defaultPosReceiptTemplateCss = `
+.pos-receipt-print-document,
+.pos-receipt {
+    box-sizing: border-box;
+    width: 80mm;
+    max-width: 80mm;
+    padding: 8px 6px;
+    background: #fff;
+    color: #111;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    line-height: 1.35;
+}
+.pos-receipt-print-document * { box-sizing: border-box; }
+.pos-receipt-print-document table { width: 100%; border-collapse: collapse; }
+.pos-receipt-print-document th,
+.pos-receipt-print-document td { padding: 2px 0; vertical-align: top; }
+.pos-receipt-print-document th { border-bottom: 1px solid #999; font-size: 11px; }
+.pos-receipt-print-document hr { border: 0; border-top: 1px dashed #999; margin: 6px 0; }
+.pos-receipt-print-document .center { text-align: center; }
+.pos-receipt-print-document .right { text-align: right; }
+.pos-receipt-print-document .muted { color: #444; font-size: 11px; }
+.pos-receipt-print-document .company-name { font-size: 15px; font-weight: 800; }
+.pos-receipt-print-document .meta td:last-child,
+.pos-receipt-print-document .totals td:last-child { text-align: right; font-weight: 600; }
+.pos-receipt-print-document .grand td { border-top: 2px solid #111; border-bottom: 2px solid #111; font-size: 14px; font-weight: 800; padding: 4px 0; }
+.pos-receipt-print-document .footer { color: #555; font-size: 11px; margin-top: 8px; }
+@page { size: 80mm auto; margin: 0; }
+@media print {
+    .pos-receipt-print-document { width: 80mm; max-width: 80mm; }
+}
+`.trim();
+
+const posReceiptPrintPageCss = `
+@page { size: 80mm auto; margin: 2mm; }
+@media print {
+    .pos-receipt-print-document {
+        width: 76mm !important;
+        max-width: 76mm !important;
+    }
+}
+`.trim();
+
 export default function PosIndex() {
     const { message } = App.useApp();
     const { token } = theme.useToken();
@@ -70,8 +285,9 @@ export default function PosIndex() {
     const auth = props.auth || {};
     const branchContext = props.branchContext || {};
     const permissions = auth.permissions || [];
+    const canBypassPermissions = !!auth.canBypassPermissions;
 
-    const can = (permission) => permissions.includes(permission);
+    const can = (permission) => canBypassPermissions || permissions.includes(permission);
 
     const canViewAllBranches = !!branchContext.canViewAllBranches;
     const queryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
@@ -123,6 +339,10 @@ export default function PosIndex() {
     const [heldOpen, setHeldOpen] = useState(false);
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [saleReceipt, setSaleReceipt] = useState(null);
+    const [receiptTemplate, setReceiptTemplate] = useState(null);
+    const [receiptTemplateLoading, setReceiptTemplateLoading] = useState(false);
+    const [receiptTemplateError, setReceiptTemplateError] = useState('');
+    const [companyInfo, setCompanyInfo] = useState(null);
     const [processing, setProcessing] = useState(false);
 
     const [shiftForm] = Form.useForm();
@@ -168,38 +388,30 @@ export default function PosIndex() {
         }));
     }, [contacts]);
 
+    const defaultCustomerId = useMemo(() => {
+        return (
+            selectedTerminal?.default_customer_id ||
+            selectedTerminal?.default_customer?.id ||
+            selectedTerminal?.defaultCustomer?.id ||
+            contacts.find(isWalkInCustomer)?.id ||
+            null
+        );
+    }, [contacts, selectedTerminal]);
+
+    const effectiveCustomerId = customerId || defaultCustomerId;
+
     const terminalWarnings = useMemo(() => {
         if (!selectedTerminal) return ['No terminal selected.'];
 
         const warnings = [];
         const hasTrackedItem = cart.some((item) => item.track_inventory);
-        const selectedPaymentMethods = new Set(
-            payments
-                .filter((payment) => payment.payment_method !== 'credit' && Number(payment.amount || 0) > 0)
-                .map((payment) => payment.payment_method),
-        );
 
         if (hasTrackedItem && !selectedTerminal.warehouse_id) {
             warnings.push('Warehouse is required for inventory-tracked products.');
         }
 
-        if (selectedPaymentMethods.has('cash') && !selectedTerminal.cash_account_id) {
-            warnings.push('Cash account is required for cash payments.');
-        }
-
-        if (selectedPaymentMethods.has('card') && !selectedTerminal.card_account_id) {
-            warnings.push('Card account is required for card payments.');
-        }
-
-        if (
-            ['online', 'wallet', 'bank_transfer'].some((method) => selectedPaymentMethods.has(method)) &&
-            !selectedTerminal.online_account_id
-        ) {
-            warnings.push('Online account is required for online, wallet, or bank transfer payments.');
-        }
-
         return warnings;
-    }, [cart, payments, selectedTerminal]);
+    }, [cart, selectedTerminal]);
 
     const checkoutError = useMemo(() => {
         if (!can('pos.sale.create')) return 'No permission to create POS sales.';
@@ -217,16 +429,13 @@ export default function PosIndex() {
         const hasCredit = payments.some((payment) => payment.payment_method === 'credit') || summary.balance_due > 0;
         const hasNonCash = moneyPayments.some((payment) => payment.payment_method !== 'cash');
 
-        if (moneyPayments.some((payment) => payment.payment_method === 'cash' && !selectedTerminal?.cash_account_id)) return 'Terminal account is missing for selected payment method.';
-        if (moneyPayments.some((payment) => payment.payment_method === 'card' && !selectedTerminal?.card_account_id)) return 'Terminal account is missing for selected payment method.';
-        if (moneyPayments.some((payment) => ['online', 'wallet', 'bank_transfer'].includes(payment.payment_method) && !selectedTerminal?.online_account_id)) return 'Terminal account is missing for selected payment method.';
-        if (hasCredit && !customerId) return 'Customer is required for credit sale.';
+        if (hasCredit && !effectiveCustomerId) return 'Customer is required for credit sale.';
         if (hasCredit && !can('pos.sale.credit')) return 'No permission to complete credit sales.';
         if (!hasCredit && summary.paid_total + 0.009 < summary.grand_total) return 'Amount received is less than grand total.';
         if (summary.change_amount > 0.009 && hasNonCash) return 'Overpayment is allowed only for cash sales.';
 
         return null;
-    }, [cart, currentShift, customerId, payments, selectedTerminal, summary, permissions]);
+    }, [cart, currentShift, effectiveCustomerId, payments, selectedTerminal, summary, permissions, canBypassPermissions]);
 
     const pageStyle = {
         padding: 16,
@@ -269,6 +478,12 @@ export default function PosIndex() {
     }, [cart, payments]);
 
     useEffect(() => {
+        if (!activeSaleId && defaultCustomerId && !customerId) {
+            setCustomerId(defaultCustomerId);
+        }
+    }, [activeSaleId, customerId, defaultCustomerId]);
+
+    useEffect(() => {
         if (!terminalId) {
             setCurrentShift(null);
             setProducts([]);
@@ -295,6 +510,49 @@ export default function PosIndex() {
 
         return () => clearTimeout(timer);
     }, [searchText, terminalId, currentShift?.id]);
+
+    useEffect(() => {
+        if (!receiptOpen || !saleReceipt) return;
+
+        let active = true;
+
+        const loadReceiptTemplate = async () => {
+            setReceiptTemplateLoading(true);
+            setReceiptTemplateError('');
+
+            try {
+                const [templateResponse, companyResponse] = await Promise.all([
+                    axios.get(api('/api/printing-templates/resolve'), {
+                        params: {
+                            document_type: 'pos_sale',
+                        },
+                    }),
+                    axios.get(api('/api/app-settings/current')).catch(() => ({ data: null })),
+                ]);
+
+                if (!active) return;
+
+                setReceiptTemplate(templateResponse.data?.data ?? templateResponse.data ?? null);
+                setCompanyInfo(companyResponse.data?.data ?? companyResponse.data ?? null);
+            } catch (error) {
+                if (!active) return;
+
+                setReceiptTemplate(null);
+                setReceiptTemplateError(
+                    error?.response?.data?.message ||
+                        'No active POS receipt template found. The fallback receipt will be used.',
+                );
+            } finally {
+                if (active) setReceiptTemplateLoading(false);
+            }
+        };
+
+        void loadReceiptTemplate();
+
+        return () => {
+            active = false;
+        };
+    }, [receiptOpen, saleReceipt]);
 
     async function bootstrap() {
         setLoading(true);
@@ -325,11 +583,26 @@ export default function PosIndex() {
                 branchRows[0]?.id ||
                 null;
 
+            let contactRows = contactPayload.results || [];
+
+            if (!contactRows.some(isWalkInCustomer)) {
+                const walkInPayload = await fetchList('/api/contacts', {
+                    search: 'Walk-in',
+                    contact_type: 'customer',
+                    page_size: 5,
+                });
+
+                const knownIds = new Set(contactRows.map((contact) => contact.id));
+                contactRows = [
+                    ...contactRows,
+                    ...(walkInPayload.results || []).filter((contact) => !knownIds.has(contact.id)),
+                ];
+            }
+
             setBranches(branchRows);
             setActiveBranchId(fallbackBranchId);
-            setContacts(contactPayload.results || []);
+            setContacts(contactRows);
             setDashboard(dashboardPayload.data || null);
-            setCustomerId(null);
 
             await loadTerminalsForBranch(fallbackBranchId, {
                 silent: true,
@@ -656,6 +929,7 @@ export default function PosIndex() {
         setCart([]);
         setPayments([{ ...emptyPayment }]);
         setActiveSaleId(null);
+        setCustomerId(defaultCustomerId || null);
 
         if (!options.keepReceipt) {
             setSaleReceipt(null);
@@ -819,7 +1093,7 @@ export default function PosIndex() {
             pos_terminal_id: terminalId,
             pos_shift_id: shiftId || null,
             warehouse_id: selectedTerminal?.warehouse_id,
-            contact_id: customerId || null,
+            contact_id: effectiveCustomerId || null,
             status,
             sale_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
             items: cart.map((item) => ({
@@ -849,7 +1123,7 @@ export default function PosIndex() {
 
     function resumeHeldSale(sale) {
         setActiveSaleId(sale.id);
-        setCustomerId(sale.contact_id || null);
+        setCustomerId(sale.contact_id || defaultCustomerId || null);
 
         setCart(
             (sale.pos_sale_lines || []).map((line) => ({
@@ -1013,6 +1287,180 @@ export default function PosIndex() {
             setCloseShiftLoading(false);
         }
     }
+
+    const receiptTemplateSource = receiptTemplate || {
+        name: 'Fallback POS Receipt',
+        template_key: 'pos_sale.fallback',
+        template_html: defaultPosReceiptTemplateHtml,
+        template_css: defaultPosReceiptTemplateCss,
+    };
+
+    const receiptContext = useMemo(() => {
+        if (!saleReceipt) return null;
+
+        const lines = saleReceipt.pos_sale_lines || saleReceipt.posSaleLines || [];
+        const receiptPayments = saleReceipt.pos_payments || saleReceipt.posPayments || [];
+        const terminal = saleReceipt.pos_terminal || saleReceipt.posTerminal || selectedTerminal || {};
+        const shift = saleReceipt.pos_shift || saleReceipt.posShift || currentShift || {};
+        const branch = saleReceipt.branch || selectedBranch || terminal.branch || {};
+        const contact = saleReceipt.contact || {};
+        const cashier = shift.cashier || saleReceipt.cashier || auth.user || {};
+        const currency = saleReceipt.currency || {};
+
+        const formatMoney = (value) => {
+            const formatted = money(value);
+            return currency.symbol ? `${currency.symbol} ${formatted}` : `Rs. ${formatted}`;
+        };
+
+        const paymentTotals = receiptPayments.reduce(
+            (totals, payment) => {
+                const method = payment.payment_method || 'cash';
+                totals[method] = numeric(totals[method]) + numeric(payment.amount);
+                return totals;
+            },
+            {},
+        );
+
+        const normalizedLines = lines.map((line) => {
+            const qty = firstPresent(line.qty, line.quantity, 0);
+            const unitPrice = firstPresent(line.unit_price, line.rate, line.price, 0);
+            const lineTotal = firstPresent(line.line_total, line.total, line.amount, 0);
+
+            return {
+                ...line,
+                product_name: firstPresent(line.product_name, line.product?.name, line.custom_product_name, line.description, 'POS Item'),
+                item_name: firstPresent(line.product_name, line.product?.name, line.custom_product_name, line.description, 'POS Item'),
+                description: firstPresent(line.description, line.remarks, line.complimentary_reason, ''),
+                qty: formatQty(qty),
+                quantity: formatQty(qty),
+                unit_price: formatMoney(unitPrice),
+                rate: formatMoney(unitPrice),
+                price: formatMoney(unitPrice),
+                discount_amount: formatMoney(firstPresent(line.discount_amount, 0)),
+                tax_amount: formatMoney(firstPresent(line.tax_amount, 0)),
+                line_total: formatMoney(lineTotal),
+                amount: formatMoney(lineTotal),
+            };
+        });
+
+        const customerName = firstPresent(
+            saleReceipt.customer_name,
+            contact.name,
+            contact.label,
+            'Walk-in Customer',
+        );
+
+        return {
+            record: saleReceipt,
+            company: {
+                name: firstPresent(companyInfo?.company_name, companyInfo?.name, saleReceipt.company?.name, branch.name, 'KiteLedger'),
+                legal_name: firstPresent(companyInfo?.legal_name, companyInfo?.company_name, saleReceipt.company?.legal_name, ''),
+                address: compactAddress(saleReceipt, companyInfo),
+                phone: firstPresent(companyInfo?.phone, saleReceipt.company?.phone, branch.phone, ''),
+                email: firstPresent(companyInfo?.email, saleReceipt.company?.email, branch.email, ''),
+                website: firstPresent(companyInfo?.website, saleReceipt.company?.website, ''),
+                pan_or_vat: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, saleReceipt.company?.tax_id, saleReceipt.company?.pan_no, ''),
+                tax_id: firstPresent(companyInfo?.tax_number, companyInfo?.vat_number, saleReceipt.company?.tax_id, saleReceipt.company?.pan_no, ''),
+                logo: firstPresent(companyInfo?.logo_url, companyInfo?.dark_logo_url, companyInfo?.logo, companyInfo?.dark_logo, ''),
+            },
+            branch: {
+                name: firstPresent(branch.name, ''),
+                code: firstPresent(branch.code, ''),
+                address: firstPresent(branch.address, ''),
+                phone: firstPresent(branch.phone, ''),
+            },
+            terminal: {
+                name: firstPresent(terminal.name, ''),
+                code: firstPresent(terminal.code, ''),
+            },
+            cashier: {
+                name: firstPresent(cashier.name, ''),
+                email: firstPresent(cashier.email, ''),
+            },
+            customer: {
+                name: customerName,
+                phone: firstPresent(saleReceipt.customer_phone, contact.phone, contact.mobile, ''),
+                email: firstPresent(saleReceipt.customer_email, contact.email, ''),
+                address: firstPresent(contact.address, contact.billing_address, ''),
+                pan_no: firstPresent(contact.pan_no, contact.vat_no, ''),
+                vat_no: firstPresent(contact.vat_no, contact.pan_no, ''),
+            },
+            party: {
+                name: customerName,
+                phone: firstPresent(saleReceipt.customer_phone, contact.phone, contact.mobile, ''),
+                email: firstPresent(saleReceipt.customer_email, contact.email, ''),
+                address: firstPresent(contact.address, contact.billing_address, ''),
+            },
+            document: {
+                type: 'pos_sale',
+                title: 'POS Sales Receipt',
+                number: firstPresent(saleReceipt.sale_no, saleReceipt.id, 'Receipt'),
+                date: formatDateTime(firstPresent(saleReceipt.sale_date, saleReceipt.created_at)),
+                status: humanize(firstPresent(saleReceipt.status, 'completed')),
+                payment_status: humanize(firstPresent(saleReceipt.payment_status, 'paid')),
+                reference: firstPresent(saleReceipt.reference, saleReceipt.invoice?.invoice_no, ''),
+                notes: firstPresent(saleReceipt.receipt_note, saleReceipt.notes, ''),
+            },
+            currency: {
+                code: firstPresent(currency.code, ''),
+                symbol: firstPresent(currency.symbol, ''),
+                name: firstPresent(currency.name, ''),
+            },
+            totals: {
+                subtotal: formatMoney(firstPresent(saleReceipt.subtotal, 0)),
+                discount: formatMoney(firstPresent(saleReceipt.discount_total, 0)),
+                tax: formatMoney(firstPresent(saleReceipt.tax_total, 0)),
+                round_off: formatMoney(firstPresent(saleReceipt.round_off, 0)),
+                grand_total: formatMoney(firstPresent(saleReceipt.grand_total, 0)),
+                total: formatMoney(firstPresent(saleReceipt.grand_total, 0)),
+                paid: formatMoney(firstPresent(saleReceipt.paid_total, 0)),
+                paid_amount: formatMoney(firstPresent(saleReceipt.paid_total, 0)),
+                balance: formatMoney(firstPresent(saleReceipt.balance_due, 0)),
+                balance_due: formatMoney(firstPresent(saleReceipt.balance_due, 0)),
+                change_amount: formatMoney(firstPresent(saleReceipt.change_amount, 0)),
+            },
+            payment: {
+                cash: paymentTotals.cash ? formatMoney(paymentTotals.cash) : '',
+                card: paymentTotals.card ? formatMoney(paymentTotals.card) : '',
+                online: paymentTotals.online ? formatMoney(paymentTotals.online) : '',
+                wallet: paymentTotals.wallet ? formatMoney(paymentTotals.wallet) : '',
+                bank_transfer: paymentTotals.bank_transfer ? formatMoney(paymentTotals.bank_transfer) : '',
+                method: receiptPayments.map((payment) => humanize(payment.payment_method)).filter(Boolean).join(', '),
+            },
+            payments: receiptPayments.map((payment) => ({
+                ...payment,
+                method: humanize(payment.payment_method),
+                payment_method: humanize(payment.payment_method),
+                amount: formatMoney(payment.amount),
+                reference: firstPresent(payment.reference, payment.transaction_no, ''),
+            })),
+            items: normalizedLines,
+            lines: normalizedLines,
+            prepared_by: firstPresent(saleReceipt.user_add?.name, saleReceipt.userAdd?.name, auth.user?.name, ''),
+            approved_by: firstPresent(saleReceipt.approved_by?.name, saleReceipt.approvedBy?.name, ''),
+            printed_at: dayjs().format('YYYY-MM-DD HH:mm'),
+        };
+    }, [auth.user, companyInfo, currentShift, saleReceipt, selectedBranch, selectedTerminal]);
+
+    const renderedReceipt = useMemo(() => {
+        if (!receiptContext) {
+            return {
+                html: '',
+                css: defaultPosReceiptTemplateCss,
+            };
+        }
+
+        const templateHtml = receiptTemplateSource.template_html || defaultPosReceiptTemplateHtml;
+        const extractedTemplate = extractTemplateBody(templateHtml);
+        const embeddedCss = scopeReceiptStyles(extractedTemplate.styles);
+        const templateCss = scopeReceiptStyles(receiptTemplateSource.template_css || '');
+        const css = [defaultPosReceiptTemplateCss, embeddedCss, templateCss, posReceiptPrintPageCss].filter(Boolean).join('\n');
+
+        return {
+            html: renderPrintTemplate(extractedTemplate.html || defaultPosReceiptTemplateHtml, receiptContext),
+            css,
+        };
+    }, [receiptContext, receiptTemplateSource]);
 
     const cartColumns = [
         {
@@ -1377,11 +1825,10 @@ export default function PosIndex() {
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                                     <Select
                                         showSearch
-                                        allowClear
                                         placeholder="Select customer"
-                                        value={customerId}
+                                        value={effectiveCustomerId}
                                         options={customerOptions}
-                                        onChange={setCustomerId}
+                                        onChange={(value) => setCustomerId(value || defaultCustomerId || null)}
                                         style={{ width: '100%' }}
                                         optionFilterProp="label"
                                     />
@@ -1823,67 +2270,39 @@ export default function PosIndex() {
                 title="Receipt Preview"
                 open={receiptOpen}
                 onCancel={() => setReceiptOpen(false)}
-                width={520}
+                width={620}
                 footer={null}
             >
                 {saleReceipt ? (
-                    <Space direction="vertical" style={{ width: '100%' }} size={10}>
-                        <Title level={4} style={{ margin: 0 }}>
-                            {saleReceipt.sale_no}
-                        </Title>
-
-                        <Text>
-                            {saleReceipt.customer_name || saleReceipt.contact?.name || 'Walk-in Customer'}
-                        </Text>
-
-                        <Divider />
-
-                        <List
-                            dataSource={saleReceipt.pos_sale_lines || []}
-                            renderItem={(line) => (
-                                <List.Item>
-                                    <Space
-                                        style={{
-                                            width: '100%',
-                                            justifyContent: 'space-between',
-                                        }}
-                                    >
-                                        <Space>
-                                            <Text>{line.product_name}</Text>
-                                            {line.is_complimentary && <Tag color="blue">Complimentary</Tag>}
-                                        </Space>
-
-                                        <Text strong>{money(line.line_total)}</Text>
-                                    </Space>
-                                </List.Item>
+                    <Spin spinning={receiptTemplateLoading}>
+                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                            {receiptTemplateError && (
+                                <Alert type="warning" showIcon message={receiptTemplateError} />
                             )}
-                        />
 
-                        <Descriptions
-                            column={1}
-                            items={[
-                                {
-                                    key: 'grand_total',
-                                    label: 'Grand Total',
-                                    children: `Rs. ${money(saleReceipt.grand_total)}`,
-                                },
-                                {
-                                    key: 'paid',
-                                    label: 'Paid',
-                                    children: `Rs. ${money(saleReceipt.paid_total)}`,
-                                },
-                                {
-                                    key: 'change',
-                                    label: 'Change',
-                                    children: `Rs. ${money(saleReceipt.change_amount)}`,
-                                },
-                            ]}
-                        />
-
-                        <Button icon={<PrinterOutlined />}>
-                            Print Receipt
-                        </Button>
-                    </Space>
+                            <PrintablePdfEmailWrapper
+                                title="POS Sales Receipt"
+                                subTitle={saleReceipt.sale_no}
+                                fileName={`pos-receipt-${saleReceipt.sale_no || saleReceipt.id || 'receipt'}.pdf`}
+                                pageSize="80mm"
+                                pageOrientation="portrait"
+                                allowDownload={false}
+                                allowEmail={false}
+                                printButtonText="Print Receipt"
+                                previewBackground={token.colorFillAlter}
+                                printStyles={renderedReceipt.css}
+                                contentClassName="pos-receipt-print-document"
+                                contentStyle={{
+                                    width: '80mm',
+                                    maxWidth: '80mm',
+                                    padding:"3mm"
+                                }}
+                            >
+                                <style>{renderedReceipt.css}</style>
+                                <div dangerouslySetInnerHTML={{ __html: renderedReceipt.html }} />
+                            </PrintablePdfEmailWrapper>
+                        </Space>
+                    </Spin>
                 ) : (
                     <Empty description="No receipt loaded" />
                 )}

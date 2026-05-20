@@ -54,6 +54,8 @@ class ParallelJournalVoucherService
 
     public function createForInvoice($invoice): JournalVoucher
     {
+        $invoice->loadMissing(['contact', 'invoiceLines.product', 'invoiceLines.taxRate']);
+
         $rate = $this->resolveJournalExchangeRate($invoice, $invoice->currency_id);
         $creditLines = [];
 
@@ -65,7 +67,7 @@ class ParallelJournalVoucherService
         foreach ($invoice->invoiceLines as $line) {
             $salesAccount = $this->accountResolver->getSalesIncomeAccount();
             if ($line->product_id && $line->product?->sales_account_id) {
-                $salesAccount = ChartOfAccount::find($line->product->sales_account_id);
+                $salesAccount = $this->resolveChartAccount($line->product->sales_account_id, $salesAccount);
             }
 
             $creditLines[] = [
@@ -116,6 +118,8 @@ class ParallelJournalVoucherService
 
     public function createForCustomerPayment($payment): JournalVoucher
     {
+        $payment->loadMissing(['contact', 'account', 'customerPaymentLines.invoice']);
+
         $rate = $this->resolveJournalExchangeRate($payment, $payment->currency_id);
         $lines = [];
 
@@ -991,6 +995,11 @@ class ParallelJournalVoucherService
         ?string $currencyId,
     ): JournalVoucher {
         return DB::transaction(function () use ($sourceModel, $lines, $date, $sourceType, $sourceId, $sourceNo, $branchId, $currencyId) {
+            $lines = collect($lines)
+                ->filter(fn (array $line) => round((float) ($line['debit'] ?? 0), 2) > 0 || round((float) ($line['credit'] ?? 0), 2) > 0)
+                ->values()
+                ->all();
+
             $this->validationService->validateJournalVoucherLines($lines);
 
             $voucher = $sourceModel && $sourceId
