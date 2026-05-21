@@ -1,5 +1,15 @@
 <?php
 
+use App\Http\Controllers\Api\AI\AiSettingsController;
+use App\Http\Controllers\Api\AI\AiCommandController;
+use App\Http\Controllers\Api\AI\AiTransactionReviewController;
+use App\Http\Controllers\Api\AI\AiInvoiceAssistantController;
+use App\Http\Controllers\Api\AI\AiReportInsightController;
+use App\Http\Controllers\Api\AI\AiAccountingCopilotController;
+use App\Http\Controllers\Api\AI\AiCrmAssistantController;
+use App\Http\Controllers\Api\AI\AiPaymentCollectionController;
+use App\Http\Controllers\Api\AI\AiInventoryInsightController;
+use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -147,6 +157,8 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api
 Route::post('bank-accounts/bulk', [BankAccountController::class, 'bulkStore']);
 Route::patch('bank-accounts/bulk', [BankAccountController::class, 'bulkUpdate']);
 Route::delete('bank-accounts/bulk', [BankAccountController::class, 'bulkDestroy']);
+Route::get('bank-accounts/{bankAccount}/ledger', [BankAccountController::class, 'ledger']);
+Route::post('bank-accounts/{bankAccount}/statement-import', [BankAccountController::class, 'importStatement']);
 
 Route::apiResource('bank-accounts', BankAccountController::class)
     ->parameters([
@@ -231,6 +243,7 @@ Route::apiResource('cash-transfer-lines', CashTransferLineController::class)
 Route::post('chart-of-accounts/bulk', [ChartOfAccountController::class, 'bulkStore']);
 Route::patch('chart-of-accounts/bulk', [ChartOfAccountController::class, 'bulkUpdate']);
 Route::delete('chart-of-accounts/bulk', [ChartOfAccountController::class, 'bulkDestroy']);
+Route::get('chart-of-accounts/{chartOfAccount}/ledger', [ChartOfAccountController::class, 'ledger']);
 
 Route::apiResource('chart-of-accounts', ChartOfAccountController::class)
     ->parameters([
@@ -922,3 +935,44 @@ Route::apiResource('tax-exemptions', TaxExemptionController::class)
 Route::get('tax-settings',                    [TaxSettingsController::class, 'show']);
 Route::put('tax-settings',                    [TaxSettingsController::class, 'upsert']);
 Route::post('tax-settings/toggle-advanced',   [TaxSettingsController::class, 'toggleAdvancedMode']);
+
+/*
+|--------------------------------------------------------------------------
+| AI Module
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
+    // Settings
+    Route::get('settings',                              [AiSettingsController::class, 'show']);
+    Route::put('settings',                              [AiSettingsController::class, 'update']);
+    Route::post('settings/test-connection',             [AiSettingsController::class, 'testConnection']);
+
+    // Usage logs
+    Route::get('usage-logs',                            [AiUsageLogController::class, 'index']);
+
+    // Global command center
+    Route::post('command',                              [AiCommandController::class, 'handle']);
+
+    // Transaction review
+    Route::post('transaction-review/{module}/{id}',     [AiTransactionReviewController::class, 'review']);
+
+    // Invoice assistant
+    Route::post('invoice-assistant/draft-lines',        [AiInvoiceAssistantController::class, 'draftLines']);
+    Route::post('invoice-assistant/explain/{id}',       [AiInvoiceAssistantController::class, 'explain']);
+
+    // Reports
+    Route::post('reports/explain',                      [AiReportInsightController::class, 'explain']);
+
+    // Accounting copilot
+    Route::post('accounting/explain-journal/{id}',      [AiAccountingCopilotController::class, 'explainJournal']);
+    Route::post('accounting/suggest-account',           [AiAccountingCopilotController::class, 'suggestAccount']);
+
+    // CRM assistant
+    Route::post('crm/follow-up',                        [AiCrmAssistantController::class, 'followUp']);
+
+    // Payment collection
+    Route::post('payments/collection-plan',             [AiPaymentCollectionController::class, 'collectionPlan']);
+
+    // Inventory insights
+    Route::post('inventory/insights',                   [AiInventoryInsightController::class, 'insights']);
+});

@@ -32,6 +32,19 @@ const DifferenceText = ({ values }) => {
         </div>
     );
 };
+const balancedLineItem = ({ defaultItem, values }) => {
+    const { difference } = lineTotals(values?.items);
+    const amount = Math.abs(difference);
+
+    if (amount < 0.01) return { ...defaultItem };
+
+    return {
+        ...defaultItem,
+        debit: difference < 0 ? amount : 0,
+        credit: difference > 0 ? amount : 0,
+        _helper: 'Auto-filled to balance voucher.',
+    };
+};
 const formatDate = (v) => {
     if (!v) return null;
     if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
@@ -50,12 +63,15 @@ export default function JournalVoucherEdit({ id, ...props }) {
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         { name: 'narration', label: 'Narration', type: 'textarea', col: 24, rows: 2, placeholder: 'Narration' },
         {
-            name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { chart_of_account_id: null, description: '', debit: 0, credit: 0 }, headerBg: '#4b5563', headerColor: '#ffffff',
+            name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { chart_of_account_id: null, description: '', debit: 0, credit: 0 }, onAddItem: balancedLineItem, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
                 { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - ') },
-                { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
-                { key: 'debit', name: 'debit', label: 'Debit', type: 'number', width: '140px', min: 0 },
-                { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '140px', min: 0 },
+                { key: '_helper', name: '_helper', label: 'Helper', type: 'text', width: '180px', disabled: true },
+                { key: 'debit', name: 'debit', label: 'Debit', type: 'number', width: '140px', min: 0, align: 'right' },
+                { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '140px', min: 0, align: 'right' },
+            ],
+            collapsedFields: [
+                { key: 'description', name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2, placeholder: 'Line description / narration' },
             ],
         },
         { name: 'journal_difference', label: '', type: 'custom', col: 24, render: DifferenceText },

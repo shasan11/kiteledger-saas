@@ -303,6 +303,8 @@ export default function PosIndex() {
 
     const barcodeRef = useRef(null);
     const beepContextRef = useRef(null);
+    const scannerBufferRef = useRef('');
+    const scannerTimerRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [shiftLoading, setShiftLoading] = useState(false);
@@ -321,6 +323,7 @@ export default function PosIndex() {
     const [terminalId, setTerminalId] = useState(null);
     const [customerId, setCustomerId] = useState(null);
     const [searchText, setSearchText] = useState('');
+    const [recentScanId, setRecentScanId] = useState(null);
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
     const [payments, setPayments] = useState([{ ...emptyPayment }]);
@@ -512,6 +515,45 @@ export default function PosIndex() {
     }, [searchText, terminalId, currentShift?.id]);
 
     useEffect(() => {
+        if (!terminalId || !currentShift?.id) return undefined;
+
+        const isTypingTarget = (target) => {
+            const tagName = String(target?.tagName || '').toLowerCase();
+            return tagName === 'input' || tagName === 'textarea' || target?.isContentEditable;
+        };
+
+        const flushScan = () => {
+            const code = scannerBufferRef.current.trim();
+            scannerBufferRef.current = '';
+            if (code.length >= 3) void scanBarcode(code);
+        };
+
+        const handleKeyDown = (event) => {
+            if (event.ctrlKey || event.altKey || event.metaKey || isTypingTarget(event.target)) return;
+
+            if (event.key === 'Enter') {
+                flushScan();
+                return;
+            }
+
+            if (event.key.length !== 1) return;
+
+            scannerBufferRef.current += event.key;
+            window.clearTimeout(scannerTimerRef.current);
+            scannerTimerRef.current = window.setTimeout(() => {
+                scannerBufferRef.current = '';
+            }, 120);
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.clearTimeout(scannerTimerRef.current);
+        };
+    }, [terminalId, currentShift?.id, selectedTerminal?.warehouse_id, activeBranchId]);
+
+    useEffect(() => {
         if (!receiptOpen || !saleReceipt) return;
 
         let active = true;
@@ -700,6 +742,35 @@ export default function PosIndex() {
         }
     }
 
+    async function scanBarcode(code) {
+        if (!code || !terminalId || !currentShift?.id) return;
+
+        try {
+            const response = await axios.get(api('/api/pos/products/search'), {
+                params: {
+                    barcode: code,
+                    warehouse_id: selectedTerminal?.warehouse_id,
+                    branch_id: selectedTerminal?.branch_id || activeBranchId,
+                    limit: 1,
+                },
+            });
+
+            const product = (response.data || [])[0];
+
+            if (!product?.id) {
+                message.warning(`No saleable product found for barcode ${code}.`);
+                return;
+            }
+
+            addProduct(product, { scanned: true });
+            setRecentScanId(product.id);
+            setTimeout(() => setRecentScanId((current) => (current === product.id ? null : current)), 1200);
+            message.success(`${product.name} added`);
+        } catch (error) {
+            showApiError(message, error, 'Barcode scan failed.');
+        }
+    }
+
     async function loadCurrentShift(targetTerminalId = terminalId, options = {}) {
         if (!targetTerminalId) {
             setCurrentShift(null);
@@ -815,13 +886,15 @@ export default function PosIndex() {
         });
     }
 
-    function addProduct(product) {
+    function addProduct(product, options = {}) {
         if (!currentShift?.id) {
             message.warning('Open a shift before adding products.');
             return;
         }
 
-        playPosBeep();
+        if (options.scanned) {
+            playPosBeep();
+        }
 
         setCart((current) => {
             const existing = current.find((item) => item.product_id === product.id);
@@ -1759,6 +1832,10 @@ export default function PosIndex() {
                                             placeholder="Search or scan barcode"
                                             value={searchText}
                                             onChange={(event) => setSearchText(event.target.value)}
+                                            onPressEnter={() => {
+                                                const value = searchText.trim();
+                                                if (value) void scanBarcode(value);
+                                            }}
                                         />
 
                                         <Button onClick={() => loadProducts(searchText)}>
@@ -1778,7 +1855,8 @@ export default function PosIndex() {
                                                         onClick={() => addProduct(product)}
                                                         style={{
                                                             borderRadius: token.borderRadiusLG,
-                                                            border: `1px solid ${token.colorBorderSecondary}`,
+                                                            border: `1px solid ${recentScanId === product.id ? token.colorSuccess : token.colorBorderSecondary}`,
+                                                            background: recentScanId === product.id ? token.colorSuccessBg : token.colorBgContainer,
                                                         }}
                                                         bodyStyle={{ padding: 12 }}
                                                     >
@@ -1803,7 +1881,7 @@ export default function PosIndex() {
                                                                     count={
                                                                         product.track_inventory
                                                                             ? `Stock ${product.available_stock ?? 0}`
-                                                                            : 'Service'
+                                                                            : 'Non-stock'
                                                                     }
                                                                     style={{
                                                                         backgroundColor: token.colorPrimary,

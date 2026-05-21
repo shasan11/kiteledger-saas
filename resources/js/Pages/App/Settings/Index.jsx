@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
 import {
@@ -26,6 +27,7 @@ import {
   InboxOutlined,
   MailOutlined,
   NumberOutlined,
+  RobotOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   TagsOutlined,
@@ -58,6 +60,7 @@ const ReportingTags = lazy(() => import('./ReportingTags/Index'));
 const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
 const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
+const AiSettings = lazy(() => import('./AiSettings'));
 
 const DEFAULT_TAB_KEY = 'company-profile';
 
@@ -264,6 +267,20 @@ const SETTINGS_TABS = [
     description: 'Print document layouts.',
     icon: <FileTextOutlined />,
     component: PrintingTemplates,
+    props: {},
+  },
+
+  {
+    key: 'ai-group',
+    label: 'Artificial Intelligence',
+    disabled: true,
+  },
+  {
+    key: 'ai-settings',
+    label: 'AI Settings',
+    description: 'Configure AI features, provider, API keys, and modules.',
+    icon: <RobotOutlined />,
+    component: AiSettings,
     props: {},
   },
 ].filter(Boolean);

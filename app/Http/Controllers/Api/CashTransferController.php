@@ -6,6 +6,7 @@ use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class CashTransferController extends BaseCrudApiController
@@ -410,6 +411,7 @@ class CashTransferController extends BaseCrudApiController
         array $nestedData
     ): array {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        $this->validateDifferentAccounts($parentData, $nestedData);
 
         if (empty($parentData['transfer_no'])) {
             $parentData['transfer_no'] = $this->generateTransferNo();
@@ -440,6 +442,11 @@ class CashTransferController extends BaseCrudApiController
             $parentData['user_add_id']
         );
 
+        $this->validateDifferentAccounts([
+            ...$record->only(['from_account_id']),
+            ...$parentData,
+        ], $nestedData);
+
         if (isset($parentData['approved']) && $parentData['approved']) {
             $parentData['approved_at'] = $parentData['approved_at'] ?? now();
             $parentData['approved_by_id'] = $parentData['approved_by_id']
@@ -464,6 +471,23 @@ class CashTransferController extends BaseCrudApiController
         $row['exchange_rate_to_default'] = $row['exchange_rate_to_default'] ?? 1;
 
         return $row;
+    }
+
+    protected function validateDifferentAccounts(array $parentData, array $nestedData): void
+    {
+        $fromAccountId = $parentData['from_account_id'] ?? null;
+
+        if (!$fromAccountId) {
+            return;
+        }
+
+        foreach (($nestedData['items'] ?? []) as $line) {
+            if (($line['to_account_id'] ?? null) && (string) $line['to_account_id'] === (string) $fromAccountId) {
+                throw ValidationException::withMessages([
+                    'items' => ['From account and to account cannot be the same.'],
+                ]);
+            }
+        }
     }
 
     protected function mutateSerializedRecord(array $data, Model $record): array

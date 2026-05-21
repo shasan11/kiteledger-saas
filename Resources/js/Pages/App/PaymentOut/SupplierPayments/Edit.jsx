@@ -107,8 +107,8 @@ export default function SupplierPaymentEdit({ id, ...props }) {
             defaultItem: { purchase_bill_id: null, allocated_amount: 0 },
             headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'purchase_bill_id', name: 'purchase_bill_id', label: 'Purchase Bill', type: 'fkSelect', width: '3fr', placeholder: 'Select Bill', fkUrl: api('/api/purchase-bills/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'bill_no' },
-                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '200px', min: 0.000001 },
+                { key: 'purchase_bill_id', name: 'purchase_bill_id', label: 'Purchase Bill', type: 'fkSelect', width: '60%', placeholder: 'Select Bill', fkUrl: api('/api/purchase-bills/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'bill_no' },
+                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '25%', min: 0.000001 },
             ],
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },

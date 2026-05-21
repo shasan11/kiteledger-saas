@@ -267,7 +267,7 @@ export default function CreditNoteEdit({ id, ...props }) {
       },
       columns: [
         {
-          key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '250px',
+          key: 'product_id', name: 'product_id', label: 'Product / Service', type: 'fkSelect', width: '20%',
           placeholder: 'Add Code or Product', fkUrl: api('/api/products/search?transaction=sale'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label',
           labelField: 'product_name', quickAdd: productQuickAdd,
           fkLabel: (r) => [r?.code || r?.sku || '', r?.name || ''].filter(Boolean).join(' - '),
@@ -285,11 +285,11 @@ export default function CreditNoteEdit({ id, ...props }) {
             return { ...baseRow, tax_amount: c.tax_amount, tax_breakup: c.tax_breakup, line_total: c.line_total };
           },
         },
-        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0 },
-        { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0, addonBefore: ({ values }) => getCurrencySymbol(values), prefix: ({ values }) => getCurrencySymbol(values) },
-        { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '170px', component: LineDiscountInput },
+        { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '10%', min: 0 },
+        { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '15%', min: 0, prefix: ({ values }) => getCurrencySymbol(values) },
+        { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '15%', component: LineDiscountInput },
         {
-          key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '120px',
+          key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '15%',
           placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
           storeFullObject: true, fkLabel: (r) => [r?.name, r?.rate_percent ? `${toNumber(r.rate_percent)}%` : null].filter(Boolean).join(' - '),
           onSelectRecord: (r, row) => {
@@ -297,7 +297,7 @@ export default function CreditNoteEdit({ id, ...props }) {
             return { ...row, tax_rate_id: r, tax_jurisdiction_id: c.tax_jurisdiction_id, tax_amount: c.tax_amount, tax_breakup: c.tax_breakup, line_total: c.line_total };
           },
         },
-        { key: 'line_total', name: 'line_total', label: 'Amount', type: 'number', width: '130px', min: 0, disabled: true, addonBefore: ({ values }) => getCurrencySymbol(values), prefix: ({ values }) => getCurrencySymbol(values), formula: (row) => calculateLine(row).line_total },
+        { key: 'line_total', name: 'line_total', label: 'Amount', type: 'number', width: '13%', min: 0, disabled: true, addonBefore: ({ values }) => getCurrencySymbol(values), prefix: ({ values }) => getCurrencySymbol(values), formula: (row) => calculateLine(row).line_total },
       ],
       collapsedFields: [
         { key: 'description', name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2, placeholder: 'Line description' },

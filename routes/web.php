@@ -32,6 +32,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__.'/menu/master.php';
     require __DIR__.'/menu/tax.php';
     require __DIR__.'/menu/settings.php';
+
+    // AI module standalone pages
+    Route::get('/ai/logs', fn () => Inertia::render('App/AI/Logs'))->name('ai.logs');
+    Route::get('/ai/command-center', fn () => Inertia::render('App/AI/CommandCenter'))->name('ai.command-center');
 });
 
 Route::middleware('auth')->group(function () {

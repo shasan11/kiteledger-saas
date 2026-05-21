@@ -34,7 +34,9 @@ export default function WarehouseTransferEdit({ id, ...props }) {
             columns: [
                 { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/search'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
                 { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '120px', min: 0 },
-                { key: 'remarks', name: 'remarks', label: 'Remarks', type: 'text', width: '2fr' },
+            ],
+            collapsedFields: [
+                { key: 'remarks', name: 'remarks', label: 'Remarks', type: 'textarea', col: 24, rows: 2, placeholder: 'Line remarks' },
             ],
         },
     ], []);

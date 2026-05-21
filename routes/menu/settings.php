@@ -33,4 +33,5 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/application-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('application-settings.index');
     Route::get('/general-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('general-settings.index');
     Route::get('/master-data', fn () => redirect()->route('settings.index', ['tab' => 'master-data']))->name('master-data.index');
+    Route::get('/ai', fn () => redirect()->route('settings.index', ['tab' => 'ai-settings']))->name('ai.index');
 });

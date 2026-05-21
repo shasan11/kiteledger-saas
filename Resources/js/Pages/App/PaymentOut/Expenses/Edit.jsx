@@ -36,12 +36,14 @@ export default function ExpenseEdit({ id, ...props }) {
         {
             name: 'items', label: 'Expense Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Expense Line', defaultItem: { ...emptyLine }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
-                { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '130px', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0.000001 },
-                { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
-                { key: 'line_total', name: 'line_total', label: 'Total', type: 'number', width: '130px', min: 0, disabled: true },
+                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '32%', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '15%', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '15%', min: 0.000001, align: 'right' },
+                { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '12%', min: 0, align: 'right' },
+                { key: 'line_total', name: 'line_total', label: 'Total', type: 'number', width: '15%', min: 0, disabled: true, align: 'right' },
+            ],
+            collapsedFields: [
+                { key: 'description', name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2, placeholder: 'Expense line description' },
             ],
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },

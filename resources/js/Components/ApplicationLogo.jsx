@@ -92,6 +92,7 @@ export default function ApplicationLogo({
                 style={{
                     display: 'block',
                     objectFit: 'contain',
+                    width: '130%',
                     ...style,
                 }}
                 onError={() => setFailed(true)}

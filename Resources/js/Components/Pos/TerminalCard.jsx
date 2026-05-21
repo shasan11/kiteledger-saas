@@ -1,5 +1,5 @@
-import { Badge, Card, Descriptions, Space, theme, Tooltip, Typography } from 'antd';
-import { LockOutlined, ShopOutlined } from '@ant-design/icons';
+import { Badge, Button, Card, Descriptions, Space, theme, Tooltip, Typography } from 'antd';
+import { EditOutlined, LockOutlined, ShopOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ShiftStatusTag from './ShiftStatusTag';
 import { money } from '@/Pages/App/Pos/Shared/posHelpers';
@@ -13,10 +13,22 @@ const indicatorMap = {
     risk: 'error',
 };
 
-export default function TerminalCard({ terminal, locked = false, onClick }) {
+export default function TerminalCard({ terminal, locked = false, onClick, onOpenPos, onViewShifts, onEdit }) {
     const { token } = theme.useToken();
     const shift = terminal.current_shift;
     const disabled = locked && !shift;
+
+    const softBackground = (() => {
+        if (disabled || terminal.active === false) return token.colorFillQuaternary;
+        if (terminal.status === 'open') return token.green1 || '#f6ffed';
+        if (terminal.status === 'attention' || terminal.status === 'risk') return token.gold1 || '#fffbe6';
+        return token.blue1 || '#e6f4ff';
+    })();
+
+    const stop = (handler) => (event) => {
+        event.stopPropagation();
+        handler?.();
+    };
 
     const body = (
         <Card
@@ -26,11 +38,11 @@ export default function TerminalCard({ terminal, locked = false, onClick }) {
                 height: '100%',
                 borderRadius: token.borderRadius,
                 border: `1px solid ${token.colorBorderSecondary}`,
-                background: disabled ? token.colorFillQuaternary : token.colorBgContainer,
+                background: softBackground,
                 cursor: disabled ? 'not-allowed' : 'pointer',
             }}
             bodyStyle={{
-                minHeight: 252,
+                minHeight: 310,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: token.marginSM,
@@ -76,7 +88,7 @@ export default function TerminalCard({ terminal, locked = false, onClick }) {
                 size="small"
                 column={1}
                 colon={false}
-                labelStyle={{ color: token.colorTextSecondary, width: 104 }}
+                labelStyle={{ color: token.colorTextSecondary, width: 118 }}
                 contentStyle={{ justifyContent: 'flex-end', textAlign: 'right' }}
                 items={[
                     {
@@ -90,19 +102,29 @@ export default function TerminalCard({ terminal, locked = false, onClick }) {
                         children: terminal.warehouse?.name || '-',
                     },
                     {
-                        key: 'cashier',
-                        label: 'Cashier',
+                        key: 'cash',
+                        label: 'Cash Account',
+                        children: terminal.cash_account?.name || terminal.cashAccount?.name || '-',
+                    },
+                    {
+                        key: 'last_shift',
+                        label: 'Last Shift',
+                        children: shift?.shift_no || terminal.last_shift?.shift_no || terminal.lastShift?.shift_no || '-',
+                    },
+                    {
+                        key: 'opened_by',
+                        label: 'Last Opened By',
                         children: shift?.cashier?.name || '-',
                     },
                     {
                         key: 'opened',
-                        label: 'Opened',
+                        label: 'Last Opened',
                         children: shift?.opened_at ? dayjs(shift.opened_at).format('DD MMM, HH:mm') : '-',
                     },
                     {
                         key: 'opening',
-                        label: 'Opening Cash',
-                        children: shift ? `Rs. ${money(shift.opening_cash)}` : '-',
+                        label: 'Current Cash',
+                        children: shift ? `Rs. ${money(shift.expected_cash ?? shift.opening_cash)}` : '-',
                     },
                     {
                         key: 'sales',
@@ -111,6 +133,18 @@ export default function TerminalCard({ terminal, locked = false, onClick }) {
                     },
                 ]}
             />
+
+            <Space wrap style={{ marginTop: 'auto' }}>
+                <Button size="small" type="primary" disabled={disabled} onClick={stop(onOpenPos || onClick)}>
+                    Open POS
+                </Button>
+                <Button size="small" icon={<UnorderedListOutlined />} onClick={stop(onViewShifts)}>
+                    View Shifts
+                </Button>
+                <Button size="small" icon={<EditOutlined />} onClick={stop(onEdit)}>
+                    Edit
+                </Button>
+            </Space>
         </Card>
     );
 

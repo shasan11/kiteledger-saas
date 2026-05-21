@@ -101,52 +101,7 @@ export default function AuthenticatedLayout({ header, children }) {
                           key: 'pos',
                           icon: <ShopOutlined />,
                           label: 'POS',
-                          children: [
-                              can('pos.terminal.view') && {
-                                  key: 'pos-screen',
-                                  label: 'Terminal Selection',
-                                  onClick: () => visit('pos.index', '/pos'),
-                              },
-                              can('pos.sale.view') && {
-                                  key: 'pos-sales',
-                                  label: 'Sales',
-                                  onClick: () =>
-                                      visit('pos.sales.index', '/pos/sales'),
-                              },
-                              can('pos.shift.view') && {
-                                  key: 'pos-shifts',
-                                  label: 'Shifts',
-                                  onClick: () =>
-                                      visit('pos.shifts.index', '/pos/shifts'),
-                              },
-                              can('pos.terminal.view') && {
-                                  key: 'pos-terminals',
-                                  label: 'Terminals',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.terminals.index',
-                                          '/pos/terminals',
-                                      ),
-                              },
-                              can('pos.cash_movement.view') && {
-                                  key: 'pos-cash-movements',
-                                  label: 'Cash Movements',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.cash-movements.index',
-                                          '/pos/cash-movements',
-                                      ),
-                              },
-                              can('pos.return.view') && {
-                                  key: 'pos-returns',
-                                  label: 'Returns',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.returns.index',
-                                          '/pos/returns',
-                                      ),
-                              },
-                          ].filter(Boolean),
+                          onClick: () => visit('pos.index', '/pos'),
                       },
                   ]
                 : []),
@@ -218,12 +173,6 @@ export default function AuthenticatedLayout({ header, children }) {
                                 'payment-in.invoices.index',
                                 '/payment-in/invoices',
                             ),
-                    },
-                    {
-                        key: 'pi-bills',
-                        label: 'Bills',
-                        onClick: () =>
-                            visit('payment-in.bills.index', '/payment-in/bills'),
                     },
                     {
                         key: 'pi-payment',
@@ -717,12 +666,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
 
-        if (isActive('/pos/returns')) return ['pos-returns'];
-        if (isActive('/pos/cash-movements')) return ['pos-cash-movements'];
-        if (isActive('/pos/terminals')) return ['pos-terminals'];
-        if (isActive('/pos/shifts')) return ['pos-shifts'];
-        if (isActive('/pos/sales')) return ['pos-sales'];
-        if (isActive('/pos')) return ['pos-screen'];
+        if (isActive('/pos')) return ['pos'];
 
         if (page.url === '/crm') return ['leads'];
         if (isActive('/crm/contacts')) return ['contacts'];
@@ -741,7 +685,6 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/sales/sales-returns')) return ['sales-sales-returns'];
 
         if (isActive('/payment-in/quotations')) return ['pi-quotations'];
-        if (isActive('/payment-in/bills')) return ['pi-bills'];
         if (isActive('/payment-in/proforma-invoices')) return ['pi-proforma-invoices'];
         if (isActive('/payment-in/sales-orders')) return ['pi-sales-orders'];
         if (isActive('/payment-in/invoices')) return ['pi-invoices'];

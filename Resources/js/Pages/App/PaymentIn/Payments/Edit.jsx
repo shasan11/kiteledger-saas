@@ -87,8 +87,8 @@ export default function PaymentEdit({ id, ...props }) {
         {
             name: 'items', label: 'Invoice Allocations', type: 'objectArray', col: 24, addButtonLabel: 'Add Invoice', defaultItem: { invoice_id: null, allocated_amount: 0 }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'invoice_id', name: 'invoice_id', label: 'Invoice', type: 'fkSelect', width: '3fr', placeholder: 'Select Invoice', fkUrl: api('/api/invoices/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'invoice_no' },
-                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '200px', min: 0 },
+                { key: 'invoice_id', name: 'invoice_id', label: 'Invoice', type: 'fkSelect', width: '45%', placeholder: 'Select Invoice', fkUrl: api('/api/invoices/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'invoice_no' },
+                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '25%', min: 0 },
             ],
         },
         { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },

@@ -58,6 +58,361 @@ class DashboardService
         ];
     }
 
+    public function getFinancialSummary(array $filters): array
+    {
+        $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
+        $end = $this->filterEnd($filters, now())->toDateString();
+        $revenue = $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $start, $end);
+        $expenses = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $start, $end)
+            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, $start, $end);
+
+        return [
+            'cash_bank_balance' => $this->cashBankBalance($filters),
+            'bank_balance' => $this->bankBalance($filters),
+            'cash_in_hand' => $this->cashInHand($filters),
+            'receivables' => $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters),
+            'payables' => $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters),
+            'revenue' => $revenue,
+            'expenses' => $expenses,
+            'net_profit' => $revenue - $expenses,
+            'period_start' => $start,
+            'period_end' => $end,
+        ];
+    }
+
+    public function getCashPosition(array $filters): array
+    {
+        $bankBalance = $this->bankBalance($filters);
+        $cashInHand = $this->cashInHand($filters);
+
+        return [
+            'bank_balance' => $bankBalance,
+            'cash_in_hand' => $cashInHand,
+            'cash_bank_balance' => $bankBalance + $cashInHand,
+            'expected_receivables' => $this->sumApproved('invoices', 'balance_due', 'due_date', $filters),
+            'upcoming_payables' => $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString()),
+            'bank_accounts' => $this->bankAccountBalances($filters),
+        ];
+    }
+
+    public function getMetricSparklines(array $filters): array
+    {
+        $start = $this->filterStart($filters, now()->subDays(29));
+        $end = $this->filterEnd($filters, now());
+        $customerPayments = $this->dailySums('customer_payments', 'amount', 'payment_date', $filters, $start, $end);
+        $supplierPayments = $this->dailySums('supplier_payments', 'amount', 'payment_date', $filters, $start, $end);
+        $cashExpenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $receivables = $this->dailySums('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
+        $payables = $this->dailySums('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
+        $revenue = $this->dailySums('invoices', 'total', 'invoice_date', $filters, $start, $end);
+        $bills = $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
+        $expenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+
+        $cash = [];
+        $receivableRows = [];
+        $payableRows = [];
+        $profit = [];
+
+        foreach (CarbonPeriod::create($start, $end) as $date) {
+            $key = $date->toDateString();
+            $expenseTotal = (float) ($bills[$key] ?? 0) + (float) ($expenses[$key] ?? 0);
+            $cash[] = [
+                'date' => $key,
+                'value' => (float) ($customerPayments[$key] ?? 0) - (float) ($supplierPayments[$key] ?? 0) - (float) ($cashExpenses[$key] ?? 0),
+            ];
+            $receivableRows[] = ['date' => $key, 'value' => (float) ($receivables[$key] ?? 0)];
+            $payableRows[] = ['date' => $key, 'value' => (float) ($payables[$key] ?? 0)];
+            $profit[] = ['date' => $key, 'value' => (float) ($revenue[$key] ?? 0) - $expenseTotal];
+        }
+
+        return [
+            'cash_bank' => $cash,
+            'receivables' => $receivableRows,
+            'payables' => $payableRows,
+            'net_profit' => $profit,
+        ];
+    }
+
+    public function getSalesSummary(array $filters): ?array
+    {
+        if (!$this->tableExists('invoices')) {
+            return null;
+        }
+
+        $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
+        $end = $this->filterEnd($filters, now())->toDateString();
+        $salesTotal = $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $start, $end);
+        $invoiceCount = $this->countApproved('invoices', 'invoice_date', $filters, $start, $end);
+        $paidAmount = $salesTotal - $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
+        $unpaidAmount = $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
+        $overdueAmount = $this->overdueSum('invoices', 'due_date', 'balance_due', $filters);
+
+        if ($salesTotal == 0 && $invoiceCount == 0) {
+            return null;
+        }
+
+        return [
+            'sales_total' => $salesTotal,
+            'invoice_count' => $invoiceCount,
+            'paid_amount' => max(0, $paidAmount),
+            'unpaid_amount' => $unpaidAmount,
+            'overdue_amount' => $overdueAmount,
+        ];
+    }
+
+    public function getPurchaseSummary(array $filters): ?array
+    {
+        if (!$this->tableExists('purchase_bills')) {
+            return null;
+        }
+
+        $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
+        $end = $this->filterEnd($filters, now())->toDateString();
+        $purchaseTotal = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
+        $billCount = $this->countApproved('purchase_bills', 'bill_date', $filters, $start, $end);
+        $paidBills = $purchaseTotal - $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
+        $unpaidBills = $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
+        $upcomingPayables = $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString());
+
+        if ($purchaseTotal == 0 && $billCount == 0) {
+            return null;
+        }
+
+        return [
+            'purchase_total' => $purchaseTotal,
+            'bill_count' => $billCount,
+            'paid_amount' => max(0, $paidBills),
+            'unpaid_amount' => $unpaidBills,
+            'upcoming_payables' => $upcomingPayables,
+        ];
+    }
+
+    public function getCashflowSummary(array $filters): ?array
+    {
+        $start = $this->filterStart($filters, now()->startOfMonth());
+        $end = $this->filterEnd($filters, now());
+        $incoming = $this->periodSum('customer_payments', 'amount', 'payment_date', $filters, $start, $end);
+        $supplierOut = $this->periodSum('supplier_payments', 'amount', 'payment_date', $filters, $start, $end);
+        $expenseOut = $this->periodSum('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $cashIn = $incoming;
+        $cashOut = $supplierOut + $expenseOut;
+
+        if ($cashIn == 0 && $cashOut == 0) {
+            return null;
+        }
+
+        return [
+            'cash_in' => $cashIn,
+            'cash_out' => $cashOut,
+            'net_cash_flow' => $cashIn - $cashOut,
+            'biggest_inflow' => $this->biggestInflowSource($filters, $start, $end),
+            'biggest_outflow' => $this->biggestOutflowSource($filters, $start, $end),
+        ];
+    }
+
+    public function getInventorySummaryCard(array $filters): ?array
+    {
+        if (!$this->tableExists('products')) {
+            return null;
+        }
+
+        $totalProducts = $this->activeProductsQuery()->count();
+        $lowStock = $this->lowStockCount();
+        $valueColumn = $this->firstExistingColumn('products', ['inventory_value', 'stock_value']);
+        $stockColumn = $this->firstExistingColumn('products', ['current_stock', 'stock', 'quantity', 'opening_stock']);
+        $inventoryValue = 0.0;
+
+        if ($valueColumn) {
+            $inventoryValue = (float) DB::table('products')->sum($valueColumn);
+        } elseif ($stockColumn && $this->hasColumn('products', 'purchase_price')) {
+            $inventoryValue = (float) DB::table('products')->sum(DB::raw("COALESCE($stockColumn, 0) * COALESCE(purchase_price, 0)"));
+        }
+
+        $warehouseCount = $this->tableExists('warehouses') ? DB::table('warehouses')->count() : 0;
+
+        if ($totalProducts == 0) {
+            return null;
+        }
+
+        return [
+            'total_products' => $totalProducts,
+            'low_stock_items' => $lowStock,
+            'inventory_value' => $inventoryValue,
+            'warehouse_count' => $warehouseCount,
+        ];
+    }
+
+    public function getCrmSummaryCard(array $filters): ?array
+    {
+        if (!$this->tableExists('deals') && !$this->tableExists('leads')) {
+            return null;
+        }
+
+        $openLeads = $this->tableExists('leads') && $this->hasColumn('leads', 'status')
+            ? DB::table('leads')->whereIn('status', ['new', 'NEW', 'open', 'OPEN'])->count()
+            : 0;
+        $openDeals = $this->whereCount('deals', 'status', 'open');
+        if ($openDeals === 0 && $this->tableExists('deals') && $this->hasColumn('deals', 'status')) {
+            $openDeals = DB::table('deals')->whereIn('status', ['OPEN', 'IN_PROGRESS', 'NEGOTIATION'])->count();
+        }
+
+        $pipelineValue = 0.0;
+        if ($this->tableExists('deals') && $this->hasColumn('deals', 'amount')) {
+            $query = DB::table('deals');
+            if ($this->hasColumn('deals', 'status')) {
+                $query->whereNotIn('status', ['lost', 'LOST', 'cancelled', 'CANCELLED']);
+            }
+            $pipelineValue = (float) $query->sum('amount');
+        }
+
+        $wonValue = 0.0;
+        if ($this->tableExists('deals') && $this->hasColumn('deals', 'amount') && $this->hasColumn('deals', 'status')) {
+            $query = DB::table('deals')->whereIn('status', ['won', 'WON']);
+            if ($this->hasColumn('deals', 'closed_date')) {
+                $query->whereBetween('closed_date', [now()->startOfMonth(), now()->endOfMonth()]);
+            } elseif ($this->hasColumn('deals', 'updated_at')) {
+                $query->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()]);
+            }
+            $wonValue = (float) $query->sum('amount');
+        }
+
+        if ($openLeads == 0 && $openDeals == 0 && $pipelineValue == 0) {
+            return null;
+        }
+
+        return [
+            'open_leads' => $openLeads,
+            'open_deals' => $openDeals,
+            'pipeline_value' => $pipelineValue,
+            'won_value' => $wonValue,
+        ];
+    }
+
+    public function getHrmSummaryCard(array $filters): ?array
+    {
+        if (!$this->tableExists('employee_profiles')) {
+            return null;
+        }
+
+        $employees = DB::table('employee_profiles');
+        if ($this->hasColumn('employee_profiles', 'active')) {
+            $employees->where('active', true);
+        }
+        $this->applyBranch($employees, 'employee_profiles', $filters);
+        $activeEmployees = $employees->count();
+
+        if ($activeEmployees == 0) {
+            return null;
+        }
+
+        $leaveToday = 0;
+        if ($this->tableExists('leave_applications') && $this->hasColumn('leave_applications', 'leave_from') && $this->hasColumn('leave_applications', 'leave_to')) {
+            $leave = DB::table('leave_applications')
+                ->whereDate('leave_from', '<=', now()->toDateString())
+                ->whereDate('leave_to', '>=', now()->toDateString());
+            if ($this->hasColumn('leave_applications', 'status')) {
+                $leave->whereIn('status', ['APPROVED', 'approved']);
+            }
+            $this->applyBranch($leave, 'leave_applications', $filters);
+            $leaveToday = $leave->count();
+        }
+
+        $attendanceToday = 0;
+        if ($this->tableExists('attendances') && $this->hasColumn('attendances', 'in_time')) {
+            $attendance = DB::table('attendances')->whereDate('in_time', now()->toDateString());
+            $this->applyBranch($attendance, 'attendances', $filters);
+            $attendanceToday = $attendance->count();
+        }
+
+        $payrollThisPeriod = 0.0;
+        if ($this->tableExists('payrolls') && $this->hasColumn('payrolls', 'net_pay')) {
+            $query = DB::table('payrolls');
+            if ($this->hasColumn('payrolls', 'payroll_date')) {
+                $query->whereBetween('payroll_date', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()]);
+            }
+            $this->applyBranch($query, 'payrolls', $filters);
+            $payrollThisPeriod = (float) $query->sum('net_pay');
+        }
+
+        return [
+            'active_employees' => $activeEmployees,
+            'on_leave_today' => $leaveToday,
+            'attendance_today' => $attendanceToday,
+            'payroll_this_period' => $payrollThisPeriod,
+        ];
+    }
+
+    public function getProjectSummaryCard(array $filters): ?array
+    {
+        if (!$this->tableExists('projects')) {
+            return null;
+        }
+
+        $activeProjects = DB::table('projects');
+        if ($this->hasColumn('projects', 'status')) {
+            $activeProjects->whereIn('status', ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'in_progress', 'on_hold']);
+        }
+        $activeCount = $activeProjects->count();
+
+        $completedThisPeriod = 0;
+        if ($this->hasColumn('projects', 'status')) {
+            $query = DB::table('projects')->whereIn('status', ['COMPLETED', 'completed']);
+            if ($this->hasColumn('projects', 'updated_at')) {
+                $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
+                $end = $this->filterEnd($filters, now())->toDateString();
+                $query->whereBetween('updated_at', [$start, $end]);
+            }
+            $completedThisPeriod = $query->count();
+        }
+
+        $overdueProjectTasks = 0;
+        if ($this->tableExists('tasks') && $this->hasColumn('tasks', 'project_id') && $this->hasColumn('tasks', 'end_date')) {
+            $tasks = DB::table('tasks')
+                ->join('projects', 'tasks.project_id', '=', 'projects.id')
+                ->whereDate('tasks.end_date', '<', now()->toDateString());
+            if ($this->hasColumn('tasks', 'active')) {
+                $tasks->where('tasks.active', true);
+            }
+            if ($this->hasColumn('projects', 'status')) {
+                $tasks->whereNotIn('projects.status', ['COMPLETED', 'CANCELLED', 'completed', 'cancelled']);
+            }
+            $overdueProjectTasks = $tasks->count();
+        }
+
+        $billingValue = 0.0;
+        if ($this->hasColumn('projects', 'budget') || $this->hasColumn('projects', 'total_budget')) {
+            $budgetCol = $this->firstExistingColumn('projects', ['budget', 'total_budget']);
+            if ($budgetCol) {
+                $query = DB::table('projects');
+                if ($this->hasColumn('projects', 'status')) {
+                    $query->whereIn('status', ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'in_progress', 'on_hold']);
+                }
+                $billingValue = (float) $query->sum($budgetCol);
+            }
+        }
+
+        if ($activeCount == 0 && $completedThisPeriod == 0) {
+            return null;
+        }
+
+        return [
+            'active_projects' => $activeCount,
+            'completed_this_period' => $completedThisPeriod,
+            'overdue_tasks' => $overdueProjectTasks,
+            'billing_value' => $billingValue,
+        ];
+    }
+
+    public function getBusinessSnapshots(array $filters): array
+    {
+        return collect([
+            $this->crmSummary($filters),
+            $this->hrmSummary($filters),
+            $this->projectSummary($filters),
+            $this->inventorySummary($filters),
+        ])->filter()->values()->all();
+    }
+
     public function getPendingApprovals(array $filters): array
     {
         $rows = [];
@@ -483,6 +838,275 @@ class DashboardService
         return collect($activity)->sortByDesc('time')->take(25)->values()->all();
     }
 
+    public function getRecentTransactions(array $filters): array
+    {
+        $transactions = [];
+        $configs = collect($this->transactionTables)
+            ->whereIn('table', [
+                'invoices',
+                'purchase_bills',
+                'customer_payments',
+                'supplier_payments',
+                'expenses',
+                'cash_transfers',
+                'journal_vouchers',
+            ])
+            ->values();
+
+        foreach ($configs as $config) {
+            if (!$this->tableExists($config['table'])) {
+                continue;
+            }
+
+            $query = $this->baseTransactionQuery($config, $filters);
+
+            if ($this->hasColumn($config['table'], 'approved')) {
+                $query->where($config['table'] . '.approved', true);
+            }
+
+            if ($this->hasColumn($config['table'], 'void')) {
+                $query->where($config['table'] . '.void', false);
+            }
+
+            $sortColumn = $this->hasColumn($config['table'], 'created_at') ? 'created_at' : $config['date'];
+            $query->orderByDesc($config['table'] . '.' . $sortColumn)->limit(5);
+
+            foreach ($query->get() as $row) {
+                $date = $row->{$config['date']} ?? $row->created_at ?? null;
+                $transactions[] = [
+                    'key' => $config['table'] . '-' . $row->id,
+                    'date' => $date,
+                    'type' => $config['type'],
+                    'number' => $row->{$config['number']} ?? $row->reference ?? (string) $row->id,
+                    'party' => $row->party_name ?? $row->account_name ?? '-',
+                    'amount' => (float) ($row->{$config['amount']} ?? $row->total ?? 0),
+                    'status' => $row->status ?? ($row->approved ?? false ? 'posted' : 'created'),
+                    'action_url' => $config['route'] . '/' . $row->id,
+                    'created_at' => $row->created_at ?? $date,
+                ];
+            }
+        }
+
+        return collect($transactions)->sortByDesc('created_at')->take(8)->values()->all();
+    }
+
+    protected function bankAccountBalances(array $filters): array
+    {
+        if (!$this->tableExists('bank_accounts')) {
+            return [];
+        }
+
+        $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
+        if (!$balanceColumn) {
+            return [];
+        }
+
+        $selects = [
+            'bank_accounts.id',
+            DB::raw(($this->hasColumn('bank_accounts', 'display_name') ? 'bank_accounts.display_name' : 'bank_accounts.id') . ' as display_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'bank_name') ? 'bank_accounts.bank_name' : 'NULL') . ' as bank_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'account_name') ? 'bank_accounts.account_name' : 'NULL') . ' as account_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'account_number') ? 'bank_accounts.account_number' : 'NULL') . ' as account_number'),
+            DB::raw("bank_accounts.$balanceColumn as balance"),
+        ];
+
+        $query = DB::table('bank_accounts')->select($selects);
+        if ($this->hasColumn('bank_accounts', 'currency_id') && $this->tableExists('currencies')) {
+            $query->leftJoin('currencies', 'bank_accounts.currency_id', '=', 'currencies.id')
+                ->addSelect(DB::raw($this->hasColumn('currencies', 'code') ? 'currencies.code as currency' : 'NULL as currency'));
+        } else {
+            $query->addSelect(DB::raw('NULL as currency'));
+        }
+
+        if ($this->hasColumn('bank_accounts', 'active')) {
+            $query->where('bank_accounts.active', true);
+        }
+
+        $this->applyBranch($query, 'bank_accounts', $filters);
+
+        return $query
+            ->orderByDesc("bank_accounts.$balanceColumn")
+            ->limit(5)
+            ->get()
+            ->map(fn ($account) => [
+                'key' => $account->id,
+                'bank_name' => $account->bank_name ?: $account->display_name,
+                'account_name' => $account->account_name ?: $account->display_name,
+                'account_number' => $account->account_number,
+                'balance' => (float) ($account->balance ?? 0),
+                'currency' => $account->currency,
+            ])
+            ->all();
+    }
+
+    protected function crmSummary(array $filters): ?array
+    {
+        if (!$this->tableExists('deals') && !$this->tableExists('leads')) {
+            return null;
+        }
+
+        $openDeals = $this->whereCount('deals', 'status', 'open');
+        if ($openDeals === 0 && $this->tableExists('deals') && $this->hasColumn('deals', 'status')) {
+            $openDeals = DB::table('deals')->whereIn('status', ['OPEN', 'IN_PROGRESS', 'NEGOTIATION'])->count();
+        }
+
+        $leadsThisMonth = 0;
+        if ($this->tableExists('leads') && $this->hasColumn('leads', 'created_at')) {
+            $leadsThisMonth = DB::table('leads')->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])->count();
+        }
+
+        $pipelineValue = 0.0;
+        if ($this->tableExists('deals') && $this->hasColumn('deals', 'amount')) {
+            $query = DB::table('deals');
+            if ($this->hasColumn('deals', 'status')) {
+                $query->whereNotIn('status', ['lost', 'LOST', 'cancelled', 'CANCELLED']);
+            }
+            $pipelineValue = (float) $query->sum('amount');
+        }
+
+        if ($openDeals === 0 && $leadsThisMonth === 0 && $pipelineValue == 0.0) {
+            return null;
+        }
+
+        return [
+            'key' => 'crm',
+            'title' => 'CRM',
+            'href' => '/crm',
+            'items' => [
+                ['label' => 'Open deals', 'value' => $openDeals],
+                ['label' => 'Leads this month', 'value' => $leadsThisMonth],
+                ['label' => 'Pipeline value', 'value' => $pipelineValue, 'format' => 'money'],
+            ],
+        ];
+    }
+
+    protected function hrmSummary(array $filters): ?array
+    {
+        if (!$this->tableExists('employee_profiles')) {
+            return null;
+        }
+
+        $employees = DB::table('employee_profiles');
+        if ($this->hasColumn('employee_profiles', 'active')) {
+            $employees->where('active', true);
+        }
+        $this->applyBranch($employees, 'employee_profiles', $filters);
+        $activeEmployees = $employees->count();
+
+        $attendanceToday = 0;
+        if ($this->tableExists('attendances') && $this->hasColumn('attendances', 'in_time')) {
+            $attendance = DB::table('attendances')->whereDate('in_time', now()->toDateString());
+            $this->applyBranch($attendance, 'attendances', $filters);
+            $attendanceToday = $attendance->count();
+        }
+
+        $leaveToday = 0;
+        if ($this->tableExists('leave_applications') && $this->hasColumn('leave_applications', 'leave_from') && $this->hasColumn('leave_applications', 'leave_to')) {
+            $leave = DB::table('leave_applications')
+                ->whereDate('leave_from', '<=', now()->toDateString())
+                ->whereDate('leave_to', '>=', now()->toDateString());
+            if ($this->hasColumn('leave_applications', 'status')) {
+                $leave->whereIn('status', ['APPROVED', 'approved']);
+            }
+            $this->applyBranch($leave, 'leave_applications', $filters);
+            $leaveToday = $leave->count();
+        }
+
+        if ($activeEmployees === 0 && $attendanceToday === 0 && $leaveToday === 0) {
+            return null;
+        }
+
+        return [
+            'key' => 'hrm',
+            'title' => 'HRM',
+            'href' => '/hrm/users',
+            'items' => [
+                ['label' => 'Active employees', 'value' => $activeEmployees],
+                ['label' => 'Today attendance', 'value' => $attendanceToday],
+                ['label' => 'On leave today', 'value' => $leaveToday],
+            ],
+        ];
+    }
+
+    protected function projectSummary(array $filters): ?array
+    {
+        if (!$this->tableExists('projects')) {
+            return null;
+        }
+
+        $projects = DB::table('projects');
+        if ($this->hasColumn('projects', 'active')) {
+            $projects->where('active', true);
+        }
+        if ($this->hasColumn('projects', 'status')) {
+            $projects->whereIn('status', ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'in_progress', 'on_hold']);
+        }
+        $activeProjects = $projects->count();
+
+        $overdueProjectTasks = 0;
+        if ($this->tableExists('tasks') && $this->hasColumn('tasks', 'project_id') && $this->hasColumn('tasks', 'end_date')) {
+            $tasks = DB::table('tasks')
+                ->join('projects', 'tasks.project_id', '=', 'projects.id')
+                ->whereDate('tasks.end_date', '<', now()->toDateString());
+            if ($this->hasColumn('tasks', 'active')) {
+                $tasks->where('tasks.active', true);
+            }
+            if ($this->hasColumn('projects', 'status')) {
+                $tasks->whereNotIn('projects.status', ['COMPLETED', 'CANCELLED', 'completed', 'cancelled']);
+            }
+            $overdueProjectTasks = $tasks->count();
+        }
+
+        if ($activeProjects === 0 && $overdueProjectTasks === 0) {
+            return null;
+        }
+
+        return [
+            'key' => 'projects',
+            'title' => 'Projects',
+            'href' => '/hrm/projects',
+            'items' => [
+                ['label' => 'Active projects', 'value' => $activeProjects],
+                ['label' => 'Overdue project work', 'value' => $overdueProjectTasks],
+            ],
+        ];
+    }
+
+    protected function inventorySummary(array $filters): ?array
+    {
+        if (!$this->tableExists('products')) {
+            return null;
+        }
+
+        $products = $this->activeProductsQuery();
+        $totalProducts = $products->count();
+        $lowStock = $this->lowStockCount();
+        $valueColumn = $this->firstExistingColumn('products', ['inventory_value', 'stock_value']);
+        $stockColumn = $this->firstExistingColumn('products', ['current_stock', 'stock', 'quantity', 'opening_stock']);
+        $inventoryValue = 0.0;
+
+        if ($valueColumn) {
+            $inventoryValue = (float) DB::table('products')->sum($valueColumn);
+        } elseif ($stockColumn && $this->hasColumn('products', 'purchase_price')) {
+            $inventoryValue = (float) DB::table('products')->sum(DB::raw("COALESCE($stockColumn, 0) * COALESCE(purchase_price, 0)"));
+        }
+
+        if ($totalProducts === 0 && $lowStock === 0 && $inventoryValue == 0.0) {
+            return null;
+        }
+
+        return [
+            'key' => 'inventory',
+            'title' => 'Inventory',
+            'href' => '/inventory/products',
+            'items' => [
+                ['label' => 'Total products', 'value' => $totalProducts],
+                ['label' => 'Low stock count', 'value' => $lowStock],
+                ['label' => 'Inventory value', 'value' => $inventoryValue, 'format' => 'money'],
+            ],
+        ];
+    }
+
     protected function baseTransactionQuery(array $config, array $filters): Builder
     {
         $query = DB::table($config['table'])->select($config['table'] . '.*');
@@ -699,6 +1323,78 @@ class DashboardService
         return $query->count();
     }
 
+    protected function countApproved(string $table, string $dateColumn, array $filters, ?string $from = null, ?string $to = null): int
+    {
+        if (!$this->tableExists($table)) {
+            return 0;
+        }
+        $query = DB::table($table);
+        if ($this->hasColumn($table, 'approved')) {
+            $query->where('approved', true);
+        }
+        $this->applyBranch($query, $table, $filters);
+        if ($from && $to && $this->hasColumn($table, $dateColumn)) {
+            $query->whereBetween($dateColumn, [$from, $to]);
+        }
+        return $query->count();
+    }
+
+    protected function overdueSum(string $table, string $dateColumn, string $balanceColumn, array $filters): float
+    {
+        if (!$this->tableExists($table) || !$this->hasColumn($table, $dateColumn) || !$this->hasColumn($table, $balanceColumn)) {
+            return 0;
+        }
+        $query = DB::table($table)->whereDate($dateColumn, '<', now())->where($balanceColumn, '>', 0);
+        if ($this->hasColumn($table, 'approved')) {
+            $query->where('approved', true);
+        }
+        $this->applyBranch($query, $table, $filters);
+        return (float) $query->sum($balanceColumn);
+    }
+
+    protected function periodSum(string $table, string $amountColumn, string $dateColumn, array $filters, Carbon $from, Carbon $to): float
+    {
+        if (!$this->tableExists($table) || !$this->hasColumn($table, $amountColumn) || !$this->hasColumn($table, $dateColumn)) {
+            return 0;
+        }
+        $query = DB::table($table)->whereBetween($dateColumn, [$from->toDateString(), $to->toDateString()]);
+        if ($this->hasColumn($table, 'approved')) {
+            $query->where('approved', true);
+        }
+        $this->applyBranch($query, $table, $filters);
+        return (float) $query->sum($amountColumn);
+    }
+
+    protected function biggestInflowSource(array $filters, Carbon $from, Carbon $to): ?string
+    {
+        if (!$this->tableExists('customer_payments') || !$this->tableExists('contacts') || !$this->hasColumn('customer_payments', 'contact_id')) {
+            return null;
+        }
+        $row = DB::table('customer_payments')
+            ->join('contacts', 'customer_payments.contact_id', '=', 'contacts.id')
+            ->select('contacts.name', DB::raw('SUM(customer_payments.amount) as total'))
+            ->whereBetween('customer_payments.payment_date', [$from->toDateString(), $to->toDateString()])
+            ->groupBy('contacts.id', 'contacts.name')
+            ->orderByDesc('total')
+            ->first();
+        return $row?->name;
+    }
+
+    protected function biggestOutflowSource(array $filters, Carbon $from, Carbon $to): ?string
+    {
+        if (!$this->tableExists('supplier_payments') || !$this->tableExists('contacts') || !$this->hasColumn('supplier_payments', 'contact_id')) {
+            return null;
+        }
+        $row = DB::table('supplier_payments')
+            ->join('contacts', 'supplier_payments.contact_id', '=', 'contacts.id')
+            ->select('contacts.name', DB::raw('SUM(supplier_payments.amount) as total'))
+            ->whereBetween('supplier_payments.payment_date', [$from->toDateString(), $to->toDateString()])
+            ->groupBy('contacts.id', 'contacts.name')
+            ->orderByDesc('total')
+            ->first();
+        return $row?->name;
+    }
+
     protected function sumApproved(string $table, string $amountColumn, string $dateColumn, array $filters, ?string $from = null, ?string $to = null): float
     {
         if (!$this->tableExists($table) || !$this->hasColumn($table, $amountColumn)) {
@@ -739,11 +1435,21 @@ class DashboardService
 
     protected function bankBalance(array $filters): float
     {
-        if ($this->tableExists('bank_accounts') && $this->hasColumn('bank_accounts', 'current_balance')) {
+        if ($this->tableExists('bank_accounts')) {
+            $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
+            if (!$balanceColumn) {
+                return 0;
+            }
+
             $query = DB::table('bank_accounts');
+            if ($this->hasColumn('bank_accounts', 'active')) {
+                $query->where('active', true);
+            }
             $this->applyBranch($query, 'bank_accounts', $filters);
-            return (float) $query->sum('current_balance');
+
+            return (float) $query->sum($balanceColumn);
         }
+
         return 0;
     }
 
@@ -756,7 +1462,10 @@ class DashboardService
         if (!$balanceColumn) {
             return 0;
         }
-        return (float) DB::table('accounts')->where('name', 'like', '%cash%')->sum($balanceColumn);
+        $query = DB::table('accounts')->where('name', 'like', '%cash%');
+        $this->applyBranch($query, 'accounts', $filters);
+
+        return (float) $query->sum($balanceColumn);
     }
 
     protected function countTable(string $table, string $dateColumn, array $filters): int

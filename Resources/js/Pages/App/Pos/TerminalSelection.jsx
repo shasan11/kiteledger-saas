@@ -8,6 +8,7 @@ import AddTerminalModal from '@/Components/Pos/AddTerminalModal';
 import OpenShiftModal from '@/Components/Pos/OpenShiftModal';
 import TerminalCard from '@/Components/Pos/TerminalCard';
 import { api, showApiError } from './Shared/posHelpers';
+import PosSubNav from './Shared/PosSubNav';
 
 const { Text, Title } = Typography;
 
@@ -193,6 +194,10 @@ export default function TerminalSelection() {
 
             <div style={{ padding: token.padding, background: token.colorBgLayout, minHeight: 'calc(100vh - 120px)' }}>
                 <Space direction="vertical" size={token.margin} style={{ width: '100%' }}>
+                    <PosSubNav
+                        description="Select a terminal, open a shift, or jump to POS sales and shift operations."
+                    />
+
                     <Card
                         bordered={false}
                         style={{
@@ -243,6 +248,9 @@ export default function TerminalSelection() {
                                         terminal={terminal}
                                         locked={!canOpenShift}
                                         onClick={() => handleTerminalClick(terminal)}
+                                        onOpenPos={() => handleTerminalClick(terminal)}
+                                        onViewShifts={() => router.visit(route('pos.shifts.index', { pos_terminal_id: terminal.id }))}
+                                        onEdit={() => router.visit(route('pos.terminals.index', { edit: terminal.id }))}
                                     />
                                 </Col>
                             ))}

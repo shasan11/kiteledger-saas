@@ -24,7 +24,7 @@ const currencyLabel = (values = {}) => (
 );
 const formatMoney = (amount) => Number(toNumber(amount)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TransferTotal = ({ values }) => (
-    <div style={{ marginTop: -4, fontWeight: 700, color: '#111827' }}>
+    <div style={{ marginTop: -4, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
         Total {currencyLabel(values)} {formatMoney(transferTotal(values?.items))}
     </div>
 );
@@ -49,8 +49,10 @@ export default function CashTransferEdit({ id, ...props }) {
             name: 'items', label: 'Transfer Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { to_account_id: null, amount: 0, description: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
                 { key: 'to_account_id', name: 'to_account_id', label: 'To Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '160px', min: 0 },
-                { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
+                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '160px', min: 0, align: 'right' },
+            ],
+            collapsedFields: [
+                { key: 'description', name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2, placeholder: 'Transfer line description' },
             ],
         },
         { name: 'transfer_total', label: '', type: 'custom', col: 24, render: TransferTotal },
@@ -61,7 +63,13 @@ export default function CashTransferEdit({ id, ...props }) {
         from_account_id: Yup.mixed().test('req', 'From Account is required', (v) => !!asId(v)).required(),
         transfer_date: Yup.mixed().required('Date is required'),
         currency_id: Yup.mixed().test('req', 'Currency is required', (v) => !!asId(v)).required(),
-        items: Yup.array().min(1, 'At least one transfer line is required').required(),
+        items: Yup.array()
+            .min(1, 'At least one transfer line is required')
+            .test('different-accounts', 'From account and to account cannot be the same.', function (items = []) {
+                const fromAccount = asId(this.parent?.from_account_id);
+                return !fromAccount || !items.some((item) => asId(item?.to_account_id) === fromAccount);
+            })
+            .required(),
     }), []);
 
     const transformPayload = (values = {}) => {

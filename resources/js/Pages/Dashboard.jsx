@@ -2,54 +2,29 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
     Alert,
-    Badge,
     Button,
     Card,
-    Col,
     DatePicker,
-    Dropdown,
     Empty,
-    Flex,
-    List,
-    Progress,
-    Row,
     Select,
     Skeleton,
-    Space,
-    Tabs,
-    Tag,
-    Timeline,
+    Table,
     Tooltip,
     Typography,
     theme,
 } from 'antd';
-import {
-    ArrowDownOutlined,
-    ArrowUpOutlined,
-    BankOutlined,
-    BookOutlined,
-    CheckCircleOutlined,
-    ClockCircleOutlined,
-    DollarOutlined,
-    DownOutlined,
-    FileAddOutlined,
-    FileDoneOutlined,
-    FileTextOutlined,
-    PlusOutlined,
-    ReloadOutlined,
-    RightOutlined,
-    SendOutlined,
-    WalletOutlined,
-    WarningOutlined,
-} from '@ant-design/icons';
+import { ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
+    Area,
+    AreaChart,
     Bar,
     BarChart,
     CartesianGrid,
-    ComposedChart,
+    Cell,
     Line,
+    LineChart,
     ResponsiveContainer,
     Tooltip as ChartTooltip,
     XAxis,
@@ -59,38 +34,46 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
+const DASH = '—';
 
-const money = (value, compact = false) =>
-    new Intl.NumberFormat('en-NP', {
-        style: 'currency',
-        currency: 'NPR',
-        notation: compact ? 'compact' : 'standard',
-        maximumFractionDigits: compact ? 1 : 0,
-    }).format(Number(value || 0));
+const currencyFormatter = new Intl.NumberFormat('en-NP', {
+    style: 'currency',
+    currency: 'NPR',
+    maximumFractionDigits: 0,
+});
 
-const number = (value) => new Intl.NumberFormat('en-NP').format(Number(value || 0));
+const compactCurrencyFormatter = new Intl.NumberFormat('en-NP', {
+    style: 'currency',
+    currency: 'NPR',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+});
+
+const numberFormatter = new Intl.NumberFormat('en-NP');
+
+const formatMoney = (value, compact = false) => {
+    if (value === null || value === undefined || value === '') return DASH;
+    return (compact ? compactCurrencyFormatter : currencyFormatter).format(Number(value || 0));
+};
+
+const formatNumber = (value) => {
+    if (value === null || value === undefined || value === '') return DASH;
+    return numberFormatter.format(Number(value || 0));
+};
+
+const formatDate = (value) => (value ? dayjs(value).format('DD MMM YYYY') : DASH);
 const toAmount = (value) => Number(value || 0);
+const hasValue = (v) => v !== null && v !== undefined && v !== '';
+const hasSeriesData = (items) => Array.isArray(items) && items.some((i) => toAmount(i.value) !== 0);
 
 const visit = (url) => {
     if (url && url !== '#') router.visit(url);
 };
 
-const routeOr = (routeName, fallback) => {
-    try {
-        if (typeof route === 'function' && route().has(routeName)) return route(routeName);
-    } catch {
-        return fallback;
-    }
-    return fallback;
-};
-
 export default function Dashboard() {
     const { token } = theme.useToken();
     const page = usePage();
-    const user = page.props.auth?.user || {};
-    const permissions = page.props.auth?.permissions || [];
     const branchContext = page.props.branchContext || {};
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [data, setData] = useState({});
@@ -104,16 +87,16 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
         try {
-            const { data: response } = await axios.get('/dashboard-data', {
+            const response = await axios.get('/dashboard-data', {
                 params: {
                     branch_id: filters.branch_id === 'all' ? undefined : filters.branch_id,
                     date_from: filters.date_from,
                     date_to: filters.date_to,
                 },
             });
-            setData(response || {});
-        } catch (e) {
-            setError(e?.response?.data?.message || 'Unable to load dashboard data.');
+            setData(response.data || {});
+        } catch (ex) {
+            setError(ex?.response?.data?.message || 'Unable to load dashboard data.');
         } finally {
             setLoading(false);
         }
@@ -123,660 +106,950 @@ export default function Dashboard() {
         fetchDashboard();
     }, [fetchDashboard]);
 
-    const model = useMemo(() => buildDashboardModel(data, permissions), [data, permissions]);
-    const gap = token.marginLG;
+    const dashboard = useMemo(() => buildModel(data), [data]);
+    const branches = data.branches || branchContext.branches || [];
 
     return (
         <AuthenticatedLayout
             header={
-                <HeroHeader
-                    token={token}
-                    user={user}
-                    branches={data.branches || branchContext.branches || []}
+                <DashboardHeader
+                    branches={branches}
                     filters={filters}
-                    setFilters={setFilters}
                     loading={loading}
-                    refresh={fetchDashboard}
-                    permissions={model.permissions}
-                    health={model.health}
+                    onRefresh={fetchDashboard}
+                    onFiltersChange={setFilters}
                 />
             }
         >
             <Head title="Dashboard" />
-            <main style={{ minHeight: 'calc(100vh - 100px)', background: '#f7f8fa', padding: gap }}>
-                {error && (
-                    <Alert
-                        showIcon
-                        type="error"
-                        message="Could not load dashboard"
-                        description={error}
-                        action={<Button onClick={fetchDashboard}>Retry</Button>}
-                        style={{ marginBottom: gap }}
-                    />
-                )}
+            <DashboardStyles token={token} />
 
-                {loading ? (
-                    <DashboardSkeleton token={token} />
-                ) : (
-                    <Flex vertical gap={gap}>
-                        <KpiCards cards={model.kpis} token={token} />
+            <main className="kl-dash">
+                <div className="kl-dash__wrap">
+                    {error && (
+                        <Alert
+                            showIcon
+                            type="error"
+                            message="Dashboard could not be loaded"
+                            description={error}
+                            action={<Button onClick={fetchDashboard}>Retry</Button>}
+                        />
+                    )}
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={16}>
-                                <RevenueExpenseChart data={model.revenueExpense} token={token} />
-                            </Col>
-                            <Col xs={24} xl={8}>
-                                <HealthPanel health={model.health} accounting={model.accountingHealth} token={token} />
-                            </Col>
-                        </Row>
+                    {loading ? (
+                        <DashboardSkeleton />
+                    ) : (
+                        <>
+                            <section className="kl-dash__top">
+                                <FinancialPerformanceChart data={dashboard.chartData} />
+                                <div className="kl-dash__kpi-grid">
+                                    {dashboard.metrics.map((m) => (
+                                        <MetricCard key={m.key} {...m} />
+                                    ))}
+                                </div>
+                            </section>
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={12}>
-                                <CashForecastChart data={model.cashForecast} token={token} />
-                            </Col>
-                            <Col xs={24} xl={12}>
-                                <AgeingChart data={model.receivableAgeing} token={token} />
-                            </Col>
-                        </Row>
+                            <BankCashBalances
+                                balances={dashboard.cashPosition}
+                                accounts={dashboard.bankAccounts}
+                            />
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={10}>
-                                <ActionCenter actions={model.actions} token={token} />
-                            </Col>
-                            <Col xs={24} xl={14}>
-                                <BusinessTabs model={model} token={token} />
-                            </Col>
-                        </Row>
+                            {dashboard.businessCards.length > 0 && (
+                                <section className="kl-dash__biz-grid">
+                                    {dashboard.businessCards.map((card) => (
+                                        <BusinessOverviewCard key={card.key} card={card} />
+                                    ))}
+                                </section>
+                            )}
 
-                        <RecentActivity activity={model.activity} token={token} />
-                    </Flex>
-                )}
+                            <RecentTransactionsTable transactions={dashboard.recentTransactions} />
+
+                            {dashboard.miniCharts.length > 0 && (
+                                <section className="kl-dash__mini-row">
+                                    {dashboard.miniCharts.map((chart) => (
+                                        <MiniChartCard key={chart.key} chart={chart} />
+                                    ))}
+                                </section>
+                            )}
+                        </>
+                    )}
+                </div>
             </main>
         </AuthenticatedLayout>
     );
 }
 
-function HeroHeader({ token, user, branches, filters, setFilters, loading, refresh, permissions, health }) {
-    const quickActions = [
-        permissions.canCreateInvoice && {
-            key: 'invoice',
-            icon: <FileAddOutlined />,
-            label: 'Create invoice',
-            onClick: () => visit(routeOr('payment-in.invoices.create', '/payment-in/invoices/create')),
-        },
-        permissions.canRecordPayment && {
-            key: 'payment',
-            icon: <DollarOutlined />,
-            label: 'Record payment',
-            onClick: () => visit(routeOr('payment-in.payments.create', '/payment-in/payments/create')),
-        },
-        permissions.canAddExpense && {
-            key: 'expense',
-            icon: <WalletOutlined />,
-            label: 'Add expense',
-            onClick: () => visit(routeOr('payment-out.expenses.create', '/payment-out/expenses/create')),
-        },
-        permissions.canCreateBill && {
-            key: 'bill',
-            icon: <BookOutlined />,
-            label: 'Create bill',
-            onClick: () => visit(routeOr('payment-out.purchase-bills.create', '/payment-out/purchase-bills/create')),
-        },
-    ].filter(Boolean);
+/* ─── Header ─── */
 
+function DashboardHeader({ branches, filters, loading, onRefresh, onFiltersChange }) {
     return (
-        <Flex justify="space-between" align="center" wrap="wrap" gap={token.marginMD}>
-            <div style={{ minWidth: 260 }}>
-                <Space size={8} align="center" wrap>
-                    <Title level={4} style={{ margin: 0, fontWeight: 650, letterSpacing: 0 }}>
-                        Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 18 ? 'afternoon' : 'evening'}, {user.name || 'there'}
-                    </Title>
-                    <Tag color={health.score >= 75 ? 'success' : health.score >= 55 ? 'warning' : 'error'} bordered={false}>
-                        {health.status}
-                    </Tag>
-                </Space>
-                <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: token.fontSizeSM }}>
-                    {health.message}
-                </Text>
+        <div className="kl-dh">
+            <div className="kl-dh__copy">
+                <Title level={4} className="kl-dh__title">Dashboard</Title>
+                <Text type="secondary">Financial and business overview for the selected period</Text>
             </div>
-
-            <Flex wrap="wrap" gap={8} align="center">
+            <div className="kl-dh__controls">
                 <Select
                     value={filters.branch_id}
                     options={branchOptions(branches)}
-                    style={{ minWidth: 168 }}
-                    onChange={(branch_id) => setFilters((f) => ({ ...f, branch_id: branch_id || 'all' }))}
+                    className="kl-dh__branch"
+                    onChange={(v) => onFiltersChange((c) => ({ ...c, branch_id: v || 'all' }))}
                 />
                 <RangePicker
-                    value={filters.date_from && filters.date_to ? [dayjs(filters.date_from), dayjs(filters.date_to)] : null}
+                    value={
+                        filters.date_from && filters.date_to
+                            ? [dayjs(filters.date_from), dayjs(filters.date_to)]
+                            : null
+                    }
+                    className="kl-dh__range"
                     onChange={(dates) =>
-                        setFilters((f) => ({
-                            ...f,
+                        onFiltersChange((c) => ({
+                            ...c,
                             date_from: dates?.[0]?.format('YYYY-MM-DD'),
                             date_to: dates?.[1]?.format('YYYY-MM-DD'),
                         }))
                     }
                 />
-                <Tooltip title="Refresh dashboard">
-                    <Button icon={<ReloadOutlined spin={loading} />} onClick={refresh} />
+                <Tooltip title="Refresh">
+                    <Button icon={<ReloadOutlined spin={loading} />} onClick={onRefresh} />
                 </Tooltip>
-                {quickActions.length > 0 && (
-                    <Dropdown menu={{ items: quickActions }} trigger={['click']}>
-                        <Button type="primary" icon={<PlusOutlined />}>
-                            Quick action <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
-                        </Button>
-                    </Dropdown>
-                )}
-            </Flex>
-        </Flex>
-    );
-}
-
-const cardStyle = (token) => ({
-    height: '100%',
-    borderRadius: token.borderRadiusLG,
-    border: `1px solid ${token.colorBorderSecondary}`,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
-});
-
-function KpiCards({ cards, token }) {
-    return (
-        <Row gutter={[token.marginMD, token.marginMD]}>
-            {cards.map((card) => (
-                <Col key={card.key} xs={24} sm={12} lg={8} xl={4}>
-                    <Card hoverable onClick={() => visit(card.url)} style={cardStyle(token)} styles={{ body: { padding: 18 } }}>
-                        <Flex vertical gap={10}>
-                            <Flex justify="space-between" align="center" gap={12}>
-                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                                    {card.title}
-                                </Text>
-                                <span style={{ color: token.colorTextTertiary, fontSize: 16 }}>{card.icon}</span>
-                            </Flex>
-                            <div style={{ color: token.colorTextHeading, fontSize: 23, fontWeight: 650, lineHeight: 1.15 }}>
-                                {card.display}
-                            </div>
-                            <Text type="secondary" style={{ minHeight: 34, fontSize: token.fontSizeSM - 1 }}>
-                                {card.helper}
-                            </Text>
-                            <Flex justify="space-between" align="center">
-                                <Tag color={card.statusColor} bordered={false} style={{ margin: 0 }}>
-                                    {card.status}
-                                </Tag>
-                                <Text style={{ color: card.trendColor, fontSize: token.fontSizeSM }}>
-                                    {card.trendIcon} {card.trend}
-                                </Text>
-                            </Flex>
-                        </Flex>
-                    </Card>
-                </Col>
-            ))}
-        </Row>
-    );
-}
-
-function HealthPanel({ health, accounting, token }) {
-    return (
-        <Card title="Business health" style={cardStyle(token)}>
-            <Flex align="center" gap={20}>
-                <Progress type="circle" percent={health.score} size={108} strokeColor={health.score >= 75 ? token.colorSuccess : health.score >= 55 ? token.colorWarning : token.colorError} />
-                <Flex vertical gap={10} style={{ flex: 1 }}>
-                    <Insight label="Net profit" value={money(health.profit)} tone={health.profit >= 0 ? 'success' : 'error'} />
-                    <Insight label="Accounting score" value={`${accounting.score || 0}%`} tone={(accounting.score || 0) >= 80 ? 'success' : 'warning'} />
-                    <Insight label="Payables due soon" value={number(health.payables_due_soon)} tone={health.payables_due_soon ? 'warning' : 'success'} />
-                    <Insight label="CRM follow-ups" value={number(health.crm_followups)} tone={health.crm_followups ? 'warning' : 'success'} />
-                </Flex>
-            </Flex>
-        </Card>
-    );
-}
-
-function RevenueExpenseChart({ data, token }) {
-    return (
-        <Card title="Revenue vs expenses" extra={<Text type="secondary">Selected period</Text>} style={cardStyle(token)}>
-            {data.length === 0 ? (
-                <Empty description="No revenue or expense activity" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={310}>
-                    <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="date" tickFormatter={(v) => dayjs(v).format('MMM D')} tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Revenue" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                        <Bar name="Expenses" dataKey="expenses" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                        <Line name="Net profit" dataKey="profit" stroke="#111827" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function CashForecastChart({ data, token }) {
-    return (
-        <Card title="Cash flow forecast" extra={<Button type="text" size="small" onClick={() => visit('/reports/accounting/cash-flow-summary')}>Report <RightOutlined /></Button>} style={cardStyle(token)}>
-            {data.length === 0 ? (
-                <Empty description="No due receivables or payables" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="date" tickFormatter={(v) => dayjs(v).format('MMM D')} tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Expected in" dataKey="cash_in" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                        <Bar name="Expected out" dataKey="cash_out" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                        <Line name="Projected cash" dataKey="projected_cash" stroke="#111827" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function AgeingChart({ data, token }) {
-    return (
-        <Card title="Receivable ageing" extra={<Button type="text" size="small" onClick={() => visit('/reports/receivable/customer-receivable-summary')}>View <RightOutlined /></Button>} style={cardStyle(token)}>
-            {data.every((item) => toAmount(item.amount) === 0) ? (
-                <Empty description="No outstanding receivables" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="bucket" tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Outstanding" dataKey="amount" fill="#2563eb" radius={[5, 5, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function ActionCenter({ actions, token }) {
-    return (
-        <Card
-            title={<Space><span>Action center</span><Badge count={actions.length} size="small" /></Space>}
-            style={cardStyle(token)}
-            styles={{ body: { padding: actions.length ? 0 : 24 } }}
-        >
-            {actions.length === 0 ? (
-                <Empty description="Nothing urgent today" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <List
-                    dataSource={actions}
-                    renderItem={(item) => (
-                        <List.Item
-                            actions={[<Button key="open" type="text" icon={<RightOutlined />} onClick={() => visit(item.action_url)} />]}
-                            style={{ padding: '14px 20px' }}
-                        >
-                            <List.Item.Meta
-                                avatar={item.severity === 'critical' ? <WarningOutlined style={{ color: token.colorError }} /> : <ClockCircleOutlined style={{ color: token.colorWarning }} />}
-                                title={<Flex justify="space-between" gap={12}><Text strong>{item.title}</Text><Tag bordered={false} color={severityColor(item.severity)}>{item.module}</Tag></Flex>}
-                                description={<Text type="secondary">{item.description}</Text>}
-                            />
-                        </List.Item>
-                    )}
-                />
-            )}
-        </Card>
-    );
-}
-
-function BusinessTabs({ model, token }) {
-    const items = [
-        {
-            key: 'sales',
-            label: 'Sales',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Invoices', number(model.sales.invoices)],
-                        ['Overdue invoices', number(model.sales.overdue_invoices)],
-                        ['Top customer', model.topCustomers[0]?.name || '-'],
-                    ]}
-                    listTitle="Top customers"
-                    list={model.topCustomers.map((item) => ({ title: item.name, value: money(item.amount) }))}
-                />
-            ),
-        },
-        {
-            key: 'purchase',
-            label: 'Purchase',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Bills', number(model.purchase.purchase_bills)],
-                        ['Due soon', number(model.purchase.upcoming_bills)],
-                        ['Top supplier', model.topSuppliers[0]?.name || '-'],
-                    ]}
-                    listTitle="Payable ageing"
-                    list={model.payableAgeing.map((item) => ({ title: item.bucket, value: money(item.amount) }))}
-                />
-            ),
-        },
-        {
-            key: 'inventory',
-            label: 'Inventory',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Products', number(model.inventory.summary.total_products)],
-                        ['Low stock', number(model.inventory.summary.low_stock_products)],
-                        ['Inventory value', money(model.inventory.summary.inventory_value, true)],
-                    ]}
-                    listTitle="Warnings"
-                    list={model.inventory.warnings.map((item) => ({ title: item.product, value: `${number(item.current_stock)} in stock`, url: item.action_url }))}
-                />
-            ),
-        },
-        {
-            key: 'crm',
-            label: 'CRM',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Open deals', number(model.crm.summary.open_deals)],
-                        ['Forecast', money(model.crm.summary.forecast_this_month, true)],
-                        ['Win rate', `${model.crm.summary.win_rate || 0}%`],
-                    ]}
-                    listTitle="Follow-ups"
-                    list={model.crm.followups.map((item) => ({ title: item.name, value: item.assigned_to || 'Unassigned', url: item.action_url }))}
-                />
-            ),
-        },
-        {
-            key: 'accounting',
-            label: 'Accounting',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Health score', `${model.accountingHealth.score || 0}%`],
-                        ['Missing JV', number(model.accountingHealth.approved_jv_missing)],
-                        ['Unbalanced JV', number(model.accountingHealth.unbalanced_jvs)],
-                    ]}
-                    listTitle="Issues"
-                    list={model.accountingIssues.map((item) => ({ title: item.issue_type, value: item.record, url: item.action_url }))}
-                />
-            ),
-        },
-    ];
-
-    return (
-        <Card title="Business tabs" style={cardStyle(token)}>
-            <Tabs items={items} />
-        </Card>
-    );
-}
-
-function CompactPanel({ stats, listTitle, list, token }) {
-    return (
-        <Row gutter={[token.marginLG, token.marginMD]}>
-            <Col xs={24} md={10}>
-                <Flex vertical gap={12}>
-                    {stats.map(([label, value]) => (
-                        <Insight key={label} label={label} value={value} />
-                    ))}
-                </Flex>
-            </Col>
-            <Col xs={24} md={14}>
-                <Text strong>{listTitle}</Text>
-                <div style={{ marginTop: 8 }}>
-                    {list.length === 0 ? (
-                        <Empty description="No records" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    ) : (
-                        list.slice(0, 5).map((item) => (
-                            <Flex key={`${item.title}-${item.value}`} justify="space-between" align="center" gap={12} style={{ padding: '9px 0', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-                                <Text ellipsis style={{ minWidth: 0 }}>{item.title}</Text>
-                                <Button type="text" size="small" onClick={() => visit(item.url)} style={{ maxWidth: 180 }}>
-                                    <Text ellipsis>{item.value}</Text>
-                                </Button>
-                            </Flex>
-                        ))
-                    )}
-                </div>
-            </Col>
-        </Row>
-    );
-}
-
-function Insight({ label, value, tone }) {
-    const color = tone === 'success' ? 'success' : tone === 'error' ? 'danger' : tone === 'warning' ? 'warning' : 'secondary';
-    return (
-        <Flex justify="space-between" align="center" gap={12}>
-            <Text type="secondary">{label}</Text>
-            <Text strong type={color === 'secondary' ? undefined : color}>{value}</Text>
-        </Flex>
-    );
-}
-
-function RecentActivity({ activity, token }) {
-    return (
-        <Card title="Recent activity" style={cardStyle(token)}>
-            {activity.length === 0 ? (
-                <Empty description="No recent activity" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <Timeline
-                    items={activity.slice(0, 8).map((item) => ({
-                        color: activityColor(item.status, token),
-                        children: (
-                            <Flex justify="space-between" align="start" gap={16}>
-                                <div style={{ minWidth: 0 }}>
-                                    <Text strong>{item.description}</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                                        {item.module || 'Business'} · {item.user || 'System'} · {dayjs(item.time).isValid() ? dayjs(item.time).format('MMM D, HH:mm') : 'Recent'}
-                                    </Text>
-                                </div>
-                                {item.action_url && <Button type="text" size="small" icon={<RightOutlined />} onClick={() => visit(item.action_url)} />}
-                            </Flex>
-                        ),
-                    }))}
-                />
-            )}
-        </Card>
-    );
-}
-
-function MoneyTooltip({ active, payload, label, token }) {
-    if (!active || !payload?.length) return null;
-
-    return (
-        <div style={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: token.borderRadius, boxShadow: token.boxShadowSecondary, padding: '10px 12px', minWidth: 160 }}>
-            {label && (
-                <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 12 }}>
-                    {dayjs(label).isValid() ? dayjs(label).format('MMM D, YYYY') : label}
-                </Text>
-            )}
-            <Flex vertical gap={4}>
-                {payload.map((item) => (
-                    <Flex key={`${item.name}-${item.dataKey}`} justify="space-between" gap={16}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{item.name}</Text>
-                        <Text strong style={{ fontSize: 12 }}>{money(item.value)}</Text>
-                    </Flex>
-                ))}
-            </Flex>
+            </div>
         </div>
     );
 }
 
-function DashboardSkeleton({ token }) {
+/* ─── Financial Performance Chart ─── */
+
+function FinancialPerformanceChart({ data }) {
+    const hasData = data.some(
+        (i) => toAmount(i.revenue) !== 0 || toAmount(i.expenses) !== 0 || toAmount(i.profit) !== 0,
+    );
+
     return (
-        <Flex vertical gap={token.marginLG}>
-            <Row gutter={[token.marginMD, token.marginMD]}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                    <Col key={i} xs={24} sm={12} lg={8} xl={4}>
-                        <Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 2 }} /></Card>
-                    </Col>
-                ))}
-            </Row>
-            <Row gutter={[token.marginLG, token.marginLG]}>
-                <Col xs={24} xl={16}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 8 }} /></Card></Col>
-                <Col xs={24} xl={8}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 8 }} /></Card></Col>
-            </Row>
-            <Row gutter={[token.marginLG, token.marginLG]}>
-                <Col xs={24} xl={12}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 7 }} /></Card></Col>
-                <Col xs={24} xl={12}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 7 }} /></Card></Col>
-            </Row>
-        </Flex>
+        <Card
+            className="kl-card kl-chart-card"
+            title={
+                <div className="kl-card-title">
+                    <span>Financial Performance</span>
+                    <Text type="secondary">Revenue, expenses, and net profit trend</Text>
+                </div>
+            }
+            styles={{ body: { padding: 20 } }}
+        >
+            {hasData ? (
+                <div className="kl-chart-card__chart">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data} margin={{ top: 8, right: 18, bottom: 4, left: 0 }}>
+                            <CartesianGrid stroke="var(--kl-border-soft)" vertical={false} />
+                            <XAxis
+                                dataKey="label"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fill: 'var(--kl-muted)', fontSize: 12 }}
+                            />
+                            <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fill: 'var(--kl-muted)', fontSize: 12 }}
+                                tickFormatter={(v) => compactCurrencyFormatter.format(v)}
+                                width={74}
+                            />
+                            <ChartTooltip content={<MoneyTooltip />} />
+                            <Line type="monotone" dataKey="revenue" name="Revenue" stroke="var(--kl-revenue)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="expenses" name="Expenses" stroke="var(--kl-expense)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke="var(--kl-profit)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <DashboardEmptyState
+                    title="No financial movement yet"
+                    description="Posted revenue and expense activity will appear here for the selected period."
+                />
+            )}
+        </Card>
     );
 }
 
-function buildDashboardModel(data, permissions) {
-    const summary = data.summary || {};
-    const sales = data.sales_purchase?.sales || {};
-    const purchase = data.sales_purchase?.purchase || {};
-    const inventory = data.inventory || { summary: {}, warnings: [] };
-    const crm = data.crm || { summary: {}, pipeline: [], followups: [] };
-    const accountingHealth = data.accounting_health || {};
-    const health = data.business_health || {};
-
-    const revenue = toAmount(summary.sales_this_month);
-    const expenses = sumSeries(data.revenue_expense, 'expenses') || toAmount(data.sales_purchase?.chart?.find((item) => item.name === 'Purchase')?.amount);
-    const profit = health.profit ?? revenue - expenses;
-    const cash = toAmount(summary.cash_bank_balance);
-    const receivables = toAmount(summary.receivables);
-    const payables = toAmount(summary.payables);
-    const overdueReceivables = sumSeries((data.receivable_ageing || []).filter((item) => item.bucket !== 'Current'), 'amount');
-
-    return {
-        permissions: dashboardPermissions(permissions),
-        health: {
-            score: toAmount(health.score || 0),
-            status: health.status || 'Review',
-            message: health.message || 'Review cash, collections, payables, and operational exceptions.',
-            profit,
-            payables_due_soon: toAmount(health.payables_due_soon || purchase.upcoming_bills),
-            crm_followups: toAmount(health.crm_followups || crm.followups?.length),
-        },
-        accountingHealth: { score: 100, ...accountingHealth },
-        kpis: [
-            kpi('cash', 'Cash & Bank', cash, 'Total cash and bank balance', cash >= 0 ? 'Healthy' : 'Negative', cash >= 0 ? 'success' : 'error', cash >= 0 ? 'Stable' : 'Review', <BankOutlined />, '/accounting/bank-accounts'),
-            kpi('revenue', 'Revenue', revenue, 'Approved sales in the selected period', revenue >= expenses ? 'On track' : 'Below cost', revenue >= expenses ? 'success' : 'warning', revenue >= expenses ? 'Up' : 'Watch', <DollarOutlined />, '/reports/sales/sales-summary'),
-            kpi('expenses', 'Expenses', expenses, 'Bills and expenses in the selected period', expenses > revenue ? 'High' : 'Controlled', expenses > revenue ? 'error' : 'default', expenses > revenue ? 'Up' : 'Normal', <WalletOutlined />, '/payment-out/expenses'),
-            kpi('profit', 'Net Profit', profit, 'Revenue minus expenses', profit >= 0 ? 'Profit' : 'Loss', profit >= 0 ? 'success' : 'error', profit >= 0 ? 'Positive' : 'Negative', <FileDoneOutlined />, '/reports/accounting/income-statement'),
-            kpi('receivables', 'Receivables', receivables, `${money(overdueReceivables, true)} overdue`, overdueReceivables ? 'Collect' : 'Current', overdueReceivables ? 'warning' : 'success', `${number(sales.overdue_invoices)} overdue`, <FileTextOutlined />, '/reports/receivable/customer-receivable-summary'),
-            kpi('payables', 'Payables', payables, 'Supplier balances and due bills', purchase.upcoming_bills ? 'Due soon' : 'Clear', purchase.upcoming_bills ? 'warning' : 'success', `${number(purchase.upcoming_bills)} due`, <BookOutlined />, '/reports/payable/supplier-payable-summary'),
-        ],
-        revenueExpense: normalizeSeries(data.revenue_expense),
-        cashForecast: normalizeSeries(data.cash_flow?.forecast || []),
-        receivableAgeing: normalizeAgeing(data.receivable_ageing),
-        payableAgeing: normalizeAgeing(data.payable_ageing),
-        actions: buildActions(data, sales, purchase),
-        sales,
-        purchase,
-        inventory: { summary: inventory.summary || {}, warnings: inventory.warnings || [] },
-        crm: { summary: crm.summary || {}, pipeline: crm.pipeline || [], followups: crm.followups || [] },
-        accountingIssues: data.accounting_issues || [],
-        topCustomers: normalizeParties(data.top_customers || sales.top_customers),
-        topSuppliers: normalizeParties(data.top_suppliers || purchase.top_suppliers),
-        activity: Array.isArray(data.recent_activity) ? data.recent_activity : [],
-    };
+function MoneyTooltip({ active, payload, label }) {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="kl-tooltip">
+            <Text strong>{label}</Text>
+            {payload.map((item) => (
+                <div className="kl-tooltip__row" key={item.dataKey}>
+                    <span style={{ background: item.color }} />
+                    <Text type="secondary">{item.name}</Text>
+                    <Text>{formatMoney(item.value)}</Text>
+                </div>
+            ))}
+        </div>
+    );
 }
 
-function kpi(key, title, value, helper, status, statusColor, trend, icon, url) {
-    const positive = ['cash', 'revenue', 'profit'].includes(key) ? value >= 0 : true;
-    return {
-        key,
-        title,
-        value,
-        display: money(value),
-        helper,
-        status,
-        statusColor,
-        trend,
-        trendIcon: positive ? <ArrowUpOutlined /> : <ArrowDownOutlined />,
-        trendColor: positive ? '#15803d' : '#b91c1c',
-        icon,
-        url,
-    };
+/* ─── Metric Card with Sparkline ─── */
+
+function MetricCard({ label, value, helper, sparkline, tone }) {
+    return (
+        <Card className="kl-card kl-metric" styles={{ body: { padding: 20 } }}>
+            <div className="kl-metric__body">
+                <Text type="secondary" className="kl-metric__label">{label}</Text>
+                <div className="kl-metric__value">{value}</div>
+                <Text type="secondary" className="kl-metric__helper">{helper}</Text>
+            </div>
+            <MetricSparkline data={sparkline} tone={tone} />
+        </Card>
+    );
 }
 
-function buildActions(data, sales, purchase) {
-    const alerts = Array.isArray(data.alerts) ? data.alerts : [];
-    const base = [
-        toAmount(sales.overdue_invoices) > 0 && {
-            severity: 'critical',
-            module: 'Sales',
-            title: `${number(sales.overdue_invoices)} overdue invoices`,
-            description: 'Collections need follow-up today.',
-            action_url: '/payment-in/invoices?status=overdue',
-        },
-        toAmount(purchase.upcoming_bills) > 0 && {
-            severity: 'warning',
-            module: 'Purchase',
-            title: `${number(purchase.upcoming_bills)} bills due soon`,
-            description: 'Review supplier payment timing.',
-            action_url: '/payment-out/purchase-bills',
-        },
-        toAmount(data.summary?.pending_approvals) > 0 && {
-            severity: 'info',
-            module: 'Approval',
-            title: `${number(data.summary.pending_approvals)} pending approvals`,
-            description: 'Documents are waiting to be posted.',
-            action_url: '/workflow',
-        },
-    ].filter(Boolean);
-
-    return [...base, ...alerts].slice(0, 8);
+function MetricSparkline({ data, tone }) {
+    if (!hasSeriesData(data)) return null;
+    return (
+        <div className="kl-spark" aria-hidden="true">
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data}>
+                    <defs>
+                        <linearGradient id={`spark-${tone}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={`var(--kl-${tone || 'primary'})`} stopOpacity={0.18} />
+                            <stop offset="100%" stopColor={`var(--kl-${tone || 'primary'})`} stopOpacity={0.02} />
+                        </linearGradient>
+                    </defs>
+                    <Area
+                        type="monotone"
+                        dataKey="value"
+                        stroke={`var(--kl-${tone || 'primary'})`}
+                        strokeWidth={1.8}
+                        fill={`url(#spark-${tone})`}
+                        dot={false}
+                        isAnimationActive={false}
+                    />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
+    );
 }
 
-function dashboardPermissions(permissions) {
-    const can = (p) => permissions.includes(p);
-    const unrestricted = permissions.length === 0;
-    return {
-        canCreateInvoice: unrestricted || can('payment-in.invoice.create') || can('sales.invoice.create'),
-        canRecordPayment: unrestricted || can('payment-in.payment.create'),
-        canAddExpense: unrestricted || can('payment-out.expense.create'),
-        canCreateBill: unrestricted || can('payment-out.purchase_bill.create'),
-    };
+/* ─── Bank & Cash Balances ─── */
+
+function BankCashBalances({ balances, accounts }) {
+    return (
+        <Card
+            className="kl-card kl-bank"
+            title={
+                <div className="kl-card-title">
+                    <span>Bank & Cash Balances</span>
+                    <Text type="secondary">Recorded cash position and near-term balances</Text>
+                </div>
+            }
+            styles={{ body: { padding: 22 } }}
+        >
+            <div className="kl-bank__tiles">
+                {balances.map((b) => (
+                    <div className="kl-tile" key={b.label}>
+                        <Text type="secondary" className="kl-tile__label">{b.label}</Text>
+                        <div className="kl-tile__value">{b.value}</div>
+                        <Text type="secondary" className="kl-tile__helper">{b.helper}</Text>
+                    </div>
+                ))}
+            </div>
+
+            {accounts.length > 0 && (
+                <div className="kl-bank__list">
+                    {accounts.map((a) => (
+                        <div className="kl-bank-row" key={a.key}>
+                            <div className="kl-bank-row__info">
+                                <Text className="kl-bank-row__name">{a.bank_name || DASH}</Text>
+                                <Text type="secondary" className="kl-bank-row__meta">
+                                    {[a.account_name, a.account_number].filter(Boolean).join(' / ') || DASH}
+                                </Text>
+                            </div>
+                            <div className="kl-bank-row__bal">
+                                <Text>{formatMoney(a.balance)}</Text>
+                                {a.currency && <Text type="secondary">{a.currency}</Text>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </Card>
+    );
+}
+
+/* ─── Business Overview Card ─── */
+
+function BusinessOverviewCard({ card }) {
+    return (
+        <Card className="kl-card kl-biz" styles={{ body: { padding: 20 } }}>
+            <div className="kl-biz__head">
+                <Title level={5}>{card.title}</Title>
+                {card.href && (
+                    <Button type="link" size="small" onClick={() => visit(card.href)}>
+                        {card.linkText || 'View'}
+                    </Button>
+                )}
+            </div>
+            <div className="kl-biz__rows">
+                {card.items.map((item) => (
+                    <div className="kl-biz__row" key={item.label}>
+                        <Text type="secondary">{item.label}</Text>
+                        <Text strong>
+                            {item.format === 'money'
+                                ? formatMoney(item.value, true)
+                                : item.format === 'text'
+                                  ? (item.value || DASH)
+                                  : formatNumber(item.value)}
+                        </Text>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+}
+
+/* ─── Recent Transactions Table ─── */
+
+function RecentTransactionsTable({ transactions }) {
+    const columns = [
+        { title: 'Date', dataIndex: 'date', render: formatDate, width: 120 },
+        { title: 'Type', dataIndex: 'type', width: 150 },
+        {
+            title: 'Number',
+            dataIndex: 'number',
+            render: (number, row) =>
+                row.action_url ? (
+                    <Button type="link" className="kl-tbl-link" onClick={(e) => { e.stopPropagation(); visit(row.action_url); }}>
+                        {number || DASH}
+                    </Button>
+                ) : (number || DASH),
+        },
+        { title: 'Party', dataIndex: 'party', ellipsis: true, render: (v) => v || DASH },
+        { title: 'Amount', dataIndex: 'amount', align: 'right', render: (v) => formatMoney(v) },
+        {
+            title: 'Status',
+            dataIndex: 'status',
+            width: 110,
+            render: (s) => <span className="kl-pill">{s || 'posted'}</span>,
+        },
+    ];
+
+    return (
+        <Card
+            className="kl-card kl-txn"
+            title={
+                <div className="kl-card-title">
+                    <span>Recent Transactions</span>
+                    <Text type="secondary">Latest financial and business documents</Text>
+                </div>
+            }
+            styles={{ body: { padding: transactions.length > 0 ? 0 : 22 } }}
+        >
+            {transactions.length > 0 ? (
+                <Table
+                    rowKey="key"
+                    columns={columns}
+                    dataSource={transactions}
+                    pagination={false}
+                    scroll={{ x: 760 }}
+                    onRow={(r) => ({
+                        onClick: () => visit(r.action_url),
+                        className: r.action_url ? 'kl-row--click' : '',
+                    })}
+                />
+            ) : (
+                <DashboardEmptyState
+                    title="No recent transactions"
+                    description="Posted invoices, bills, payments, expenses, journals, and cash transfers will appear here."
+                    compact
+                />
+            )}
+        </Card>
+    );
+}
+
+/* ─── Mini Chart Card ─── */
+
+function MiniChartCard({ chart }) {
+    const AGEING_COLORS = ['var(--kl-primary)', '#64748b', '#f59e0b', '#ef4444', '#991b1b'];
+
+    if (chart.type === 'bar') {
+        const hasData = chart.data.some((d) => toAmount(d.amount) > 0);
+        return (
+            <Card className="kl-card kl-mini" styles={{ body: { padding: 20 } }}>
+                <div className="kl-mini__head">
+                    <Title level={5}>{chart.title}</Title>
+                </div>
+                {hasData ? (
+                    <div className="kl-mini__chart">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chart.data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                                <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kl-muted)', fontSize: 11 }} />
+                                <YAxis hide />
+                                <ChartTooltip content={<MiniBarTooltip />} />
+                                <Bar dataKey="amount" radius={[4, 4, 0, 0]} maxBarSize={32}>
+                                    {chart.data.map((_, i) => (
+                                        <Cell key={i} fill={AGEING_COLORS[i % AGEING_COLORS.length]} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                ) : (
+                    <DashboardEmptyState title="No data" description="No ageing data for this period." compact />
+                )}
+            </Card>
+        );
+    }
+
+    if (chart.type === 'list') {
+        return (
+            <Card className="kl-card kl-mini" styles={{ body: { padding: 20 } }}>
+                <div className="kl-mini__head">
+                    <Title level={5}>{chart.title}</Title>
+                </div>
+                {chart.data.length > 0 ? (
+                    <div className="kl-mini__list">
+                        {chart.data.map((item, i) => (
+                            <div className="kl-mini__list-row" key={i}>
+                                <Text type="secondary" ellipsis>{item.name}</Text>
+                                <Text strong>{formatMoney(item.amount, true)}</Text>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <DashboardEmptyState title="No data" description={`No ${chart.title.toLowerCase()} data.`} compact />
+                )}
+            </Card>
+        );
+    }
+
+    return null;
+}
+
+function MiniBarTooltip({ active, payload }) {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+        <div className="kl-tooltip">
+            <Text strong>{d.bucket}</Text>
+            <div className="kl-tooltip__row">
+                <span style={{ background: payload[0].fill }} />
+                <Text type="secondary">Amount</Text>
+                <Text>{formatMoney(d.amount)}</Text>
+            </div>
+            {d.count !== undefined && (
+                <div className="kl-tooltip__row">
+                    <span style={{ background: 'transparent' }} />
+                    <Text type="secondary">Count</Text>
+                    <Text>{d.count}</Text>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ─── Empty State ─── */
+
+function DashboardEmptyState({ title, description, compact = false }) {
+    return (
+        <div className={`kl-empty ${compact ? 'kl-empty--sm' : ''}`}>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false}>
+                <Title level={5}>{title}</Title>
+                <Text type="secondary">{description}</Text>
+            </Empty>
+        </div>
+    );
+}
+
+/* ─── Skeleton ─── */
+
+function DashboardSkeleton() {
+    return (
+        <div className="kl-skel">
+            <section className="kl-dash__top">
+                <Card className="kl-card"><Skeleton active paragraph={{ rows: 9 }} /></Card>
+                <div className="kl-dash__kpi-grid">
+                    {[1, 2, 3, 4].map((i) => (
+                        <Card key={i} className="kl-card" styles={{ body: { padding: 20 } }}>
+                            <Skeleton active paragraph={{ rows: 2 }} />
+                        </Card>
+                    ))}
+                </div>
+            </section>
+            <Card className="kl-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
+            <Card className="kl-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
+        </div>
+    );
+}
+
+/* ─── Data Model Builder ─── */
+
+function buildModel(data) {
+    const fin = data.financial_summary || data.summary || {};
+    const cp = data.cash_position || {};
+    const sparklines = data.metric_sparklines || {};
+    const chartRaw = data.revenue_expense_profit_chart || data.revenue_expense || [];
+
+    const chartData = normalizeChart(chartRaw);
+
+    const metrics = [
+        {
+            key: 'cash',
+            label: 'Cash & Bank',
+            value: formatMoney(fin.cash_bank_balance),
+            helper: 'Across bank and cash accounts',
+            sparkline: normSparkline(sparklines.cash_bank),
+            tone: 'primary',
+        },
+        {
+            key: 'receivables',
+            label: 'Receivables',
+            value: formatMoney(fin.receivables),
+            helper: 'Outstanding customer balances',
+            sparkline: normSparkline(sparklines.receivables),
+            tone: 'success',
+        },
+        {
+            key: 'payables',
+            label: 'Payables',
+            value: formatMoney(fin.payables),
+            helper: 'Outstanding supplier balances',
+            sparkline: normSparkline(sparklines.payables),
+            tone: 'warning',
+        },
+        {
+            key: 'profit',
+            label: 'Net Profit',
+            value: formatMoney(fin.net_profit),
+            helper: 'Revenue minus expenses',
+            sparkline: normSparkline(sparklines.net_profit),
+            tone: 'profit',
+        },
+    ];
+
+    const cashPosition = [
+        { label: 'Bank balance', value: formatMoney(cp.bank_balance), helper: hasValue(cp.bank_balance) ? 'Recorded bank account balance' : 'No reliable bank balance available' },
+        { label: 'Cash in hand', value: formatMoney(cp.cash_in_hand), helper: hasValue(cp.cash_in_hand) ? 'Cash accounts currently recorded' : 'No reliable cash balance available' },
+        { label: 'Total cash position', value: formatMoney(cp.cash_bank_balance), helper: 'Bank balance plus cash in hand' },
+        { label: 'Expected receivables', value: formatMoney(cp.expected_receivables), helper: 'Open customer balances' },
+        { label: 'Upcoming payables', value: formatMoney(cp.upcoming_payables), helper: 'Supplier balances due in 14 days' },
+    ];
+
+    const bankAccounts = Array.isArray(cp.bank_accounts) ? cp.bank_accounts : [];
+    const recentTransactions = Array.isArray(data.recent_transactions) ? data.recent_transactions : [];
+
+    const businessCards = [];
+    const sales = data.sales_summary;
+    if (sales) {
+        businessCards.push({
+            key: 'sales', title: 'Sales', href: '/payment-in/invoices', linkText: 'View invoices',
+            items: [
+                { label: 'Sales this period', value: sales.sales_total, format: 'money' },
+                { label: 'Invoices', value: sales.invoice_count },
+                { label: 'Paid amount', value: sales.paid_amount, format: 'money' },
+                { label: 'Unpaid amount', value: sales.unpaid_amount, format: 'money' },
+                { label: 'Overdue amount', value: sales.overdue_amount, format: 'money' },
+            ],
+        });
+    }
+    const purchase = data.purchase_summary;
+    if (purchase) {
+        businessCards.push({
+            key: 'purchase', title: 'Purchases', href: '/payment-out/purchase-bills', linkText: 'View purchase bills',
+            items: [
+                { label: 'Purchases this period', value: purchase.purchase_total, format: 'money' },
+                { label: 'Bills', value: purchase.bill_count },
+                { label: 'Paid bills', value: purchase.paid_amount, format: 'money' },
+                { label: 'Unpaid bills', value: purchase.unpaid_amount, format: 'money' },
+                { label: 'Upcoming payables', value: purchase.upcoming_payables, format: 'money' },
+            ],
+        });
+    }
+    const cf = data.cashflow_summary;
+    if (cf) {
+        const cfItems = [
+            { label: 'Cash in', value: cf.cash_in, format: 'money' },
+            { label: 'Cash out', value: cf.cash_out, format: 'money' },
+            { label: 'Net cash flow', value: cf.net_cash_flow, format: 'money' },
+        ];
+        if (cf.biggest_inflow) cfItems.push({ label: 'Biggest inflow', value: cf.biggest_inflow, format: 'text' });
+        if (cf.biggest_outflow) cfItems.push({ label: 'Biggest outflow', value: cf.biggest_outflow, format: 'text' });
+        businessCards.push({ key: 'cashflow', title: 'Cash Flow', items: cfItems });
+    }
+    const inv = data.inventory_summary;
+    if (inv) {
+        businessCards.push({
+            key: 'inventory', title: 'Inventory', href: '/inventory/products', linkText: 'View inventory',
+            items: [
+                { label: 'Total products', value: inv.total_products },
+                { label: 'Low stock items', value: inv.low_stock_items },
+                { label: 'Inventory value', value: inv.inventory_value, format: 'money' },
+                { label: 'Warehouses', value: inv.warehouse_count },
+            ],
+        });
+    }
+    const crm = data.crm_summary;
+    if (crm) {
+        businessCards.push({
+            key: 'crm', title: 'CRM', href: '/crm', linkText: 'View CRM',
+            items: [
+                { label: 'Open leads', value: crm.open_leads },
+                { label: 'Open deals', value: crm.open_deals },
+                { label: 'Pipeline value', value: crm.pipeline_value, format: 'money' },
+                { label: 'Won this period', value: crm.won_value, format: 'money' },
+            ],
+        });
+    }
+    const hrm = data.hrm_summary;
+    if (hrm) {
+        const hrmItems = [{ label: 'Active employees', value: hrm.active_employees }];
+        if (hrm.on_leave_today > 0) hrmItems.push({ label: 'On leave today', value: hrm.on_leave_today });
+        if (hrm.attendance_today > 0) hrmItems.push({ label: 'Attendance today', value: hrm.attendance_today });
+        if (hrm.payroll_this_period > 0) hrmItems.push({ label: 'Payroll this period', value: hrm.payroll_this_period, format: 'money' });
+        businessCards.push({ key: 'hrm', title: 'HRM', href: '/hrm/users', linkText: 'View HRM', items: hrmItems });
+    }
+    const proj = data.project_summary;
+    if (proj) {
+        const projItems = [
+            { label: 'Active projects', value: proj.active_projects },
+            { label: 'Completed this period', value: proj.completed_this_period },
+        ];
+        if (proj.overdue_tasks > 0) projItems.push({ label: 'Overdue project tasks', value: proj.overdue_tasks });
+        if (proj.billing_value > 0) projItems.push({ label: 'Project billing value', value: proj.billing_value, format: 'money' });
+        businessCards.push({ key: 'projects', title: 'Projects', href: '/hrm/projects', linkText: 'View projects', items: projItems });
+    }
+
+    const miniCharts = [];
+    const recAge = data.receivable_ageing;
+    if (Array.isArray(recAge) && recAge.some((b) => b.amount > 0)) {
+        miniCharts.push({ key: 'rec-age', title: 'Receivables Ageing', type: 'bar', data: recAge });
+    }
+    const payAge = data.payable_ageing;
+    if (Array.isArray(payAge) && payAge.some((b) => b.amount > 0)) {
+        miniCharts.push({ key: 'pay-age', title: 'Payables Ageing', type: 'bar', data: payAge });
+    }
+    const topCust = data.top_customers;
+    if (Array.isArray(topCust) && topCust.length > 0) {
+        miniCharts.push({ key: 'top-cust', title: 'Top Customers', type: 'list', data: topCust });
+    }
+    const topSupp = data.top_suppliers;
+    if (Array.isArray(topSupp) && topSupp.length > 0) {
+        miniCharts.push({ key: 'top-supp', title: 'Top Suppliers', type: 'list', data: topSupp });
+    }
+
+    return { chartData, metrics, cashPosition, bankAccounts, recentTransactions, businessCards, miniCharts };
+}
+
+function normalizeChart(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((i) => ({
+        date: i.date,
+        label: i.date ? dayjs(i.date).format('DD MMM') : i.bucket || '',
+        revenue: toAmount(i.revenue),
+        expenses: toAmount(i.expenses),
+        profit: toAmount(i.profit),
+    }));
+}
+
+function normSparkline(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map((i) => ({ date: i.date, value: toAmount(i.value) }));
 }
 
 function branchOptions(branches) {
     const items = Array.isArray(branches) ? branches : [];
     return [
         { value: 'all', label: 'All branches' },
-        ...items.map((b) => ({ value: b.value ?? b.id, label: b.label ?? b.name ?? `Branch #${b.id}` })),
+        ...items.map((b) => ({
+            value: b.value ?? b.id,
+            label: b.label ?? b.name ?? `Branch #${b.id}`,
+        })),
     ];
 }
 
-function normalizeSeries(items) {
-    return Array.isArray(items) ? items.map((item) => Object.fromEntries(Object.entries(item).map(([key, value]) => [key, key === 'date' || key === 'bucket' ? value : toAmount(value)]))) : [];
-}
+/* ─── Styles ─── */
 
-function normalizeAgeing(items) {
-    if (!Array.isArray(items)) return [];
-    return items.map((item) => ({ ...item, amount: toAmount(item.amount), count: toAmount(item.count) }));
-}
+function DashboardStyles({ token }) {
+    return (
+        <style>{`
+            .kl-dash {
+                --kl-bg: ${token.colorBgLayout};
+                --kl-card: ${token.colorBgContainer};
+                --kl-card-muted: ${token.colorFillQuaternary || token.colorFillTertiary};
+                --kl-border: ${token.colorBorderSecondary};
+                --kl-border-soft: ${token.colorSplit || token.colorBorderSecondary};
+                --kl-text: ${token.colorText};
+                --kl-muted: ${token.colorTextSecondary};
+                --kl-primary: ${token.colorPrimary};
+                --kl-success: ${token.colorSuccess};
+                --kl-warning: ${token.colorWarningText || token.colorWarning};
+                --kl-profit: ${token.colorInfo || token.colorPrimary};
+                --kl-revenue: ${token.colorPrimary};
+                --kl-expense: ${token.colorWarningText || token.colorWarning};
+                --kl-hover: ${token.controlItemBgHover};
+                --kl-shadow: ${token.boxShadowTertiary || '0 1px 3px rgba(0,0,0,.04)'};
+                min-height: calc(100vh - 96px);
+                background: var(--kl-bg);
+                padding: clamp(16px, 2.5vw, 32px);
+            }
 
-function normalizeParties(items) {
-    if (!Array.isArray(items)) return [];
-    return items.map((item, index) => ({
-        key: item.key || item.id || `${item.name}-${index}`,
-        name: item.name || item.customer || item.supplier || 'Unknown',
-        amount: toAmount(item.amount || item.total || item.balance),
-    })).filter((item) => item.amount > 0);
-}
+            .kl-dash__wrap {
+                width: min(1440px, 100%);
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
 
-function sumSeries(items, key) {
-    return Array.isArray(items) ? items.reduce((sum, item) => sum + toAmount(item[key]), 0) : 0;
-}
+            /* ─ Header ─ */
+            .kl-dh {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+            }
+            .kl-dh__copy { min-width: 220px; }
+            .kl-dh__title { margin: 0 0 2px !important; font-weight: 650 !important; }
+            .kl-dh__controls {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            .kl-dh__branch { width: 180px; }
+            .kl-dh__range { width: 270px; }
 
-function severityColor(severity) {
-    if (severity === 'critical') return 'error';
-    if (severity === 'warning') return 'warning';
-    return 'processing';
-}
+            /* ─ Top Section 60/40 ─ */
+            .kl-dash__top {
+                display: grid;
+                grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr);
+                gap: 18px;
+                align-items: stretch;
+            }
+            .kl-dash__kpi-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 14px;
+            }
 
-function activityColor(status, token) {
-    if (['approved', 'posted', 'paid', 'success'].includes(status)) return token.colorSuccess;
-    if (['pending', 'draft', 'warning'].includes(status)) return token.colorWarning;
-    if (['failed', 'void', 'cancelled', 'error'].includes(status)) return token.colorError;
-    return token.colorPrimary;
+            /* ─ Card base ─ */
+            .kl-card {
+                background: var(--kl-card) !important;
+                border: 1px solid var(--kl-border) !important;
+                border-radius: 16px !important;
+                box-shadow: var(--kl-shadow) !important;
+            }
+            .kl-card .ant-card-head {
+                min-height: 64px;
+                border-bottom-color: var(--kl-border-soft);
+                padding: 0 22px;
+            }
+            .kl-card-title {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                line-height: 1.25;
+                font-weight: 650;
+            }
+            .kl-card-title .ant-typography { font-size: 12px; font-weight: 400; }
+
+            /* ─ Financial Chart ─ */
+            .kl-chart-card__chart { height: 380px; min-width: 0; }
+
+            /* ─ Tooltip ─ */
+            .kl-tooltip {
+                min-width: 190px;
+                padding: 12px;
+                background: var(--kl-card);
+                border: 1px solid var(--kl-border);
+                border-radius: 12px;
+                box-shadow: var(--kl-shadow);
+            }
+            .kl-tooltip__row {
+                display: grid;
+                grid-template-columns: 8px 1fr auto;
+                align-items: center;
+                gap: 8px;
+                margin-top: 6px;
+            }
+            .kl-tooltip__row span:first-child {
+                width: 8px; height: 8px; border-radius: 50%;
+            }
+
+            /* ─ Metric Card ─ */
+            .kl-metric { min-height: 180px; overflow: hidden; }
+            .kl-metric .ant-card-body { height: 100%; position: relative; }
+            .kl-metric__body {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 140px;
+            }
+            .kl-metric__label { display: block; font-size: 13px; font-weight: 500; }
+            .kl-metric__value {
+                color: var(--kl-text);
+                font-size: clamp(22px, 2vw, 28px);
+                font-weight: 680;
+                line-height: 1.15;
+                margin-top: 10px;
+                overflow-wrap: anywhere;
+            }
+            .kl-metric__helper {
+                display: block;
+                margin-top: auto;
+                padding-top: 10px;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            /* ─ Sparkline ─ */
+            .kl-spark {
+                position: absolute;
+                right: 0; bottom: 0;
+                width: 72%; height: 68px;
+                opacity: 0.25;
+                pointer-events: none;
+            }
+
+            /* ─ Bank & Cash ─ */
+            .kl-bank__tiles {
+                display: grid;
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: 12px;
+            }
+            .kl-tile {
+                background: var(--kl-card-muted);
+                border: 1px solid var(--kl-border-soft);
+                border-radius: 14px;
+                padding: 16px;
+                min-width: 0;
+            }
+            .kl-tile__label { display: block; font-size: 12px; font-weight: 500; }
+            .kl-tile__value {
+                color: var(--kl-text);
+                font-size: 19px;
+                font-weight: 650;
+                line-height: 1.15;
+                margin-top: 8px;
+                overflow-wrap: anywhere;
+            }
+            .kl-tile__helper { display: block; font-size: 12px; line-height: 1.4; margin-top: 8px; }
+
+            .kl-bank__list { margin-top: 18px; border-top: 1px solid var(--kl-border-soft); }
+            .kl-bank-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 18px;
+                padding: 12px 0;
+                border-bottom: 1px solid var(--kl-border-soft);
+            }
+            .kl-bank-row:last-child { border-bottom: 0; padding-bottom: 0; }
+            .kl-bank-row__info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+            .kl-bank-row__name { color: var(--kl-text); font-weight: 600; }
+            .kl-bank-row__meta { font-size: 12px; }
+            .kl-bank-row__bal { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+            .kl-bank-row__bal .ant-typography:first-child { color: var(--kl-text); font-weight: 650; }
+
+            /* ─ Business Cards Grid ─ */
+            .kl-dash__biz-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 14px;
+            }
+            .kl-biz__head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                margin-bottom: 12px;
+            }
+            .kl-biz__head h5 { margin: 0 !important; font-weight: 650 !important; font-size: 14px !important; }
+            .kl-biz__head .ant-btn { padding: 0; height: auto; font-weight: 600; font-size: 13px; }
+            .kl-biz__rows { display: flex; flex-direction: column; gap: 8px; }
+            .kl-biz__row {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 10px;
+                font-size: 13px;
+            }
+
+            /* ─ Recent Transactions ─ */
+            .kl-tbl-link { height: auto; padding: 0; font-weight: 600; }
+            .kl-row--click { cursor: pointer; }
+            .kl-row--click:hover td { background: var(--kl-hover) !important; }
+            .kl-pill {
+                display: inline-flex;
+                align-items: center;
+                padding: 2px 9px;
+                border: 1px solid var(--kl-border);
+                border-radius: 999px;
+                color: var(--kl-muted);
+                background: var(--kl-card-muted);
+                font-size: 12px;
+                line-height: 1.4;
+                text-transform: capitalize;
+            }
+
+            /* ─ Mini Charts Row ─ */
+            .kl-dash__mini-row {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                gap: 14px;
+            }
+            .kl-mini__head { margin-bottom: 12px; }
+            .kl-mini__head h5 { margin: 0 !important; font-weight: 650 !important; font-size: 14px !important; }
+            .kl-mini__chart { height: 180px; }
+            .kl-mini__list { display: flex; flex-direction: column; gap: 8px; }
+            .kl-mini__list-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 10px;
+                font-size: 13px;
+            }
+
+            /* ─ Empty State ─ */
+            .kl-empty {
+                min-height: 280px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                padding: 24px 16px;
+            }
+            .kl-empty--sm { min-height: 160px; }
+            .kl-empty .ant-empty { margin: 0; }
+            .kl-empty h5 { margin: 0 0 6px !important; }
+
+            /* ─ Skeleton ─ */
+            .kl-skel { display: flex; flex-direction: column; gap: 18px; }
+
+            /* ─ Responsive ─ */
+            @media (max-width: 1180px) {
+                .kl-dash__top { grid-template-columns: minmax(0, 1fr); }
+                .kl-bank__tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            }
+            @media (max-width: 768px) {
+                .kl-dash { padding: 14px; }
+                .kl-dh { align-items: flex-start; flex-direction: column; }
+                .kl-dh__controls { width: 100%; justify-content: flex-start; }
+                .kl-dh__branch, .kl-dh__range { width: 100%; flex: 1 1 220px; }
+                .kl-dash__kpi-grid { grid-template-columns: minmax(0, 1fr); }
+                .kl-bank__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .kl-chart-card__chart { height: 300px; }
+                .kl-dash__biz-grid { grid-template-columns: minmax(0, 1fr); }
+                .kl-dash__mini-row { grid-template-columns: minmax(0, 1fr); }
+            }
+            @media (max-width: 540px) {
+                .kl-bank__tiles { grid-template-columns: minmax(0, 1fr); }
+                .kl-bank-row { align-items: flex-start; flex-direction: column; gap: 6px; }
+                .kl-bank-row__bal { align-items: flex-start; }
+                .kl-metric { min-height: 160px; }
+            }
+        `}</style>
+    );
 }

@@ -3,6 +3,7 @@ import {
   Button,
   Col,
   Divider,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -356,15 +357,31 @@ export default function AddTerminalModal({
 
   return (
     <>
-      <Modal
+      <Drawer
         title="Add POS Terminal"
         open={open}
         onCancel={onCancel}
-        onOk={handleSubmit}
-        confirmLoading={loading}
-        okText="Create Terminal"
-        width={920}
+        onClose={onCancel}
+        width="min(640px, 100vw)"
         destroyOnClose
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: token.marginSM }}>
+            <Button onClick={onCancel}>Cancel</Button>
+            <Button type="primary" loading={loading} onClick={handleSubmit}>
+              Save
+            </Button>
+          </div>
+        }
+        styles={{
+          body: { paddingBottom: 72 },
+          footer: {
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 1,
+            background: token.colorBgElevated,
+            borderTop: `1px solid ${token.colorBorderSecondary}`,
+          },
+        }}
       >
         <Form
           form={form}
@@ -583,7 +600,7 @@ export default function AddTerminalModal({
             </Col>
           </Row>
         </Form>
-      </Modal>
+      </Drawer>
 
       <Formik
         enableReinitialize

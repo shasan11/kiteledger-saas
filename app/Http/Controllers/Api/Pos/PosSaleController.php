@@ -171,7 +171,7 @@ class PosSaleController extends Controller
             ->with(['productUnit', 'taxClass'])
             ->where('active', true)
             ->where('allow_sale', true)
-            ->whereIn('product_type', ['simple', 'service', 'variant'])
+            ->whereIn('product_type', ['simple', 'variant'])
             ->when($branchId && $this->tableHasColumn('products', 'branch_id'), fn ($query) => $query->where(function ($inner) use ($branchId) {
                 $inner->where('branch_id', $branchId)->orWhereNull('branch_id');
             }))

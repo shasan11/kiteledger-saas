@@ -2,6 +2,8 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 import BranchToggle from '@/Components/BranchToggle';
 import FiscalYearToggle from '@/Components/FiscalYearToggle';
 import GlobalSearch from '@/Components/GlobalSearch';
+import AiCommandModal from '@/Components/AI/AiCommandModal';
+import { useAiAvailability } from '@/hooks/useAiAvailability';
 import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
 import { Link } from '@inertiajs/react';
 import {
@@ -9,6 +11,7 @@ import {
     MenuOutlined,
     MoonOutlined,
     ProfileOutlined,
+    RobotOutlined,
     SunOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -73,6 +76,11 @@ export default function AppNavbar({
 
     const [brandSettings, setBrandSettings] = useState(null);
     const [themeMode, setThemeMode] = useState(getStoredThemeMode);
+    const [aiCommandOpen, setAiCommandOpen] = useState(false);
+    const { aiEnabled, canUseAiModule, hasPermission } = useAiAvailability();
+    const showAiCommand = aiEnabled
+        && canUseAiModule('global_command')
+        && hasPermission('ai.global_command.use');
 
     useEffect(() => {
         let mounted = true;
@@ -110,6 +118,17 @@ export default function AppNavbar({
             window.removeEventListener('storage', handleStorage);
         };
     }, []);
+
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'j') {
+                e.preventDefault();
+                if (showAiCommand) setAiCommandOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [showAiCommand]);
 
     const isMobile = !screens.md;
     const isTablet = screens.md && !screens.lg;
@@ -242,7 +261,7 @@ export default function AppNavbar({
                                 dark
                                 style={{
                                     width: logoWidth,
-                                    maxWidth: '100%',
+                                    maxWidth: '200px',
                                     padding: 2,
                                 }}
                             />
@@ -303,6 +322,17 @@ export default function AppNavbar({
                         />
                     </div>
 
+                    {showAiCommand && (
+                        <Button
+                            type="text"
+                            icon={<RobotOutlined />}
+                            className="app-navbar__soft-btn"
+                            onClick={() => setAiCommandOpen(true)}
+                            title="AI Command (Ctrl+J)"
+                            style={{ color: token.colorPrimary }}
+                        />
+                    )}
+
                     <Switch
                         checked={isDarkMode}
                         checkedChildren={<MoonOutlined />}
@@ -361,6 +391,14 @@ export default function AppNavbar({
                     </div>
                 )}
             </Header>
+
+            {showAiCommand && (
+                <AiCommandModal
+                    open={aiCommandOpen}
+                    onClose={() => setAiCommandOpen(false)}
+                    branchId={branchContext?.selectedBranchId}
+                />
+            )}
 
             <style>
                 {`

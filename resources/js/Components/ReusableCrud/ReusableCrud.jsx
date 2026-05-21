@@ -3261,9 +3261,10 @@ export default function ReusableCrud({
                         const collapsedFields = field.collapsedFields || EMPTY_ARRAY;
                         const showExpand = collapsedFields.length > 0;
 
+                        const showActions = showExpand || !readOnly;
                         const gridTemplateColumns = `${cols
                           .map((c) => c.width || "1fr")
-                          .join(" ")}${showExpand ? " 52px" : ""}${!readOnly ? " 52px" : ""}`;
+                          .join(" ")}${showActions ? " 76px" : ""}`;
 
                         const applyFullRowPatch = (rowValue, idx, patch = EMPTY_OBJECT) => {
                           const patchedRow = {
@@ -3647,7 +3648,7 @@ export default function ReusableCrud({
                                 key={`${fieldKey}.${idx}.${colKey}`}
                                 size="medium"
                                 variant="underlined"
-                                style={{ width: "100%" }}
+                                style={{ width: "100%", textAlign: c.align === "right" ? "right" : undefined }}
                                 value={val}
                                 min={c.min}
                                 max={c.max}
@@ -3778,8 +3779,7 @@ export default function ReusableCrud({
                                 return <div key={String(colKey)}>{c.label}</div>;
                               })}
 
-                              {showExpand ? <div /> : null}
-                              {!readOnly ? <div /> : null}
+                              {showActions ? <div style={{ textAlign: "right" }}>Actions</div> : null}
                             </div>
 
                             {rows.map((rowValue, idx) => {
@@ -3800,47 +3800,58 @@ export default function ReusableCrud({
                                       renderObjectArrayCell(c, rowValue, idx, colIdx, false)
                                     )}
 
-                                    {showExpand ? (
-                                      <Button
-                                        type="text"
-                                        size="small"
-                                        icon={
-                                          <DownOutlined
-                                            rotate={expanded ? 180 : 0}
-                                            style={{ fontSize: 12 }}
-                                          />
-                                        }
-                                        onClick={() => toggleObjectArrayRow(name, idx)}
-                                      />
-                                    ) : null}
-
-                                    {!readOnly ? (
-                                      <Button
-                                        type="text"
-                                        danger
-                                        size="small"
-                                        icon={<CloseOutlined />}
-                                        onClick={() => {
-                                          const deletedId = rowValue?.id;
-
-                                          if (deletedId) {
-                                            const deletedFieldName =
-                                              field.deletedFieldName || "deleted_item_ids";
-
-                                            const currentDeleted = Array.isArray(values?.[deletedFieldName])
-                                              ? values[deletedFieldName]
-                                              : EMPTY_ARRAY;
-
-                                            setFieldValue(
-                                              deletedFieldName,
-                                              [...currentDeleted, deletedId],
-                                              false
-                                            );
-                                          }
-
-                                          remove(idx);
+                                    {showActions ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "flex-end",
+                                          alignItems: "center",
+                                          gap: 2,
                                         }}
-                                      />
+                                      >
+                                        {showExpand ? (
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            icon={
+                                              <DownOutlined
+                                                rotate={expanded ? 180 : 0}
+                                                style={{ fontSize: 12 }}
+                                              />
+                                            }
+                                            onClick={() => toggleObjectArrayRow(name, idx)}
+                                          />
+                                        ) : null}
+
+                                        {!readOnly ? (
+                                          <Button
+                                            type="text"
+                                            danger
+                                            size="small"
+                                            icon={<CloseOutlined />}
+                                            onClick={() => {
+                                              const deletedId = rowValue?.id;
+
+                                              if (deletedId) {
+                                                const deletedFieldName =
+                                                  field.deletedFieldName || "deleted_item_ids";
+
+                                                const currentDeleted = Array.isArray(values?.[deletedFieldName])
+                                                  ? values[deletedFieldName]
+                                                  : EMPTY_ARRAY;
+
+                                                setFieldValue(
+                                                  deletedFieldName,
+                                                  [...currentDeleted, deletedId],
+                                                  false
+                                                );
+                                              }
+
+                                              remove(idx);
+                                            }}
+                                          />
+                                        ) : null}
+                                      </div>
                                     ) : null}
                                   </div>
 
@@ -3880,9 +3891,18 @@ export default function ReusableCrud({
                                   type="dashed"
                                   icon={<PlusOutlined />}
                                   onClick={() => {
-                                    push({
-                                      ...(field.defaultItem || EMPTY_OBJECT),
-                                    });
+                                    const baseItem = { ...(field.defaultItem || EMPTY_OBJECT) };
+                                    const nextItem =
+                                      typeof field.onAddItem === "function"
+                                        ? field.onAddItem({
+                                          defaultItem: baseItem,
+                                          values,
+                                          rows,
+                                          rowCount: rows.length,
+                                        }) || baseItem
+                                        : baseItem;
+
+                                    push(nextItem);
                                   }}
                                 >
                                   {field.addButtonLabel || "Add row"}
