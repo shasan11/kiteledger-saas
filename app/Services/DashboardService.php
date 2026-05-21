@@ -7,7 +7,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-
+use App\Models\BankAccount;
 class DashboardService
 {
     protected array $transactionTables = [
@@ -35,7 +35,7 @@ class DashboardService
             ->orderBy($this->hasColumn('branches', 'name') ? 'name' : 'id')
             ->limit(100)
             ->get()
-            ->map(fn ($branch) => ['value' => $branch->id, 'label' => $branch->name])
+            ->map(fn($branch) => ['value' => $branch->id, 'label' => $branch->name])
             ->all();
     }
 
@@ -50,7 +50,7 @@ class DashboardService
                 - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $today, $today),
             'sales_this_month' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $monthStart, $monthEnd)
                 - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $monthStart, $monthEnd),
-            'receivables' => $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters),
+            'receivables' => $this->customerReceivableBalance($filters),
             'payables' => $this->payableBalance($filters),
             'cash_bank_balance' => $this->cashBankBalance($filters),
             'pending_approvals' => count($this->getPendingApprovals($filters)),
@@ -70,8 +70,10 @@ class DashboardService
             'cash_bank_balance' => $this->cashBankBalance($filters),
             'bank_balance' => $this->bankBalance($filters),
             'cash_in_hand' => $this->cashInHand($filters),
-            'receivables' => $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters),
+            'receivables' => $this->customerReceivableBalance($filters),
             'payables' => $this->payableBalance($filters),
+            'supplier_payables' => $this->supplierPayableBalance($filters),
+            'employee_payables' => $this->employeePayableBalance($filters),
             'revenue' => $revenue,
             'expenses' => $expenses,
             'net_profit' => $revenue - $expenses,
@@ -89,8 +91,10 @@ class DashboardService
             'bank_balance' => $bankBalance,
             'cash_in_hand' => $cashInHand,
             'cash_bank_balance' => $bankBalance + $cashInHand,
-            'expected_receivables' => $this->sumApproved('invoices', 'balance_due', 'due_date', $filters),
+            'expected_receivables' => $this->customerReceivableBalance($filters),
             'upcoming_payables' => $this->upcomingPayables($filters, now()->toDateString(), now()->addDays(14)->toDateString()),
+            'supplier_payables' => $this->supplierPayableBalance($filters),
+            'employee_payables' => $this->employeePayableBalance($filters),
             'bank_accounts' => $this->bankAccountBalances($filters),
         ];
     }
@@ -338,6 +342,7 @@ class DashboardService
             'on_leave_today' => $leaveToday,
             'attendance_today' => $attendanceToday,
             'payroll_this_period' => $payrollThisPeriod,
+            'employee_payables' => $this->employeePayableBalance($filters),
         ];
     }
 
@@ -470,7 +475,7 @@ class DashboardService
         $expenses = $this->periodExpenses($filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString());
         $profit = $revenue - $expenses;
         $overdueReceivables = (float) collect($this->getReceivableAgeing($filters))
-            ->reject(fn ($bucket) => $bucket['bucket'] === 'Current')
+            ->reject(fn($bucket) => $bucket['bucket'] === 'Current')
             ->sum('amount');
         $payablesDueSoon = $this->overdueCount('purchase_bills', 'due_date', 'balance_due', $filters, false);
         $lowStock = $this->lowStockCount();
@@ -583,7 +588,7 @@ class DashboardService
                 'net_cash_flow' => ((float) ($incoming[now()->toDateString()] ?? 0)) - (float) ($outgoing[now()->toDateString()] ?? 0),
                 'bank_balance' => $this->bankBalance($filters),
                 'cash_in_hand' => $this->cashInHand($filters),
-                'expected_receivables' => $this->sumApproved('invoices', 'balance_due', 'due_date', $filters),
+                'expected_receivables' => $this->customerReceivableBalance($filters),
                 'upcoming_payables' => $this->upcomingPayables($filters, now()->toDateString(), now()->addDays(14)->toDateString()),
             ],
             'chart' => $rows,
@@ -681,7 +686,7 @@ class DashboardService
         }
         $products = $products->orderBy($nameColumn)->limit(300)->get();
 
-        $warnings = $products->filter(fn ($product) => (float) $product->current_stock <= (float) $product->reorder_level)
+        $warnings = $products->filter(fn($product) => (float) $product->current_stock <= (float) $product->reorder_level)
             ->take(20)
             ->map(function ($product) {
                 $stock = (float) $product->current_stock;
@@ -703,7 +708,7 @@ class DashboardService
             'summary' => [
                 'total_products' => $this->activeProductsQuery()->count(),
                 'low_stock_products' => count($warnings),
-                'negative_stock_warnings' => $products->filter(fn ($product) => (float) $product->current_stock < 0)->count(),
+                'negative_stock_warnings' => $products->filter(fn($product) => (float) $product->current_stock < 0)->count(),
                 'inventory_value' => $valueColumn ? (float) DB::table('products')->sum($valueColumn) : ($this->hasColumn('products', 'purchase_price') ? (float) DB::table('products')->sum(DB::raw("COALESCE($stockExpr, 0) * COALESCE(purchase_price, 0)")) : 0),
                 'pending_warehouse_transfers' => $this->pendingCount('warehouse_transfers'),
                 'pending_inventory_adjustments' => $this->pendingCount('inventory_adjustments'),
@@ -808,8 +813,10 @@ class DashboardService
         $end = $this->filterEnd($filters, now())->toDateString();
         $breakdown = [];
 
-        if ($this->tableExists('expense_lines') && $this->hasColumn('expense_lines', 'expense_id')
-            && $this->hasColumn('expense_lines', 'account_id') && $this->tableExists('chart_of_accounts')) {
+        if (
+            $this->tableExists('expense_lines') && $this->hasColumn('expense_lines', 'expense_id')
+            && $this->hasColumn('expense_lines', 'account_id') && $this->tableExists('chart_of_accounts')
+        ) {
 
             $amountCol = $this->firstExistingColumn('expense_lines', ['amount', 'total', 'line_total']);
 
@@ -975,21 +982,34 @@ class DashboardService
             return [];
         }
 
-        $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
-        if (!$balanceColumn) {
-            return [];
-        }
-
         $selects = [
             'bank_accounts.id',
             DB::raw(($this->hasColumn('bank_accounts', 'display_name') ? 'bank_accounts.display_name' : 'bank_accounts.id') . ' as display_name'),
             DB::raw(($this->hasColumn('bank_accounts', 'bank_name') ? 'bank_accounts.bank_name' : 'NULL') . ' as bank_name'),
             DB::raw(($this->hasColumn('bank_accounts', 'account_name') ? 'bank_accounts.account_name' : 'NULL') . ' as account_name'),
             DB::raw(($this->hasColumn('bank_accounts', 'account_number') ? 'bank_accounts.account_number' : 'NULL') . ' as account_number'),
-            DB::raw("bank_accounts.$balanceColumn as balance"),
         ];
 
         $query = DB::table('bank_accounts')->select($selects);
+
+        if ($this->hasColumn('bank_accounts', 'account_id') && $this->tableExists('accounts') && $this->hasColumn('accounts', 'balance')) {
+            $query->leftJoin('accounts', 'bank_accounts.account_id', '=', 'accounts.id')
+                ->addSelect(DB::raw('COALESCE(accounts.balance, 0) as balance'));
+
+            if ($this->hasColumn('accounts', 'active')) {
+                $query->where(function (Builder $query) {
+                    $query->whereNull('accounts.id')->orWhere('accounts.active', true);
+                });
+            }
+        } else {
+            $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
+            if (!$balanceColumn) {
+                return [];
+            }
+
+            $query->addSelect(DB::raw("bank_accounts.$balanceColumn as balance"));
+        }
+
         if ($this->hasColumn('bank_accounts', 'currency_id') && $this->tableExists('currencies')) {
             $query->leftJoin('currencies', 'bank_accounts.currency_id', '=', 'currencies.id')
                 ->addSelect(DB::raw($this->hasColumn('currencies', 'code') ? 'currencies.code as currency' : 'NULL as currency'));
@@ -997,6 +1017,9 @@ class DashboardService
             $query->addSelect(DB::raw('NULL as currency'));
         }
 
+        if ($this->hasColumn('bank_accounts', 'type')) {
+            $query->where('bank_accounts.type', 'bank');
+        }
         if ($this->hasColumn('bank_accounts', 'active')) {
             $query->where('bank_accounts.active', true);
         }
@@ -1004,10 +1027,10 @@ class DashboardService
         $this->applyBranch($query, 'bank_accounts', $filters);
 
         return $query
-            ->orderByDesc("bank_accounts.$balanceColumn")
+            ->orderByDesc('balance')
             ->limit(5)
             ->get()
-            ->map(fn ($account) => [
+            ->map(fn($account) => [
                 'key' => $account->id,
                 'bank_name' => $account->bank_name ?: $account->display_name,
                 'account_name' => $account->account_name ?: $account->display_name,
@@ -1103,6 +1126,7 @@ class DashboardService
                 ['label' => 'Active employees', 'value' => $activeEmployees],
                 ['label' => 'Today attendance', 'value' => $attendanceToday],
                 ['label' => 'On leave today', 'value' => $leaveToday],
+                ['label' => 'Employee payables', 'value' => $this->employeePayableBalance($filters), 'format' => 'money'],
             ],
         ];
     }
@@ -1244,8 +1268,8 @@ class DashboardService
     protected function approvedButJvMissingCount(array $filters): int
     {
         return collect($this->transactionTables)
-            ->reject(fn ($config) => $config['table'] === 'journal_vouchers')
-            ->sum(fn ($config) => $this->approvedButJvMissingQuery($config, $filters)?->count() ?? 0);
+            ->reject(fn($config) => $config['table'] === 'journal_vouchers')
+            ->sum(fn($config) => $this->approvedButJvMissingQuery($config, $filters)?->count() ?? 0);
     }
 
     protected function approvedButJvMissingRows(array $config, array $filters, int $limit)
@@ -1281,7 +1305,7 @@ class DashboardService
 
     protected function approvedButNumberMissingCount(array $filters): int
     {
-        return collect($this->transactionTables)->sum(fn ($config) => $this->approvedButNumberMissingQuery($config, $filters)?->count() ?? 0);
+        return collect($this->transactionTables)->sum(fn($config) => $this->approvedButNumberMissingQuery($config, $filters)?->count() ?? 0);
     }
 
     protected function approvedButNumberMissingRows(array $config, array $filters, int $limit)
@@ -1325,7 +1349,7 @@ class DashboardService
     protected function journalVoucherNullCount(array $filters): int
     {
         return collect($this->transactionTables)
-            ->reject(fn ($config) => $config['table'] === 'journal_vouchers')
+            ->reject(fn($config) => $config['table'] === 'journal_vouchers')
             ->sum(function ($config) use ($filters) {
                 if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'journal_voucher_id')) {
                     return 0;
@@ -1503,6 +1527,13 @@ class DashboardService
 
     protected function payableBalance(array $filters): float
     {
+        $linkedAccountPayables = $this->supplierPayableBalance($filters)
+            + $this->employeePayableBalance($filters);
+
+        if ($linkedAccountPayables > 0) {
+            return $linkedAccountPayables;
+        }
+
         return $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters)
             + $this->expensePayableBalance($filters);
     }
@@ -1635,7 +1666,7 @@ class DashboardService
             $requiresContact ? $query->whereNotNull('contact_id') : $query->whereNull('contact_id');
         }
 
-        return $query->pluck('amount', 'day')->map(fn ($v) => (float) $v)->all();
+        return $query->pluck('amount', 'day')->map(fn($v) => (float) $v)->all();
     }
 
     protected function dailyCashOut(array $filters, Carbon $from, Carbon $to): array
@@ -1649,7 +1680,7 @@ class DashboardService
     protected function negateDailySums(array $sums): array
     {
         return collect($sums)
-            ->map(fn ($value) => -1 * (float) $value)
+            ->map(fn($value) => -1 * (float) $value)
             ->all();
     }
 
@@ -1697,6 +1728,167 @@ class DashboardService
         return $query->pluck('amount', 'day')->all();
     }
 
+    protected function linkedBankAccountBalance(array $filters, string $type): float
+    {
+        $query = BankAccount::query()
+            ->where('type', $type)
+            ->where('active', true)
+            ->whereNotNull('account_id')
+            ->whereHas('account', function ($query) {
+                $query->where('active', true);
+            })
+            ->with('account');
+
+        if (!empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
+            $query->where('branch_id', $filters['branch_id']);
+        }
+
+        return round(
+            (float) $query->get()->sum(fn($bankAccount) => $bankAccount->account?->balance ?? 0),
+            2
+        );
+    }
+
+    protected function customerReceivableBalance(array $filters): float
+    {
+        $balance = $this->contactAccountBalance($filters, 'customer');
+
+        if ($balance > 0) {
+            return $balance;
+        }
+
+        return $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters);
+    }
+
+    protected function supplierPayableBalance(array $filters): float
+    {
+        return $this->contactAccountBalance($filters, 'supplier');
+    }
+
+    protected function employeePayableBalance(array $filters): float
+    {
+        if (
+            $this->tableExists('users')
+            && $this->tableExists('accounts')
+            && $this->hasColumn('users', 'payroll_account_id')
+            && $this->hasColumn('accounts', 'balance')
+        ) {
+            $query = DB::table('users')
+                ->join('accounts', 'users.payroll_account_id', '=', 'accounts.id')
+                ->whereNotNull('users.payroll_account_id');
+
+            if ($this->hasColumn('users', 'active')) {
+                $query->where('users.active', true);
+            }
+            if ($this->hasColumn('accounts', 'active')) {
+                $query->where('accounts.active', true);
+            }
+            $this->applyBranch($query, 'users', $filters);
+
+            return round((float) $query
+                ->selectRaw('COALESCE(SUM(CASE WHEN accounts.balance < 0 THEN accounts.balance * -1 ELSE 0 END), 0) as total')
+                ->value('total'), 2);
+        }
+
+        return $this->payslipPayableBalance($filters);
+    }
+
+    protected function payslipPayableBalance(array $filters): float
+    {
+        if (!$this->tableExists('payslips')) {
+            return 0.0;
+        }
+
+        $amountColumn = $this->firstExistingColumn('payslips', ['net_payable', 'total_payable', 'salary_payable']);
+        if (!$amountColumn) {
+            return 0.0;
+        }
+
+        $query = DB::table('payslips');
+        $this->applyBranch($query, 'payslips', $filters);
+
+        if ($this->hasColumn('payslips', 'active')) {
+            $query->where('active', true);
+        }
+
+        if ($this->hasColumn('payslips', 'status')) {
+            $query->whereNotIn('status', ['void', 'voided', 'cancelled', 'rejected', 'VOID', 'VOIDED', 'CANCELLED', 'REJECTED']);
+        }
+
+        if ($this->hasColumn('payslips', 'payment_status')) {
+            $query->whereIn('payment_status', ['UNPAID', 'PARTIAL', 'unpaid', 'partial']);
+        }
+
+        $grossPayable = (float) $query->sum($amountColumn);
+
+        if (!$this->tableExists('payroll_payments') || !$this->hasColumn('payroll_payments', 'amount')) {
+            return round(max(0, $grossPayable), 2);
+        }
+
+        $paid = DB::table('payroll_payments')
+            ->when($this->hasColumn('payroll_payments', 'status'), function (Builder $query) {
+                $query->whereNotIn('status', ['cancelled', 'failed', 'void', 'voided', 'CANCELLED', 'FAILED', 'VOID', 'VOIDED']);
+            })
+            ->when(!empty($filters['branch_id']) && $this->hasColumn('payroll_payments', 'payroll_run_id') && $this->tableExists('payroll_runs') && $this->hasColumn('payroll_runs', 'branch_id'), function (Builder $query) use ($filters) {
+                $query->join('payroll_runs', 'payroll_payments.payroll_run_id', '=', 'payroll_runs.id')
+                    ->where('payroll_runs.branch_id', $filters['branch_id']);
+            })
+            ->sum('payroll_payments.amount');
+
+        return round(max(0, $grossPayable - (float) $paid), 2);
+    }
+
+    protected function contactAccountBalance(array $filters, string $partyType): float
+    {
+        if (!$this->tableExists('contacts') || !$this->tableExists('accounts') || !$this->hasColumn('contacts', 'account_id') || !$this->hasColumn('accounts', 'balance')) {
+            return 0.0;
+        }
+
+        $query = DB::table('contacts')
+            ->join('accounts', 'contacts.account_id', '=', 'accounts.id')
+            ->whereNotNull('contacts.account_id');
+
+        if ($this->hasColumn('contacts', 'active')) {
+            $query->where('contacts.active', true);
+        }
+        if ($this->hasColumn('accounts', 'active')) {
+            $query->where('accounts.active', true);
+        }
+
+        if ($partyType === 'customer') {
+            $query->where(function (Builder $query) {
+                if ($this->hasColumn('contacts', 'contact_type')) {
+                    $query->whereIn('contacts.contact_type', ['customer', 'Customer', 'CUSTOMER', 'client', 'Client', 'CLIENT', 'both', 'Both', 'BOTH']);
+                }
+
+                if (!$this->hasColumn('contacts', 'contact_type') && $this->hasColumn('contacts', 'accept_purchase')) {
+                    $query->where(function (Builder $query) {
+                        $query->where('contacts.accept_purchase', false)
+                            ->orWhereNull('contacts.accept_purchase');
+                    });
+                }
+            });
+
+            $select = 'COALESCE(SUM(CASE WHEN accounts.balance > 0 THEN accounts.balance ELSE 0 END), 0) as total';
+        } else {
+            $query->where(function (Builder $query) {
+                if ($this->hasColumn('contacts', 'contact_type')) {
+                    $query->whereIn('contacts.contact_type', ['supplier', 'Supplier', 'SUPPLIER', 'vendor', 'Vendor', 'VENDOR', 'both', 'Both', 'BOTH']);
+                }
+
+                if ($this->hasColumn('contacts', 'accept_purchase')) {
+                    $query->orWhere('contacts.accept_purchase', true);
+                }
+            });
+
+            $select = 'COALESCE(SUM(CASE WHEN accounts.balance < 0 THEN accounts.balance * -1 ELSE 0 END), 0) as total';
+        }
+
+        $this->applyBranch($query, 'contacts', $filters);
+
+        return round((float) $query->selectRaw($select)->value('total'), 2);
+    }
+
     protected function cashBankBalance(array $filters): float
     {
         return $this->bankBalance($filters) + $this->cashInHand($filters);
@@ -1704,37 +1896,12 @@ class DashboardService
 
     protected function bankBalance(array $filters): float
     {
-        if ($this->tableExists('bank_accounts')) {
-            $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
-            if (!$balanceColumn) {
-                return 0;
-            }
-
-            $query = DB::table('bank_accounts');
-            if ($this->hasColumn('bank_accounts', 'active')) {
-                $query->where('active', true);
-            }
-            $this->applyBranch($query, 'bank_accounts', $filters);
-
-            return (float) $query->sum($balanceColumn);
-        }
-
-        return 0;
+        return $this->linkedBankAccountBalance($filters, 'bank');
     }
 
     protected function cashInHand(array $filters): float
     {
-        if (!$this->tableExists('accounts')) {
-            return 0;
-        }
-        $balanceColumn = $this->firstExistingColumn('accounts', ['current_balance', 'balance', 'opening_balance']);
-        if (!$balanceColumn) {
-            return 0;
-        }
-        $query = DB::table('accounts')->where('name', 'like', '%cash%');
-        $this->applyBranch($query, 'accounts', $filters);
-
-        return (float) $query->sum($balanceColumn);
+        return $this->linkedBankAccountBalance($filters, 'cash');
     }
 
     protected function countTable(string $table, string $dateColumn, array $filters): int
@@ -1806,7 +1973,7 @@ class DashboardService
         $this->applyBranch($query, $table, $filters);
         $this->applyDateRange($query, $table, $dateColumn, $filters);
 
-        return $query->get()->map(fn ($row) => ['name' => $row->name, 'amount' => (float) $row->amount])->all();
+        return $query->get()->map(fn($row) => ['name' => $row->name, 'amount' => (float) $row->amount])->all();
     }
 
     protected function whereCount(string $table, string $column, string $value): int
@@ -1847,7 +2014,7 @@ class DashboardService
     {
         $defaultStages = ['New', 'Contacted', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost'];
         if (!$this->tableExists('deal_stages') || !$this->tableExists('deals') || !$this->hasColumn('deals', 'deal_stage_id') || !$this->hasColumn('deal_stages', 'name')) {
-            return collect($defaultStages)->map(fn ($stage) => ['stage' => $stage, 'count' => 0, 'amount' => 0])->all();
+            return collect($defaultStages)->map(fn($stage) => ['stage' => $stage, 'count' => 0, 'amount' => 0])->all();
         }
 
         $query = DB::table('deal_stages')
@@ -1861,7 +2028,7 @@ class DashboardService
         }
 
         return $query->get()
-            ->map(fn ($row) => ['stage' => $row->stage, 'count' => (int) $row->count, 'amount' => (float) $row->amount])
+            ->map(fn($row) => ['stage' => $row->stage, 'count' => (int) $row->count, 'amount' => (float) $row->amount])
             ->all();
     }
 
@@ -1900,7 +2067,7 @@ class DashboardService
             ->orderBy('crm_activities.due_at')
             ->limit(15)
             ->get()
-            ->map(fn ($row) => [
+            ->map(fn($row) => [
                 'key' => $row->id,
                 'name' => $row->deal_title ?: $row->lead_name ?: $row->subject,
                 'contact' => $row->contact_name,
@@ -2029,7 +2196,7 @@ class DashboardService
         }
 
         return collect($combined)
-            ->map(fn ($values, $bucket) => [
+            ->map(fn($values, $bucket) => [
                 'bucket' => $bucket,
                 'amount' => round((float) $values['amount'], 2),
                 'count' => (int) $values['count'],
@@ -2062,7 +2229,7 @@ class DashboardService
     protected function formatAgeingBuckets(array $buckets, string $route): array
     {
         return collect($buckets)
-            ->map(fn ($values, $bucket) => [
+            ->map(fn($values, $bucket) => [
                 'bucket' => $bucket,
                 'amount' => round((float) $values['amount'], 2),
                 'count' => (int) $values['count'],
