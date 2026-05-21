@@ -17,8 +17,7 @@ class DashboardService
         ['table' => 'supplier_payments', 'type' => 'Supplier Payment', 'module' => 'Payment Out', 'date' => 'payment_date', 'number' => 'payment_no', 'amount' => 'amount', 'route' => '/payment-out/payments'],
         ['table' => 'expenses', 'type' => 'Expense', 'module' => 'Purchase', 'date' => 'expense_date', 'number' => 'expense_no', 'amount' => 'total', 'route' => '/payment-out/expenses'],
         ['table' => 'cash_transfers', 'type' => 'Cash Transfer', 'module' => 'Accounting', 'date' => 'transfer_date', 'number' => 'transfer_no', 'amount' => 'total_amount', 'route' => '/accounting/cash-transfers'],
-        ['table' => 'journal_vouchers', 'type' => 'Journal Voucher', 'module' => 'Accounting', 'date' => 'voucher_date', 'number' => 'voucher_no', 'amount' => 'total', 'route' => '/accounting/journal-vouchers'],
-        ['table' => 'sales_returns', 'type' => 'Sales Return', 'module' => 'Sales', 'date' => 'return_date', 'number' => 'sales_return_no', 'amount' => 'total', 'route' => '/payment-in/credit-notes'],
+        ['table' => 'sales_returns', 'type' => 'Sales Return', 'module' => 'Sales', 'date' => 'sales_return_date', 'number' => 'sales_return_no', 'amount' => 'total', 'route' => '/payment-in/credit-notes'],
         ['table' => 'debit_notes', 'type' => 'Debit Note', 'module' => 'Purchase', 'date' => 'debit_note_date', 'number' => 'debit_note_no', 'amount' => 'total', 'route' => '/payment-out/debit-notes'],
         ['table' => 'inventory_adjustments', 'type' => 'Inventory Adjustment', 'module' => 'Inventory', 'date' => 'adjustment_date', 'number' => 'adjustment_no', 'amount' => 'total', 'route' => '/inventory/adjustments'],
         ['table' => 'loan_top_ups', 'type' => 'Loan TopUp', 'module' => 'Accounting', 'date' => 'topup_date', 'number' => 'topup_no', 'amount' => 'amount', 'route' => '/accounting/loan-accounts'],
@@ -47,10 +46,12 @@ class DashboardService
         $monthEnd = now()->endOfMonth()->toDateString();
 
         return [
-            'sales_today' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $today, $today),
-            'sales_this_month' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $monthStart, $monthEnd),
+            'sales_today' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $today, $today)
+                - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $today, $today),
+            'sales_this_month' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $monthStart, $monthEnd)
+                - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $monthStart, $monthEnd),
             'receivables' => $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters),
-            'payables' => $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters),
+            'payables' => $this->payableBalance($filters),
             'cash_bank_balance' => $this->cashBankBalance($filters),
             'pending_approvals' => count($this->getPendingApprovals($filters)),
             'low_stock_items' => $this->lowStockCount(),
@@ -62,16 +63,15 @@ class DashboardService
     {
         $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
         $end = $this->filterEnd($filters, now())->toDateString();
-        $revenue = $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $start, $end);
-        $expenses = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $start, $end)
-            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $revenue = $this->periodRevenue($filters, $start, $end);
+        $expenses = $this->periodExpenses($filters, $start, $end);
 
         return [
             'cash_bank_balance' => $this->cashBankBalance($filters),
             'bank_balance' => $this->bankBalance($filters),
             'cash_in_hand' => $this->cashInHand($filters),
             'receivables' => $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters),
-            'payables' => $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters),
+            'payables' => $this->payableBalance($filters),
             'revenue' => $revenue,
             'expenses' => $expenses,
             'net_profit' => $revenue - $expenses,
@@ -90,7 +90,7 @@ class DashboardService
             'cash_in_hand' => $cashInHand,
             'cash_bank_balance' => $bankBalance + $cashInHand,
             'expected_receivables' => $this->sumApproved('invoices', 'balance_due', 'due_date', $filters),
-            'upcoming_payables' => $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString()),
+            'upcoming_payables' => $this->upcomingPayables($filters, now()->toDateString(), now()->addDays(14)->toDateString()),
             'bank_accounts' => $this->bankAccountBalances($filters),
         ];
     }
@@ -99,14 +99,12 @@ class DashboardService
     {
         $start = $this->filterStart($filters, now()->subDays(29));
         $end = $this->filterEnd($filters, now());
-        $customerPayments = $this->dailySums('customer_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $supplierPayments = $this->dailySums('supplier_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $cashExpenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
         $receivables = $this->dailySums('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
-        $payables = $this->dailySums('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
-        $revenue = $this->dailySums('invoices', 'total', 'invoice_date', $filters, $start, $end);
-        $bills = $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
-        $expenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $payables = $this->dailyPayables($filters, $start, $end);
+        $revenue = $this->dailyRevenue($filters, $start, $end);
+        $expenses = $this->dailyExpenses($filters, $start, $end);
+        $cashIn = $this->dailyCashIn($filters, $start, $end);
+        $cashOut = $this->dailyCashOut($filters, $start, $end);
 
         $cash = [];
         $receivableRows = [];
@@ -115,14 +113,15 @@ class DashboardService
 
         foreach (CarbonPeriod::create($start, $end) as $date) {
             $key = $date->toDateString();
-            $expenseTotal = (float) ($bills[$key] ?? 0) + (float) ($expenses[$key] ?? 0);
+            $revenueTotal = (float) ($revenue[$key] ?? 0);
+            $expenseTotal = (float) ($expenses[$key] ?? 0);
             $cash[] = [
                 'date' => $key,
-                'value' => (float) ($customerPayments[$key] ?? 0) - (float) ($supplierPayments[$key] ?? 0) - (float) ($cashExpenses[$key] ?? 0),
+                'value' => (float) ($cashIn[$key] ?? 0) - (float) ($cashOut[$key] ?? 0),
             ];
             $receivableRows[] = ['date' => $key, 'value' => (float) ($receivables[$key] ?? 0)];
             $payableRows[] = ['date' => $key, 'value' => (float) ($payables[$key] ?? 0)];
-            $profit[] = ['date' => $key, 'value' => (float) ($revenue[$key] ?? 0) - $expenseTotal];
+            $profit[] = ['date' => $key, 'value' => $revenueTotal - $expenseTotal];
         }
 
         return [
@@ -141,9 +140,9 @@ class DashboardService
 
         $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
         $end = $this->filterEnd($filters, now())->toDateString();
-        $salesTotal = $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $start, $end);
+        $salesTotal = $this->periodRevenue($filters, $start, $end);
         $invoiceCount = $this->countApproved('invoices', 'invoice_date', $filters, $start, $end);
-        $paidAmount = $salesTotal - $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
+        $paidAmount = $this->paidAmountFor('invoices', 'invoice_date', $filters, $start, $end);
         $unpaidAmount = $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters, $start, $end);
         $overdueAmount = $this->overdueSum('invoices', 'due_date', 'balance_due', $filters);
 
@@ -168,13 +167,14 @@ class DashboardService
 
         $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
         $end = $this->filterEnd($filters, now())->toDateString();
-        $purchaseTotal = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
+        $purchaseTotal = $this->periodPurchases($filters, $start, $end);
         $billCount = $this->countApproved('purchase_bills', 'bill_date', $filters, $start, $end);
-        $paidBills = $purchaseTotal - $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
+        $paidBills = $this->paidAmountFor('purchase_bills', 'bill_date', $filters, $start, $end);
         $unpaidBills = $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters, $start, $end);
-        $upcomingPayables = $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString());
+        $expensePayables = $this->expensePayableBalance($filters);
+        $upcomingPayables = $this->upcomingPayables($filters, now()->toDateString(), now()->addDays(14)->toDateString());
 
-        if ($purchaseTotal == 0 && $billCount == 0) {
+        if ($purchaseTotal == 0 && $billCount == 0 && $expensePayables == 0.0) {
             return null;
         }
 
@@ -183,6 +183,8 @@ class DashboardService
             'bill_count' => $billCount,
             'paid_amount' => max(0, $paidBills),
             'unpaid_amount' => $unpaidBills,
+            'expense_payables' => $expensePayables,
+            'total_payables' => $unpaidBills + $expensePayables,
             'upcoming_payables' => $upcomingPayables,
         ];
     }
@@ -191,11 +193,8 @@ class DashboardService
     {
         $start = $this->filterStart($filters, now()->startOfMonth());
         $end = $this->filterEnd($filters, now());
-        $incoming = $this->periodSum('customer_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $supplierOut = $this->periodSum('supplier_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $expenseOut = $this->periodSum('expenses', 'total', 'expense_date', $filters, $start, $end);
-        $cashIn = $incoming;
-        $cashOut = $supplierOut + $expenseOut;
+        $cashIn = $this->periodCashIn($filters, $start, $end);
+        $cashOut = $this->periodCashOut($filters, $start, $end);
 
         if ($cashIn == 0 && $cashOut == 0) {
             return null;
@@ -468,8 +467,7 @@ class DashboardService
     {
         $summary = $this->getSummary($filters);
         $revenue = (float) ($summary['sales_this_month'] ?? 0);
-        $expenses = $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString())
-            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString());
+        $expenses = $this->periodExpenses($filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString());
         $profit = $revenue - $expenses;
         $overdueReceivables = (float) collect($this->getReceivableAgeing($filters))
             ->reject(fn ($bucket) => $bucket['bucket'] === 'Current')
@@ -562,15 +560,14 @@ class DashboardService
     {
         $start = now()->subDays(29)->startOfDay();
         $end = now()->endOfDay();
-        $incoming = $this->dailySums('customer_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $supplier = $this->dailySums('supplier_payments', 'amount', 'payment_date', $filters, $start, $end);
-        $expenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $incoming = $this->dailyCashIn($filters, $start, $end);
+        $outgoing = $this->dailyCashOut($filters, $start, $end);
 
         $rows = [];
         foreach (CarbonPeriod::create($start, $end) as $date) {
             $key = $date->toDateString();
             $cashIn = (float) ($incoming[$key] ?? 0);
-            $cashOut = (float) ($supplier[$key] ?? 0) + (float) ($expenses[$key] ?? 0);
+            $cashOut = (float) ($outgoing[$key] ?? 0);
             $rows[] = [
                 'date' => $key,
                 'cash_in' => $cashIn,
@@ -582,12 +579,12 @@ class DashboardService
         return [
             'summary' => [
                 'cash_in_today' => (float) ($incoming[now()->toDateString()] ?? 0),
-                'cash_out_today' => (float) ($supplier[now()->toDateString()] ?? 0) + (float) ($expenses[now()->toDateString()] ?? 0),
-                'net_cash_flow' => ((float) ($incoming[now()->toDateString()] ?? 0)) - ((float) ($supplier[now()->toDateString()] ?? 0) + (float) ($expenses[now()->toDateString()] ?? 0)),
+                'cash_out_today' => (float) ($outgoing[now()->toDateString()] ?? 0),
+                'net_cash_flow' => ((float) ($incoming[now()->toDateString()] ?? 0)) - (float) ($outgoing[now()->toDateString()] ?? 0),
                 'bank_balance' => $this->bankBalance($filters),
                 'cash_in_hand' => $this->cashInHand($filters),
                 'expected_receivables' => $this->sumApproved('invoices', 'balance_due', 'due_date', $filters),
-                'upcoming_payables' => $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, now()->toDateString(), now()->addDays(14)->toDateString()),
+                'upcoming_payables' => $this->upcomingPayables($filters, now()->toDateString(), now()->addDays(14)->toDateString()),
             ],
             'chart' => $rows,
             'forecast' => $this->cashFlowForecast($filters),
@@ -598,19 +595,19 @@ class DashboardService
     {
         $start = $this->filterStart($filters, now()->subDays(29));
         $end = $this->filterEnd($filters, now());
-        $revenue = $this->dailySums('invoices', 'total', 'invoice_date', $filters, $start, $end);
-        $bills = $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $start, $end);
-        $expenses = $this->dailySums('expenses', 'total', 'expense_date', $filters, $start, $end);
+        $revenue = $this->dailyRevenue($filters, $start, $end);
+        $expenses = $this->dailyExpenses($filters, $start, $end);
 
         $rows = [];
         foreach (CarbonPeriod::create($start, $end) as $date) {
             $key = $date->toDateString();
-            $expenseTotal = (float) ($bills[$key] ?? 0) + (float) ($expenses[$key] ?? 0);
+            $revenueTotal = (float) ($revenue[$key] ?? 0);
+            $expenseTotal = (float) ($expenses[$key] ?? 0);
             $rows[] = [
                 'date' => $key,
-                'revenue' => (float) ($revenue[$key] ?? 0),
+                'revenue' => $revenueTotal,
                 'expenses' => $expenseTotal,
-                'profit' => (float) ($revenue[$key] ?? 0) - $expenseTotal,
+                'profit' => $revenueTotal - $expenseTotal,
             ];
         }
 
@@ -624,7 +621,10 @@ class DashboardService
 
     public function getPayableAgeing(array $filters): array
     {
-        return $this->ageingBuckets('purchase_bills', 'due_date', 'balance_due', $filters, '/payment-out/purchase-bills');
+        return $this->combineAgeingBuckets([
+            $this->ageingBuckets('purchase_bills', 'due_date', 'balance_due', $filters, '/payment-out/purchase-bills'),
+            $this->expenseAgeingBuckets($filters),
+        ]);
     }
 
     public function getSalesPurchase(array $filters): array
@@ -638,7 +638,7 @@ class DashboardService
                 'sales_orders' => $this->countTable('sales_orders', 'order_date', $filters),
                 'invoices' => $this->countTable('invoices', 'invoice_date', $filters),
                 'customer_payments' => $this->countTable('customer_payments', 'payment_date', $filters),
-                'sales_returns' => $this->countTable('sales_returns', 'return_date', $filters),
+                'sales_returns' => $this->countTable('sales_returns', 'sales_return_date', $filters),
                 'overdue_invoices' => $this->overdueCount('invoices', 'due_date', 'balance_due', $filters),
                 'top_customers' => $this->topParties('invoices', 'invoice_date', 'total', $filters),
             ],
@@ -648,12 +648,13 @@ class DashboardService
                 'supplier_payments' => $this->countTable('supplier_payments', 'payment_date', $filters),
                 'expenses' => $this->countTable('expenses', 'expense_date', $filters),
                 'debit_notes' => $this->countTable('debit_notes', 'debit_note_date', $filters),
-                'upcoming_bills' => $this->overdueCount('purchase_bills', 'due_date', 'balance_due', $filters, false),
+                'upcoming_bills' => $this->overdueCount('purchase_bills', 'due_date', 'balance_due', $filters, false)
+                    + $this->expenseDueCount($filters, now()->toDateString(), now()->addDays(14)->toDateString()),
                 'top_suppliers' => $this->topParties('purchase_bills', 'bill_date', 'total', $filters),
             ],
             'chart' => [
-                ['name' => 'Sales', 'amount' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $monthStart, $monthEnd)],
-                ['name' => 'Purchase', 'amount' => $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $monthStart, $monthEnd)],
+                ['name' => 'Sales', 'amount' => $this->periodRevenue($filters, $monthStart, $monthEnd)],
+                ['name' => 'Purchase', 'amount' => $this->periodPurchases($filters, $monthStart, $monthEnd)],
             ],
         ];
     }
@@ -801,6 +802,91 @@ class DashboardService
         return $this->topParties('purchase_bills', 'bill_date', 'total', $filters);
     }
 
+    public function getExpenseBreakdown(array $filters): array
+    {
+        $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
+        $end = $this->filterEnd($filters, now())->toDateString();
+        $breakdown = [];
+
+        if ($this->tableExists('expense_lines') && $this->hasColumn('expense_lines', 'expense_id')
+            && $this->hasColumn('expense_lines', 'account_id') && $this->tableExists('chart_of_accounts')) {
+
+            $amountCol = $this->firstExistingColumn('expense_lines', ['amount', 'total', 'line_total']);
+
+            if ($amountCol) {
+                $nameCol = $this->hasColumn('chart_of_accounts', 'name')
+                    ? 'chart_of_accounts.name'
+                    : 'chart_of_accounts.id';
+
+                $query = DB::table('expense_lines')
+                    ->join('expenses', 'expense_lines.expense_id', '=', 'expenses.id')
+                    ->leftJoin('chart_of_accounts', 'expense_lines.account_id', '=', 'chart_of_accounts.id')
+                    ->whereDate('expenses.expense_date', '>=', $start)
+                    ->whereDate('expenses.expense_date', '<=', $end);
+
+                if ($this->hasColumn('expenses', 'approved')) {
+                    $query->where('expenses.approved', true);
+                }
+                if ($this->hasColumn('expenses', 'void')) {
+                    $query->where('expenses.void', false);
+                }
+                $this->applyBranch($query, 'expenses', $filters);
+
+                $results = $query
+                    ->select([
+                        DB::raw("$nameCol as category"),
+                        DB::raw("SUM(expense_lines.$amountCol) as total"),
+                    ])
+                    ->groupBy(DB::raw($nameCol))
+                    ->orderByDesc('total')
+                    ->limit(8)
+                    ->get();
+
+                foreach ($results as $row) {
+                    if ((float) $row->total > 0) {
+                        $breakdown[] = ['name' => $row->category ?: 'Uncategorized', 'value' => round((float) $row->total, 2)];
+                    }
+                }
+            }
+        }
+
+        if (empty($breakdown)) {
+            $purchases = $this->periodPurchases($filters, $start, $end);
+            $expenses = $this->sumApproved('expenses', 'total', 'expense_date', $filters, $start, $end);
+            if ($purchases > 0) {
+                $breakdown[] = ['name' => 'Purchases', 'value' => round($purchases, 2)];
+            }
+            if ($expenses > 0) {
+                $breakdown[] = ['name' => 'Operating Expenses', 'value' => round($expenses, 2)];
+            }
+        }
+
+        return $breakdown;
+    }
+
+    public function getCashFlowChart(array $filters): array
+    {
+        $start = $this->filterStart($filters, now()->subDays(29));
+        $end = $this->filterEnd($filters, now());
+        $incoming = $this->dailyCashIn($filters, $start, $end);
+        $outgoing = $this->dailyCashOut($filters, $start, $end);
+
+        $rows = [];
+        foreach (CarbonPeriod::create($start, $end) as $date) {
+            $key = $date->toDateString();
+            $in = (float) ($incoming[$key] ?? 0);
+            $out = (float) ($outgoing[$key] ?? 0);
+            $rows[] = [
+                'date' => $key,
+                'cash_in' => round($in, 2),
+                'cash_out' => round($out, 2),
+                'net' => round($in - $out, 2),
+            ];
+        }
+
+        return $rows;
+    }
+
     public function getRecentActivity(array $filters): array
     {
         $activity = [];
@@ -810,7 +896,6 @@ class DashboardService
             ['table' => 'supplier_payments', 'module' => 'Payment Out', 'date' => 'approved_at', 'text' => 'Supplier payment posted', 'number' => 'payment_no', 'route' => '/payment-out/payments'],
             ['table' => 'contacts', 'module' => 'CRM', 'date' => 'created_at', 'text' => 'Contact created', 'number' => 'name', 'route' => '/crm/contacts'],
             ['table' => 'leads', 'module' => 'CRM', 'date' => 'created_at', 'text' => 'Lead created', 'number' => 'name', 'route' => '/crm/leads'],
-            ['table' => 'journal_vouchers', 'module' => 'Accounting', 'date' => 'created_at', 'text' => 'Journal voucher created', 'number' => 'voucher_no', 'route' => '/accounting/journal-vouchers'],
         ];
 
         foreach ($recentConfigs as $config) {
@@ -819,6 +904,7 @@ class DashboardService
             }
 
             $query = DB::table($config['table'])->select($config['table'] . '.*')->orderByDesc($config['date'])->limit(8);
+            $this->applyDashboardRecordScope($query, $config['table'], in_array($config['table'], ['invoices', 'customer_payments', 'supplier_payments'], true));
             $this->applyBranch($query, $config['table'], $filters);
 
             foreach ($query->get() as $row) {
@@ -849,7 +935,6 @@ class DashboardService
                 'supplier_payments',
                 'expenses',
                 'cash_transfers',
-                'journal_vouchers',
             ])
             ->values();
 
@@ -860,13 +945,7 @@ class DashboardService
 
             $query = $this->baseTransactionQuery($config, $filters);
 
-            if ($this->hasColumn($config['table'], 'approved')) {
-                $query->where($config['table'] . '.approved', true);
-            }
-
-            if ($this->hasColumn($config['table'], 'void')) {
-                $query->where($config['table'] . '.void', false);
-            }
+            $this->applyDashboardRecordScope($query, $config['table'], true);
 
             $sortColumn = $this->hasColumn($config['table'], 'created_at') ? 'created_at' : $config['date'];
             $query->orderByDesc($config['table'] . '.' . $sortColumn)->limit(5);
@@ -1329,12 +1408,11 @@ class DashboardService
             return 0;
         }
         $query = DB::table($table);
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
         if ($from && $to && $this->hasColumn($table, $dateColumn)) {
-            $query->whereBetween($dateColumn, [$from, $to]);
+            $query->whereDate($dateColumn, '>=', $from)
+                ->whereDate($dateColumn, '<=', $to);
         }
         return $query->count();
     }
@@ -1345,9 +1423,7 @@ class DashboardService
             return 0;
         }
         $query = DB::table($table)->whereDate($dateColumn, '<', now())->where($balanceColumn, '>', 0);
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
         return (float) $query->sum($balanceColumn);
     }
@@ -1357,10 +1433,10 @@ class DashboardService
         if (!$this->tableExists($table) || !$this->hasColumn($table, $amountColumn) || !$this->hasColumn($table, $dateColumn)) {
             return 0;
         }
-        $query = DB::table($table)->whereBetween($dateColumn, [$from->toDateString(), $to->toDateString()]);
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
+        $query = DB::table($table)
+            ->whereDate($dateColumn, '>=', $from->toDateString())
+            ->whereDate($dateColumn, '<=', $to->toDateString());
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
         return (float) $query->sum($amountColumn);
     }
@@ -1370,29 +1446,224 @@ class DashboardService
         if (!$this->tableExists('customer_payments') || !$this->tableExists('contacts') || !$this->hasColumn('customer_payments', 'contact_id')) {
             return null;
         }
-        $row = DB::table('customer_payments')
+        $query = DB::table('customer_payments')
             ->join('contacts', 'customer_payments.contact_id', '=', 'contacts.id')
             ->select('contacts.name', DB::raw('SUM(customer_payments.amount) as total'))
-            ->whereBetween('customer_payments.payment_date', [$from->toDateString(), $to->toDateString()])
+            ->whereDate('customer_payments.payment_date', '>=', $from->toDateString())
+            ->whereDate('customer_payments.payment_date', '<=', $to->toDateString())
             ->groupBy('contacts.id', 'contacts.name')
-            ->orderByDesc('total')
-            ->first();
+            ->orderByDesc('total');
+        $this->applyDashboardRecordScope($query, 'customer_payments', true);
+        $row = $query->first();
         return $row?->name;
     }
 
     protected function biggestOutflowSource(array $filters, Carbon $from, Carbon $to): ?string
     {
-        if (!$this->tableExists('supplier_payments') || !$this->tableExists('contacts') || !$this->hasColumn('supplier_payments', 'contact_id')) {
-            return null;
+        $supplierRow = null;
+        if ($this->tableExists('supplier_payments') && $this->tableExists('contacts') && $this->hasColumn('supplier_payments', 'contact_id')) {
+            $query = DB::table('supplier_payments')
+                ->join('contacts', 'supplier_payments.contact_id', '=', 'contacts.id')
+                ->select('contacts.name', DB::raw('SUM(supplier_payments.amount) as total'))
+                ->whereDate('supplier_payments.payment_date', '>=', $from->toDateString())
+                ->whereDate('supplier_payments.payment_date', '<=', $to->toDateString())
+                ->groupBy('contacts.id', 'contacts.name')
+                ->orderByDesc('total');
+            $this->applyDashboardRecordScope($query, 'supplier_payments', true);
+            $supplierRow = $query->first();
         }
-        $row = DB::table('supplier_payments')
-            ->join('contacts', 'supplier_payments.contact_id', '=', 'contacts.id')
-            ->select('contacts.name', DB::raw('SUM(supplier_payments.amount) as total'))
-            ->whereBetween('supplier_payments.payment_date', [$from->toDateString(), $to->toDateString()])
-            ->groupBy('contacts.id', 'contacts.name')
-            ->orderByDesc('total')
-            ->first();
-        return $row?->name;
+
+        $supplierTotal = (float) ($supplierRow->total ?? 0);
+        $directExpenses = $this->directExpenseCashOut($filters, $from->toDateString(), $to->toDateString());
+
+        if ($directExpenses > $supplierTotal) {
+            return 'Direct expenses';
+        }
+
+        return $supplierRow?->name;
+    }
+
+    protected function periodRevenue(array $filters, string $from, string $to): float
+    {
+        return $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $from, $to)
+            - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $from, $to);
+    }
+
+    protected function periodPurchases(array $filters, string $from, string $to): float
+    {
+        return $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $from, $to)
+            - $this->sumApproved('debit_notes', 'total', 'debit_note_date', $filters, $from, $to);
+    }
+
+    protected function periodExpenses(array $filters, string $from, string $to): float
+    {
+        return $this->periodPurchases($filters, $from, $to)
+            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, $from, $to);
+    }
+
+    protected function payableBalance(array $filters): float
+    {
+        return $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters)
+            + $this->expensePayableBalance($filters);
+    }
+
+    protected function expensePayableBalance(array $filters, ?string $from = null, ?string $to = null, string $dateColumn = 'due_date'): float
+    {
+        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total')) {
+            return 0.0;
+        }
+
+        $query = DB::table('expenses')->where('total', '>', 0);
+        $this->applyDashboardRecordScope($query, 'expenses', true);
+        $this->applyBranch($query, 'expenses', $filters);
+
+        if ($this->hasColumn('expenses', 'contact_id')) {
+            $query->whereNotNull('contact_id');
+        }
+
+        if ($from && $to && $this->hasColumn('expenses', $dateColumn)) {
+            $query->whereDate($dateColumn, '>=', $from)
+                ->whereDate($dateColumn, '<=', $to);
+        }
+
+        return (float) $query->sum('total');
+    }
+
+    protected function directExpenseCashOut(array $filters, string $from, string $to): float
+    {
+        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total') || !$this->hasColumn('expenses', 'expense_date')) {
+            return 0.0;
+        }
+
+        $query = DB::table('expenses')
+            ->where('total', '>', 0)
+            ->whereDate('expense_date', '>=', $from)
+            ->whereDate('expense_date', '<=', $to);
+        $this->applyDashboardRecordScope($query, 'expenses', true);
+        $this->applyBranch($query, 'expenses', $filters);
+
+        if ($this->hasColumn('expenses', 'contact_id')) {
+            $query->whereNull('contact_id');
+        }
+
+        return (float) $query->sum('total');
+    }
+
+    protected function upcomingPayables(array $filters, string $from, string $to): float
+    {
+        return $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, $from, $to)
+            + $this->expensePayableBalance($filters, $from, $to, 'due_date');
+    }
+
+    protected function periodCashIn(array $filters, Carbon $from, Carbon $to): float
+    {
+        return $this->periodSum('customer_payments', 'amount', 'payment_date', $filters, $from, $to);
+    }
+
+    protected function periodCashOut(array $filters, Carbon $from, Carbon $to): float
+    {
+        return $this->periodSum('supplier_payments', 'amount', 'payment_date', $filters, $from, $to)
+            + $this->directExpenseCashOut($filters, $from->toDateString(), $to->toDateString());
+    }
+
+    protected function paidAmountFor(string $table, string $dateColumn, array $filters, string $from, string $to): float
+    {
+        if ($this->hasColumn($table, 'paid_total')) {
+            return $this->sumApproved($table, 'paid_total', $dateColumn, $filters, $from, $to);
+        }
+
+        return max(0, $this->sumApproved($table, 'total', $dateColumn, $filters, $from, $to)
+            - $this->sumApproved($table, 'balance_due', $dateColumn, $filters, $from, $to));
+    }
+
+    protected function dailyRevenue(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->combineDailySums([
+            $this->dailySums('invoices', 'total', 'invoice_date', $filters, $from, $to),
+            $this->negateDailySums($this->dailySums('sales_returns', 'total', 'sales_return_date', $filters, $from, $to)),
+        ]);
+    }
+
+    protected function dailyExpenses(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->combineDailySums([
+            $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $from, $to),
+            $this->negateDailySums($this->dailySums('debit_notes', 'total', 'debit_note_date', $filters, $from, $to)),
+            $this->dailySums('expenses', 'total', 'expense_date', $filters, $from, $to),
+        ]);
+    }
+
+    protected function dailyCashIn(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->dailySums('customer_payments', 'amount', 'payment_date', $filters, $from, $to);
+    }
+
+    protected function dailyPayables(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->combineDailySums([
+            $this->dailySums('purchase_bills', 'balance_due', 'bill_date', $filters, $from, $to),
+            $this->dailyExpensePayables($filters, $from, $to),
+        ]);
+    }
+
+    protected function dailyExpensePayables(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->dailyExpenseSums($filters, $from, $to, true);
+    }
+
+    protected function dailyDirectExpenseCashOut(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->dailyExpenseSums($filters, $from, $to, false);
+    }
+
+    protected function dailyExpenseSums(array $filters, Carbon $from, Carbon $to, bool $requiresContact): array
+    {
+        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total') || !$this->hasColumn('expenses', 'expense_date')) {
+            return [];
+        }
+
+        $query = DB::table('expenses')
+            ->select(DB::raw('DATE(expense_date) as day'), DB::raw('SUM(total) as amount'))
+            ->where('total', '>', 0)
+            ->whereDate('expense_date', '>=', $from->toDateString())
+            ->whereDate('expense_date', '<=', $to->toDateString())
+            ->groupBy(DB::raw('DATE(expense_date)'));
+        $this->applyDashboardRecordScope($query, 'expenses', true);
+        $this->applyBranch($query, 'expenses', $filters);
+
+        if ($this->hasColumn('expenses', 'contact_id')) {
+            $requiresContact ? $query->whereNotNull('contact_id') : $query->whereNull('contact_id');
+        }
+
+        return $query->pluck('amount', 'day')->map(fn ($v) => (float) $v)->all();
+    }
+
+    protected function dailyCashOut(array $filters, Carbon $from, Carbon $to): array
+    {
+        return $this->combineDailySums([
+            $this->dailySums('supplier_payments', 'amount', 'payment_date', $filters, $from, $to),
+            $this->dailyDirectExpenseCashOut($filters, $from, $to),
+        ]);
+    }
+
+    protected function negateDailySums(array $sums): array
+    {
+        return collect($sums)
+            ->map(fn ($value) => -1 * (float) $value)
+            ->all();
+    }
+
+    protected function combineDailySums(array $series): array
+    {
+        $combined = [];
+
+        foreach ($series as $items) {
+            foreach ($items as $date => $amount) {
+                $combined[$date] = (float) ($combined[$date] ?? 0) + (float) $amount;
+            }
+        }
+
+        return $combined;
     }
 
     protected function sumApproved(string $table, string $amountColumn, string $dateColumn, array $filters, ?string $from = null, ?string $to = null): float
@@ -1401,12 +1672,11 @@ class DashboardService
             return 0;
         }
         $query = DB::table($table);
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
         if ($from && $to && $this->hasColumn($table, $dateColumn)) {
-            $query->whereBetween($dateColumn, [$from, $to]);
+            $query->whereDate($dateColumn, '>=', $from)
+                ->whereDate($dateColumn, '<=', $to);
         }
         return (float) $query->sum($amountColumn);
     }
@@ -1418,11 +1688,10 @@ class DashboardService
         }
         $query = DB::table($table)
             ->select(DB::raw("DATE($date) as day"), DB::raw("SUM($amount) as amount"))
-            ->whereBetween($date, [$from->toDateString(), $to->toDateString()])
+            ->whereDate($date, '>=', $from->toDateString())
+            ->whereDate($date, '<=', $to->toDateString())
             ->groupBy(DB::raw("DATE($date)"));
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
 
         return $query->pluck('amount', 'day')->all();
@@ -1474,6 +1743,7 @@ class DashboardService
             return 0;
         }
         $query = DB::table($table);
+        $this->applyDashboardRecordScope($query, $table);
         $this->applyBranch($query, $table, $filters);
         $this->applyDateRange($query, $table, $dateColumn, $filters);
         return $query->count();
@@ -1512,6 +1782,7 @@ class DashboardService
             return 0;
         }
         $query = DB::table($table);
+        $this->applyDashboardRecordScope($query, $table);
         $past ? $query->whereDate($dateColumn, '<', now()) : $query->whereBetween($dateColumn, [now(), now()->addDays(14)]);
         if ($this->hasColumn($table, $balanceColumn)) {
             $query->where($balanceColumn, '>', 0);
@@ -1531,6 +1802,7 @@ class DashboardService
             ->groupBy('contacts.id', 'contacts.name')
             ->orderByDesc('amount')
             ->limit(5);
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
         $this->applyDateRange($query, $table, $dateColumn, $filters);
 
@@ -1651,7 +1923,7 @@ class DashboardService
             $from = $offset === 0 ? now()->toDateString() : now()->addDays($offset - 6)->toDateString();
             $to = now()->addDays($offset)->toDateString();
             $receivables = $this->sumApproved('invoices', 'balance_due', 'due_date', $filters, $from, $to);
-            $payables = $this->sumApproved('purchase_bills', 'balance_due', 'due_date', $filters, $from, $to);
+            $payables = $this->upcomingPayables($filters, $from, $to);
             $closing += $receivables - $payables;
             $rows[] = [
                 'date' => $to,
@@ -1681,18 +1953,13 @@ class DashboardService
         $query = DB::table($table)
             ->select('id', $dateColumn, $balanceColumn)
             ->where($balanceColumn, '>', 0);
-        if ($this->hasColumn($table, 'approved')) {
-            $query->where('approved', true);
-        }
-        if ($this->hasColumn($table, 'void')) {
-            $query->where('void', false);
-        }
+        $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
 
         foreach ($query->get() as $row) {
             $bucket = 'Current';
             if (!empty($row->{$dateColumn})) {
-                $days = Carbon::parse($row->{$dateColumn})->diffInDays(now(), false);
+                $days = Carbon::parse($row->{$dateColumn})->startOfDay()->diffInDays(now()->startOfDay(), false);
                 $bucket = $days <= 0 ? 'Current' : ($days <= 30 ? '1-30' : ($days <= 60 ? '31-60' : ($days <= 90 ? '61-90' : '90+')));
             }
             $labels[$bucket]['amount'] += (float) $row->{$balanceColumn};
@@ -1700,6 +1967,96 @@ class DashboardService
         }
 
         return $this->formatAgeingBuckets($labels, $route);
+    }
+
+    protected function expenseAgeingBuckets(array $filters): array
+    {
+        $labels = [
+            'Current' => ['amount' => 0.0, 'count' => 0],
+            '1-30' => ['amount' => 0.0, 'count' => 0],
+            '31-60' => ['amount' => 0.0, 'count' => 0],
+            '61-90' => ['amount' => 0.0, 'count' => 0],
+            '90+' => ['amount' => 0.0, 'count' => 0],
+        ];
+
+        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total')) {
+            return $this->formatAgeingBuckets($labels, '/payment-out/expenses');
+        }
+
+        $query = DB::table('expenses')
+            ->select('id', 'due_date', 'expense_date', 'total')
+            ->where('total', '>', 0);
+        $this->applyDashboardRecordScope($query, 'expenses', true);
+        $this->applyBranch($query, 'expenses', $filters);
+
+        if ($this->hasColumn('expenses', 'contact_id')) {
+            $query->whereNotNull('contact_id');
+        }
+
+        foreach ($query->get() as $row) {
+            $date = $row->due_date ?: $row->expense_date;
+            $bucket = 'Current';
+            if (!empty($date)) {
+                $days = Carbon::parse($date)->startOfDay()->diffInDays(now()->startOfDay(), false);
+                $bucket = $days <= 0 ? 'Current' : ($days <= 30 ? '1-30' : ($days <= 60 ? '31-60' : ($days <= 90 ? '61-90' : '90+')));
+            }
+            $labels[$bucket]['amount'] += (float) $row->total;
+            $labels[$bucket]['count']++;
+        }
+
+        return $this->formatAgeingBuckets($labels, '/payment-out/expenses');
+    }
+
+    protected function combineAgeingBuckets(array $bucketSets): array
+    {
+        $combined = [
+            'Current' => ['amount' => 0.0, 'count' => 0, 'action_url' => '/payment-out/purchase-bills'],
+            '1-30' => ['amount' => 0.0, 'count' => 0, 'action_url' => '/payment-out/purchase-bills'],
+            '31-60' => ['amount' => 0.0, 'count' => 0, 'action_url' => '/payment-out/purchase-bills'],
+            '61-90' => ['amount' => 0.0, 'count' => 0, 'action_url' => '/payment-out/purchase-bills'],
+            '90+' => ['amount' => 0.0, 'count' => 0, 'action_url' => '/payment-out/purchase-bills'],
+        ];
+
+        foreach ($bucketSets as $buckets) {
+            foreach ($buckets as $bucket) {
+                $key = $bucket['bucket'] ?? null;
+                if (!$key || !isset($combined[$key])) {
+                    continue;
+                }
+                $combined[$key]['amount'] += (float) ($bucket['amount'] ?? 0);
+                $combined[$key]['count'] += (int) ($bucket['count'] ?? 0);
+            }
+        }
+
+        return collect($combined)
+            ->map(fn ($values, $bucket) => [
+                'bucket' => $bucket,
+                'amount' => round((float) $values['amount'], 2),
+                'count' => (int) $values['count'],
+                'action_url' => $values['action_url'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    protected function expenseDueCount(array $filters, string $from, string $to): int
+    {
+        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'due_date')) {
+            return 0;
+        }
+
+        $query = DB::table('expenses')
+            ->where('total', '>', 0)
+            ->whereDate('due_date', '>=', $from)
+            ->whereDate('due_date', '<=', $to);
+        $this->applyDashboardRecordScope($query, 'expenses', true);
+        $this->applyBranch($query, 'expenses', $filters);
+
+        if ($this->hasColumn('expenses', 'contact_id')) {
+            $query->whereNotNull('contact_id');
+        }
+
+        return $query->count();
     }
 
     protected function formatAgeingBuckets(array $buckets, string $route): array
@@ -1858,6 +2215,25 @@ class DashboardService
         }
         if (!empty($filters['date_to'])) {
             $query->whereDate($table . '.' . $dateColumn, '<=', $filters['date_to']);
+        }
+    }
+
+    protected function applyDashboardRecordScope(Builder $query, string $table, bool $requireApproved = false): void
+    {
+        if ($requireApproved && $this->hasColumn($table, 'approved')) {
+            $query->where($table . '.approved', true);
+        }
+
+        if ($this->hasColumn($table, 'active')) {
+            $query->where($table . '.active', true);
+        }
+
+        if ($this->hasColumn($table, 'void')) {
+            $query->where($table . '.void', false);
+        }
+
+        if ($this->hasColumn($table, 'status')) {
+            $query->whereNotIn($table . '.status', ['void', 'VOID', 'cancelled', 'CANCELLED', 'canceled', 'CANCELED']);
         }
     }
 

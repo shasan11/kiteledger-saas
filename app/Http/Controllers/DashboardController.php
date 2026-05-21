@@ -37,6 +37,8 @@ class DashboardController extends Controller
         $data['payable_ageing'] = $dashboardService->getPayableAgeing($filters);
         $data['top_customers'] = $dashboardService->getTopCustomers($filters);
         $data['top_suppliers'] = $dashboardService->getTopSuppliers($filters);
+        $data['expense_breakdown'] = $dashboardService->getExpenseBreakdown($filters);
+        $data['cashflow_chart'] = $dashboardService->getCashFlowChart($filters);
 
         return response()->json($data);
     }
