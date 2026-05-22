@@ -39,6 +39,7 @@ class ContactController extends BaseCrudApiController
     protected array $relations = [
         'contactGroup',
         'account',
+        'payableAccount',
         'crmAccount',
         'creditTerm',
     ];
@@ -46,6 +47,7 @@ class ContactController extends BaseCrudApiController
     protected array $relationDetails = [
         'contactGroup' => 'contact_group_id',
         'account' => 'account_id',
+        'payableAccount' => 'payable_account_id',
         'crmAccount' => 'crm_account_id',
         'creditTerm' => 'credit_term_id',
     ];
@@ -59,6 +61,8 @@ class ContactController extends BaseCrudApiController
         'contactGroup.name',
         'account.name',
         'account.code',
+        'payableAccount.name',
+        'payableAccount.code',
         'crmAccount.name',
         'creditTerm.name',
     ];
@@ -66,6 +70,7 @@ class ContactController extends BaseCrudApiController
     protected array $filterable = [
         'contact_group_id',
         'account_id',
+        'payable_account_id',
         'crm_account_id',
         'contact_type',
         'credit_term_id',
@@ -139,6 +144,7 @@ class ContactController extends BaseCrudApiController
     protected array $storeRules = [
         'contact_group_id' => ['nullable', 'uuid', 'exists:contact_groups,id'],
         'account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+        'payable_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'crm_account_id' => ['nullable', 'uuid', 'exists:crm_accounts,id'],
         'contact_type' => ['required', 'in:customer,supplier,lead'],
         'name' => ['required', 'string', 'max:180'],
@@ -161,6 +167,7 @@ class ContactController extends BaseCrudApiController
         return [
             'contact_group_id' => ['sometimes', 'nullable', 'uuid', 'exists:contact_groups,id'],
             'account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
+            'payable_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'crm_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:crm_accounts,id'],
             'contact_type' => ['sometimes', 'required', 'in:customer,supplier,lead'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
@@ -210,6 +217,7 @@ class ContactController extends BaseCrudApiController
     {
         $data['recent_transactions'] = [];
         $data['account_summary'] = null;
+        $data['payable_account_summary'] = null;
         $data['account_chart'] = [];
 
         if (!$record->account_id) {
@@ -225,6 +233,17 @@ class ContactController extends BaseCrudApiController
                 'dr_amount' => (float) ($account->dr_amount ?? 0),
                 'cr_amount' => (float) ($account->cr_amount ?? 0),
                 'nature' => $account->nature,
+            ];
+        }
+
+        if ($record->payable_account_id && $record->payableAccount) {
+            $data['payable_account_summary'] = [
+                'name' => $record->payableAccount->name,
+                'code' => $record->payableAccount->code,
+                'balance' => (float) ($record->payableAccount->balance ?? 0),
+                'dr_amount' => (float) ($record->payableAccount->dr_amount ?? 0),
+                'cr_amount' => (float) ($record->payableAccount->cr_amount ?? 0),
+                'nature' => $record->payableAccount->nature,
             ];
         }
 

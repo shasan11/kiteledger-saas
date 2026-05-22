@@ -54,7 +54,7 @@ class CashTransferService
 
     public function syncFinancials(CashTransfer $cashTransfer, array $oldEffect = []): void
     {
-        DB::transaction(function () use ($cashTransfer, $oldEffect) {
+        DB::transaction(function () use ($cashTransfer) {
             $cashTransfer = CashTransfer::query()
                 ->with('cashTransferLines')
                 ->lockForUpdate()
@@ -64,10 +64,6 @@ class CashTransferService
             $this->assignTransferNoIfMissing($cashTransfer);
             $this->recalculateTotal($cashTransfer);
             $this->syncGeneratedJournalVoucher($cashTransfer);
-
-            $newEffect = $this->snapshotEffect($cashTransfer);
-
-            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
         });
     }
 

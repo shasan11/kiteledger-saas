@@ -45,7 +45,7 @@ class LoanTopUpService
 
     public function syncFinancials(LoanTopUp $loanTopUp, array $oldEffect = []): void
     {
-        DB::transaction(function () use ($loanTopUp, $oldEffect) {
+        DB::transaction(function () use ($loanTopUp) {
             $loanTopUp = LoanTopUp::query()
                 ->with('loanAccount')
                 ->lockForUpdate()
@@ -53,10 +53,6 @@ class LoanTopUpService
 
             $this->validate($loanTopUp);
             $this->syncGeneratedJournalVoucher($loanTopUp);
-
-            $newEffect = $this->snapshotEffect($loanTopUp);
-
-            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
             $this->recalculateLoanBalance($loanTopUp->loan_account_id);
         });
     }

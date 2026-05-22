@@ -33,13 +33,18 @@ class ContactObserver
     {
         $typeChanged = $contact->wasChanged('contact_type');
         $nameChanged = $contact->wasChanged('name');
+        $purchaseRoleChanged = $contact->wasChanged('accept_purchase');
 
-        if ($typeChanged && in_array($contact->contact_type, ['customer', 'supplier']) && !$contact->account_id) {
+        if (
+            ($typeChanged || $purchaseRoleChanged)
+            && in_array($contact->contact_type, ['customer', 'supplier'], true)
+            && (!$contact->account_id || ((bool) $contact->accept_purchase && !$contact->payable_account_id))
+        ) {
             $this->accountProvisioning->createForContact($contact);
             return;
         }
 
-        if ($nameChanged && $contact->account_id) {
+        if ($nameChanged && ($contact->account_id || $contact->payable_account_id)) {
             $this->accountProvisioning->syncContactAccount($contact);
         }
     }

@@ -13,7 +13,8 @@ use Illuminate\Validation\ValidationException;
 class SystemJournalVoucherService
 {
     public function __construct(
-        protected CodeGeneratorService $codeGenerator
+        protected CodeGeneratorService $codeGenerator,
+        protected JournalVoucherService $journalVoucherService
     ) {}
 
     public function syncFromEntries(
@@ -39,6 +40,9 @@ class SystemJournalVoucherService
             $exchangeRate
         ) {
             $voucher = $this->findExistingVoucher($sourceType, $source);
+            $oldEffect = $voucher
+                ? $this->journalVoucherService->snapshotEffect($voucher->fresh(['journalVoucherLines']))
+                : [];
 
             $reference = $this->reference($sourceType, $source->getKey());
 
@@ -117,13 +121,20 @@ class SystemJournalVoucherService
                             accountId: $accountId,
                             debit: $debit,
                             credit: $credit,
-                            description: $entry['description'] ?? null
+                            description: $entry['description'] ?? null,
+                            foreignDebit: (float) ($entry['foreign_debit'] ?? $entry['foreignDebit'] ?? $debit),
+                            foreignCredit: (float) ($entry['foreign_credit'] ?? $entry['foreignCredit'] ?? $credit),
+                            currencyId: $entry['currency_id'] ?? $voucher->currency_id,
+                            exchangeRate: $entry['exchange_rate'] ?? $voucher->exchange_rate
                         )
                     );
                 }
             });
 
             $this->syncBackReferenceToSource($source, $voucher);
+
+            $voucher = $voucher->fresh(['journalVoucherLines']);
+            $this->journalVoucherService->syncFinancials($voucher, $oldEffect);
 
             return $voucher->fresh(['journalVoucherLines']);
         });
@@ -170,7 +181,11 @@ class SystemJournalVoucherService
         string $accountId,
         float $debit,
         float $credit,
-        ?string $description = null
+        ?string $description = null,
+        float $foreignDebit = 0,
+        float $foreignCredit = 0,
+        ?string $currencyId = null,
+        float|int|string|null $exchangeRate = 1
     ): array {
         $line = new JournalVoucherLine();
         $table = $line->getTable();
@@ -181,6 +196,22 @@ class SystemJournalVoucherService
             'debit' => $debit,
             'credit' => $credit,
         ];
+
+        if (Schema::hasColumn($table, 'foreign_debit')) {
+            $payload['foreign_debit'] = $foreignDebit;
+        }
+
+        if (Schema::hasColumn($table, 'foreign_credit')) {
+            $payload['foreign_credit'] = $foreignCredit;
+        }
+
+        if (Schema::hasColumn($table, 'currency_id')) {
+            $payload['currency_id'] = $currencyId;
+        }
+
+        if (Schema::hasColumn($table, 'exchange_rate')) {
+            $payload['exchange_rate'] = $exchangeRate ?: 1;
+        }
 
         if (Schema::hasColumn($table, 'chart_of_account_id')) {
             $coaId = ChartOfAccount::query()

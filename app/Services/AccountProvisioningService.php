@@ -48,50 +48,55 @@ class AccountProvisioningService
             return null;
         }
 
+        if ($contact->contact_type === 'customer') {
+            $receivable = $contact->account_id
+                ? $contact->account
+                : $this->createContactAccount($contact, 'CUST', 'Receivable');
+
+            $updates = [];
+            if (!$contact->account_id && $receivable) {
+                $updates['account_id'] = $receivable->id;
+            }
+
+            if ((bool) $contact->accept_purchase && !$contact->payable_account_id) {
+                $payable = $this->createContactAccount($contact, 'SUP', 'Payable');
+                $updates['payable_account_id'] = $payable->id;
+            }
+
+            if ($updates) {
+                $contact->updateQuietly($updates);
+            }
+
+            return $receivable;
+        }
+
         if ($contact->account_id) {
             return $contact->account;
         }
 
-        $baseCurrency = Currency::where('is_base', true)->first();
-        if (!$baseCurrency) {
-            $baseCurrency = Currency::first();
-        }
+        $payable = $this->createContactAccount($contact, 'SUP', 'Payable');
+        $contact->updateQuietly(['account_id' => $payable->id]);
 
-        $prefix = $contact->contact_type === 'customer' ? 'CUST' : 'SUP';
-        $label = $contact->contact_type === 'customer' ? 'Customer' : 'Supplier';
-        $accountCode = $this->generateContactAccountCode($prefix, $contact->code);
-
-        $account = Account::firstOrCreate(
-            [
-                'code' => $accountCode,
-            ],
-            [
-                'name' => "{$label} - {$contact->name}",
-                'nature' => 'coa',
-                'currency_id' => $baseCurrency?->id,
-                'active' => true,
-                'is_system_generated' => true,
-            ]
-        );
-
-        $contact->updateQuietly(['account_id' => $account->id]);
-
-        return $account;
+        return $payable;
     }
 
     public function syncContactAccount(Contact $contact): void
     {
-        if (!$contact->account_id) {
-            return;
-        }
+        $roles = [
+            $contact->account_id => $contact->contact_type === 'supplier' ? 'Payable' : 'Receivable',
+            $contact->payable_account_id => 'Payable',
+        ];
 
-        $account = Account::find($contact->account_id);
-        if (!$account || !$account->is_system_generated) {
-            return;
-        }
+        foreach ($roles as $accountId => $role) {
+            if (!$accountId) {
+                continue;
+            }
 
-        $label = $contact->contact_type === 'customer' ? 'Customer' : 'Supplier';
-        $account->updateQuietly(['name' => "{$label} - {$contact->name}"]);
+            $account = Account::find($accountId);
+            if ($account && $account->is_system_generated) {
+                $account->updateQuietly(['name' => "{$contact->name} - {$role}"]);
+            }
+        }
     }
 
     protected function generateContactAccountCode(string $prefix, ?string $contactCode): string
@@ -114,6 +119,23 @@ class AccountProvisioningService
         } while (Account::query()->where('code', $code)->exists());
 
         return $code;
+    }
+
+    protected function createContactAccount(Contact $contact, string $prefix, string $role): Account
+    {
+        $baseCurrency = Currency::where('is_base', true)->first() ?: Currency::first();
+        $code = $this->generateContactAccountCode($prefix, $contact->code);
+
+        return Account::firstOrCreate(
+            ['code' => $code],
+            [
+                'name' => "{$contact->name} - {$role}",
+                'nature' => 'actor',
+                'currency_id' => $baseCurrency?->id,
+                'active' => true,
+                'is_system_generated' => true,
+            ]
+        );
     }
 
     public function createForBankAccount(BankAccount $bankAccount): Account

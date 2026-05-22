@@ -23,6 +23,10 @@ class JournalVoucherLine extends Model
         'description',
         'debit',
         'credit',
+        'foreign_debit',
+        'foreign_credit',
+        'currency_id',
+        'exchange_rate',
     ];
 
     /**
@@ -35,6 +39,9 @@ class JournalVoucherLine extends Model
         return [
             'debit' => 'decimal:2',
             'credit' => 'decimal:2',
+            'foreign_debit' => 'decimal:2',
+            'foreign_credit' => 'decimal:2',
+            'exchange_rate' => 'decimal:6',
         ];
     }
 
@@ -51,5 +58,10 @@ class JournalVoucherLine extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 }

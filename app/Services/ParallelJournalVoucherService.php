@@ -188,11 +188,14 @@ class ParallelJournalVoucherService
 
     public function createForPurchaseBill($bill): JournalVoucher
     {
+        $bill->loadMissing(['contact', 'purchaseBillLines.product', 'purchaseBillLines.taxRate']);
+
+        $rate = $this->resolveJournalExchangeRate($bill, $bill->currency_id);
         $lines = [];
         $totalDebit = 0;
 
         foreach ($bill->purchaseBillLines as $line) {
-            $totalDebit += $line->line_total;
+            $totalDebit += round($this->convertToBase($line->line_total, $rate), 2);
         }
 
         foreach ($bill->purchaseBillLines as $line) {
@@ -201,10 +204,13 @@ class ParallelJournalVoucherService
                 $account = $this->resolveChartAccount($line->product->purchase_account_id, $account);
             }
 
+            $foreignDebit = (float) $line->line_total - (float) ($line->tax_amount ?? 0);
             $lines[] = [
                 'chart_of_account_id' => $account->id,
-                'debit' => $line->line_total - ($line->tax_amount ?? 0),
+                'debit' => round($this->convertToBase($foreignDebit, $rate), 2),
                 'credit' => 0,
+                'foreign_debit' => $foreignDebit,
+                'foreign_credit' => 0,
                 'description' => $line->product?->name ?? 'Purchase',
             ];
         }
@@ -213,24 +219,26 @@ class ParallelJournalVoucherService
             $taxAccount = $this->accountResolver->getTaxReceivableAccount();
             $lines[] = [
                 'chart_of_account_id' => $taxAccount->id,
-                'debit' => $totalTax,
+                'debit' => round($this->convertToBase($totalTax, $rate), 2),
                 'credit' => 0,
+                'foreign_debit' => (float) $totalTax,
+                'foreign_credit' => 0,
                 'description' => 'Tax Receivable',
             ];
         }
 
-        $apAccount = $this->accountResolver->getAccountsPayableAccount();
-        if ($bill->contact_id && $bill->contact?->account_id) {
-            $apAccount = $this->resolveChartAccount($bill->contact->account_id, $apAccount);
-        }
+        $apAccount = $this->contactPayableChartAccount($bill->contact, $this->accountResolver->getAccountsPayableAccount());
 
         $lines[] = [
             'chart_of_account_id' => $apAccount->id,
             'debit' => 0,
             'credit' => $totalDebit,
+            'foreign_debit' => 0,
+            'foreign_credit' => (float) $bill->purchaseBillLines->sum('line_total'),
             'description' => "AP increase to {$bill->contact?->name}",
         ];
 
+        $lines = $this->balanceRoundingDifference($lines);
         $this->validationService->validateBalanced($lines);
 
         return $this->createJournal(
