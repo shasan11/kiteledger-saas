@@ -77,7 +77,7 @@ const accountFkBase = {
 
 const bankFkBase = {
     ...accountFkBase,
-    fkUrl: api('/api/accounts/?nature=bank&nature=cash'),
+    fkUrl: api('/api/accounts/?nature=bank'),
 };
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────

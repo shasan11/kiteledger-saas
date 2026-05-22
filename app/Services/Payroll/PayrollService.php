@@ -483,7 +483,7 @@ class PayrollService
                 }
 
                 $items[] = [
-                    'chart_of_account_id' => $chartAccountId,
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
                     'description' => "Payroll expense {$payroll->payroll_number}",
                     'debit' => $this->baseAmount($amount, $payroll->exchange_rate),
                     'credit' => 0,
@@ -502,7 +502,7 @@ class PayrollService
                 }
 
                 $items[] = [
-                    'chart_of_account_id' => $chartAccountId,
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
                     'description' => "Employer contribution expense {$payroll->payroll_number}",
                     'debit' => $this->baseAmount($amount, $payroll->exchange_rate),
                     'credit' => 0,
@@ -516,7 +516,7 @@ class PayrollService
 
             if ($taxTotal > 0) {
                 $items[] = [
-                    'chart_of_account_id' => $settings->tax_payable_account_id,
+                    'account_id' => $this->resolvePostingAccountId($settings->tax_payable_account_id),
                     'description' => "Payroll tax payable {$payroll->payroll_number}",
                     'debit' => 0,
                     'credit' => $this->baseAmount($taxTotal, $payroll->exchange_rate),
@@ -534,7 +534,7 @@ class PayrollService
                 }
 
                 $items[] = [
-                    'chart_of_account_id' => $chartAccountId,
+                    'account_id' => $this->resolvePostingAccountId($chartAccountId),
                     'description' => "Payroll benefits payable {$payroll->payroll_number}",
                     'debit' => 0,
                     'credit' => $this->baseAmount($amount, $payroll->exchange_rate),
@@ -549,7 +549,7 @@ class PayrollService
 
             if ($otherDeductionTotal > 0) {
                 $items[] = [
-                    'chart_of_account_id' => $settings->tax_payable_account_id,
+                    'account_id' => $this->resolvePostingAccountId($settings->tax_payable_account_id),
                     'description' => "Payroll deductions payable {$payroll->payroll_number}",
                     'debit' => 0,
                     'credit' => $this->baseAmount($otherDeductionTotal, $payroll->exchange_rate),
@@ -557,7 +557,7 @@ class PayrollService
             }
 
             $items[] = [
-                'chart_of_account_id' => $settings->salary_payable_account_id,
+                'account_id' => $this->resolvePostingAccountId($settings->salary_payable_account_id),
                 'description' => "Net salary payable {$payroll->payroll_number}",
                 'debit' => 0,
                 'credit' => $this->baseAmount((float) $payroll->total_net_payable, $payroll->exchange_rate),
@@ -612,7 +612,7 @@ class PayrollService
 
             $items = [
                 [
-                    'chart_of_account_id' => $settings->salary_payable_account_id,
+                    'account_id' => $this->resolvePostingAccountId($settings->salary_payable_account_id),
                     'description' => "Salary payable cleared {$payroll->payroll_number}",
                     'debit' => $this->baseAmount((float) $payroll->total_net_payable, $payroll->exchange_rate),
                     'credit' => 0,
@@ -1078,11 +1078,27 @@ class PayrollService
 
         return [
             'account_id' => $account->id,
-            'chart_of_account_id' => $chart->id,
             'description' => $description,
             'debit' => $this->baseAmount($debit, $exchangeRate),
             'credit' => $this->baseAmount($credit, $exchangeRate),
         ];
+    }
+
+    protected function resolvePostingAccountId(?string $accountOrChartId): string
+    {
+        if ($accountOrChartId && Account::query()->whereKey($accountOrChartId)->exists()) {
+            return $accountOrChartId;
+        }
+
+        if ($accountOrChartId) {
+            $accountId = ChartOfAccount::query()->whereKey($accountOrChartId)->value('account_id');
+
+            if ($accountId) {
+                return $accountId;
+            }
+        }
+
+        abort(422, 'Payroll journal line posting account is required.');
     }
 
     protected function syncPayrollEmployeeAccounts(Payroll $payroll): void
@@ -1284,3 +1300,7 @@ class PayrollService
         ]);
     }
 }
+
+
+
+

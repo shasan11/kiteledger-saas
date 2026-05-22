@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Domain\Accounting\Services\JournalVoucherService;
-use App\Models\ChartOfAccount;
+use App\Http\Controllers\Api\Concerns\ResolvesAccountPayloads;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,6 +12,8 @@ use Illuminate\Http\Request;
 
 class JournalVoucherController extends BaseCrudApiController
 {
+    use ResolvesAccountPayloads;
+
     protected string $modelClass = JournalVoucher::class;
 
     protected ?string $permissionPrefix = null;
@@ -30,7 +32,6 @@ class JournalVoucherController extends BaseCrudApiController
         'branch',
         'currency',
         'items',
-        'items.chartOfAccount',
         'items.account',
     ];
 
@@ -148,24 +149,24 @@ class JournalVoucherController extends BaseCrudApiController
             'child_total_field' => 'debit',
 
             'relations' => [
-                'chartOfAccount',
                 'account',
             ],
 
             'relation_details' => [
-                'chartOfAccount' => 'chart_of_account_id',
                 'account' => 'account_id',
             ],
 
             'rules' => [
-                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'account_id' => ['required_without:chart_of_account_id', 'uuid', 'exists:accounts,id'],
+                'chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'debit' => ['nullable', 'numeric', 'min:0'],
                 'credit' => ['nullable', 'numeric', 'min:0'],
             ],
 
             'update_rules' => [
-                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'account_id' => ['required_without:chart_of_account_id', 'uuid', 'exists:accounts,id'],
+                'chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'debit' => ['nullable', 'numeric', 'min:0'],
                 'credit' => ['nullable', 'numeric', 'min:0'],
@@ -296,17 +297,11 @@ class JournalVoucherController extends BaseCrudApiController
             abort(422, 'Each journal voucher line must have either debit or credit.');
         }
 
-        $chartOfAccount = ChartOfAccount::query()->find($row['chart_of_account_id'] ?? null);
+        $row = $this->normalizeAccountPayload($row);
 
-        if (! $chartOfAccount) {
-            abort(422, 'Every journal voucher line must have a valid chart_of_account_id.');
+        if (! $row['account_id']) {
+            abort(422, 'Every journal voucher line must have an account.');
         }
-
-        if (! $chartOfAccount->account_id) {
-            abort(422, 'Selected chart of account is not linked to an account.');
-        }
-
-        $row['account_id'] = $chartOfAccount->account_id;
 
         return $row;
     }

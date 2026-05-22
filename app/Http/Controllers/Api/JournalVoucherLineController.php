@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesAccountPayloads;
 use App\Http\Resources\JournalVoucherLineResource;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,18 +14,20 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class JournalVoucherLineController extends Controller
 {
+    use ResolvesAccountPayloads;
+
     public function index(Request $request)
     {
         $perPage = min($request->integer('per_page', 15), 100);
 
         $records = QueryBuilder::for(JournalVoucherLine::class)
-            ->allowedIncludes(...['journalVoucher', 'chartOfAccount'])
+            ->allowedIncludes(...['journalVoucher', 'account'])
             ->allowedFilters([
                 AllowedFilter::callback('q', function (Builder $query, mixed $value) {
                     $query->where('description', 'like', "%{$value}%");
                 }),
                 AllowedFilter::exact('journal_voucher_id'),
-                AllowedFilter::exact('chart_of_account_id'),
+                AllowedFilter::exact('account_id'),
                 AllowedFilter::callback('date_from', function (Builder $query, mixed $value) {
                     $query->whereDate('created_at', '>=', $value);
                 }),
@@ -50,7 +53,7 @@ class JournalVoucherLineController extends Controller
     {
         $data = $this->validateJournalVoucherLine($request);
 
-        $record = JournalVoucherLine::create($data);
+        $record = JournalVoucherLine::create($this->normalizeAccountPayload($data));
 
         return new JournalVoucherLineResource($record->fresh());
     }
@@ -64,7 +67,7 @@ class JournalVoucherLineController extends Controller
     {
         $data = $this->validateJournalVoucherLine($request, true);
 
-        $journalVoucherLine->update($data);
+        $journalVoucherLine->update($this->normalizeAccountPayload($data));
 
         return new JournalVoucherLineResource($journalVoucherLine->fresh());
     }
@@ -83,14 +86,15 @@ class JournalVoucherLineController extends Controller
         $data = $request->validate([
             'records' => ['required', 'array', 'min:1'],
             'records.*.journal_voucher_id' => ['required', 'uuid', 'exists:journal_vouchers,id'],
-            'records.*.chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+            'records.*.account_id' => ['required_without:records.*.chart_of_account_id', 'uuid', 'exists:accounts,id'],
+            'records.*.chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
             'records.*.description' => ['nullable', 'string', 'max:200'],
             'records.*.debit' => ['nullable', 'numeric', 'min:0'],
             'records.*.credit' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $records = DB::transaction(function () use ($data) {
-            return collect($data['records'])->map(fn (array $record) => JournalVoucherLine::create($record));
+            return collect($data['records'])->map(fn (array $record) => JournalVoucherLine::create($this->normalizeAccountPayload($record)));
         });
 
         return JournalVoucherLineResource::collection($records);
@@ -102,7 +106,8 @@ class JournalVoucherLineController extends Controller
             'records' => ['required', 'array', 'min:1'],
             'records.*.id' => ['required', 'uuid', 'exists:journal_voucher_lines,id'],
             'records.*.journal_voucher_id' => ['sometimes', 'required', 'uuid', 'exists:journal_vouchers,id'],
-            'records.*.chart_of_account_id' => ['sometimes', 'required', 'uuid', 'exists:chart_of_accounts,id'],
+            'records.*.account_id' => ['sometimes', 'required_without:records.*.chart_of_account_id', 'uuid', 'exists:accounts,id'],
+            'records.*.chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
             'records.*.description' => ['sometimes', 'nullable', 'string', 'max:200'],
             'records.*.debit' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'records.*.credit' => ['sometimes', 'nullable', 'numeric', 'min:0'],
@@ -114,7 +119,7 @@ class JournalVoucherLineController extends Controller
 
                 unset($record['id']);
 
-                $model->update($record);
+                $model->update($this->normalizeAccountPayload($record));
 
                 return $model->fresh();
             });
@@ -145,7 +150,8 @@ class JournalVoucherLineController extends Controller
 
         return $request->validate([
             'journal_voucher_id' => [$required, 'uuid', 'exists:journal_vouchers,id'],
-            'chart_of_account_id' => [$required, 'uuid', 'exists:chart_of_accounts,id'],
+            'account_id' => [$partial ? 'sometimes' : 'required_without:chart_of_account_id', 'uuid', 'exists:accounts,id'],
+            'chart_of_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
             'description' => ['sometimes', 'nullable', 'string', 'max:200'],
             'debit' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'credit' => ['sometimes', 'nullable', 'numeric', 'min:0'],

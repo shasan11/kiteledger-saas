@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\ResolvesAccountPayloads;
 use App\Models\Expense;
 use App\Models\ExpenseLine;
 use App\Models\TaxRate;
@@ -10,6 +11,8 @@ use Illuminate\Http\Request;
 
 class ExpenseController extends BaseCrudApiController
 {
+    use ResolvesAccountPayloads;
+
     protected string $modelClass = Expense::class;
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
@@ -38,10 +41,11 @@ class ExpenseController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
-            'relations' => ['chartOfAccount', 'taxRate'],
-            'relation_details' => ['chartOfAccount' => 'chart_of_account_id', 'taxRate' => 'tax_rate_id'],
+            'relations' => ['account', 'taxRate'],
+            'relation_details' => ['account' => 'account_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [
-                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'account_id' => ['required_without:chart_of_account_id', 'uuid', 'exists:accounts,id'],
+                'chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
                 'amount' => ['required', 'numeric', 'gt:0'],
@@ -49,7 +53,8 @@ class ExpenseController extends BaseCrudApiController
                 'line_total' => ['nullable', 'numeric', 'min:0'],
             ],
             'update_rules' => [
-                'chart_of_account_id' => ['required', 'uuid', 'exists:chart_of_accounts,id'],
+                'account_id' => ['required_without:chart_of_account_id', 'uuid', 'exists:accounts,id'],
+                'chart_of_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
                 'description' => ['nullable', 'string', 'max:200'],
                 'tax_rate_id' => ['nullable', 'uuid', 'exists:tax_rates,id'],
                 'amount' => ['required', 'numeric', 'gt:0'],
@@ -70,7 +75,7 @@ class ExpenseController extends BaseCrudApiController
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
-        'tds_charges_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
+        'tds_charges_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'tds_type' => ['nullable', 'string', 'max:20'],
         'tds_charges' => ['nullable', 'numeric', 'min:0'],
     ];
@@ -88,7 +93,7 @@ class ExpenseController extends BaseCrudApiController
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
-            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:chart_of_accounts,id'],
+            'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],
             'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
         ];
@@ -109,6 +114,7 @@ class ExpenseController extends BaseCrudApiController
         bool $isUpdate
     ): array {
         $amount = (float) ($row['amount'] ?? 0);
+        $row = $this->normalizeAccountPayload($row);
         $row['tax_amount'] = $this->calculateTaxAmount($row, $amount);
         $row['line_total'] = round($amount + (float) $row['tax_amount'], 2);
 

@@ -119,13 +119,13 @@ class ProductionOrderController extends BaseCrudApiController
             'relations' => ['expenseAccount'],
             'relation_details' => ['expenseAccount' => 'expense_account_id'],
             'rules' => [
-                'expense_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
+                'expense_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
                 'name' => ['required', 'string', 'max:120'],
                 'amount' => ['required', 'numeric', 'min:0'],
                 'notes' => ['nullable', 'string'],
             ],
             'update_rules' => [
-                'expense_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
+                'expense_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
                 'name' => ['required', 'string', 'max:120'],
                 'amount' => ['required', 'numeric', 'min:0'],
                 'notes' => ['nullable', 'string'],

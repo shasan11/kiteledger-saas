@@ -87,7 +87,7 @@ class Expense extends Model
 
     public function tdsChargesAccount(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 
     public function approvedBy(): BelongsTo

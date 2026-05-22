@@ -43,13 +43,7 @@ class BalanceUpdateService
                     '=',
                     'journal_vouchers.id'
                 )
-                ->join(
-                    'chart_of_accounts',
-                    'journal_voucher_lines.chart_of_account_id',
-                    '=',
-                    'chart_of_accounts.id'
-                )
-                ->where('chart_of_accounts.account_id', $account->id)
+                ->where('journal_voucher_lines.account_id', $account->id)
                 ->where('journal_vouchers.status', 'posted')
                 ->where('journal_vouchers.active', true)
                 ->where('journal_vouchers.void', false)

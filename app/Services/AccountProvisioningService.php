@@ -9,7 +9,6 @@ use App\Models\Contact;
 use App\Models\Currency;
 use App\Models\EmployeeProfile;
 use App\Models\LoanAccount;
-use Illuminate\Database\Eloquent\Model;
 
 class AccountProvisioningService
 {
@@ -20,7 +19,7 @@ class AccountProvisioningService
         }
 
         $baseCurrency = Currency::where('is_base', true)->first();
-        if (!$baseCurrency) {
+        if (! $baseCurrency) {
             $baseCurrency = Currency::first();
         }
 
@@ -44,7 +43,7 @@ class AccountProvisioningService
 
     public function createForContact(Contact $contact): ?Account
     {
-        if (!in_array($contact->contact_type, ['customer', 'supplier'])) {
+        if (! in_array($contact->contact_type, ['customer', 'supplier'])) {
             return null;
         }
 
@@ -54,11 +53,11 @@ class AccountProvisioningService
                 : $this->createContactAccount($contact, 'CUST', 'Receivable');
 
             $updates = [];
-            if (!$contact->account_id && $receivable) {
+            if (! $contact->account_id && $receivable) {
                 $updates['account_id'] = $receivable->id;
             }
 
-            if ((bool) $contact->accept_purchase && !$contact->payable_account_id) {
+            if ((bool) $contact->accept_purchase && ! $contact->payable_account_id) {
                 $payable = $this->createContactAccount($contact, 'SUP', 'Payable');
                 $updates['payable_account_id'] = $payable->id;
             }
@@ -88,7 +87,7 @@ class AccountProvisioningService
         ];
 
         foreach ($roles as $accountId => $role) {
-            if (!$accountId) {
+            if (! $accountId) {
                 continue;
             }
 
@@ -103,7 +102,7 @@ class AccountProvisioningService
     {
         if ($contactCode) {
             $code = "{$prefix}-{$contactCode}";
-            if (!Account::query()->where('code', $code)->exists()) {
+            if (! Account::query()->where('code', $code)->exists()) {
                 return $code;
             }
         }
@@ -115,7 +114,7 @@ class AccountProvisioningService
             ->max() ?? 0;
 
         do {
-            $code = "{$prefix}-" . str_pad((string) (++$max), 4, '0', STR_PAD_LEFT);
+            $code = "{$prefix}-".str_pad((string) (++$max), 4, '0', STR_PAD_LEFT);
         } while (Account::query()->where('code', $code)->exists());
 
         return $code;
@@ -145,7 +144,7 @@ class AccountProvisioningService
         }
 
         $baseCurrency = Currency::where('is_base', true)->first();
-        if (!$baseCurrency) {
+        if (! $baseCurrency) {
             $baseCurrency = Currency::first();
         }
 
@@ -176,14 +175,14 @@ class AccountProvisioningService
         }
 
         $baseCurrency = Currency::where('is_base', true)->first();
-        if (!$baseCurrency) {
+        if (! $baseCurrency) {
             $baseCurrency = Currency::first();
         }
 
         $account = Account::firstOrCreate(
             [
                 'name' => $loanAccount->name,
-                'code' => $loanAccount->loan_number ?? 'LOAN-' . substr($loanAccount->id, 0, 8),
+                'code' => $loanAccount->loan_number ?? 'LOAN-'.substr($loanAccount->id, 0, 8),
             ],
             [
                 'nature' => 'coa',
@@ -200,7 +199,7 @@ class AccountProvisioningService
 
     public function createForEmployeeProfile(EmployeeProfile $employee): ?Account
     {
-        if (!$employee->account_id || !class_exists(EmployeeProfile::class)) {
+        if (! $employee->account_id || ! class_exists(EmployeeProfile::class)) {
             return null;
         }
 
@@ -209,14 +208,14 @@ class AccountProvisioningService
         }
 
         $baseCurrency = Currency::where('is_base', true)->first();
-        if (!$baseCurrency) {
+        if (! $baseCurrency) {
             $baseCurrency = Currency::first();
         }
 
         $account = Account::firstOrCreate(
             [
                 'name' => $employee->name,
-                'code' => $employee->employee_id ?? 'EMP-' . substr($employee->id, 0, 8),
+                'code' => $employee->employee_id ?? 'EMP-'.substr($employee->id, 0, 8),
             ],
             [
                 'nature' => 'employee',
@@ -238,7 +237,7 @@ class AccountProvisioningService
         $data['active'] = $data['active'] ?? true;
         $data['is_system_generated'] = $data['is_system_generated'] ?? true;
 
-        if (!isset($data['currency_id'])) {
+        if (! isset($data['currency_id'])) {
             $baseCurrency = Currency::where('is_base', true)->first();
             $data['currency_id'] = $baseCurrency?->id;
         }

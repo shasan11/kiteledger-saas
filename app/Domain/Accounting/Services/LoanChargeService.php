@@ -15,7 +15,7 @@ class LoanChargeService
 
     public function snapshotEffect(LoanCharge $loanCharge): array
     {
-        if (!(bool) ($loanCharge->active ?? true)) {
+        if (! (bool) ($loanCharge->active ?? true)) {
             return [];
         }
 
@@ -55,7 +55,7 @@ class LoanChargeService
 
     public function validate(LoanCharge $loanCharge): void
     {
-        if (!$loanCharge->loan_account_id) {
+        if (! $loanCharge->loan_account_id) {
             throw ValidationException::withMessages([
                 'loan_account_id' => 'Loan account is required.',
             ]);
@@ -67,13 +67,13 @@ class LoanChargeService
             ]);
         }
 
-        if (!$loanCharge->charges_paid_from_account_id) {
+        if (! $loanCharge->charges_paid_from_account_id) {
             throw ValidationException::withMessages([
                 'charges_paid_from_account_id' => 'Charges paid-from account is required.',
             ]);
         }
 
-        if (!$this->resolveExpenseAccountId()) {
+        if (! $this->resolveExpenseAccountId()) {
             throw ValidationException::withMessages([
                 'loan_charge_expense_account_id' => 'Set accounting.loan_charge_expense_account_id before posting loan charges.',
             ]);
@@ -108,7 +108,7 @@ class LoanChargeService
             branchId: null,
             currencyId: null,
             status: (bool) ($loanCharge->active ?? true) ? 'posted' : 'draft',
-            narration: 'System generated journal voucher from loan charge ' . $loanCharge->charge_name,
+            narration: 'System generated journal voucher from loan charge '.$loanCharge->charge_name,
             exchangeRate: 1
         );
     }

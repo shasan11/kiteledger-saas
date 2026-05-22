@@ -904,6 +904,14 @@ export default function ReusableCrud({
     [authHeaders]
   );
 
+  const inlineFkStoreKey = useCallback((parentFieldName, rowIndex, colKey, cfg = EMPTY_OBJECT) => {
+    if (cfg.fkStoreScope === "shared") {
+      return `inline:${parentFieldName}.*.${colKey}`;
+    }
+
+    return `inline:${parentFieldName}.${rowIndex}.${colKey}`;
+  }, []);
+
   const refreshFkAndSelect = useCallback(
     async (fieldName, optionOrId) => {
       const field = fieldByName[fieldName];
@@ -3400,7 +3408,7 @@ export default function ReusableCrud({
                           }
 
                           if (c.type === "fkSelect") {
-                            const storeKey = `inline:${name}.${idx}.${colKey}`;
+                            const storeKey = inlineFkStoreKey(name, idx, colKey, c);
 
                             const store = fkStore[storeKey] || {
                               options: EMPTY_ARRAY,
@@ -3492,7 +3500,8 @@ export default function ReusableCrud({
                                   if (
                                     open &&
                                     (!fkStore[storeKey]?.options ||
-                                      fkStore[storeKey]?.options.length === 0)
+                                      fkStore[storeKey]?.options.length === 0 ||
+                                      fkStore[storeKey]?.search)
                                   ) {
                                     fetchFkOptionsInline(storeKey, c, {
                                       search: "",

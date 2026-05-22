@@ -84,7 +84,7 @@ class SettingsConfigurationController extends Controller
 
     private function validated(Request $request, string $area, Model $record): array
     {
-        $account = ['nullable', 'uuid', 'exists:chart_of_accounts,id'];
+        $account = ['nullable', 'uuid', 'exists:accounts,id'];
         $rules = match ($area) {
             'accounting' => [
                 'default_cash_account_id' => $account, 'default_bank_account_id' => $account,

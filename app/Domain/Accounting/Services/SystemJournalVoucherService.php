@@ -2,7 +2,6 @@
 
 namespace App\Domain\Accounting\Services;
 
-use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
@@ -60,11 +59,11 @@ class SystemJournalVoucherService
                 'exchange_rate' => $exchangeRate ?: 1,
             ];
 
-            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_auto_generated')) {
+            if (Schema::hasColumn((new JournalVoucher)->getTable(), 'is_auto_generated')) {
                 $voucherPayload['is_auto_generated'] = true;
             }
 
-            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_system_generated')) {
+            if (Schema::hasColumn((new JournalVoucher)->getTable(), 'is_system_generated')) {
                 $voucherPayload['is_system_generated'] = true;
             }
 
@@ -99,7 +98,7 @@ class SystemJournalVoucherService
                     $debit = (float) ($entry['debit'] ?? 0);
                     $credit = (float) ($entry['credit'] ?? 0);
 
-                    if (!$accountId) {
+                    if (! $accountId) {
                         throw ValidationException::withMessages([
                             'account_id' => 'System journal entry account_id is required.',
                         ]);
@@ -146,19 +145,19 @@ class SystemJournalVoucherService
 
         if (
             Schema::hasColumn($sourceTable, 'subsequent_journal_voucher_id')
-            && !empty($source->subsequent_journal_voucher_id)
+            && ! empty($source->subsequent_journal_voucher_id)
         ) {
             return JournalVoucher::query()->find($source->subsequent_journal_voucher_id);
         }
 
         if (
             Schema::hasColumn($sourceTable, 'journal_voucher_id')
-            && !empty($source->journal_voucher_id)
+            && ! empty($source->journal_voucher_id)
         ) {
             return JournalVoucher::query()->find($source->journal_voucher_id);
         }
 
-        $voucher = new JournalVoucher();
+        $voucher = new JournalVoucher;
         $voucherTable = $voucher->getTable();
 
         if (
@@ -187,7 +186,7 @@ class SystemJournalVoucherService
         ?string $currencyId = null,
         float|int|string|null $exchangeRate = 1
     ): array {
-        $line = new JournalVoucherLine();
+        $line = new JournalVoucherLine;
         $table = $line->getTable();
 
         $payload = [
@@ -213,36 +212,22 @@ class SystemJournalVoucherService
             $payload['exchange_rate'] = $exchangeRate ?: 1;
         }
 
-        if (Schema::hasColumn($table, 'chart_of_account_id')) {
-            $coaId = ChartOfAccount::query()
-                ->where('account_id', $accountId)
-                ->value('id');
-
-            if (!$coaId) {
-                throw ValidationException::withMessages([
-                    'chart_of_account_id' => "No ChartOfAccount found for account_id {$accountId}. Add account_id to journal_voucher_lines or create linked COA.",
-                ]);
-            }
-
-            $payload['chart_of_account_id'] = $coaId;
-        }
-
         if (Schema::hasColumn($table, 'account_id')) {
             $payload['account_id'] = $accountId;
         }
 
-        if (isset($payload['account_id']) || isset($payload['chart_of_account_id'])) {
+        if (isset($payload['account_id'])) {
             return $payload;
         }
 
         throw ValidationException::withMessages([
-            'journal_voucher_lines' => 'journal_voucher_lines must have account_id or chart_of_account_id.',
+            'journal_voucher_lines' => 'journal_voucher_lines must have account_id.',
         ]);
     }
 
     protected function addOptionalSourceColumns(array $payload, string $sourceType, string $sourceId): array
     {
-        $voucher = new JournalVoucher();
+        $voucher = new JournalVoucher;
         $table = $voucher->getTable();
 
         if (Schema::hasColumn($table, 'source_type')) {
@@ -297,11 +282,11 @@ class SystemJournalVoucherService
 
     protected function reference(string $sourceType, string $sourceId): string
     {
-        return 'SYS:' . strtoupper($sourceType) . ':' . $sourceId;
+        return 'SYS:'.strtoupper($sourceType).':'.$sourceId;
     }
 
     protected function sourceNo(string $sourceType, string $sourceId): string
     {
-        return $sourceType . ':' . $sourceId;
+        return $sourceType.':'.$sourceId;
     }
 }

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Contact;
 use App\Models\ChartOfAccount;
+use App\Models\Contact;
 use App\Models\CrmCommunication;
 use App\Models\CustomerPayment;
 use App\Models\DebitNote;
@@ -16,11 +16,13 @@ use App\Models\Quotation;
 use App\Models\SalesOrder;
 use App\Models\SalesReturn;
 use App\Models\SupplierPayment;
+use App\Services\SmsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class ContactController extends BaseCrudApiController
 {
@@ -119,7 +121,7 @@ class ContactController extends BaseCrudApiController
     {
         $user = request()->user();
 
-        if (!$user || $this->userHasFullCrmAccess($user)) {
+        if (! $user || $this->userHasFullCrmAccess($user)) {
             return $query;
         }
 
@@ -207,9 +209,10 @@ class ContactController extends BaseCrudApiController
      */
     private bool $serializingForShow = false;
 
-    public function show(\Illuminate\Http\Request $request, mixed $id): \Illuminate\Http\JsonResponse
+    public function show(Request $request, mixed $id): JsonResponse
     {
         $this->serializingForShow = true;
+
         return parent::show($request, $id);
     }
 
@@ -220,7 +223,7 @@ class ContactController extends BaseCrudApiController
         $data['payable_account_summary'] = null;
         $data['account_chart'] = [];
 
-        if (!$record->account_id) {
+        if (! $record->account_id) {
             return $data;
         }
 
@@ -248,7 +251,7 @@ class ContactController extends BaseCrudApiController
         }
 
         // Only compute expensive transaction history for single-record (show) requests.
-        if (!$this->serializingForShow) {
+        if (! $this->serializingForShow) {
             return $data;
         }
 
@@ -299,8 +302,8 @@ class ContactController extends BaseCrudApiController
 
         $monthExpr = match ($driver) {
             'mysql', 'mariadb' => DB::raw("DATE_FORMAT(journal_vouchers.voucher_date, '%Y-%m') as month"),
-            'pgsql'            => DB::raw("TO_CHAR(journal_vouchers.voucher_date, 'YYYY-MM') as month"),
-            default            => DB::raw("strftime('%Y-%m', journal_vouchers.voucher_date) as month"),
+            'pgsql' => DB::raw("TO_CHAR(journal_vouchers.voucher_date, 'YYYY-MM') as month"),
+            default => DB::raw("strftime('%Y-%m', journal_vouchers.voucher_date) as month"),
         };
 
         try {
@@ -327,7 +330,7 @@ class ContactController extends BaseCrudApiController
                 'net' => round((float) $row->debit - (float) $row->credit, 2),
             ])->values()->all();
         } catch (\Throwable) {
-            // Chart data unavailable — return empty array rather than crashing.
+            // Chart data unavailable; return empty array rather than crashing.
             $data['account_chart'] = [];
         }
 
@@ -433,7 +436,7 @@ class ContactController extends BaseCrudApiController
         foreach ($sources as $typeName => $config) {
             $modelClass = $config['model'];
 
-            if (!class_exists($modelClass)) {
+            if (! class_exists($modelClass)) {
                 continue;
             }
 
@@ -474,7 +477,7 @@ class ContactController extends BaseCrudApiController
     {
         $contact = Contact::query()->findOrFail($id);
 
-        if (!$contact->email) {
+        if (! $contact->email) {
             return response()->json(['message' => 'Contact has no email address.'], 422);
         }
 
@@ -484,7 +487,7 @@ class ContactController extends BaseCrudApiController
         ]);
 
         try {
-            \Illuminate\Support\Facades\Mail::raw($validated['body'], function ($mail) use ($contact, $validated, $request) {
+            Mail::raw($validated['body'], function ($mail) use ($contact, $validated, $request) {
                 $senderEmail = $request->user()?->email;
                 $mail->to($contact->email, $contact->name)
                     ->subject($validated['subject']);
@@ -518,7 +521,7 @@ class ContactController extends BaseCrudApiController
     {
         $contact = Contact::query()->findOrFail($id);
 
-        if (!$contact->phone) {
+        if (! $contact->phone) {
             return response()->json(['message' => 'Contact has no phone number.'], 422);
         }
 
@@ -532,16 +535,16 @@ class ContactController extends BaseCrudApiController
         $errorMessage = 'SMS provider is not configured.';
 
         try {
-            if (app()->bound('sms') || app()->bound(\App\Services\SmsService::class)) {
+            if (app()->bound('sms') || app()->bound(SmsService::class)) {
                 $smsService = app()->bound('sms')
                     ? app('sms')
-                    : app(\App\Services\SmsService::class);
+                    : app(SmsService::class);
 
                 $smsService->send($contact->phone, $validated['message']);
                 $sent = true;
             }
         } catch (\Throwable $e) {
-            $errorMessage = 'Failed to send SMS: ' . $e->getMessage();
+            $errorMessage = 'Failed to send SMS: '.$e->getMessage();
         }
 
         CrmCommunication::create([
@@ -554,7 +557,7 @@ class ContactController extends BaseCrudApiController
             'created_by' => $request->user()?->id,
         ]);
 
-        if (!$sent) {
+        if (! $sent) {
             return response()->json(['message' => $errorMessage], 422);
         }
 

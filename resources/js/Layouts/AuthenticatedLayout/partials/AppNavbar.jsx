@@ -10,6 +10,7 @@ import {
     LogoutOutlined,
     MenuOutlined,
     MoonOutlined,
+    PlusOutlined,
     ProfileOutlined,
     RobotOutlined,
     SunOutlined,
@@ -67,6 +68,7 @@ const getStoredThemeMode = () => {
 export default function AppNavbar({
     user,
     branchContext,
+    quickAddItems = [],
     profileItems = [],
     getUrl,
     onSidebarToggle,
@@ -333,6 +335,24 @@ export default function AppNavbar({
                         />
                     )}
 
+                    {quickAddItems.length > 0 && (
+                        <Dropdown
+                            menu={{ items: quickAddItems }}
+                            placement="bottomRight"
+                            trigger={['click']}
+                            overlayClassName="app-navbar-dropdown"
+                        >
+                            <Button
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                className="app-navbar__quick-add"
+                                title="Quick Add"
+                            >
+                                {!isMobile && !isTablet ? 'Quick Add' : null}
+                            </Button>
+                        </Dropdown>
+                    )}
+
                     <Switch
                         checked={isDarkMode}
                         checkedChildren={<MoonOutlined />}
@@ -470,15 +490,25 @@ export default function AppNavbar({
 
                     /* Buttons */
                     .app-navbar__soft-btn,
-                    .app-navbar__icon-btn {
+                    .app-navbar__icon-btn,
+                    .app-navbar__quick-add {
                         height: ${controlHeight}px;
-                        width: ${controlHeight}px;
                         border-radius: ${radius}px;
                         font-weight: 600;
                         display: inline-flex;
                         align-items: center;
                         justify-content: center;
                         flex-shrink: 0;
+                    }
+
+                    .app-navbar__soft-btn,
+                    .app-navbar__icon-btn {
+                        width: ${controlHeight}px;
+                    }
+
+                    .app-navbar__quick-add {
+                        padding-inline: ${isMobile || isTablet ? 0 : 12}px;
+                        width: ${isMobile || isTablet ? `${controlHeight}px` : 'auto'};
                     }
 
                     .app-navbar__soft-btn {

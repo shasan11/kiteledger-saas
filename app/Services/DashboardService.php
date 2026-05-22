@@ -2,12 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\BankAccount;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use App\Models\BankAccount;
+
 class DashboardService
 {
     protected array $transactionTables = [
@@ -26,7 +27,7 @@ class DashboardService
 
     public function getBranches(): array
     {
-        if (!$this->tableExists('branches')) {
+        if (! $this->tableExists('branches')) {
             return [];
         }
 
@@ -35,7 +36,7 @@ class DashboardService
             ->orderBy($this->hasColumn('branches', 'name') ? 'name' : 'id')
             ->limit(100)
             ->get()
-            ->map(fn($branch) => ['value' => $branch->id, 'label' => $branch->name])
+            ->map(fn ($branch) => ['value' => $branch->id, 'label' => $branch->name])
             ->all();
     }
 
@@ -46,10 +47,8 @@ class DashboardService
         $monthEnd = now()->endOfMonth()->toDateString();
 
         return [
-            'sales_today' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $today, $today)
-                - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $today, $today),
-            'sales_this_month' => $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $monthStart, $monthEnd)
-                - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $monthStart, $monthEnd),
+            'sales_today' => $this->periodRevenue($filters, $today, $today),
+            'sales_this_month' => $this->periodRevenue($filters, $monthStart, $monthEnd),
             'receivables' => $this->customerReceivableBalance($filters),
             'payables' => $this->payableBalance($filters),
             'cash_bank_balance' => $this->cashBankBalance($filters),
@@ -138,7 +137,7 @@ class DashboardService
 
     public function getSalesSummary(array $filters): ?array
     {
-        if (!$this->tableExists('invoices')) {
+        if (! $this->tableExists('invoices')) {
             return null;
         }
 
@@ -165,7 +164,7 @@ class DashboardService
 
     public function getPurchaseSummary(array $filters): ?array
     {
-        if (!$this->tableExists('purchase_bills')) {
+        if (! $this->tableExists('purchase_bills')) {
             return null;
         }
 
@@ -215,7 +214,7 @@ class DashboardService
 
     public function getInventorySummaryCard(array $filters): ?array
     {
-        if (!$this->tableExists('products')) {
+        if (! $this->tableExists('products')) {
             return null;
         }
 
@@ -247,7 +246,7 @@ class DashboardService
 
     public function getCrmSummaryCard(array $filters): ?array
     {
-        if (!$this->tableExists('deals') && !$this->tableExists('leads')) {
+        if (! $this->tableExists('deals') && ! $this->tableExists('leads')) {
             return null;
         }
 
@@ -293,7 +292,7 @@ class DashboardService
 
     public function getHrmSummaryCard(array $filters): ?array
     {
-        if (!$this->tableExists('employee_profiles')) {
+        if (! $this->tableExists('employee_profiles')) {
             return null;
         }
 
@@ -348,7 +347,7 @@ class DashboardService
 
     public function getProjectSummaryCard(array $filters): ?array
     {
-        if (!$this->tableExists('projects')) {
+        if (! $this->tableExists('projects')) {
             return null;
         }
 
@@ -413,7 +412,7 @@ class DashboardService
 
     public function getProjectDeadlineProjects(array $filters, string $bucket): array
     {
-        if (!$this->tableExists('projects') || !$this->hasColumn('projects', 'end_date')) {
+        if (! $this->tableExists('projects') || ! $this->hasColumn('projects', 'end_date')) {
             return [];
         }
 
@@ -461,7 +460,7 @@ class DashboardService
                     'status' => $project->status,
                     'days_left' => max($diff, 0),
                     'days_overdue' => max(abs($diff), 0),
-                    'action_url' => '/hrm/projects/' . $project->id,
+                    'action_url' => '/hrm/projects/'.$project->id,
                 ];
             })
             ->all();
@@ -482,23 +481,23 @@ class DashboardService
         $rows = [];
 
         foreach ($this->transactionTables as $config) {
-            if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'approved')) {
+            if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'approved')) {
                 continue;
             }
 
             $query = $this->baseTransactionQuery($config, $filters)
                 ->where(function (Builder $query) use ($config) {
-                    $query->where($config['table'] . '.approved', false);
+                    $query->where($config['table'].'.approved', false);
                     if ($this->hasColumn($config['table'], 'status')) {
-                        $query->orWhereIn($config['table'] . '.status', ['draft', 'pending']);
+                        $query->orWhereIn($config['table'].'.status', ['draft', 'pending']);
                     }
                 })
                 ->where(function (Builder $query) use ($config) {
                     if ($this->hasColumn($config['table'], 'void')) {
-                        $query->where($config['table'] . '.void', false);
+                        $query->where($config['table'].'.void', false);
                     }
                 })
-                ->orderByDesc($config['table'] . '.created_at')
+                ->orderByDesc($config['table'].'.created_at')
                 ->limit(10);
 
             foreach ($query->get() as $row) {
@@ -535,7 +534,7 @@ class DashboardService
         $expenses = $this->periodExpenses($filters, now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString());
         $profit = $revenue - $expenses;
         $overdueReceivables = (float) collect($this->getReceivableAgeing($filters))
-            ->reject(fn($bucket) => $bucket['bucket'] === 'Current')
+            ->reject(fn ($bucket) => $bucket['bucket'] === 'Current')
             ->sum('amount');
         $payablesDueSoon = $this->overdueCount('purchase_bills', 'due_date', 'balance_due', $filters, false);
         $lowStock = $this->lowStockCount();
@@ -575,7 +574,7 @@ class DashboardService
         $issues = [];
 
         foreach ($this->transactionTables as $config) {
-            if ($config['table'] === 'journal_vouchers' || !$this->tableExists($config['table'])) {
+            if ($config['table'] === 'journal_vouchers' || ! $this->tableExists($config['table'])) {
                 continue;
             }
 
@@ -594,27 +593,27 @@ class DashboardService
 
         foreach ($this->unbalancedJournalVouchers($filters) as $row) {
             $issues[] = [
-                'key' => 'unbalanced-jv-' . $row->id,
+                'key' => 'unbalanced-jv-'.$row->id,
                 'issue_type' => 'Unbalanced journal voucher',
                 'module' => 'Accounting',
                 'record' => $row->voucher_no ?: $row->id,
                 'amount' => abs((float) $row->debit_total - (float) $row->credit_total),
                 'date' => $row->voucher_date,
                 'severity' => 'critical',
-                'action_url' => '/accounting/journal-vouchers/' . $row->id,
+                'action_url' => '/accounting/journal-vouchers/'.$row->id,
             ];
         }
 
         foreach ($this->jvWithNoLines($filters) as $row) {
             $issues[] = [
-                'key' => 'empty-jv-' . $row->id,
+                'key' => 'empty-jv-'.$row->id,
                 'issue_type' => 'JV has no lines',
                 'module' => 'Accounting',
                 'record' => $row->voucher_no ?: $row->id,
                 'amount' => (float) ($row->total ?? 0),
                 'date' => $row->voucher_date,
                 'severity' => 'critical',
-                'action_url' => '/accounting/journal-vouchers/' . $row->id,
+                'action_url' => '/accounting/journal-vouchers/'.$row->id,
             ];
         }
 
@@ -726,7 +725,7 @@ class DashboardService
 
     public function getInventorySnapshot(array $filters): array
     {
-        if (!$this->tableExists('products')) {
+        if (! $this->tableExists('products')) {
             return ['summary' => [], 'warnings' => []];
         }
 
@@ -735,7 +734,7 @@ class DashboardService
         $reorderColumn = $this->hasColumn('products', 'reorder_level') ? 'reorder_level' : null;
         $nameColumn = $this->hasColumn('products', 'name') ? 'name' : 'id';
         $stockExpr = $stockColumn ?: '0';
-        $selects = ['id', DB::raw($nameColumn . ' as name'), DB::raw(($reorderColumn ?: '0') . ' as reorder_level'), DB::raw(($stockColumn ?: '0') . ' as current_stock')];
+        $selects = ['id', DB::raw($nameColumn.' as name'), DB::raw(($reorderColumn ?: '0').' as reorder_level'), DB::raw(($stockColumn ?: '0').' as current_stock')];
         $selects[] = $this->hasColumn('products', 'sku') ? 'sku' : DB::raw('NULL as sku');
         $selects[] = $this->hasColumn('products', 'code') ? 'code' : DB::raw('NULL as code');
 
@@ -746,10 +745,11 @@ class DashboardService
         }
         $products = $products->orderBy($nameColumn)->limit(300)->get();
 
-        $warnings = $products->filter(fn($product) => (float) $product->current_stock <= (float) $product->reorder_level)
+        $warnings = $products->filter(fn ($product) => (float) $product->current_stock <= (float) $product->reorder_level)
             ->take(20)
             ->map(function ($product) {
                 $stock = (float) $product->current_stock;
+
                 return [
                     'key' => $product->id,
                     'product' => $product->name,
@@ -758,7 +758,7 @@ class DashboardService
                     'reorder_level' => (float) $product->reorder_level,
                     'warehouse' => null,
                     'status' => $stock < 0 ? 'negative' : ($stock == 0 ? 'no_stock' : 'low_stock'),
-                    'action_url' => '/inventory/products/' . $product->id,
+                    'action_url' => '/inventory/products/'.$product->id,
                 ];
             })
             ->values()
@@ -768,7 +768,7 @@ class DashboardService
             'summary' => [
                 'total_products' => $this->activeProductsQuery()->count(),
                 'low_stock_products' => count($warnings),
-                'negative_stock_warnings' => $products->filter(fn($product) => (float) $product->current_stock < 0)->count(),
+                'negative_stock_warnings' => $products->filter(fn ($product) => (float) $product->current_stock < 0)->count(),
                 'inventory_value' => $valueColumn ? (float) DB::table('products')->sum($valueColumn) : ($this->hasColumn('products', 'purchase_price') ? (float) DB::table('products')->sum(DB::raw("COALESCE($stockExpr, 0) * COALESCE(purchase_price, 0)")) : 0),
                 'pending_warehouse_transfers' => $this->pendingCount('warehouse_transfers'),
                 'pending_inventory_adjustments' => $this->pendingCount('inventory_adjustments'),
@@ -828,7 +828,7 @@ class DashboardService
             $alerts[] = [
                 'severity' => $issue['severity'],
                 'title' => $issue['issue_type'],
-                'description' => $issue['module'] . ' record ' . $issue['record'] . ' needs review.',
+                'description' => $issue['module'].' record '.$issue['record'].' needs review.',
                 'module' => $issue['module'],
                 'action_url' => $issue['action_url'],
             ];
@@ -838,7 +838,7 @@ class DashboardService
             $alerts[] = [
                 'severity' => $warning['status'] === 'negative' ? 'critical' : 'warning',
                 'title' => 'Product below reorder level',
-                'description' => $warning['product'] . ' has stock of ' . $warning['current_stock'] . '.',
+                'description' => $warning['product'].' has stock of '.$warning['current_stock'].'.',
                 'module' => 'Inventory',
                 'action_url' => $warning['action_url'],
             ];
@@ -846,9 +846,9 @@ class DashboardService
 
         foreach ($this->crmFollowups() as $followup) {
             $alerts[] = [
-                'severity' => !empty($followup['next_follow_up']) && Carbon::parse($followup['next_follow_up'])->isPast() ? 'warning' : 'info',
+                'severity' => ! empty($followup['next_follow_up']) && Carbon::parse($followup['next_follow_up'])->isPast() ? 'warning' : 'info',
                 'title' => 'CRM follow-up due',
-                'description' => ($followup['name'] ?? 'Activity') . ' needs a response.',
+                'description' => ($followup['name'] ?? 'Activity').' needs a response.',
                 'module' => 'CRM',
                 'action_url' => $followup['action_url'] ?? '/crm/activities',
             ];
@@ -966,24 +966,24 @@ class DashboardService
         ];
 
         foreach ($recentConfigs as $config) {
-            if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], $config['date'])) {
+            if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], $config['date'])) {
                 continue;
             }
 
-            $query = DB::table($config['table'])->select($config['table'] . '.*')->orderByDesc($config['date'])->limit(8);
+            $query = DB::table($config['table'])->select($config['table'].'.*')->orderByDesc($config['date'])->limit(8);
             $this->applyDashboardRecordScope($query, $config['table'], in_array($config['table'], ['invoices', 'customer_payments', 'supplier_payments'], true));
             $this->applyBranch($query, $config['table'], $filters);
 
             foreach ($query->get() as $row) {
                 $user = $this->userName($row->user_add_id ?? null);
                 $activity[] = [
-                    'key' => $config['table'] . '-' . $row->id,
+                    'key' => $config['table'].'-'.$row->id,
                     'time' => $row->{$config['date']},
                     'module' => $config['module'],
-                    'description' => trim($config['text'] . ' ' . ($row->{$config['number']} ?? '')),
+                    'description' => trim($config['text'].' '.($row->{$config['number']} ?? '')),
                     'user' => $user,
                     'status' => $row->status ?? ($row->approved ?? false ? 'approved' : 'created'),
-                    'action_url' => $config['route'] . '/' . $row->id,
+                    'action_url' => $config['route'].'/'.$row->id,
                 ];
             }
         }
@@ -1006,7 +1006,7 @@ class DashboardService
             ->values();
 
         foreach ($configs as $config) {
-            if (!$this->tableExists($config['table'])) {
+            if (! $this->tableExists($config['table'])) {
                 continue;
             }
 
@@ -1015,19 +1015,19 @@ class DashboardService
             $this->applyDashboardRecordScope($query, $config['table'], true);
 
             $sortColumn = $this->hasColumn($config['table'], 'created_at') ? 'created_at' : $config['date'];
-            $query->orderByDesc($config['table'] . '.' . $sortColumn)->limit(5);
+            $query->orderByDesc($config['table'].'.'.$sortColumn)->limit(5);
 
             foreach ($query->get() as $row) {
                 $date = $row->{$config['date']} ?? $row->created_at ?? null;
                 $transactions[] = [
-                    'key' => $config['table'] . '-' . $row->id,
+                    'key' => $config['table'].'-'.$row->id,
                     'date' => $date,
                     'type' => $config['type'],
                     'number' => $row->{$config['number']} ?? $row->reference ?? (string) $row->id,
                     'party' => $row->party_name ?? $row->account_name ?? '-',
                     'amount' => (float) ($row->{$config['amount']} ?? $row->total ?? 0),
                     'status' => $row->status ?? ($row->approved ?? false ? 'posted' : 'created'),
-                    'action_url' => $config['route'] . '/' . $row->id,
+                    'action_url' => $config['route'].'/'.$row->id,
                     'created_at' => $row->created_at ?? $date,
                 ];
             }
@@ -1038,30 +1038,24 @@ class DashboardService
 
     protected function bankAccountBalances(array $filters): array
     {
-        if (!$this->tableExists('bank_accounts')) {
+        if (! $this->tableExists('bank_accounts')) {
             return [];
         }
 
         $selects = [
             'bank_accounts.id',
-            DB::raw(($this->hasColumn('bank_accounts', 'display_name') ? 'bank_accounts.display_name' : 'bank_accounts.id') . ' as display_name'),
-            DB::raw(($this->hasColumn('bank_accounts', 'bank_name') ? 'bank_accounts.bank_name' : 'NULL') . ' as bank_name'),
-            DB::raw(($this->hasColumn('bank_accounts', 'account_name') ? 'bank_accounts.account_name' : 'NULL') . ' as account_name'),
-            DB::raw(($this->hasColumn('bank_accounts', 'account_number') ? 'bank_accounts.account_number' : 'NULL') . ' as account_number'),
+            DB::raw(($this->hasColumn('bank_accounts', 'display_name') ? 'bank_accounts.display_name' : 'bank_accounts.id').' as display_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'bank_name') ? 'bank_accounts.bank_name' : 'NULL').' as bank_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'account_name') ? 'bank_accounts.account_name' : 'NULL').' as account_name'),
+            DB::raw(($this->hasColumn('bank_accounts', 'account_number') ? 'bank_accounts.account_number' : 'NULL').' as account_number'),
         ];
 
         $query = DB::table('bank_accounts')->select($selects);
 
-        $hasOpeningBalance = $this->hasColumn('bank_accounts', 'opening_balance');
-
         if ($this->hasColumn('bank_accounts', 'account_id') && $this->tableExists('accounts') && $this->hasColumn('accounts', 'balance')) {
             $query->leftJoin('accounts', 'bank_accounts.account_id', '=', 'accounts.id');
 
-            if ($hasOpeningBalance) {
-                $query->addSelect(DB::raw('(COALESCE(bank_accounts.opening_balance, 0) + COALESCE(accounts.balance, 0)) as balance'));
-            } else {
-                $query->addSelect(DB::raw('COALESCE(accounts.balance, 0) as balance'));
-            }
+            $query->addSelect(DB::raw('COALESCE(accounts.balance, 0) as balance'));
 
             if ($this->hasColumn('accounts', 'active')) {
                 $query->where(function (Builder $query) {
@@ -1070,7 +1064,7 @@ class DashboardService
             }
         } else {
             $balanceColumn = $this->firstExistingColumn('bank_accounts', ['current_balance', 'balance', 'opening_balance']);
-            if (!$balanceColumn) {
+            if (! $balanceColumn) {
                 return [];
             }
 
@@ -1091,10 +1085,10 @@ class DashboardService
             $query->where('bank_accounts.active', true);
         }
 
-        if (!empty($filters['branch_id']) && $this->hasColumn('bank_accounts', 'branch_id')) {
+        if (! empty($filters['branch_id']) && $this->hasColumn('bank_accounts', 'branch_id')) {
             $query->where(function ($q) use ($filters) {
                 $q->where('bank_accounts.branch_id', $filters['branch_id'])
-                  ->orWhereNull('bank_accounts.branch_id');
+                    ->orWhereNull('bank_accounts.branch_id');
             });
         }
 
@@ -1102,7 +1096,7 @@ class DashboardService
             ->orderByDesc('balance')
             ->limit(5)
             ->get()
-            ->map(fn($account) => [
+            ->map(fn ($account) => [
                 'key' => $account->id,
                 'bank_name' => $account->bank_name ?: $account->display_name,
                 'account_name' => $account->account_name ?: $account->display_name,
@@ -1115,7 +1109,7 @@ class DashboardService
 
     protected function crmSummary(array $filters): ?array
     {
-        if (!$this->tableExists('deals') && !$this->tableExists('leads')) {
+        if (! $this->tableExists('deals') && ! $this->tableExists('leads')) {
             return null;
         }
 
@@ -1156,7 +1150,7 @@ class DashboardService
 
     protected function hrmSummary(array $filters): ?array
     {
-        if (!$this->tableExists('employee_profiles')) {
+        if (! $this->tableExists('employee_profiles')) {
             return null;
         }
 
@@ -1205,7 +1199,7 @@ class DashboardService
 
     protected function projectSummary(array $filters): ?array
     {
-        if (!$this->tableExists('projects')) {
+        if (! $this->tableExists('projects')) {
             return null;
         }
 
@@ -1249,7 +1243,7 @@ class DashboardService
 
     protected function inventorySummary(array $filters): ?array
     {
-        if (!$this->tableExists('products')) {
+        if (! $this->tableExists('products')) {
             return null;
         }
 
@@ -1284,15 +1278,15 @@ class DashboardService
 
     protected function baseTransactionQuery(array $config, array $filters): Builder
     {
-        $query = DB::table($config['table'])->select($config['table'] . '.*');
+        $query = DB::table($config['table'])->select($config['table'].'.*');
 
         if ($this->hasColumn($config['table'], 'contact_id') && $this->tableExists('contacts')) {
-            $query->leftJoin('contacts', $config['table'] . '.contact_id', '=', 'contacts.id')
+            $query->leftJoin('contacts', $config['table'].'.contact_id', '=', 'contacts.id')
                 ->addSelect('contacts.name as party_name');
         }
 
         if ($this->hasColumn($config['table'], 'user_add_id') && $this->tableExists('users')) {
-            $query->leftJoin('users', $config['table'] . '.user_add_id', '=', 'users.id')
+            $query->leftJoin('users', $config['table'].'.user_add_id', '=', 'users.id')
                 ->addSelect('users.name as created_by_name');
         }
 
@@ -1305,8 +1299,9 @@ class DashboardService
     protected function formatTransactionRow(object $row, array $config, string $fallbackStatus): array
     {
         $date = $row->{$config['date']} ?? $row->created_at ?? null;
+
         return [
-            'key' => $config['table'] . '-' . $row->id,
+            'key' => $config['table'].'-'.$row->id,
             'id' => $row->id,
             'type' => $config['type'],
             'module' => $config['module'],
@@ -1319,29 +1314,29 @@ class DashboardService
             'status' => $row->status ?? $fallbackStatus,
             'approved' => (bool) ($row->approved ?? false),
             'created_at' => $row->created_at ?? null,
-            'action_url' => $config['route'] . '/' . $row->id,
+            'action_url' => $config['route'].'/'.$row->id,
         ];
     }
 
     protected function issue(string $type, array $config, object $row, string $severity): array
     {
         return [
-            'key' => $type . '-' . $config['table'] . '-' . $row->id,
+            'key' => $type.'-'.$config['table'].'-'.$row->id,
             'issue_type' => $type,
             'module' => $config['module'],
             'record' => $row->{$config['number']} ?? $row->reference ?? $row->id,
             'amount' => (float) ($row->{$config['amount']} ?? $row->total ?? 0),
             'date' => $row->{$config['date']} ?? $row->created_at ?? null,
             'severity' => $severity,
-            'action_url' => $config['route'] . '/' . $row->id,
+            'action_url' => $config['route'].'/'.$row->id,
         ];
     }
 
     protected function approvedButJvMissingCount(array $filters): int
     {
         return collect($this->transactionTables)
-            ->reject(fn($config) => $config['table'] === 'journal_vouchers')
-            ->sum(fn($config) => $this->approvedButJvMissingQuery($config, $filters)?->count() ?? 0);
+            ->reject(fn ($config) => $config['table'] === 'journal_vouchers')
+            ->sum(fn ($config) => $this->approvedButJvMissingQuery($config, $filters)?->count() ?? 0);
     }
 
     protected function approvedButJvMissingRows(array $config, array $filters, int $limit)
@@ -1351,7 +1346,7 @@ class DashboardService
 
     protected function approvedButJvMissingQuery(array $config, array $filters): ?Builder
     {
-        if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'approved')) {
+        if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'approved')) {
             return null;
         }
 
@@ -1367,7 +1362,7 @@ class DashboardService
             $query->whereNotExists(function ($sub) use ($config, $sourceType) {
                 $sub->select(DB::raw(1))
                     ->from('journal_vouchers')
-                    ->whereColumn('journal_vouchers.source_id', $config['table'] . '.id')
+                    ->whereColumn('journal_vouchers.source_id', $config['table'].'.id')
                     ->where('journal_vouchers.source_type', $sourceType);
             });
         }
@@ -1377,7 +1372,7 @@ class DashboardService
 
     protected function approvedButNumberMissingCount(array $filters): int
     {
-        return collect($this->transactionTables)->sum(fn($config) => $this->approvedButNumberMissingQuery($config, $filters)?->count() ?? 0);
+        return collect($this->transactionTables)->sum(fn ($config) => $this->approvedButNumberMissingQuery($config, $filters)?->count() ?? 0);
     }
 
     protected function approvedButNumberMissingRows(array $config, array $filters, int $limit)
@@ -1387,7 +1382,7 @@ class DashboardService
 
     protected function approvedButNumberMissingQuery(array $config, array $filters): ?Builder
     {
-        if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'approved') || !$this->hasColumn($config['table'], $config['number'])) {
+        if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'approved') || ! $this->hasColumn($config['table'], $config['number'])) {
             return null;
         }
 
@@ -1403,15 +1398,15 @@ class DashboardService
 
     protected function sourceWithMissingJvRows(array $config, array $filters, int $limit)
     {
-        if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'journal_voucher_id') || !$this->tableExists('journal_vouchers')) {
+        if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'journal_voucher_id') || ! $this->tableExists('journal_vouchers')) {
             return collect();
         }
 
         $query = DB::table($config['table'])
-            ->leftJoin('journal_vouchers', $config['table'] . '.journal_voucher_id', '=', 'journal_vouchers.id')
-            ->whereNotNull($config['table'] . '.journal_voucher_id')
+            ->leftJoin('journal_vouchers', $config['table'].'.journal_voucher_id', '=', 'journal_vouchers.id')
+            ->whereNotNull($config['table'].'.journal_voucher_id')
             ->whereNull('journal_vouchers.id')
-            ->select($config['table'] . '.*')
+            ->select($config['table'].'.*')
             ->limit($limit);
         $this->applyBranch($query, $config['table'], $filters);
 
@@ -1421,21 +1416,22 @@ class DashboardService
     protected function journalVoucherNullCount(array $filters): int
     {
         return collect($this->transactionTables)
-            ->reject(fn($config) => $config['table'] === 'journal_vouchers')
+            ->reject(fn ($config) => $config['table'] === 'journal_vouchers')
             ->sum(function ($config) use ($filters) {
-                if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'journal_voucher_id')) {
+                if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'journal_voucher_id')) {
                     return 0;
                 }
 
                 $query = DB::table($config['table'])->whereNull('journal_voucher_id');
                 $this->applyBranch($query, $config['table'], $filters);
+
                 return $query->count();
             });
     }
 
     protected function unbalancedJournalVouchers(array $filters)
     {
-        if (!$this->tableExists('journal_vouchers') || !$this->tableExists('journal_voucher_lines')) {
+        if (! $this->tableExists('journal_vouchers') || ! $this->tableExists('journal_voucher_lines')) {
             return collect();
         }
 
@@ -1452,7 +1448,7 @@ class DashboardService
 
     protected function jvWithNoLines(array $filters)
     {
-        if (!$this->tableExists('journal_vouchers') || !$this->tableExists('journal_voucher_lines')) {
+        if (! $this->tableExists('journal_vouchers') || ! $this->tableExists('journal_voucher_lines')) {
             return collect();
         }
 
@@ -1468,39 +1464,42 @@ class DashboardService
 
     protected function autoJvCreatedToday(array $filters): int
     {
-        if (!$this->tableExists('journal_vouchers') || !$this->hasColumn('journal_vouchers', 'is_auto_generated')) {
+        if (! $this->tableExists('journal_vouchers') || ! $this->hasColumn('journal_vouchers', 'is_auto_generated')) {
             return 0;
         }
         $query = DB::table('journal_vouchers')->where('is_auto_generated', true)->whereDate('created_at', now()->toDateString());
         $this->applyBranch($query, 'journal_vouchers', $filters);
+
         return $query->count();
     }
 
     protected function voidedThisMonth(array $filters): int
     {
         return collect($this->transactionTables)->sum(function ($config) use ($filters) {
-            if (!$this->tableExists($config['table']) || !$this->hasColumn($config['table'], 'voided_at')) {
+            if (! $this->tableExists($config['table']) || ! $this->hasColumn($config['table'], 'voided_at')) {
                 return 0;
             }
             $query = DB::table($config['table'])->whereBetween('voided_at', [now()->startOfMonth(), now()->endOfMonth()]);
             $this->applyBranch($query, $config['table'], $filters);
+
             return $query->count();
         });
     }
 
     protected function reversalJvsThisMonth(array $filters): int
     {
-        if (!$this->tableExists('journal_vouchers') || !$this->hasColumn('journal_vouchers', 'reversed_journal_voucher_id')) {
+        if (! $this->tableExists('journal_vouchers') || ! $this->hasColumn('journal_vouchers', 'reversed_journal_voucher_id')) {
             return 0;
         }
         $query = DB::table('journal_vouchers')->whereNotNull('reversed_journal_voucher_id')->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()]);
         $this->applyBranch($query, 'journal_vouchers', $filters);
+
         return $query->count();
     }
 
     protected function countApproved(string $table, string $dateColumn, array $filters, ?string $from = null, ?string $to = null): int
     {
-        if (!$this->tableExists($table)) {
+        if (! $this->tableExists($table)) {
             return 0;
         }
         $query = DB::table($table);
@@ -1510,23 +1509,25 @@ class DashboardService
             $query->whereDate($dateColumn, '>=', $from)
                 ->whereDate($dateColumn, '<=', $to);
         }
+
         return $query->count();
     }
 
     protected function overdueSum(string $table, string $dateColumn, string $balanceColumn, array $filters): float
     {
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $dateColumn) || !$this->hasColumn($table, $balanceColumn)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $dateColumn) || ! $this->hasColumn($table, $balanceColumn)) {
             return 0;
         }
         $query = DB::table($table)->whereDate($dateColumn, '<', now())->where($balanceColumn, '>', 0);
         $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
+
         return (float) $query->sum($balanceColumn);
     }
 
     protected function periodSum(string $table, string $amountColumn, string $dateColumn, array $filters, Carbon $from, Carbon $to): float
     {
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $amountColumn) || !$this->hasColumn($table, $dateColumn)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $amountColumn) || ! $this->hasColumn($table, $dateColumn)) {
             return 0;
         }
         $query = DB::table($table)
@@ -1534,12 +1535,13 @@ class DashboardService
             ->whereDate($dateColumn, '<=', $to->toDateString());
         $this->applyDashboardRecordScope($query, $table, true);
         $this->applyBranch($query, $table, $filters);
+
         return (float) $query->sum($amountColumn);
     }
 
     protected function biggestInflowSource(array $filters, Carbon $from, Carbon $to): ?string
     {
-        if (!$this->tableExists('customer_payments') || !$this->tableExists('contacts') || !$this->hasColumn('customer_payments', 'contact_id')) {
+        if (! $this->tableExists('customer_payments') || ! $this->tableExists('contacts') || ! $this->hasColumn('customer_payments', 'contact_id')) {
             return null;
         }
         $query = DB::table('customer_payments')
@@ -1551,6 +1553,7 @@ class DashboardService
             ->orderByDesc('total');
         $this->applyDashboardRecordScope($query, 'customer_payments', true);
         $row = $query->first();
+
         return $row?->name;
     }
 
@@ -1581,38 +1584,28 @@ class DashboardService
 
     protected function periodRevenue(array $filters, string $from, string $to): float
     {
-        return $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $from, $to)
-            - $this->sumApproved('sales_returns', 'total', 'sales_return_date', $filters, $from, $to);
+        return $this->ledgerTypeNetTotal(['income'], $filters, $from, $to, creditPositive: true);
     }
 
     protected function periodPurchases(array $filters, string $from, string $to): float
     {
-        return $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $from, $to)
-            - $this->sumApproved('debit_notes', 'total', 'debit_note_date', $filters, $from, $to);
+        return $this->ledgerTypeNetTotal(['expense'], $filters, $from, $to);
     }
 
     protected function periodExpenses(array $filters, string $from, string $to): float
     {
-        return $this->periodPurchases($filters, $from, $to)
-            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, $from, $to);
+        return $this->ledgerTypeNetTotal(['expense'], $filters, $from, $to);
     }
 
     protected function payableBalance(array $filters): float
     {
-        $linkedAccountPayables = $this->supplierPayableBalance($filters)
+        return $this->supplierPayableBalance($filters)
             + $this->employeePayableBalance($filters);
-
-        if ($linkedAccountPayables > 0) {
-            return $linkedAccountPayables;
-        }
-
-        return $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters)
-            + $this->expensePayableBalance($filters);
     }
 
     protected function expensePayableBalance(array $filters, ?string $from = null, ?string $to = null, string $dateColumn = 'due_date'): float
     {
-        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total')) {
+        if (! $this->tableExists('expenses') || ! $this->hasColumn('expenses', 'total')) {
             return 0.0;
         }
 
@@ -1634,7 +1627,7 @@ class DashboardService
 
     protected function directExpenseCashOut(array $filters, string $from, string $to): float
     {
-        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total') || !$this->hasColumn('expenses', 'expense_date')) {
+        if (! $this->tableExists('expenses') || ! $this->hasColumn('expenses', 'total') || ! $this->hasColumn('expenses', 'expense_date')) {
             return 0.0;
         }
 
@@ -1660,13 +1653,12 @@ class DashboardService
 
     protected function periodCashIn(array $filters, Carbon $from, Carbon $to): float
     {
-        return $this->periodSum('customer_payments', 'amount', 'payment_date', $filters, $from, $to);
+        return $this->cashMovementTotal($filters, $from, $to, 'in');
     }
 
     protected function periodCashOut(array $filters, Carbon $from, Carbon $to): float
     {
-        return $this->periodSum('supplier_payments', 'amount', 'payment_date', $filters, $from, $to)
-            + $this->directExpenseCashOut($filters, $from->toDateString(), $to->toDateString());
+        return $this->cashMovementTotal($filters, $from, $to, 'out');
     }
 
     protected function paidAmountFor(string $table, string $dateColumn, array $filters, string $from, string $to): float
@@ -1681,24 +1673,17 @@ class DashboardService
 
     protected function dailyRevenue(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->combineDailySums([
-            $this->dailySums('invoices', 'total', 'invoice_date', $filters, $from, $to),
-            $this->negateDailySums($this->dailySums('sales_returns', 'total', 'sales_return_date', $filters, $from, $to)),
-        ]);
+        return $this->dailyLedgerTypeNetTotals(['income'], $filters, $from, $to, creditPositive: true);
     }
 
     protected function dailyExpenses(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->combineDailySums([
-            $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $from, $to),
-            $this->negateDailySums($this->dailySums('debit_notes', 'total', 'debit_note_date', $filters, $from, $to)),
-            $this->dailySums('expenses', 'total', 'expense_date', $filters, $from, $to),
-        ]);
+        return $this->dailyLedgerTypeNetTotals(['expense'], $filters, $from, $to);
     }
 
     protected function dailyCashIn(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->dailySums('customer_payments', 'amount', 'payment_date', $filters, $from, $to);
+        return $this->dailyCashMovements($filters, $from, $to, 'in');
     }
 
     protected function dailyPayables(array $filters, Carbon $from, Carbon $to): array
@@ -1721,7 +1706,7 @@ class DashboardService
 
     protected function dailyExpenseSums(array $filters, Carbon $from, Carbon $to, bool $requiresContact): array
     {
-        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total') || !$this->hasColumn('expenses', 'expense_date')) {
+        if (! $this->tableExists('expenses') || ! $this->hasColumn('expenses', 'total') || ! $this->hasColumn('expenses', 'expense_date')) {
             return [];
         }
 
@@ -1738,21 +1723,18 @@ class DashboardService
             $requiresContact ? $query->whereNotNull('contact_id') : $query->whereNull('contact_id');
         }
 
-        return $query->pluck('amount', 'day')->map(fn($v) => (float) $v)->all();
+        return $query->pluck('amount', 'day')->map(fn ($v) => (float) $v)->all();
     }
 
     protected function dailyCashOut(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->combineDailySums([
-            $this->dailySums('supplier_payments', 'amount', 'payment_date', $filters, $from, $to),
-            $this->dailyDirectExpenseCashOut($filters, $from, $to),
-        ]);
+        return $this->dailyCashMovements($filters, $from, $to, 'out');
     }
 
     protected function negateDailySums(array $sums): array
     {
         return collect($sums)
-            ->map(fn($value) => -1 * (float) $value)
+            ->map(fn ($value) => -1 * (float) $value)
             ->all();
     }
 
@@ -1771,7 +1753,7 @@ class DashboardService
 
     protected function sumApproved(string $table, string $amountColumn, string $dateColumn, array $filters, ?string $from = null, ?string $to = null): float
     {
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $amountColumn)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $amountColumn)) {
             return 0;
         }
         $query = DB::table($table);
@@ -1781,12 +1763,13 @@ class DashboardService
             $query->whereDate($dateColumn, '>=', $from)
                 ->whereDate($dateColumn, '<=', $to);
         }
+
         return (float) $query->sum($amountColumn);
     }
 
     protected function dailySums(string $table, string $amount, string $date, array $filters, Carbon $from, Carbon $to): array
     {
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $amount) || !$this->hasColumn($table, $date)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $amount) || ! $this->hasColumn($table, $date)) {
             return [];
         }
         $query = DB::table($table)
@@ -1800,6 +1783,136 @@ class DashboardService
         return $query->pluck('amount', 'day')->all();
     }
 
+    protected function postedLedgerLinesQuery(array $filters, Carbon|string|null $from = null, Carbon|string|null $to = null): ?Builder
+    {
+        if (! $this->tableExists('journal_vouchers') || ! $this->tableExists('journal_voucher_lines') || ! $this->tableExists('chart_of_accounts')) {
+            return null;
+        }
+
+        $query = DB::table('journal_voucher_lines')
+            ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
+            ->join('chart_of_accounts', 'journal_voucher_lines.chart_of_account_id', '=', 'chart_of_accounts.id');
+
+        if ($this->tableExists('accounts') && $this->hasColumn('chart_of_accounts', 'account_id')) {
+            $query->leftJoin('accounts', 'chart_of_accounts.account_id', '=', 'accounts.id');
+        }
+
+        $query->where('journal_vouchers.status', 'posted');
+
+        if ($this->hasColumn('journal_vouchers', 'active')) {
+            $query->where('journal_vouchers.active', true);
+        }
+
+        if ($this->hasColumn('journal_vouchers', 'void')) {
+            $query->where('journal_vouchers.void', false);
+        }
+
+        if ($from && $to && $this->hasColumn('journal_vouchers', 'voucher_date')) {
+            $fromDate = $from instanceof Carbon ? $from->toDateString() : $from;
+            $toDate = $to instanceof Carbon ? $to->toDateString() : $to;
+
+            $query->whereDate('journal_vouchers.voucher_date', '>=', $fromDate)
+                ->whereDate('journal_vouchers.voucher_date', '<=', $toDate);
+        }
+
+        $this->applyBranch($query, 'journal_vouchers', $filters);
+
+        return $query;
+    }
+
+    protected function ledgerTypeNetTotal(array $types, array $filters, string $from, string $to, bool $creditPositive = false): float
+    {
+        $query = $this->postedLedgerLinesQuery($filters, $from, $to);
+
+        if (! $query) {
+            return 0.0;
+        }
+
+        $query->whereIn('chart_of_accounts.type', $types);
+
+        $expression = $creditPositive
+            ? 'COALESCE(SUM(COALESCE(journal_voucher_lines.credit, 0) - COALESCE(journal_voucher_lines.debit, 0)), 0)'
+            : 'COALESCE(SUM(COALESCE(journal_voucher_lines.debit, 0) - COALESCE(journal_voucher_lines.credit, 0)), 0)';
+
+        return round((float) $query->selectRaw($expression.' as total')->value('total'), 2);
+    }
+
+    protected function dailyLedgerTypeNetTotals(array $types, array $filters, Carbon $from, Carbon $to, bool $creditPositive = false): array
+    {
+        $query = $this->postedLedgerLinesQuery($filters, $from, $to);
+
+        if (! $query) {
+            return [];
+        }
+
+        $amountExpression = $creditPositive
+            ? 'SUM(COALESCE(journal_voucher_lines.credit, 0) - COALESCE(journal_voucher_lines.debit, 0))'
+            : 'SUM(COALESCE(journal_voucher_lines.debit, 0) - COALESCE(journal_voucher_lines.credit, 0))';
+
+        return $query
+            ->whereIn('chart_of_accounts.type', $types)
+            ->select(DB::raw('DATE(journal_vouchers.voucher_date) as day'), DB::raw($amountExpression.' as amount'))
+            ->groupBy(DB::raw('DATE(journal_vouchers.voucher_date)'))
+            ->pluck('amount', 'day')
+            ->map(fn ($value) => round((float) $value, 2))
+            ->all();
+    }
+
+    protected function cashMovementTotal(array $filters, Carbon $from, Carbon $to, string $direction): float
+    {
+        $query = $this->cashMovementQuery($filters, $from, $to);
+
+        if (! $query) {
+            return 0.0;
+        }
+
+        $expression = $direction === 'in'
+            ? 'COALESCE(SUM(CASE WHEN journal_voucher_lines.debit > journal_voucher_lines.credit THEN journal_voucher_lines.debit - journal_voucher_lines.credit ELSE 0 END), 0)'
+            : 'COALESCE(SUM(CASE WHEN journal_voucher_lines.credit > journal_voucher_lines.debit THEN journal_voucher_lines.credit - journal_voucher_lines.debit ELSE 0 END), 0)';
+
+        return round((float) $query->value(DB::raw($expression)), 2);
+    }
+
+    protected function dailyCashMovements(array $filters, Carbon $from, Carbon $to, string $direction): array
+    {
+        $query = $this->cashMovementQuery($filters, $from, $to);
+
+        if (! $query) {
+            return [];
+        }
+
+        $expression = $direction === 'in'
+            ? 'SUM(CASE WHEN journal_voucher_lines.debit > journal_voucher_lines.credit THEN journal_voucher_lines.debit - journal_voucher_lines.credit ELSE 0 END)'
+            : 'SUM(CASE WHEN journal_voucher_lines.credit > journal_voucher_lines.debit THEN journal_voucher_lines.credit - journal_voucher_lines.debit ELSE 0 END)';
+
+        return $query
+            ->select(DB::raw('DATE(journal_vouchers.voucher_date) as day'), DB::raw($expression.' as amount'))
+            ->groupBy(DB::raw('DATE(journal_vouchers.voucher_date)'))
+            ->pluck('amount', 'day')
+            ->map(fn ($value) => round((float) $value, 2))
+            ->all();
+    }
+
+    protected function cashMovementQuery(array $filters, Carbon $from, Carbon $to): ?Builder
+    {
+        $query = $this->postedLedgerLinesQuery($filters, $from, $to);
+
+        if (! $query || ! $this->tableExists('accounts') || ! $this->hasColumn('accounts', 'nature')) {
+            return null;
+        }
+
+        $query->whereIn('accounts.nature', ['bank', 'cash']);
+
+        if ($this->hasColumn('journal_vouchers', 'source_type')) {
+            $query->where(function (Builder $query) {
+                $query->whereNull('journal_vouchers.source_type')
+                    ->orWhereNotIn('journal_vouchers.source_type', ['cash_transfer', 'CashTransfer']);
+            });
+        }
+
+        return $query;
+    }
+
     protected function linkedBankAccountBalance(array $filters, string $type): float
     {
         $query = BankAccount::query()
@@ -1811,30 +1924,19 @@ class DashboardService
             })
             ->with('account');
 
-        if (!empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
+        if (! empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
             $query->where(function ($q) use ($filters) {
                 $q->where('branch_id', $filters['branch_id'])
-                  ->orWhereNull('branch_id');
+                    ->orWhereNull('branch_id');
             });
         }
 
-        return round(
-            (float) $query->get()->sum(fn($bankAccount) =>
-                (float) ($bankAccount->opening_balance ?? 0) + (float) ($bankAccount->account?->balance ?? 0)
-            ),
-            2
-        );
+        return round((float) $query->get()->sum(fn ($bankAccount) => (float) ($bankAccount->account?->balance ?? 0)), 2);
     }
 
     protected function customerReceivableBalance(array $filters): float
     {
-        $balance = $this->contactAccountBalance($filters, 'customer');
-
-        if ($balance > 0) {
-            return $balance;
-        }
-
-        return $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters);
+        return $this->contactAccountBalance($filters, 'customer');
     }
 
     protected function supplierPayableBalance(array $filters): float
@@ -1872,12 +1974,12 @@ class DashboardService
 
     protected function payslipPayableBalance(array $filters): float
     {
-        if (!$this->tableExists('payslips')) {
+        if (! $this->tableExists('payslips')) {
             return 0.0;
         }
 
         $amountColumn = $this->firstExistingColumn('payslips', ['net_payable', 'total_payable', 'salary_payable']);
-        if (!$amountColumn) {
+        if (! $amountColumn) {
             return 0.0;
         }
 
@@ -1898,7 +2000,7 @@ class DashboardService
 
         $grossPayable = (float) $query->sum($amountColumn);
 
-        if (!$this->tableExists('payroll_payments') || !$this->hasColumn('payroll_payments', 'amount')) {
+        if (! $this->tableExists('payroll_payments') || ! $this->hasColumn('payroll_payments', 'amount')) {
             return round(max(0, $grossPayable), 2);
         }
 
@@ -1906,7 +2008,7 @@ class DashboardService
             ->when($this->hasColumn('payroll_payments', 'status'), function (Builder $query) {
                 $query->whereNotIn('status', ['cancelled', 'failed', 'void', 'voided', 'CANCELLED', 'FAILED', 'VOID', 'VOIDED']);
             })
-            ->when(!empty($filters['branch_id']) && $this->hasColumn('payroll_payments', 'payroll_run_id') && $this->tableExists('payroll_runs') && $this->hasColumn('payroll_runs', 'branch_id'), function (Builder $query) use ($filters) {
+            ->when(! empty($filters['branch_id']) && $this->hasColumn('payroll_payments', 'payroll_run_id') && $this->tableExists('payroll_runs') && $this->hasColumn('payroll_runs', 'branch_id'), function (Builder $query) use ($filters) {
                 $query->join('payroll_runs', 'payroll_payments.payroll_run_id', '=', 'payroll_runs.id')
                     ->where('payroll_runs.branch_id', $filters['branch_id']);
             })
@@ -1917,13 +2019,19 @@ class DashboardService
 
     protected function contactAccountBalance(array $filters, string $partyType): float
     {
-        if (!$this->tableExists('contacts') || !$this->tableExists('accounts') || !$this->hasColumn('contacts', 'account_id') || !$this->hasColumn('accounts', 'balance')) {
+        if (! $this->tableExists('contacts') || ! $this->tableExists('accounts') || ! $this->hasColumn('contacts', 'account_id') || ! $this->hasColumn('accounts', 'balance')) {
             return 0.0;
         }
 
+        $accountColumn = $partyType === 'supplier' && $this->hasColumn('contacts', 'payable_account_id')
+            ? DB::raw('COALESCE(contacts.payable_account_id, contacts.account_id)')
+            : DB::raw('contacts.account_id');
+
         $query = DB::table('contacts')
-            ->join('accounts', 'contacts.account_id', '=', 'accounts.id')
-            ->whereNotNull('contacts.account_id');
+            ->join('accounts', $accountColumn, '=', 'accounts.id')
+            ->whereRaw($partyType === 'supplier' && $this->hasColumn('contacts', 'payable_account_id')
+                ? 'COALESCE(contacts.payable_account_id, contacts.account_id) IS NOT NULL'
+                : 'contacts.account_id IS NOT NULL');
 
         if ($this->hasColumn('contacts', 'active')) {
             $query->where('contacts.active', true);
@@ -1938,7 +2046,7 @@ class DashboardService
                     $query->whereIn('contacts.contact_type', ['customer', 'Customer', 'CUSTOMER', 'client', 'Client', 'CLIENT', 'both', 'Both', 'BOTH']);
                 }
 
-                if (!$this->hasColumn('contacts', 'contact_type') && $this->hasColumn('contacts', 'accept_purchase')) {
+                if (! $this->hasColumn('contacts', 'contact_type') && $this->hasColumn('contacts', 'accept_purchase')) {
                     $query->where(function (Builder $query) {
                         $query->where('contacts.accept_purchase', false)
                             ->orWhereNull('contacts.accept_purchase');
@@ -1983,19 +2091,20 @@ class DashboardService
 
     protected function countTable(string $table, string $dateColumn, array $filters): int
     {
-        if (!$this->tableExists($table)) {
+        if (! $this->tableExists($table)) {
             return 0;
         }
         $query = DB::table($table);
         $this->applyDashboardRecordScope($query, $table);
         $this->applyBranch($query, $table, $filters);
         $this->applyDateRange($query, $table, $dateColumn, $filters);
+
         return $query->count();
     }
 
     protected function pendingCount(string $table): int
     {
-        if (!$this->tableExists($table)) {
+        if (! $this->tableExists($table)) {
             return 0;
         }
         $query = DB::table($table);
@@ -2004,25 +2113,27 @@ class DashboardService
         } elseif ($this->hasColumn($table, 'status')) {
             $query->whereIn('status', ['draft', 'pending']);
         }
+
         return $query->count();
     }
 
     protected function lowStockCount(): int
     {
-        if (!$this->tableExists('products') || !$this->hasColumn('products', 'reorder_level')) {
+        if (! $this->tableExists('products') || ! $this->hasColumn('products', 'reorder_level')) {
             return 0;
         }
         $stockColumn = $this->firstExistingColumn('products', ['current_stock', 'stock', 'quantity', 'opening_stock']);
-        if (!$stockColumn) {
+        if (! $stockColumn) {
             return 0;
         }
         $query = $this->activeProductsQuery();
+
         return $query->whereColumn($stockColumn, '<=', 'reorder_level')->count();
     }
 
     protected function overdueCount(string $table, string $dateColumn, string $balanceColumn, array $filters, bool $past = true): int
     {
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $dateColumn)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $dateColumn)) {
             return 0;
         }
         $query = DB::table($table);
@@ -2032,16 +2143,17 @@ class DashboardService
             $query->where($balanceColumn, '>', 0);
         }
         $this->applyBranch($query, $table, $filters);
+
         return $query->count();
     }
 
     protected function topParties(string $table, string $dateColumn, string $amountColumn, array $filters): array
     {
-        if (!$this->tableExists($table) || !$this->tableExists('contacts') || !$this->hasColumn($table, 'contact_id') || !$this->hasColumn($table, $amountColumn) || !$this->hasColumn('contacts', 'name')) {
+        if (! $this->tableExists($table) || ! $this->tableExists('contacts') || ! $this->hasColumn($table, 'contact_id') || ! $this->hasColumn($table, $amountColumn) || ! $this->hasColumn('contacts', 'name')) {
             return [];
         }
         $query = DB::table($table)
-            ->join('contacts', $table . '.contact_id', '=', 'contacts.id')
+            ->join('contacts', $table.'.contact_id', '=', 'contacts.id')
             ->select('contacts.name', DB::raw("SUM($table.$amountColumn) as amount"))
             ->groupBy('contacts.id', 'contacts.name')
             ->orderByDesc('amount')
@@ -2050,7 +2162,7 @@ class DashboardService
         $this->applyBranch($query, $table, $filters);
         $this->applyDateRange($query, $table, $dateColumn, $filters);
 
-        return $query->get()->map(fn($row) => ['name' => $row->name, 'amount' => (float) $row->amount])->all();
+        return $query->get()->map(fn ($row) => ['name' => $row->name, 'amount' => (float) $row->amount])->all();
     }
 
     protected function whereCount(string $table, string $column, string $value): int
@@ -2070,13 +2182,14 @@ class DashboardService
 
     protected function overdueActivities(): int
     {
-        if (!$this->tableExists('crm_activities') || !$this->hasColumn('crm_activities', 'due_at')) {
+        if (! $this->tableExists('crm_activities') || ! $this->hasColumn('crm_activities', 'due_at')) {
             return 0;
         }
         $query = DB::table('crm_activities')->where('due_at', '<', now());
         if ($this->hasColumn('crm_activities', 'completed_at')) {
             $query->whereNull('completed_at');
         }
+
         return $query->count();
     }
 
@@ -2090,8 +2203,8 @@ class DashboardService
     protected function pipeline(): array
     {
         $defaultStages = ['New', 'Contacted', 'Qualified', 'Proposal Sent', 'Negotiation', 'Won', 'Lost'];
-        if (!$this->tableExists('deal_stages') || !$this->tableExists('deals') || !$this->hasColumn('deals', 'deal_stage_id') || !$this->hasColumn('deal_stages', 'name')) {
-            return collect($defaultStages)->map(fn($stage) => ['stage' => $stage, 'count' => 0, 'amount' => 0])->all();
+        if (! $this->tableExists('deal_stages') || ! $this->tableExists('deals') || ! $this->hasColumn('deals', 'deal_stage_id') || ! $this->hasColumn('deal_stages', 'name')) {
+            return collect($defaultStages)->map(fn ($stage) => ['stage' => $stage, 'count' => 0, 'amount' => 0])->all();
         }
 
         $query = DB::table('deal_stages')
@@ -2105,13 +2218,13 @@ class DashboardService
         }
 
         return $query->get()
-            ->map(fn($row) => ['stage' => $row->stage, 'count' => (int) $row->count, 'amount' => (float) $row->amount])
+            ->map(fn ($row) => ['stage' => $row->stage, 'count' => (int) $row->count, 'amount' => (float) $row->amount])
             ->all();
     }
 
     protected function crmFollowups(): array
     {
-        if (!$this->tableExists('crm_activities') || !$this->hasColumn('crm_activities', 'due_at')) {
+        if (! $this->tableExists('crm_activities') || ! $this->hasColumn('crm_activities', 'due_at')) {
             return [];
         }
 
@@ -2144,7 +2257,7 @@ class DashboardService
             ->orderBy('crm_activities.due_at')
             ->limit(15)
             ->get()
-            ->map(fn($row) => [
+            ->map(fn ($row) => [
                 'key' => $row->id,
                 'name' => $row->deal_title ?: $row->lead_name ?: $row->subject,
                 'contact' => $row->contact_name,
@@ -2152,7 +2265,7 @@ class DashboardService
                 'amount' => (float) ($row->deal_amount ?? 0),
                 'assigned_to' => $row->assigned_to,
                 'next_follow_up' => $row->due_at,
-                'action_url' => '/crm/activities/' . $row->id,
+                'action_url' => '/crm/activities/'.$row->id,
             ])
             ->all();
     }
@@ -2190,7 +2303,7 @@ class DashboardService
             '90+' => ['amount' => 0.0, 'count' => 0],
         ];
 
-        if (!$this->tableExists($table) || !$this->hasColumn($table, $dateColumn) || !$this->hasColumn($table, $balanceColumn)) {
+        if (! $this->tableExists($table) || ! $this->hasColumn($table, $dateColumn) || ! $this->hasColumn($table, $balanceColumn)) {
             return $this->formatAgeingBuckets($labels, $route);
         }
 
@@ -2202,7 +2315,7 @@ class DashboardService
 
         foreach ($query->get() as $row) {
             $bucket = 'Current';
-            if (!empty($row->{$dateColumn})) {
+            if (! empty($row->{$dateColumn})) {
                 $days = Carbon::parse($row->{$dateColumn})->startOfDay()->diffInDays(now()->startOfDay(), false);
                 $bucket = $days <= 0 ? 'Current' : ($days <= 30 ? '1-30' : ($days <= 60 ? '31-60' : ($days <= 90 ? '61-90' : '90+')));
             }
@@ -2223,7 +2336,7 @@ class DashboardService
             '90+' => ['amount' => 0.0, 'count' => 0],
         ];
 
-        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'total')) {
+        if (! $this->tableExists('expenses') || ! $this->hasColumn('expenses', 'total')) {
             return $this->formatAgeingBuckets($labels, '/payment-out/expenses');
         }
 
@@ -2240,7 +2353,7 @@ class DashboardService
         foreach ($query->get() as $row) {
             $date = $row->due_date ?: $row->expense_date;
             $bucket = 'Current';
-            if (!empty($date)) {
+            if (! empty($date)) {
                 $days = Carbon::parse($date)->startOfDay()->diffInDays(now()->startOfDay(), false);
                 $bucket = $days <= 0 ? 'Current' : ($days <= 30 ? '1-30' : ($days <= 60 ? '31-60' : ($days <= 90 ? '61-90' : '90+')));
             }
@@ -2264,7 +2377,7 @@ class DashboardService
         foreach ($bucketSets as $buckets) {
             foreach ($buckets as $bucket) {
                 $key = $bucket['bucket'] ?? null;
-                if (!$key || !isset($combined[$key])) {
+                if (! $key || ! isset($combined[$key])) {
                     continue;
                 }
                 $combined[$key]['amount'] += (float) ($bucket['amount'] ?? 0);
@@ -2273,7 +2386,7 @@ class DashboardService
         }
 
         return collect($combined)
-            ->map(fn($values, $bucket) => [
+            ->map(fn ($values, $bucket) => [
                 'bucket' => $bucket,
                 'amount' => round((float) $values['amount'], 2),
                 'count' => (int) $values['count'],
@@ -2285,7 +2398,7 @@ class DashboardService
 
     protected function expenseDueCount(array $filters, string $from, string $to): int
     {
-        if (!$this->tableExists('expenses') || !$this->hasColumn('expenses', 'due_date')) {
+        if (! $this->tableExists('expenses') || ! $this->hasColumn('expenses', 'due_date')) {
             return 0;
         }
 
@@ -2306,7 +2419,7 @@ class DashboardService
     protected function formatAgeingBuckets(array $buckets, string $route): array
     {
         return collect($buckets)
-            ->map(fn($values, $bucket) => [
+            ->map(fn ($values, $bucket) => [
                 'bucket' => $bucket,
                 'amount' => round((float) $values['amount'], 2),
                 'count' => (int) $values['count'],
@@ -2318,12 +2431,12 @@ class DashboardService
 
     protected function filterStart(array $filters, Carbon $fallback): Carbon
     {
-        return !empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : $fallback->copy()->startOfDay();
+        return ! empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : $fallback->copy()->startOfDay();
     }
 
     protected function filterEnd(array $filters, Carbon $fallback): Carbon
     {
-        return !empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : $fallback->copy()->endOfDay();
+        return ! empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : $fallback->copy()->endOfDay();
     }
 
     protected function activeProductsQuery(): Builder
@@ -2363,7 +2476,7 @@ class DashboardService
 
     protected function weightedForecastThisMonth(): float
     {
-        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'expected_close_date') || !$this->hasColumn('deals', 'amount') || !$this->hasColumn('deals', 'probability')) {
+        if (! $this->tableExists('deals') || ! $this->hasColumn('deals', 'status') || ! $this->hasColumn('deals', 'expected_close_date') || ! $this->hasColumn('deals', 'amount') || ! $this->hasColumn('deals', 'probability')) {
             return 0;
         }
 
@@ -2378,7 +2491,7 @@ class DashboardService
 
     protected function dealsAtRiskCount(int $days): int
     {
-        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || (!$this->hasColumn('deals', 'expected_close_date') && !$this->hasColumn('deals', 'updated_at'))) {
+        if (! $this->tableExists('deals') || ! $this->hasColumn('deals', 'status') || (! $this->hasColumn('deals', 'expected_close_date') && ! $this->hasColumn('deals', 'updated_at'))) {
             return 0;
         }
 
@@ -2397,7 +2510,7 @@ class DashboardService
 
     protected function winRateThisMonth(): float
     {
-        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'closed_date')) {
+        if (! $this->tableExists('deals') || ! $this->hasColumn('deals', 'status') || ! $this->hasColumn('deals', 'closed_date')) {
             return 0;
         }
 
@@ -2410,7 +2523,7 @@ class DashboardService
 
     protected function winRateBySource(): array
     {
-        if (!$this->tableExists('deals') || !$this->hasColumn('deals', 'status') || !$this->hasColumn('deals', 'source')) {
+        if (! $this->tableExists('deals') || ! $this->hasColumn('deals', 'status') || ! $this->hasColumn('deals', 'source')) {
             return [];
         }
 
@@ -2436,64 +2549,66 @@ class DashboardService
 
     protected function userName($userId): string
     {
-        if (!$userId || !$this->tableExists('users')) {
+        if (! $userId || ! $this->tableExists('users')) {
             return '-';
         }
+
         return DB::table('users')->where('id', $userId)->value('name') ?: '-';
     }
 
     protected function applyBranch(Builder $query, string $table, array $filters): void
     {
-        if (!empty($filters['branch_id']) && $this->hasColumn($table, 'branch_id')) {
-            $query->where($table . '.branch_id', $filters['branch_id']);
+        if (! empty($filters['branch_id']) && $this->hasColumn($table, 'branch_id')) {
+            $query->where($table.'.branch_id', $filters['branch_id']);
         }
     }
 
     protected function applyDateRange(Builder $query, string $table, string $dateColumn, array $filters): void
     {
-        if (!$this->hasColumn($table, $dateColumn)) {
+        if (! $this->hasColumn($table, $dateColumn)) {
             return;
         }
-        if (!empty($filters['date_from'])) {
-            $query->whereDate($table . '.' . $dateColumn, '>=', $filters['date_from']);
+        if (! empty($filters['date_from'])) {
+            $query->whereDate($table.'.'.$dateColumn, '>=', $filters['date_from']);
         }
-        if (!empty($filters['date_to'])) {
-            $query->whereDate($table . '.' . $dateColumn, '<=', $filters['date_to']);
+        if (! empty($filters['date_to'])) {
+            $query->whereDate($table.'.'.$dateColumn, '<=', $filters['date_to']);
         }
     }
 
     protected function applyDashboardRecordScope(Builder $query, string $table, bool $requireApproved = false): void
     {
         if ($requireApproved && $this->hasColumn($table, 'approved')) {
-            $query->where($table . '.approved', true);
+            $query->where($table.'.approved', true);
         }
 
         if ($this->hasColumn($table, 'active')) {
-            $query->where($table . '.active', true);
+            $query->where($table.'.active', true);
         }
 
         if ($this->hasColumn($table, 'void')) {
-            $query->where($table . '.void', false);
+            $query->where($table.'.void', false);
         }
 
         if ($this->hasColumn($table, 'status')) {
-            $query->whereNotIn($table . '.status', ['void', 'VOID', 'cancelled', 'CANCELLED', 'canceled', 'CANCELED']);
+            $query->whereNotIn($table.'.status', ['void', 'VOID', 'cancelled', 'CANCELLED', 'canceled', 'CANCELED']);
         }
     }
 
     protected function applyProjectDashboardScope(Builder $query, array $filters): void
     {
-        if (!$this->tableExists('projects')) {
+        if (! $this->tableExists('projects')) {
             return;
         }
 
-        if (!empty($filters['branch_id']) && $this->hasColumn('projects', 'branch_id')) {
+        if (! empty($filters['branch_id']) && $this->hasColumn('projects', 'branch_id')) {
             $query->where('projects.branch_id', $filters['branch_id']);
         }
 
         $user = auth()->user();
-        if (!$user) {
+        if (! $user) {
             $query->whereRaw('1 = 0');
+
             return;
         }
 
@@ -2508,8 +2623,9 @@ class DashboardService
                 ->values()
                 ->all();
 
-            if (!empty($branchIds)) {
+            if (! empty($branchIds)) {
                 $query->whereIn('projects.branch_id', $branchIds);
+
                 return;
             }
         }
@@ -2545,7 +2661,7 @@ class DashboardService
 
     protected function dashboardUserHasProjectFullAccess($user): bool
     {
-        if (!empty($user->is_super_admin)) {
+        if (! empty($user->is_super_admin)) {
             return true;
         }
 
@@ -2561,6 +2677,7 @@ class DashboardService
 
         try {
             $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+
             return $role?->name && in_array($role->name, $roles, true);
         } catch (\Throwable $e) {
             return false;
@@ -2581,6 +2698,7 @@ class DashboardService
 
         try {
             $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+
             return $role?->name && in_array($role->name, ['Branch Admin', 'branch-admin', 'branch_admin'], true);
         } catch (\Throwable $e) {
             return false;

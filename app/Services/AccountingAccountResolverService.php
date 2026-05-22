@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Account;
 use App\Models\ChartOfAccount;
 use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
@@ -161,7 +160,7 @@ class AccountingAccountResolverService
         $id = Cache::remember("accounting_account_{$accountType}_id", 3600, function () use ($accountType) {
             $mapping = $this->accountMapping[$accountType] ?? null;
 
-            if (!$mapping) {
+            if (! $mapping) {
                 throw new InvalidArgumentException("Unknown account type: {$accountType}");
             }
 
@@ -187,7 +186,7 @@ class AccountingAccountResolverService
 
         $account = ChartOfAccount::find($id);
 
-        if (!$account) {
+        if (! $account) {
             Cache::forget("accounting_account_{$accountType}_id");
             throw new InvalidArgumentException("Required account '{$accountType}' not found. Please seed your chart of accounts.");
         }

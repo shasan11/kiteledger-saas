@@ -10,6 +10,21 @@ dayjs.extend(customParseFormat);
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const journalLineAccountField = {
+    key: 'chart_of_account_id',
+    name: 'chart_of_account_id',
+    label: 'Account',
+    type: 'fkSelect',
+    width: '3fr',
+    placeholder: 'Select Account',
+    fkUrl: api('/api/accounts/'),
+    fkSearchParam: 'search',
+    fkPageSize: 20,
+    fkValueKey: 'id',
+    fkLabelKey: 'name',
+    fkStoreScope: 'shared',
+    fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - '),
+};
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
 const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
@@ -65,8 +80,8 @@ export default function JournalVoucherAdd(props) {
         {
             name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { chart_of_account_id: null, description: '', debit: 0, credit: 0 }, onAddItem: balancedLineItem, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - ') },
-                { key: '_helper', name: '_helper', label: 'Helper', type: 'text', width: '180px', disabled: true },
+                journalLineAccountField,
+                 
                 { key: 'debit', name: 'debit', label: 'Debit', type: 'number', width: '140px', min: 0, align: 'right' },
                 { key: 'credit', name: 'credit', label: 'Credit', type: 'number', width: '140px', min: 0, align: 'right' },
             ],

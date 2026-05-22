@@ -69,30 +69,4 @@ class ChartOfAccount extends Model
         return $this->hasMany(ChartOfAccount::class);
     }
 
-    public function journalVoucherLines(): HasMany
-    {
-        return $this->hasMany(JournalVoucherLine::class);
-    }
-
-    public function expenseLines(): HasMany
-    {
-        return $this->hasMany(ExpenseLine::class);
-    }
-
-    public function bankChargePayments(): HasMany
-    {
-        return $this->hasMany(CustomerPayment::class);
-    }
-
-    public function tdsPayments(): HasMany
-    {
-        return $this->hasMany(CustomerPayment::class);
-    }
-
-     
-
-    public function taxRateComponents(): HasMany
-    {
-        return $this->hasMany(TaxRateComponent::class);
-    }
 }
