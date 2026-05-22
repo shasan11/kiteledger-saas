@@ -16,12 +16,6 @@ import {
   message,
   theme,
 } from 'antd';
-import {
-  BankOutlined,
-  HomeOutlined,
-  ShopOutlined,
-  TeamOutlined,
-} from '@ant-design/icons';
 import { Formik, Form as FormikForm } from 'formik';
 import * as Yup from 'yup';
 import QuickAddRemoteSelect from '@/Components/QuickAddRemoteSelect';
@@ -406,7 +400,7 @@ export default function AddTerminalModal({
 
             <Col xs={24} md={12}>
               <Form.Item name="code" label="Terminal Code">
-                <Input placeholder="POS-HO-01" />
+                <Input placeholder="Auto-generated" readOnly disabled />
               </Form.Item>
             </Col>
 
@@ -414,8 +408,6 @@ export default function AddTerminalModal({
               <QuickAddRemoteSelect
                 name="branch_id"
                 label="Branch"
-                icon={<HomeOutlined />}
-                quickAddIcon={<HomeOutlined />}
                 required
                 disabled={!canViewAllBranches}
                 apiUrl={api('/api/branches')}
@@ -443,8 +435,6 @@ export default function AddTerminalModal({
               <QuickAddRemoteSelect
                 name="warehouse_id"
                 label="Warehouse"
-                icon={<ShopOutlined />}
-                quickAddIcon={<ShopOutlined />}
                 required
                 disabled={!selectedBranchId}
                 placeholder={selectedBranchId ? 'Search warehouse' : 'Select branch first'}
@@ -481,7 +471,6 @@ export default function AddTerminalModal({
                 key={`cash-account-${accountRefreshKey}`}
                 name="cash_account_id"
                 label="Cash Account"
-                icon={<BankOutlined />}
                 apiUrl={api('/api/accounts')}
                 params={cashParams}
               />
@@ -489,7 +478,6 @@ export default function AddTerminalModal({
               <Button
                 type="link"
                 size="small"
-                icon={<BankOutlined />}
                 onClick={() => openAccountQuickAdd('cash')}
                 style={{ paddingLeft: 0, marginTop: -8 }}
               >
@@ -502,7 +490,6 @@ export default function AddTerminalModal({
                 key={`card-account-${accountRefreshKey}`}
                 name="card_account_id"
                 label="Card Account"
-                icon={<BankOutlined />}
                 apiUrl={api('/api/accounts')}
                 params={bankParams}
               />
@@ -510,7 +497,6 @@ export default function AddTerminalModal({
               <Button
                 type="link"
                 size="small"
-                icon={<BankOutlined />}
                 onClick={() => openAccountQuickAdd('card')}
                 style={{ paddingLeft: 0, marginTop: -8 }}
               >
@@ -523,7 +509,6 @@ export default function AddTerminalModal({
                 key={`online-account-${accountRefreshKey}`}
                 name="online_account_id"
                 label="Online Account"
-                icon={<BankOutlined />}
                 apiUrl={api('/api/accounts')}
                 params={bankParams}
               />
@@ -531,7 +516,6 @@ export default function AddTerminalModal({
               <Button
                 type="link"
                 size="small"
-                icon={<BankOutlined />}
                 onClick={() => openAccountQuickAdd('online')}
                 style={{ paddingLeft: 0, marginTop: -8 }}
               >
@@ -549,8 +533,6 @@ export default function AddTerminalModal({
               <QuickAddRemoteSelect
                 name="default_customer_id"
                 label="Default Customer"
-                icon={<TeamOutlined />}
-                quickAddIcon={<TeamOutlined />}
                 required
                 apiUrl={api('/api/contacts')}
                 createUrl={api('/api/contacts')}
@@ -569,12 +551,6 @@ export default function AddTerminalModal({
 
             <Col xs={12} md={6}>
               <Form.Item name="is_default" label="Default Terminal" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Col>
-
-            <Col xs={12} md={6}>
-              <Form.Item name="active" label="Active" valuePropName="checked">
                 <Switch />
               </Form.Item>
             </Col>

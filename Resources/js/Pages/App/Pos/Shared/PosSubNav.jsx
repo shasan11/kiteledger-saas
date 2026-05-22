@@ -1,14 +1,12 @@
 import { router, usePage } from '@inertiajs/react';
-import { Card, Tabs, Typography, theme } from 'antd';
-
-const { Text, Title } = Typography;
+import { Tabs, theme } from 'antd';
 
 const items = [
-    ['terminal', 'Terminal Selection', '/pos'],
+    ['terminal', 'Terminals', '/pos'],
     ['screen', 'POS Screen', '/pos/screen'],
     ['sales', 'Sales', '/pos/sales'],
     ['shifts', 'Shifts', '/pos/shifts'],
-    ['terminals', 'Terminals', '/pos/terminals'],
+    ['terminals', 'Terminal Settings', '/pos/terminals'],
     ['cash', 'Cash Movements', '/pos/cash-movements'],
     ['returns', 'Returns', '/pos/returns'],
 ];
@@ -23,23 +21,19 @@ const activeKeyFromUrl = (url = '') => {
     return 'terminal';
 };
 
-export default function PosSubNav({ title = 'POS Control Center', description }) {
+export default function PosSubNav() {
     const { token } = theme.useToken();
     const { url } = usePage();
 
     return (
-        <Card
-            bordered={false}
+        <div
             style={{
+                background: token.colorBgContainer,
                 border: `1px solid ${token.colorBorderSecondary}`,
                 borderRadius: token.borderRadius,
+                padding: `0 ${token.padding}px`,
             }}
-            bodyStyle={{ padding: `${token.paddingSM}px ${token.padding}px 0` }}
         >
-            <Title level={4} style={{ margin: 0 }}>{title}</Title>
-            <Text type="secondary">
-                {description || 'Manage terminals, active selling, shifts, cash movements, returns, and sales history from one workspace.'}
-            </Text>
             <Tabs
                 size="small"
                 activeKey={activeKeyFromUrl(url)}
@@ -48,8 +42,8 @@ export default function PosSubNav({ title = 'POS Control Center', description })
                     const item = items.find(([itemKey]) => itemKey === key);
                     if (item) router.visit(item[2]);
                 }}
-                style={{ marginTop: token.marginSM }}
+                style={{ marginBottom: -1 }}
             />
-        </Card>
+        </div>
     );
 }

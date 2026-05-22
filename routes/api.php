@@ -335,6 +335,9 @@ Route::post('contacts/bulk', [ContactController::class, 'bulkStore']);
 Route::patch('contacts/bulk', [ContactController::class, 'bulkUpdate']);
 Route::delete('contacts/bulk', [ContactController::class, 'bulkDestroy']);
 
+Route::get('contacts/{contact}/transactions', [ContactController::class, 'transactions']);
+Route::post('contacts/{contact}/send-email', [ContactController::class, 'sendEmail']);
+Route::post('contacts/{contact}/send-sms', [ContactController::class, 'sendSms']);
 Route::apiResource('contacts', ContactController::class)
     ->parameters([
         'contacts' => 'contact',
@@ -633,6 +636,7 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
     Route::apiResource('email-configs', EmailConfigController::class);
     Route::apiResource('emails', EmailController::class);
 
+    Route::get('projects/{project}/financial-summary', [ProjectController::class, 'financialSummary']);
     Route::apiResource('projects', ProjectController::class);
 
     Route::apiResource('milestones', MilestoneController::class);
@@ -844,6 +848,7 @@ Route::delete('crm-communications/bulk', [CrmCommunicationController::class, 'bu
 Route::apiResource('crm-communications', CrmCommunicationController::class)
     ->parameters(['crm-communications' => 'crmCommunication']);
 
+Route::get('crm-campaigns/summary', [CrmCampaignController::class, 'summary']);
 Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
 Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
 Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
@@ -880,8 +885,23 @@ Route::post('crm-activities/bulk', [CrmActivityController::class, 'bulkStore']);
 Route::patch('crm-activities/bulk', [CrmActivityController::class, 'bulkUpdate']);
 Route::delete('crm-activities/bulk', [CrmActivityController::class, 'bulkDestroy']);
 Route::post('crm-activities/{crmActivity}/comments', [CrmActivityController::class, 'addComment']);
+Route::patch('crm-activities/{crmActivity}/toggle-complete', [CrmActivityController::class, 'toggleComplete']);
 Route::apiResource('crm-activities', CrmActivityController::class)
     ->parameters(['crm-activities' => 'crmActivity']);
+
+/*
+|--------------------------------------------------------------------------
+| Support Tickets
+|--------------------------------------------------------------------------
+*/
+
+Route::get('support-tickets/summary', [\App\Http\Controllers\Api\SupportTicketController::class, 'summary']);
+Route::patch('support-tickets/{supportTicket}/status', [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
+Route::get('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'index']);
+Route::post('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'store']);
+Route::delete('support-tickets/{supportTicket}/comments/{comment}', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'destroy']);
+Route::apiResource('support-tickets', \App\Http\Controllers\Api\SupportTicketController::class)
+    ->parameters(['support-tickets' => 'supportTicket']);
 
 /*
 |--------------------------------------------------------------------------

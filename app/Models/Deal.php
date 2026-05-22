@@ -22,6 +22,7 @@ class Deal extends Model
         'lead_id',
         'contact_id',
         'crm_account_id',
+        'campaign_id',
         'deal_pipeline_id',
         'deal_stage_id',
         'assigned_to_id',
@@ -114,5 +115,20 @@ class Deal extends Model
     public function crmCommunications(): HasMany
     {
         return $this->hasMany(CrmCommunication::class);
+    }
+
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(CrmCampaign::class, 'campaign_id');
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class);
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
     }
 }

@@ -6,6 +6,7 @@ use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -86,6 +87,38 @@ class JournalVoucherController extends BaseCrudApiController
     ];
 
     protected string $defaultSort = '-created_at';
+
+    protected function applyFiscalYearScope(Builder $query, Request $request): void
+    {
+        if (! $this->usesFiscalYearScope()) {
+            return;
+        }
+
+        $fiscalYear = $this->requestedFiscalYear($request);
+
+        if (! $fiscalYear) {
+            return;
+        }
+
+        if (
+            $this->tableHasColumn($this->fiscalYearColumn)
+            && $this->businessDateColumn
+            && $this->tableHasColumn($this->businessDateColumn)
+        ) {
+            $query->where(function (Builder $query) use ($fiscalYear) {
+                $query->where($this->qualifiedColumn($this->fiscalYearColumn), $fiscalYear->id)
+                    ->orWhere(function (Builder $query) use ($fiscalYear) {
+                        $query->whereNull($this->qualifiedColumn($this->fiscalYearColumn))
+                            ->whereDate($this->qualifiedColumn($this->businessDateColumn), '>=', $fiscalYear->start_date)
+                            ->whereDate($this->qualifiedColumn($this->businessDateColumn), '<=', $fiscalYear->end_date);
+                    });
+            });
+
+            return;
+        }
+
+        parent::applyFiscalYearScope($query, $request);
+    }
 
     protected array $nested = [
         'items' => [

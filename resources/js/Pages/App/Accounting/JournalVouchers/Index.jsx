@@ -52,10 +52,11 @@ export default function JournalVouchersIndex(props) {
                     style: { cursor: 'pointer' },
                 })}
                 anchorFilters={[
+                    { key: 'all', label: 'All', params: {} },
                     { key: 'approved', label: 'Approved', params: { approved: true } },
                     { key: 'draft', label: 'Draft', params: { approved: false } },
                 ]}
-                defaultAnchorKey="approved"
+                defaultAnchorKey="all"
                 anchorSyncWithHash
             />
         </AuthenticatedLayout>

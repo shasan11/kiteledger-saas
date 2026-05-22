@@ -28,4 +28,19 @@ class ContactObserver
     {
         $this->accountProvisioning->createForContact($contact);
     }
+
+    public function updated(Contact $contact): void
+    {
+        $typeChanged = $contact->wasChanged('contact_type');
+        $nameChanged = $contact->wasChanged('name');
+
+        if ($typeChanged && in_array($contact->contact_type, ['customer', 'supplier']) && !$contact->account_id) {
+            $this->accountProvisioning->createForContact($contact);
+            return;
+        }
+
+        if ($nameChanged && $contact->account_id) {
+            $this->accountProvisioning->syncContactAccount($contact);
+        }
+    }
 }

@@ -47,7 +47,7 @@ export default function JournalVouchers(props) {
       <ReusableCrud
         icon={<AppstoreOutlined />}
         title="JournalVouchers"
-        endpoint="/accounting/journalvouchers"
+        endpoint="/accounting/journal-vouchers/"
         columns={columns}
         fields={fields}
         validationSchema={validationSchema}

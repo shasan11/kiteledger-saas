@@ -163,4 +163,9 @@ class Contact extends Model
     {
         return $this->hasMany(SupplierPayment::class);
     }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
 }

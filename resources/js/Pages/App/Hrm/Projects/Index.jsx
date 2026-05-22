@@ -5,6 +5,7 @@ import * as Yup from 'yup';
 import dayjs from 'dayjs';
 import {
   Avatar,
+  Progress,
   Space,
   Tag,
   Tooltip,
@@ -14,6 +15,7 @@ import {
   CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  ExclamationCircleOutlined,
   ProjectOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -49,6 +51,7 @@ const PROJECT_STATUS_ANCHORS = [
     label,
     params: { status: value },
   })),
+  { key: 'overdue', label: 'Overdue', params: { overdue: 1 } },
 ];
 
 const ACTIVE_OPTIONS = [
@@ -122,6 +125,29 @@ const getDuration = (start, end) => {
   if (diff <= 0) return '-';
 
   return `${diff} day${diff > 1 ? 's' : ''}`;
+};
+
+const isDoneStatus = (value) => ['COMPLETED','DONE'].includes(String(value||'').toUpperCase().replace(/\s+/g,'_'));
+
+const taskStats = (record) => {
+  const tasks = Array.isArray(record.tasks) ? record.tasks : [];
+  const completed = tasks.filter((task) => isDoneStatus(task.task_status?.name || task.taskStatus?.name)).length;
+  const overdue = tasks.filter((task) => task.end_date && dayjs(task.end_date).isBefore(dayjs(), 'day') && !isDoneStatus(task.task_status?.name || task.taskStatus?.name)).length;
+  return {
+    total: tasks.length,
+    overdue,
+    progress: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
+  };
+};
+
+const deadlineLabel = (record) => {
+  const end = normalizeDate(record.end_date);
+  if (!end) return '-';
+  const inactive = record.active === false || ['COMPLETED','CANCELLED'].includes(String(record.status||'').toUpperCase());
+  if (inactive) return fmtDate(record.end_date);
+  const diff = end.startOf('day').diff(dayjs().startOf('day'), 'day');
+  if (diff < 0) return `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} overdue`;
+  return `${diff} day${diff === 1 ? '' : 's'} left`;
 };
 
 export default function Projects(props) {
@@ -210,6 +236,12 @@ export default function Projects(props) {
       },
     },
     {
+      title: 'Branch',
+      key: 'branch',
+      width: 150,
+      render: (_, record) => record.branch?.name || '-',
+    },
+    {
       title: 'Start Date',
       dataIndex: 'start_date',
       key: 'start_date',
@@ -236,15 +268,30 @@ export default function Projects(props) {
       ),
     },
     {
-      title: 'Duration',
+      title: 'Days Left / Overdue',
       key: 'duration',
-      width: 115,
-      render: (_, record) => (
-        <Space size={6}>
-          <ClockCircleOutlined style={{ color: '#8c8c8c' }} />
-          <Text>{getDuration(record.start_date, record.end_date)}</Text>
-        </Space>
-      ),
+      width: 170,
+      render: (_, record) => <Text type={deadlineLabel(record).includes('overdue') ? 'danger' : undefined}>{deadlineLabel(record)}</Text>,
+    },
+    {
+      title: 'Progress',
+      key: 'progress',
+      width: 150,
+      render: (_, record) => <Progress percent={taskStats(record).progress} size="small" />,
+    },
+    {
+      title: 'Tasks',
+      key: 'tasks_count',
+      width: 120,
+      render: (_, record) => {
+        const stats = taskStats(record);
+        return (
+          <Space size={6}>
+            <Tag>{stats.total}</Tag>
+            {stats.overdue > 0 && <Tag color="red" icon={<ExclamationCircleOutlined />}>{stats.overdue}</Tag>}
+          </Space>
+        );
+      },
     },
     {
       title: 'Status',
@@ -280,7 +327,7 @@ export default function Projects(props) {
       name: 'name',
       label: 'Project Name',
       type: 'text',
-      required: false,
+      required: true,
       col: 24,
     },
     {
@@ -295,6 +342,19 @@ export default function Projects(props) {
       fkValueKey: 'id',
       fkLabelKey: 'first_name',
       fkLabel: (record) => getUserName(record),
+    },
+    {
+      name: 'branch_id',
+      label: 'Branch',
+      type: 'fkSelect',
+      required: false,
+      col: 12,
+      fkUrl: api('/api/branches'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      allowClear: true,
     },
     {
       name: 'status',
@@ -324,7 +384,7 @@ export default function Projects(props) {
       name: 'description',
       label: 'Description',
       type: 'textarea',
-      required: true,
+      required: false,
       col: 24,
       rows: 4,
     },
@@ -384,6 +444,7 @@ export default function Projects(props) {
   const initialValues = {
     name: '',
     project_manager_id: null,
+    branch_id: null,
     status: 'PENDING',
     start_date: null,
     end_date: null,
@@ -400,6 +461,10 @@ export default function Projects(props) {
     ) {
       payload.project_manager_id =
         payload.project_manager_id.id ?? payload.project_manager_id.value;
+    }
+
+    if (payload.branch_id && typeof payload.branch_id === 'object') {
+      payload.branch_id = payload.branch_id.id ?? payload.branch_id.value;
     }
 
     payload.start_date = toApiDate(payload.start_date);
@@ -430,6 +495,17 @@ export default function Projects(props) {
       fkValueKey: 'id',
       fkLabelKey: 'first_name',
       fkLabel: (record) => getUserName(record),
+    },
+    {
+      name: 'branch_id',
+      label: 'Branch',
+      type: 'fkSelect',
+      fkUrl: api('/api/branches'),
+      fkSearchParam: 'search',
+      fkPageSize: 20,
+      fkValueKey: 'id',
+      fkLabelKey: 'name',
+      allowClear: true,
     },
     {
       name: 'status',

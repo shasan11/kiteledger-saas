@@ -155,6 +155,31 @@ class CrmActivityController extends BaseCrudApiController
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
 
+    /**
+     * Toggle activity completion status (mark complete / reopen).
+     */
+    public function toggleComplete(Request $request, CrmActivity $crmActivity)
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+
+        $crmActivity = $this->applyAssignedUserScope(CrmActivity::query())
+            ->findOrFail($crmActivity->getKey());
+
+        $isCompleted = $crmActivity->status === 'completed';
+
+        $crmActivity->update([
+            'status'       => $isCompleted ? 'pending' : 'completed',
+            'completed_at' => $isCompleted ? null : now(),
+        ]);
+
+        return response()->json(
+            $this->serializeRecord(
+                $crmActivity->fresh($this->validEagerLoadRelations($crmActivity))
+            )
+        );
+    }
+
     public function addComment(Request $request, CrmActivity $crmActivity)
     {
         $user = $request->user();

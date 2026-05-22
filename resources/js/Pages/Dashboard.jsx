@@ -9,6 +9,8 @@ import {
     Select,
     Skeleton,
     Table,
+    Tabs,
+    Tag,
     Tooltip,
     Typography,
     theme,
@@ -149,6 +151,8 @@ export default function Dashboard() {
                                     {m.bizCards.map((c) => <BizCard key={c.key} card={c} />)}
                                 </section>
                             )}
+
+                            <ProjectDeadlines approaching={m.approachingProjects} overdue={m.overdueProjects} />
 
                             {/* Transactions Table */}
                             <TxnTable transactions={m.transactions} />
@@ -652,7 +656,54 @@ function buildModel(data) {
         bizCards.push({ key: 'projects', title: 'Projects', href: '/hrm/projects', linkText: 'View', items });
     }
 
-    return { kpis, chartData, cashflowChart, expenseBreakdown, ageingData, bizCards, transactions, topCustomers, topSuppliers, bankAccounts };
+    return {
+        kpis, chartData, cashflowChart, expenseBreakdown, ageingData, bizCards,
+        transactions, topCustomers, topSuppliers, bankAccounts,
+        approachingProjects: Array.isArray(data.approaching_deadline_projects) ? data.approaching_deadline_projects : [],
+        overdueProjects: Array.isArray(data.overdue_projects) ? data.overdue_projects : [],
+    };
+}
+
+function ProjectDeadlines({ approaching, overdue }) {
+    const cols = (bucket) => [
+        {
+            title: 'Project',
+            dataIndex: 'name',
+            render: (v, row) => <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={() => visit(row.action_url)}>{v || DASH}</Button>,
+        },
+        { title: 'Manager', dataIndex: 'manager', ellipsis: true, render: (v) => v || DASH },
+        { title: 'End Date', dataIndex: 'end_date', width: 120, render: fmtDate },
+        {
+            title: bucket === 'overdue' ? 'Overdue' : 'Time Left',
+            width: 115,
+            render: (_, row) => bucket === 'overdue'
+                ? `${row.days_overdue || 0} day${Number(row.days_overdue) === 1 ? '' : 's'}`
+                : `${row.days_left || 0} day${Number(row.days_left) === 1 ? '' : 's'}`,
+        },
+        { title: 'Status', dataIndex: 'status', width: 120, render: (v) => <Tag>{String(v || DASH).replace(/_/g, ' ')}</Tag> },
+    ];
+
+    const table = (rows, bucket) => rows.length ? (
+        <Table size="small" rowKey="id" pagination={false} dataSource={rows} columns={cols(bucket)} scroll={{ x: 650 }} />
+    ) : (
+        <EmptyState title="No projects" desc="Project deadlines that need attention will appear here." compact />
+    );
+
+    return (
+        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Project Deadlines</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Approaching and overdue internal project dates</Text>
+            </div>
+            <Tabs
+                size="small"
+                items={[
+                    { key: 'approaching', label: `Approaching Deadline (${approaching.length})`, children: table(approaching, 'approaching') },
+                    { key: 'overdue', label: `Overdue (${overdue.length})`, children: table(overdue, 'overdue') },
+                ]}
+            />
+        </Card>
+    );
 }
 
 function mergeAgeing(receivables = [], payables = []) {

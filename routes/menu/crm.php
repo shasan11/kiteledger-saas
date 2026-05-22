@@ -16,4 +16,6 @@ Route::prefix('crm')->name('crm.')->group(function () {
     Route::get('/projects', fn () => Inertia::render('App/Crm/Projects/Index'))->name('projects.index');
     Route::get('/activities', fn () => Inertia::render('App/Crm/Activities/Index'))->name('activities.index');
     Route::get('/activities/{id}', fn (string $id) => Inertia::render('App/Crm/Activities/Show', ['id' => $id]))->name('activities.show');
+    Route::get('/campaigns', fn () => Inertia::render('App/Crm/Campaigns/Index'))->name('campaigns.index');
+    Route::get('/campaigns/{id}', fn (string $id) => Inertia::render('App/Crm/Campaigns/Show', ['id' => $id]))->name('campaigns.show');
 });

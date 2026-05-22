@@ -245,6 +245,7 @@ export default function PurchaseBillEdit({ id, ...props }) {
       },
     },
     { name: 'bill_no', label: 'Bill No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
+    { name: 'project_id', label: 'Project', type: 'fkSelect', col: 8, placeholder: 'Optional project', fkUrl: api('/api/hrm/projects/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true },
     { name: 'bill_date', label: 'Bill Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
     { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
     {
@@ -339,6 +340,7 @@ export default function PurchaseBillEdit({ id, ...props }) {
       bill_date: formatDate(values.bill_date),
       due_date: formatDate(values.due_date),
       contact_id: asId(values.contact_id ?? values.contact),
+      project_id: asId(values.project_id ?? values.project),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
       currency_id: asId(values.currency_id ?? values.currency),
       exchange_rate: toNumber(values.exchange_rate) || 1,

@@ -52,6 +52,7 @@ export default function InvoiceEdit({ id, ...props }) {
     const fields = useMemo(() => [
         { name: 'contact_id', label: 'Customer', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Customer', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { name: 'invoice_no', label: 'Invoice No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
+        { name: 'project_id', label: 'Project', type: 'fkSelect', col: 8, placeholder: 'Optional project', fkUrl: api('/api/hrm/projects/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true },
         { name: 'invoice_date', label: 'Invoice Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
         { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
         {
@@ -96,6 +97,7 @@ export default function InvoiceEdit({ id, ...props }) {
             invoice_date: formatDate(values.invoice_date),
             due_date: formatDate(values.due_date),
             contact_id: asId(values.contact_id ?? values.contact),
+            project_id: asId(values.project_id ?? values.project),
             warehouse_id: asId(values.warehouse_id ?? values.warehouse),
             credit_term_id: asId(values.credit_term_id ?? values.creditTerm ?? values.credit_term),
             currency_id: asId(values.currency_id ?? values.currency),

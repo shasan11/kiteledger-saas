@@ -23,6 +23,7 @@ class Lead extends Model
         'contact_id',
         'crm_account_id',
         'deal_pipeline_id',
+        'campaign_id',
         'assigned_to_id',
         'converted_contact_id',
         'converted_deal_id',
@@ -115,5 +116,20 @@ class Lead extends Model
     public function crmCommunications(): HasMany
     {
         return $this->hasMany(CrmCommunication::class);
+    }
+
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(CrmCampaign::class, 'campaign_id');
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class);
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
     }
 }

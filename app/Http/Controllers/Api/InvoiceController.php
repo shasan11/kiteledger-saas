@@ -22,10 +22,10 @@ class InvoiceController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'invoice_date';
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'customerPaymentLines', 'customerPaymentLines.customerPayment'];
-    protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
+    protected array $relations = ['branch', 'project', 'contact', 'warehouse', 'currency', 'customerPaymentLines', 'customerPaymentLines.customerPayment'];
+    protected array $relationDetails = ['branch' => 'branch_id', 'project' => 'project_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['invoice_no', 'reference', 'notes', 'status'];
-    protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
+    protected array $filterable = ['branch_id', 'project_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
     protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['invoice_date' => ['from' => 'date_from', 'to' => 'date_to']];
@@ -78,6 +78,7 @@ class InvoiceController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        'project_id' => ['nullable', 'uuid', 'exists:projects,id'],
         'invoice_no' => ['nullable', 'string', 'max:40', 'unique:invoices,invoice_no'],
         'invoice_date' => ['required', 'date'],
         'due_date' => ['nullable', 'date'],
@@ -99,6 +100,7 @@ class InvoiceController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            'project_id' => ['sometimes', 'nullable', 'uuid', 'exists:projects,id'],
             'invoice_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:invoices,invoice_no,' . $record->id . ',id'],
             'invoice_date' => ['sometimes', 'required', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date'],
@@ -194,7 +196,7 @@ class InvoiceController extends BaseCrudApiController
         $this->enforceSalesSettings($record, $lines);
 
         return $record->fresh([
-            'branch', 'contact', 'warehouse', 'currency',
+            'branch', 'project', 'contact', 'warehouse', 'currency',
             'invoiceLines.product', 'invoiceLines.taxRate', 'invoiceLines.taxJurisdiction',
         ]);
     }

@@ -17,6 +17,7 @@ import {
     TeamOutlined,
     UserOutlined,
     WalletOutlined,
+    CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -139,6 +140,24 @@ export default function AuthenticatedLayout({ header, children }) {
                         label: 'Activities',
                         onClick: () =>
                             visit('crm.activities.index', '/crm/activities'),
+                    },
+                    {
+                        key: 'campaigns',
+                        label: 'Campaigns',
+                        onClick: () =>
+                            visit('crm.campaigns.index', '/crm/campaigns'),
+                    },
+                ],
+            },
+            {
+                key: 'support',
+                icon: <CustomerServiceOutlined />,
+                label: 'Support',
+                children: [
+                    {
+                        key: 'support-tickets',
+                        label: 'Tickets',
+                        onClick: () => visit('support.tickets.index', '/support/tickets'),
                     },
                 ],
             },

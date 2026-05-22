@@ -353,6 +353,7 @@ class DashboardService
         }
 
         $activeProjects = DB::table('projects');
+        $this->applyProjectDashboardScope($activeProjects, $filters);
         if ($this->hasColumn('projects', 'status')) {
             $activeProjects->whereIn('status', ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'in_progress', 'on_hold']);
         }
@@ -361,6 +362,7 @@ class DashboardService
         $completedThisPeriod = 0;
         if ($this->hasColumn('projects', 'status')) {
             $query = DB::table('projects')->whereIn('status', ['COMPLETED', 'completed']);
+            $this->applyProjectDashboardScope($query, $filters);
             if ($this->hasColumn('projects', 'updated_at')) {
                 $start = $this->filterStart($filters, now()->startOfMonth())->toDateString();
                 $end = $this->filterEnd($filters, now())->toDateString();
@@ -374,6 +376,7 @@ class DashboardService
             $tasks = DB::table('tasks')
                 ->join('projects', 'tasks.project_id', '=', 'projects.id')
                 ->whereDate('tasks.end_date', '<', now()->toDateString());
+            $this->applyProjectDashboardScope($tasks, $filters);
             if ($this->hasColumn('tasks', 'active')) {
                 $tasks->where('tasks.active', true);
             }
@@ -388,6 +391,7 @@ class DashboardService
             $budgetCol = $this->firstExistingColumn('projects', ['budget', 'total_budget']);
             if ($budgetCol) {
                 $query = DB::table('projects');
+                $this->applyProjectDashboardScope($query, $filters);
                 if ($this->hasColumn('projects', 'status')) {
                     $query->whereIn('status', ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'in_progress', 'on_hold']);
                 }
@@ -405,6 +409,62 @@ class DashboardService
             'overdue_tasks' => $overdueProjectTasks,
             'billing_value' => $billingValue,
         ];
+    }
+
+    public function getProjectDeadlineProjects(array $filters, string $bucket): array
+    {
+        if (!$this->tableExists('projects') || !$this->hasColumn('projects', 'end_date')) {
+            return [];
+        }
+
+        $today = now()->toDateString();
+        $query = DB::table('projects')
+            ->leftJoin('users as managers', 'projects.project_manager_id', '=', 'managers.id')
+            ->select([
+                'projects.id',
+                'projects.name',
+                'projects.end_date',
+                'projects.status',
+                'projects.active',
+                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(COALESCE(managers.first_name, ''), ' ', COALESCE(managers.last_name, ''))), ''), managers.name, managers.username, managers.email, '-') as manager_name"),
+            ])
+            ->where(function (Builder $query) {
+                $query->where('projects.active', true)->orWhereNull('projects.active');
+            });
+
+        $this->applyProjectDashboardScope($query, $filters);
+
+        if ($this->hasColumn('projects', 'status')) {
+            $query->whereNotIn('projects.status', ['COMPLETED', 'CANCELLED', 'completed', 'cancelled']);
+        }
+
+        if ($bucket === 'overdue') {
+            $query->whereDate('projects.end_date', '<', $today);
+        } else {
+            $query->whereDate('projects.end_date', '>=', $today)
+                ->whereDate('projects.end_date', '<=', now()->addDays(7)->toDateString());
+        }
+
+        return $query
+            ->orderBy('projects.end_date')
+            ->limit(8)
+            ->get()
+            ->map(function ($project) use ($today) {
+                $end = Carbon::parse($project->end_date)->startOfDay();
+                $diff = Carbon::parse($today)->startOfDay()->diffInDays($end, false);
+
+                return [
+                    'id' => $project->id,
+                    'name' => $project->name,
+                    'manager' => $project->manager_name,
+                    'end_date' => $project->end_date,
+                    'status' => $project->status,
+                    'days_left' => max($diff, 0),
+                    'days_overdue' => max(abs($diff), 0),
+                    'action_url' => '/hrm/projects/' . $project->id,
+                ];
+            })
+            ->all();
     }
 
     public function getBusinessSnapshots(array $filters): array
@@ -992,9 +1052,16 @@ class DashboardService
 
         $query = DB::table('bank_accounts')->select($selects);
 
+        $hasOpeningBalance = $this->hasColumn('bank_accounts', 'opening_balance');
+
         if ($this->hasColumn('bank_accounts', 'account_id') && $this->tableExists('accounts') && $this->hasColumn('accounts', 'balance')) {
-            $query->leftJoin('accounts', 'bank_accounts.account_id', '=', 'accounts.id')
-                ->addSelect(DB::raw('COALESCE(accounts.balance, 0) as balance'));
+            $query->leftJoin('accounts', 'bank_accounts.account_id', '=', 'accounts.id');
+
+            if ($hasOpeningBalance) {
+                $query->addSelect(DB::raw('(COALESCE(bank_accounts.opening_balance, 0) + COALESCE(accounts.balance, 0)) as balance'));
+            } else {
+                $query->addSelect(DB::raw('COALESCE(accounts.balance, 0) as balance'));
+            }
 
             if ($this->hasColumn('accounts', 'active')) {
                 $query->where(function (Builder $query) {
@@ -1024,7 +1091,12 @@ class DashboardService
             $query->where('bank_accounts.active', true);
         }
 
-        $this->applyBranch($query, 'bank_accounts', $filters);
+        if (!empty($filters['branch_id']) && $this->hasColumn('bank_accounts', 'branch_id')) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('bank_accounts.branch_id', $filters['branch_id'])
+                  ->orWhereNull('bank_accounts.branch_id');
+            });
+        }
 
         return $query
             ->orderByDesc('balance')
@@ -1740,11 +1812,16 @@ class DashboardService
             ->with('account');
 
         if (!empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
-            $query->where('branch_id', $filters['branch_id']);
+            $query->where(function ($q) use ($filters) {
+                $q->where('branch_id', $filters['branch_id'])
+                  ->orWhereNull('branch_id');
+            });
         }
 
         return round(
-            (float) $query->get()->sum(fn($bankAccount) => $bankAccount->account?->balance ?? 0),
+            (float) $query->get()->sum(fn($bankAccount) =>
+                (float) ($bankAccount->opening_balance ?? 0) + (float) ($bankAccount->account?->balance ?? 0)
+            ),
             2
         );
     }
@@ -2401,6 +2478,112 @@ class DashboardService
 
         if ($this->hasColumn($table, 'status')) {
             $query->whereNotIn($table . '.status', ['void', 'VOID', 'cancelled', 'CANCELLED', 'canceled', 'CANCELED']);
+        }
+    }
+
+    protected function applyProjectDashboardScope(Builder $query, array $filters): void
+    {
+        if (!$this->tableExists('projects')) {
+            return;
+        }
+
+        if (!empty($filters['branch_id']) && $this->hasColumn('projects', 'branch_id')) {
+            $query->where('projects.branch_id', $filters['branch_id']);
+        }
+
+        $user = auth()->user();
+        if (!$user) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        if ($this->dashboardUserHasProjectFullAccess($user)) {
+            return;
+        }
+
+        if ($this->dashboardUserIsBranchAdmin($user) && $this->hasColumn('projects', 'branch_id')) {
+            $branchIds = collect([$user->current_branch_id ?? null, $user->branch_id ?? null])
+                ->filter()
+                ->map(fn ($id) => (string) $id)
+                ->values()
+                ->all();
+
+            if (!empty($branchIds)) {
+                $query->whereIn('projects.branch_id', $branchIds);
+                return;
+            }
+        }
+
+        $query->where(function (Builder $query) use ($user) {
+            $query->where('projects.project_manager_id', $user->id);
+
+            if ($this->hasColumn('projects', 'user_add_id')) {
+                $query->orWhere('projects.user_add_id', $user->id);
+            }
+
+            if ($this->tableExists('project_teams') && $this->tableExists('project_team_members')) {
+                $query->orWhereExists(function (Builder $sub) use ($user) {
+                    $sub->selectRaw('1')
+                        ->from('project_team_members')
+                        ->join('project_teams', 'project_team_members.project_team_id', '=', 'project_teams.id')
+                        ->whereColumn('project_teams.project_id', 'projects.id')
+                        ->where('project_team_members.user_id', $user->id);
+                });
+            }
+
+            if ($this->tableExists('tasks') && $this->tableExists('assigned_tasks')) {
+                $query->orWhereExists(function (Builder $sub) use ($user) {
+                    $sub->selectRaw('1')
+                        ->from('assigned_tasks')
+                        ->join('tasks', 'assigned_tasks.task_id', '=', 'tasks.id')
+                        ->whereColumn('tasks.project_id', 'projects.id')
+                        ->where('assigned_tasks.user_id', $user->id);
+                });
+            }
+        });
+    }
+
+    protected function dashboardUserHasProjectFullAccess($user): bool
+    {
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        $roles = ['Super Admin', 'Company Owner', 'Admin', 'System Manager', 'HR Manager', 'Full Access User', 'Full Access Admin', 'super-admin', 'admin'];
+
+        try {
+            if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole($roles)) {
+                return true;
+            }
+        } catch (\Throwable $e) {
+            //
+        }
+
+        try {
+            $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+            return $role?->name && in_array($role->name, $roles, true);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    protected function dashboardUserIsBranchAdmin($user): bool
+    {
+        foreach (['Branch Admin', 'branch-admin', 'branch_admin'] as $role) {
+            try {
+                if (method_exists($user, 'hasRole') && $user->hasRole($role)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                //
+            }
+        }
+
+        try {
+            $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+            return $role?->name && in_array($role->name, ['Branch Admin', 'branch-admin', 'branch_admin'], true);
+        } catch (\Throwable $e) {
+            return false;
         }
     }
 

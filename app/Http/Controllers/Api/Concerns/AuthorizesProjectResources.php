@@ -19,6 +19,18 @@ trait AuthorizesProjectResources
         'Super Admin',
         'Company Owner',
         'Admin',
+        'System Manager',
+        'HR Manager',
+        'Full Access User',
+        'Full Access Admin',
+        'super-admin',
+        'admin',
+    ];
+
+    protected array $projectCrudBypassRoles = [
+        'Super Admin',
+        'Company Owner',
+        'Admin',
         'Branch Admin',
         'System Manager',
         'HR Manager',
@@ -41,7 +53,7 @@ trait AuthorizesProjectResources
             return $query;
         }
 
-        return $this->scopeQueryToAccessibleProjects($query, (int) $user->id);
+        return $this->scopeQueryToAccessibleProjects($query, $user);
     }
 
     protected function checkAccess(Request $request, string $action, mixed $record = null): void
@@ -66,7 +78,7 @@ trait AuthorizesProjectResources
             $projectId = $this->projectIdForRecord($record);
 
             abort_unless(
-                $projectId && $this->userCanAccessProject((int) $user->id, (string) $projectId),
+                $projectId && $this->userCanAccessProject($user, (string) $projectId),
                 403,
                 'You do not have access to this project.'
             );
@@ -76,7 +88,7 @@ trait AuthorizesProjectResources
 
         if ($incomingProjectId) {
             abort_unless(
-                $this->userCanAccessProject((int) $user->id, (string) $incomingProjectId)
+                $this->userCanAccessProject($user, (string) $incomingProjectId)
                     || $this->isCreatingProject($action),
                 403,
                 'You do not have access to this project.'
@@ -125,19 +137,20 @@ trait AuthorizesProjectResources
         return null;
     }
 
-    protected function scopeQueryToAccessibleProjects(Builder $query, int $userId): Builder
+    protected function scopeQueryToAccessibleProjects(Builder $query, $user): Builder
     {
         $model = $query->getModel();
+        $userId = (int) $user->id;
 
         if ($model instanceof Project) {
-            return $query->where(function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            return $query->where(function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             });
         }
 
         if ($model instanceof Task) {
-            return $query->whereHas('project', function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            return $query->whereHas('project', function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             });
         }
 
@@ -146,36 +159,44 @@ trait AuthorizesProjectResources
             $model instanceof TaskStatus ||
             $model instanceof ProjectTeam
         ) {
-            return $query->whereHas('project', function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            return $query->whereHas('project', function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             });
         }
 
         if ($model instanceof ProjectTeamMember) {
-            return $query->whereHas('projectTeam.project', function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            return $query->whereHas('projectTeam.project', function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             });
         }
 
         if ($model instanceof AssignedTask) {
-            return $query->whereHas('task.project', function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            return $query->whereHas('task.project', function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             });
         }
 
         return $query;
     }
 
-    protected function scopeProjectRelation(Builder $query, int $userId): void
+    protected function scopeProjectRelation(Builder $query, int $userId, $user = null): void
     {
         $query
             ->where('project_manager_id', $userId)
+            ->orWhere('user_add_id', $userId)
             ->orWhereHas('projectTeams.projectTeamMembers', function (Builder $query) use ($userId) {
                 $query->where('user_id', $userId);
             })
             ->orWhereHas('tasks.assignedTasks', function (Builder $query) use ($userId) {
                 $query->where('user_id', $userId);
             });
+
+        if ($user && $this->userIsBranchAdmin($user) && $this->projectTableHasColumn('branch_id')) {
+            $branchIds = $this->projectAccessibleBranchIds($user);
+            if (!empty($branchIds)) {
+                $query->orWhereIn('branch_id', $branchIds);
+            }
+        }
     }
 
     protected function projectIdForRecord(Model $record): ?string
@@ -237,12 +258,14 @@ trait AuthorizesProjectResources
         return null;
     }
 
-    protected function userCanAccessProject(int $userId, string $projectId): bool
+    protected function userCanAccessProject($user, string $projectId): bool
     {
+        $userId = (int) $user->id;
+
         return Project::query()
             ->whereKey($projectId)
-            ->where(function (Builder $query) use ($userId) {
-                $this->scopeProjectRelation($query, $userId);
+            ->where(function (Builder $query) use ($userId, $user) {
+                $this->scopeProjectRelation($query, $userId, $user);
             })
             ->exists();
     }
@@ -274,7 +297,7 @@ trait AuthorizesProjectResources
 
         if (method_exists($user, 'hasAnyRole')) {
             try {
-                if ($user->hasAnyRole($this->projectAccessBypassRoles)) {
+                if ($user->hasAnyRole($this->projectCrudBypassRoles)) {
                     return true;
                 }
             } catch (\Throwable $e) {
@@ -283,7 +306,7 @@ trait AuthorizesProjectResources
         }
 
         if (method_exists($user, 'hasRole')) {
-            foreach ($this->projectAccessBypassRoles as $role) {
+        foreach ($this->projectCrudBypassRoles as $role) {
                 try {
                     if ($user->hasRole($role)) {
                         return true;
@@ -301,7 +324,7 @@ trait AuthorizesProjectResources
 
             $roleName = $role?->name;
 
-            if ($roleName && in_array($roleName, $this->projectAccessBypassRoles, true)) {
+            if ($roleName && in_array($roleName, $this->projectCrudBypassRoles, true)) {
                 return true;
             }
         } catch (\Throwable $e) {
@@ -309,6 +332,43 @@ trait AuthorizesProjectResources
         }
 
         return false;
+    }
+
+    protected function userIsBranchAdmin($user): bool
+    {
+        foreach (['Branch Admin', 'branch-admin', 'branch_admin'] as $role) {
+            try {
+                if (method_exists($user, 'hasRole') && $user->hasRole($role)) {
+                    return true;
+                }
+            } catch (\Throwable $e) {
+                //
+            }
+        }
+
+        try {
+            $role = $user->relationLoaded('role') ? $user->getRelation('role') : $user->role;
+            return in_array((string) $role?->name, ['Branch Admin', 'branch-admin', 'branch_admin'], true);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    protected function projectAccessibleBranchIds($user): array
+    {
+        return collect([
+            $user->current_branch_id ?? null,
+            $user->branch_id ?? null,
+        ])->filter()->map(fn ($id) => (string) $id)->unique()->values()->all();
+    }
+
+    protected function projectTableHasColumn(string $column): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn('projects', $column);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     protected function isCreatingProject(string $action): bool
@@ -357,7 +417,7 @@ trait AuthorizesProjectResources
             return false;
         }
 
-        $allowedFields = ['task_status_id', 'completion_time', 'description'];
+        $allowedFields = ['task_status_id', 'sort_order', 'completion_time', 'description'];
         $requestedFields = array_keys($request->all());
         $structuralFields = array_diff($requestedFields, $allowedFields);
 

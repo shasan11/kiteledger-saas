@@ -20,6 +20,7 @@ class Invoice extends Model
      */
     protected $fillable = [
         'branch_id',
+        'project_id',
         'fiscal_year_id',
         'invoice_no',
         'invoice_date',
@@ -78,6 +79,11 @@ class Invoice extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function contact(): BelongsTo

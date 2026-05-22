@@ -724,6 +724,33 @@ class RolesAndPermissionsSeeder extends Seeder
                     'update',
                     'delete',
                 ],
+
+                'campaign' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'export',
+                ],
+            ],
+
+            'support' => [
+                'ticket' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'assign',
+                    'close',
+                    'export',
+                ],
+
+                'ticket_comment' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                ],
             ],
 
             'hrm' => [

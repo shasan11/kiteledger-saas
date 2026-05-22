@@ -125,8 +125,10 @@ class BankAccountController extends BaseCrudApiController
 
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
-        $statementBalance = (float) ($record->opening_balance ?? 0);
-        $softwareBalance = (float) optional($record->account)->balance ?: $statementBalance;
+        $openingBalance = (float) ($record->opening_balance ?? 0);
+        $ledgerBalance = (float) (optional($record->account)->balance ?? 0);
+        $statementBalance = $openingBalance;
+        $softwareBalance = $openingBalance + $ledgerBalance;
         $difference = round($statementBalance - $softwareBalance, 2);
 
         $data['statement_balance'] = $statementBalance;

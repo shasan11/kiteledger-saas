@@ -33,6 +33,8 @@ class DashboardController extends Controller
         $data['crm_summary'] = $dashboardService->getCrmSummaryCard($filters);
         $data['hrm_summary'] = $dashboardService->getHrmSummaryCard($filters);
         $data['project_summary'] = $dashboardService->getProjectSummaryCard($filters);
+        $data['approaching_deadline_projects'] = $dashboardService->getProjectDeadlineProjects($filters, 'approaching');
+        $data['overdue_projects'] = $dashboardService->getProjectDeadlineProjects($filters, 'overdue');
         $data['receivable_ageing'] = $dashboardService->getReceivableAgeing($filters);
         $data['payable_ageing'] = $dashboardService->getPayableAgeing($filters);
         $data['top_customers'] = $dashboardService->getTopCustomers($filters);

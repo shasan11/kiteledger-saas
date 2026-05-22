@@ -42,8 +42,12 @@ class AccountProvisioningService
         return $account;
     }
 
-    public function createForContact(Contact $contact): Account
+    public function createForContact(Contact $contact): ?Account
     {
+        if (!in_array($contact->contact_type, ['customer', 'supplier'])) {
+            return null;
+        }
+
         if ($contact->account_id) {
             return $contact->account;
         }
@@ -53,13 +57,17 @@ class AccountProvisioningService
             $baseCurrency = Currency::first();
         }
 
+        $prefix = $contact->contact_type === 'customer' ? 'CUST' : 'SUP';
+        $label = $contact->contact_type === 'customer' ? 'Customer' : 'Supplier';
+        $accountCode = $this->generateContactAccountCode($prefix, $contact->code);
+
         $account = Account::firstOrCreate(
             [
-                'name' => $contact->name,
-                'code' => $contact->code ?? 'CONT-' . substr($contact->id, 0, 8),
+                'code' => $accountCode,
             ],
             [
-                'nature' => 'actor',
+                'name' => "{$label} - {$contact->name}",
+                'nature' => 'coa',
                 'currency_id' => $baseCurrency?->id,
                 'active' => true,
                 'is_system_generated' => true,
@@ -69,6 +77,43 @@ class AccountProvisioningService
         $contact->updateQuietly(['account_id' => $account->id]);
 
         return $account;
+    }
+
+    public function syncContactAccount(Contact $contact): void
+    {
+        if (!$contact->account_id) {
+            return;
+        }
+
+        $account = Account::find($contact->account_id);
+        if (!$account || !$account->is_system_generated) {
+            return;
+        }
+
+        $label = $contact->contact_type === 'customer' ? 'Customer' : 'Supplier';
+        $account->updateQuietly(['name' => "{$label} - {$contact->name}"]);
+    }
+
+    protected function generateContactAccountCode(string $prefix, ?string $contactCode): string
+    {
+        if ($contactCode) {
+            $code = "{$prefix}-{$contactCode}";
+            if (!Account::query()->where('code', $code)->exists()) {
+                return $code;
+            }
+        }
+
+        $max = Account::query()
+            ->where('code', 'like', "{$prefix}-%")
+            ->pluck('code')
+            ->map(fn ($c) => (int) preg_replace('/\D+/', '', substr((string) $c, strlen($prefix) + 1)))
+            ->max() ?? 0;
+
+        do {
+            $code = "{$prefix}-" . str_pad((string) (++$max), 4, '0', STR_PAD_LEFT);
+        } while (Account::query()->where('code', $code)->exists());
+
+        return $code;
     }
 
     public function createForBankAccount(BankAccount $bankAccount): Account

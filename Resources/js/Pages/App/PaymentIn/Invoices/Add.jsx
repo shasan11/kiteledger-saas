@@ -744,6 +744,19 @@ export default function InvoiceAdd(props) {
         disabled: true,
       },
       {
+        name: 'project_id',
+        label: 'Project',
+        type: 'fkSelect',
+        col: 8,
+        placeholder: 'Optional project',
+        fkUrl: api('/api/hrm/projects/'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        allowClear: true,
+      },
+      {
         name: 'invoice_date',
         label: 'Invoice Date',
         type: 'datePicker',
@@ -1131,6 +1144,7 @@ export default function InvoiceAdd(props) {
       invoice_date: dayjs(),
       due_date: null,
       contact_id: null,
+      project_id: null,
       warehouse_id: null,
       credit_term_id: null,
       currency_id: baseCurrency,
@@ -1164,6 +1178,7 @@ export default function InvoiceAdd(props) {
     return {
       ...defaults,
       contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
+      project_id: prefillData.project_id_detail ?? prefillData.project_id ?? null,
       currency_id: prefillData.currency_id_detail ?? prefillData.currency_id ?? baseCurrency,
       exchange_rate: toNumber(prefillData.exchange_rate) || toNumber(baseCurrency?.exchange_rate) || 1,
       credit_term_id: prefillData.credit_term_id_detail ?? prefillData.credit_term_id ?? null,
@@ -1194,6 +1209,7 @@ export default function InvoiceAdd(props) {
       due_date: formatDate(values.due_date),
 
       contact_id: asId(values.contact_id ?? values.contact),
+      project_id: asId(values.project_id ?? values.project),
       warehouse_id: asId(values.warehouse_id ?? values.warehouse),
       credit_term_id: asId(
         values.credit_term_id ?? values.creditTerm ?? values.credit_term
