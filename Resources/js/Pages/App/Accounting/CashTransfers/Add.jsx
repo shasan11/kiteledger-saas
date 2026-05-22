@@ -39,7 +39,7 @@ const formatDate = (v) => {
 
 export default function CashTransferAdd(props) {
     const fields = useMemo(() => [
-        { name: 'from_account_id', label: 'From Account', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Account', fkUrl: api('/api/accounts/?nature=bank&nature=cash'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { name: 'from_account_id', label: 'From Account', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkExtraParams: { active: true } },
         { name: 'transfer_no', label: 'Transfer No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
         { name: 'transfer_date', label: 'Transfer Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
         { name: 'currency_id', label: 'Currency', type: 'fkSelect', required: true, col: 8, placeholder: 'Select Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '' },
@@ -48,7 +48,7 @@ export default function CashTransferAdd(props) {
         {
             name: 'items', label: 'Transfer Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { to_account_id: null, amount: 0, description: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
-                { key: 'to_account_id', name: 'to_account_id', label: 'To Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/accounts/?nature=bank&nature=cash'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+                { key: 'to_account_id', name: 'to_account_id', label: 'To Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkStoreScope: 'shared', fkExtraParams: { active: true } },
                 { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '160px', min: 0, align: 'right' },
             ],
             collapsedFields: [

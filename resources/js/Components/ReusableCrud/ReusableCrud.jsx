@@ -656,30 +656,94 @@ export default function ReusableCrud({
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
   const [fkStore, setFkStore] = useState(EMPTY_OBJECT);
   const fkTimersRef = useRef(EMPTY_OBJECT);
+  const fkRequestSeqRef = useRef(EMPTY_OBJECT);
 
   const isSystemGeneratedRecord = useCallback((record) => {
     return !!record?.is_system_generated;
   }, []);
 
+  const getFieldFkUrl = (field) => {
+    return field?.fkUrl || field?.url || field?.endpoint || field?.apiUrl || null;
+  };
+
+  const extractRowsFromPayload = (payload) => {
+    if (Array.isArray(payload)) return payload;
+
+    if (Array.isArray(payload?.results)) return payload.results;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.rows)) return payload.rows;
+    if (Array.isArray(payload?.records)) return payload.records;
+
+    if (Array.isArray(payload?.data?.results)) return payload.data.results;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    if (Array.isArray(payload?.data?.rows)) return payload.data.rows;
+    if (Array.isArray(payload?.data?.records)) return payload.data.records;
+
+    return EMPTY_ARRAY;
+  };
+
+  const extractCountFromPayload = (payload, fallback = 0) => {
+    return Number(
+      payload?.count ??
+      payload?.total ??
+      payload?.meta?.total ??
+      payload?.pagination?.total ??
+      payload?.data?.count ??
+      payload?.data?.total ??
+      payload?.data?.meta?.total ??
+      fallback ??
+      0
+    );
+  };
+
+  const extractSingleRecordFromPayload = (payload) => {
+    if (!payload || Array.isArray(payload)) return payload;
+
+    if (payload?.data && !Array.isArray(payload.data)) return payload.data;
+    if (payload?.result && !Array.isArray(payload.result)) return payload.result;
+    if (payload?.record && !Array.isArray(payload.record)) return payload.record;
+    if (payload?.item && !Array.isArray(payload.item)) return payload.item;
+
+    return payload;
+  };
+
   const toFkOption = (row, field) => {
+    const normalizedRow = extractSingleRecordFromPayload(row);
+
+    if (!normalizedRow || typeof normalizedRow !== "object") {
+      return null;
+    }
+
     const valueKey = field?.fkValueKey || "id";
     const labelKey = field?.fkLabelKey || "name";
-    const value = row?.[valueKey] ?? row?.id ?? row?.value;
+    const value =
+      normalizedRow?.[valueKey] ??
+      normalizedRow?.id ??
+      normalizedRow?.uuid ??
+      normalizedRow?.value ??
+      normalizedRow?.code;
 
     const label =
       typeof field?.fkLabel === "function"
-        ? field.fkLabel(row)
-        : row?.[labelKey] ??
-        row?.name ??
-        row?.company_name ??
-        row?.person_name ??
-        row?.display_name ??
-        row?.code ??
-        row?.label ??
-        row?.title ??
+        ? field.fkLabel(normalizedRow)
+        : normalizedRow?.[labelKey] ??
+        normalizedRow?.name ??
+        normalizedRow?.company_name ??
+        normalizedRow?.person_name ??
+        normalizedRow?.display_name ??
+        normalizedRow?.full_name ??
+        normalizedRow?.code ??
+        normalizedRow?.label ??
+        normalizedRow?.title ??
         String(value ?? "");
 
-    return { value, label, raw: row };
+    if (value === undefined || value === null || value === "") {
+      return null;
+    }
+
+    return { value, label: String(label ?? value), raw: normalizedRow };
   };
 
   const upsertOption = (list, opt) => {
@@ -698,12 +762,14 @@ export default function ReusableCrud({
     async (fieldName, id) => {
       const field = fieldByName[fieldName];
 
-      if (!field?.fkUrl || id == null || id === "") return null;
+      const fkUrl = getFieldFkUrl(field);
+
+      if (!fkUrl || id == null || id === "") return null;
 
       try {
-        const detailUrl = recordUrl(resolveUrl(field.fkUrl), id);
+        const detailUrl = recordUrl(resolveUrl(fkUrl), id);
         const res = await axios.get(detailUrl, { headers: authHeaders });
-        return toFkOption(res?.data, field);
+        return toFkOption(extractSingleRecordFromPayload(res?.data), field);
       } catch (error) {
         return null;
       }
@@ -754,9 +820,20 @@ export default function ReusableCrud({
   const fetchFkOptions = useCallback(
     async (fieldName, { search = "", ensureOption = null, valuesOverride = null } = {}) => {
       const field = fieldByName[fieldName];
-      const fkUrl = field?.fkUrl;
+      const fkUrl = getFieldFkUrl(field);
 
-      if (!fkUrl) return;
+      if (!fkUrl) {
+        setFkStore((prev) => ({
+          ...prev,
+          [fieldName]: {
+            ...(prev[fieldName] || EMPTY_OBJECT),
+            options: EMPTY_ARRAY,
+            loading: false,
+          },
+        }));
+        console.warn(`FK fetch skipped for "${fieldName}" because fkUrl is missing`, field);
+        return;
+      }
 
       const fkSearchParam = field.fkSearchParam ?? "search";
       const fkPageParam = field.fkPageParam ?? "page";
@@ -791,13 +868,9 @@ export default function ReusableCrud({
         const res = await axios.get(finalUrl, { headers: authHeaders });
         const payload = res?.data;
 
-        const rows = Array.isArray(payload?.results)
-          ? payload.results
-          : Array.isArray(payload)
-            ? payload
-            : EMPTY_ARRAY;
+        const rows = extractRowsFromPayload(payload);
 
-        let options = rows.map((r) => toFkOption(r, field));
+        let options = rows.map((r) => toFkOption(r, field)).filter(Boolean);
 
         if (ensureOption) options = upsertOption(options, ensureOption);
 
@@ -807,10 +880,12 @@ export default function ReusableCrud({
             options,
             loading: false,
             search,
-            count: Number(payload?.count ?? options.length ?? 0),
+            count: extractCountFromPayload(payload, options.length),
           },
         }));
       } catch (e) {
+        console.error("FK fetch failed:", fieldName, e);
+
         setFkStore((prev) => ({
           ...prev,
           [fieldName]: {
@@ -836,8 +911,19 @@ export default function ReusableCrud({
         valuesOverride = null,
       } = {}
     ) => {
-      const fkUrl = cfg?.fkUrl;
-      if (!fkUrl) return;
+      const fkUrl = getFieldFkUrl(cfg);
+      if (!fkUrl) {
+        setFkStore((prev) => ({
+          ...prev,
+          [storeKey]: {
+            ...(prev[storeKey] || EMPTY_OBJECT),
+            options: EMPTY_ARRAY,
+            loading: false,
+          },
+        }));
+        console.warn(`Inline FK fetch skipped for "${storeKey}" because fkUrl is missing`, cfg);
+        return;
+      }
 
       const fkSearchParam = cfg.fkSearchParam ?? "search";
       const fkPageParam = cfg.fkPageParam ?? "page";
@@ -861,6 +947,9 @@ export default function ReusableCrud({
         },
       }));
 
+      const requestSeq = (fkRequestSeqRef.current[storeKey] || 0) + 1;
+      fkRequestSeqRef.current[storeKey] = requestSeq;
+
       try {
         const finalUrl = appendQueryParams(resolveUrl(fkUrl), {
           [fkPageParam]: 1,
@@ -872,15 +961,15 @@ export default function ReusableCrud({
         const res = await axios.get(finalUrl, { headers: authHeaders });
         const payload = res?.data;
 
-        const rows = Array.isArray(payload?.results)
-          ? payload.results
-          : Array.isArray(payload)
-            ? payload
-            : EMPTY_ARRAY;
+        const rows = extractRowsFromPayload(payload);
 
-        let options = rows.map((r) => toFkOption(r, cfg));
+        let options = rows.map((r) => toFkOption(r, cfg)).filter(Boolean);
 
         if (ensureOption) options = upsertOption(options, ensureOption);
+
+        if (fkRequestSeqRef.current[storeKey] !== requestSeq) {
+          return;
+        }
 
         setFkStore((prev) => ({
           ...prev,
@@ -888,10 +977,16 @@ export default function ReusableCrud({
             options,
             loading: false,
             search,
-            count: Number(payload?.count ?? options.length ?? 0),
+            count: extractCountFromPayload(payload, options.length),
           },
         }));
       } catch (e) {
+        console.error("FK inline fetch failed:", storeKey, e);
+
+        if (fkRequestSeqRef.current[storeKey] !== requestSeq) {
+          return;
+        }
+
         setFkStore((prev) => ({
           ...prev,
           [storeKey]: {
@@ -1009,25 +1104,28 @@ export default function ReusableCrud({
 
         const res = await axios.get(finalUrl, { headers: authHeaders });
 
-        if (res?.data && typeof res.data === "object" && Array.isArray(res.data.results)) {
-          setServerPaginated(true);
-          setData(applyRecordsTransform(res.data.results));
-          setPagination((p) => ({
-            ...p,
-            current: page ?? p.current,
-            pageSize: pageSize ?? p.pageSize,
-            total: Number(res.data.count ?? 0),
-          }));
-          return;
-        }
+        const payload = res?.data;
+        const rows = extractRowsFromPayload(payload);
 
-        if (Array.isArray(res.data)) {
-          setServerPaginated(false);
-          setData(applyRecordsTransform(res.data));
+        if (rows.length || Array.isArray(payload) || payload?.results || payload?.data) {
+          const isPaginatedPayload =
+            !!(
+              payload?.count ??
+              payload?.total ??
+              payload?.meta?.total ??
+              payload?.pagination?.total ??
+              payload?.data?.count ??
+              payload?.data?.total ??
+              payload?.data?.meta?.total
+            );
+
+          setServerPaginated(enableServerPagination || isPaginatedPayload);
+          setData(applyRecordsTransform(rows));
           setPagination((p) => ({
             ...p,
-            current: 1,
-            total: res.data.length,
+            current: page ?? (enableServerPagination ? p.current : 1),
+            pageSize: pageSize ?? p.pageSize,
+            total: extractCountFromPayload(payload, rows.length),
           }));
           return;
         }
@@ -1082,26 +1180,25 @@ export default function ReusableCrud({
 
         const res = await axios.get(finalUrl, { headers: authHeaders });
 
-        if (res?.data && typeof res.data === "object" && Array.isArray(res.data.results)) {
-          setInactiveRows(applyRecordsTransform(res.data.results));
-          setInactivePagination((p) => ({
-            ...p,
-            current: page ?? p.current,
-            pageSize: pageSize ?? p.pageSize,
-            total: Number(res.data.count ?? 0),
-          }));
-          return;
-        }
+        const payload = res?.data;
+        const rows = extractRowsFromPayload(payload);
 
-        if (Array.isArray(res.data)) {
-          const list = res.data.filter((d) => {
-            if (d?.hasOwnProperty("active")) return d.active === false;
-            if (d?.hasOwnProperty("is_active")) return d.is_active === false;
-            return false;
-          });
+        if (rows.length || Array.isArray(payload) || payload?.results || payload?.data) {
+          const list = activeParam
+            ? rows
+            : rows.filter((d) => {
+              if (d?.hasOwnProperty("active")) return d.active === false;
+              if (d?.hasOwnProperty("is_active")) return d.is_active === false;
+              return false;
+            });
 
           setInactiveRows(applyRecordsTransform(list));
-          setInactivePagination((p) => ({ ...p, current: 1, total: list.length }));
+          setInactivePagination((p) => ({
+            ...p,
+            current: page ?? (enableServerPagination ? p.current : 1),
+            pageSize: pageSize ?? p.pageSize,
+            total: extractCountFromPayload(payload, list.length),
+          }));
           return;
         }
 
@@ -1451,14 +1548,16 @@ export default function ReusableCrud({
       const res = await axios.get(finalUrl, { headers: authHeaders });
       const payload = res?.data;
 
-      if (Array.isArray(payload)) return payload;
+      const rows = extractRowsFromPayload(payload);
 
-      if (Array.isArray(payload?.results)) {
-        mergedRows.push(...payload.results);
+      if (Array.isArray(payload) && !enableServerPagination) return rows;
 
-        const total = Number(payload?.count ?? mergedRows.length);
+      if (rows.length) {
+        mergedRows.push(...rows);
 
-        hasMore = mergedRows.length < total && payload.results.length > 0;
+        const total = extractCountFromPayload(payload, mergedRows.length);
+
+        hasMore = mergedRows.length < total && rows.length > 0;
         page += 1;
       } else {
         hasMore = false;
@@ -1765,25 +1864,25 @@ export default function ReusableCrud({
           const res = await axios.get(url, { headers: authHeaders });
           const payload = res?.data;
 
-          const rows = Array.isArray(payload?.results)
-            ? payload.results
-            : Array.isArray(payload)
-              ? payload
-              : EMPTY_ARRAY;
+          const rows = extractRowsFromPayload(payload);
 
           setter(
-            rows.map((row) => ({
-              value: row?.[fkValueKey] ?? row?.id,
-              label:
-                typeof fkLabel === "function"
-                  ? fkLabel(row)
-                  : row?.[fkLabelKey] ??
-                  row?.name ??
-                  row?.display_name ??
-                  row?.code ??
-                  String(row?.[fkValueKey] ?? row?.id ?? ""),
-              raw: row,
-            }))
+            rows.map((row) => {
+              const normalizedRow = extractSingleRecordFromPayload(row);
+
+              return {
+                value: normalizedRow?.[fkValueKey] ?? normalizedRow?.id,
+                label:
+                  typeof fkLabel === "function"
+                    ? fkLabel(normalizedRow)
+                    : normalizedRow?.[fkLabelKey] ??
+                    normalizedRow?.name ??
+                    normalizedRow?.display_name ??
+                    normalizedRow?.code ??
+                    String(normalizedRow?.[fkValueKey] ?? normalizedRow?.id ?? ""),
+                raw: normalizedRow,
+              };
+            }).filter((row) => row.value !== undefined && row.value !== null && row.value !== "")
           );
         } catch (e) {
           setter(EMPTY_ARRAY);
@@ -2784,55 +2883,59 @@ export default function ReusableCrud({
                       ]
                       : options;
 
+                  const doFormFkFetch = (search = "") => {
+                    fetchFkOptions(name, {
+                      search,
+                      ensureOption:
+                        finalVal != null
+                          ? {
+                            value: finalVal,
+                            label: currentLabel || String(finalVal),
+                            raw: detailCurrent || rawCurrent,
+                          }
+                          : null,
+                      valuesOverride: values,
+                    });
+                  };
+
                   const selectEl = (
                     <Select
                       showSearch
-                      size="medium"
+                      size="middle"
                       value={finalVal ?? undefined}
                       placeholder={field.placeholder || "Search and select..."}
                       disabled={readOnly}
                       filterOption={false}
                       loading={store.loading}
                       allowClear
+                      optionLabelProp="label"
+                      notFoundContent={
+                        store.loading
+                          ? "Loading..."
+                          : mergedOptions.length === 0
+                            ? "No results found"
+                            : null
+                      }
                       onClear={() => {
                         setFieldValue(name, null);
                         setFieldValue(`${name}_detail`, null, false);
 
                         if (field.labelField) setFieldValue(field.labelField, "", false);
                       }}
-                      onOpenChange={(open) => {
-                        if (!open) return;
-
-                        fetchFkOptions(name, {
-                          search: "",
-                          ensureOption:
-                            finalVal != null
-                              ? {
-                                value: finalVal,
-                                label: currentLabel || String(finalVal),
-                                raw: detailCurrent || rawCurrent,
-                              }
-                              : null,
-                          valuesOverride: values,
-                        });
+                      onFocus={() => {
+                        if (!store.options?.length) {
+                          doFormFkFetch("");
+                        }
+                      }}
+                      onDropdownVisibleChange={(open) => {
+                        if (open) doFormFkFetch("");
                       }}
                       onSearch={(txt) => {
                         if (fkTimersRef.current[name]) clearTimeout(fkTimersRef.current[name]);
 
                         fkTimersRef.current[name] = setTimeout(() => {
-                          fetchFkOptions(name, {
-                            search: txt || "",
-                            ensureOption:
-                              finalVal != null
-                                ? {
-                                  value: finalVal,
-                                  label: currentLabel || String(finalVal),
-                                  raw: detailCurrent || rawCurrent,
-                                }
-                                : null,
-                            valuesOverride: values,
-                          });
-                        }, 350);
+                          doFormFkFetch(txt || "");
+                        }, 200);
                       }}
                       onChange={(val, option) => {
                         const opt = Array.isArray(option) ? option?.[0] : option;
@@ -2845,7 +2948,11 @@ export default function ReusableCrud({
                           setFieldValue(field.labelField, lbl, false);
                         }
                       }}
-                      options={mergedOptions}
+                      options={mergedOptions.map((opt) => ({
+                        value: opt.value,
+                        label: opt.label,
+                        raw: opt.raw,
+                      }))}
                     />
                   );
 
@@ -3437,11 +3544,29 @@ export default function ReusableCrud({
                                 ]
                                 : options;
 
+                            const doInlineFetch = (search = "") => {
+                              fetchFkOptionsInline(storeKey, c, {
+                                search,
+                                ensureOption:
+                                  finalVal != null
+                                    ? {
+                                      value: finalVal,
+                                      label: currentLabel || String(finalVal),
+                                      raw: detailVal || val,
+                                    }
+                                    : null,
+                                rowValue,
+                                rowIndex: idx,
+                                parentFieldName: name,
+                                valuesOverride: values,
+                              });
+                            };
+
                             return (
                               <Select
                                 key={`${fieldKey}.${idx}.${colKey}`}
                                 showSearch
-                                size="medium"
+                                size="middle"
                                 value={finalVal ?? undefined}
                                 variant="underlined"
                                 placeholder={c.placeholder || "Search and select"}
@@ -3450,6 +3575,16 @@ export default function ReusableCrud({
                                 loading={store.loading}
                                 allowClear
                                 optionLabelProp="label"
+                                notFoundContent={
+                                  store.loading
+                                    ? "Loading..."
+                                    : mergedOptions.length === 0
+                                      ? "No results found"
+                                      : null
+                                }
+                                onInputKeyDown={(event) => {
+                                  event.stopPropagation();
+                                }}
                                 dropdownRender={(menu) => (
                                   <>
                                     {menu}
@@ -3496,52 +3631,25 @@ export default function ReusableCrud({
                                     ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
                                   });
                                 }}
-                                onOpenChange={(open) => {
-                                  if (
-                                    open &&
-                                    (!fkStore[storeKey]?.options ||
-                                      fkStore[storeKey]?.options.length === 0 ||
-                                      fkStore[storeKey]?.search)
-                                  ) {
-                                    fetchFkOptionsInline(storeKey, c, {
-                                      search: "",
-                                      ensureOption:
-                                        finalVal != null
-                                          ? {
-                                            value: finalVal,
-                                            label: currentLabel || String(finalVal),
-                                            raw: detailVal || val,
-                                          }
-                                          : null,
-                                      rowValue,
-                                      rowIndex: idx,
-                                      parentFieldName: name,
-                                      valuesOverride: values,
-                                    });
+                                onFocus={() => {
+                                  const currentStore = fkStore[storeKey];
+                                  if (!currentStore?.options?.length) {
+                                    doInlineFetch("");
                                   }
                                 }}
+                                onDropdownVisibleChange={(open) => {
+                                  if (open) doInlineFetch("");
+                                }}
                                 onSearch={(txt) => {
+                                  const searchValue = txt || "";
+
                                   if (fkTimersRef.current[storeKey]) {
                                     clearTimeout(fkTimersRef.current[storeKey]);
                                   }
 
                                   fkTimersRef.current[storeKey] = setTimeout(() => {
-                                    fetchFkOptionsInline(storeKey, c, {
-                                      search: txt || "",
-                                      ensureOption:
-                                        finalVal != null
-                                          ? {
-                                            value: finalVal,
-                                            label: currentLabel || String(finalVal),
-                                            raw: detailVal || val,
-                                          }
-                                          : null,
-                                      rowValue,
-                                      rowIndex: idx,
-                                      parentFieldName: name,
-                                      valuesOverride: values,
-                                    });
-                                  }, 350);
+                                    doInlineFetch(searchValue);
+                                  }, 200);
                                 }}
                                 onChange={(selectedValue, option) => {
                                   const selectedOption = Array.isArray(option) ? option?.[0] : option;

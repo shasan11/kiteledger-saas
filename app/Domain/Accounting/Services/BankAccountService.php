@@ -40,10 +40,12 @@ class BankAccountService
 
     public function syncLinkedAccount(BankAccount $bankAccount): void
     {
-        DB::transaction(function () use ($bankAccount) {
+        $source = $bankAccount;
+
+        DB::transaction(function () use ($source) {
             $bankAccount = BankAccount::query()
                 ->lockForUpdate()
-                ->findOrFail($bankAccount->id);
+                ->findOrFail($source->id);
 
             $payload = [
                 'name' => $bankAccount->display_name,
@@ -52,7 +54,7 @@ class BankAccountService
                 'currency_id' => $bankAccount->currency_id,
                 'swift_code' => $bankAccount->swift_code,
                 'active' => (bool) $bankAccount->active,
-                'is_system_generated' => (bool) ($bankAccount->is_system_generated ?? false),
+                'is_system_generated' => true,
                 'user_add_id' => $bankAccount->user_add_id,
             ];
 
@@ -76,6 +78,8 @@ class BankAccountService
                     'account_id' => $account->id,
                 ])->saveQuietly();
             }
+
+            $source->setAttribute('account_id', $account->id);
         });
     }
 

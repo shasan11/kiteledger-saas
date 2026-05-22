@@ -20,6 +20,7 @@ class ChartOfAccount extends Model
     protected $fillable = [
         'account_id',
         'branch_id',
+        'currency_id',
         'type',
         'code',
         'name',
@@ -52,6 +53,11 @@ class ChartOfAccount extends Model
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
     }
 
     public function parent(): BelongsTo

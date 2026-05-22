@@ -4,6 +4,7 @@ namespace App\Domain\Accounting\Services;
 
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
+use App\Models\ChartOfAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -214,6 +215,21 @@ class SystemJournalVoucherService
 
         if (Schema::hasColumn($table, 'account_id')) {
             $payload['account_id'] = $accountId;
+        }
+
+        // TODO: Remove this bridge after legacy chart_of_account_id is dropped.
+        if (Schema::hasColumn($table, 'chart_of_account_id')) {
+            $chartOfAccountId = ChartOfAccount::query()
+                ->where('account_id', $accountId)
+                ->value('id');
+
+            if (! $chartOfAccountId) {
+                throw ValidationException::withMessages([
+                    'journal_voucher_lines' => 'Selected account is not linked to a chart of account for the current legacy journal line schema.',
+                ]);
+            }
+
+            $payload['chart_of_account_id'] = $chartOfAccountId;
         }
 
         if (isset($payload['account_id'])) {

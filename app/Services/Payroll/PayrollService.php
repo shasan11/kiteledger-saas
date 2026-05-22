@@ -451,7 +451,7 @@ class PayrollService
                 $payroll->update(['journal_voucher_id' => $existingVoucher->id]);
                 $payroll->payslips()->update(['journal_voucher_id' => $existingVoucher->id]);
 
-                return $existingVoucher->fresh('items.account', 'items.chartOfAccount');
+                return $existingVoucher->fresh('items.account');
             }
 
             if (! in_array($payroll->status, ['approved', 'processed'], true)) {
@@ -592,7 +592,7 @@ class PayrollService
             $payroll->payslips()->update(['journal_voucher_id' => $voucher->id]);
             $this->log($payroll, $payroll->status, $payroll->status, 'journal_voucher_created', $voucher->voucher_no, $actor);
 
-            return $voucher->fresh('items.account', 'items.chartOfAccount');
+            return $voucher->fresh('items.account');
         });
     }
 
@@ -654,7 +654,7 @@ class PayrollService
             $payroll->payslips()->update(['status' => 'paid', 'payment_status' => 'PAID']);
             $this->log($payroll, 'processed', 'paid', 'payment_journal_voucher_created', $voucher->voucher_no, $actor);
 
-            return $voucher->fresh('items.account', 'items.chartOfAccount');
+            return $voucher->fresh('items.account');
         });
     }
 

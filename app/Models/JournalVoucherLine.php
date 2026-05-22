@@ -19,6 +19,7 @@ class JournalVoucherLine extends Model
     protected $fillable = [
         'journal_voucher_id',
         'account_id',
+        'chart_of_account_id',
         'description',
         'debit',
         'credit',

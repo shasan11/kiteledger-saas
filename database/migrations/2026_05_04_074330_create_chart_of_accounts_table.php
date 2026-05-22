@@ -17,6 +17,7 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('account_id')->constrained();
             $table->foreignUuid('branch_id')->nullable()->constrained();
+            $table->foreignUuid('currency_id')->nullable()->constrained();
             $table->enum('type', ["asset","liability","equity","income","expense"])->default('asset');
             $table->string('code', 30)->unique()->nullable();
             $table->string('name', 150);

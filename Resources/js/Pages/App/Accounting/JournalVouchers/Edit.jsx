@@ -11,38 +11,19 @@ dayjs.extend(customParseFormat);
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const journalLineAccountField = {
-    key: 'chart_of_account_id',
-    name: 'chart_of_account_id',
+    key: 'account_id',
+    name: 'account_id',
     label: 'Account',
     type: 'fkSelect',
     width: '3fr',
     placeholder: 'Select Account',
-    fkUrl: api('/api/chart-of-accounts/'),
+    fkUrl: api('/api/accounts/'),
     fkSearchParam: 'search',
     fkPageSize: 20,
     fkValueKey: 'id',
     fkLabelKey: 'name',
     fkStoreScope: 'shared',
     fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - '),
-    quickAdd: {
-        title: 'Quick Add Account',
-        buttonLabel: 'Quick Add Account',
-        apiUrl: api('/api/chart-of-accounts/'),
-        initialValues: { type: 'asset', active: true },
-        fields: [
-            { name: 'name', label: 'Account Name', type: 'text', required: true, col: 12 },
-            { name: 'type', label: 'Type', type: 'select', required: true, col: 12, options: [
-                { value: 'asset', label: 'Asset' },
-                { value: 'liability', label: 'Liability' },
-                { value: 'equity', label: 'Equity' },
-                { value: 'income', label: 'Income' },
-                { value: 'expense', label: 'Expense' },
-            ] },
-            { name: 'parent_id', label: 'Parent Account', type: 'fkSelect', col: 12, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - ') },
-            { name: 'active', label: 'Active', type: 'switch', col: 12 },
-            { name: 'description', label: 'Description', type: 'textarea', col: 24, rows: 2 },
-        ],
-    },
 };
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
@@ -97,7 +78,7 @@ export default function JournalVoucherEdit({ id, ...props }) {
         { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
         { name: 'narration', label: 'Narration', type: 'textarea', col: 24, rows: 2, placeholder: 'Narration' },
         {
-            name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { chart_of_account_id: null, description: '', debit: 0, credit: 0 }, onAddItem: balancedLineItem, headerBg: '#4b5563', headerColor: '#ffffff',
+            name: 'items', label: 'Journal Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Line', defaultItem: { account_id: null, description: '', debit: 0, credit: 0 }, onAddItem: balancedLineItem, headerBg: '#4b5563', headerColor: '#ffffff',
             columns: [
                 journalLineAccountField,
                 { key: '_helper', name: '_helper', label: 'Helper', type: 'text', width: '180px', disabled: true },
@@ -121,7 +102,7 @@ export default function JournalVoucherEdit({ id, ...props }) {
     }), []);
 
     const transformPayload = (values = {}) => {
-        const items = (Array.isArray(values.items) ? values.items : []).filter((l) => !!asId(l?.chart_of_account_id)).map((l) => ({ ...(l.id ? { id: l.id } : {}), chart_of_account_id: asId(l.chart_of_account_id), description: nullIfEmpty(l.description), debit: toNumber(l.debit), credit: toNumber(l.credit) }));
+        const items = (Array.isArray(values.items) ? values.items : []).filter((l) => !!asId(l?.account_id)).map((l) => ({ ...(l.id ? { id: l.id } : {}), account_id: asId(l.account_id), description: nullIfEmpty(l.description), debit: toNumber(l.debit), credit: toNumber(l.credit) }));
         return {
             voucher_no: nullIfEmpty(values.voucher_no),
             voucher_date: formatDate(values.voucher_date),
