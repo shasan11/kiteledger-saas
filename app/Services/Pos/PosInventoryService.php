@@ -3,11 +3,10 @@
 namespace App\Services\Pos;
 
 use App\Models\AppSetting;
-use App\Models\InventoryAdjustmentLine;
-use App\Models\PosReturnLine;
-use App\Models\PosSaleLine;
+use App\Models\PosSale;
 use App\Models\Product;
-use App\Models\WarehouseTransferLine;
+use App\Models\Warehouse;
+use App\Models\WarehouseItem;
 use InvalidArgumentException;
 
 class PosInventoryService
@@ -18,63 +17,10 @@ class PosInventoryService
             return 0;
         }
 
-        $adjustments = InventoryAdjustmentLine::query()
+        return (float) (WarehouseItem::query()
             ->where('product_id', $productId)
-            ->whereHas('inventoryAdjustment', function ($query) use ($warehouseId) {
-                $query->where('warehouse_id', $warehouseId)
-                    ->whereNotIn('status', ['cancelled'])
-                    ->where(function ($q) {
-                        $q->whereNull('void')->orWhere('void', false);
-                    });
-            })
-            ->get()
-            ->sum(function ($line) {
-                $qty = (float) $line->qty;
-                return $line->adjustment_type === 'decrease' ? -$qty : $qty;
-            });
-
-        $transfersOut = WarehouseTransferLine::query()
-            ->where('product_id', $productId)
-            ->whereHas('warehouseTransfer', function ($query) use ($warehouseId) {
-                $query->where('from_warehouse_id', $warehouseId)
-                    ->whereNotIn('status', ['cancelled'])
-                    ->where(function ($q) {
-                        $q->whereNull('void')->orWhere('void', false);
-                    });
-            })
-            ->sum('qty');
-
-        $transfersIn = WarehouseTransferLine::query()
-            ->where('product_id', $productId)
-            ->whereHas('warehouseTransfer', function ($query) use ($warehouseId) {
-                $query->where('to_warehouse_id', $warehouseId)
-                    ->whereNotIn('status', ['cancelled'])
-                    ->where(function ($q) {
-                        $q->whereNull('void')->orWhere('void', false);
-                    });
-            })
-            ->sum('qty');
-
-        $posSales = PosSaleLine::query()
-            ->where('product_id', $productId)
-            ->whereHas('posSale', function ($query) use ($warehouseId) {
-                $query->where('warehouse_id', $warehouseId)
-                    ->whereIn('status', ['completed', 'part_refunded', 'refunded'])
-                    ->where('void', false);
-            })
-            ->sum('qty');
-
-        $posReturns = PosReturnLine::query()
-            ->where('product_id', $productId)
-            ->whereHas('posReturn.posSale', function ($query) use ($warehouseId) {
-                $query->where('warehouse_id', $warehouseId);
-            })
-            ->whereHas('posReturn', function ($query) {
-                $query->where('status', 'completed');
-            })
-            ->sum('qty');
-
-        return round((float) $adjustments + (float) $transfersIn - (float) $transfersOut - (float) $posSales + (float) $posReturns, 4);
+            ->where('warehouse_id', $warehouseId)
+            ->value('qty_on_hand') ?? 0);
     }
 
     public function validateStock(string $productId, float $qty, ?string $warehouseId): void
@@ -85,11 +31,120 @@ class PosInventoryService
             return;
         }
 
-        $available = $this->availableStock($productId, $warehouseId);
-        $policy = AppSetting::query()->value('negative_item_balance') ?: 'warn';
-
-        if ($available - $qty < 0 && $policy === 'reject') {
-            throw new InvalidArgumentException("Insufficient stock for {$product->name}. Available: {$available}");
+        if (!$warehouseId) {
+            throw new InvalidArgumentException("Warehouse is required for inventory-tracked product {$product->name}.");
         }
+
+        $available = $this->availableStock($productId, $warehouseId);
+        $policy = $this->negativeItemBalancePolicy();
+
+        if ($this->blocksNegativeStock($policy) && $available - $qty < -0.0001) {
+            $warehouseName = Warehouse::query()->whereKey($warehouseId)->value('name') ?? $warehouseId;
+
+            throw new InvalidArgumentException($this->insufficientStockMessage(
+                $product->name,
+                $warehouseName,
+                $available,
+                $qty
+            ));
+        }
+    }
+
+    public function deductStockForSale(PosSale $sale): void
+    {
+        $sale->loadMissing(['warehouse', 'posSaleLines.product']);
+        $warehouseId = $sale->warehouse_id;
+        $warehouseName = $sale->warehouse?->name ?? $warehouseId;
+        $policy = $this->negativeItemBalancePolicy();
+
+        foreach ($sale->posSaleLines as $line) {
+            if (!$line->product_id) {
+                continue;
+            }
+
+            $product = $line->product ?? Product::query()->findOrFail($line->product_id);
+
+            if (!$product->track_inventory) {
+                continue;
+            }
+
+            if (!$warehouseId) {
+                throw new InvalidArgumentException("Warehouse is required for inventory-tracked product {$product->name}.");
+            }
+
+            $qty = (float) $line->qty;
+            $warehouseItem = WarehouseItem::query()
+                ->where('warehouse_id', $warehouseId)
+                ->where('product_id', $product->id)
+                ->lockForUpdate()
+                ->first();
+
+            $available = (float) ($warehouseItem?->qty_on_hand ?? 0);
+
+            if ($this->blocksNegativeStock($policy) && $available - $qty < -0.0001) {
+                throw new InvalidArgumentException($this->insufficientStockMessage(
+                    $product->name,
+                    $warehouseName,
+                    $available,
+                    $qty
+                ));
+            }
+
+            if (!$warehouseItem) {
+                $warehouseItem = new WarehouseItem([
+                    'branch_id' => $sale->branch_id,
+                    'warehouse_id' => $warehouseId,
+                    'product_id' => $product->id,
+                    'qty_on_hand' => 0,
+                    'avg_cost' => 0,
+                    'total_value' => 0,
+                    'reorder_level' => $product->reorder_level,
+                    'active' => (bool) $product->active,
+                ]);
+            }
+
+            $newQty = round($available - $qty, 4);
+            $avgCost = (float) ($warehouseItem->avg_cost ?? 0);
+
+            $warehouseItem->fill([
+                'branch_id' => $sale->branch_id,
+                'qty_on_hand' => $newQty,
+                'avg_cost' => round($avgCost, 6),
+                'total_value' => round($newQty * $avgCost, 6),
+                'reorder_level' => $product->reorder_level,
+                'active' => (bool) $product->active,
+            ]);
+            $warehouseItem->save();
+        }
+    }
+
+    private function negativeItemBalancePolicy(): string
+    {
+        return strtolower((string) (
+            AppSetting::query()->where('active', true)->oldest()->value('negative_item_balance')
+            ?: AppSetting::query()->oldest()->value('negative_item_balance')
+            ?: 'warn'
+        ));
+    }
+
+    private function blocksNegativeStock(string $policy): bool
+    {
+        return in_array($policy, ['block', 'reject'], true);
+    }
+
+    private function insufficientStockMessage(string $productName, ?string $warehouseName, float $available, float $requested): string
+    {
+        return sprintf(
+            'Insufficient stock for %s in %s. Available: %s, requested: %s.',
+            $productName,
+            $warehouseName ?: 'the selected warehouse',
+            $this->formatQty($available),
+            $this->formatQty($requested)
+        );
+    }
+
+    private function formatQty(float $qty): string
+    {
+        return rtrim(rtrim(number_format($qty, 4, '.', ''), '0'), '.') ?: '0';
     }
 }

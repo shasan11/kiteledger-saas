@@ -14,16 +14,23 @@ import {
   Table,
   Tag,
   Typography,
+  Modal,
+  message,
   theme,
 } from 'antd';
-import { ArrowLeftOutlined, BarcodeOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, BarcodeOutlined, CheckCircleOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
+const authHeaders = () => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const APPROVED_STATUSES = new Set([
   'posted',
@@ -261,6 +268,16 @@ function sectionTitle(documentType) {
 }
 
 function getDocumentCode(record, documentType) {
+  if (!record) return '#DRAFT';
+
+  if (documentType === 'warehouse_transfer') {
+    return displayDocumentNumber(record, record?.warehouse_transfer_no ? 'warehouse_transfer_no' : 'transfer_no');
+  }
+
+  if (documentType === 'inventory_adjustment') {
+    return displayDocumentNumber(record, record?.inventory_adjustment_no ? 'inventory_adjustment_no' : 'adjustment_no');
+  }
+
   return firstPresent(
     record?.transfer_no,
     record?.adjustment_no,
@@ -759,6 +776,7 @@ export default function InventoryRecordShow({
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -794,6 +812,38 @@ export default function InventoryRecordShow({
       active = false;
     };
   }, [endpoint, id, title]);
+
+  const reloadRecord = async () => {
+    const { data } = await axios.get(api(`${endpoint}${id}`), { headers: authHeaders() });
+    setRecord(data);
+  };
+
+  const approveRecord = () => {
+    Modal.confirm({
+      title: documentType === 'warehouse_transfer' ? 'Post warehouse transfer?' : 'Post inventory adjustment?',
+      content: 'This will update warehouse stock and lock the document from normal editing.',
+      okText: 'Approve / Post',
+      onOk: async () => {
+        setApproving(true);
+        try {
+          const cleanEndpoint = endpoint.replace(/\/$/, '');
+          await axios.post(api(`${cleanEndpoint}/${id}/approve`), {}, { headers: authHeaders() });
+          await reloadRecord();
+          message.success('Document approved and posted.');
+        } catch (err) {
+          const data = err?.response?.data;
+          const errors = data?.errors || data || {};
+          const firstError = typeof errors === 'object'
+            ? Object.values(errors).flat().filter(Boolean)[0]
+            : null;
+          message.error(firstError || data?.message || 'Approval failed.');
+          throw err;
+        } finally {
+          setApproving(false);
+        }
+      },
+    });
+  };
 
   const documentCode = getDocumentCode(record, documentType);
   const railRows = useMemo(() => buildRailRows(record, documentType), [record, documentType]);
@@ -1006,11 +1056,16 @@ export default function InventoryRecordShow({
           <Space size={8}>
             {editRoute && (
               <Link href={route(editRoute, id)}>
-                <Button size="small" icon={<EditOutlined />} disabled={loading || !record}>
+                <Button size="small" icon={<EditOutlined />} disabled={loading || !record || isApproved(record)}>
                   Edit
                 </Button>
               </Link>
             )}
+            {!isApproved(record) && ['warehouse_transfer', 'inventory_adjustment'].includes(documentType) ? (
+              <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={approving} disabled={loading || !record} onClick={approveRecord}>
+                Approve / Post
+              </Button>
+            ) : null}
             <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
               Print Preview
             </Button>

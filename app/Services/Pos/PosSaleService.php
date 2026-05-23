@@ -178,6 +178,8 @@ class PosSaleService
                 $this->inventoryService->validateStock($product->id, (float) $line->qty, $draft->warehouse_id);
             }
 
+            $this->inventoryService->deductStockForSale($draft);
+
             $draft->forceFill([
                 'status' => 'completed',
                 'approved' => (bool) ($payload['approved'] ?? true),

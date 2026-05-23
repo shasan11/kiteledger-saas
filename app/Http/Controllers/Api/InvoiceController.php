@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\AppSetting;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\PosSale;
 use App\Models\WarehouseItem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -211,6 +212,10 @@ class InvoiceController extends BaseCrudApiController
 
     private function checkNegativeItemBalance(?AppSetting $config, Model $record, \Illuminate\Support\Collection $lines): void
     {
+        if ($this->isPosGeneratedInvoice($record)) {
+            return;
+        }
+
         $mode = $config?->negative_item_balance ?? 'warn';
         if ($mode === 'allow') return;
         if ($this->isValidationOverrideConfirmed('negative_stock')) return;
@@ -250,13 +255,22 @@ class InvoiceController extends BaseCrudApiController
 
         if (in_array($mode, ['block', 'reject'], true)) {
             $messages = array_map(fn ($s) =>
-                "Insufficient stock for \"{$s['product_name']}\": available {$s['available_stock']}, requested {$s['required_qty']}.",
+                "Insufficient stock for {$s['product_name']} in {$s['warehouse']}. Available: {$s['available_stock']}, requested: {$s['required_qty']}.",
                 $shortages
             );
             $this->throwValidation(['items' => $messages]);
         } else {
             $this->throwValidationWarning(['negative_stock' => ['items' => $shortages]]);
         }
+    }
+
+    private function isPosGeneratedInvoice(Model $record): bool
+    {
+        return $record->exists
+            && PosSale::query()
+                ->where('invoice_id', $record->getKey())
+                ->whereIn('status', ['completed', 'part_refunded', 'refunded'])
+                ->exists();
     }
 
     private function checkCreditLimitExceed(?AppSetting $config, Model $record): void

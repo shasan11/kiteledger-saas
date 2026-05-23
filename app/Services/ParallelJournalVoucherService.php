@@ -80,7 +80,7 @@ class ParallelJournalVoucherService
         if ($totalTax = $invoice->invoiceLines->sum('tax_amount')) {
             $taxAccount = $this->accountResolver->getTaxPayableAccount();
             $creditLines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($taxAccount->id),
                 'debit' => 0,
                 'credit' => round($this->convertToBase($totalTax, $rate), 2),
                 'description' => 'Tax Payable',
@@ -92,7 +92,7 @@ class ParallelJournalVoucherService
         $lines = array_merge(
             [
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($arAccount->id),
                     'debit' => $totalCredit,
                     'credit' => 0,
                     'description' => "Invoice {$invoice->invoice_no}",
@@ -127,7 +127,7 @@ class ParallelJournalVoucherService
             : $this->accountResolver->getDefaultBankAccount();
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($bankAccount->id),
             'debit' => round($this->convertToBase($payment->amount, $rate), 2),
             'credit' => 0,
             'description' => "Payment received from {$payment->contact?->name}",
@@ -138,7 +138,7 @@ class ParallelJournalVoucherService
                 ? $this->resolveChartAccount($payment->bank_charges_account_id)
                 : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($bankChargesAccount->id),
                 'debit' => round($this->convertToBase($payment->bank_charges, $rate), 2),
                 'credit' => 0,
                 'description' => 'Bank Charges',
@@ -150,7 +150,7 @@ class ParallelJournalVoucherService
                 ? $this->resolveChartAccount($payment->tds_charges_account_id)
                 : $this->accountResolver->getTdsReceivableAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($tdsReceivableAccount->id),
                 'debit' => round($this->convertToBase($payment->tds_charges, $rate), 2),
                 'credit' => 0,
                 'description' => 'TDS Receivable',
@@ -170,7 +170,7 @@ class ParallelJournalVoucherService
         }
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($arAccount->id),
             'debit' => 0,
             'credit' => $arCredit,
             'foreign_debit' => 0,
@@ -182,7 +182,7 @@ class ParallelJournalVoucherService
 
         if ($fxDifference > 0) {
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($this->accountResolver->getForeignExchangeGainAccount()->id),
                 'debit' => 0,
                 'credit' => $fxDifference,
                 'foreign_debit' => 0,
@@ -191,7 +191,7 @@ class ParallelJournalVoucherService
             ];
         } elseif ($fxDifference < 0) {
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($this->accountResolver->getForeignExchangeLossAccount()->id),
                 'debit' => abs($fxDifference),
                 'credit' => 0,
                 'foreign_debit' => 0,
@@ -235,7 +235,7 @@ class ParallelJournalVoucherService
 
             $foreignDebit = (float) $line->line_total - (float) ($line->tax_amount ?? 0);
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($account->id),
                 'debit' => round($this->convertToBase($foreignDebit, $rate), 2),
                 'credit' => 0,
                 'foreign_debit' => $foreignDebit,
@@ -247,7 +247,7 @@ class ParallelJournalVoucherService
         if ($totalTax = $bill->purchaseBillLines->sum('tax_amount')) {
             $taxAccount = $this->accountResolver->getTaxReceivableAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($taxAccount->id),
                 'debit' => round($this->convertToBase($totalTax, $rate), 2),
                 'credit' => 0,
                 'foreign_debit' => (float) $totalTax,
@@ -259,7 +259,7 @@ class ParallelJournalVoucherService
         $apAccount = $this->contactPayableChartAccount($bill->contact, $this->accountResolver->getAccountsPayableAccount());
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($apAccount->id),
             'debit' => 0,
             'credit' => $totalDebit,
             'foreign_debit' => 0,
@@ -295,7 +295,7 @@ class ParallelJournalVoucherService
         $foreignApDebit = (float) $payment->amount + $tdsCharges;
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($apAccount->id),
             'debit' => round($this->convertToBase($foreignApDebit, $rate), 2),
             'credit' => 0,
             'foreign_debit' => $foreignApDebit,
@@ -308,7 +308,7 @@ class ParallelJournalVoucherService
                 ? $this->resolveChartAccount($payment->bank_charges_account_id)
                 : $this->accountResolver->getBankChargesExpenseAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($bankChargesAccount->id),
                 'debit' => round($this->convertToBase($payment->bank_charges, $rate), 2),
                 'credit' => 0,
                 'foreign_debit' => (float) $payment->bank_charges,
@@ -323,7 +323,7 @@ class ParallelJournalVoucherService
 
         $foreignBankCredit = (float) $payment->amount + (float) ($payment->bank_charges ?? 0);
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($bankAccount->id),
             'debit' => 0,
             'credit' => round($this->convertToBase($foreignBankCredit, $rate), 2),
             'foreign_debit' => 0,
@@ -336,7 +336,7 @@ class ParallelJournalVoucherService
                 ? $this->resolveChartAccount($payment->tds_charges_account_id)
                 : $this->accountResolver->getTdsPayableAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($tdsPayableAccount->id),
                 'debit' => 0,
                 'credit' => round($this->convertToBase($tdsCharges, $rate), 2),
                 'foreign_debit' => 0,
@@ -371,10 +371,10 @@ class ParallelJournalVoucherService
         foreach ($expense->expenseLines as $line) {
             $baseAmount = round($this->convertToBase($line->line_total, $rate), 2);
             $totalDebit += $baseAmount;
-            $account = ChartOfAccount::find($line->chart_of_account_id);
+            $account = $this->resolveChartAccount($line->account_id ?: $line->chart_of_account_id);
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($account->id),
                 'debit' => $baseAmount,
                 'credit' => 0,
                 'foreign_debit' => (float) $line->line_total,
@@ -391,7 +391,7 @@ class ParallelJournalVoucherService
         }
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($creditAccount->id),
             'debit' => 0,
             'credit' => $totalDebit,
             'foreign_debit' => 0,
@@ -432,7 +432,7 @@ class ParallelJournalVoucherService
             $totalBaseAmount += $baseAmount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($toCoa->id),
                 'debit' => $baseAmount,
                 'credit' => 0,
                 'foreign_debit' => (float) $line->amount,
@@ -443,7 +443,7 @@ class ParallelJournalVoucherService
         }
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($fromCoa->id),
             'debit' => 0,
             'credit' => round($totalBaseAmount, 2),
             'foreign_debit' => 0,
@@ -479,13 +479,13 @@ class ParallelJournalVoucherService
         $lines = $cheque->direction === 'received'
             ? [
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($bankAccount->id),
                     'debit' => $amount,
                     'credit' => 0,
                     'description' => "Cheque received {$cheque->cheque_no}",
                 ],
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($relatedAccount->id),
                     'debit' => 0,
                     'credit' => $amount,
                     'description' => "Cheque received from {$cheque->payee_name}",
@@ -493,13 +493,13 @@ class ParallelJournalVoucherService
             ]
             : [
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($relatedAccount->id),
                     'debit' => $amount,
                     'credit' => 0,
                     'description' => "Cheque issued to {$cheque->payee_name}",
                 ],
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($bankAccount->id),
                     'debit' => 0,
                     'credit' => $amount,
                     'description' => "Cheque issued {$cheque->cheque_no}",
@@ -547,7 +547,7 @@ class ParallelJournalVoucherService
         if ($totalTax = $return->salesReturnLines->sum('tax_amount')) {
             $taxAccount = $this->accountResolver->getTaxPayableAccount();
             $debitLines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($taxAccount->id),
                 'debit' => round($this->convertToBase($totalTax, $rate), 2),
                 'credit' => 0,
                 'foreign_debit' => (float) $totalTax,
@@ -566,7 +566,7 @@ class ParallelJournalVoucherService
         $lines = array_merge(
             [
                 [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($arAccount->id),
                     'debit' => 0,
                     'credit' => $totalDebit,
                     'foreign_debit' => 0,
@@ -607,7 +607,7 @@ class ParallelJournalVoucherService
         $apAccount = $this->contactPayableChartAccount($debitNote->contact, $this->accountResolver->getAccountsPayableAccount());
 
         $lines[] = [
-            'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+            'account_id' => $this->resolvePostingAccountId($apAccount->id),
             'debit' => $totalCredit,
             'credit' => 0,
             'foreign_debit' => (float) $debitNote->debitNoteLines->sum('line_total'),
@@ -626,7 +626,7 @@ class ParallelJournalVoucherService
 
             $foreignCredit = (float) $line->line_total - (float) ($line->tax_amount ?? 0);
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($purchaseAccount->id),
                 'debit' => 0,
                 'credit' => round($this->convertToBase($foreignCredit, $rate), 2),
                 'foreign_debit' => 0,
@@ -638,7 +638,7 @@ class ParallelJournalVoucherService
         if ($totalTax = $debitNote->debitNoteLines->sum('tax_amount')) {
             $taxAccount = $this->accountResolver->getTaxReceivableAccount();
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($taxAccount->id),
                 'debit' => 0,
                 'credit' => round($this->convertToBase($totalTax, $rate), 2),
                 'foreign_debit' => 0,
@@ -662,7 +662,7 @@ class ParallelJournalVoucherService
         );
     }
 
-    public function createForInventoryAdjustment($adjustment): JournalVoucher
+    public function createForInventoryAdjustment($adjustment): ?JournalVoucher
     {
         $adjustment->loadMissing('inventoryAdjustmentLines');
 
@@ -670,15 +670,19 @@ class ParallelJournalVoucherService
         $lines = [];
 
         foreach ($adjustment->inventoryAdjustmentLines as $line) {
-            $foreignAmount = (float) $line->adjustment_value;
+            $foreignAmount = round((float) ($line->adjustment_value ?? ((float) $line->qty * (float) $line->unit_cost)), 2);
             $baseAmount = round($this->convertToBase($foreignAmount, $rate), 2);
+
+            if ($baseAmount <= 0) {
+                continue;
+            }
 
             if ($line->adjustment_type === 'increase') {
                 $inventoryAccount = $this->accountResolver->getInventoryAccount();
                 $gainAccount = $this->accountResolver->getInventoryAdjustmentGainAccount();
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($inventoryAccount->id),
                     'debit' => $baseAmount,
                     'credit' => 0,
                     'foreign_debit' => $foreignAmount,
@@ -687,7 +691,7 @@ class ParallelJournalVoucherService
                 ];
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($gainAccount->id),
                     'debit' => 0,
                     'credit' => $baseAmount,
                     'foreign_debit' => 0,
@@ -699,7 +703,7 @@ class ParallelJournalVoucherService
                 $lossAccount = $this->accountResolver->getInventoryAdjustmentLossAccount();
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($lossAccount->id),
                     'debit' => $baseAmount,
                     'credit' => 0,
                     'foreign_debit' => $foreignAmount,
@@ -708,7 +712,7 @@ class ParallelJournalVoucherService
                 ];
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($inventoryAccount->id),
                     'debit' => 0,
                     'credit' => $baseAmount,
                     'foreign_debit' => 0,
@@ -719,6 +723,11 @@ class ParallelJournalVoucherService
         }
 
         $lines = $this->balanceRoundingDifference($lines);
+
+        if (count($lines) < 2) {
+            return null;
+        }
+
         $this->validationService->validateBalanced($lines);
 
         return $this->createJournal(
@@ -744,7 +753,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($finishedAccount->id),
                 'debit' => (float) $journal->finished_goods_cost,
                 'credit' => 0,
                 'description' => 'Finished goods produced',
@@ -761,7 +770,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($byProductAccount->id),
                 'debit' => (float) $line->allocated_cost,
                 'credit' => 0,
                 'description' => 'By-product produced',
@@ -778,7 +787,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($rawAccount->id),
                 'debit' => 0,
                 'credit' => (float) $line->amount,
                 'description' => 'Raw material consumed',
@@ -798,7 +807,7 @@ class ParallelJournalVoucherService
                     : $expenseAccount;
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                    'account_id' => $this->resolvePostingAccountId(($account ?: $expenseAccount)->id),
                     'debit' => 0,
                     'credit' => (float) $expense->amount,
                     'description' => $expense->costTerm?->name ?? 'Production expense absorbed',
@@ -831,7 +840,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($finishedAccount->id),
                 'debit' => (float) $order->total_finished_goods_cost,
                 'credit' => 0,
                 'description' => 'Finished goods produced',
@@ -848,7 +857,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($account->id),
                 'debit' => (float) $line->allocated_cost,
                 'credit' => 0,
                 'description' => 'By-product produced',
@@ -865,7 +874,7 @@ class ParallelJournalVoucherService
                 : $inventoryAccount;
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($account->id),
                 'debit' => 0,
                 'credit' => (float) $line->total_cost,
                 'description' => 'Raw material consumed',
@@ -878,11 +887,11 @@ class ParallelJournalVoucherService
             }
 
             $account = $expense->expense_account_id
-                ? ChartOfAccount::find($expense->expense_account_id)
+                ? $this->resolveChartAccount($expense->expense_account_id)
                 : $this->accountResolver->getPurchaseExpenseAccount();
 
             $lines[] = [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($account->id),
                 'debit' => 0,
                 'credit' => (float) $expense->amount,
                 'description' => $expense->name ?: 'Production expense absorbed',
@@ -919,13 +928,13 @@ class ParallelJournalVoucherService
 
         $lines = [
             [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($receivedCoa->id),
                 'debit' => $topUp->amount,
                 'credit' => 0,
                 'description' => 'Loan Received',
             ],
             [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($loanCoa->id),
                 'debit' => 0,
                 'credit' => $topUp->amount,
                 'description' => 'Loan Increase',
@@ -958,13 +967,13 @@ class ParallelJournalVoucherService
 
         $lines = [
             [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($chargeAccount->id),
                 'debit' => $charge->amount,
                 'credit' => 0,
                 'description' => $charge->charge_name,
             ],
             [
-                'account_id' => $this->resolvePostingAccountId($salesAccount->id),
+                'account_id' => $this->resolvePostingAccountId($paidCoa->id),
                 'debit' => 0,
                 'credit' => $charge->amount,
                 'description' => 'Charge Payment',
@@ -1079,11 +1088,15 @@ class ParallelJournalVoucherService
             return $fallback;
         }
 
-        return match ($account->nature) {
-            'bank' => $this->accountResolver->getDefaultBankAccount(),
-            'cash' => $this->accountResolver->getCashAccount(),
-            default => null,
-        };
+        try {
+            return match ($account->nature) {
+                'bank' => $this->accountResolver->getDefaultBankAccount(),
+                'cash' => $this->accountResolver->getCashAccount(),
+                default => null,
+            };
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
     }
 
     protected function createJournal(
@@ -1139,7 +1152,7 @@ class ParallelJournalVoucherService
                 ]));
             });
 
-            JournalVoucherLine::withoutEvents(function () use ($voucher, $lines) {
+            JournalVoucherLine::withoutEvents(function () use ($voucher, $lines, $currencyId, $exchangeRate) {
                 JournalVoucherLine::query()
                     ->where('journal_voucher_id', $voucher->id)
                     ->delete();
@@ -1287,6 +1300,11 @@ class ParallelJournalVoucherService
 
         if (Schema::hasColumn('journal_voucher_lines', 'exchange_rate')) {
             $payload['exchange_rate'] = $exchangeRate ?: 1;
+        }
+
+        // TODO: Remove after legacy journal_voucher_lines.chart_of_account_id is dropped.
+        if (Schema::hasColumn('journal_voucher_lines', 'chart_of_account_id')) {
+            $payload['chart_of_account_id'] = $this->resolveChartAccount($accountId)->id;
         }
 
         return $payload;

@@ -410,15 +410,27 @@ Route::apiResource('warehouses', WarehouseController::class)
 Route::post('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkStore']);
 Route::patch('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkUpdate']);
 Route::delete('warehouse-transfers/bulk', [WarehouseTransferController::class, 'bulkDestroy']);
+Route::post('warehouse-transfers/bulk-approve', [WarehouseTransferController::class, 'bulkApprove']);
+Route::post('warehouse-transfers/bulk-void', [WarehouseTransferController::class, 'bulkVoid']);
+Route::post('warehouse-transfers/{id}/approve', [WarehouseTransferController::class, 'transactionApprove']);
+Route::post('warehouse-transfers/{id}/void', [WarehouseTransferController::class, 'transactionVoid']);
 Route::apiResource('warehouse-transfers', WarehouseTransferController::class);
 
 Route::post('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkStore']);
 Route::patch('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpdate']);
 Route::delete('inventory-adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
+Route::post('inventory-adjustments/bulk-approve', [InventoryAdjustmentController::class, 'bulkApprove']);
+Route::post('inventory-adjustments/bulk-void', [InventoryAdjustmentController::class, 'bulkVoid']);
+Route::post('inventory-adjustments/{id}/approve', [InventoryAdjustmentController::class, 'transactionApprove']);
+Route::post('inventory-adjustments/{id}/void', [InventoryAdjustmentController::class, 'transactionVoid']);
 Route::apiResource('inventory-adjustments', InventoryAdjustmentController::class);
 Route::post('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkStore']);
 Route::patch('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkUpdate']);
 Route::delete('adjustments/bulk', [InventoryAdjustmentController::class, 'bulkDestroy']);
+Route::post('adjustments/bulk-approve', [InventoryAdjustmentController::class, 'bulkApprove']);
+Route::post('adjustments/bulk-void', [InventoryAdjustmentController::class, 'bulkVoid']);
+Route::post('adjustments/{id}/approve', [InventoryAdjustmentController::class, 'transactionApprove']);
+Route::post('adjustments/{id}/void', [InventoryAdjustmentController::class, 'transactionVoid']);
 Route::apiResource('adjustments', InventoryAdjustmentController::class);
 Route::apiResource('warehouse-items', WarehouseItemController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
 

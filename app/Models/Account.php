@@ -67,7 +67,7 @@ class Account extends Model
 
     public function childrens(): HasMany
     {
-        return $this->hasMany(Account::class);
+        return $this->hasMany(Account::class, 'parent_id');
     }
 
     public function contacts(): HasMany

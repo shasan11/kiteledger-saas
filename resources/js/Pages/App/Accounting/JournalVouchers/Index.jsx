@@ -10,7 +10,7 @@ const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const displayDate = (v) => { if (!v) return '-'; const d = dayjs(v); return d.isValid() ? d.format('DD-MM-YYYY') : '-'; };
-const statusColor = (s) => ({ draft: 'default', posted: 'green', cancelled: 'red' }[s] || 'default');
+const statusColor = (s) => ({ draft: 'default', posted: 'green', approved: 'green', cancelled: 'red', voided: 'red' }[s] || 'default');
 
 export default function JournalVouchersIndex(props) {
     const columns = useMemo(() => [
@@ -52,11 +52,10 @@ export default function JournalVouchersIndex(props) {
                     style: { cursor: 'pointer' },
                 })}
                 anchorFilters={[
-                    { key: 'all', label: 'All', params: {} },
                     { key: 'approved', label: 'Approved', params: { approved: true } },
                     { key: 'draft', label: 'Draft', params: { approved: false } },
                 ]}
-                defaultAnchorKey="all"
+                defaultAnchorKey="approved"
                 anchorSyncWithHash
             />
         </AuthenticatedLayout>

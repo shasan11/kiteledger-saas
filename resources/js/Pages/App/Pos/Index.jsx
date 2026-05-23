@@ -1147,6 +1147,7 @@ export default function PosIndex() {
 
             await loadCurrentShift();
             await loadHeldSales();
+            await loadProducts(searchText);
 
             clearSale({
                 keepReceipt: true,

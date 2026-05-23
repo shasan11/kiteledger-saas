@@ -84,7 +84,7 @@ class DocumentNumberingService
         }
 
         $field = $mapping['field'];
-        if ($model->{$field} !== null && !str_starts_with((string) $model->{$field}, '#draft')) {
+        if ($model->{$field} !== null && !$this->isDraftNumber((string) $model->{$field})) {
             return null;
         }
 
@@ -95,6 +95,15 @@ class DocumentNumberingService
     {
         $modelClass = class_basename($model);
         return $this->modelMapping[$modelClass] ?? null;
+    }
+
+    protected function isDraftNumber(string $number): bool
+    {
+        $normalized = strtolower(trim($number));
+
+        return $normalized === ''
+            || str_starts_with($normalized, '#draft')
+            || str_starts_with($normalized, 'draft-');
     }
 
     public function assignNumberIfMissing(Model $model): Model

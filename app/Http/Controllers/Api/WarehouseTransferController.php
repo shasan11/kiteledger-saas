@@ -4,11 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\WarehouseTransfer;
 use App\Models\WarehouseTransferLine;
+use App\Services\Inventory\WarehouseStockService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
 class WarehouseTransferController extends BaseCrudApiController
 {
+    public function __construct(protected WarehouseStockService $warehouseStockService)
+    {
+    }
+
     protected string $modelClass = WarehouseTransfer::class;
     protected ?string $permissionPrefix = null;
     protected bool $usePolicyAuthorization = false;
@@ -21,7 +26,7 @@ class WarehouseTransferController extends BaseCrudApiController
     protected array $relationDetails = ['branch' => 'branch_id', 'fromWarehouse' => 'from_warehouse_id', 'toWarehouse' => 'to_warehouse_id'];
     protected array $searchable = ['transfer_no', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'from_warehouse_id', 'to_warehouse_id', 'status'];
-    protected array $booleanFilters = ['active', 'approved', 'void'];
+    protected array $booleanFilters = ['active', 'approved', 'void', 'stock_posted'];
     protected array $dateRangeFilters = ['transfer_date' => ['from' => 'date_from', 'to' => 'date_to']];
     protected array $sortable = ['id','transfer_no','transfer_date','status','created_at','updated_at'];
     protected string $defaultSort = '-created_at';
@@ -79,8 +84,68 @@ class WarehouseTransferController extends BaseCrudApiController
         return $record;
     }
 
+    public function destroy(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        if ((bool) $record->stock_posted || $record->status === 'posted') {
+            $this->throwValidation([
+                'status' => ['Posted warehouse transfers cannot be deleted.'],
+            ]);
+        }
+
+        return parent::destroy($request, $id);
+    }
+
+    public function bulkDestroy(Request $request)
+    {
+        $ids = $request->input('ids', []);
+
+        if (is_array($ids) && WarehouseTransfer::query()->whereIn('id', $ids)->where(function ($query) {
+            $query->where('stock_posted', true)->orWhere('status', 'posted');
+        })->exists()) {
+            $this->throwValidation([
+                'status' => ['Posted warehouse transfers cannot be deleted.'],
+            ]);
+        }
+
+        return parent::bulkDestroy($request);
+    }
+
+    protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
+    {
+        if ($this->requestsDirectPosting($parentData)) {
+            $this->throwValidation([
+                'status' => ['Use the approve/post action to post warehouse transfers.'],
+            ]);
+        }
+
+        if (((bool) $record->stock_posted || $record->status === 'posted') && $this->hasProtectedEdit($parentData, $nestedData)) {
+            $this->throwValidation([
+                'status' => ['Posted warehouse transfers cannot be edited.'],
+            ]);
+        }
+
+        if (
+            ((isset($parentData['status']) && $parentData['status'] === 'cancelled') || (isset($parentData['void']) && (bool) $parentData['void']))
+            && ((bool) $record->stock_posted || $record->status === 'posted')
+        ) {
+            $this->throwValidation([
+                'status' => ['Posted warehouse transfers cannot be cancelled or voided.'],
+            ]);
+        }
+
+        return parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+    }
+
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
+        if ($this->requestsDirectPosting($parentData)) {
+            $this->throwValidation([
+                'status' => ['New warehouse transfers must be saved as draft first. Use approve/post after saving.'],
+            ]);
+        }
+
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
         $parentData['transfer_no'] = $parentData['transfer_no'] ?? $this->draftTransferNo();
 
@@ -99,7 +164,24 @@ class WarehouseTransferController extends BaseCrudApiController
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         $data['items'] = $data['items'] ?? $data['warehouse_transfer_lines'] ?? [];
+        $data['stock_posting_status'] = $record->status === 'cancelled'
+            ? 'Cancelled/Void'
+            : ((bool) $record->stock_posted ? 'Posted to Warehouse Stock' : 'Draft');
 
         return $data;
+    }
+
+    protected function requestsDirectPosting(array $parentData): bool
+    {
+        return ($parentData['status'] ?? null) === 'posted'
+            || (array_key_exists('approved', $parentData) && (bool) $parentData['approved']);
+    }
+
+    protected function hasProtectedEdit(array $parentData, array $nestedData): bool
+    {
+        $allowedParentKeys = ['approved', 'approved_at', 'approved_by_id', 'status', 'void', 'voided_reason', 'voided_at', 'voided_by_id'];
+        $protectedParent = array_diff(array_keys($parentData), $allowedParentKeys);
+
+        return !empty($protectedParent) || !empty($nestedData);
     }
 }

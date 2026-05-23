@@ -1,370 +1,308 @@
-import { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ReusableCrud';
+import { useEffect, useMemo, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
-import * as Yup from 'yup';
+import {
+    Form,
+    Input,
+    InputNumber,
+    DatePicker,
+    Button,
+    Space,
+    Row,
+    Col,
+    Table,
+    message,
+    Typography,
+} from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
+import axios from 'axios';
+import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
+import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 
-dayjs.extend(customParseFormat);
-
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
-
-const api = (path) => {
-    const base = String(BACKEND_BASE || '').replace(/\/+$/, '');
-    const cleanPath = String(path || '').startsWith('/') ? path : `/${path}`;
-    return `${base}${cleanPath}`;
+const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 const toNumber = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
 };
-
-const asId = (v) => {
-    if (v === undefined || v === null || v === '') return null;
-    if (typeof v === 'object') return v.id ?? v.value ?? null;
-    return v;
-};
-
-const nullIfEmpty = (v) => {
-    if (v === undefined || v === null || v === '') return null;
-    return v;
-};
+const nullIfEmpty = (v) => (v === undefined || v === null || v === '' ? null : v);
 
 const lineTotals = (items = []) => {
-    const rows = Array.isArray(items) ? items : [];
-
-    const debit = rows.reduce((sum, row) => sum + toNumber(row?.debit), 0);
-    const credit = rows.reduce((sum, row) => sum + toNumber(row?.credit), 0);
+    const debit = items.reduce((s, r) => s + toNumber(r?.debit), 0);
+    const credit = items.reduce((s, r) => s + toNumber(r?.credit), 0);
     const difference = Math.round((debit - credit) * 100) / 100;
-
     return { debit, credit, difference };
 };
 
-const isBalanced = (items = []) => Math.abs(lineTotals(items).difference) < 0.01;
+const formatMoney = (n) =>
+    Number(toNumber(n)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const formatMoney = (amount) =>
-    Number(toNumber(amount)).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+const emptyLine = () => ({
+    _key: Math.random().toString(36).slice(2),
+    account_id: null,
+    account_detail: null,
+    description: '',
+    debit: 0,
+    credit: 0,
+});
 
-const DifferenceText = ({ values }) => {
-    const { difference } = lineTotals(values?.items);
-    const balanced = Math.abs(difference) < 0.01;
+export default function JournalVoucherAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
+    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+    const [items, setItems] = useState([emptyLine(), emptyLine()]);
+    const [deletedItemIds, setDeletedItemIds] = useState([]);
 
-    return (
-        <div
-            style={{
-                marginTop: -4,
-                fontWeight: 700,
-                color: balanced ? '#15803d' : '#dc2626',
-            }}
-        >
-            Difference: {formatMoney(Math.abs(difference))}
-        </div>
-    );
-};
-
-const balancedLineItem = ({ defaultItem, values }) => {
-    const { difference } = lineTotals(values?.items);
-    const amount = Math.abs(difference);
-
-    if (amount < 0.01) {
-        return { ...defaultItem };
-    }
-
-    return {
-        ...defaultItem,
-        debit: difference < 0 ? amount : 0,
-        credit: difference > 0 ? amount : 0,
-        _helper: 'Auto-filled to balance voucher.',
-    };
-};
-
-const formatDate = (v) => {
-    if (!v) return null;
-
-    if (dayjs.isDayjs(v)) {
-        return v.isValid() ? v.format('YYYY-MM-DD') : null;
-    }
-
-    const parsedStrict = dayjs(v, ['YYYY-MM-DD', 'DD-MM-YYYY'], true);
-
-    if (parsedStrict.isValid()) {
-        return parsedStrict.format('YYYY-MM-DD');
-    }
-
-    const parsedFallback = dayjs(v);
-
-    return parsedFallback.isValid() ? parsedFallback.format('YYYY-MM-DD') : null;
-};
-
-export default function JournalVoucherAdd(props) {
-    const journalLineAccountField = useMemo(
-        () => ({
-            key: 'account_id',
-            name: 'account_id',
-            label: 'Account',
-            type: 'fkSelect',
-            width: '3fr',
-            placeholder: 'Select account',
-            fkUrl: api('/api/accounting/accounts/'),
-            fkSearchParam: 'search',
-            fkPageSize: 20,
-            fkValueKey: 'id',
-            fkLabelKey: 'name',
-            fkStoreScope: 'shared',
-            fkLabel: (r) => [r?.code, r?.name].filter(Boolean).join(' - '),
-        }),
-        []
-    );
-
-    const fields = useMemo(
-        () => [
-            {
-                name: 'voucher_no',
-                label: 'Voucher No',
-                type: 'text',
-                col: 8,
-                placeholder: 'Auto-generated',
-                disabled: true,
-            },
-            {
-                name: 'voucher_date',
-                label: 'Voucher Date',
-                type: 'datePicker',
-                required: true,
-                col: 8,
-                format: 'DD-MM-YYYY',
-            },
-            {
-                name: 'currency_id',
-                label: 'Currency',
-                type: 'fkSelect',
-                col: 8,
-                placeholder: 'Select currency',
-                fkUrl: api('/api/accounting/currencies/'),
-                fkSearchParam: 'search',
-                fkPageSize: 20,
-                fkValueKey: 'id',
-                fkLabelKey: 'name',
-                fkLabel: (r) => r?.name || r?.code || '',
-            },
-            {
-                name: 'exchange_rate',
-                label: 'Exchange Rate',
-                type: 'number',
-                col: 8,
-                min: 0,
-            },
-            {
-                name: 'reference',
-                label: 'Reference',
-                type: 'text',
-                col: 8,
-                placeholder: 'Reference',
-            },
-            {
-                name: 'narration',
-                label: 'Narration',
-                type: 'textarea',
-                col: 24,
-                rows: 2,
-                placeholder: 'Narration',
-            },
-            {
-                name: 'items',
-                label: 'Journal Lines',
-                type: 'objectArray',
-                col: 24,
-                addButtonLabel: 'Add Line',
-                defaultItem: {
-                    account_id: null,
-                    description: '',
-                    debit: 0,
-                    credit: 0,
-                },
-                onAddItem: balancedLineItem,
-                headerBg: '#4b5563',
-                headerColor: '#ffffff',
-                columns: [
-                    journalLineAccountField,
-                    {
-                        key: 'debit',
-                        name: 'debit',
-                        label: 'Debit',
-                        type: 'number',
-                        width: '140px',
-                        min: 0,
-                        align: 'right',
-                    },
-                    {
-                        key: 'credit',
-                        name: 'credit',
-                        label: 'Credit',
-                        type: 'number',
-                        width: '140px',
-                        min: 0,
-                        align: 'right',
-                    },
-                ],
-                collapsedFields: [
-                    {
-                        key: 'description',
-                        name: 'description',
-                        label: 'Description',
-                        type: 'textarea',
-                        col: 24,
-                        rows: 2,
-                        placeholder: 'Line description / narration',
-                    },
-                ],
-            },
-            {
-                name: 'journal_difference',
-                label: '',
-                type: 'custom',
-                col: 24,
-                render: DifferenceText,
-            },
-            {
-                name: 'notes',
-                label: 'Notes',
-                type: 'textarea',
-                col: 24,
-                rows: 3,
-                placeholder: 'Notes',
-            },
-        ],
-        [journalLineAccountField]
-    );
-
-    const validationSchema = useMemo(
-        () =>
-            Yup.object().shape({
-                voucher_date: Yup.mixed().required('Date is required'),
-
-                items: Yup.array()
-                    .min(1, 'At least one journal line is required')
-                    .test(
-                        'has-account',
-                        'Every journal line must have an account.',
-                        (items = []) =>
-                            Array.isArray(items) &&
-                            items.length > 0 &&
-                            items.every((row) => !!asId(row?.account_id))
-                    )
-                    .test(
-                        'has-amount',
-                        'Each journal line must have debit or credit amount.',
-                        (items = []) =>
-                            Array.isArray(items) &&
-                            items.length > 0 &&
-                            items.every(
-                                (row) =>
-                                    toNumber(row?.debit) > 0 ||
-                                    toNumber(row?.credit) > 0
-                            )
-                    )
-                    .test(
-                        'not-both-debit-credit',
-                        'A line cannot have both debit and credit.',
-                        (items = []) =>
-                            Array.isArray(items) &&
-                            items.every(
-                                (row) =>
-                                    !(
-                                        toNumber(row?.debit) > 0 &&
-                                        toNumber(row?.credit) > 0
-                                    )
-                            )
-                    )
-                    .test(
-                        'balanced',
-                        'Journal voucher difference must be 0 before saving.',
-                        (items = []) => isBalanced(items)
-                    )
-                    .required('Journal lines are required'),
-            }),
-        []
-    );
-
-    const crudInitialValues = useMemo(
-        () => ({
-            voucher_no: '',
-            voucher_date: dayjs(),
-            currency_id: null,
-            exchange_rate: 1,
-            reference: '',
-            narration: '',
-            notes: '',
-            items: [
-                {
-                    account_id: null,
-                    description: '',
-                    debit: 0,
-                    credit: 0,
-                },
-            ],
-            deleted_item_ids: [],
-        }),
-        []
-    );
-
-    const transformPayload = (values = {}) => {
-        const items = (Array.isArray(values.items) ? values.items : [])
-            .filter((line) => !!asId(line?.account_id))
-            .map((line) => ({
-                ...(line.id ? { id: line.id } : {}),
-                account_id: asId(line.account_id),
-                description: nullIfEmpty(line.description),
-                debit: toNumber(line.debit),
-                credit: toNumber(line.credit),
-            }));
-
-        return {
-            voucher_no: nullIfEmpty(values.voucher_no),
-            voucher_date: formatDate(values.voucher_date),
-            currency_id: asId(values.currency_id ?? values.currency),
-            exchange_rate: toNumber(values.exchange_rate) || null,
-            reference: nullIfEmpty(values.reference),
-            narration: nullIfEmpty(values.narration),
-            notes: nullIfEmpty(values.notes),
-            items,
-            deleted_item_ids: Array.isArray(values.deleted_item_ids)
-                ? values.deleted_item_ids.filter(Boolean)
-                : [],
-        };
-    };
-
-    const handleAddSuccess = (record) => {
-        if (record?.id) {
-            router.visit(`/accounting/journal-vouchers/${record.id}`);
-            return;
+    useEffect(() => {
+        if (initialRecord) {
+            form.setFieldsValue({
+                voucher_no: initialRecord.voucher_no || '',
+                voucher_date: initialRecord.voucher_date ? dayjs(initialRecord.voucher_date) : dayjs(),
+                currency_id: initialRecord.currency_id ?? initialRecord.currency?.id ?? null,
+                exchange_rate: initialRecord.exchange_rate ?? 1,
+                reference: initialRecord.reference || '',
+                narration: initialRecord.narration || '',
+                notes: initialRecord.notes || '',
+            });
+            const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
+            if (lines.length) {
+                setItems(lines.map((l) => ({
+                    _key: Math.random().toString(36).slice(2),
+                    id: l.id,
+                    account_id: l.account_id ?? l.account?.id ?? null,
+                    account_detail: l.account || l.account_id_detail || null,
+                    description: l.description || '',
+                    debit: toNumber(l.debit),
+                    credit: toNumber(l.credit),
+                })));
+            }
+        } else {
+            form.setFieldsValue({ voucher_date: dayjs(), exchange_rate: 1 });
         }
+    }, [initialRecord, form]);
 
-        router.visit('/accounting/journal-vouchers');
+    const updateLine = (index, patch) => {
+        setItems((prev) => {
+            const next = [...prev];
+            next[index] = { ...next[index], ...patch };
+            return next;
+        });
     };
 
-    return (
-        <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="New Journal Voucher" />
+    const removeLine = (index) => {
+        setItems((prev) => {
+            const line = prev[index];
+            if (line?.id) setDeletedItemIds((ids) => [...ids, line.id]);
+            const next = prev.filter((_, i) => i !== index);
+            return next.length ? next : [emptyLine()];
+        });
+    };
 
-            <ReusableCrud
-                title="Journal Vouchers"
-                addTitle="New Journal Voucher"
-                apiUrl={api('/api/accounting/journal-vouchers/')}
-                fields={fields}
-                validationSchema={validationSchema}
-                crudInitialValues={crudInitialValues}
-                transformPayload={transformPayload}
-                ui_type="add form"
-                form_ui="drawer"
-                drawerWidth="calc(100vw - 24px)"
-                onAddSuccess={handleAddSuccess}
-            />
-        </AuthenticatedLayout>
+    const addLine = () => {
+        const { difference } = lineTotals(items);
+        const amount = Math.abs(difference);
+        const line = emptyLine();
+        if (amount >= 0.01) {
+            line.debit = difference < 0 ? amount : 0;
+            line.credit = difference > 0 ? amount : 0;
+        }
+        setItems((prev) => [...prev, line]);
+    };
+
+    const totals = useMemo(() => lineTotals(items), [items]);
+    const balanced = Math.abs(totals.difference) < 0.01;
+
+    const validateLines = () => {
+        if (!items.length) return 'At least one journal line is required.';
+        for (const line of items) {
+            if (!line.account_id) return 'Every journal line must have an account.';
+            const d = toNumber(line.debit), c = toNumber(line.credit);
+            if (d <= 0 && c <= 0) return 'Each journal line must have a debit or credit amount.';
+            if (d > 0 && c > 0) return 'A journal line cannot have both debit and credit.';
+        }
+        if (!balanced) return `Journal voucher is not balanced. Difference: ${formatMoney(totals.difference)}.`;
+        return null;
+    };
+
+    const onSubmit = async () => {
+        const fieldValues = await form.validateFields().catch(() => null);
+        if (!fieldValues) return;
+        const lineErr = validateLines();
+        if (lineErr) { message.error(lineErr); return; }
+
+        const payload = {
+            voucher_no: nullIfEmpty(fieldValues.voucher_no),
+            voucher_date: fieldValues.voucher_date ? fieldValues.voucher_date.format('YYYY-MM-DD') : null,
+            currency_id: fieldValues.currency_id || null,
+            exchange_rate: toNumber(fieldValues.exchange_rate) || null,
+            reference: nullIfEmpty(fieldValues.reference),
+            narration: nullIfEmpty(fieldValues.narration),
+            notes: nullIfEmpty(fieldValues.notes),
+            items: items.map((l) => ({
+                ...(l.id ? { id: l.id } : {}),
+                account_id: l.account_id,
+                description: nullIfEmpty(l.description),
+                debit: toNumber(l.debit),
+                credit: toNumber(l.credit),
+            })),
+            deleted_item_ids: deletedItemIds,
+        };
+
+        setSubmitting(true);
+        try {
+            const url = isEdit ? api(`/api/journal-vouchers/${recordId}/`) : api('/api/journal-vouchers/');
+            const res = await axios({ method: isEdit ? 'patch' : 'post', url, data: payload, headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+            message.success(isEdit ? 'Voucher updated' : 'Voucher created');
+            const id = res?.data?.id;
+            if (id) router.visit(route('accounting.journal-vouchers.show', id));
+            else router.visit(route('accounting.journal-vouchers.index'));
+        } catch (e) {
+            const data = e?.response?.data;
+            if (data && typeof data === 'object') {
+                const errs = data.errors || data;
+                const remain = [];
+                Object.entries(errs).forEach(([f, msgs]) => {
+                    const m = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+                    if (form.getFieldInstance(f)) form.setFields([{ name: f, errors: [m] }]);
+                    else remain.push(`${f}: ${m}`);
+                });
+                if (remain.length) message.error(remain.join(' | '));
+                else if (data.message) message.error(data.message);
+                else message.error('Validation failed');
+            } else { message.error('Save failed'); }
+        } finally { setSubmitting(false); }
+    };
+
+    const lineColumns = [
+        {
+            title: 'Account',
+            dataIndex: 'account_id',
+            render: (val, row, idx) => (
+                <BackendSelect
+                    value={val}
+                    detailValue={row.account_detail}
+                    fkUrl="/api/accounts/"
+                    labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')}
+                    placeholder="Select account"
+                    style={{ width: '100%' }}
+                    variant="borderless"
+                    onChange={(v, raw) => updateLine(idx, { account_id: v, account_detail: raw })}
+                />
+            ),
+        },
+        {
+            title: 'Description',
+            dataIndex: 'description',
+            width: 240,
+            render: (val, _, idx) => (
+                <Input variant="borderless" value={val} onChange={(e) => updateLine(idx, { description: e.target.value })} placeholder="Optional" />
+            ),
+        },
+        {
+            title: 'Debit', dataIndex: 'debit', width: 140, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%', textAlign: 'right' }} onChange={(v) => updateLine(idx, { debit: v ?? 0 })} />
+            ),
+        },
+        {
+            title: 'Credit', dataIndex: 'credit', width: 140, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%', textAlign: 'right' }} onChange={(v) => updateLine(idx, { credit: v ?? 0 })} />
+            ),
+        },
+        {
+            title: '', key: 'remove', width: 50,
+            render: (_, __, idx) => (
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeLine(idx)} disabled={items.length <= 1} />
+            ),
+        },
+    ];
+
+    return (
+        <TransactionFormShell
+            auth={props.auth}
+            title={isEdit ? 'Edit Journal Voucher' : 'New Journal Voucher'}
+            headTitle={isEdit ? 'Edit Journal Voucher' : 'New Journal Voucher'}
+            onBack={() => router.visit(route('accounting.journal-vouchers.index'))}
+            onCancel={() => router.visit(route('accounting.journal-vouchers.index'))}
+            onSubmit={onSubmit}
+            submitting={submitting}
+            submitLabel={isEdit ? 'Update' : 'Save'}
+        >
+            <Form form={form} layout="vertical" requiredMark>
+                <FormSection title="Voucher details">
+                    <Row gutter={16}>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Voucher No" name="voucher_no">
+                                <Input placeholder="Auto-generated" disabled />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Voucher Date" name="voucher_date" rules={[{ required: true, message: 'Date is required' }]}>
+                                <DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Currency" name="currency_id">
+                                <BackendSelect fkUrl="/api/currencies/" labelFn={(r) => r?.name || r?.code || ''} placeholder="Select currency" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                                <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Reference" name="reference">
+                                <Input placeholder="Reference" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Narration" name="narration">
+                                <Input.TextArea rows={2} placeholder="Narration" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+
+                <FormSection>
+                    <Table
+                        rowKey="_key"
+                        size="small"
+                        columns={lineColumns}
+                        dataSource={items}
+                        pagination={false}
+                       
+                        footer={() => (
+                            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                <Button icon={<PlusOutlined />} onClick={addLine} type="dashed">Add Line</Button>
+                                <Space size="large">
+                                    <Text>Total Debit: <b>{formatMoney(totals.debit)}</b></Text>
+                                    <Text>Total Credit: <b>{formatMoney(totals.credit)}</b></Text>
+                                    <Text style={{ color: balanced ? '#15803d' : '#dc2626', fontWeight: 700 }}>
+                                        Difference: {formatMoney(Math.abs(totals.difference))}
+                                    </Text>
+                                </Space>
+                            </Space>
+                        )}
+                    />
+                </FormSection>
+
+                <FormSection title="Additional">
+                    <Row>
+                        <Col xs={24}>
+                            <Form.Item label="Notes" name="notes">
+                                <Input.TextArea rows={3} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+            </Form>
+        </TransactionFormShell>
     );
 }

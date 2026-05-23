@@ -5,9 +5,11 @@ namespace App\Domain\Accounting\Services;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use App\Models\ChartOfAccount;
+use App\Models\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class SystemJournalVoucherService
@@ -219,17 +221,7 @@ class SystemJournalVoucherService
 
         // TODO: Remove this bridge after legacy chart_of_account_id is dropped.
         if (Schema::hasColumn($table, 'chart_of_account_id')) {
-            $chartOfAccountId = ChartOfAccount::query()
-                ->where('account_id', $accountId)
-                ->value('id');
-
-            if (! $chartOfAccountId) {
-                throw ValidationException::withMessages([
-                    'journal_voucher_lines' => 'Selected account is not linked to a chart of account for the current legacy journal line schema.',
-                ]);
-            }
-
-            $payload['chart_of_account_id'] = $chartOfAccountId;
+            $payload['chart_of_account_id'] = $this->legacyChartOfAccountIdForAccount($accountId);
         }
 
         if (isset($payload['account_id'])) {
@@ -239,6 +231,50 @@ class SystemJournalVoucherService
         throw ValidationException::withMessages([
             'journal_voucher_lines' => 'journal_voucher_lines must have account_id.',
         ]);
+    }
+
+    protected function legacyChartOfAccountIdForAccount(string $accountId): string
+    {
+        $chartOfAccountId = ChartOfAccount::query()
+            ->where('account_id', $accountId)
+            ->value('id');
+
+        if ($chartOfAccountId) {
+            return $chartOfAccountId;
+        }
+
+        $account = Account::query()->find($accountId);
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'journal_voucher_lines' => 'Selected account does not exist.',
+            ]);
+        }
+
+        return ChartOfAccount::withoutEvents(function () use ($account) {
+            $chart = new ChartOfAccount;
+            $chart->forceFill([
+                'id' => (string) Str::orderedUuid(),
+                'account_id' => $account->id,
+                'type' => $this->legacyChartTypeForAccount($account),
+                'code' => null,
+                'name' => $account->name,
+                'description' => 'Legacy journal line compatibility link for account-based posting.',
+                'active' => (bool) $account->active,
+                'is_system_generated' => true,
+                'user_add_id' => $account->user_add_id,
+            ])->saveQuietly();
+
+            return $chart->id;
+        });
+    }
+
+    protected function legacyChartTypeForAccount(Account $account): string
+    {
+        return match ($account->nature) {
+            'bank', 'cash', 'actor', 'employee' => 'asset',
+            default => 'asset',
+        };
     }
 
     protected function addOptionalSourceColumns(array $payload, string $sourceType, string $sourceId): array

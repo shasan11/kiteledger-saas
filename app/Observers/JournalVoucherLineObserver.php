@@ -3,12 +3,14 @@
 namespace App\Observers;
 
 use App\Models\ChartOfAccount;
+use App\Models\Account;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use App\Observers\Concerns\CapturesAccountingEffect;
 use App\Domain\Accounting\Services\JournalVoucherService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class JournalVoucherLineObserver
@@ -73,10 +75,44 @@ class JournalVoucherLineObserver
 
         // TODO: Drop this legacy bridge after chart_of_account_id is removed from journal_voucher_lines.
         if ($line->account_id && $hasChartOfAccountId && ! $line->chart_of_account_id) {
-            $line->chart_of_account_id = ChartOfAccount::query()
-                ->where('account_id', $line->account_id)
-                ->value('id');
+            $line->chart_of_account_id = $this->legacyChartOfAccountIdForAccount($line->account_id);
         }
+    }
+
+    protected function legacyChartOfAccountIdForAccount(string $accountId): string
+    {
+        $chartOfAccountId = ChartOfAccount::query()
+            ->where('account_id', $accountId)
+            ->value('id');
+
+        if ($chartOfAccountId) {
+            return $chartOfAccountId;
+        }
+
+        $account = Account::query()->find($accountId);
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'account_id' => 'Selected account does not exist.',
+            ]);
+        }
+
+        return ChartOfAccount::withoutEvents(function () use ($account) {
+            $chart = new ChartOfAccount;
+            $chart->forceFill([
+                'id' => (string) Str::orderedUuid(),
+                'account_id' => $account->id,
+                'type' => 'asset',
+                'code' => null,
+                'name' => $account->name,
+                'description' => 'Legacy journal line compatibility link for account-based posting.',
+                'active' => (bool) $account->active,
+                'is_system_generated' => true,
+                'user_add_id' => $account->user_add_id,
+            ])->saveQuietly();
+
+            return $chart->id;
+        });
     }
 
     public function updating(JournalVoucherLine $line): void

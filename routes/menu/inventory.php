@@ -24,9 +24,15 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
     Route::get('/adjustments/{id}', fn ($id) => Inertia::render('App/Inventory/Adjustments/Show', ['id' => $id]))->name('adjustments.show');
 
     Route::get('/bill-of-materials', fn () => Inertia::render('App/Inventory/BillOfMaterials/Index'))->name('bill-of-materials.index');
+    Route::get('/bill-of-materials/add', fn () => Inertia::render('App/Inventory/BillOfMaterials/Add'))->name('bill-of-materials.add');
+    Route::get('/bill-of-materials/{id}/edit', fn ($id) => Inertia::render('App/Inventory/BillOfMaterials/Edit', ['id' => $id]))->name('bill-of-materials.edit');
     Route::get('/bill-of-materials/{id}', fn ($id) => Inertia::render('App/Inventory/BillOfMaterials/Show', ['id' => $id]))->name('bill-of-materials.show');
     Route::get('/production-orders', fn () => Inertia::render('App/Inventory/ProductionOrders/Index'))->name('production-orders.index');
+    Route::get('/production-orders/add', fn () => Inertia::render('App/Inventory/ProductionOrders/Add'))->name('production-orders.add');
+    Route::get('/production-orders/{id}/edit', fn ($id) => Inertia::render('App/Inventory/ProductionOrders/Edit', ['id' => $id]))->name('production-orders.edit');
     Route::get('/production-orders/{id}', fn ($id) => Inertia::render('App/Inventory/ProductionOrders/Show', ['id' => $id]))->name('production-orders.show');
     Route::get('/production-journals', fn () => Inertia::render('App/Inventory/ProductionJournals/Index'))->name('production-journals.index');
+    Route::get('/production-journals/add', fn () => Inertia::render('App/Inventory/ProductionJournals/Add'))->name('production-journals.add');
+    Route::get('/production-journals/{id}/edit', fn ($id) => Inertia::render('App/Inventory/ProductionJournals/Edit', ['id' => $id]))->name('production-journals.edit');
     Route::get('/production-journals/{id}', fn ($id) => Inertia::render('App/Inventory/ProductionJournals/Show', ['id' => $id]))->name('production-journals.show');
 });

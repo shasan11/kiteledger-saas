@@ -6,6 +6,7 @@ import { Modal, Input, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -17,7 +18,7 @@ export default function AdjustmentsIndex(props) {
     const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
 
     const columns = useMemo(() => [
-        { title: 'Adjustment No', dataIndex: 'adjustment_no', key: 'adjustment_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        { title: 'Adjustment No', dataIndex: 'adjustment_no', key: 'adjustment_no', sorter: true, width: 140, render: (_, r) => <Text strong>{displayDocumentNumber(r, r?.inventory_adjustment_no ? 'inventory_adjustment_no' : 'adjustment_no')}</Text> },
         { title: 'Date', dataIndex: 'adjustment_date', key: 'adjustment_date', sorter: true, width: 120, render: displayDate },
         { title: 'Warehouse', dataIndex: 'warehouse', key: 'warehouse', render: (_, r) => r?.warehouse?.name || r?.warehouse_name || '-' },
         { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (v) => v || '-' },
@@ -41,7 +42,7 @@ export default function AdjustmentsIndex(props) {
                             onCancel: reject,
                         });
                     });
-                    await axios.patch(api('/api/inventory-adjustments/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
+                    await axios.post(api('/api/inventory-adjustments/bulk-approve'), { ids: selectedRowKeys });
                     message.success('Records approved');
                     clearSelection();
                     fetchData();
@@ -64,7 +65,7 @@ export default function AdjustmentsIndex(props) {
         if (!ctx) return;
         setVoidState((s) => ({ ...s, loading: true }));
         try {
-            await axios.patch(api('/api/inventory-adjustments/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
+            await axios.post(api('/api/inventory-adjustments/bulk-void'), { ids: ctx.selectedRowKeys, voided_reason: reason });
             ctx.message.success('Records voided');
             ctx.clearSelection();
             ctx.fetchData();

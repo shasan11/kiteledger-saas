@@ -48,6 +48,7 @@ class DatabaseSeeder extends Seeder
             PosSeeder::class,
             RolesAndPermissionsSeeder::class,
             FullPermissionUserSeeder::class,
+            AiPermissionSeeder::class,
          ]);
     }
 }
