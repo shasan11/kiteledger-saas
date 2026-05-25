@@ -27,26 +27,27 @@ class AiIntentDetector
     {
         $m = strtolower($message);
 
+        // PHP doesn't allow enum instances as array keys — use ->value strings.
         $rules = [
-            AiIntentType::CREATE_INVOICE_DRAFT         => ['create invoice', 'make invoice', 'new invoice', 'invoice for', 'bill the customer'],
-            AiIntentType::CREATE_QUOTATION_DRAFT       => ['quotation', 'quote for', 'prepare quote'],
-            AiIntentType::CREATE_PURCHASE_BILL_DRAFT   => ['purchase bill', 'supplier bill', 'vendor bill'],
-            AiIntentType::CREATE_EXPENSE_DRAFT         => ['record expense', 'log expense', 'expense of'],
-            AiIntentType::CREATE_JOURNAL_VOUCHER_DRAFT => ['journal voucher', 'journal entry', 'jv for', 'create journal'],
-            AiIntentType::EXPLAIN_ACCOUNTING_IMPACT    => ['accounting impact', 'explain this invoice', 'explain accounting', 'what entries'],
-            AiIntentType::ASK_REPORT                   => ['why did', 'compared to last', 'this month', 'profit and loss', 'income statement', 'cash flow', 'report'],
-            AiIntentType::RISK_REVIEW                  => ['risk review', 'review risk', 'is this safe', 'duplicate', 'fraud check'],
-            AiIntentType::RECEIVABLE_COLLECTION        => ['overdue', 'collect', 'payment reminder', 'follow up customer'],
-            AiIntentType::INVENTORY_ADVISOR            => ['dead stock', 'reorder', 'low stock', 'slow moving'],
-            AiIntentType::TEMPLATE_GENERATION          => ['draft email', 'quotation terms', 'message template'],
-            AiIntentType::GLOBAL_SEARCH                => ['find ', 'show ', 'list '],
+            AiIntentType::CREATE_INVOICE_DRAFT->value         => ['create invoice', 'make invoice', 'new invoice', 'invoice for', 'bill the customer'],
+            AiIntentType::CREATE_QUOTATION_DRAFT->value       => ['quotation', 'quote for', 'prepare quote'],
+            AiIntentType::CREATE_PURCHASE_BILL_DRAFT->value   => ['purchase bill', 'supplier bill', 'vendor bill'],
+            AiIntentType::CREATE_EXPENSE_DRAFT->value         => ['record expense', 'log expense', 'expense of'],
+            AiIntentType::CREATE_JOURNAL_VOUCHER_DRAFT->value => ['journal voucher', 'journal entry', 'jv for', 'create journal'],
+            AiIntentType::EXPLAIN_ACCOUNTING_IMPACT->value    => ['accounting impact', 'explain this invoice', 'explain accounting', 'what entries'],
+            AiIntentType::ASK_REPORT->value                   => ['why did', 'compared to last', 'this month', 'profit and loss', 'income statement', 'cash flow', 'report'],
+            AiIntentType::RISK_REVIEW->value                  => ['risk review', 'review risk', 'is this safe', 'duplicate', 'fraud check'],
+            AiIntentType::RECEIVABLE_COLLECTION->value        => ['overdue', 'collect', 'payment reminder', 'follow up customer'],
+            AiIntentType::INVENTORY_ADVISOR->value            => ['dead stock', 'reorder', 'low stock', 'slow moving'],
+            AiIntentType::TEMPLATE_GENERATION->value          => ['draft email', 'quotation terms', 'message template'],
+            AiIntentType::GLOBAL_SEARCH->value                => ['find ', 'show ', 'list '],
         ];
 
-        foreach ($rules as $intent => $keywords) {
+        foreach ($rules as $intentValue => $keywords) {
             foreach ($keywords as $kw) {
                 if (str_contains($m, $kw)) {
                     return new AiIntentData(
-                        intent: $intent,
+                        intent: AiIntentType::from($intentValue),
                         confidence: 0.6,
                         rationale: "Matched keyword: {$kw}",
                     );
