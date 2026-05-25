@@ -23,6 +23,7 @@ class DocumentNumberingService
         'DebitNote' => ['document_type' => 'debit_note', 'field' => 'debit_note_no', 'approval_required' => true, 'accounting_impact' => true],
         'WarehouseTransfer' => ['document_type' => 'warehouse_transfer', 'field' => 'transfer_no', 'approval_required' => true, 'accounting_impact' => false],
         'InventoryAdjustment' => ['document_type' => 'inventory_adjustment', 'field' => 'adjustment_no', 'approval_required' => true, 'accounting_impact' => true],
+        'BillOfMaterial' => ['document_type' => 'bill_of_material', 'field' => 'code', 'approval_required' => false, 'accounting_impact' => false],
         'ProductionOrder' => ['document_type' => 'production_order', 'field' => 'code', 'approval_required' => true, 'accounting_impact' => true],
         'ProductionJournal' => ['document_type' => 'production_journal', 'field' => 'code', 'approval_required' => true, 'accounting_impact' => true],
         'Quotation' => ['document_type' => 'quotation', 'field' => 'quotation_no', 'approval_required' => true, 'accounting_impact' => false],

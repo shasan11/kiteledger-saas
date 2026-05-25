@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Invoice extends Model
 {
@@ -129,6 +130,21 @@ class Invoice extends Model
     public function customerPaymentLines(): HasMany
     {
         return $this->hasMany(CustomerPaymentLine::class);
+    }
+
+    public function paymentLinks(): HasMany
+    {
+        return $this->hasMany(InvoicePaymentLink::class);
+    }
+
+    public function paymentLink(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(InvoicePaymentLink::class)->where('active', true)->latest();
+    }
+
+    public function onlinePayments(): HasMany
+    {
+        return $this->hasMany(OnlinePayment::class);
     }
 
     public function recalculatePaymentTotals(): self

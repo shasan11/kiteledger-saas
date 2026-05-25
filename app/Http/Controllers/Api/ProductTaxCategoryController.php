@@ -27,7 +27,7 @@ class ProductTaxCategoryController extends BaseCrudApiController
     protected string $defaultSort = 'code';
 
     protected array $storeRules = [
-        'country_code' => ['required', 'in:NP,IN,US'],
+        'country_code' => ['required', 'string', 'size:2'],
         'code' => ['required', 'string', 'max:80'],
         'name' => ['required', 'string', 'max:180'],
         'tax_category_type' => ['required', 'in:goods,service,expense,exempt,zero_rated,non_taxable'],
@@ -41,7 +41,7 @@ class ProductTaxCategoryController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'country_code' => ['sometimes', 'required', 'in:NP,IN,US'],
+            'country_code' => ['sometimes', 'required', 'string', 'size:2'],
             'code' => ['sometimes', 'required', 'string', 'max:80'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'tax_category_type' => ['sometimes', 'required', 'in:goods,service,expense,exempt,zero_rated,non_taxable'],

@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\InvoicePaymentLinkController;
+use App\Http\Controllers\Api\OnlinePaymentController;
+use App\Http\Controllers\Api\OnlinePaymentSettingController;
+use App\Http\Controllers\Api\PaymentGatewaySettingController;
+use App\Http\Controllers\Api\PaymentWebhookController;
+use App\Http\Controllers\Api\PublicInvoicePaymentController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
 use App\Http\Controllers\Api\AI\AiCommandController;
 use App\Http\Controllers\Api\AI\AiTransactionReviewController;
@@ -10,6 +16,10 @@ use App\Http\Controllers\Api\AI\AiCrmAssistantController;
 use App\Http\Controllers\Api\AI\AiPaymentCollectionController;
 use App\Http\Controllers\Api\AI\AiInventoryInsightController;
 use App\Http\Controllers\Api\AI\AiUsageLogController;
+use App\Http\Controllers\Api\AI\AiChatController;
+use App\Http\Controllers\Api\AI\AiActionController;
+use App\Http\Controllers\Api\AI\AiRiskReviewController;
+use App\Http\Controllers\Api\AI\AiReportController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -51,6 +61,8 @@ use App\Http\Controllers\Api\TaxRateController;
 use App\Http\Controllers\Api\TaxRegistrationController;
 use App\Http\Controllers\Api\TaxRuleController;
 use App\Http\Controllers\Api\TaxSettingsController;
+use App\Http\Controllers\Api\TaxSystemController;
+use App\Http\Controllers\Api\TaxDashboardController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
@@ -77,6 +89,7 @@ use App\Http\Controllers\Api\ProductCategoryController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ProductUnitController;
 use App\Http\Controllers\Api\ProductVariantItemController;
+use App\Http\Controllers\Api\BillOfMaterialController;
 use App\Http\Controllers\Api\ProductionCostTermController;
 use App\Http\Controllers\Api\ProductionJournalController;
 use App\Http\Controllers\Api\ProductionOrderController;
@@ -433,6 +446,11 @@ Route::post('adjustments/{id}/approve', [InventoryAdjustmentController::class, '
 Route::post('adjustments/{id}/void', [InventoryAdjustmentController::class, 'transactionVoid']);
 Route::apiResource('adjustments', InventoryAdjustmentController::class);
 Route::apiResource('warehouse-items', WarehouseItemController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+
+Route::post('bills-of-material/bulk', [BillOfMaterialController::class, 'bulkStore']);
+Route::patch('bills-of-material/bulk', [BillOfMaterialController::class, 'bulkUpdate']);
+Route::delete('bills-of-material/bulk', [BillOfMaterialController::class, 'bulkDestroy']);
+Route::apiResource('bills-of-material', BillOfMaterialController::class);
 
 Route::post('production-cost-terms/bulk', [ProductionCostTermController::class, 'bulkStore']);
 Route::patch('production-cost-terms/bulk', [ProductionCostTermController::class, 'bulkUpdate']);
@@ -860,12 +878,14 @@ Route::delete('crm-communications/bulk', [CrmCommunicationController::class, 'bu
 Route::apiResource('crm-communications', CrmCommunicationController::class)
     ->parameters(['crm-communications' => 'crmCommunication']);
 
-Route::get('crm-campaigns/summary', [CrmCampaignController::class, 'summary']);
-Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
-Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
-Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
-Route::apiResource('crm-campaigns', CrmCampaignController::class)
-    ->parameters(['crm-campaigns' => 'crmCampaign']);
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('crm-campaigns/summary', [CrmCampaignController::class, 'summary']);
+    Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
+    Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
+    Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
+    Route::apiResource('crm-campaigns', CrmCampaignController::class)
+        ->parameters(['crm-campaigns' => 'crmCampaign']);
+});
 
 Route::post('crm-sequences/bulk', [CrmSequenceController::class, 'bulkStore']);
 Route::patch('crm-sequences/bulk', [CrmSequenceController::class, 'bulkUpdate']);
@@ -907,13 +927,15 @@ Route::apiResource('crm-activities', CrmActivityController::class)
 |--------------------------------------------------------------------------
 */
 
-Route::get('support-tickets/summary', [\App\Http\Controllers\Api\SupportTicketController::class, 'summary']);
-Route::patch('support-tickets/{supportTicket}/status', [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
-Route::get('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'index']);
-Route::post('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'store']);
-Route::delete('support-tickets/{supportTicket}/comments/{comment}', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'destroy']);
-Route::apiResource('support-tickets', \App\Http\Controllers\Api\SupportTicketController::class)
-    ->parameters(['support-tickets' => 'supportTicket']);
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('support-tickets/summary', [\App\Http\Controllers\Api\SupportTicketController::class, 'summary']);
+    Route::patch('support-tickets/{supportTicket}/status', [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
+    Route::get('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'index']);
+    Route::post('support-tickets/{supportTicket}/comments', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'store']);
+    Route::delete('support-tickets/{supportTicket}/comments/{comment}', [\App\Http\Controllers\Api\SupportTicketCommentController::class, 'destroy']);
+    Route::apiResource('support-tickets', \App\Http\Controllers\Api\SupportTicketController::class)
+        ->parameters(['support-tickets' => 'supportTicket']);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -968,6 +990,17 @@ Route::get('tax-settings',                    [TaxSettingsController::class, 'sh
 Route::put('tax-settings',                    [TaxSettingsController::class, 'upsert']);
 Route::post('tax-settings/toggle-advanced',   [TaxSettingsController::class, 'toggleAdvancedMode']);
 
+// Tax Systems
+Route::post('tax-systems/bulk', [TaxSystemController::class, 'bulkStore']);
+Route::patch('tax-systems/bulk', [TaxSystemController::class, 'bulkUpdate']);
+Route::delete('tax-systems/bulk', [TaxSystemController::class, 'bulkDestroy']);
+Route::apiResource('tax-systems', TaxSystemController::class)
+    ->parameters(['tax-systems' => 'taxSystem']);
+
+// Tax Dashboard & Country Options
+Route::get('tax-dashboard-summary', [TaxDashboardController::class, 'summary']);
+Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOptions']);
+
 /*
 |--------------------------------------------------------------------------
 | AI Module
@@ -1007,4 +1040,55 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
 
     // Inventory insights
     Route::post('inventory/insights',                   [AiInventoryInsightController::class, 'insights']);
+
+    // -----------------------------------------------------------------
+    // Kite AI Command Center — approval-safe chat + action pipeline
+    // -----------------------------------------------------------------
+    Route::post('chat',                                 [AiChatController::class, 'chat']);
+    Route::post('actions/{uuid}/approve',               [AiActionController::class, 'approve']);
+    Route::post('actions/{uuid}/reject',                [AiActionController::class, 'reject']);
+    Route::post('risk-review',                          [AiRiskReviewController::class, 'review']);
+    Route::post('reports/ask',                          [AiReportController::class, 'ask']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Online Payments Module
+|--------------------------------------------------------------------------
+*/
+
+// Webhook routes — NO auth required, signature-verified internally
+Route::post('webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle'])
+    ->name('api.webhooks.payments');
+
+// Public invoice payment routes — NO auth required, rate limited
+Route::middleware(['throttle:60,1'])->prefix('public/invoices')->name('api.public.invoices.')->group(function () {
+    Route::get('{token}', [PublicInvoicePaymentController::class, 'show'])->name('show');
+    Route::post('{token}/create-payment', [PublicInvoicePaymentController::class, 'createPayment'])->name('create-payment');
+    Route::post('{token}/verify-payment', [PublicInvoicePaymentController::class, 'verifyPayment'])->name('verify-payment');
+});
+
+// Admin protected routes
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    // Online payment settings (singleton)
+    Route::get('online-payment-settings', [OnlinePaymentSettingController::class, 'show'])->name('api.online-payment-settings.show');
+    Route::put('online-payment-settings', [OnlinePaymentSettingController::class, 'upsert'])->name('api.online-payment-settings.upsert');
+    Route::patch('online-payment-settings', [OnlinePaymentSettingController::class, 'upsert']);
+
+    // Payment gateway settings per-provider
+    Route::get('payment-gateway-settings', [PaymentGatewaySettingController::class, 'index'])->name('api.payment-gateway-settings.index');
+    Route::get('payment-gateway-settings/{provider}', [PaymentGatewaySettingController::class, 'show'])->name('api.payment-gateway-settings.show');
+    Route::put('payment-gateway-settings/{provider}', [PaymentGatewaySettingController::class, 'upsert'])->name('api.payment-gateway-settings.upsert');
+    Route::patch('payment-gateway-settings/{provider}', [PaymentGatewaySettingController::class, 'upsert']);
+    Route::post('payment-gateway-settings/{provider}/test', [PaymentGatewaySettingController::class, 'testCredentials'])->name('api.payment-gateway-settings.test');
+
+    // Invoice payment link management
+    Route::get('invoices/{invoice}/payment-link', [InvoicePaymentLinkController::class, 'show'])->name('api.invoices.payment-link.show');
+    Route::post('invoices/{invoice}/payment-link', [InvoicePaymentLinkController::class, 'generate'])->name('api.invoices.payment-link.generate');
+    Route::delete('invoices/{invoice}/payment-link', [InvoicePaymentLinkController::class, 'disable'])->name('api.invoices.payment-link.disable');
+
+    // Online payments list / detail / refund
+    Route::get('online-payments/{id}/webhook-logs', [OnlinePaymentController::class, 'webhookLogs'])->name('api.online-payments.webhook-logs');
+    Route::post('online-payments/{id}/refund', [OnlinePaymentController::class, 'refund'])->name('api.online-payments.refund');
+    Route::apiResource('online-payments', OnlinePaymentController::class)->only(['index', 'show']);
 });

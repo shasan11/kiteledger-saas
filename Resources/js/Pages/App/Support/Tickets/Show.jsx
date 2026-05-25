@@ -41,6 +41,10 @@ const { TextArea } = Input;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const STATUS_OPTIONS = [
     { label: 'Open', value: 'open' },
@@ -97,7 +101,7 @@ export default function TicketShow() {
     const loadTicket = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get(api(`/api/support-tickets/${ticketId}`));
+            const res = await axios.get(api(`/api/support-tickets/${ticketId}`), { headers: authHeaders() });
             setTicket(res.data?.data || res.data);
         } catch (err) {
             message.error(err?.response?.data?.message || 'Failed to load ticket');
@@ -110,7 +114,7 @@ export default function TicketShow() {
 
     const updateStatus = async (newStatus) => {
         try {
-            await axios.patch(api(`/api/support-tickets/${ticketId}/status`), { status: newStatus });
+            await axios.patch(api(`/api/support-tickets/${ticketId}/status`), { status: newStatus }, { headers: authHeaders() });
             message.success('Status updated');
             loadTicket();
         } catch (err) {
@@ -121,7 +125,7 @@ export default function TicketShow() {
     const handleEdit = async (values) => {
         setEditLoading(true);
         try {
-            await axios.patch(api(`/api/support-tickets/${ticketId}`), values);
+            await axios.patch(api(`/api/support-tickets/${ticketId}`), values, { headers: authHeaders() });
             message.success('Ticket updated');
             setEditOpen(false);
             loadTicket();
@@ -156,7 +160,7 @@ export default function TicketShow() {
     const headerNode = (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <Space>
-                <Button icon={<ArrowLeftOutlined />} size="small" onClick={() => router.visit('/support/tickets')} />
+                <Button icon={<ArrowLeftOutlined />} size="small" onClick={() => router.visit('/crm/tickets')} />
                 <div>
                     <Text type="secondary" style={{ fontSize: 12 }}>{ticket.ticket_no}</Text>
                     <Title level={5} style={{ margin: 0 }}>{ticket.subject}</Title>

@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Space, Tag, Typography } from 'antd';
 import { PercentageOutlined } from '@ant-design/icons';
+import axios from 'axios';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
@@ -76,12 +77,20 @@ const appliesOnColor = {
 };
 
 const taxTypeOptions = [
-  { value: 'vat', label: 'VAT' },
-  { value: 'gst', label: 'GST' },
-  { value: 'sales_tax', label: 'Sales Tax' },
-  { value: 'service_tax', label: 'Service Tax' },
-  { value: 'tds', label: 'TDS' },
-  { value: 'withholding', label: 'Withholding' },
+  { value: 'vat',          label: 'VAT' },
+  { value: 'gst',          label: 'GST' },
+  { value: 'sales_tax',    label: 'Sales Tax' },
+  { value: 'service_tax',  label: 'Service Tax' },
+  { value: 'tds',          label: 'TDS' },
+  { value: 'tcs',          label: 'TCS' },
+  { value: 'withholding',  label: 'Withholding' },
+  { value: 'use_tax',      label: 'Use Tax' },
+  { value: 'reverse_charge', label: 'Reverse Charge' },
+  { value: 'zero_rated',   label: 'Zero Rated' },
+  { value: 'exempt',       label: 'Exempt' },
+  { value: 'excise',       label: 'Excise' },
+  { value: 'customs',      label: 'Customs' },
+  { value: 'custom',       label: 'Custom' },
 ];
 
 const appliesOnOptions = [
@@ -97,7 +106,9 @@ const calculationMethodOptions = [
   { value: 'compound', label: 'Compound' },
 ];
 
-const countryOptions = [
+// Country options are loaded dynamically from the API (see useEffect below).
+// Fallback list used only while the API call is in flight.
+const FALLBACK_COUNTRY_OPTIONS = [
   { value: 'NP', label: 'NP - Nepal' },
   { value: 'IN', label: 'IN - India' },
   { value: 'US', label: 'US - United States' },
@@ -112,158 +123,176 @@ const emptyComponent = {
   sort_order: 0,
 };
 
-const taxJurisdictionQuickAdd = {
-  title: 'Tax Jurisdiction',
-  buttonLabel: 'Add Tax Jurisdiction',
-  apiUrl: api('/api/tax-jurisdictions/'),
-  initialValues: {
-    country_code: 'NP',
-    name: '',
-    code: '',
-    tax_system: 'nepal_vat',
-    active: true,
-  },
-  validationSchema: Yup.object({
-    country_code: Yup.string().required('Country is required'),
-    name: Yup.string().required('Jurisdiction name is required'),
-    code: Yup.string().required('Code is required'),
-  }),
-  fields: [
-    {
-      name: 'country_code',
-      label: 'Country',
-      type: 'select',
-      col: 12,
-      required: true,
-      options: countryOptions,
-    },
-    {
-      name: 'name',
-      label: 'Name',
-      type: 'text',
-      col: 12,
-      required: true,
-      placeholder: 'Nepal VAT',
-    },
-    {
-      name: 'code',
-      label: 'Code',
-      type: 'text',
-      col: 12,
-      required: true,
-      placeholder: 'NP-VAT',
-    },
-    {
-      name: 'tax_system',
-      label: 'Tax System',
-      type: 'text',
-      col: 12,
-      placeholder: 'nepal_vat',
-    },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-      col: 8,
-    },
-  ],
-  transformPayload: (values) => ({
-    country_code: values.country_code || 'NP',
-    name: nullIfEmpty(values.name),
-    code: nullIfEmpty(values.code),
-    tax_system: nullIfEmpty(values.tax_system) || 'nepal_vat',
-    active: values.active !== false,
-  }),
-};
-
-const taxClassQuickAdd = {
-  title: 'Tax Class',
-  buttonLabel: 'Add Tax Class',
-  apiUrl: api('/api/tax-classes/'),
-  initialValues: {
-    tax_jurisdiction_id: null,
-    country_code: 'NP',
-    name: '',
-    code: '',
-    tax_type: 'vat',
-    tax_behavior: 'standard',
-    description: '',
-    active: true,
-  },
-  validationSchema: Yup.object({
-    name: Yup.string().required('Tax class name is required'),
-    code: Yup.string().required('Code is required'),
-    tax_type: Yup.string().required('Tax type is required'),
-  }),
-  fields: [
-    {
-      name: 'name',
-      label: 'Name',
-      type: 'text',
-      col: 12,
-      required: true,
-      placeholder: 'VAT 13%',
-    },
-    {
-      name: 'code',
-      label: 'Code',
-      type: 'text',
-      col: 12,
-      required: true,
-      placeholder: 'VAT13',
-    },
-    {
-      name: 'tax_jurisdiction_id',
-      label: 'Jurisdiction',
-      type: 'fkSelect',
-      col: 12,
-      fkUrl: api('/api/tax-jurisdictions/'),
-      fkSearchParam: 'search',
-      fkPageSize: 20,
-      fkValueKey: 'id',
-      fkLabelKey: 'name',
-      storeFullObject: true,
-      quickAdd: taxJurisdictionQuickAdd,
-      allowClear: true,
-    },
-    {
-      name: 'tax_type',
-      label: 'Tax Type',
-      type: 'select',
-      col: 12,
-      required: true,
-      options: taxTypeOptions,
-    },
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      col: 24,
-      rows: 2,
-    },
-    {
-      name: 'active',
-      label: 'Active',
-      type: 'switch',
-      col: 8,
-    },
-  ],
-  transformPayload: (values) => ({
-    tax_jurisdiction_id: asId(values.tax_jurisdiction_id),
-    country_code:
-      values.tax_jurisdiction_id?.country_code ||
-      values.country_code ||
-      'NP',
-    name: nullIfEmpty(values.name),
-    code: nullIfEmpty(values.code),
-    tax_type: values.tax_type || 'vat',
-    tax_behavior: values.tax_behavior || 'standard',
-    description: nullIfEmpty(values.description),
-    active: values.active !== false,
-  }),
-};
+// Quick-add forms are built inside the component so they get fresh countryOptions.
 
 export default function TaxRates({ auth }) {
+  const [countryOptions, setCountryOptions] = useState(FALLBACK_COUNTRY_OPTIONS);
+
+  useEffect(() => {
+    axios
+      .get(api('/api/tax-country-options'))
+      .then(({ data }) => {
+        if (Array.isArray(data) && data.length) {
+          setCountryOptions(
+            data.map((c) => ({ value: c.value, label: `${c.value} - ${c.label}` }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── Quick-add configs (rebuilt when countryOptions changes) ──────────────
+  const taxJurisdictionQuickAdd = useMemo(() => ({
+    title: 'Tax Jurisdiction',
+    buttonLabel: 'Add Tax Jurisdiction',
+    apiUrl: api('/api/tax-jurisdictions/'),
+    initialValues: {
+      country_code: 'NP',
+      name: '',
+      code: '',
+      tax_system: '',
+      active: true,
+    },
+    validationSchema: Yup.object({
+      country_code: Yup.string().required('Country is required'),
+      name: Yup.string().required('Jurisdiction name is required'),
+      code: Yup.string().required('Code is required'),
+    }),
+    fields: [
+      {
+        name: 'country_code',
+        label: 'Country',
+        type: 'select',
+        col: 12,
+        required: true,
+        options: countryOptions,
+      },
+      {
+        name: 'name',
+        label: 'Name',
+        type: 'text',
+        col: 12,
+        required: true,
+        placeholder: 'Nepal VAT',
+      },
+      {
+        name: 'code',
+        label: 'Code',
+        type: 'text',
+        col: 12,
+        required: true,
+        placeholder: 'NP-VAT',
+      },
+      {
+        name: 'tax_system',
+        label: 'Tax System Code',
+        type: 'text',
+        col: 12,
+        placeholder: 'e.g. nepal_vat / france_tva',
+      },
+      {
+        name: 'active',
+        label: 'Active',
+        type: 'switch',
+        col: 8,
+      },
+    ],
+    transformPayload: (values) => ({
+      country_code: values.country_code || 'NP',
+      name: nullIfEmpty(values.name),
+      code: nullIfEmpty(values.code),
+      tax_system: nullIfEmpty(values.tax_system) || undefined,
+      active: values.active !== false,
+    }),
+  }), [countryOptions]);
+
+  const taxClassQuickAdd = useMemo(() => ({
+    title: 'Tax Class',
+    buttonLabel: 'Add Tax Class',
+    apiUrl: api('/api/tax-classes/'),
+    initialValues: {
+      tax_jurisdiction_id: null,
+      country_code: 'NP',
+      name: '',
+      code: '',
+      tax_type: 'vat',
+      tax_behavior: 'standard',
+      description: '',
+      active: true,
+    },
+    validationSchema: Yup.object({
+      name: Yup.string().required('Tax class name is required'),
+      code: Yup.string().required('Code is required'),
+      tax_type: Yup.string().required('Tax type is required'),
+    }),
+    fields: [
+      {
+        name: 'name',
+        label: 'Name',
+        type: 'text',
+        col: 12,
+        required: true,
+        placeholder: 'VAT 13%',
+      },
+      {
+        name: 'code',
+        label: 'Code',
+        type: 'text',
+        col: 12,
+        required: true,
+        placeholder: 'VAT13',
+      },
+      {
+        name: 'tax_jurisdiction_id',
+        label: 'Jurisdiction',
+        type: 'fkSelect',
+        col: 12,
+        fkUrl: api('/api/tax-jurisdictions/'),
+        fkSearchParam: 'search',
+        fkPageSize: 20,
+        fkValueKey: 'id',
+        fkLabelKey: 'name',
+        storeFullObject: true,
+        quickAdd: taxJurisdictionQuickAdd,
+        allowClear: true,
+      },
+      {
+        name: 'tax_type',
+        label: 'Tax Type',
+        type: 'select',
+        col: 12,
+        required: true,
+        options: taxTypeOptions,
+      },
+      {
+        name: 'description',
+        label: 'Description',
+        type: 'textarea',
+        col: 24,
+        rows: 2,
+      },
+      {
+        name: 'active',
+        label: 'Active',
+        type: 'switch',
+        col: 8,
+      },
+    ],
+    transformPayload: (values) => ({
+      tax_jurisdiction_id: asId(values.tax_jurisdiction_id),
+      country_code:
+        values.tax_jurisdiction_id?.country_code ||
+        values.country_code ||
+        'NP',
+      name: nullIfEmpty(values.name),
+      code: nullIfEmpty(values.code),
+      tax_type: values.tax_type || 'vat',
+      tax_behavior: values.tax_behavior || 'standard',
+      description: nullIfEmpty(values.description),
+      active: values.active !== false,
+    }),
+  }), [countryOptions, taxJurisdictionQuickAdd]);
+
   const columns = useMemo(
     () => [
       {
@@ -341,6 +370,7 @@ export default function TaxRates({ auth }) {
   );
 
   const fields = useMemo(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     () => [
       {
         type: 'group',
@@ -532,7 +562,7 @@ export default function TaxRates({ auth }) {
         ],
       },
     ],
-    []
+    [taxJurisdictionQuickAdd, taxClassQuickAdd]
   );
 
   const validationSchema = useMemo(

@@ -190,7 +190,7 @@ class AccountingReportService extends BaseReportService
     protected function generalLedgerSummary(string $reportKey, array $filters, array $meta): array
     {
         $accounts = ChartOfAccount::query()
-            ->with(['account', 'branch'])
+            ->with(['branch'])
             ->when(!empty($filters['account_type']), fn ($query) => $query->where('type', $filters['account_type']))
             ->when(!$filters['include_inactive'], fn ($query) => $query->where('active', true))
             ->orderBy('code')
@@ -459,9 +459,16 @@ class AccountingReportService extends BaseReportService
 
     protected function cashFlowSummary(string $reportKey, array $filters, array $meta): array
     {
-        $cashAccounts = ChartOfAccount::query()
-            ->whereHas('account', fn ($query) => $query->whereIn('nature', ['cash', 'bank']))
-            ->get();
+        try {
+            $cashAccounts = ChartOfAccount::query()
+                ->whereHas('account', fn ($query) => $query->whereIn('nature', ['cash', 'bank']))
+                ->get();
+        } catch (\Throwable) {
+            $cashAccounts = ChartOfAccount::query()
+                ->where('type', 'asset')
+                ->where(fn ($q) => $q->where('name', 'like', '%cash%')->orWhere('name', 'like', '%bank%'))
+                ->get();
+        }
 
         $opening = 0.0;
         $inflow = 0.0;

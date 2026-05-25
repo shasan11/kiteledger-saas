@@ -6,7 +6,9 @@ import {
     Card,
     Col,
     DatePicker,
+    Drawer,
     Empty,
+    Form,
     Input,
     Row,
     Select,
@@ -30,9 +32,14 @@ import TicketKanban from './components/TicketKanban';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
+const { TextArea } = Input;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const STATUS_OPTIONS = [
     { label: 'Open', value: 'open' },
@@ -97,6 +104,18 @@ export default function TicketIndex() {
     const [priorityFilter, setPriorityFilter] = useState(undefined);
     const [summary, setSummary] = useState({});
     const [view, setView] = useState('table');
+    const [createOpen, setCreateOpen] = useState(false);
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createForm] = Form.useForm();
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('action') === 'create') {
+            setCreateOpen(true);
+        }
+    }, []);
 
     const loadTickets = useCallback(async () => {
         setLoading(true);
@@ -107,8 +126,8 @@ export default function TicketIndex() {
             if (priorityFilter) params.priority = priorityFilter;
 
             const [listRes, summaryRes] = await Promise.all([
-                axios.get(api('/api/support-tickets'), { params }),
-                axios.get(api('/api/support-tickets/summary')),
+                axios.get(api('/api/support-tickets'), { params, headers: authHeaders() }),
+                axios.get(api('/api/support-tickets/summary'), { headers: authHeaders() }),
             ]);
 
             const data = listRes.data;
@@ -124,6 +143,66 @@ export default function TicketIndex() {
     }, [page, pageSize, search, statusFilter, priorityFilter]);
 
     useEffect(() => { loadTickets(); }, [loadTickets]);
+
+    const openCreateDrawer = () => {
+        createForm.resetFields();
+        createForm.setFieldsValue({
+            priority: 'medium',
+            category: 'general',
+            source: 'manual',
+        });
+        setCreateOpen(true);
+    };
+
+    const closeCreateDrawer = () => {
+        setCreateOpen(false);
+
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            if (url.searchParams.get('action') === 'create') {
+                url.searchParams.delete('action');
+                window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+            }
+        }
+    };
+
+    const handleCreate = async (values) => {
+        setCreateLoading(true);
+        try {
+            const payload = {
+                ...values,
+                subject: values.subject?.trim(),
+                description: values.description?.trim() || null,
+                due_at: values.due_at ? values.due_at.toISOString() : null,
+            };
+
+            const res = await axios.post(api('/api/support-tickets'), payload, { headers: authHeaders() });
+            const created = res.data?.data || res.data;
+
+            message.success('Ticket created');
+            closeCreateDrawer();
+            createForm.resetFields();
+
+            if (created?.id) {
+                router.visit(`/crm/tickets/${created.id}`);
+            } else {
+                loadTickets();
+            }
+        } catch (err) {
+            const errors = err?.response?.data;
+            if (errors && typeof errors === 'object' && !errors.message) {
+                createForm.setFields(
+                    Object.entries(errors).map(([name, value]) => ({
+                        name,
+                        errors: Array.isArray(value) ? value : [String(value)],
+                    }))
+                );
+            }
+            message.error(err?.response?.data?.message || 'Failed to create ticket');
+        } finally {
+            setCreateLoading(false);
+        }
+    };
 
     const columns = useMemo(() => [
         {
@@ -224,7 +303,7 @@ export default function TicketIndex() {
                             type="primary"
                             icon={<PlusOutlined />}
                             size="small"
-                            onClick={() => router.visit('/support/tickets?action=create')}
+                            onClick={openCreateDrawer}
                         >
                             New Ticket
                         </Button>
@@ -316,7 +395,7 @@ export default function TicketIndex() {
                                         onChange: (p, ps) => { setPage(p); setPageSize(ps); },
                                     }}
                                     onRow={(record) => ({
-                                        onClick: () => router.visit(`/support/tickets/${record.id}`),
+                                        onClick: () => router.visit(`/crm/tickets/${record.id}`),
                                         style: { cursor: 'pointer' },
                                     })}
                                     locale={{
@@ -330,6 +409,85 @@ export default function TicketIndex() {
                     )}
                 </Space>
             </div>
+
+            <Drawer
+                title="New Ticket"
+                open={createOpen}
+                onClose={closeCreateDrawer}
+                width={520}
+                footer={
+                    <Space style={{ float: 'right' }}>
+                        <Button onClick={closeCreateDrawer}>Cancel</Button>
+                        <Button type="primary" loading={createLoading} onClick={() => createForm.submit()}>
+                            Create
+                        </Button>
+                    </Space>
+                }
+            >
+                <Form
+                    form={createForm}
+                    layout="vertical"
+                    onFinish={handleCreate}
+                    initialValues={{ priority: 'medium', category: 'general', source: 'manual' }}
+                >
+                    <Form.Item
+                        name="subject"
+                        label="Subject"
+                        rules={[
+                            { required: true, message: 'Subject is required' },
+                            { max: 255, message: 'Subject must be 255 characters or fewer' },
+                        ]}
+                    >
+                        <Input autoFocus />
+                    </Form.Item>
+
+                    <Form.Item name="description" label="Description">
+                        <TextArea rows={4} />
+                    </Form.Item>
+
+                    <Row gutter={12}>
+                        <Col span={12}>
+                            <Form.Item name="priority" label="Priority">
+                                <Select options={PRIORITY_OPTIONS} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="category" label="Category">
+                                <Select allowClear options={[
+                                    { label: 'General', value: 'general' },
+                                    { label: 'Billing', value: 'billing' },
+                                    { label: 'Technical', value: 'technical' },
+                                    { label: 'Account', value: 'account' },
+                                    { label: 'Product', value: 'product' },
+                                    { label: 'POS', value: 'pos' },
+                                    { label: 'CRM', value: 'crm' },
+                                    { label: 'Inventory', value: 'inventory' },
+                                ]} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Row gutter={12}>
+                        <Col span={12}>
+                            <Form.Item name="source" label="Source">
+                                <Select allowClear options={[
+                                    { label: 'Manual', value: 'manual' },
+                                    { label: 'Email', value: 'email' },
+                                    { label: 'Phone', value: 'phone' },
+                                    { label: 'WhatsApp', value: 'whatsapp' },
+                                    { label: 'Web', value: 'web' },
+                                    { label: 'Internal', value: 'internal' },
+                                ]} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item name="due_at" label="Due Date">
+                                <DatePicker style={{ width: '100%' }} showTime />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Form>
+            </Drawer>
         </AuthenticatedLayout>
     );
 }

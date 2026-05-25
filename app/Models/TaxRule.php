@@ -27,25 +27,24 @@ class TaxRule extends Model
         'from_state_code',
         'to_state_code',
         'reverse_charge',
+        'conditions',
+        'actions',
         'priority',
         'active',
         'is_system_generated',
         'user_add_id',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'reverse_charge' => 'boolean',
-            'priority' => 'integer',
-            'active' => 'boolean',
+            'reverse_charge'      => 'boolean',
+            'conditions'          => 'array',
+            'actions'             => 'array',
+            'priority'            => 'integer',
+            'active'              => 'boolean',
             'is_system_generated' => 'boolean',
-            'user_add_id' => 'integer',
+            'user_add_id'         => 'integer',
         ];
     }
 

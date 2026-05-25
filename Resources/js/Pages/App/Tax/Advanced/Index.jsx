@@ -13,6 +13,7 @@ import {
 import {
     ApartmentOutlined,
     ArrowRightOutlined,
+    BankOutlined,
     ExceptionOutlined,
     GlobalOutlined,
     GroupOutlined,
@@ -79,6 +80,14 @@ const ADVANCED_PAGES = [
         icon: <TagsOutlined style={{ fontSize: 22 }} />,
         path: '/tax/product-tax-categories',
         badge: 'Category',
+    },
+    {
+        key: 'tax-systems',
+        title: 'Tax Systems',
+        description: 'Manage country tax systems (VAT, GST, Sales Tax, Withholding, etc.).',
+        icon: <BankOutlined style={{ fontSize: 22 }} />,
+        path: '/tax/tax-systems',
+        badge: 'Tax System',
     },
 ];
 

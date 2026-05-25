@@ -1,14 +1,5 @@
-import InventoryRecordShow from '@/Pages/App/Inventory/Shared/InventoryRecordShow';
+import ManufacturingShow from '@/Pages/App/Inventory/Shared/ManufacturingShow';
 
-export default function ProductionOrderShow({ id }) {
-    return (
-        <InventoryRecordShow
-            id={id}
-            title="Production Order"
-            endpoint="/api/production-orders/"
-            backRoute="inventory.production-orders.index"
-            backLabel="Back to Production Orders"
-            documentType="production_order"
-        />
-    );
+export default function ProductionOrderShow({ id, ...props }) {
+    return <ManufacturingShow id={id} documentType="production_order" {...props} />;
 }

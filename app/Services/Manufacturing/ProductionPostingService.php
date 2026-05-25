@@ -18,11 +18,24 @@ class ProductionPostingService
     ) {
     }
 
+    /**
+     * Approve a Production Order — sets the plan as approved and calculates costs.
+     * Does NOT post stock or create a journal voucher.
+     * Stock posting is handled exclusively by Production Journal.
+     */
     public function approve(ProductionOrder $order, ?int $approvedById = null): ProductionOrder
     {
         return DB::transaction(function () use ($order, $approvedById) {
             $locked = ProductionOrder::query()
-                ->with(['finishedProduct', 'warehouse', 'rawMaterials.product', 'rawMaterials.warehouse', 'expenses.expenseAccount', 'byproducts.product', 'byproducts.warehouse'])
+                ->with([
+                    'finishedProduct',
+                    'warehouse',
+                    'rawMaterials.product',
+                    'rawMaterials.warehouse',
+                    'expenses.expenseAccount',
+                    'byproducts.product',
+                    'byproducts.warehouse',
+                ])
                 ->lockForUpdate()
                 ->findOrFail($order->id);
 
@@ -30,75 +43,50 @@ class ProductionPostingService
                 throw ValidationException::withMessages(['status' => ['Voided production orders cannot be approved.']]);
             }
 
-            if ((bool) $locked->stock_posted) {
-                return $locked->refresh();
+            if ((bool) $locked->approved) {
+                return $locked->fresh($this->freshRelations());
             }
 
             $this->validateForApproval($locked);
-            $rawMaterialCost = 0.0;
 
+            // Resolve warehouse for lines that don't have one yet
             foreach ($locked->rawMaterials as $line) {
                 $warehouseId = $line->warehouse_id ?: $locked->warehouse_id;
-                $item = $this->warehouseItem($locked, $line->product_id, $warehouseId, true);
-                $qty = (float) $line->quantity;
-                $unitCost = (float) ($line->unit_cost ?: $item->avg_cost ?: 0);
-
-                if ((float) $item->qty_on_hand + 0.0001 < $qty) {
-                    throw ValidationException::withMessages([
-                        'stock' => [sprintf(
-                            'Insufficient stock for %s. Available: %s, required: %s.',
-                            $line->product?->name ?? 'raw material',
-                            number_format((float) $item->qty_on_hand, 4, '.', ''),
-                            number_format($qty, 4, '.', '')
-                        )],
-                    ]);
+                if ($warehouseId && !$line->warehouse_id) {
+                    $line->forceFill(['warehouse_id' => $warehouseId])->saveQuietly();
                 }
-
-                $line->forceFill([
-                    'warehouse_id' => $warehouseId,
-                    'unit_cost' => round($unitCost, 6),
-                    'total_cost' => round($qty * $unitCost, 6),
-                ])->saveQuietly();
-
-                $rawMaterialCost += $qty * $unitCost;
             }
 
-            $locked = $locked->fresh(['rawMaterials', 'expenses', 'byproducts']);
-            $locked->forceFill(['total_raw_material_cost' => round($rawMaterialCost, 6)])->saveQuietly();
-            $locked = $this->costingService->syncLineCosts($locked);
+            foreach ($locked->byproducts as $line) {
+                $warehouseId = $line->warehouse_id ?: $locked->warehouse_id;
+                if ($warehouseId && !$line->warehouse_id) {
+                    $line->forceFill(['warehouse_id' => $warehouseId])->saveQuietly();
+                }
+            }
+
+            $locked = $this->costingService->syncLineCosts($locked->fresh(['rawMaterials', 'expenses', 'byproducts']));
 
             if (!$locked->code || str_starts_with((string) $locked->code, '#draft')) {
                 $locked->code = app(\App\Services\DocumentNumberingService::class)->generate('production_order');
                 $locked->saveQuietly();
             }
 
-            foreach ($locked->rawMaterials as $line) {
-                $this->applyMovement($locked, $line->product_id, $line->warehouse_id ?: $locked->warehouse_id, 'production_order_raw_consumed', (float) $line->quantity, (float) $line->unit_cost, 'out', 'Raw material consumed');
-            }
-
-            $this->applyMovement($locked, $locked->finished_product_id, $locked->warehouse_id, 'production_order_finished_goods', (float) $locked->output_quantity, (float) $locked->finished_goods_unit_cost, 'in', 'Finished goods produced');
-
-            foreach ($locked->byproducts as $line) {
-                $warehouseId = $line->warehouse_id ?: $locked->warehouse_id;
-                $this->applyMovement($locked, $line->product_id, $warehouseId, 'production_order_byproduct', (float) $line->quantity, (float) $line->unit_cost, 'in', 'By-product produced');
-                $line->forceFill(['warehouse_id' => $warehouseId])->saveQuietly();
-            }
-
             $locked->forceFill([
-                'approved' => true,
-                'approved_at' => $locked->approved_at ?: now(),
+                'approved'       => true,
+                'approved_at'    => $locked->approved_at ?: now(),
                 'approved_by_id' => $approvedById ?: $locked->approved_by_id,
-                'status' => 'approved',
-                'stock_posted' => true,
-                'stock_posted_at' => now(),
+                'status'         => 'approved',
             ])->saveQuietly();
 
-            $this->journalVoucherService->createForApprovedSource($locked->refresh());
-
-            return $locked->fresh(['finishedProduct', 'warehouse', 'productUnit', 'rawMaterials.product', 'rawMaterials.warehouse', 'rawMaterials.productUnit', 'expenses.expenseAccount', 'byproducts.product', 'byproducts.warehouse', 'byproducts.productUnit', 'journalVoucher']);
+            return $locked->fresh($this->freshRelations());
         });
     }
 
+    /**
+     * Void a Production Order.
+     * For backward-compatibility, reverses any legacy stock entries that were
+     * posted under the old behaviour (source_type = 'production_order').
+     */
     public function void(ProductionOrder $order, string $reason, ?int $voidedById = null): ProductionOrder
     {
         return DB::transaction(function () use ($order, $reason, $voidedById) {
@@ -108,30 +96,44 @@ class ProductionPostingService
                 return $locked->refresh();
             }
 
-            $ledgers = InventoryLedger::query()
-                ->where('source_type', 'production_order')
-                ->where('source_id', $locked->id)
-                ->where('is_reversal', false)
-                ->orderByDesc('created_at')
-                ->get();
+            // Reverse any legacy ledger entries that were created under the old approval flow
+            if ((bool) $locked->stock_posted) {
+                $ledgers = InventoryLedger::query()
+                    ->where('source_type', 'production_order')
+                    ->where('source_id', $locked->id)
+                    ->where('is_reversal', false)
+                    ->orderByDesc('created_at')
+                    ->get();
 
-            foreach ($ledgers as $ledger) {
-                $direction = (float) $ledger->qty_in > 0 ? 'out' : 'in';
-                $qty = (float) $ledger->qty_in > 0 ? (float) $ledger->qty_in : (float) $ledger->qty_out;
-                $this->applyMovement($locked, $ledger->product_id, $ledger->warehouse_id, $ledger->movement_type . '_reversal', $qty, (float) $ledger->unit_cost, $direction, $reason, true, $ledger->id);
+                foreach ($ledgers as $ledger) {
+                    $direction = (float) $ledger->qty_in > 0 ? 'out' : 'in';
+                    $qty = (float) $ledger->qty_in > 0 ? (float) $ledger->qty_in : (float) $ledger->qty_out;
+                    $this->applyMovement(
+                        $locked,
+                        $ledger->product_id,
+                        $ledger->warehouse_id,
+                        $ledger->movement_type . '_reversal',
+                        $qty,
+                        (float) $ledger->unit_cost,
+                        $direction,
+                        $reason,
+                        true,
+                        $ledger->id
+                    );
+                }
+
+                $this->journalVoucherService->reverseForSource($locked, $reason);
             }
 
             $locked->forceFill([
-                'void' => true,
-                'voided_at' => now(),
-                'voided_by_id' => $voidedById,
+                'void'          => true,
+                'voided_at'     => now(),
+                'voided_by_id'  => $voidedById,
                 'voided_reason' => $reason,
-                'status' => 'void',
-                'active' => false,
-                'stock_posted' => false,
+                'status'        => 'void',
+                'active'        => false,
+                'stock_posted'  => false,
             ])->saveQuietly();
-
-            $this->journalVoucherService->reverseForSource($locked, $reason);
 
             return $locked->fresh(['finishedProduct', 'warehouse', 'productUnit', 'rawMaterials.product', 'expenses.expenseAccount', 'byproducts.product', 'journalVoucher']);
         });
@@ -156,89 +158,109 @@ class ProductionPostingService
         foreach ($order->byproducts as $line) {
             $this->assertStockableProduct($line->product, 'byproducts');
         }
-
-        $this->costingService->calculate($order);
     }
 
-    protected function applyMovement(ProductionOrder $order, string $productId, ?string $warehouseId, string $movementType, float $qty, float $unitCost, string $direction, string $description, bool $isReversal = false, ?string $reversesLedgerId = null): WarehouseItem
-    {
+    /** Kept for void reversal of legacy records only. */
+    protected function applyMovement(
+        ProductionOrder $order,
+        string $productId,
+        ?string $warehouseId,
+        string $movementType,
+        float $qty,
+        float $unitCost,
+        string $direction,
+        string $description,
+        bool $isReversal = false,
+        ?string $reversesLedgerId = null
+    ): WarehouseItem {
         if (!$warehouseId) {
-            throw ValidationException::withMessages(['warehouse_id' => ['Warehouse is required for stock posting.']]);
+            throw ValidationException::withMessages(['warehouse_id' => ['Warehouse is required for stock reversal.']]);
         }
 
-        $item = $this->warehouseItem($order, $productId, $warehouseId);
-        $oldQty = (float) $item->qty_on_hand;
+        $item = WarehouseItem::query()
+            ->where('warehouse_id', $warehouseId)
+            ->where('product_id', $productId)
+            ->lockForUpdate()
+            ->first();
+
+        if (!$item) {
+            $product = Product::query()->find($productId);
+            $item = WarehouseItem::query()->create([
+                'branch_id'     => $order->branch_id,
+                'warehouse_id'  => $warehouseId,
+                'product_id'    => $productId,
+                'qty_on_hand'   => 0,
+                'avg_cost'      => 0,
+                'total_value'   => 0,
+                'reorder_level' => $product?->reorder_level,
+                'active'        => true,
+            ]);
+            $item = WarehouseItem::query()->whereKey($item->id)->lockForUpdate()->first();
+        }
+
+        $oldQty   = (float) $item->qty_on_hand;
         $oldValue = (float) $item->total_value;
-        $value = round($qty * $unitCost, 6);
+        $value    = round($qty * $unitCost, 6);
 
         if ($direction === 'out') {
             if ($oldQty + 0.0001 < $qty) {
-                throw ValidationException::withMessages(['stock' => ['Insufficient stock for production stock movement.']]);
+                throw ValidationException::withMessages(['stock' => ['Insufficient stock for production stock reversal.']]);
             }
-            $newQty = $oldQty - $qty;
+            $newQty   = $oldQty - $qty;
             $newValue = max($oldValue - $value, 0);
         } else {
-            $newQty = $oldQty + $qty;
+            $newQty   = $oldQty + $qty;
             $newValue = $oldValue + $value;
         }
 
         $newAvg = $newQty > 0 ? $newValue / $newQty : 0;
 
         $item->forceFill([
-            'branch_id' => $order->branch_id,
-            'qty_on_hand' => round($newQty, 4),
-            'avg_cost' => round($newAvg, 6),
+            'branch_id'   => $order->branch_id,
+            'qty_on_hand'  => round($newQty, 4),
+            'avg_cost'    => round($newAvg, 6),
             'total_value' => round($newValue, 6),
         ])->save();
 
         InventoryLedger::query()->create([
-            'branch_id' => $order->branch_id,
-            'warehouse_id' => $warehouseId,
-            'product_id' => $productId,
-            'transaction_date' => $order->date,
-            'source_type' => 'production_order',
-            'source_id' => $order->id,
-            'source_no' => $order->code,
-            'movement_type' => $movementType,
-            'qty_in' => $direction === 'in' ? round($qty, 4) : 0,
-            'qty_out' => $direction === 'out' ? round($qty, 4) : 0,
-            'unit_cost' => round($unitCost, 6),
-            'value_in' => $direction === 'in' ? $value : 0,
-            'value_out' => $direction === 'out' ? $value : 0,
-            'balance_qty' => round($newQty, 4),
-            'balance_value' => round($newValue, 6),
-            'description' => $description,
-            'is_reversal' => $isReversal,
+            'branch_id'          => $order->branch_id,
+            'warehouse_id'       => $warehouseId,
+            'product_id'         => $productId,
+            'transaction_date'   => $order->date,
+            'source_type'        => 'production_order',
+            'source_id'          => $order->id,
+            'source_no'          => $order->code,
+            'movement_type'      => $movementType,
+            'qty_in'             => $direction === 'in' ? round($qty, 4) : 0,
+            'qty_out'            => $direction === 'out' ? round($qty, 4) : 0,
+            'unit_cost'          => round($unitCost, 6),
+            'value_in'           => $direction === 'in' ? $value : 0,
+            'value_out'          => $direction === 'out' ? $value : 0,
+            'balance_qty'        => round($newQty, 4),
+            'balance_value'      => round($newValue, 6),
+            'description'        => $description,
+            'is_reversal'        => $isReversal,
             'reverses_ledger_id' => $reversesLedgerId,
         ]);
 
         return $item;
     }
 
-    protected function warehouseItem(ProductionOrder $order, string $productId, string $warehouseId, bool $mustExist = false): WarehouseItem
+    protected function freshRelations(): array
     {
-        $item = WarehouseItem::query()->where('warehouse_id', $warehouseId)->where('product_id', $productId)->lockForUpdate()->first();
-
-        if (!$item && $mustExist) {
-            throw ValidationException::withMessages(['stock' => ['Raw material stock does not exist in selected warehouse.']]);
-        }
-
-        if (!$item) {
-            $product = Product::query()->find($productId);
-            $item = WarehouseItem::query()->create([
-                'branch_id' => $order->branch_id,
-                'warehouse_id' => $warehouseId,
-                'product_id' => $productId,
-                'qty_on_hand' => 0,
-                'avg_cost' => 0,
-                'total_value' => 0,
-                'reorder_level' => $product?->reorder_level,
-                'active' => true,
-            ]);
-            $item = WarehouseItem::query()->whereKey($item->id)->lockForUpdate()->first();
-        }
-
-        return $item;
+        return [
+            'finishedProduct',
+            'warehouse',
+            'productUnit',
+            'rawMaterials.product',
+            'rawMaterials.warehouse',
+            'rawMaterials.productUnit',
+            'expenses.expenseAccount',
+            'byproducts.product',
+            'byproducts.warehouse',
+            'byproducts.productUnit',
+            'journalVoucher',
+        ];
     }
 
     protected function assertStockableProduct(?Product $product, string $field): void

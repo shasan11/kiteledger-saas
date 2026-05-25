@@ -205,15 +205,17 @@ class SupportTicketController extends BaseCrudApiController
         $this->applyBranchScope($query, $request);
         $this->applyVisibilityScope($query, $request);
 
+        $now = now();
+
         $stats = $query->selectRaw("
             COUNT(*) as total,
             SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
             SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
             SUM(CASE WHEN status IN ('waiting_customer', 'waiting_internal') THEN 1 ELSE 0 END) as waiting_count,
             SUM(CASE WHEN priority = 'urgent' AND status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as urgent_count,
-            SUM(CASE WHEN due_at IS NOT NULL AND due_at < NOW() AND status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as overdue_count,
+            SUM(CASE WHEN due_at IS NOT NULL AND due_at < ? AND status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as overdue_count,
             SUM(CASE WHEN status = 'resolved' AND resolved_at >= ? THEN 1 ELSE 0 END) as resolved_this_month
-        ", [now()->startOfMonth()])
+        ", [$now, $now->copy()->startOfMonth()])
             ->first();
 
         return response()->json($stats);

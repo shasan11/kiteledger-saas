@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Reports\ReportRegistry;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,9 +24,17 @@ class ReportsController extends Controller
         return Inertia::render('App/Reports/Index', $this->sharedProps());
     }
 
-    public function show(Request $request, string $component): Response
+    public function showReport(Request $request, string $category, string $slug): Response
     {
-        return Inertia::render($component, $this->sharedProps());
+        abort_unless(ReportRegistry::resolve($category, $slug), 404);
+
+        return Inertia::render('App/Reports/Shared/ReportPage', array_merge(
+            $this->sharedProps(),
+            [
+                'reportCategory' => $category,
+                'reportKey' => $slug,
+            ]
+        ));
     }
 
     protected function sharedProps(): array

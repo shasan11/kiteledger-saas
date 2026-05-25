@@ -33,37 +33,19 @@ import {
     ShoppingOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
-import dayjs from 'dayjs';
 
 const { Title, Text, Paragraph } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-// ─── Preset definitions ───────────────────────────────────────────────────────
-const PRESETS = [
+// Presets that are generic (not country-specific).
+// Country-specific presets are injected based on the selected country.
+const BASE_PRESETS = [
     {
         key: 'no_tax',
         label: 'No Tax',
         description: 'Your business does not charge or pay tax.',
         color: 'default',
-    },
-    {
-        key: 'standard_vat',
-        label: 'Standard VAT',
-        description: 'Single VAT rate on both sales and purchases (e.g. 13% Nepal VAT).',
-        color: 'green',
-    },
-    {
-        key: 'sales_tax_only',
-        label: 'Sales Tax Only',
-        description: 'You charge tax on sales only — no purchase tax recovery.',
-        color: 'blue',
-    },
-    {
-        key: 'purchase_sales_vat',
-        label: 'Purchase + Sales VAT',
-        description: 'Separate rates for sales and purchases, both recoverable.',
-        color: 'purple',
     },
     {
         key: 'custom',
@@ -73,17 +55,11 @@ const PRESETS = [
     },
 ];
 
-const COUNTRY_OPTIONS = [
-    { value: 'NP', label: 'Nepal (NP)' },
-    { value: 'IN', label: 'India (IN)' },
-    { value: 'US', label: 'United States (US)' },
-];
-
-const CURRENCY_OPTIONS = [
-    { value: 'NPR', label: 'NPR — Nepalese Rupee' },
-    { value: 'INR', label: 'INR — Indian Rupee' },
-    { value: 'USD', label: 'USD — US Dollar' },
-];
+const COUNTRY_PRESETS = {
+    standard_vat:       { label: 'Standard VAT',          description: 'Single VAT rate on both sales and purchases.',        color: 'green'  },
+    sales_tax_only:     { label: 'Sales Tax Only',         description: 'You charge tax on sales only — no purchase recovery.', color: 'blue'   },
+    purchase_sales_vat: { label: 'Purchase + Sales VAT',   description: 'Separate rates for sales and purchases, both recoverable.', color: 'purple' },
+};
 
 const REGISTRATION_TYPE_OPTIONS = [
     { value: 'vat',   label: 'VAT Number' },
@@ -100,7 +76,6 @@ const PRODUCT_BEHAVIOR_OPTIONS = [
     { value: 'some_different',  label: 'Some products/services have different rates' },
 ];
 
-// ─── Step labels ──────────────────────────────────────────────────────────────
 const STEPS = [
     { title: 'Registration',  icon: <GlobalOutlined /> },
     { title: 'Sales Tax',     icon: <ShoppingOutlined /> },
@@ -109,7 +84,6 @@ const STEPS = [
     { title: 'Review',        icon: <CheckCircleOutlined /> },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const yesNo = (v) => (v ? 'Yes' : 'No');
 const rateLabel = (v) => (v != null ? `${v}%` : '—');
 
@@ -118,6 +92,7 @@ export default function TaxSettings({ auth }) {
     const [loading, setLoading]   = useState(true);
     const [saving, setSaving]     = useState(false);
     const [step, setStep]         = useState(0);
+    const [countryOptions, setCountryOptions] = useState([]);
     const [values, setValues]     = useState({
         is_tax_registered:           false,
         registration_type:           'vat',
@@ -144,24 +119,57 @@ export default function TaxSettings({ auth }) {
     const [advancedMode, setAdvancedMode] = useState(false);
     const [msgApi, contextHolder]         = message.useMessage();
 
-    // ── Load existing settings ────────────────────────────────────────────────
+    // Derived: presets to show for currently selected country
+    const selectedCountry = values.country_code || 'NP';
+    const selectedCountryMeta = countryOptions.find((c) => c.value === selectedCountry);
+    const hasPreset = selectedCountryMeta?.has_preset;
+
+    const availablePresets = [
+        ...BASE_PRESETS,
+        ...(hasPreset
+            ? Object.entries(COUNTRY_PRESETS).map(([key, p]) => ({ key, ...p }))
+            : []),
+    ];
+
+    // Load settings + country options
     useEffect(() => {
-        axios
-            .get(api('/api/tax-settings'))
-            .then(({ data }) => {
-                const s = data.data;
+        Promise.all([
+            axios.get(api('/api/tax-settings')),
+            axios.get(api('/api/tax-country-options')),
+        ])
+            .then(([settingsRes, countriesRes]) => {
+                const s = settingsRes.data?.data;
                 if (s) {
                     setValues((prev) => ({ ...prev, ...s }));
                     setAdvancedMode(!!s.advanced_mode);
                     form.setFieldsValue(s);
                 }
+                setCountryOptions(countriesRes.data || []);
             })
             .catch(() => {})
             .finally(() => setLoading(false));
     }, []);
 
-    // ── Apply preset defaults ─────────────────────────────────────────────────
+    // When country changes, auto-fill currency and reset tax name/rate from preset
+    const handleCountryChange = (code) => {
+        const meta = countryOptions.find((c) => c.value === code);
+        const updates = {
+            country_code: code,
+        };
+        if (meta?.currency) updates.default_currency = meta.currency;
+        if (meta?.tax_name)  updates.sales_tax_name   = meta.tax_name;
+        if (meta?.tax_name)  updates.purchase_tax_name = meta.tax_name;
+        if (meta?.default_rate != null) {
+            updates.sales_tax_rate_percent    = meta.default_rate;
+            updates.purchase_tax_rate_percent = meta.default_rate;
+        }
+        const next = { ...values, ...updates };
+        setValues(next);
+        form.setFieldsValue(next);
+    };
+
     const applyPreset = (key) => {
+        const meta = countryOptions.find((c) => c.value === selectedCountry);
         const updates = { preset: key };
 
         if (key === 'no_tax') {
@@ -169,19 +177,24 @@ export default function TaxSettings({ auth }) {
         } else if (key === 'standard_vat') {
             Object.assign(updates, {
                 sales_tax_enabled: true, purchase_tax_enabled: true,
-                sales_tax_name: 'VAT', purchase_tax_name: 'VAT',
-                sales_tax_rate_percent: 13, purchase_tax_rate_percent: 13,
+                sales_tax_name: meta?.tax_name || 'VAT',
+                purchase_tax_name: meta?.tax_name || 'VAT',
+                sales_tax_rate_percent: meta?.default_rate ?? 13,
+                purchase_tax_rate_percent: meta?.default_rate ?? 13,
             });
         } else if (key === 'sales_tax_only') {
             Object.assign(updates, {
                 sales_tax_enabled: true, purchase_tax_enabled: false,
-                sales_tax_name: 'VAT', sales_tax_rate_percent: 13,
+                sales_tax_name: meta?.tax_name || 'VAT',
+                sales_tax_rate_percent: meta?.default_rate ?? 13,
             });
         } else if (key === 'purchase_sales_vat') {
             Object.assign(updates, {
                 sales_tax_enabled: true, purchase_tax_enabled: true,
-                sales_tax_name: 'VAT', purchase_tax_name: 'VAT',
-                sales_tax_rate_percent: 13, purchase_tax_rate_percent: 13,
+                sales_tax_name: meta?.tax_name || 'VAT',
+                purchase_tax_name: meta?.tax_name || 'VAT',
+                sales_tax_rate_percent: meta?.default_rate ?? 13,
+                purchase_tax_rate_percent: meta?.default_rate ?? 13,
                 purchase_tax_recoverable: true,
             });
         }
@@ -191,7 +204,6 @@ export default function TaxSettings({ auth }) {
         form.setFieldsValue(next);
     };
 
-    // ── Per-step validation ───────────────────────────────────────────────────
     const validateStep = () => {
         if (step === 0) {
             const v = form.getFieldsValue();
@@ -226,7 +238,6 @@ export default function TaxSettings({ auth }) {
 
     const prev = () => setStep((s) => Math.max(s - 1, 0));
 
-    // ── Save ──────────────────────────────────────────────────────────────────
     const save = async () => {
         const current = form.getFieldsValue();
         const payload  = { ...values, ...current, wizard_completed: true };
@@ -256,10 +267,16 @@ export default function TaxSettings({ auth }) {
         }
     };
 
-    // ── Step content ──────────────────────────────────────────────────────────
     const renderStep = () => {
         switch (step) {
-            case 0: return <StepRegistration form={form} values={values} />;
+            case 0: return (
+                <StepRegistration
+                    form={form}
+                    values={values}
+                    countryOptions={countryOptions}
+                    onCountryChange={handleCountryChange}
+                />
+            );
             case 1: return <StepSalesTax     form={form} values={values} />;
             case 2: return <StepPurchaseTax  form={form} values={values} />;
             case 3: return <StepProducts     form={form} values={values} />;
@@ -275,7 +292,7 @@ export default function TaxSettings({ auth }) {
 
             <div style={{ padding: '24px 24px 48px', maxWidth: 860, margin: '0 auto' }}>
 
-                {/* Header row */}
+                {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
                     <div>
                         <Title level={4} style={{ margin: 0 }}>Tax Settings</Title>
@@ -293,7 +310,6 @@ export default function TaxSettings({ auth }) {
                         {advancedMode && (
                             <Button
                                 size="small"
-                                type="default"
                                 onClick={() => router.visit('/tax/advanced')}
                             >
                                 Advanced Setup
@@ -302,6 +318,26 @@ export default function TaxSettings({ auth }) {
                     </Space>
                 </div>
 
+                {/* Country hint */}
+                {selectedCountryMeta && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        style={{ marginBottom: 16 }}
+                        message={
+                            <span>
+                                Country: <strong>{selectedCountryMeta.label}</strong>
+                                {selectedCountryMeta.tax_name && (
+                                    <> — default tax: <strong>{selectedCountryMeta.tax_name} {selectedCountryMeta.default_rate}%</strong></>
+                                )}
+                                {!selectedCountryMeta.has_preset && (
+                                    <> — <Text type="warning">No preset available. Rates will be set manually.</Text></>
+                                )}
+                            </span>
+                        }
+                    />
+                )}
+
                 {/* Preset picker */}
                 <Card
                     title={<Text strong>Quick Start: Choose a preset</Text>}
@@ -309,7 +345,7 @@ export default function TaxSettings({ auth }) {
                     style={{ marginBottom: 24 }}
                 >
                     <Row gutter={[10, 10]}>
-                        {PRESETS.map((p) => {
+                        {availablePresets.map((p) => {
                             const selected = values.preset === p.key;
                             return (
                                 <Col key={p.key} xs={24} sm={12} md={8}>
@@ -390,9 +426,20 @@ export default function TaxSettings({ auth }) {
     );
 }
 
-// ─── Step 1: Business Tax Registration ────────────────────────────────────────
-function StepRegistration({ form, values }) {
+// ── Step 1: Business Registration ─────────────────────────────────────────────
+function StepRegistration({ form, values, countryOptions, onCountryChange }) {
     const isRegistered = Form.useWatch('is_tax_registered', form);
+    const selectedCountry = Form.useWatch('country_code', form) || values.country_code;
+
+    // Derive currency options from loaded country list
+    const currencyOptions = countryOptions
+        .filter((c) => c.currency)
+        .reduce((acc, c) => {
+            if (!acc.find((o) => o.value === c.currency)) {
+                acc.push({ value: c.currency, label: `${c.currency} — ${c.label}` });
+            }
+            return acc;
+        }, []);
 
     return (
         <div>
@@ -448,12 +495,28 @@ function StepRegistration({ form, values }) {
             <Row gutter={16}>
                 <Col xs={24} sm={12}>
                     <Form.Item name="country_code" label="Country">
-                        <Select options={COUNTRY_OPTIONS} />
+                        <Select
+                            options={countryOptions.map((c) => ({
+                                value: c.value,
+                                label: `${c.label} (${c.value})`,
+                            }))}
+                            showSearch
+                            filterOption={(input, option) =>
+                                option.label.toLowerCase().includes(input.toLowerCase())
+                            }
+                            onChange={onCountryChange}
+                        />
                     </Form.Item>
                 </Col>
                 <Col xs={24} sm={12}>
                     <Form.Item name="default_currency" label="Default Tax Currency">
-                        <Select options={CURRENCY_OPTIONS} />
+                        <Select
+                            options={currencyOptions}
+                            showSearch
+                            filterOption={(input, option) =>
+                                option.label.toLowerCase().includes(input.toLowerCase())
+                            }
+                        />
                     </Form.Item>
                 </Col>
             </Row>
@@ -461,7 +524,7 @@ function StepRegistration({ form, values }) {
     );
 }
 
-// ─── Step 2: Default Sales Tax ────────────────────────────────────────────────
+// ── Step 2: Default Sales Tax ──────────────────────────────────────────────────
 function StepSalesTax({ form }) {
     const enabled = Form.useWatch('sales_tax_enabled', form);
 
@@ -525,7 +588,7 @@ function StepSalesTax({ form }) {
     );
 }
 
-// ─── Step 3: Default Purchase Tax ────────────────────────────────────────────
+// ── Step 3: Default Purchase Tax ──────────────────────────────────────────────
 function StepPurchaseTax({ form }) {
     const enabled = Form.useWatch('purchase_tax_enabled', form);
 
@@ -593,8 +656,8 @@ function StepPurchaseTax({ form }) {
     );
 }
 
-// ─── Step 4: Product Tax Behavior ────────────────────────────────────────────
-function StepProducts({ form }) {
+// ── Step 4: Product Tax Behavior ──────────────────────────────────────────────
+function StepProducts() {
     return (
         <div>
             <Title level={5} style={{ marginBottom: 2 }}>How does tax apply to your products and services?</Title>
@@ -622,9 +685,9 @@ function StepProducts({ form }) {
     );
 }
 
-// ─── Step 5: Review ───────────────────────────────────────────────────────────
+// ── Step 5: Review ─────────────────────────────────────────────────────────────
 function StepReview({ values: v }) {
-    const preset    = PRESETS.find((p) => p.key === v.preset);
+    const preset    = [...BASE_PRESETS, ...Object.entries(COUNTRY_PRESETS).map(([key, p]) => ({ key, ...p }))].find((p) => p.key === v.preset);
     const behavior  = PRODUCT_BEHAVIOR_OPTIONS.find((o) => o.value === v.product_tax_behavior);
 
     return (

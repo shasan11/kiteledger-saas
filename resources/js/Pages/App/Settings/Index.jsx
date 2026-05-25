@@ -22,6 +22,7 @@ import {
   AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
+  CreditCardOutlined,
   DollarOutlined,
   FileTextOutlined,
   InboxOutlined,
@@ -61,6 +62,7 @@ const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
 const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
 const AiSettings = lazy(() => import('./AiSettings'));
+const PaymentGatewaySettings = lazy(() => import('./PaymentGatewaySettings'));
 
 const DEFAULT_TAB_KEY = 'company-profile';
 
@@ -267,6 +269,20 @@ const SETTINGS_TABS = [
     description: 'Print document layouts.',
     icon: <FileTextOutlined />,
     component: PrintingTemplates,
+    props: {},
+  },
+
+  {
+    key: 'payments-group',
+    label: 'Online Payments',
+    disabled: true,
+  },
+  {
+    key: 'payment-gateways',
+    label: 'Payment Gateways',
+    description: 'Configure online payment gateways, payment links, and customer checkout settings.',
+    icon: <CreditCardOutlined />,
+    component: PaymentGatewaySettings,
     props: {},
   },
 

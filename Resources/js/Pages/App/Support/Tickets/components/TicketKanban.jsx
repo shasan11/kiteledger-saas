@@ -6,6 +6,10 @@ import axios from 'axios';
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const KANBAN_COLUMNS = [
     { key: 'open', label: 'Open', color: '#1677ff' },
@@ -34,7 +38,7 @@ export default function TicketKanban({ onRefresh }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get(api('/api/support-tickets'), { params: { page_size: 200 } });
+            const res = await axios.get(api('/api/support-tickets'), { params: { page_size: 200 }, headers: authHeaders() });
             const rows = res.data?.data || res.data?.results || [];
 
             const grouped = {};
@@ -69,7 +73,7 @@ export default function TicketKanban({ onRefresh }) {
         });
 
         try {
-            await axios.patch(api(`/api/support-tickets/${ticketId}/status`), { status: newStatus });
+            await axios.patch(api(`/api/support-tickets/${ticketId}/status`), { status: newStatus }, { headers: authHeaders() });
             message.success('Status updated');
             onRefresh?.();
         } catch (err) {
@@ -133,7 +137,7 @@ export default function TicketKanban({ onRefresh }) {
                                                 border: isOverdue ? `1px solid ${token.colorError}` : undefined,
                                             }}
                                             bodyStyle={{ padding: '8px 10px' }}
-                                            onClick={() => router.visit(`/support/tickets/${ticket.id}`)}
+                                            onClick={() => router.visit(`/crm/tickets/${ticket.id}`)}
                                             draggable
                                             onDragStart={(e) => e.dataTransfer.setData('ticketId', ticket.id)}
                                         >

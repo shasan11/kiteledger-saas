@@ -95,8 +95,8 @@ class TaxRateController extends BaseCrudApiController
     protected array $storeRules = [
         'tax_class_id' => ['required', 'uuid', 'exists:tax_classes,id'],
         'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
-        'country_code' => ['required', 'in:NP,IN,US'],
-        'tax_type' => ['required', 'in:vat,gst,sales_tax,use_tax,withholding,tds,tcs'],
+        'country_code' => ['required', 'string', 'size:2'],
+        'tax_type' => ['required', 'string', 'max:50'],
         'name' => ['required', 'string', 'max:120'],
         'code' => ['nullable', 'string', 'max:50'],
         'rate_percent' => ['nullable', 'numeric', 'min:0'],
@@ -116,8 +116,8 @@ class TaxRateController extends BaseCrudApiController
         return [
             'tax_class_id' => ['sometimes', 'required', 'uuid', 'exists:tax_classes,id'],
             'tax_jurisdiction_id' => ['sometimes', 'nullable', 'uuid', 'exists:tax_jurisdictions,id'],
-            'country_code' => ['sometimes', 'required', 'in:NP,IN,US'],
-            'tax_type' => ['sometimes', 'required', 'in:vat,gst,sales_tax,use_tax,withholding,tds,tcs'],
+            'country_code' => ['sometimes', 'required', 'string', 'size:2'],
+            'tax_type' => ['sometimes', 'required', 'string', 'max:50'],
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'code' => ['sometimes', 'nullable', 'string', 'max:50'],
             'rate_percent' => ['sometimes', 'nullable', 'numeric', 'min:0'],

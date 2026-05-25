@@ -17,7 +17,6 @@ import {
     TeamOutlined,
     UserOutlined,
     WalletOutlined,
-    CustomerServiceOutlined,
     PlusOutlined,
 } from '@ant-design/icons';
 import { Button, Dropdown, Grid, Layout, theme } from 'antd';
@@ -26,6 +25,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
 import { AppContextProvider } from '@/Contexts/AppContext';
+import KiteAiFloatingButton from '@/Components/AI/KiteAiFloatingButton';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -148,17 +148,10 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () =>
                             visit('crm.campaigns.index', '/crm/campaigns'),
                     },
-                ],
-            },
-            {
-                key: 'support',
-                icon: <CustomerServiceOutlined />,
-                label: 'Support',
-                children: [
                     {
-                        key: 'support-tickets',
+                        key: 'crm-tickets',
                         label: 'Tickets',
-                        onClick: () => visit('support.tickets.index', '/support/tickets'),
+                        onClick: () => visit('crm.tickets.index', '/crm/tickets'),
                     },
                 ],
             },
@@ -694,6 +687,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/crm/deals')) return ['deals'];
         if (isActive('/crm/activity-inbox')) return ['activity-inbox'];
         if (isActive('/crm/activities')) return ['activities'];
+        if (isActive('/crm/tickets') || isActive('/support/tickets')) return ['crm-tickets'];
 
         if (isActive('/workflow')) return ['workflow'];
 
@@ -980,6 +974,8 @@ export default function AuthenticatedLayout({ header, children }) {
                     </Content>
                 </Layout>
             </Layout>
+
+            <KiteAiFloatingButton />
 
             {quickAddItems.length > 0 && (
                 <Dropdown

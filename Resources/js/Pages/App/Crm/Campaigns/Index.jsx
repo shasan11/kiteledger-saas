@@ -12,6 +12,10 @@ import * as Yup from 'yup';
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const formatMoney = (v) => v != null ? Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
 const labelize = (v) => v ? String(v).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '-';
@@ -26,7 +30,7 @@ export default function Campaigns({ auth }) {
 
     useEffect(() => {
         setSummaryLoading(true);
-        axios.get(api('/api/crm-campaigns/summary'))
+        axios.get(api('/api/crm-campaigns/summary'), { headers: authHeaders() })
             .then((res) => setSummary(res.data))
             .catch(() => setSummary(null))
             .finally(() => setSummaryLoading(false));

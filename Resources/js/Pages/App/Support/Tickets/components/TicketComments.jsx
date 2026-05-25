@@ -8,6 +8,10 @@ const { TextArea } = Input;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const formatDateTime = (v) => {
     if (!v) return '-';
@@ -43,7 +47,7 @@ export default function TicketComments({ ticketId, isInternal = false }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get(api(`/api/support-tickets/${ticketId}/comments`));
+            const res = await axios.get(api(`/api/support-tickets/${ticketId}/comments`), { headers: authHeaders() });
             const all = Array.isArray(res.data) ? res.data : (res.data?.data || []);
             setComments(isInternal ? all.filter((c) => c.is_internal) : all.filter((c) => !c.is_internal));
         } catch {
@@ -63,7 +67,7 @@ export default function TicketComments({ ticketId, isInternal = false }) {
                 body: values.body.trim(),
                 is_internal: isInternal,
                 type: isInternal ? 'internal_note' : 'public_reply',
-            });
+            }, { headers: authHeaders() });
             form.resetFields();
             message.success(isInternal ? 'Note added' : 'Reply sent');
             load();

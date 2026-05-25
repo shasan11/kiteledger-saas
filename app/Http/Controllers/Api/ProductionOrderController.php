@@ -149,7 +149,7 @@ class ProductionOrderController extends BaseCrudApiController
         'total_finished_goods_cost' => ['nullable', 'numeric', 'min:0'],
         'total_production_cost' => ['nullable', 'numeric', 'min:0'],
         'finished_goods_unit_cost' => ['nullable', 'numeric', 'min:0'],
-        'status' => ['nullable', 'in:draft,approved,completed,void,cancelled'],
+        'status' => ['nullable', 'in:draft,approved,released,in_progress,partially_produced,completed,void,cancelled'],
         'approved' => ['nullable', 'boolean'],
         'void' => ['nullable', 'boolean'],
         'voided_reason' => ['nullable', 'string', 'max:500'],
@@ -177,7 +177,7 @@ class ProductionOrderController extends BaseCrudApiController
 
     protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
     {
-        if (((bool) $record->approved || (bool) $record->stock_posted || $record->status !== 'draft') && $this->hasProtectedEdit($parentData, $nestedData)) {
+        if (((bool) $record->approved || $record->status !== 'draft') && $this->hasProtectedEdit($parentData, $nestedData)) {
             $this->throwValidation(['status' => ['Approved production orders cannot be edited directly. Void and recreate if required.']]);
         }
 
@@ -221,7 +221,7 @@ class ProductionOrderController extends BaseCrudApiController
     {
         $record = $this->findRecord($id);
 
-        if ((bool) $record->approved || (bool) $record->stock_posted || $record->status !== 'draft') {
+        if ((bool) $record->approved || $record->status !== 'draft') {
             $this->throwValidation(['status' => ['Approved production orders cannot be hard deleted. Void them instead.']]);
         }
 
@@ -245,14 +245,14 @@ class ProductionOrderController extends BaseCrudApiController
                 'unit_cost' => $record->finished_goods_unit_cost,
             ],
         ], $data['byproducts'] ?? []);
-        $data['stock_posting_status'] = (bool) $record->void ? 'Voided/Reversed' : ((bool) $record->stock_posted ? 'Posted to Warehouse Stock' : 'Draft');
+        $data['stock_posting_status'] = (bool) $record->void ? 'Voided' : ((bool) $record->approved ? 'Approved — Pending Journal' : 'Draft');
 
         return $data;
     }
 
     protected function shouldApprove(Model $record, array $parentData): bool
     {
-        if ((bool) $record->stock_posted || (bool) $record->void) {
+        if ((bool) $record->approved || (bool) $record->void) {
             return false;
         }
 

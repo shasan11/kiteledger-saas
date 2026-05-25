@@ -43,7 +43,7 @@ class TaxSettingsController extends Controller
             'registration_type'            => ['nullable', 'string', 'max:30'],
             'tax_number'                   => ['nullable', 'string', 'max:80'],
             'tax_registered_name'          => ['nullable', 'string', 'max:180'],
-            'country_code'                 => ['nullable', 'string', 'max:3'],
+            'country_code'                 => ['nullable', 'string', 'size:2'],
             'default_currency'             => ['nullable', 'string', 'max:10'],
             'registration_effective_date'  => ['nullable', 'date'],
             'sales_tax_enabled'            => ['nullable', 'boolean'],

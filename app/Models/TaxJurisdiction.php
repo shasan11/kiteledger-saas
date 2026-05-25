@@ -25,6 +25,7 @@ class TaxJurisdiction extends Model
         'name',
         'code',
         'tax_system',
+        'tax_system_id',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -42,6 +43,11 @@ class TaxJurisdiction extends Model
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];
+    }
+
+    public function taxSystem(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(TaxSystem::class);
     }
 
     public function taxRegistrations(): HasMany

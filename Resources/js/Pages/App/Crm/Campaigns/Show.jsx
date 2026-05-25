@@ -10,6 +10,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 const { Text, Title, Paragraph } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const formatMoney = (v) => v != null ? Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
 const formatDate = (v) => { if (!v) return '-'; try { return new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return v; } };
@@ -25,7 +29,7 @@ function RelatedList({ endpoint, params, columns, emptyText, onRowClick }) {
     useEffect(() => {
         let mounted = true;
         setLoading(true);
-        axios.get(api(endpoint), { params: { ...params, page_size: 50 } })
+        axios.get(api(endpoint), { params: { ...params, page_size: 50 }, headers: authHeaders() })
             .then((res) => {
                 if (mounted) {
                     const d = res.data;
@@ -67,7 +71,7 @@ export default function CampaignShow({ auth }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await axios.get(api(`/api/crm-campaigns/${campaignId}`));
+            const res = await axios.get(api(`/api/crm-campaigns/${campaignId}`), { headers: authHeaders() });
             setCampaign(res.data?.data || res.data);
         } catch (err) {
             message.error(err?.response?.data?.message || 'Failed to load campaign');
@@ -230,7 +234,7 @@ export default function CampaignShow({ auth }) {
                     params={{ campaign_id: campaignId }}
                     columns={ticketColumns}
                     emptyText="No tickets linked"
-                    onRowClick={(r) => router.visit(`/support/tickets/${r.id}`)}
+                    onRowClick={(r) => router.visit(`/crm/tickets/${r.id}`)}
                 />
             ),
         },

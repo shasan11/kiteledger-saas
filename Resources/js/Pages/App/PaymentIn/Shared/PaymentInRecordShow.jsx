@@ -1,14 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
     Alert,
+    Badge,
     Button,
     Card,
+    Descriptions,
     Drawer,
     Empty,
+    Input,
     Modal,
+    Popconfirm,
     Skeleton,
     Space,
     Table,
@@ -16,20 +20,27 @@ import {
     Tooltip,
     Typography,
     theme,
+    message as antMessage,
 } from 'antd';
 import {
     ArrowLeftOutlined,
     ArrowRightOutlined,
     CheckCircleOutlined,
     CalendarOutlined,
+    CopyOutlined,
+    DisconnectOutlined,
     DollarCircleOutlined,
     EditOutlined,
     ExclamationCircleOutlined,
+    ExportOutlined,
     FileTextOutlined,
+    LinkOutlined,
     PrinterOutlined,
+    ReloadOutlined,
     RollbackOutlined,
     StopOutlined,
     UserOutlined,
+    WarningOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
@@ -39,6 +50,22 @@ const { useToken } = theme;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
+
+const PROVIDER_LABELS = {
+    stripe: 'Stripe',
+    paypal: 'PayPal',
+    razorpay: 'Razorpay',
+    khalti: 'Khalti',
+    esewa: 'eSewa',
+};
+
+const PROVIDER_COLORS = {
+    stripe: '#635BFF',
+    paypal: '#003087',
+    razorpay: '#3395FF',
+    khalti: '#5C2D91',
+    esewa: '#60BB46',
+};
 
 const APPROVED_STATUSES = new Set([
     'posted',
@@ -1025,6 +1052,7 @@ function HeaderBlock({
     onConvertToSalesOrder,
     onConvertToInvoice,
     onCollectPayment,
+    onSharePaymentLink,
 }) {
     const normalizedType = normalizeDocumentType(documentType);
     const isApproved = record?.approved === true;
@@ -1084,7 +1112,7 @@ function HeaderBlock({
                         </Tooltip>
                     )}
 
-                    {normalizedType === 'invoice' && isApproved && (
+                    {normalizedType === 'invoice' && isApproved && !isVoided && (
                         <Tooltip title="Collect payment for this Invoice">
                             <Button
                                 type="primary"
@@ -1093,6 +1121,18 @@ function HeaderBlock({
                                 onClick={onCollectPayment}
                             >
                                 Collect Payment
+                            </Button>
+                        </Tooltip>
+                    )}
+
+                    {normalizedType === 'invoice' && isApproved && !isVoided && (
+                        <Tooltip title="Generate or share a payment link so your customer can pay online">
+                            <Button
+                                icon={<LinkOutlined />}
+                                disabled={loading || !record}
+                                onClick={onSharePaymentLink}
+                            >
+                                Share Payment Link
                             </Button>
                         </Tooltip>
                     )}
@@ -1527,6 +1567,291 @@ function buildMainCards(record, documentType) {
     return cards;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment Link Drawer
+// ─────────────────────────────────────────────────────────────────────────────
+function PaymentLinkDrawer({ open, onClose, invoiceId, invoiceNo, currency }) {
+    const { token } = theme.useToken();
+
+    const [linkData, setLinkData]       = useState(null);
+    const [payments, setPayments]       = useState([]);
+    const [loading, setLoading]         = useState(false);
+    const [generating, setGenerating]   = useState(false);
+    const [disabling, setDisabling]     = useState(false);
+
+    const load = useCallback(async () => {
+        if (!open || !invoiceId) return;
+        setLoading(true);
+        try {
+            const [linkRes, paymentsRes] = await Promise.allSettled([
+                axios.get(api(`/api/invoices/${invoiceId}/payment-link`)),
+                axios.get(api('/api/online-payments/'), {
+                    params: { invoice_id: invoiceId, page_size: 20 },
+                }),
+            ]);
+            if (linkRes.status === 'fulfilled') setLinkData(linkRes.value.data);
+            if (paymentsRes.status === 'fulfilled')
+                setPayments(paymentsRes.value.data?.results || paymentsRes.value.data || []);
+        } catch {
+            // silent — individual settled errors handled above
+        } finally {
+            setLoading(false);
+        }
+    }, [open, invoiceId]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const handleGenerate = async () => {
+        setGenerating(true);
+        try {
+            const res = await axios.post(api(`/api/invoices/${invoiceId}/payment-link`));
+            setLinkData(res.data);
+            antMessage.success('Payment link generated');
+        } catch (e) {
+            antMessage.error(e?.response?.data?.message || 'Failed to generate link');
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const handleDisable = async () => {
+        setDisabling(true);
+        try {
+            await axios.delete(api(`/api/invoices/${invoiceId}/payment-link`));
+            setLinkData((prev) => ({
+                ...prev,
+                link: { ...prev?.link, active: false },
+                public_url: null,
+            }));
+            antMessage.success('Payment link disabled');
+        } catch (e) {
+            antMessage.error(e?.response?.data?.message || 'Failed to disable link');
+        } finally {
+            setDisabling(false);
+        }
+    };
+
+    const publicUrl = linkData?.public_url;
+    const link      = linkData?.link;
+    const isActive  = !!(link?.active && !link?.is_expired && publicUrl);
+    const isExpired = !!(link && link.is_expired);
+
+    const statusTag = !link
+        ? <Tag>No link yet</Tag>
+        : isActive
+        ? <Tag color="success" icon={<CheckCircleOutlined />}>Active</Tag>
+        : isExpired
+        ? <Tag color="warning" icon={<WarningOutlined />}>Expired</Tag>
+        : <Tag icon={<StopOutlined />}>Disabled</Tag>;
+
+    const paymentStatusColor = { succeeded: 'success', failed: 'error', refunded: 'warning', pending: 'processing' };
+
+    return (
+        <Drawer
+            title={<Space><LinkOutlined />Share Payment Link</Space>}
+            open={open}
+            onClose={onClose}
+            width={520}
+            destroyOnClose={false}
+            styles={{ body: { padding: 20, background: token.colorBgLayout } }}
+        >
+            {loading ? (
+                <Skeleton active paragraph={{ rows: 10 }} />
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                    {/* ── Status & URL ─────────────────────────────────────── */}
+                    <Card size="small" style={{ borderRadius: token.borderRadiusLG }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Typography.Text strong>Payment Link</Typography.Text>
+                            {statusTag}
+                        </div>
+
+                        {isActive ? (
+                            <>
+                                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+                                    Share this link with your customer so they can pay online.
+                                </Typography.Text>
+                                <Space.Compact style={{ width: '100%' }}>
+                                    <Input value={publicUrl} readOnly style={{ fontSize: 12 }} />
+                                    <Button
+                                        icon={<CopyOutlined />}
+                                        onClick={() => {
+                                            navigator.clipboard?.writeText(publicUrl);
+                                            antMessage.success('Link copied to clipboard');
+                                        }}
+                                    >
+                                        Copy
+                                    </Button>
+                                    <Tooltip title="Open in new tab">
+                                        <Button icon={<ExportOutlined />} onClick={() => window.open(publicUrl, '_blank')} />
+                                    </Tooltip>
+                                </Space.Compact>
+                            </>
+                        ) : (
+                            <Alert
+                                type="info"
+                                showIcon
+                                message={!link
+                                    ? 'No payment link exists yet. Generate one to let customers pay online.'
+                                    : isExpired
+                                    ? 'This payment link has expired. Regenerate to create a fresh one.'
+                                    : 'This payment link is disabled. Regenerate to reactivate it.'}
+                            />
+                        )}
+                    </Card>
+
+                    {/* ── QR Code ──────────────────────────────────────────── */}
+                    {isActive && (
+                        <Card
+                            size="small"
+                            style={{ borderRadius: token.borderRadiusLG, textAlign: 'center' }}
+                            title={<Space><span>QR Code</span><Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>— customer scans to pay</Typography.Text></Space>}
+                        >
+                            <div style={{ padding: '12px 0' }}>
+                                <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(publicUrl)}&size=200x200&margin=10&bgcolor=ffffff`}
+                                    alt="Payment QR Code"
+                                    width={200}
+                                    height={200}
+                                    style={{
+                                        border: '6px solid #fff',
+                                        borderRadius: 8,
+                                        boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+                                    }}
+                                />
+                                <div style={{ marginTop: 10 }}>
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                        Invoice #{invoiceNo}
+                                    </Typography.Text>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* ── Link details ─────────────────────────────────────── */}
+                    {link && (
+                        <Card size="small" title="Link Details" style={{ borderRadius: token.borderRadiusLG }}>
+                            <Descriptions size="small" column={1} bordered>
+                                <Descriptions.Item label="Status">{statusTag}</Descriptions.Item>
+                                {link.expires_at && (
+                                    <Descriptions.Item label="Expires">
+                                        {formatDate(link.expires_at)}
+                                    </Descriptions.Item>
+                                )}
+                                {link.last_accessed_at && (
+                                    <Descriptions.Item label="Last Accessed">
+                                        {formatDate(link.last_accessed_at)}
+                                    </Descriptions.Item>
+                                )}
+                            </Descriptions>
+                        </Card>
+                    )}
+
+                    {/* ── Actions ──────────────────────────────────────────── */}
+                    <Card size="small" title="Actions" style={{ borderRadius: token.borderRadiusLG }}>
+                        <Space wrap>
+                            <Button
+                                type={!link || !isActive ? 'primary' : 'default'}
+                                icon={<ReloadOutlined />}
+                                loading={generating}
+                                onClick={handleGenerate}
+                            >
+                                {!link ? 'Generate Link' : 'Regenerate Link'}
+                            </Button>
+
+                            {link && isActive && (
+                                <Popconfirm
+                                    title="Disable payment link?"
+                                    description="Customers will no longer be able to pay via this link."
+                                    onConfirm={handleDisable}
+                                    okText="Disable"
+                                    okButtonProps={{ danger: true }}
+                                    cancelText="Cancel"
+                                >
+                                    <Button danger icon={<DisconnectOutlined />} loading={disabling}>
+                                        Disable Link
+                                    </Button>
+                                </Popconfirm>
+                            )}
+
+                            <Tooltip title="Refresh status">
+                                <Button icon={<ReloadOutlined />} onClick={load} />
+                            </Tooltip>
+                        </Space>
+                    </Card>
+
+                    {/* ── Online Payment History ────────────────────────────── */}
+                    <Card
+                        size="small"
+                        title={
+                            <Space>
+                                Online Payments
+                                <Badge count={payments.length} color="#1677ff" overflowCount={99} />
+                            </Space>
+                        }
+                        style={{ borderRadius: token.borderRadiusLG }}
+                    >
+                        {payments.length === 0 ? (
+                            <Empty
+                                description="No online payments received yet"
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                style={{ padding: '20px 0' }}
+                            />
+                        ) : (
+                            <Table
+                                size="small"
+                                rowKey="id"
+                                dataSource={payments}
+                                pagination={{ pageSize: 10, size: 'small', hideOnSinglePage: true }}
+                                columns={[
+                                    {
+                                        title: 'Date',
+                                        dataIndex: 'paid_at',
+                                        width: 100,
+                                        render: (v, r) => formatDate(v || r.created_at),
+                                    },
+                                    {
+                                        title: 'Method',
+                                        dataIndex: 'provider',
+                                        width: 100,
+                                        render: (v) => (
+                                            <Tag color={PROVIDER_COLORS[v] ? undefined : 'blue'}
+                                                style={PROVIDER_COLORS[v] ? { background: PROVIDER_COLORS[v] + '18', borderColor: PROVIDER_COLORS[v], color: PROVIDER_COLORS[v] } : {}}>
+                                                {PROVIDER_LABELS[v] || v}
+                                            </Tag>
+                                        ),
+                                    },
+                                    {
+                                        title: 'Amount',
+                                        dataIndex: 'amount',
+                                        align: 'right',
+                                        render: (v, r) => {
+                                            const sym = r.currency?.symbol || currency?.symbol || '';
+                                            return `${sym}${Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                        },
+                                    },
+                                    {
+                                        title: 'Status',
+                                        dataIndex: 'status',
+                                        width: 100,
+                                        render: (v) => (
+                                            <Tag color={paymentStatusColor[v] || 'default'}>
+                                                {String(v || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                            </Tag>
+                                        ),
+                                    },
+                                ]}
+                            />
+                        )}
+                    </Card>
+
+                </div>
+            )}
+        </Drawer>
+    );
+}
+
 export default function PaymentInRecordShow({
     id,
     title,
@@ -1552,6 +1877,8 @@ export default function PaymentInRecordShow({
 
     const [approveModalOpen, setApproveModalOpen] = useState(false);
     const [approveLoading, setApproveLoading] = useState(false);
+
+    const [paymentLinkOpen, setPaymentLinkOpen] = useState(false);
 
     const handleApprove = async () => {
         if (!record) return;
@@ -1754,6 +2081,7 @@ export default function PaymentInRecordShow({
                     onConvertToSalesOrder={handleConvertToSalesOrder}
                     onConvertToInvoice={handleConvertToInvoice}
                     onCollectPayment={handleCollectPayment}
+                    onSharePaymentLink={() => setPaymentLinkOpen(true)}
                 />
             }
         >
@@ -2246,6 +2574,17 @@ export default function PaymentInRecordShow({
                 <p>Are you sure you want to approve this transaction?</p>
                 <p>The final document number will be assigned after approval and the transaction will be finalized.</p>
             </Modal>
+
+            {/* ── Payment Link Drawer ──────────────────────────────────── */}
+            {normalizedDocumentType === 'invoice' && (
+                <PaymentLinkDrawer
+                    open={paymentLinkOpen}
+                    onClose={() => setPaymentLinkOpen(false)}
+                    invoiceId={id}
+                    invoiceNo={documentNumber}
+                    currency={record?.currency}
+                />
+            )}
 
             <Drawer
                 title="Print Preview"
