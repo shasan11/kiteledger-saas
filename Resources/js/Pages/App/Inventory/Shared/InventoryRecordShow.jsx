@@ -81,6 +81,7 @@ export const relationLabel = (value) => {
     value.display_name ||
     value.title ||
     value.code ||
+    value.purchase_order_no ||
     value.account_name ||
     value.bank_name ||
     '-'
@@ -421,6 +422,7 @@ function overviewRows(record, documentType) {
       { label: 'Adjustment No', value: getDocumentCode(record, documentType) },
       { label: 'Adjustment Date', value: formatDate(record?.adjustment_date) },
       { label: 'Warehouse', value: warehouseLabel(record?.warehouse) },
+      { label: 'Purchase Order', value: record?.source_type === 'purchase_order' ? relationLabel(record?.purchase_order || record?.purchaseOrder) : '-' },
       { label: 'Reason', value: record?.reason || '-' },
       { label: 'Status', value: statusTag(record?.status) },
       { label: 'Approval Status', value: approvalTag(record) },

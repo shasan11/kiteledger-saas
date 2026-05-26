@@ -101,6 +101,11 @@ class InventoryAdjustment extends Model
         return $this->belongsTo(JournalVoucher::class);
     }
 
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class, 'source_id');
+    }
+
     public function inventoryAdjustmentLines(): HasMany
     {
         return $this->hasMany(InventoryAdjustmentLine::class);
