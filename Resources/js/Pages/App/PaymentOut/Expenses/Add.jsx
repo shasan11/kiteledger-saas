@@ -7,6 +7,7 @@ import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -35,6 +36,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
 
     useEffect(() => {
         if (initialRecord) {
@@ -66,6 +68,10 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
             form.setFieldsValue({ expense_date: dayjs(), exchange_rate: 1, expense_no: '#DRAFT' });
         }
     }, [initialRecord, form]);
+
+    useEffect(() => {
+        if (!initialRecord) applyDefaultCurrency(form, defaultCurrency);
+    }, [defaultCurrency, form, initialRecord]);
 
     const updateLine = (idx, patch) => setItems((p) => { const n = [...p]; n[idx] = { ...n[idx], ...patch }; return n; });
     const addLine = () => setItems((p) => [...p, emptyLine()]);

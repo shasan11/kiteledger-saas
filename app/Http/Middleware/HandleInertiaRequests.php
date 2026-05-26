@@ -66,6 +66,9 @@ class HandleInertiaRequests extends Middleware
             'Super Admin',
             'Company Owner',
             'Admin',
+            'Branch Admin',
+            'Full Access User',
+            'Full Access Admin',
             'super-admin',
             'admin',
         ]);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head, router } from '@inertiajs/react';
@@ -7,6 +7,7 @@ import { Col, InputNumber, Row, Select, Space, Tag, Typography } from 'antd';
 import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import { useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 dayjs.extend(customParseFormat);
 
@@ -31,14 +32,6 @@ const formatDate = (v) => {
 };
 
 const currencySymbolFromCode = { NPR: 'रू', USD: '$', EUR: '€', GBP: '£', INR: '₹', AUD: 'A$', CAD: 'C$', JPY: '¥' };
-
-const normalizeCurrencyResponse = (payload) => {
-  if (!payload) return null;
-  if (Array.isArray(payload)) return payload[0] || null;
-  if (Array.isArray(payload.results)) return payload.results[0] || null;
-  if (typeof payload === 'object') { const vals = Object.values(payload); return vals.find((i) => i && typeof i === 'object') || null; }
-  return null;
-};
 
 const getCurrencySymbol = (values = {}) => {
   const c = values?.currency_id ?? values?.currency ?? values?.currency_id_detail ?? values?.currency_detail;
@@ -241,15 +234,7 @@ const visitBillShow = (id) => {
 };
 
 export default function BillAdd(props) {
-  const [baseCurrency, setBaseCurrency] = useState(null);
-
-  useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    fetch(api('/api/currencies/?is_base=true&active=true&page_size=1'), { headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((payload) => { const c = normalizeCurrencyResponse(payload); if (c?.id) setBaseCurrency(c); })
-      .catch(() => {});
-  }, []);
+  const defaultCurrency = useDefaultCurrency(true);
 
   const columns = useMemo(() => [
     { title: 'Code', dataIndex: 'invoice_no', key: 'invoice_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
@@ -341,7 +326,7 @@ export default function BillAdd(props) {
     },
     { name: 'notes', label: 'Notes', type: 'textarea', col: 12, rows: 5, placeholder: 'Notes', help: 'This will appear on print' },
     { name: '_bill_totals', label: '', type: 'custom', col: 12, render: ({ values }) => <BillTotals values={values} /> },
-  ], [baseCurrency]);
+  ], [defaultCurrency]);
 
   const validationSchema = useMemo(() => Yup.object().shape({
     contact_id: Yup.mixed().test('req', 'Customer is required', (v) => !!asId(v)).required('Customer is required'),
@@ -364,10 +349,10 @@ export default function BillAdd(props) {
   const crudInitialValues = useMemo(() => ({
     invoice_no: 'DRAFT', invoice_date: dayjs(), due_date: null,
     contact_id: null, warehouse_id: null,
-    currency_id: baseCurrency, exchange_rate: toNumber(baseCurrency?.exchange_rate) || 1,
+    currency_id: defaultCurrency, exchange_rate: 1,
     reference: '', notes: '',
     items: [{ ...emptyLine }], deleted_item_ids: [],
-  }), [baseCurrency]);
+  }), [defaultCurrency]);
 
   const transformPayload = (values = {}) => {
     const rawItems = Array.isArray(values.items) ? values.items : [];
@@ -419,7 +404,7 @@ export default function BillAdd(props) {
         .bill-total-grand strong { font-size: 18px; }
       `}</style>
       <ReusableCrud
-        key={baseCurrency?.id || 'bill-crud'}
+        key={defaultCurrency?.id || 'bill-crud'}
         className="bill-crud"
         drawerClassName="bill-form-drawer"
         icon={<FileTextOutlined />}

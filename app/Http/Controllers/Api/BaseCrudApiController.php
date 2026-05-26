@@ -1046,10 +1046,19 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        // For above-branch users with "all" selected and no requested branch,
-        // we have no safe default — let validation surface "branch required".
         if ($scope->canViewAllBranches($user)) {
-            return null;
+            if ($user && !empty($user->branch_id)) {
+                return (string) $user->branch_id;
+            }
+
+            return Branch::query()
+                ->where('active', true)
+                ->where('is_head_office', true)
+                ->value('id')
+                ?: Branch::query()
+                    ->where('active', true)
+                    ->oldest()
+                    ->value('id');
         }
 
         $assigned = $scope->assignedBranchIds($user);
@@ -2086,6 +2095,10 @@ abstract class BaseCrudApiController extends Controller
 
             $permissionName = "{$this->permissionPrefix}.{$crudPermission}";
 
+            if ($this->userHasAdministrativeBypass($user)) {
+                return;
+            }
+
             abort_unless(
                 method_exists($user, 'can') && $user->can($permissionName),
                 403,
@@ -2124,6 +2137,46 @@ abstract class BaseCrudApiController extends Controller
         $filterValue = $request->input("filter.{$key}");
 
         return $filterValue !== null ? $filterValue : $default;
+    }
+
+    protected function userHasAdministrativeBypass(mixed $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        $roles = [
+            'Super Admin',
+            'Company Owner',
+            'Admin',
+            'Branch Admin',
+            'Full Access User',
+            'Full Access Admin',
+            'super-admin',
+            'admin',
+        ];
+
+        $legacyRole = method_exists($user, 'relationLoaded') && $user->relationLoaded('role')
+            ? $user->getRelation('role')
+            : ($user->role ?? null);
+
+        if ($legacyRole && in_array((string) $legacyRole->name, $roles, true)) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasAnyRole')) {
+            try {
+                return $user->hasAnyRole($roles);
+            } catch (Throwable) {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     protected function validateCompat(array $data, array $rules): array

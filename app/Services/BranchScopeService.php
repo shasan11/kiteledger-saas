@@ -23,6 +23,8 @@ class BranchScopeService
         'Company Owner',
         'Company Admin',
         'Main Branch Admin',
+        'Full Access User',
+        'Full Access Admin',
         'super-admin',
         'admin',
     ];
@@ -51,6 +53,12 @@ class BranchScopeService
         }
 
         if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        $legacyRole = $user->relationLoaded('role') ? $user->getRelation('role') : ($user->role ?? null);
+
+        if ($legacyRole && in_array((string) $legacyRole->name, self::ABOVE_BRANCH_ROLES, true)) {
             return true;
         }
 

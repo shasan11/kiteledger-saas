@@ -9,6 +9,7 @@ import TransactionTotals from '@/Components/Transactions/TransactionTotals.jsx';
 import { api, postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -20,6 +21,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
   const [deletedItemIds, setDeletedItemIds] = useState([]);
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'quotation_no') : '#DRAFT';
@@ -59,6 +61,10 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
       form.setFieldsValue({ quotation_no: '#DRAFT', quotation_date: dayjs(), exchange_rate: 1 });
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const validateLines = () => {
     if (!items.length) return 'At least one line is required.';

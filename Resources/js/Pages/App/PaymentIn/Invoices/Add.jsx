@@ -4,15 +4,38 @@ import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from '
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
+import QuickAddRemoteSelect from '@/Components/QuickAddRemoteSelect.jsx';
 import TransactionLineItems from '@/Components/Transactions/TransactionLineItems.jsx';
 import TransactionTotals from '@/Components/Transactions/TransactionTotals.jsx';
 import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomplete.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
+const customerQuickAddFields = [
+  { name: 'name', label: 'Customer Name', placeholder: 'Customer name', rules: [{ required: true, message: 'Customer name is required' }] },
+  { name: 'phone', label: 'Phone', placeholder: '+977 9800000000', col: 12 },
+  { name: 'email', label: 'Email', placeholder: 'email@example.com', col: 12 },
+  { name: 'address', label: 'Address', type: 'textarea', rows: 2, placeholder: 'Address' },
+];
+const customerQuickAddInitialValues = { contact_type: 'customer', name: '', phone: '', email: '', address: '', active: true };
+const customerLabel = (row) => [row?.name, row?.code ? `(${row.code})` : null].filter(Boolean).join(' ');
+const trimOrNull = (value) => {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+};
+const customerCreatePayload = (values = {}) => ({
+  contact_type: 'customer',
+  name: trimOrNull(values.name),
+  phone: trimOrNull(values.phone),
+  email: trimOrNull(values.email),
+  address: trimOrNull(values.address),
+  active: true,
+});
 
 const mapLines = (lines = []) => (lines || []).map((l) => ({
   _key: newKey(),
@@ -38,6 +61,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
   const [topError, setTopError] = useState(null);
   const [sourceIds, setSourceIds] = useState({ quotation_id: null, sales_order_id: null });
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'invoice_no') : '#DRAFT';
@@ -62,18 +86,27 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
       try {
-        const raw = sessionStorage.getItem('invoice_prefill');
+        const raw = sessionStorage.getItem('kiteledger_invoice_prefill') || sessionStorage.getItem('invoice_prefill');
         if (raw) {
           const p = JSON.parse(raw);
           form.setFieldsValue({
             invoice_no: '#DRAFT',
             invoice_date: dayjs(),
-            exchange_rate: 1,
+            due_date: toDayjs(p.due_date),
+            exchange_rate: toNumber(p.exchange_rate) || 1,
             contact_id: p.contact_id || null,
+            warehouse_id: p.warehouse_id || null,
+            credit_term_id: p.credit_term_id || null,
             reference: p.reference || '',
             currency_id: p.currency_id || null,
           });
+          setSourceIds({
+            quotation_id: p._source === 'quotation' ? p._source_id || null : p.quotation_id || null,
+            sales_order_id: p._source === 'sales_order' ? p._source_id || null : p.sales_order_id || null,
+          });
+          setCurrencyDetail(p.currency_id_detail || null);
           if (Array.isArray(p.items) && p.items.length) setItems(mapLines(p.items));
+          sessionStorage.removeItem('kiteledger_invoice_prefill');
           sessionStorage.removeItem('invoice_prefill');
           return;
         }
@@ -81,6 +114,10 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
       form.setFieldsValue({ invoice_no: '#DRAFT', invoice_date: dayjs(), exchange_rate: 1 });
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onPickReference = (rec, source) => {
     if (!rec) return;
@@ -160,9 +197,19 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
         <FormSection title="Invoice details">
           <Row gutter={16}>
             <Col xs={24} md={16}>
-              <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" />
-              </Form.Item>
+              <QuickAddRemoteSelect
+                name="contact_id"
+                label="Customer"
+                required
+                apiUrl="/api/contacts/"
+                params={{ contact_type: 'customer' }}
+                placeholder="Select customer"
+                labelBuilder={customerLabel}
+                quickAddTitle="Customer"
+                quickAddFields={customerQuickAddFields}
+                quickAddInitialValues={customerQuickAddInitialValues}
+                createPayload={customerCreatePayload}
+              />
             </Col>
             <Col xs={24} md={8}>
               <Form.Item label="Invoice No" name="invoice_no"><Input disabled /></Form.Item>

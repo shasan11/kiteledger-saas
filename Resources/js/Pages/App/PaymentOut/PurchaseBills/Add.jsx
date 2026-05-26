@@ -10,6 +10,7 @@ import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomple
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -30,6 +31,7 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
   const [topError, setTopError] = useState(null);
   const [purchaseOrderId, setPurchaseOrderId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, initialRecord.purchase_bill_no ? 'purchase_bill_no' : 'bill_no') : '#DRAFT';
@@ -52,9 +54,35 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
       setPurchaseOrderId(initialRecord.purchase_order_id || null);
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
+      try {
+        const raw = sessionStorage.getItem('kiteledger_bill_prefill');
+        if (raw) {
+          const p = JSON.parse(raw);
+          form.setFieldsValue({
+            purchase_bill_no: '#DRAFT',
+            bill_date: dayjs(),
+            due_date: toDayjs(p.due_date),
+            contact_id: p.contact_id || null,
+            warehouse_id: p.warehouse_id || null,
+            currency_id: p.currency_id || null,
+            exchange_rate: toNumber(p.exchange_rate) || 1,
+            reference: p.reference || p._source_no || '',
+            notes: p.notes || '',
+          });
+          setPurchaseOrderId(p._source === 'purchase_order' ? p._source_id || null : p.purchase_order_id || null);
+          setCurrencyDetail(p.currency_id_detail || null);
+          if (Array.isArray(p.items) && p.items.length) setItems(mapLines(p.items));
+          sessionStorage.removeItem('kiteledger_bill_prefill');
+          return;
+        }
+      } catch {}
       form.setFieldsValue({ purchase_bill_no: '#DRAFT', bill_date: dayjs(), exchange_rate: 1 });
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onPickPO = (rec) => {
     if (!rec) return;

@@ -169,6 +169,7 @@ export default function QuickAddRemoteSelect({
   const { message: messageApi } = App.useApp();
   const form = Form.useFormInstance();
   const [quickForm] = Form.useForm();
+  const selectedValue = Form.useWatch(name, form);
 
   const [options, setOptions] = useState(EMPTY_ARRAY);
   const [loading, setLoading] = useState(false);
@@ -212,6 +213,43 @@ export default function QuickAddRemoteSelect({
   useEffect(() => {
     void loadOptions('');
   }, [loadOptions]);
+
+  useEffect(() => {
+    if (selectedValue == null || selectedValue === '' || !apiUrl) return;
+    const found = options.some((option) => String(option.value) === String(selectedValue));
+    if (found) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const base = String(apiUrl).replace(/\/+$/, '');
+        const response = await axios.get(`${base}/${encodeURIComponent(selectedValue)}/`);
+        if (cancelled) return;
+
+        const row = response.data;
+        const rowValue = row?.[valueKey] ?? row?.id;
+        if (rowValue == null) return;
+
+        const option = {
+          value: rowValue,
+          label: labelBuilder(row),
+          raw: row,
+        };
+
+        setOptions((prev) =>
+          prev.some((item) => String(item.value) === String(rowValue))
+            ? prev
+            : [option, ...prev],
+        );
+      } catch {
+        // Keep the raw value selected if detail hydration is unavailable.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, labelBuilder, options, selectedValue, valueKey]);
 
   const handleSearch = useCallback(
     (value) => {
