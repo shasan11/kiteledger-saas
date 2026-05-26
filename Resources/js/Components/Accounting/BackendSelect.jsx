@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Select } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Select, Space, message } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -38,10 +39,15 @@ export default function BackendSelect({
     size = 'middle',
     variant,
     style,
+    quickAddProduct = false,
+    quickAddProductDefaults = {},
 }) {
     const [options, setOptions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [open, setOpen] = useState(false);
+    const [quickOpen, setQuickOpen] = useState(false);
+    const [quickSaving, setQuickSaving] = useState(false);
+    const [quickForm] = Form.useForm();
     const debounceRef = useRef(null);
     const seqRef = useRef(0);
 
@@ -131,7 +137,53 @@ export default function BackendSelect({
         return ghost ? [ghost, ...options] : options;
     }, [options, value, detailValue]);
 
-    return (
+    const submitQuickProduct = async () => {
+        const values = await quickForm.validateFields();
+        setQuickSaving(true);
+        try {
+            const payload = {
+                product_type: 'simple',
+                name: values.name,
+                code: values.code || null,
+                purchase_price: values.purchase_price ?? 0,
+                selling_price: values.selling_price ?? 0,
+                track_inventory: true,
+                allow_sale: true,
+                allow_purchase: true,
+                active: true,
+                ...quickAddProductDefaults,
+            };
+
+            const res = await axios.post(`${BACKEND_BASE}/api/products/`, payload, {
+                headers: getAuthHeaders(),
+            });
+            const saved = res?.data;
+            const opt = toOption(saved);
+            if (!opt) {
+                message.error('Product was created but no ID was returned.');
+                return;
+            }
+
+            setOptions((prev) =>
+                prev.some((item) => String(item.value) === String(opt.value))
+                    ? prev
+                    : [opt, ...prev],
+            );
+            onChange?.(opt.value, opt.raw);
+            if (typeof onDetailChange === 'function') onDetailChange(opt.raw);
+            setQuickOpen(false);
+            quickForm.resetFields();
+            message.success('Product added.');
+        } catch (error) {
+            const data = error?.response?.data || {};
+            const firstError = Object.values(data.errors || {})[0]?.[0];
+            message.error(firstError || data.message || 'Failed to add product.');
+        } finally {
+            setQuickSaving(false);
+        }
+    };
+
+    const select = (
         <Select
             showSearch
             value={value ?? undefined}
@@ -167,5 +219,62 @@ export default function BackendSelect({
                 if (typeof onDetailChange === 'function') onDetailChange(null);
             }}
         />
+    );
+
+    if (!quickAddProduct) return select;
+
+    return (
+        <>
+            <Space.Compact style={{ width: '100%' }}>
+                {select}
+                <Button
+                    icon={<PlusOutlined />}
+                    disabled={disabled}
+                    title="Quick add product"
+                    onClick={() => {
+                        quickForm.resetFields();
+                        quickForm.setFieldsValue({
+                            name: '',
+                            code: '',
+                            purchase_price: 0,
+                            selling_price: 0,
+                        });
+                        setQuickOpen(true);
+                    }}
+                />
+            </Space.Compact>
+
+            <Modal
+                title="Quick Add Product"
+                open={quickOpen}
+                onCancel={() => setQuickOpen(false)}
+                onOk={submitQuickProduct}
+                confirmLoading={quickSaving}
+                destroyOnClose
+                okText="Save"
+                width={560}
+            >
+                <Form form={quickForm} layout="vertical">
+                    <Form.Item
+                        name="name"
+                        label="Product Name"
+                        rules={[{ required: true, message: 'Product name is required' }]}
+                    >
+                        <Input placeholder="Product name" />
+                    </Form.Item>
+                    <Form.Item name="code" label="Code">
+                        <Input placeholder="Optional code / SKU" />
+                    </Form.Item>
+                    <Space size={12} style={{ width: '100%' }}>
+                        <Form.Item name="purchase_price" label="Purchase Price" style={{ flex: 1 }}>
+                            <InputNumber min={0} style={{ width: '100%' }} />
+                        </Form.Item>
+                        <Form.Item name="selling_price" label="Selling Price" style={{ flex: 1 }}>
+                            <InputNumber min={0} style={{ width: '100%' }} />
+                        </Form.Item>
+                    </Space>
+                </Form>
+            </Modal>
+        </>
     );
 }

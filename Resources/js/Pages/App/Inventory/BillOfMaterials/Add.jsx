@@ -161,7 +161,7 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
 
   const rawCols = [
     { title: 'Component', dataIndex: 'product_id', render: (val, row, idx) => (
-      <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select component" variant="borderless" style={{ width: '100%' }}
+      <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select component" variant="borderless" style={{ width: '100%' }} quickAddProduct
         onChange={(v, raw) => updateRaw(idx, { product_id: v, product_detail: raw })} />
     ) },
     { title: 'Qty', dataIndex: 'quantity', width: 100, align: 'right', render: (val, _, idx) => <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateRaw(idx, { quantity: v ?? 0 })} /> },
@@ -173,7 +173,7 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
 
   const byProductCols = [
     { title: 'By-product', dataIndex: 'product_id', render: (val, row, idx) => (
-      <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select product" variant="borderless" style={{ width: '100%' }}
+      <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select product" variant="borderless" style={{ width: '100%' }} quickAddProduct
         onChange={(v, raw) => updateByProduct(idx, { product_id: v, product_detail: raw })} />
     ) },
     { title: 'Cost %', dataIndex: 'cost_percent', width: 100, align: 'right', render: (val, _, idx) => <InputNumber variant="borderless" value={val} min={0} max={100} style={{ width: '100%' }} onChange={(v) => updateByProduct(idx, { cost_percent: v ?? 0 })} /> },
@@ -206,7 +206,7 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Finished Product" name="product_id" rules={[{ required: true, message: 'Finished product is required' }]}>
-                <BackendSelect fkUrl="/api/products/search" labelKey="label" placeholder="Select finished product"
+                <BackendSelect fkUrl="/api/products/search" labelKey="label" placeholder="Select finished product" quickAddProduct
                   extraParams={{ active: true, product_type: 'goods' }} />
               </Form.Item>
             </Col>

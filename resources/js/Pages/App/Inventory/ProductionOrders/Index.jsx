@@ -560,7 +560,7 @@ export default function Index({ auth }) {
                 transformPayload={transformPayload}
                 onFormValuesChange={handleFormValuesChange}
                 anchorFilters={anchorFilters}
-                defaultAnchorKey="approved"
+                defaultAnchorKey="all"
                 anchorSyncWithHash
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 24px)"
@@ -577,10 +577,13 @@ export default function Index({ auth }) {
                 canEdit
                 canDelete
                 canView
+                custom_add
+                custom_add_link={route('inventory.production-orders.add')}
                 showViewColumn
                 hasActions
                 hasActionColumns
                 viewPathBuilder={(record) => route('inventory.production-orders.show', record.id)}
+                editPathBuilder={(record) => route('inventory.production-orders.edit', record.id)}
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
                         if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

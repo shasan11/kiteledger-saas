@@ -862,15 +862,18 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="approved"
+                defaultAnchorKey="all"
                 anchorSyncWithHash
                 showSearch
                 canAdd
                 canEdit
                 canDelete
                 canView
+                custom_add
+                custom_add_link={route('inventory.bill-of-materials.add')}
                 showViewColumn
                 viewPathBuilder={(record) => route('inventory.bill-of-materials.show', record.id)}
+                editPathBuilder={(record) => route('inventory.bill-of-materials.edit', record.id)}
                 activeTableRowFunction={(record) => ({
                     onClick: (event) => {
                         if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;

@@ -211,6 +211,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
     { title: 'Material', dataIndex: 'product_id', render: (val, row, idx) => (
       <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select material"
         variant="borderless" style={{ width: '100%' }}
+        quickAddProduct
         onChange={(v, raw) => updateMat(idx, { product_id: v, product_detail: raw })} />
     ) },
     { title: 'Qty', dataIndex: 'quantity', width: 110, align: 'right',
@@ -231,6 +232,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
     { title: 'By-product', dataIndex: 'product_id', render: (val, row, idx) => (
       <BackendSelect value={val} detailValue={row.product_detail} fkUrl="/api/products/search" labelKey="label" placeholder="Select product"
         variant="borderless" style={{ width: '100%' }}
+        quickAddProduct
         onChange={(v, raw) => updateByProduct(idx, { product_id: v, product_detail: raw })} />
     ) },
     { title: 'Cost %', dataIndex: 'cost_percent', width: 100, align: 'right',
@@ -307,7 +309,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="Finished Product" name="finished_product_id" rules={[{ required: true, message: 'Finished product is required' }]}>
-                <BackendSelect fkUrl="/api/products/search" labelKey="label" extraParams={{ active: true }} />
+                <BackendSelect fkUrl="/api/products/search" labelKey="label" extraParams={{ active: true }} quickAddProduct />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
