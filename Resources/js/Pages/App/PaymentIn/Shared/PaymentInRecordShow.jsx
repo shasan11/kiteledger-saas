@@ -44,6 +44,7 @@ import {
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
+import { RecordMetaPanel } from '@/Components/Transactions';
 import { QRCodeSVG } from 'qrcode.react';
 
 const { Text, Title } = Typography;
@@ -2628,6 +2629,10 @@ export default function PaymentInRecordShow({
 
                                 <Card title={`${title} Details`} className="payment-record-show__card">
                                     <InfoTable rows={overviewRows} />
+                                </Card>
+
+                                <Card title="Record Info" className="payment-record-show__card" size="small">
+                                    <RecordMetaPanel record={record} />
                                 </Card>
 
                                 {mainCards}

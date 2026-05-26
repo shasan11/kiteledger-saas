@@ -31,6 +31,7 @@ class Invoice extends Model
         'currency_id',
         'reference',
         'notes',
+        'remarks',
         'paid_total',
         'balance_due',
         'export_country',

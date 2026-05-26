@@ -8,6 +8,7 @@ import {
     CreditCardOutlined,
     FileTextOutlined,
     HomeOutlined,
+    RobotOutlined,
     InboxOutlined,
     ProfileOutlined,
     ProjectOutlined,
@@ -90,6 +91,16 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
+            ...(['ai.view', 'ai.use', 'ai.chat', 'ai.manage'].some((p) => can(p))
+                ? [
+                      {
+                          key: 'ai-assistant',
+                          icon: <RobotOutlined />,
+                          label: 'AI Assistant',
+                          onClick: () => visit('ai.assistant', '/ai/assistant'),
+                      },
+                  ]
+                : []),
             ...([
                 'pos.sale.create',
                 'pos.sale.view',

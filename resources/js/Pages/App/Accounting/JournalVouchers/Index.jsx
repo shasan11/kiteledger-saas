@@ -5,6 +5,7 @@ import { Head, router } from '@inertiajs/react';
 import { Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -15,6 +16,7 @@ const statusColor = (s) => ({ draft: 'default', posted: 'green', approved: 'gree
 export default function JournalVouchersIndex(props) {
     const columns = useMemo(() => [
         { title: 'Voucher No', dataIndex: 'voucher_no', key: 'voucher_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Date', dataIndex: 'voucher_date', key: 'voucher_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Reference', dataIndex: 'reference', key: 'reference', render: (v) => v || '-' },
         { title: 'Narration', dataIndex: 'narration', key: 'narration', render: (v) => v || '-' },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Select, Row, Col, message, Alert, Table, Button, Switch, Space, Typography } from 'antd';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
@@ -22,7 +23,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
   const [tdsApplicable, setTdsApplicable] = useState(false);
   const [topError, setTopError] = useState(null);
   const [contactId, setContactId] = useState(null);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'payment_no') : '#DRAFT';
 
@@ -43,6 +44,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
         tds_charges: toNumber(initialRecord.tds_charges),
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       setBankApplicable(toNumber(initialRecord.bank_charges) > 0 || !!initialRecord.bank_charges_account_id);
       setTdsApplicable(toNumber(initialRecord.tds_charges) > 0 || !!initialRecord.tds_charges_account_id);
@@ -56,34 +58,14 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
         allocated_amount: toNumber(l.allocated_amount),
       })));
     } else {
-      try {
-        const raw = sessionStorage.getItem('kiteledger_payment_prefill');
-        if (raw) {
-          const p = JSON.parse(raw);
-          form.setFieldsValue({
-            payment_no: '#DRAFT',
-            payment_date: dayjs(),
-            contact_id: p.contact_id || null,
-            currency_id: p.currency_id || null,
-            exchange_rate: toNumber(p.exchange_rate) || 1,
-            amount: toNumber(p.amount),
-            payment_method: 'cash',
-            reference: p._source_no || '',
-          });
-          setContactId(p.contact_id || null);
-          if (Array.isArray(p.items)) {
-            setAllocations(p.items.map((l) => ({
-              _key: newKey(),
-              invoice_id: l.invoice_id ?? l.invoice?.id ?? null,
-              invoice_detail: l.invoice || l.invoice_id_detail || null,
-              allocated_amount: toNumber(l.allocated_amount),
-            })));
-          }
-          sessionStorage.removeItem('kiteledger_payment_prefill');
-          return;
-        }
-      } catch {}
-      form.setFieldsValue({ payment_no: '#DRAFT', payment_date: dayjs(), payment_method: 'cash', amount: 0 });
+      form.setFieldsValue({
+        payment_no: '#DRAFT',
+        payment_date: dayjs(),
+        payment_method: 'cash',
+        amount: 0,
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
     }
   }, [initialRecord]);
 
@@ -123,6 +105,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
       tds_charges: tdsApplicable && toNumber(v.tds_charges) ? toNumber(v.tds_charges) : null,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       items,
       deleted_item_ids: deletedItemIds,
     };
@@ -227,7 +210,9 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
           />
         </FormSection>
 
-        <FormSection title="Notes"><Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item></FormSection>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
+        </FormSection>
       </Form>
     </TransactionFormShell>
   );

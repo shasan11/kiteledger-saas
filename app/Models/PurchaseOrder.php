@@ -27,6 +27,7 @@ class PurchaseOrder extends Model
         'currency_id',
         'credit_term_id',
         'notes',
+        'remarks',
         'status',
         'active',
         'approved',

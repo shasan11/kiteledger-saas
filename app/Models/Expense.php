@@ -28,6 +28,7 @@ class Expense extends Model
         'contact_id',
         'currency_id',
         'notes',
+        'remarks',
         'status',
         'tds_charges_account_id',
         'tds_type',

@@ -21,6 +21,8 @@ import {
 import { ArrowLeftOutlined, BarcodeOutlined, CheckCircleOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
+import { RecordMetaPanel } from '@/Components/Transactions';
+import LabelPrintDrawer, { isLabelPrintableAdjustmentLine } from '@/Components/Labels/LabelPrintDrawer';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -512,7 +514,8 @@ function tableCard(title, columns, dataSource, summary, emptyText = 'No records'
   );
 }
 
-function buildLineCards(record, documentType) {
+function buildLineCards(record, documentType, options = {}) {
+  const { onPrintLabelLine } = options;
   const lines = getLines(record, documentType);
   const materialLines = getMaterialLines(record, documentType);
   const outputLines = getOutputLines(record, documentType);
@@ -563,6 +566,24 @@ function buildLineCards(record, documentType) {
           { title: 'Unit Cost', key: 'unit_cost', align: 'right', render: (_, row) => formatMoney(row?.unit_cost) },
           { title: 'Line Value', key: 'line_value', align: 'right', render: (_, row) => formatMoney(lineCost(row)) },
           { title: 'Remarks', dataIndex: 'remarks', render: (value) => value || '-' },
+          {
+            title: '',
+            key: 'label_action',
+            width: 110,
+            align: 'right',
+            render: (_, row) => {
+              if (!isLabelPrintableAdjustmentLine(row)) return null;
+              return (
+                <Button
+                  size="small"
+                  icon={<BarcodeOutlined />}
+                  onClick={() => onPrintLabelLine?.(row)}
+                >
+                  Print Label
+                </Button>
+              );
+            },
+          },
         ],
         lines,
         () => (
@@ -570,17 +591,17 @@ function buildLineCards(record, documentType) {
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={3}>Total Increase Qty</Table.Summary.Cell>
               <Table.Summary.Cell index={3} align="right">{formatQty(totalIncrease)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={4} colSpan={3} />
+              <Table.Summary.Cell index={4} colSpan={4} />
             </Table.Summary.Row>
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={3}>Total Decrease Qty</Table.Summary.Cell>
               <Table.Summary.Cell index={3} align="right">{formatQty(totalDecrease)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={4} colSpan={3} />
+              <Table.Summary.Cell index={4} colSpan={4} />
             </Table.Summary.Row>
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={5}>Total Value</Table.Summary.Cell>
               <Table.Summary.Cell index={5} align="right">{formatMoney(totalValue)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={6} />
+              <Table.Summary.Cell index={6} colSpan={2} />
             </Table.Summary.Row>
           </>
         ),
@@ -777,7 +798,8 @@ export default function InventoryRecordShow({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
-  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [labelDrawerOpen, setLabelDrawerOpen] = useState(false);
+  const [labelInitialLineIds, setLabelInitialLineIds] = useState([]);
   const [approving, setApproving] = useState(false);
 
   useEffect(() => {
@@ -850,12 +872,22 @@ export default function InventoryRecordShow({
   const documentCode = getDocumentCode(record, documentType);
   const railRows = useMemo(() => buildRailRows(record, documentType), [record, documentType]);
   const overview = useMemo(() => overviewRows(record, documentType), [record, documentType]);
-  const cards = useMemo(() => (record ? buildLineCards(record, documentType) : []), [record, documentType]);
-  const increasedLines = useMemo(() => getLines(record, documentType).filter((line) => {
-    const type = String(line?.adjustment_type || line?.type || '').toLowerCase();
-    if (type) return type === 'increase';
-    return Number(firstPresent(line?.increase_qty, 0)) > 0;
-  }), [record, documentType]);
+  const printableAdjustmentLines = useMemo(() => {
+    if (documentType !== 'inventory_adjustment') return [];
+    return getLines(record, documentType).filter(isLabelPrintableAdjustmentLine);
+  }, [record, documentType]);
+
+  const openLabelDrawerFor = (ids) => {
+    setLabelInitialLineIds(ids);
+    setLabelDrawerOpen(true);
+  };
+
+  const cards = useMemo(
+    () => (record ? buildLineCards(record, documentType, {
+      onPrintLabelLine: (row) => openLabelDrawerFor([row.id]),
+    }) : []),
+    [record, documentType]
+  );
 
   const amount = useMemo(() => {
     if (!record) return formatMoney(0);
@@ -1071,14 +1103,12 @@ export default function InventoryRecordShow({
             <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
               Print Preview
             </Button>
-            {documentType === 'inventory_adjustment' ? (
-              <Button size="small" icon={<BarcodeOutlined />} onClick={() => {
-                if (!increasedLines.length) {
-                  window.alert('No increased stock lines available for label printing.');
-                  return;
-                }
-                setLabelsOpen(true);
-              }}>
+            {documentType === 'inventory_adjustment' && printableAdjustmentLines.length > 0 ? (
+              <Button
+                size="small"
+                icon={<BarcodeOutlined />}
+                onClick={() => openLabelDrawerFor(printableAdjustmentLines.map((l) => l.id))}
+              >
                 Print Labels
               </Button>
             ) : null}
@@ -1109,6 +1139,10 @@ export default function InventoryRecordShow({
             <main className="inventory-show__main">
               <Card title={sectionTitle(documentType)} className="inventory-show__card">
                 <InfoTable rows={overview} />
+              </Card>
+
+              <Card title="Record Info" className="inventory-show__card" size="small">
+                <RecordMetaPanel record={record} />
               </Card>
 
               {cards}
@@ -1205,33 +1239,16 @@ export default function InventoryRecordShow({
         </div>
       </Drawer>
 
-      <Drawer
-        title="Product Labels"
-        open={labelsOpen}
-        onClose={() => setLabelsOpen(false)}
-        width="min(760px, 100vw)"
-        extra={<Button icon={<PrinterOutlined />} onClick={() => window.print()}>Print</Button>}
-      >
-        <div className="inventory-label-print">
-          <style>{`
-            .inventory-label-print{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;background:#fff}
-            .inventory-label{border:1px solid #111;padding:10px;min-height:120px;break-inside:avoid}
-            .inventory-label strong{display:block;font-size:13px}
-            .inventory-label .barcode{font-family:monospace;border-top:1px dashed #999;border-bottom:1px dashed #999;margin:8px 0;padding:5px 0;text-align:center}
-            @media print{body *{visibility:hidden}.inventory-label-print,.inventory-label-print *{visibility:visible}.inventory-label-print{position:absolute;inset:0;padding:8mm;grid-template-columns:repeat(3,1fr)}}
-          `}</style>
-          {increasedLines.map((line, index) => (
-            <div className="inventory-label" key={line.id || index}>
-              <strong>{productLabel(line)}</strong>
-              <Text>{firstPresent(line.product?.sku, line.product?.code, line.product?.barcode, '-')}</Text>
-              <div className="barcode">{firstPresent(line.product?.barcode, line.product?.sku, line.product?.code, 'BARCODE')}</div>
-              <div>Warehouse: {warehouseLabel(firstPresent(record?.warehouse, record?.warehouse_detail))}</div>
-              <div>Qty: {formatQty(firstPresent(line.qty, line.quantity))}</div>
-              <div>{documentCode} / {formatDate(firstPresent(record?.adjustment_date, record?.date))}</div>
-            </div>
-          ))}
-        </div>
-      </Drawer>
+      {documentType === 'inventory_adjustment' ? (
+        <LabelPrintDrawer
+          open={labelDrawerOpen}
+          onClose={() => setLabelDrawerOpen(false)}
+          record={record}
+          lines={printableAdjustmentLines}
+          initialSelectedLineIds={labelInitialLineIds}
+          documentType={documentType}
+        />
+      ) : null}
     </AuthenticatedLayout>
   );
 }

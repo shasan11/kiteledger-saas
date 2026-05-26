@@ -8,6 +8,7 @@ import { FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 dayjs.extend(customParseFormat);
 
@@ -151,6 +152,7 @@ export default function Quotations(props) {
         width: 140,
         render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
       },
+      branchColumn(),
       {
         title: 'Customer',
         dataIndex: 'contact',

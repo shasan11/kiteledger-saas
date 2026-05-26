@@ -23,6 +23,9 @@ class BranchScopeService
         'Company Owner',
         'Company Admin',
         'Main Branch Admin',
+        // FullPermissionUserSeeder creates these roles and grants them every
+        // permission in the system. They are documented god-mode admins and
+        // must bypass branch scoping the same way Super Admin does.
         'Full Access User',
         'Full Access Admin',
         'super-admin',
@@ -72,13 +75,19 @@ class BranchScopeService
             }
         }
 
-        foreach (self::VIEW_ALL_ALIASES as $permission) {
-            try {
-                if (method_exists($user, 'can') && $user->can($permission)) {
-                    return true;
+        // IMPORTANT: use Spatie's hasPermissionTo, not $user->can(). The
+        // latter routes through Laravel's Gate which may have a `Gate::before`
+        // hook that auto-grants every ability to unrelated roles — that
+        // would silently make a Branch Admin view-all-capable.
+        if (method_exists($user, 'hasPermissionTo')) {
+            foreach (self::VIEW_ALL_ALIASES as $permission) {
+                try {
+                    if ($user->hasPermissionTo($permission)) {
+                        return true;
+                    }
+                } catch (\Throwable) {
+                    // permission may not exist in DB yet — keep checking aliases
                 }
-            } catch (\Throwable) {
-                //
             }
         }
 
@@ -96,7 +105,7 @@ class BranchScopeService
         }
 
         try {
-            if (method_exists($user, 'can') && $user->can(self::PERMISSION_SWITCH)) {
+            if (method_exists($user, 'hasPermissionTo') && $user->hasPermissionTo(self::PERMISSION_SWITCH)) {
                 return true;
             }
         } catch (\Throwable) {

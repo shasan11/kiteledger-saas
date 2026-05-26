@@ -42,6 +42,7 @@ import {
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { relationLabel, toNumber, useMoneyFormatter } from './currency';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
+import { RecordMetaPanel } from '@/Components/Transactions';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -2392,6 +2393,10 @@ export default function AccountingRecordShow({
                 ) : null}
 
                 {renderDetails()}
+
+                <DetailsCard title="Record Info">
+                  <RecordMetaPanel record={record} />
+                </DetailsCard>
               </main>
             </div>
           )}

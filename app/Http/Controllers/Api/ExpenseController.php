@@ -22,7 +22,7 @@ class ExpenseController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'expense_date';
 
-    protected array $relations = ['branch', 'contact', 'currency', 'tdsChargesAccount'];
+    protected array $relations = ['branch', 'contact', 'currency', 'tdsChargesAccount', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'currency' => 'currency_id', 'tdsChargesAccount' => 'tds_charges_account_id'];
     protected array $searchable = ['expense_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'status'];
@@ -74,6 +74,7 @@ class ExpenseController extends BaseCrudApiController
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
         'tds_charges_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'tds_type' => ['nullable', 'string', 'max:20'],
@@ -92,6 +93,7 @@ class ExpenseController extends BaseCrudApiController
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
             'tds_charges_account_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'tds_type' => ['sometimes', 'nullable', 'string', 'max:20'],

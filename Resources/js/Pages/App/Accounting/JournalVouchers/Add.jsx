@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -67,7 +68,7 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                 exchange_rate: initialRecord.exchange_rate ?? 1,
                 reference: initialRecord.reference || '',
                 narration: initialRecord.narration || '',
-                notes: initialRecord.notes || '',
+                remarks: initialRecord.remarks || '',
             });
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
@@ -142,6 +143,7 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
             exchange_rate: toNumber(fieldValues.exchange_rate) || null,
             reference: nullIfEmpty(fieldValues.reference),
             narration: nullIfEmpty(fieldValues.narration),
+            remarks: nullIfEmpty(fieldValues.remarks),
             notes: nullIfEmpty(fieldValues.notes),
             items: items.map((l) => ({
                 ...(l.id ? { id: l.id } : {}),
@@ -262,11 +264,6 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                                 <Input placeholder="Reference" />
                             </Form.Item>
                         </Col>
-                        <Col xs={24}>
-                            <Form.Item label="Narration" name="narration">
-                                <Input.TextArea rows={2} placeholder="Narration" />
-                            </Form.Item>
-                        </Col>
                     </Row>
                 </FormSection>
 
@@ -293,14 +290,8 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                     />
                 </FormSection>
 
-                <FormSection title="Additional">
-                    <Row>
-                        <Col xs={24}>
-                            <Form.Item label="Notes" name="notes">
-                                <Input.TextArea rows={3} placeholder="Notes" />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                <FormSection title="Description &amp; Remarks">
+                    <DescriptionRemarksCollapse descriptionName="narration" remarksName="remarks" />
                 </FormSection>
             </Form>
         </TransactionFormShell>

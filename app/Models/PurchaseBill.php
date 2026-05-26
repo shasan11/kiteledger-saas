@@ -33,6 +33,7 @@ class PurchaseBill extends Model
         'currency_id',
         'reference',
         'notes',
+        'remarks',
         'import_country',
         'import_date',
         'import_document_number',

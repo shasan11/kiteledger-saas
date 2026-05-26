@@ -19,7 +19,7 @@ class PurchaseOrderController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'purchase_order_date';
 
-    protected array $relations = ['branch', 'contact', 'creditTerm', 'currency'];
+    protected array $relations = ['branch', 'contact', 'creditTerm', 'currency', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'creditTerm' => 'credit_term_id', 'currency' => 'currency_id'];
     protected array $searchable = ['purchase_order_no', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'credit_term_id', 'status'];
@@ -82,6 +82,7 @@ class PurchaseOrderController extends BaseCrudApiController
         'credit_term_id' => ['nullable', 'uuid', 'exists:credit_terms,id'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'approved' => ['nullable', 'boolean'],
         'status' => ['nullable', 'in:draft,confirmed,received,cancelled'],
     ];
@@ -97,6 +98,7 @@ class PurchaseOrderController extends BaseCrudApiController
             'credit_term_id' => ['sometimes', 'nullable', 'uuid', 'exists:credit_terms,id'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'approved' => ['sometimes', 'nullable', 'boolean'],
             'status' => ['sometimes', 'nullable', 'in:draft,confirmed,received,cancelled'],
         ];

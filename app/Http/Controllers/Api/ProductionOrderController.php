@@ -154,6 +154,7 @@ class ProductionOrderController extends BaseCrudApiController
         'void' => ['nullable', 'boolean'],
         'voided_reason' => ['nullable', 'string', 'max:500'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],

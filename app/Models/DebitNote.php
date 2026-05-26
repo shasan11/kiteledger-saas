@@ -28,6 +28,7 @@ class DebitNote extends Model
         'currency_id',
         'reference',
         'notes',
+        'remarks',
         'status',
         'active',
         'approved',

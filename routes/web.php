@@ -37,6 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // AI module standalone pages
     Route::get('/ai/logs', fn () => Inertia::render('App/AI/Logs'))->name('ai.logs');
     Route::get('/ai/command-center', fn () => Inertia::render('App/AI/CommandCenter'))->name('ai.command-center');
+    Route::get('/ai/assistant', fn () => Inertia::render('App/AI/Assistant'))->name('ai.assistant');
 });
 
 Route::middleware('auth')->group(function () {

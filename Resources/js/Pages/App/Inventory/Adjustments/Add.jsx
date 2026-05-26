@@ -65,6 +65,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                 warehouse_id: initialRecord.warehouse_id ?? initialRecord.warehouse?.id ?? null,
                 reason: initialRecord.reason || '',
                 notes: initialRecord.notes || '',
+                remarks: initialRecord.remarks || '',
             });
             if (initialRecord.source_type === 'purchase_order' || initialRecord.purchase_order_id) {
                 setPurchaseOrderId(initialRecord.source_id || initialRecord.purchase_order_id || null);
@@ -228,8 +229,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
             warehouse_id: v.warehouse_id || null,
             reason: nullIfEmpty(v.reason),
             notes: nullIfEmpty(v.notes),
-            source_type: purchaseOrderId ? 'purchase_order' : null,
-            source_id: purchaseOrderId || null,
+            remarks: nullIfEmpty(v.remarks),
             items: items.map((l) => ({
                 ...(l.id ? { id: l.id } : {}),
                 product_id: l.product_id,
@@ -414,6 +414,11 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                         <Col xs={24}>
                             <Form.Item label="Notes" name="notes">
                                 <Input.TextArea rows={2} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Remarks" name="remarks">
+                                <Input.TextArea rows={2} placeholder="Internal remarks (optional)" />
                             </Form.Item>
                         </Col>
                     </Row>

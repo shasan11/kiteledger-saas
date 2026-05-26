@@ -21,7 +21,7 @@ class CustomerPaymentController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'payment_date';
 
-    protected array $relations = ['branch', 'contact', 'account', 'currency', 'bankChargesAccount', 'tdsChargesAccount', 'customerPaymentLines', 'customerPaymentLines.invoice'];
+    protected array $relations = ['branch', 'contact', 'account', 'currency', 'bankChargesAccount', 'tdsChargesAccount', 'userAdd', 'approvedBy', 'customerPaymentLines', 'customerPaymentLines.invoice'];
     protected array $relationDetails = [
         'branch' => 'branch_id',
         'contact' => 'contact_id',
@@ -77,6 +77,7 @@ class CustomerPaymentController extends BaseCrudApiController
         'tds_charges' => ['nullable', 'numeric', 'min:0'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
     ];
 
@@ -99,6 +100,7 @@ class CustomerPaymentController extends BaseCrudApiController
             'tds_charges' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
         ];
     }

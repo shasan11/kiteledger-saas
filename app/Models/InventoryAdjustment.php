@@ -26,6 +26,7 @@ class InventoryAdjustment extends Model
         'warehouse_id',
         'reason',
         'notes',
+        'remarks',
         'source_type',
         'source_id',
         'is_system_generated',

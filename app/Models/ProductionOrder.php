@@ -20,7 +20,7 @@ class ProductionOrder extends Model
         'total_raw_material_cost', 'total_expense_cost', 'total_byproduct_cost',
         'total_finished_goods_cost', 'total_production_cost', 'finished_goods_unit_cost',
         'status', 'approved', 'approved_at', 'approved_by_id', 'void', 'voided_at',
-        'voided_by_id', 'voided_reason', 'notes', 'active', 'is_system_generated',
+        'voided_by_id', 'voided_reason', 'notes', 'remarks', 'active', 'is_system_generated',
         'stock_posted', 'stock_posted_at', 'journal_voucher_id', 'user_add_id',
     ];
 

@@ -23,7 +23,7 @@ class BillOfMaterialController extends BaseCrudApiController
     protected ?string $businessDateColumn = 'date';
 
     protected array $relations = [
-        'branch', 'product', 'approvedBy',
+        'branch', 'product', 'approvedBy', 'userAdd',
         'rawMaterials.product',
         'byProducts.product',
         'expenses.costTerm',
@@ -123,6 +123,7 @@ class BillOfMaterialController extends BaseCrudApiController
         'output_unit_code'         => ['nullable', 'string', 'max:20'],
         'manufacture_on_every_sale' => ['nullable', 'boolean'],
         'notes'                    => ['nullable', 'string'],
+        'remarks'                  => ['nullable', 'string'],
         'status'                   => ['nullable', 'in:draft,approved'],
         'active'                   => ['nullable', 'boolean'],
         'approved'                 => ['nullable', 'boolean'],

@@ -63,11 +63,17 @@ class AppServiceProvider extends ServiceProvider
                 return null;
             }
 
+            // Unrestricted / god-mode roles only. Branch Admin was previously
+            // here but that silently granted it cross-branch permissions
+            // including system.branch.view_all, breaking branch scoping.
+            // Full Access User/Admin are kept because FullPermissionUserSeeder
+            // explicitly assigns them every permission in the system.
+            // Keep this list aligned with BranchScopeService::ABOVE_BRANCH_ROLES.
             return $user->hasAnyRole([
                 'Super Admin',
                 'Company Owner',
                 'Admin',
-                'Branch Admin',
+                'Company Admin',
                 'Full Access User',
                 'Full Access Admin',
                 'super-admin',

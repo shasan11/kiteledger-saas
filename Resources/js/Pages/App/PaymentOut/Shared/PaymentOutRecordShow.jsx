@@ -32,6 +32,7 @@ import {
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
+import { RecordMetaPanel } from '@/Components/Transactions';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -1600,6 +1601,11 @@ export default function PaymentOutRecordShow({
                                 <Card title={`${title} Details`} className="payment-record-show__card">
                                     <InfoTable rows={overviewRows} />
                                 </Card>
+
+                                <Card title="Record Info" className="payment-record-show__card" size="small">
+                                    <RecordMetaPanel record={record} />
+                                </Card>
+
                                 {mainCards}
                             </main>
                         </div>

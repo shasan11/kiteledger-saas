@@ -7,3 +7,6 @@ export { default as DescriptionRemarksCollapse } from './DescriptionRemarksColla
 export { displayDocumentNumber, isApproved, DRAFT_NUMBER } from './documentNumber.js';
 export * from './transactionCalculations.js';
 export { default as txnApi } from './txnApi.js';
+export { default as branchColumn, BranchCellRender } from './BranchColumn.jsx';
+export { default as RecordMetaPanel } from './RecordMetaPanel.jsx';
+export { default as DescriptionRemarksCollapse } from './DescriptionRemarksCollapse.jsx';

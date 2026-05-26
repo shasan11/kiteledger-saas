@@ -5,6 +5,7 @@ import { Head, router } from '@inertiajs/react';
 import { Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -15,6 +16,7 @@ const statusColor = (s) => ({ draft: 'default', posted: 'blue', part_paid: 'oran
 export default function PurchaseBillsIndex(props) {
     const columns = useMemo(() => [
         { title: 'Bill No', dataIndex: 'bill_no', key: 'bill_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'bill_date', key: 'bill_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },

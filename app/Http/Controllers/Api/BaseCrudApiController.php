@@ -947,13 +947,39 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        app(BranchScopeService::class)->applyToQuery(
-            $query,
-            $request,
-            $request->user(),
-            $this->branchColumn,
-            $this->modelTable()
-        );
+        $scope = app(BranchScopeService::class);
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        $requestedBranch = $scope->normalizeRequestedBranch($request);
+        $branchColumn = $this->qualifiedColumn($this->branchColumn);
+
+        if ($scope->canViewAllBranches($user)) {
+            if ($requestedBranch && $requestedBranch !== 'all') {
+                $scope->assertCanAccessBranch($user, (string) $requestedBranch);
+                $query->where($branchColumn, (string) $requestedBranch);
+            }
+
+            return;
+        }
+
+        $assignedBranchIds = $scope->assignedBranchIds($user);
+
+        if (empty($assignedBranchIds)) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        if ($requestedBranch && $requestedBranch !== 'all') {
+            $scope->assertCanAccessBranch($user, (string) $requestedBranch);
+            $query->where($branchColumn, (string) $requestedBranch);
+            return;
+        }
+
+        $query->whereIn($branchColumn, $assignedBranchIds);
     }
 
     protected function modelTable(): string
@@ -967,9 +993,14 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
-        $providedBranchId = $data[$this->branchColumn] ?? null;
         $scope = app(BranchScopeService::class);
         $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        $providedBranchId = $data[$this->branchColumn] ?? null;
 
         if (!empty($providedBranchId)) {
             $scope->assertCanAccessBranch($user, (string) $providedBranchId);
@@ -978,8 +1009,17 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
+        $requestedBranch = $scope->normalizeRequestedBranch($request);
+
+        if ($requestedBranch && $requestedBranch !== 'all') {
+            $scope->assertCanAccessBranch($user, (string) $requestedBranch);
+            $data[$this->branchColumn] = (string) $requestedBranch;
+
+            return $data;
+        }
+
         if ($this->autoFillBranchOnCreate) {
-            $defaultBranchId = $this->defaultWriteBranchId($request, true);
+            $defaultBranchId = $this->defaultWriteBranchId($request, false);
 
             if ($defaultBranchId) {
                 $scope->assertCanAccessBranch($user, (string) $defaultBranchId);
@@ -1001,15 +1041,18 @@ abstract class BaseCrudApiController extends Controller
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
+        if (!$user) {
+            abort(401, 'Unauthenticated.');
+        }
+
         if ($scope->isBranchLimited($user) || $this->preventBranchChangeOnUpdate) {
-            // Branch-limited users may never change branch on update; same when
-            // controllers explicitly opt in to preventBranchChangeOnUpdate.
             unset($data[$this->branchColumn]);
             return $data;
         }
 
         if (!empty($data[$this->branchColumn])) {
             $scope->assertCanAccessBranch($user, (string) $data[$this->branchColumn]);
+            $data[$this->branchColumn] = (string) $data[$this->branchColumn];
         }
 
         return $data;
@@ -1027,7 +1070,10 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        app(BranchScopeService::class)->assertCanAccessBranch($request->user(), (string) $branchId);
+        app(BranchScopeService::class)->assertCanAccessBranch(
+            $request->user(),
+            (string) $branchId
+        );
     }
 
     protected function requestedBranchId(Request $request): ?string
@@ -1042,32 +1088,68 @@ abstract class BaseCrudApiController extends Controller
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if ($allowRequestedBranch) {
-            $selected = $scope->selectedBranchId($request, $user);
+        if (!$user) {
+            return null;
+        }
 
-            if ($selected !== null) {
-                return $selected;
+        if ($allowRequestedBranch) {
+            $requestedBranch = $scope->normalizeRequestedBranch($request);
+
+            if ($requestedBranch && $requestedBranch !== 'all') {
+                return (string) $requestedBranch;
             }
         }
 
         if ($scope->canViewAllBranches($user)) {
-            if ($user && !empty($user->branch_id)) {
-                return (string) $user->branch_id;
-            }
+            $mainBranchId = $this->defaultMainBranchId();
 
-            return Branch::query()
-                ->where('active', true)
-                ->where('is_head_office', true)
-                ->value('id')
-                ?: Branch::query()
-                    ->where('active', true)
-                    ->oldest()
-                    ->value('id');
+            if ($mainBranchId) {
+                return $mainBranchId;
+            }
         }
 
         $assigned = $scope->assignedBranchIds($user);
 
         return $assigned[0] ?? null;
+    }
+
+    protected function defaultMainBranchId(): ?string
+    {
+        try {
+            $query = Branch::query();
+
+            if (Schema::hasColumn('branches', 'active')) {
+                $query->where('active', true);
+            }
+
+            foreach (['is_main', 'is_default', 'default', 'main'] as $column) {
+                if (!Schema::hasColumn('branches', $column)) {
+                    continue;
+                }
+
+                $branchId = (clone $query)
+                    ->where($column, true)
+                    ->value('id');
+
+                if ($branchId) {
+                    return (string) $branchId;
+                }
+            }
+
+            if (Schema::hasColumn('branches', 'created_at')) {
+                $branchId = (clone $query)
+                    ->orderBy('created_at')
+                    ->value('id');
+
+                return $branchId ? (string) $branchId : null;
+            }
+
+            $branchId = (clone $query)->value('id');
+
+            return $branchId ? (string) $branchId : null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected function accessibleBranchIds(Request $request): array

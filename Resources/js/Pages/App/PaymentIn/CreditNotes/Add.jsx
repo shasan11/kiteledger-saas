@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -40,6 +41,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
+  const { defaultCurrency } = usePage().props;
 
   // Backend uses sales_return_no / sales_return_date; preserve that.
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, initialRecord.credit_note_no ? 'credit_note_no' : 'sales_return_no') : '#DRAFT';
@@ -54,13 +56,22 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || initialRecord.reason || '',
+        remarks: initialRecord.remarks || '',
       });
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
       if (lines.length) setItems(mapLines(lines));
       setInvoiceId(initialRecord.invoice_id || null);
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
-      form.setFieldsValue({ credit_note_no: '#DRAFT', credit_note_date: dayjs(), exchange_rate: 1 });
+      form.setFieldsValue({
+        credit_note_no: '#DRAFT',
+        credit_note_date: dayjs(),
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
+      if (defaultCurrency?.id) {
+        setCurrencyDetail(defaultCurrency);
+      }
     }
   }, [initialRecord]);
 
@@ -97,6 +108,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
       exchange_rate: toNumber(v.exchange_rate) || 1,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       invoice_id: invoiceId || null,
       total: totals.grand_total,
       sub_total: totals.subtotal,
@@ -184,8 +196,8 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
 
         <FormSection title=""><TransactionTotals items={items} currencySymbol={currencySymbol} /></FormSection>
 
-        <FormSection title="Reason / Notes">
-          <Form.Item name="notes"><Input.TextArea rows={3} placeholder="Reason for credit note" /></Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

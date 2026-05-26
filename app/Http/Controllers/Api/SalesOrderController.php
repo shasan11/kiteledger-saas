@@ -29,6 +29,8 @@ class SalesOrderController extends BaseCrudApiController
         'contact',
         'warehouse',
         'currency',
+        'userAdd',
+        'approvedBy',
     ];
 
     protected array $relationDetails = [
@@ -184,6 +186,10 @@ class SalesOrderController extends BaseCrudApiController
             'nullable',
             'string',
         ],
+        'remarks' => [
+            'nullable',
+            'string',
+        ],
         'exchange_rate' => [
             'nullable',
             'numeric',
@@ -273,6 +279,11 @@ class SalesOrderController extends BaseCrudApiController
                 'max:120',
             ],
             'notes' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+            'remarks' => [
                 'sometimes',
                 'nullable',
                 'string',

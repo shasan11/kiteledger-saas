@@ -7,6 +7,7 @@ import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -20,6 +21,7 @@ export default function WarehouseTransfersIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'Transfer No', dataIndex: 'transfer_no', key: 'transfer_no', sorter: true, width: 140, render: (_, r) => <Text strong>{displayDocumentNumber(r, r?.warehouse_transfer_no ? 'warehouse_transfer_no' : 'transfer_no')}</Text> },
+        branchColumn(),
         { title: 'Date', dataIndex: 'transfer_date', key: 'transfer_date', sorter: true, width: 120, render: displayDate },
         { title: 'From Warehouse', dataIndex: 'fromWarehouse', key: 'fromWarehouse', render: (_, r) => r?.fromWarehouse?.name || r?.from_warehouse?.name || '-' },
         { title: 'To Warehouse', dataIndex: 'toWarehouse', key: 'toWarehouse', render: (_, r) => r?.toWarehouse?.name || r?.to_warehouse?.name || '-' },

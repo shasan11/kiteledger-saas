@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\AI\AiChatController;
 use App\Http\Controllers\Api\AI\AiActionController;
 use App\Http\Controllers\Api\AI\AiRiskReviewController;
 use App\Http\Controllers\Api\AI\AiReportController;
+use App\Http\Controllers\Api\AI\AiAssistantController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -1012,9 +1013,22 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 |--------------------------------------------------------------------------
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
-    // Settings
+    // -----------------------------------------------------------------
+    // AI Assistant (canonical chat + settings)
+    // -----------------------------------------------------------------
+    Route::get('health',                                [AiAssistantController::class, 'health']);
+    Route::post('chat',                                 [AiAssistantController::class, 'chat']);
+    Route::post('chat/stream',                          [AiAssistantController::class, 'stream']);
+    Route::get('conversations',                         [AiAssistantController::class, 'conversations']);
+    Route::get('conversations/{conversation}',          [AiAssistantController::class, 'showConversation']);
+    Route::delete('conversations/{conversation}',       [AiAssistantController::class, 'deleteConversation']);
+    Route::post('report-summary',                       [AiAssistantController::class, 'reportSummary']);
+    Route::post('business-insight',                     [AiAssistantController::class, 'businessInsight']);
+
+    // Settings (DB-backed via GeneralSetting group=ai)
     Route::get('settings',                              [AiSettingsController::class, 'show']);
     Route::put('settings',                              [AiSettingsController::class, 'update']);
+    Route::post('settings/test',                        [AiSettingsController::class, 'test']);
     Route::post('settings/test-connection',             [AiSettingsController::class, 'testConnection']);
 
     // Usage logs
@@ -1047,9 +1061,9 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
     Route::post('inventory/insights',                   [AiInventoryInsightController::class, 'insights']);
 
     // -----------------------------------------------------------------
-    // Kite AI Command Center — approval-safe chat + action pipeline
+    // Kite AI Command Center — approval-safe chat + action pipeline (legacy)
     // -----------------------------------------------------------------
-    Route::post('chat',                                 [AiChatController::class, 'chat']);
+    Route::post('command-center/chat',                  [AiChatController::class, 'chat']);
     Route::post('actions/{uuid}/approve',               [AiActionController::class, 'approve']);
     Route::post('actions/{uuid}/reject',                [AiActionController::class, 'reject']);
     Route::post('risk-review',                          [AiRiskReviewController::class, 'review']);

@@ -2086,6 +2086,8 @@ export default function ReusableCrud({
         icon: <EditOutlined />,
         label: "Edit",
         onClick: () => {
+          // If a path builder is provided, navigate to the custom edit page
+          // instead of opening the inline edit drawer.
           if (typeof editPathBuilder === "function") {
             const path = editPathBuilder(record);
             if (path) {
@@ -2093,7 +2095,6 @@ export default function ReusableCrud({
               return;
             }
           }
-
           setSubmitErrors(EMPTY_ARRAY);
           setEditingRecord(applyRecordTransform(record));
           setVisible(true);

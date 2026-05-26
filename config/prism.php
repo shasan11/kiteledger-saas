@@ -6,7 +6,7 @@ return [
         'middleware' => [],
         'enabled' => env('PRISM_SERVER_ENABLED', false),
     ],
-    'request_timeout' => env('PRISM_REQUEST_TIMEOUT', 120), // The timeout for requests in seconds (120s default for local/slow providers like Ollama).
+    'request_timeout' => env('PRISM_REQUEST_TIMEOUT', 1120), // The timeout for requests in seconds (120s default for local/slow providers like Ollama).
     'providers' => [
         'openai' => [
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),

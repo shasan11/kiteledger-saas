@@ -30,6 +30,7 @@ class ProductionJournal extends Model
         'finished_goods_cost',
         'cost_per_unit',
         'notes',
+        'remarks',
         'status',
         'active',
         'approved',
@@ -92,6 +93,11 @@ class ProductionJournal extends Model
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by_id');
+    }
+
+    public function userAdd(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_add_id');
     }
 
     public function journalVoucher(): BelongsTo

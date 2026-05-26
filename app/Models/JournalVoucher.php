@@ -26,6 +26,7 @@ class JournalVoucher extends Model
         'currency_id',
         'reference',
         'narration',
+        'remarks',
         'source_type',
         'source_id',
         'source_no',
