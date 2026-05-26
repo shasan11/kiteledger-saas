@@ -19,6 +19,7 @@ class GlobalSearchService
     public function __construct(
         private readonly GlobalSearchRegistry $registry,
         private readonly AppContextService $contextService,
+        private readonly BranchScopeService $branchScope,
     ) {
     }
 
@@ -254,18 +255,39 @@ class GlobalSearchService
             return;
         }
 
-        if (($context['branch_id'] ?? null) === 'all') {
+        $user = $context['user'] ?? null;
+        $canViewAll = $this->branchScope->canViewAllBranches($user);
+
+        // Above-branch users with explicit "all" selected get no filter.
+        if ($canViewAll && ($context['branch_id'] ?? null) === 'all') {
             return;
         }
 
-        if (!empty($context['branch_id'])) {
+        // Above-branch users with a specific branch selected scope to it.
+        if ($canViewAll && !empty($context['branch_id'])) {
             $query->where("{$table}.branch_id", $context['branch_id']);
             return;
         }
 
-        if (!empty($context['accessible_branch_ids'])) {
-            $query->whereIn("{$table}.branch_id", $context['accessible_branch_ids']);
+        // Branch-limited users are confined to their accessible set
+        // regardless of what they pass in context.
+        $accessible = $this->branchScope->accessibleBranchIds($user);
+
+        if (empty($accessible)) {
+            $query->whereRaw('1 = 0');
+            return;
         }
+
+        // If they have an explicit selection within their accessible set, honor it.
+        if (!empty($context['branch_id'])
+            && $context['branch_id'] !== 'all'
+            && in_array((string) $context['branch_id'], $accessible, true)
+        ) {
+            $query->where("{$table}.branch_id", (string) $context['branch_id']);
+            return;
+        }
+
+        $query->whereIn("{$table}.branch_id", $accessible);
     }
 
     private function applyRecordFiscalYearScope(Builder $query, string $table, array $definition, array $context): void
@@ -415,11 +437,18 @@ class GlobalSearchService
     {
         $appContext = $this->contextService->context($request);
         $user = $request->user();
-        $branchId = $filters['branch_id'] ?? $appContext['current_branch_id'] ?? null;
 
-        if (in_array($branchId, ['all', '*'], true)) {
-            abort_unless($this->contextService->canViewAllBranches($user), 403, 'You do not have access to all branches.');
+        $requestedBranch = $filters['branch_id'] ?? null;
+
+        if (in_array($requestedBranch, ['all', '*'], true)) {
+            abort_unless($this->branchScope->canViewAllBranches($user), 403, 'You do not have access to all branches.');
             $branchId = 'all';
+        } elseif (!empty($requestedBranch)) {
+            $this->branchScope->assertCanAccessBranch($user, (string) $requestedBranch);
+            $branchId = (string) $requestedBranch;
+        } else {
+            // No per-search override — use the saved app context as the source of truth.
+            $branchId = $appContext['all_branches'] ?? false ? 'all' : ($appContext['current_branch_id'] ?? null);
         }
 
         $fiscalYearId = $filters['fiscal_year_id'] ?? $appContext['current_fiscal_year_id'] ?? null;
@@ -430,7 +459,7 @@ class GlobalSearchService
             'branch_id' => $branchId,
             'fiscal_year_id' => $fiscalYear?->id,
             'fiscal_year' => $fiscalYear,
-            'accessible_branch_ids' => $this->contextService->accessibleBranchIds($user)->all(),
+            'accessible_branch_ids' => $this->branchScope->accessibleBranchIds($user),
         ];
     }
 

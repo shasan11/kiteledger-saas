@@ -161,6 +161,11 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api
     Route::post('/fiscal-year', [AppContextController::class, 'setFiscalYear'])->name('fiscal-year');
 });
 
+// Canonical alias matching the documented contract for the frontend branch toggle.
+Route::middleware(['web', 'auth', 'verified'])->prefix('branch-context')->name('api.branch-context.')->group(function () {
+    Route::post('/select', [AppContextController::class, 'setBranch'])->name('select');
+});
+
 /*
 |--------------------------------------------------------------------------
 | Bank Accounts

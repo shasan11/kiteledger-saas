@@ -40,6 +40,9 @@ class RolesAndPermissionsSeeder extends Seeder
         'change_status',
         'set_current',
         'statement',
+        'view_all',
+        'switch',
+        'manage_all',
         'reconcile',
         'clear',
         'cancel',
@@ -134,10 +137,13 @@ class RolesAndPermissionsSeeder extends Seeder
 
                 'branch' => [
                     'view',
+                    'view_all',
                     'create',
                     'update',
                     'delete',
                     'change_status',
+                    'switch',
+                    'manage_all',
                 ],
 
                 'app_setting' => ['view', 'update'],
@@ -1280,15 +1286,37 @@ class RolesAndPermissionsSeeder extends Seeder
                 ],
             ],
 
+            // Above-branch administrator: can switch between branches and view
+            // data across all of them. Implicitly bypasses branch scope via
+            // BranchScopeService::ABOVE_BRANCH_ROLES.
+            'Main Branch Admin' => [
+                'allow' => ['*'],
+                'deny' => [
+                    'system.permission.create',
+                    'system.permission.delete',
+                    'system.activity_log.delete',
+                    'system.audit_log.delete',
+                ],
+            ],
+
+            // Branch-scoped administrator. May administer their assigned
+            // branch but MUST NOT see other branch data — enforced by
+            // BranchScopeService denying system.branch.view_all/manage_all.
             'Branch Admin' => [
                 'allow' => ['*'],
                 'deny' => [
+                    'system.branch.view_all',
+                    'system.branch.manage_all',
+                    'system.branch.create',
+                    'system.branch.delete',
                     'system.permission.*',
                     'system.role.delete',
                     'system.app_setting.update',
                     'system.general_setting.update',
                     'system.application_setting.update',
-                    '*.delete',
+                    'branches.view-all',
+                    'branch.view_all',
+                    'branches.view_all',
                 ],
             ],
 
@@ -2077,7 +2105,8 @@ class RolesAndPermissionsSeeder extends Seeder
         return match ($role) {
             'Super Admin' => 'Full unrestricted system access.',
             'Company Owner' => 'Full business-level access except dangerous permission and audit deletion operations.',
-            'Branch Admin' => 'Branch-level administrator access.',
+            'Main Branch Admin' => 'Cross-branch administrator with branch toggle and access to all branches.',
+            'Branch Admin' => 'Branch-level administrator. Scoped to their assigned branch only.',
             'System Manager' => 'Manages system configuration, users, roles, templates, and numbering.',
             'Auditor' => 'Read-only and export access for audit and review.',
             'Finance Controller' => 'Full finance, accounting, tax, payable, receivable, and report access.',

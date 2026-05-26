@@ -112,7 +112,7 @@ class AppContextService
 
     public function canViewAllBranches(?User $user): bool
     {
-        return $this->userCan($user, ['branches.view-all', 'branch.view_all', 'branch.view-all', 'branches.view_all']);
+        return app(BranchScopeService::class)->canViewAllBranches($user);
     }
 
     public function canOverrideFiscalYearLock(?User $user): bool
@@ -170,8 +170,16 @@ class AppContextService
             return $branch;
         }
 
-        return Branch::query()->where('active', true)->where('is_head_office', true)->first()
-            ?: Branch::query()->where('active', true)->oldest()->first();
+        // Above-branch users may safely default to head office. Branch-limited
+        // users must never inherit head office as a silent fallback — they
+        // either land on an explicitly assigned branch (handled above) or get
+        // no branch context at all.
+        if ($this->canViewAllBranches($user)) {
+            return Branch::query()->where('active', true)->where('is_head_office', true)->first()
+                ?: Branch::query()->where('active', true)->oldest()->first();
+        }
+
+        return $accessibleBranches->first();
     }
 
     private function resolveFiscalYear(Request $request, ?UserAppContext $savedContext, ?AppSetting $appSettings): ?FiscalYear
@@ -214,24 +222,19 @@ class AppContextService
             return Branch::query()->where('active', true)->orderByDesc('is_head_office')->orderBy('name')->get();
         }
 
-        $ids = collect([$user->branch_id])->filter()->map(fn ($id) => (string) $id);
+        $ids = app(BranchScopeService::class)->assignedBranchIds($user);
 
-        try {
-            if (method_exists($user, 'branches')) {
-                $ids = $ids->merge($user->branches()->pluck('branches.id'));
-            }
-        } catch (\Throwable) {
-            //
+        if (empty($ids)) {
+            // Branch-limited user without an assignment. Do NOT fall back to
+            // head office — that silently grants cross-branch read access.
+            return Branch::query()->whereRaw('1 = 0')->get();
         }
 
-        if ($ids->isEmpty()) {
-            $fallback = Branch::query()->where('active', true)->where('is_head_office', true)->value('id')
-                ?: Branch::query()->where('active', true)->value('id');
-
-            $ids = collect($fallback ? [$fallback] : []);
-        }
-
-        return Branch::query()->whereIn('id', $ids->unique()->values())->where('active', true)->orderBy('name')->get();
+        return Branch::query()
+            ->whereIn('id', $ids)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
     }
 
     private function branchPayload(Branch $branch): array

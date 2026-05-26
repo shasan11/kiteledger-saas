@@ -44,6 +44,7 @@ import {
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
+import { QRCodeSVG } from 'qrcode.react';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -910,6 +911,57 @@ const defaultPrintTemplateCss = `
 }
 `.trim();
 
+function PaymentQrBlock({ paymentUrl, faviconUrl }) {
+    if (!paymentUrl) return null;
+
+    const qrProps = faviconUrl
+        ? {
+              imageSettings: {
+                  src: faviconUrl,
+                  height: 28,
+                  width: 28,
+                  excavate: true,
+              },
+          }
+        : {};
+
+    return (
+        <div
+            style={{
+                marginTop: 28,
+                paddingTop: 18,
+                borderTop: '1px dashed #d1d5db',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 18,
+            }}
+        >
+            {/* QR */}
+            <div style={{ flexShrink: 0 }}>
+                <QRCodeSVG
+                    value={paymentUrl}
+                    size={96}
+                    level="M"
+                    {...qrProps}
+                />
+            </div>
+
+            {/* Text */}
+            <div style={{ paddingTop: 4 }}>
+                <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 13, color: '#111827' }}>
+                    Pay Online
+                </p>
+                <p style={{ margin: '0 0 6px', fontSize: 11, color: '#6b7280', lineHeight: 1.4 }}>
+                    Scan the QR code with your phone to pay this invoice securely online.
+                </p>
+                <p style={{ margin: 0, fontSize: 10, color: '#9ca3af', wordBreak: 'break-all' }}>
+                    {paymentUrl}
+                </p>
+            </div>
+        </div>
+    );
+}
+
 function DynamicPrintTemplatePreview({
     record,
     documentType,
@@ -917,6 +969,7 @@ function DynamicPrintTemplatePreview({
     template,
     templateError,
     companyInfo,
+    paymentLinkData,
 }) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
 
@@ -939,6 +992,11 @@ function DynamicPrintTemplatePreview({
 
     const fileName = getPrintFileName(record, normalizedDocumentType, title);
 
+    // Payment QR — only for active invoice payment links
+    const paymentUrl  = paymentLinkData?.public_url || null;
+    const isLinkActive = !!(paymentLinkData?.link?.active && !paymentLinkData?.link?.is_expired && paymentUrl);
+    const faviconUrl  = companyInfo?.favicon_url || companyInfo?.favicon || null;
+
     return (
         <PrintablePdfEmailWrapper
             title={context.document.title}
@@ -959,7 +1017,7 @@ function DynamicPrintTemplatePreview({
                 document_number: context.document.number,
                 record_id: record?.id,
             }}
-             
+
             contentStyle={{
                 width: '210mm',
                 minHeight: '297mm',
@@ -967,6 +1025,9 @@ function DynamicPrintTemplatePreview({
         >
             <style>{resolvedTemplate.template_css || ''}</style>
             <div dangerouslySetInnerHTML={{ __html: html }} />
+            {isLinkActive && normalizedDocumentType === 'invoice' && (
+                <PaymentQrBlock paymentUrl={paymentUrl} faviconUrl={faviconUrl} />
+            )}
         </PrintablePdfEmailWrapper>
     );
 }
@@ -1874,6 +1935,7 @@ export default function PaymentInRecordShow({
     const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
     const [printTemplateError, setPrintTemplateError] = useState('');
     const [companyInfo, setCompanyInfo] = useState(null);
+    const [printPaymentLink, setPrintPaymentLink] = useState(null);
 
     const [approveModalOpen, setApproveModalOpen] = useState(false);
     const [approveLoading, setApproveLoading] = useState(false);
@@ -1972,17 +2034,30 @@ export default function PaymentInRecordShow({
             setPrintTemplateLoading(true);
             setPrintTemplateError('');
             setPrintTemplate(null);
+            setPrintPaymentLink(null);
 
             try {
-                const [templateResponse, companyResponse] = await Promise.all([
+                const requests = [
                     axios.get(api(`/api/printing-templates/resolve?document_type=${encodeURIComponent(normalizedDocumentType)}`)),
                     axios.get(api('/api/app-settings/current')).catch(() => ({ data: null })),
-                ]);
+                ];
+
+                // For invoices with an ID, also fetch the payment link so we can render a QR code
+                if (normalizedDocumentType === 'invoice' && record?.id) {
+                    requests.push(
+                        axios.get(api(`/api/invoices/${record.id}/payment-link`)).catch(() => ({ data: null }))
+                    );
+                }
+
+                const [templateResponse, companyResponse, paymentLinkResponse] = await Promise.all(requests);
 
                 if (!active) return;
 
                 setPrintTemplate(templateResponse.data?.data ?? templateResponse.data ?? null);
                 setCompanyInfo(companyResponse.data?.data ?? companyResponse.data ?? null);
+                if (paymentLinkResponse) {
+                    setPrintPaymentLink(paymentLinkResponse.data ?? null);
+                }
             } catch (err) {
                 if (!active) return;
 
@@ -2618,6 +2693,7 @@ export default function PaymentInRecordShow({
                         template={printTemplate}
                         templateError={printTemplateError}
                         companyInfo={companyInfo}
+                        paymentLinkData={printPaymentLink}
                     />
                 )}
             </Drawer>

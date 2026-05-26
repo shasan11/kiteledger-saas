@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\FiscalYear;
+use App\Services\BranchScopeService;
 use App\Services\DocumentNumberingService;
 use App\Services\AppContextService;
 use App\Services\TransactionApprovalService;
@@ -73,7 +74,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected bool $preventBranchChangeOnUpdate = false;
 
-    protected ?string $branchBypassPermission = 'branches.view-all';
+    protected ?string $branchBypassPermission = BranchScopeService::PERMISSION_VIEW_ALL;
 
     protected bool $fiscalYearScoped = false;
 
@@ -579,10 +580,19 @@ abstract class BaseCrudApiController extends Controller
             'format' => ['nullable', 'string', 'in:csv'],
         ]);
 
-        $records = $this->newQuery()
-            ->with($this->validEagerLoadRelations())
-            ->whereIn($this->primaryKeyName(), array_values(array_unique($data['ids'])))
+        $requestedIds = array_values(array_unique($data['ids']));
+
+        $scopedQuery = $this->newQuery()->with($this->validEagerLoadRelations());
+        $this->applyBranchScope($scopedQuery, $request);
+
+        $records = (clone $scopedQuery)
+            ->whereIn($this->primaryKeyName(), $requestedIds)
             ->get();
+
+        if ($records->count() !== count($requestedIds)) {
+            // Some requested ids were outside the user's branch scope.
+            abort(403, 'You do not have access to one or more of the selected records.');
+        }
 
         $filename = Str::slug(class_basename($this->modelClass)) . '-selected-' . now()->format('YmdHis') . '.csv';
 
@@ -933,39 +943,18 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        if ($this->userCanAccessAllBranches($request)) {
-            $requestedBranchId = $this->requestedBranchId($request);
+        app(BranchScopeService::class)->applyToQuery(
+            $query,
+            $request,
+            $request->user(),
+            $this->branchColumn,
+            $this->modelTable()
+        );
+    }
 
-            if ($requestedBranchId) {
-                if (in_array($requestedBranchId, ['all', '*'], true)) {
-                    return;
-                }
-
-                $query->where($this->qualifiedColumn($this->branchColumn), $requestedBranchId);
-            }
-
-            return;
-        }
-
-        $allowedBranchIds = $this->accessibleBranchIds($request);
-
-        if (empty($allowedBranchIds)) {
-            $query->whereRaw('1 = 0');
-            return;
-        }
-
-        $requestedBranchId = $this->requestedBranchId($request);
-
-        if ($requestedBranchId) {
-            if (!in_array((string) $requestedBranchId, $allowedBranchIds, true)) {
-                abort(403, 'You do not have access to this branch.');
-            }
-
-            $query->where($this->qualifiedColumn($this->branchColumn), $requestedBranchId);
-            return;
-        }
-
-        $query->whereIn($this->qualifiedColumn($this->branchColumn), $allowedBranchIds);
+    protected function modelTable(): string
+    {
+        return $this->newModelInstance()->getTable();
     }
 
     protected function applyBranchToCreatePayload(array $data, Request $request): array
@@ -975,9 +964,11 @@ abstract class BaseCrudApiController extends Controller
         }
 
         $providedBranchId = $data[$this->branchColumn] ?? null;
+        $scope = app(BranchScopeService::class);
+        $user = $request->user();
 
         if (!empty($providedBranchId)) {
-            $this->assertBranchIdAllowed($request, $providedBranchId);
+            $scope->assertCanAccessBranch($user, (string) $providedBranchId);
             $data[$this->branchColumn] = (string) $providedBranchId;
 
             return $data;
@@ -987,7 +978,7 @@ abstract class BaseCrudApiController extends Controller
             $defaultBranchId = $this->defaultWriteBranchId($request, true);
 
             if ($defaultBranchId) {
-                $this->assertBranchIdAllowed($request, $defaultBranchId);
+                $scope->assertCanAccessBranch($user, (string) $defaultBranchId);
                 $data[$this->branchColumn] = (string) $defaultBranchId;
             }
         }
@@ -1003,12 +994,18 @@ abstract class BaseCrudApiController extends Controller
 
         $this->assertRecordBranchAccess($request, $record);
 
-        if ($this->preventBranchChangeOnUpdate && array_key_exists($this->branchColumn, $data)) {
+        $scope = app(BranchScopeService::class);
+        $user = $request->user();
+
+        if ($scope->isBranchLimited($user) || $this->preventBranchChangeOnUpdate) {
+            // Branch-limited users may never change branch on update; same when
+            // controllers explicitly opt in to preventBranchChangeOnUpdate.
             unset($data[$this->branchColumn]);
+            return $data;
         }
 
-        if (!$this->preventBranchChangeOnUpdate && !empty($data[$this->branchColumn])) {
-            $this->assertBranchIdAllowed($request, $data[$this->branchColumn]);
+        if (!empty($data[$this->branchColumn])) {
+            $scope->assertCanAccessBranch($user, (string) $data[$this->branchColumn]);
         }
 
         return $data;
@@ -1020,154 +1017,54 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        if ($this->userCanAccessAllBranches($request)) {
-            return;
-        }
-
         $branchId = $record->{$this->branchColumn} ?? null;
 
         if (!$branchId) {
             return;
         }
 
-        $this->assertBranchIdAllowed($request, $branchId);
-    }
-
-    protected function assertBranchIdAllowed(Request $request, mixed $branchId): void
-    {
-        if (!$this->usesBranchScope()) {
-            return;
-        }
-
-        if ($this->userCanAccessAllBranches($request)) {
-            return;
-        }
-
-        if (!$branchId) {
-            abort(403, 'Branch is required.');
-        }
-
-        $allowedBranchIds = $this->accessibleBranchIds($request);
-
-        if (!in_array((string) $branchId, $allowedBranchIds, true)) {
-            abort(403, 'You do not have access to this branch.');
-        }
+        app(BranchScopeService::class)->assertCanAccessBranch($request->user(), (string) $branchId);
     }
 
     protected function requestedBranchId(Request $request): ?string
     {
-        $branchId = $request->header($this->branchHeaderKey);
+        $value = app(BranchScopeService::class)->normalizeRequestedBranch($request);
 
-        if (!$branchId) {
-            $branchId = $request->query($this->branchRequestKey);
-        }
-
-        if (!$branchId) {
-            $branchId = $request->input($this->branchRequestKey);
-        }
-
-        return $branchId ? (string) $branchId : null;
+        return $value === 'all' ? null : $value;
     }
 
     protected function defaultWriteBranchId(Request $request, bool $allowRequestedBranch = true): ?string
     {
-        $requested = $allowRequestedBranch ? $this->requestedBranchId($request) : null;
-
-        if ($requested) {
-            if (in_array($requested, ['all', '*'], true)) {
-                return null;
-            }
-
-            return (string) $requested;
-        }
-
+        $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if ($user) {
-            if (!empty($user->current_branch_id)) {
-                return (string) $user->current_branch_id;
-            }
+        if ($allowRequestedBranch) {
+            $selected = $scope->selectedBranchId($request, $user);
 
-            if (!empty($user->branch_id)) {
-                return (string) $user->branch_id;
-            }
-
-            $branchIds = $this->accessibleBranchIds($request);
-
-            if (count($branchIds) === 1) {
-                return $branchIds[0];
+            if ($selected !== null) {
+                return $selected;
             }
         }
 
-        return Branch::query()->where('code', 'MAIN')->value('id')
-            ?: Branch::query()->value('id');
+        // For above-branch users with "all" selected and no requested branch,
+        // we have no safe default — let validation surface "branch required".
+        if ($scope->canViewAllBranches($user)) {
+            return null;
+        }
+
+        $assigned = $scope->assignedBranchIds($user);
+
+        return $assigned[0] ?? null;
     }
 
     protected function accessibleBranchIds(Request $request): array
     {
-        $user = $request->user();
-
-        $ids = [];
-
-        if ($user) {
-            if (!empty($user->current_branch_id)) {
-                $ids[] = (string) $user->current_branch_id;
-            }
-
-            if (!empty($user->branch_id)) {
-                $ids[] = (string) $user->branch_id;
-            }
-
-            if (!empty($user->branch_ids) && is_array($user->branch_ids)) {
-                foreach ($user->branch_ids as $id) {
-                    if ($id) {
-                        $ids[] = (string) $id;
-                    }
-                }
-            }
-
-            try {
-                if (method_exists($user, 'branches')) {
-                    $relationIds = $user->branches()->pluck('branches.id')->toArray();
-
-                    foreach ($relationIds as $id) {
-                        if ($id) {
-                            $ids[] = (string) $id;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                //
-            }
-        }
-
-        $ids = array_values(array_unique(array_filter($ids)));
-
-        if (!empty($ids)) {
-            return $ids;
-        }
-
-        $fallbackBranchId = Branch::query()->where('code', 'MAIN')->value('id')
-            ?: Branch::query()->value('id');
-
-        return $fallbackBranchId ? [(string) $fallbackBranchId] : [];
+        return app(BranchScopeService::class)->accessibleBranchIds($request->user());
     }
 
     protected function userCanAccessAllBranches(Request $request): bool
     {
-        $user = $request->user();
-
-        if (!$user || !$this->branchBypassPermission || !method_exists($user, 'can')) {
-            return false;
-        }
-
-        try {
-            return $user->can($this->branchBypassPermission)
-                || $user->can('branch.view_all')
-                || $user->can('branches.view_all');
-        } catch (\Throwable $e) {
-            return false;
-        }
+        return app(BranchScopeService::class)->canViewAllBranches($request->user());
     }
 
     protected function applyFiscalYearScope(Builder $query, Request $request): void
