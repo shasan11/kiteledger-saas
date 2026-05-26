@@ -20,6 +20,8 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'adjustment_date';
     protected array $relations = ['branch','warehouse'];
     protected array $relationDetails = ['branch'=>'branch_id','warehouse'=>'warehouse_id'];
     protected array $searchable = ['adjustment_no','reason','notes','status'];
@@ -40,10 +42,6 @@ class InventoryAdjustmentController extends BaseCrudApiController
     {
         $total = $record->inventoryAdjustmentLines()->get()->sum(fn ($i) => (float) $i->qty * (float) ($i->unit_cost ?? 0));
         $record->forceFill(['total' => $total])->save();
-
-        if ($this->shouldPostStock($record, $parentData)) {
-            $record = $this->warehouseStockService->postInventoryAdjustment($record);
-        }
 
         return $record;
     }
@@ -78,6 +76,12 @@ class InventoryAdjustmentController extends BaseCrudApiController
 
     protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
     {
+        if ($this->requestsDirectPosting($parentData)) {
+            $this->throwValidation([
+                'status' => ['Use the approve/post action to post inventory adjustments.'],
+            ]);
+        }
+
         if (((bool) $record->stock_posted || $record->status === 'posted') && $this->hasProtectedEdit($parentData, $nestedData)) {
             $this->throwValidation([
                 'status' => ['Posted inventory adjustments cannot be edited.'],
@@ -98,6 +102,12 @@ class InventoryAdjustmentController extends BaseCrudApiController
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
+        if ($this->requestsDirectPosting($parentData)) {
+            $this->throwValidation([
+                'status' => ['New inventory adjustments must be saved as draft first. Use approve/post after saving.'],
+            ]);
+        }
+
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
         $parentData['adjustment_no'] = $parentData['adjustment_no'] ?? $this->draftAdjustmentNo();
 
@@ -123,13 +133,9 @@ class InventoryAdjustmentController extends BaseCrudApiController
         return $data;
     }
 
-    protected function shouldPostStock(Model $record, array $parentData): bool
+    protected function requestsDirectPosting(array $parentData): bool
     {
-        if ((bool) $record->stock_posted) {
-            return false;
-        }
-
-        return ($parentData['status'] ?? $record->status) === 'posted'
+        return ($parentData['status'] ?? null) === 'posted'
             || (array_key_exists('approved', $parentData) && (bool) $parentData['approved']);
     }
 

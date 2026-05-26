@@ -8,18 +8,19 @@ use Illuminate\Support\Facades\View;
 use App\Support\Branding;
 
 use App\Models\{
-    Branch, ChartOfAccount, BankAccount, CashTransfer, CashTransferLine,
+    Branch, ChartOfAccount, BankAccount, CashTransfer, CashTransferLine, Currency,
     JournalVoucher, JournalVoucherLine, ChequeRegister,
     LoanAccount, LoanTopUp, LoanCharge,
     Invoice, CustomerPayment, PurchaseBill, SupplierPayment, SupplierPaymentLine,
     Expense, SalesReturn, DebitNote, InventoryAdjustment,
     Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
     Contact, Product, Lead, Deal,
-    PosCashMovement, PosReturn, PosSale, PosShift
+    PosCashMovement, PosReturn, PosSale, PosShift,
+    ProductionOrder, ProductionJournal
 };
 
 use App\Observers\{
-    BranchObserver, ChartOfAccountObserver, BankAccountObserver,
+    BranchObserver, ChartOfAccountObserver, BankAccountObserver, CurrencyObserver,
     CashTransferObserver, CashTransferLineObserver,
     JournalVoucherObserver, JournalVoucherLineObserver,
     ChequeRegisterObserver,
@@ -31,7 +32,8 @@ use App\Observers\{
     SalesOrderObserver, PurchaseOrderObserver, ProformaInvoiceObserver,
     ContactObserver, ProductObserver, LeadObserver, DealObserver,
     PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver,
-    SubsequentJournalVoucherObserver
+    SubsequentJournalVoucherObserver,
+    ProductionOrderObserver, ProductionJournalObserver
 };
 
 class AppServiceProvider extends ServiceProvider
@@ -75,6 +77,7 @@ class AppServiceProvider extends ServiceProvider
         ChartOfAccount::observe(ChartOfAccountObserver::class);
         BankAccount::observe(BankAccountObserver::class);
         Branch::observe(BranchObserver::class);
+        Currency::observe(CurrencyObserver::class);
 
         CashTransfer::observe(CashTransferObserver::class);
         CashTransferLine::observe(CashTransferLineObserver::class);
@@ -111,6 +114,9 @@ class AppServiceProvider extends ServiceProvider
         PosSale::observe(PosSaleObserver::class);
         PosCashMovement::observe(PosCashMovementObserver::class);
         PosReturn::observe(PosReturnObserver::class);
+
+        ProductionOrder::observe(ProductionOrderObserver::class);
+        ProductionJournal::observe(ProductionJournalObserver::class);
 
         foreach ([
             ChequeRegister::class,

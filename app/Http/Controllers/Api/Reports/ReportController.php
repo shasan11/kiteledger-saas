@@ -44,7 +44,24 @@ class ReportController extends Controller
         $meta = ReportRegistry::resolve($category, $report_key);
         abort_unless($meta, 404);
         $this->authorizePermission($request, $meta['permission']);
-        $data = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
+
+        try {
+            $data = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'title' => $meta['title'] ?? 'Report',
+                'report_key' => $report_key,
+                'category' => $meta['category_label'] ?? $category,
+                'rows' => [],
+                'columns' => [],
+                'summary' => [],
+                'totals' => [],
+                'generated_at' => now()->format('Y-m-d H:i:s'),
+                'error' => config('app.debug') ? $e->getMessage() : 'An error occurred while generating this report.',
+            ], 500);
+        }
+
         return response()->json($data);
     }
 
@@ -54,8 +71,14 @@ class ReportController extends Controller
         abort_unless($meta, 404);
         $this->authorizePermission($request, $meta['permission']);
         $this->authorizePermission($request, 'reports.export');
-        $report = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
-        return $this->exportService->export($report, $request->query('format', 'csv'));
+
+        try {
+            $report = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
+            return $this->exportService->export($report, $request->query('format', 'csv'));
+        } catch (\Throwable $e) {
+            report($e);
+            abort(500, config('app.debug') ? $e->getMessage() : 'Export failed.');
+        }
     }
 
     protected function authorizePermission(Request $request, string $permission): void

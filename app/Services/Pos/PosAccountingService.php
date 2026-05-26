@@ -21,6 +21,14 @@ class PosAccountingService
             return;
         }
 
+        $sale->loadMissing([
+            'invoice.contact',
+            'invoice.invoiceLines.product',
+            'invoice.invoiceLines.taxRate',
+            'customerPayment.contact',
+            'customerPayment.account',
+        ]);
+
         if ($sale->invoice && !$sale->invoice->approved) {
             $this->approvalService->approve($sale->invoice, $sale->approved_by_id);
         }

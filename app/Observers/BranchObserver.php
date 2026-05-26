@@ -13,6 +13,18 @@ class BranchObserver
         $this->ensureSystemWarehouse($branch);
     }
 
+    public function saved(Branch $branch): void
+    {
+        if (!$branch->is_head_office) {
+            return;
+        }
+
+        Branch::query()
+            ->whereKeyNot($branch->getKey())
+            ->where('is_head_office', true)
+            ->update(['is_head_office' => false]);
+    }
+
     public function ensureSystemWarehouse(Branch $branch): Warehouse
     {
         $existing = $branch->warehouses()

@@ -18,7 +18,7 @@ class LoanTopUpService
     {
         $loanTopUp->loadMissing('loanAccount');
 
-        if (!(bool) ($loanTopUp->active ?? true)) {
+        if (! (bool) ($loanTopUp->active ?? true)) {
             return [];
         }
 
@@ -45,7 +45,7 @@ class LoanTopUpService
 
     public function syncFinancials(LoanTopUp $loanTopUp, array $oldEffect = []): void
     {
-        DB::transaction(function () use ($loanTopUp, $oldEffect) {
+        DB::transaction(function () use ($loanTopUp) {
             $loanTopUp = LoanTopUp::query()
                 ->with('loanAccount')
                 ->lockForUpdate()
@@ -53,23 +53,19 @@ class LoanTopUpService
 
             $this->validate($loanTopUp);
             $this->syncGeneratedJournalVoucher($loanTopUp);
-
-            $newEffect = $this->snapshotEffect($loanTopUp);
-
-            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
             $this->recalculateLoanBalance($loanTopUp->loan_account_id);
         });
     }
 
     public function validate(LoanTopUp $loanTopUp): void
     {
-        if (!$loanTopUp->loan_account_id) {
+        if (! $loanTopUp->loan_account_id) {
             throw ValidationException::withMessages([
                 'loan_account_id' => 'Loan account is required.',
             ]);
         }
 
-        if (!$loanTopUp->loan_received_in_account_id) {
+        if (! $loanTopUp->loan_received_in_account_id) {
             throw ValidationException::withMessages([
                 'loan_received_in_account_id' => 'Loan received-in account is required.',
             ]);
@@ -81,7 +77,7 @@ class LoanTopUpService
             ]);
         }
 
-        if (!$loanTopUp->loanAccount?->related_account_id) {
+        if (! $loanTopUp->loanAccount?->related_account_id) {
             throw ValidationException::withMessages([
                 'related_account_id' => 'Loan liability account is missing on loan account.',
             ]);
@@ -127,7 +123,7 @@ class LoanTopUpService
             ->lockForUpdate()
             ->find($loanAccountId);
 
-        if (!$loanAccount) {
+        if (! $loanAccount) {
             return;
         }
 

@@ -2,18 +2,21 @@
 
 namespace App\Domain\Accounting\Services;
 
-use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
+use App\Models\ChartOfAccount;
+use App\Models\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class SystemJournalVoucherService
 {
     public function __construct(
-        protected CodeGeneratorService $codeGenerator
+        protected CodeGeneratorService $codeGenerator,
+        protected JournalVoucherService $journalVoucherService
     ) {}
 
     public function syncFromEntries(
@@ -39,6 +42,9 @@ class SystemJournalVoucherService
             $exchangeRate
         ) {
             $voucher = $this->findExistingVoucher($sourceType, $source);
+            $oldEffect = $voucher
+                ? $this->journalVoucherService->snapshotEffect($voucher->fresh(['journalVoucherLines']))
+                : [];
 
             $reference = $this->reference($sourceType, $source->getKey());
 
@@ -56,11 +62,11 @@ class SystemJournalVoucherService
                 'exchange_rate' => $exchangeRate ?: 1,
             ];
 
-            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_auto_generated')) {
+            if (Schema::hasColumn((new JournalVoucher)->getTable(), 'is_auto_generated')) {
                 $voucherPayload['is_auto_generated'] = true;
             }
 
-            if (Schema::hasColumn((new JournalVoucher())->getTable(), 'is_system_generated')) {
+            if (Schema::hasColumn((new JournalVoucher)->getTable(), 'is_system_generated')) {
                 $voucherPayload['is_system_generated'] = true;
             }
 
@@ -95,7 +101,7 @@ class SystemJournalVoucherService
                     $debit = (float) ($entry['debit'] ?? 0);
                     $credit = (float) ($entry['credit'] ?? 0);
 
-                    if (!$accountId) {
+                    if (! $accountId) {
                         throw ValidationException::withMessages([
                             'account_id' => 'System journal entry account_id is required.',
                         ]);
@@ -117,13 +123,20 @@ class SystemJournalVoucherService
                             accountId: $accountId,
                             debit: $debit,
                             credit: $credit,
-                            description: $entry['description'] ?? null
+                            description: $entry['description'] ?? null,
+                            foreignDebit: (float) ($entry['foreign_debit'] ?? $entry['foreignDebit'] ?? $debit),
+                            foreignCredit: (float) ($entry['foreign_credit'] ?? $entry['foreignCredit'] ?? $credit),
+                            currencyId: $entry['currency_id'] ?? $voucher->currency_id,
+                            exchangeRate: $entry['exchange_rate'] ?? $voucher->exchange_rate
                         )
                     );
                 }
             });
 
             $this->syncBackReferenceToSource($source, $voucher);
+
+            $voucher = $voucher->fresh(['journalVoucherLines']);
+            $this->journalVoucherService->syncFinancials($voucher, $oldEffect);
 
             return $voucher->fresh(['journalVoucherLines']);
         });
@@ -135,19 +148,19 @@ class SystemJournalVoucherService
 
         if (
             Schema::hasColumn($sourceTable, 'subsequent_journal_voucher_id')
-            && !empty($source->subsequent_journal_voucher_id)
+            && ! empty($source->subsequent_journal_voucher_id)
         ) {
             return JournalVoucher::query()->find($source->subsequent_journal_voucher_id);
         }
 
         if (
             Schema::hasColumn($sourceTable, 'journal_voucher_id')
-            && !empty($source->journal_voucher_id)
+            && ! empty($source->journal_voucher_id)
         ) {
             return JournalVoucher::query()->find($source->journal_voucher_id);
         }
 
-        $voucher = new JournalVoucher();
+        $voucher = new JournalVoucher;
         $voucherTable = $voucher->getTable();
 
         if (
@@ -170,9 +183,13 @@ class SystemJournalVoucherService
         string $accountId,
         float $debit,
         float $credit,
-        ?string $description = null
+        ?string $description = null,
+        float $foreignDebit = 0,
+        float $foreignCredit = 0,
+        ?string $currencyId = null,
+        float|int|string|null $exchangeRate = 1
     ): array {
-        $line = new JournalVoucherLine();
+        $line = new JournalVoucherLine;
         $table = $line->getTable();
 
         $payload = [
@@ -182,36 +199,87 @@ class SystemJournalVoucherService
             'credit' => $credit,
         ];
 
-        if (Schema::hasColumn($table, 'chart_of_account_id')) {
-            $coaId = ChartOfAccount::query()
-                ->where('account_id', $accountId)
-                ->value('id');
+        if (Schema::hasColumn($table, 'foreign_debit')) {
+            $payload['foreign_debit'] = $foreignDebit;
+        }
 
-            if (!$coaId) {
-                throw ValidationException::withMessages([
-                    'chart_of_account_id' => "No ChartOfAccount found for account_id {$accountId}. Add account_id to journal_voucher_lines or create linked COA.",
-                ]);
-            }
+        if (Schema::hasColumn($table, 'foreign_credit')) {
+            $payload['foreign_credit'] = $foreignCredit;
+        }
 
-            $payload['chart_of_account_id'] = $coaId;
+        if (Schema::hasColumn($table, 'currency_id')) {
+            $payload['currency_id'] = $currencyId;
+        }
+
+        if (Schema::hasColumn($table, 'exchange_rate')) {
+            $payload['exchange_rate'] = $exchangeRate ?: 1;
         }
 
         if (Schema::hasColumn($table, 'account_id')) {
             $payload['account_id'] = $accountId;
         }
 
-        if (isset($payload['account_id']) || isset($payload['chart_of_account_id'])) {
+        // TODO: Remove this bridge after legacy chart_of_account_id is dropped.
+        if (Schema::hasColumn($table, 'chart_of_account_id')) {
+            $payload['chart_of_account_id'] = $this->legacyChartOfAccountIdForAccount($accountId);
+        }
+
+        if (isset($payload['account_id'])) {
             return $payload;
         }
 
         throw ValidationException::withMessages([
-            'journal_voucher_lines' => 'journal_voucher_lines must have account_id or chart_of_account_id.',
+            'journal_voucher_lines' => 'journal_voucher_lines must have account_id.',
         ]);
+    }
+
+    protected function legacyChartOfAccountIdForAccount(string $accountId): string
+    {
+        $chartOfAccountId = ChartOfAccount::query()
+            ->where('account_id', $accountId)
+            ->value('id');
+
+        if ($chartOfAccountId) {
+            return $chartOfAccountId;
+        }
+
+        $account = Account::query()->find($accountId);
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'journal_voucher_lines' => 'Selected account does not exist.',
+            ]);
+        }
+
+        return ChartOfAccount::withoutEvents(function () use ($account) {
+            $chart = new ChartOfAccount;
+            $chart->forceFill([
+                'id' => (string) Str::orderedUuid(),
+                'account_id' => $account->id,
+                'type' => $this->legacyChartTypeForAccount($account),
+                'code' => null,
+                'name' => $account->name,
+                'description' => 'Legacy journal line compatibility link for account-based posting.',
+                'active' => (bool) $account->active,
+                'is_system_generated' => true,
+                'user_add_id' => $account->user_add_id,
+            ])->saveQuietly();
+
+            return $chart->id;
+        });
+    }
+
+    protected function legacyChartTypeForAccount(Account $account): string
+    {
+        return match ($account->nature) {
+            'bank', 'cash', 'actor', 'employee' => 'asset',
+            default => 'asset',
+        };
     }
 
     protected function addOptionalSourceColumns(array $payload, string $sourceType, string $sourceId): array
     {
-        $voucher = new JournalVoucher();
+        $voucher = new JournalVoucher;
         $table = $voucher->getTable();
 
         if (Schema::hasColumn($table, 'source_type')) {
@@ -266,11 +334,11 @@ class SystemJournalVoucherService
 
     protected function reference(string $sourceType, string $sourceId): string
     {
-        return 'SYS:' . strtoupper($sourceType) . ':' . $sourceId;
+        return 'SYS:'.strtoupper($sourceType).':'.$sourceId;
     }
 
     protected function sourceNo(string $sourceType, string $sourceId): string
     {
-        return $sourceType . ':' . $sourceId;
+        return $sourceType.':'.$sourceId;
     }
 }

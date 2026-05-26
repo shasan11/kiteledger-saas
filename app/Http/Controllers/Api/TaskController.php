@@ -72,6 +72,7 @@ class TaskController extends BaseCrudApiController
         'start_date',
         'end_date',
         'completion_time',
+        'sort_order',
         'active',
         'created_at',
         'updated_at',
@@ -108,6 +109,7 @@ class TaskController extends BaseCrudApiController
         'start_date' => ['required', 'date'],
         'end_date' => ['required', 'date', 'after_or_equal:start_date'],
         'completion_time' => ['nullable', 'numeric', 'min:0'],
+        'sort_order' => ['nullable', 'integer', 'min:0'],
         'description' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -137,6 +139,7 @@ class TaskController extends BaseCrudApiController
             ],
             'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:' . $startDate],
             'completion_time' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'sort_order' => ['sometimes', 'nullable', 'integer', 'min:0'],
             'description' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
@@ -166,6 +169,13 @@ class TaskController extends BaseCrudApiController
             $parentData['completion_time'] = 0;
         }
 
+        if (!array_key_exists('sort_order', $parentData) || $parentData['sort_order'] === null) {
+            $parentData['sort_order'] = $this->nextSortOrder(
+                (string) $parentData['project_id'],
+                (string) $parentData['task_status_id']
+            );
+        }
+
         return $parentData;
     }
 
@@ -178,6 +188,14 @@ class TaskController extends BaseCrudApiController
         $this->validateProjectScopedSelections($parentData, $record);
 
         return $parentData;
+    }
+
+    protected function nextSortOrder(string $projectId, string $taskStatusId): int
+    {
+        return ((int) Task::query()
+            ->where('project_id', $projectId)
+            ->where('task_status_id', $taskStatusId)
+            ->max('sort_order')) + 1;
     }
 
     protected function validateProjectScopedSelections(array $data, ?Task $task): void

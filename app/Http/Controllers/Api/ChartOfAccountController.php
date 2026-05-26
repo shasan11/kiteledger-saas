@@ -83,6 +83,51 @@ class ChartOfAccountController extends BaseCrudApiController
         return parent::index($request);
     }
 
+    public function ledger(Request $request, ChartOfAccount $chartOfAccount)
+    {
+        $query = JournalVoucherLine::query()
+            ->with(['journalVoucher.branch'])
+            ->where('chart_of_account_id', $chartOfAccount->getKey())
+            ->whereHas('journalVoucher', function ($voucherQuery) use ($request) {
+                $voucherQuery
+                    ->when($request->filled('date_from'), fn ($q) => $q->whereDate('voucher_date', '>=', $request->date('date_from')))
+                    ->when($request->filled('date_to'), fn ($q) => $q->whereDate('voucher_date', '<=', $request->date('date_to')))
+                    ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->string('branch_id')))
+                    ->when($request->filled('fiscal_year_id'), fn ($q) => $q->where('fiscal_year_id', $request->string('fiscal_year_id')));
+            })
+            ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
+            ->orderBy('journal_vouchers.voucher_date')
+            ->orderBy('journal_voucher_lines.created_at')
+            ->select('journal_voucher_lines.*')
+            ->get();
+
+        $balance = 0;
+
+        $rows = $query->map(function (JournalVoucherLine $line) use (&$balance) {
+            $debit = (float) $line->debit;
+            $credit = (float) $line->credit;
+            $balance += $debit - $credit;
+            $voucher = $line->journalVoucher;
+
+            return [
+                'id' => $line->id,
+                'date' => optional($voucher?->voucher_date)->toDateString(),
+                'voucher_no' => $voucher?->voucher_no,
+                'journal_voucher_id' => $voucher?->id,
+                'description' => $line->description ?: $voucher?->narration,
+                'branch' => $voucher?->branch?->name,
+                'debit' => round($debit, 2),
+                'credit' => round($credit, 2),
+                'balance' => round($balance, 2),
+            ];
+        })->values();
+
+        return response()->json([
+            'account' => $chartOfAccount->load(['branch', 'parent', 'account']),
+            'rows' => $rows,
+        ]);
+    }
+
     protected function storeRules(Request $request): array
     {
         return [

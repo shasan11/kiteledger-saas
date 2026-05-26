@@ -18,7 +18,7 @@ class ExpenseLine extends Model
      */
     protected $fillable = [
         'expense_id',
-        'chart_of_account_id',
+        'account_id',
         'description',
         'tax_rate_id',
         'tax_jurisdiction_id',
@@ -48,9 +48,9 @@ class ExpenseLine extends Model
         return $this->belongsTo(Expense::class);
     }
 
-    public function chartOfAccount(): BelongsTo
+    public function account(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 
     public function taxRate(): BelongsTo

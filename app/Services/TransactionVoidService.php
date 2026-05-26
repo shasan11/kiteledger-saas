@@ -2,6 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\Invoice;
+use App\Models\PurchaseBill;
+use App\Services\Inventory\InvoiceStockPostingService;
+use App\Services\Inventory\PurchaseBillStockPostingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -11,6 +15,8 @@ class TransactionVoidService
     public function __construct(
         protected LedgerValidationService $validationService,
         protected ParallelJournalVoucherService $jvService,
+        protected InvoiceStockPostingService $invoiceStockService,
+        protected PurchaseBillStockPostingService $purchaseBillStockService,
     ) {
     }
 
@@ -26,11 +32,11 @@ class TransactionVoidService
                 $this->jvService->reverseForSource($fresh, $reason);
 
                 if ($fresh instanceof \App\Models\CustomerPayment) {
-                    \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+                    Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
                 }
 
                 if ($fresh instanceof \App\Models\SupplierPayment) {
-                    \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+                    PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
                 }
 
                 return $fresh->refresh();
@@ -79,12 +85,22 @@ class TransactionVoidService
 
             $this->jvService->reverseForSource($fresh, $reason);
 
+            if ($fresh instanceof Invoice) {
+                $this->invoiceStockService->reverse($fresh, $reason ?: 'Voided');
+                Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+            }
+
+            if ($fresh instanceof PurchaseBill) {
+                $this->purchaseBillStockService->reverse($fresh, $reason ?: 'Voided');
+                PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+            }
+
             if ($fresh instanceof \App\Models\CustomerPayment) {
-                \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+                Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             if ($fresh instanceof \App\Models\SupplierPayment) {
-                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+                PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             return $fresh->refresh();

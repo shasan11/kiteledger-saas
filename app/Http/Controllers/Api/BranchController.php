@@ -10,7 +10,7 @@ class BranchController extends BaseCrudApiController
 {
     protected string $modelClass = Branch::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'system.branch';
 
     protected bool $usePolicyAuthorization = false;
 

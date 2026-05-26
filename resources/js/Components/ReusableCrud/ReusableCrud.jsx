@@ -656,6 +656,7 @@ export default function ReusableCrud({
   const formikLiveRef = useRef({ setFieldValue: null, values: null });
   const [fkStore, setFkStore] = useState(EMPTY_OBJECT);
   const fkTimersRef = useRef(EMPTY_OBJECT);
+  const fkRequestSeqRef = useRef(EMPTY_OBJECT);
 
   const isSystemGeneratedRecord = useCallback((record) => {
     return !!record?.is_system_generated;
@@ -839,6 +840,9 @@ export default function ReusableCrud({
       const fkUrl = cfg?.fkUrl;
       if (!fkUrl) return;
 
+      const requestSeq = (fkRequestSeqRef.current[storeKey] || 0) + 1;
+      fkRequestSeqRef.current[storeKey] = requestSeq;
+
       const fkSearchParam = cfg.fkSearchParam ?? "search";
       const fkPageParam = cfg.fkPageParam ?? "page";
       const fkPageSizeParam = cfg.fkPageSizeParam ?? "page_size";
@@ -882,6 +886,10 @@ export default function ReusableCrud({
 
         if (ensureOption) options = upsertOption(options, ensureOption);
 
+        if (fkRequestSeqRef.current[storeKey] !== requestSeq) {
+          return;
+        }
+
         setFkStore((prev) => ({
           ...prev,
           [storeKey]: {
@@ -892,6 +900,10 @@ export default function ReusableCrud({
           },
         }));
       } catch (e) {
+        if (fkRequestSeqRef.current[storeKey] !== requestSeq) {
+          return;
+        }
+
         setFkStore((prev) => ({
           ...prev,
           [storeKey]: {
@@ -903,6 +915,14 @@ export default function ReusableCrud({
     },
     [authHeaders]
   );
+
+  const inlineFkStoreKey = useCallback((parentFieldName, rowIndex, colKey, cfg = EMPTY_OBJECT) => {
+    if (cfg.fkStoreScope === "shared") {
+      return `inline:${parentFieldName}.*.${colKey}`;
+    }
+
+    return `inline:${parentFieldName}.${rowIndex}.${colKey}`;
+  }, []);
 
   const refreshFkAndSelect = useCallback(
     async (fieldName, optionOrId) => {
@@ -2792,6 +2812,22 @@ export default function ReusableCrud({
 
                         if (field.labelField) setFieldValue(field.labelField, "", false);
                       }}
+                      onFocus={() => {
+                        if (!store.options?.length) {
+                          fetchFkOptions(name, {
+                            search: "",
+                            ensureOption:
+                              finalVal != null
+                                ? {
+                                  value: finalVal,
+                                  label: currentLabel || String(finalVal),
+                                  raw: detailCurrent || rawCurrent,
+                                }
+                                : null,
+                            valuesOverride: values,
+                          });
+                        }
+                      }}
                       onOpenChange={(open) => {
                         if (!open) return;
 
@@ -3261,9 +3297,10 @@ export default function ReusableCrud({
                         const collapsedFields = field.collapsedFields || EMPTY_ARRAY;
                         const showExpand = collapsedFields.length > 0;
 
+                        const showActions = showExpand || !readOnly;
                         const gridTemplateColumns = `${cols
                           .map((c) => c.width || "1fr")
-                          .join(" ")}${showExpand ? " 52px" : ""}${!readOnly ? " 52px" : ""}`;
+                          .join(" ")}${showActions ? " 76px" : ""}`;
 
                         const applyFullRowPatch = (rowValue, idx, patch = EMPTY_OBJECT) => {
                           const patchedRow = {
@@ -3399,7 +3436,7 @@ export default function ReusableCrud({
                           }
 
                           if (c.type === "fkSelect") {
-                            const storeKey = `inline:${name}.${idx}.${colKey}`;
+                            const storeKey = inlineFkStoreKey(name, idx, colKey, c);
 
                             const store = fkStore[storeKey] || {
                               options: EMPTY_ARRAY,
@@ -3438,9 +3475,11 @@ export default function ReusableCrud({
                                 placeholder={c.placeholder || "Search and select"}
                                 disabled={cellReadOnly}
                                 filterOption={false}
+                                optionFilterProp="label"
                                 loading={store.loading}
                                 allowClear
                                 optionLabelProp="label"
+                                onInputKeyDown={(event) => event.stopPropagation()}
                                 dropdownRender={(menu) => (
                                   <>
                                     {menu}
@@ -3487,12 +3526,8 @@ export default function ReusableCrud({
                                     ...(c.labelField ? { [c.labelField]: "" } : EMPTY_OBJECT),
                                   });
                                 }}
-                                onOpenChange={(open) => {
-                                  if (
-                                    open &&
-                                    (!fkStore[storeKey]?.options ||
-                                      fkStore[storeKey]?.options.length === 0)
-                                  ) {
+                                onFocus={() => {
+                                  if (!fkStore[storeKey]?.options?.length) {
                                     fetchFkOptionsInline(storeKey, c, {
                                       search: "",
                                       ensureOption:
@@ -3509,6 +3544,25 @@ export default function ReusableCrud({
                                       valuesOverride: values,
                                     });
                                   }
+                                }}
+                                onOpenChange={(open) => {
+                                  if (!open) return;
+
+                                  fetchFkOptionsInline(storeKey, c, {
+                                    search: "",
+                                    ensureOption:
+                                      finalVal != null
+                                        ? {
+                                          value: finalVal,
+                                          label: currentLabel || String(finalVal),
+                                          raw: detailVal || val,
+                                        }
+                                        : null,
+                                    rowValue,
+                                    rowIndex: idx,
+                                    parentFieldName: name,
+                                    valuesOverride: values,
+                                  });
                                 }}
                                 onSearch={(txt) => {
                                   if (fkTimersRef.current[storeKey]) {
@@ -3647,7 +3701,7 @@ export default function ReusableCrud({
                                 key={`${fieldKey}.${idx}.${colKey}`}
                                 size="medium"
                                 variant="underlined"
-                                style={{ width: "100%" }}
+                                style={{ width: "100%", textAlign: c.align === "right" ? "right" : undefined }}
                                 value={val}
                                 min={c.min}
                                 max={c.max}
@@ -3778,8 +3832,7 @@ export default function ReusableCrud({
                                 return <div key={String(colKey)}>{c.label}</div>;
                               })}
 
-                              {showExpand ? <div /> : null}
-                              {!readOnly ? <div /> : null}
+                              {showActions ? <div style={{ textAlign: "right" }}>Actions</div> : null}
                             </div>
 
                             {rows.map((rowValue, idx) => {
@@ -3800,47 +3853,58 @@ export default function ReusableCrud({
                                       renderObjectArrayCell(c, rowValue, idx, colIdx, false)
                                     )}
 
-                                    {showExpand ? (
-                                      <Button
-                                        type="text"
-                                        size="small"
-                                        icon={
-                                          <DownOutlined
-                                            rotate={expanded ? 180 : 0}
-                                            style={{ fontSize: 12 }}
-                                          />
-                                        }
-                                        onClick={() => toggleObjectArrayRow(name, idx)}
-                                      />
-                                    ) : null}
-
-                                    {!readOnly ? (
-                                      <Button
-                                        type="text"
-                                        danger
-                                        size="small"
-                                        icon={<CloseOutlined />}
-                                        onClick={() => {
-                                          const deletedId = rowValue?.id;
-
-                                          if (deletedId) {
-                                            const deletedFieldName =
-                                              field.deletedFieldName || "deleted_item_ids";
-
-                                            const currentDeleted = Array.isArray(values?.[deletedFieldName])
-                                              ? values[deletedFieldName]
-                                              : EMPTY_ARRAY;
-
-                                            setFieldValue(
-                                              deletedFieldName,
-                                              [...currentDeleted, deletedId],
-                                              false
-                                            );
-                                          }
-
-                                          remove(idx);
+                                    {showActions ? (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "flex-end",
+                                          alignItems: "center",
+                                          gap: 2,
                                         }}
-                                      />
+                                      >
+                                        {showExpand ? (
+                                          <Button
+                                            type="text"
+                                            size="small"
+                                            icon={
+                                              <DownOutlined
+                                                rotate={expanded ? 180 : 0}
+                                                style={{ fontSize: 12 }}
+                                              />
+                                            }
+                                            onClick={() => toggleObjectArrayRow(name, idx)}
+                                          />
+                                        ) : null}
+
+                                        {!readOnly ? (
+                                          <Button
+                                            type="text"
+                                            danger
+                                            size="small"
+                                            icon={<CloseOutlined />}
+                                            onClick={() => {
+                                              const deletedId = rowValue?.id;
+
+                                              if (deletedId) {
+                                                const deletedFieldName =
+                                                  field.deletedFieldName || "deleted_item_ids";
+
+                                                const currentDeleted = Array.isArray(values?.[deletedFieldName])
+                                                  ? values[deletedFieldName]
+                                                  : EMPTY_ARRAY;
+
+                                                setFieldValue(
+                                                  deletedFieldName,
+                                                  [...currentDeleted, deletedId],
+                                                  false
+                                                );
+                                              }
+
+                                              remove(idx);
+                                            }}
+                                          />
+                                        ) : null}
+                                      </div>
                                     ) : null}
                                   </div>
 
@@ -3880,9 +3944,18 @@ export default function ReusableCrud({
                                   type="dashed"
                                   icon={<PlusOutlined />}
                                   onClick={() => {
-                                    push({
-                                      ...(field.defaultItem || EMPTY_OBJECT),
-                                    });
+                                    const baseItem = { ...(field.defaultItem || EMPTY_OBJECT) };
+                                    const nextItem =
+                                      typeof field.onAddItem === "function"
+                                        ? field.onAddItem({
+                                          defaultItem: baseItem,
+                                          values,
+                                          rows,
+                                          rowCount: rows.length,
+                                        }) || baseItem
+                                        : baseItem;
+
+                                    push(nextItem);
                                   }}
                                 >
                                   {field.addButtonLabel || "Add row"}

@@ -15,6 +15,8 @@ class ChequeRegisterController extends BaseCrudApiController
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'cheque_date';
 
     protected array $relations = [
         'branch',

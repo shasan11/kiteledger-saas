@@ -153,7 +153,7 @@ export const FILTER_PRESETS = {
   warehouse: { key: 'warehouse_id', type: 'select', source: 'warehouses', label: 'Warehouse' },
   account: { key: 'chart_of_account_id', type: 'select', source: 'chartOfAccounts', label: 'Account' },
   department: { key: 'department_id', type: 'select', source: 'departments', label: 'Department' },
-  employee: { key: 'employee_id', type: 'select', source: 'employees', label: 'Employee' },
+  employee: { key: 'user_id', type: 'select', source: 'users', label: 'Employee' },
   user: { key: 'user_id', type: 'select', source: 'users', label: 'User' },
   status: { key: 'status', type: 'status', label: 'Status' },
   groupBy: { key: 'group_by', type: 'groupBy', label: 'Group By' },

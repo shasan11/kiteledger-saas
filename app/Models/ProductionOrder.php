@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,10 +11,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductionOrder extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     protected $fillable = [
-        'branch_id', 'code', 'date', 'reference', 'bill_of_material_id',
+        'branch_id',
+        'fiscal_year_id', 'code', 'date', 'reference', 'bill_of_material_id',
         'finished_product_id', 'warehouse_id', 'product_unit_id', 'output_quantity',
         'total_raw_material_cost', 'total_expense_cost', 'total_byproduct_cost',
         'total_finished_goods_cost', 'total_production_cost', 'finished_goods_unit_cost',

@@ -17,14 +17,12 @@ class AccountController extends BaseCrudApiController
     protected bool $branchScoped = false;
 
     protected array $relations = [
-        'branch',
         'parent',
         'currency',
-        'children',
+        'childrens',
     ];
 
     protected array $relationDetails = [
-        'branch' => 'branch_id',
         'parent' => 'parent_id',
         'currency' => 'currency_id',
     ];
@@ -33,14 +31,7 @@ class AccountController extends BaseCrudApiController
         'name',
         'code',
         'nature',
-        'description',
-        'bank_name',
-        'account_name',
-        'account_number',
-        'account_type',
         'swift_code',
-        'branch.name',
-        'branch.code',
         'parent.name',
         'parent.code',
         'currency.name',
@@ -48,7 +39,6 @@ class AccountController extends BaseCrudApiController
     ];
 
     protected array $filterable = [
-        'branch_id',
         'parent_id',
         'currency_id',
         'nature',
@@ -64,10 +54,8 @@ class AccountController extends BaseCrudApiController
         'name',
         'code',
         'nature',
-        'branch_id',
         'parent_id',
         'currency_id',
-        'opening_balance',
         'dr_amount',
         'cr_amount',
         'balance',
@@ -79,8 +67,6 @@ class AccountController extends BaseCrudApiController
     protected string $defaultSort = 'code';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
-
         'name' => ['required', 'string', 'max:120'],
         'code' => ['nullable', 'string', 'max:30'],
 
@@ -93,15 +79,8 @@ class AccountController extends BaseCrudApiController
         'parent_id' => ['nullable', 'uuid', 'exists:accounts,id'],
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
 
-        'description' => ['nullable', 'string'],
-
-        'bank_name' => ['nullable', 'string', 'max:150'],
-        'account_name' => ['nullable', 'string', 'max:150'],
-        'account_number' => ['nullable', 'string', 'max:80'],
-        'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
 
-        'opening_balance' => ['nullable', 'numeric'],
         'dr_amount' => ['nullable', 'numeric'],
         'cr_amount' => ['nullable', 'numeric'],
         'balance' => ['nullable', 'numeric'],
@@ -114,8 +93,6 @@ class AccountController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
-
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'code' => ['sometimes', 'nullable', 'string', 'max:30'],
 
@@ -129,15 +106,8 @@ class AccountController extends BaseCrudApiController
             'parent_id' => ['sometimes', 'nullable', 'uuid', 'exists:accounts,id'],
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
 
-            'description' => ['sometimes', 'nullable', 'string'],
-
-            'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'account_name' => ['sometimes', 'nullable', 'string', 'max:150'],
-            'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
-            'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
 
-            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
             'dr_amount' => ['sometimes', 'nullable', 'numeric'],
             'cr_amount' => ['sometimes', 'nullable', 'numeric'],
             'balance' => ['sometimes', 'nullable', 'numeric'],
@@ -153,10 +123,9 @@ class AccountController extends BaseCrudApiController
         array $nestedData
     ): array {
         $parentData['nature'] = $parentData['nature'] ?? 'coa';
-        $parentData['opening_balance'] = $parentData['opening_balance'] ?? 0;
         $parentData['dr_amount'] = $parentData['dr_amount'] ?? 0;
         $parentData['cr_amount'] = $parentData['cr_amount'] ?? 0;
-        $parentData['balance'] = $parentData['balance'] ?? $parentData['opening_balance'] ?? 0;
+        $parentData['balance'] = $parentData['balance'] ?? 0;
         $parentData['active'] = $parentData['active'] ?? true;
         $parentData['is_system_generated'] = $parentData['is_system_generated'] ?? false;
 

@@ -18,7 +18,7 @@ class CashTransferService
     {
         $cashTransfer->loadMissing('cashTransferLines');
 
-        if (!$this->postingService->isFinanciallyPosted($cashTransfer, ['posted'])) {
+        if (! $this->postingService->isFinanciallyPosted($cashTransfer, ['posted'])) {
             return [];
         }
 
@@ -54,7 +54,7 @@ class CashTransferService
 
     public function syncFinancials(CashTransfer $cashTransfer, array $oldEffect = []): void
     {
-        DB::transaction(function () use ($cashTransfer, $oldEffect) {
+        DB::transaction(function () use ($cashTransfer) {
             $cashTransfer = CashTransfer::query()
                 ->with('cashTransferLines')
                 ->lockForUpdate()
@@ -64,10 +64,6 @@ class CashTransferService
             $this->assignTransferNoIfMissing($cashTransfer);
             $this->recalculateTotal($cashTransfer);
             $this->syncGeneratedJournalVoucher($cashTransfer);
-
-            $newEffect = $this->snapshotEffect($cashTransfer);
-
-            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
         });
     }
 
@@ -75,13 +71,13 @@ class CashTransferService
     {
         $cashTransfer->loadMissing('cashTransferLines');
 
-        if (!$cashTransfer->from_account_id) {
+        if (! $cashTransfer->from_account_id) {
             throw ValidationException::withMessages([
                 'from_account_id' => 'From account is required.',
             ]);
         }
 
-        if (!$cashTransfer->currency_id) {
+        if (! $cashTransfer->currency_id) {
             throw ValidationException::withMessages([
                 'currency_id' => 'Currency is required.',
             ]);
@@ -100,7 +96,7 @@ class CashTransferService
         }
 
         foreach ($cashTransfer->cashTransferLines as $line) {
-            if (!$line->to_account_id) {
+            if (! $line->to_account_id) {
                 throw ValidationException::withMessages([
                     'to_account_id' => 'To account is required.',
                 ]);
@@ -122,7 +118,7 @@ class CashTransferService
 
     public function assignTransferNoIfMissing(CashTransfer $cashTransfer): void
     {
-        if (!empty($cashTransfer->transfer_no)) {
+        if (! empty($cashTransfer->transfer_no)) {
             return;
         }
 
@@ -194,7 +190,7 @@ class CashTransferService
             branchId: $cashTransfer->branch_id,
             currencyId: $cashTransfer->currency_id,
             status: $cashTransfer->status === 'posted' ? 'posted' : 'draft',
-            narration: 'System generated journal voucher from cash transfer ' . ($cashTransfer->transfer_no ?? $cashTransfer->id),
+            narration: 'System generated journal voucher from cash transfer '.($cashTransfer->transfer_no ?? $cashTransfer->id),
             exchangeRate: $cashTransfer->exchange_rate ?: 1
         );
     }

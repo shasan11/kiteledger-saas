@@ -1,15 +1,18 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
-import GlobalSearchCommand from '@/Components/App/GlobalSearchCommand';
+import BranchToggle from '@/Components/BranchToggle';
+import FiscalYearToggle from '@/Components/FiscalYearToggle';
+import GlobalSearch from '@/Components/GlobalSearch';
+import AiCommandModal from '@/Components/AI/AiCommandModal';
+import { useAiAvailability } from '@/hooks/useAiAvailability';
 import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
 import { Link } from '@inertiajs/react';
 import {
-    BranchesOutlined,
     LogoutOutlined,
     MenuOutlined,
     MoonOutlined,
     PlusOutlined,
     ProfileOutlined,
-    QuestionCircleOutlined,
+    RobotOutlined,
     SunOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -19,7 +22,6 @@ import {
     Dropdown,
     Grid,
     Layout,
-    Select,
     Space,
     Switch,
     theme,
@@ -54,18 +56,18 @@ const hexToRgb = (hex) => {
 
 const rgba = (hex, opacity) => {
     const rgb = hexToRgb(hex);
-
     if (!rgb) return hex;
-
     return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+};
+
+const getStoredThemeMode = () => {
+    if (typeof window === 'undefined') return 'light';
+    return localStorage.getItem('themeMode') || 'light';
 };
 
 export default function AppNavbar({
     user,
-    branch,
-    setBranch,
     branchContext,
-    branchOptions = [],
     quickAddItems = [],
     profileItems = [],
     getUrl,
@@ -73,8 +75,14 @@ export default function AppNavbar({
 }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
+
     const [brandSettings, setBrandSettings] = useState(null);
-    const [themeMode, setThemeMode] = useState(() => localStorage.getItem('themeMode') || 'light');
+    const [themeMode, setThemeMode] = useState(getStoredThemeMode);
+    const [aiCommandOpen, setAiCommandOpen] = useState(false);
+    const { aiEnabled, canUseAiModule, hasPermission } = useAiAvailability();
+    const showAiCommand = aiEnabled
+        && canUseAiModule('global_command')
+        && hasPermission('ai.global_command.use');
 
     useEffect(() => {
         let mounted = true;
@@ -95,7 +103,7 @@ export default function AppNavbar({
 
     useEffect(() => {
         const handleThemeModeChange = (event) => {
-            setThemeMode(event.detail?.mode || localStorage.getItem('themeMode') || 'light');
+            setThemeMode(event.detail?.mode || getStoredThemeMode());
         };
 
         const handleStorage = (event) => {
@@ -113,12 +121,33 @@ export default function AppNavbar({
         };
     }, []);
 
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'j') {
+                e.preventDefault();
+                if (showAiCommand) setAiCommandOpen(true);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [showAiCommand]);
+
     const isMobile = !screens.md;
-    const isTablet = !screens.lg;
+    const isTablet = screens.md && !screens.lg;
+    const isLaptop = screens.lg && !screens.xl;
+    const isDesktop = screens.lg; // includes laptop and larger
+
     const isDarkMode = themeMode === 'dark';
 
-    const controlHeight = 38;
-    const radius = token.borderRadiusLG;
+    const controlHeight = isMobile ? 38 : 34;
+    const headerHeight = isMobile ? 'auto' : '60px';
+    const radius = 10;
+
+    const logoWidth = isMobile ? 116 : isTablet ? 132 : 150;
+    const searchMaxWidth = isDesktop ? (isLaptop ? 360 : 460) : 500;
+    const branchToggleWidth = isMobile ? '100%' : isTablet ? 150 : 180;
+    const fiscalYearToggleWidth = isMobile ? '100%' : isTablet ? 122 : 142;
+
     const initials = (user?.display_name || user?.name || user?.email || 'User')
         .split(' ')
         .map((part) => part?.[0])
@@ -153,43 +182,42 @@ export default function AppNavbar({
             if (item?.key === 'profile') {
                 return { ...item, icon: item.icon || <ProfileOutlined />, label: 'View Profile' };
             }
-
             if (item?.key === 'logout') {
                 return { ...item, icon: <LogoutOutlined /> };
             }
-
             return item;
         }),
     ];
 
     const dark = useMemo(() => {
-        const nav = isHexColor(brandSettings?.brand_sidebar_color)
-            ? '#0b1220'
-            : '#0b1220';
         const primary = isHexColor(brandSettings?.brand_primary_color)
             ? brandSettings.brand_primary_color.trim()
             : token.colorPrimary;
 
         return {
-        nav,
-        navSoft: '#111827',
-        navElevated: '#162033',
-        border: 'rgba(148, 163, 184, 0.18)',
-        borderStrong: 'rgba(148, 163, 184, 0.28)',
-        text: '#f8fafc',
-        textSecondary: '#cbd5e1',
-        textMuted: '#94a3b8',
-        primarySoft: rgba(primary, 0.16),
-        primaryBorder: rgba(primary, 0.35),
+            nav: '#080d18',
+            navSoft: '#101827',
+            navElevated: '#172234',
+            border: 'rgba(148, 163, 184, 0.12)',
+            borderStrong: 'rgba(148, 163, 184, 0.24)',
+            text: '#f8fafc',
+            textSecondary: '#cbd5e1',
+            textMuted: '#94a3b8',
+            primarySoft: rgba(primary, 0.16),
+            primaryBorder: rgba(primary, 0.35),
         };
-    }, [brandSettings?.brand_primary_color, brandSettings?.brand_sidebar_color, token.colorPrimary]);
+    }, [brandSettings?.brand_primary_color, token.colorPrimary]);
 
     const toggleThemeMode = (checked) => {
         const nextMode = checked ? 'dark' : 'light';
         setThemeMode(nextMode);
         localStorage.setItem('themeMode', nextMode);
         localStorage.setItem('theme_mode', nextMode);
-        window.dispatchEvent(new CustomEvent('kiteledger-theme-mode-change', { detail: { mode: nextMode } }));
+        window.dispatchEvent(
+            new CustomEvent('kiteledger-theme-mode-change', {
+                detail: { mode: nextMode },
+            }),
+        );
     };
 
     return (
@@ -197,24 +225,22 @@ export default function AppNavbar({
             <Header
                 className="app-navbar"
                 style={{
-                    height: 72,
-                    padding: isMobile ? '0 12px' : '0 18px',
+                    minHeight: headerHeight,
+                    height: headerHeight,
+                    padding: isMobile ? '8px 12px' : '0 20px',
                     background: dark.nav,
                     borderBottom: `1px solid ${dark.border}`,
-                    
-                    display: 'grid',
-                    gridTemplateColumns: isMobile
-                        ? 'auto 1fr auto'
-                        : isTablet
-                          ? '280px minmax(0, 1fr) 220px'
-                          : '360px minmax(0, 1fr) 330px',
+                    display: 'flex',
+                    flexWrap: isMobile ? 'wrap' : 'nowrap',
                     alignItems: 'center',
-                    gap: 14,
+                    gap: isMobile ? 8 : 16,
                     position: 'sticky',
                     top: 0,
                     zIndex: 100,
+                    lineHeight: 1,
                 }}
             >
+                {/* Left section: menu button, logo, branch toggle */}
                 <div className="app-navbar__left">
                     {isMobile && (
                         <Button
@@ -236,48 +262,44 @@ export default function AppNavbar({
                                 className="app-navbar__logo"
                                 dark
                                 style={{
-                                    width: '200px',
-                                    padding: '3px',
+                                    width: logoWidth,
+                                    maxWidth: '200px',
+                                    padding: 2,
                                 }}
                             />
                         </div>
                     </Link>
 
                     {!isMobile && (
-                        <Select
-                            size="middle"
-                            value={branch}
-                            onChange={setBranch}
-                            options={branchOptions}
-                            suffixIcon={
-                                <BranchesOutlined
-                                    style={{ color: dark.textMuted }}
-                                />
-                            }
+                        <BranchToggle
                             className="app-dark-select"
-                            popupClassName="app-dark-select-dropdown"
-                            popupMatchSelectWidth={230}
                             style={{
-                                width: 160,
+                                width: branchToggleWidth,
                                 height: controlHeight,
                             }}
                         />
                     )}
                 </div>
 
-                <div className="app-navbar__center">
-                    {!isMobile ? (
-                        <GlobalSearchCommand
+                {/* Center: global search (hidden on mobile, shown in right group) */}
+                {!isMobile && (
+                    <div className="app-navbar__center">
+                        <GlobalSearch
                             branchContext={branchContext}
                             className="global-search-command__trigger app-navbar__search"
                             style={{
                                 width: '100%',
-                                maxWidth: isTablet ? 380 : 560,
+                                maxWidth: searchMaxWidth,
                                 height: controlHeight,
                             }}
                         />
-                    ) : (
-                        <GlobalSearchCommand
+                    </div>
+                )}
+
+                {/* Right section: search (mobile only), fiscal year, theme, profile */}
+                <div className="app-navbar__right">
+                    {isMobile && (
+                        <GlobalSearch
                             branchContext={branchContext}
                             compact
                             className="app-navbar__icon-btn app-navbar__search-compact"
@@ -292,22 +314,45 @@ export default function AppNavbar({
                         />
                     )}
 
-                    <Dropdown
-                        menu={{ items: quickAddItems }}
-                        placement="bottomRight"
-                        trigger={['click']}
-                        overlayClassName="app-navbar-dropdown"
-                    >
-                        <Button
-                            type="primary"
-                            shape="circle"
-                            icon={<PlusOutlined />}
-                            className="app-navbar__primary-btn"
+                    <div className="app-navbar__fy-wrap">
+                        <FiscalYearToggle
+                            className="app-dark-select"
+                            style={{
+                                width: fiscalYearToggleWidth,
+                                height: controlHeight,
+                            }}
                         />
-                    </Dropdown>
-                </div>
+                    </div>
 
-                <div className="app-navbar__right">
+                    {showAiCommand && (
+                        <Button
+                            type="text"
+                            icon={<RobotOutlined />}
+                            className="app-navbar__soft-btn"
+                            onClick={() => setAiCommandOpen(true)}
+                            title="AI Command (Ctrl+J)"
+                            style={{ color: token.colorPrimary }}
+                        />
+                    )}
+
+                    {quickAddItems.length > 0 && (
+                        <Dropdown
+                            menu={{ items: quickAddItems }}
+                            placement="bottomRight"
+                            trigger={['click']}
+                            overlayClassName="app-navbar-dropdown"
+                        >
+                            <Button
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                className="app-navbar__quick-add"
+                                title="Quick Add"
+                            >
+                                {!isMobile && !isTablet ? 'Quick Add' : null}
+                            </Button>
+                        </Dropdown>
+                    )}
+
                     <Switch
                         checked={isDarkMode}
                         checkedChildren={<MoonOutlined />}
@@ -317,15 +362,6 @@ export default function AppNavbar({
                         className="app-navbar__theme-switch"
                     />
 
-                    {!isMobile && (
-                        <Button
-                            icon={<QuestionCircleOutlined />}
-                            className="app-navbar__soft-btn"
-                            shape="circle"
-                            type="text"
-                        />
-                    )}
-
                     <Dropdown
                         menu={{ items: enhancedProfileItems }}
                         placement="bottomRight"
@@ -333,17 +369,17 @@ export default function AppNavbar({
                         overlayClassName="app-navbar-dropdown"
                     >
                         <Button type="text" className="app-navbar__profile-btn">
-                            <Space size={10}>
+                            <Space size={8} wrap={false}>
                                 <Avatar
-                                    size={34}
+                                    size={32}
                                     src={user?.image_url}
                                     icon={!user?.image_url ? <UserOutlined /> : null}
                                     className="app-navbar__avatar"
                                 >
                                     {!user?.image_url ? initials : null}
                                 </Avatar>
-
-                                {!isTablet && (
+                                {/* Show name only on larger screens to keep things minimal */}
+                                {!isMobile && !isTablet && !isLaptop && (
                                     <span className="app-navbar__user-name">
                                         {user?.name || 'User'}
                                     </span>
@@ -352,39 +388,88 @@ export default function AppNavbar({
                         </Button>
                     </Dropdown>
                 </div>
+
+                {/* Second row on mobile for branch & fiscal year toggles */}
+                {isMobile && (
+                    <div className="app-navbar__mobile-context">
+                        <BranchToggle
+                            className="app-dark-select app-navbar__mobile-context-select"
+                            style={{
+                                width: '100%',
+                                height: controlHeight,
+                            }}
+                        />
+                        <div className="app-navbar__mobile-fy-wrap">
+                            <FiscalYearToggle
+                                className="app-dark-select app-navbar__mobile-context-select"
+                                style={{
+                                    width: '100%',
+                                    height: controlHeight,
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
             </Header>
+
+            {showAiCommand && (
+                <AiCommandModal
+                    open={aiCommandOpen}
+                    onClose={() => setAiCommandOpen(false)}
+                    branchId={branchContext?.selectedBranchId}
+                />
+            )}
 
             <style>
                 {`
-                    .app-navbar__left,
-                    .app-navbar__center,
-                    .app-navbar__right {
+                    .app-navbar {
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+
+                    /* Left group */
+                    .app-navbar__left {
                         display: flex;
                         align-items: center;
+                        gap: 14px;
+                        flex: 0 0 auto;
                         min-width: 0;
                     }
 
-                    .app-navbar__left {
-                        justify-content: flex-start;
-                        gap: 14px;
-                    }
-
+                    /* Center (search) - fills remaining space */
                     .app-navbar__center {
+                        flex: 1 1 auto;
+                        display: flex;
                         justify-content: center;
-                        gap: 10px;
+                        min-width: 0;
                     }
 
+                    /* Right group */
                     .app-navbar__right {
-                        justify-content: flex-end;
+                        display: flex;
+                        align-items: center;
                         gap: 10px;
+                        flex: 0 0 auto;
+                        min-width: 0;
                     }
 
+                    /* Mobile second row */
+                    .app-navbar__mobile-context {
+                        width: 100%;
+                        display: grid;
+                        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                        gap: 8px;
+                        margin-top: 2px;
+                    }
+
+                    /* Logo & link */
                     .app-navbar__brand-link {
                         display: inline-flex;
                         align-items: center;
                         text-decoration: none;
-                        flex-shrink: 0;
+                        flex-shrink: 1;
                         min-width: 0;
+                        overflow: hidden;
                     }
 
                     .app-navbar__logo-wrap {
@@ -392,31 +477,44 @@ export default function AppNavbar({
                         align-items: center;
                         justify-content: center;
                         min-width: 0;
+                        max-width: 100%;
+                        overflow: hidden;
                     }
 
                     .app-navbar__logo {
                         display: block;
                         height: auto;
-                        max-height: 50px;
+                        max-height: 36px;
                         object-fit: contain;
                     }
 
+                    /* Buttons */
                     .app-navbar__soft-btn,
-                    .app-navbar__primary-btn,
-                    .app-navbar__icon-btn {
+                    .app-navbar__icon-btn,
+                    .app-navbar__quick-add {
                         height: ${controlHeight}px;
                         border-radius: ${radius}px;
                         font-weight: 600;
                         display: inline-flex;
                         align-items: center;
                         justify-content: center;
+                        flex-shrink: 0;
+                    }
+
+                    .app-navbar__soft-btn,
+                    .app-navbar__icon-btn {
+                        width: ${controlHeight}px;
+                    }
+
+                    .app-navbar__quick-add {
+                        padding-inline: ${isMobile || isTablet ? 0 : 12}px;
+                        width: ${isMobile || isTablet ? `${controlHeight}px` : 'auto'};
                     }
 
                     .app-navbar__soft-btn {
-                        width: ${controlHeight}px;
                         color: ${dark.textSecondary} !important;
-                        background: ${dark.navSoft} !important;
-                        border: 1px solid ${dark.border} !important;
+                        background: transparent !important;
+                        border: 1px solid transparent !important;
                     }
 
                     .app-navbar__soft-btn:hover {
@@ -425,29 +523,18 @@ export default function AppNavbar({
                         border-color: ${dark.borderStrong} !important;
                     }
 
-                    .app-navbar__primary-btn {
-                        width: ${controlHeight}px;
-                        min-width: ${controlHeight}px;
-                        box-shadow: none;
-                        font-weight: 700;
-                    }
-
                     .app-navbar__icon-btn {
-                        width: ${controlHeight}px;
                         color: ${dark.text};
+                        flex-shrink: 0;
                     }
 
+                    /* Profile button */
                     .app-navbar__profile-btn {
-                        height: 42px;
-                        padding: 0 8px;
+                        height: ${controlHeight}px;
+                        padding: 0 6px;
                         color: ${dark.textSecondary} !important;
                         border-radius: ${radius}px;
-                        display: inline-flex;
-                        align-items: center;
                         background: transparent !important;
-                    }
-
-                    .app-navbar__theme-switch {
                         flex-shrink: 0;
                     }
 
@@ -456,16 +543,39 @@ export default function AppNavbar({
                         color: ${dark.text} !important;
                     }
 
+                    /* Theme switch */
+                    .app-navbar__theme-switch {
+                        flex-shrink: 0;
+                        transform: scale(0.92);
+                    }
+
+                    /* Fiscal year group */
+                    .app-navbar__fy-wrap,
+                    .app-navbar__mobile-fy-wrap {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 4px;
+                        min-width: 0;
+                        flex-shrink: 0;
+                    }
+
+                    .app-navbar__fy-badge .ant-badge-status-text {
+                        color: ${dark.textMuted};
+                        font-size: 11px;
+                    }
+
+                    /* Avatar */
                     .app-navbar__avatar {
                         background: ${dark.primarySoft} !important;
                         color: ${token.colorPrimary} !important;
                         border: 1px solid ${dark.primaryBorder} !important;
                     }
 
+                    /* User name (only visible on larger screens) */
                     .app-navbar__user-name {
                         font-weight: 600;
                         color: ${dark.text};
-                        max-width: 135px;
+                        max-width: 110px;
                         overflow: hidden;
                         text-overflow: ellipsis;
                         white-space: nowrap;
@@ -473,11 +583,12 @@ export default function AppNavbar({
                         line-height: 1;
                     }
 
+                    /* Dropdown user header */
                     .app-navbar__dropdown-user {
                         display: flex;
                         align-items: center;
                         gap: 10px;
-                        min-width: 240px;
+                        min-width: 220px;
                         padding: 4px 2px;
                     }
 
@@ -489,7 +600,7 @@ export default function AppNavbar({
 
                     .app-navbar__dropdown-user-copy strong,
                     .app-navbar__dropdown-user-copy span {
-                        max-width: 180px;
+                        max-width: 160px;
                         overflow: hidden;
                         text-overflow: ellipsis;
                         white-space: nowrap;
@@ -505,26 +616,45 @@ export default function AppNavbar({
                         font-size: 12px;
                     }
 
+                    /* Dark select overrides (Branch & Fiscal Year) */
+                    .app-dark-select {
+                        min-width: 0;
+                    }
+
                     .app-dark-select .ant-select-selector {
                         height: ${controlHeight}px !important;
                         background: ${dark.navSoft} !important;
-                        border-color: ${dark.border} !important;
+                        border-color: transparent !important;
                         border-radius: ${radius}px !important;
                         color: ${dark.text} !important;
                         display: flex;
                         align-items: center;
                         box-shadow: none !important;
+                        padding-inline: 12px !important;
+                    }
+
+                    .app-dark-select .ant-select-selection-search-input {
+                        height: ${controlHeight}px !important;
+                        color: ${dark.text} !important;
+                    }
+
+                    .app-dark-select .ant-select-selection-placeholder {
+                        color: ${dark.textMuted} !important;
                     }
 
                     .app-dark-select .ant-select-selection-item {
                         color: ${dark.text} !important;
-                        font-weight: 600;
+                        font-weight: 500;
+                        font-size: 13px;
                         line-height: ${controlHeight}px !important;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
                     }
 
                     .app-dark-select:hover .ant-select-selector,
                     .app-dark-select.ant-select-focused .ant-select-selector {
-                        border-color: ${token.colorPrimary} !important;
+                        border-color: ${dark.borderStrong} !important;
                         background: ${dark.navElevated} !important;
                     }
 
@@ -532,6 +662,7 @@ export default function AppNavbar({
                         color: ${dark.textMuted} !important;
                     }
 
+                    /* Dropdowns for dark selects */
                     .app-dark-select-dropdown {
                         background: ${dark.navSoft} !important;
                         border: 1px solid ${dark.border} !important;
@@ -556,6 +687,7 @@ export default function AppNavbar({
                         font-weight: 700 !important;
                     }
 
+                    /* Global search styling */
                     .app-navbar__search,
                     .app-navbar__search button,
                     .app-navbar__search .ant-btn,
@@ -563,7 +695,9 @@ export default function AppNavbar({
                     .app-navbar__search .ant-input-affix-wrapper {
                         background: ${dark.navSoft} !important;
                         color: ${dark.textSecondary} !important;
-                        border-color: ${dark.border} !important;
+                        border-color: transparent !important;
+                        border-radius: ${radius}px !important;
+                        box-shadow: none !important;
                     }
 
                     .app-navbar__search:hover,
@@ -580,17 +714,7 @@ export default function AppNavbar({
                         color: ${dark.textMuted} !important;
                     }
 
-                    .app-navbar .ant-btn-text:hover {
-                        background: ${dark.navSoft} !important;
-                        color: ${dark.text} !important;
-                    }
-
-                    .app-navbar .ant-btn-default:hover {
-                        color: ${dark.text} !important;
-                        border-color: ${dark.borderStrong} !important;
-                        background: ${dark.navElevated} !important;
-                    }
-
+                    /* Dropdown menu (profile) */
                     .app-navbar-dropdown .ant-dropdown-menu {
                         background: ${dark.navSoft} !important;
                         border: 1px solid ${dark.border} !important;
@@ -609,28 +733,39 @@ export default function AppNavbar({
                         color: ${dark.text} !important;
                     }
 
+                    /* Responsive fine‑tuning */
                     @media (max-width: 767px) {
-                        .app-navbar__center {
-                            justify-content: flex-end;
+                        .app-navbar__left {
+                            gap: 6px;
                         }
+                        .app-navbar__right {
+                            gap: 5px;
+                        }
+                        .app-navbar__profile-btn {
+                            padding: 0 2px;
+                            height: 38px;
+                        }
+                        .app-navbar__logo {
+                            max-height: 36px;
+                        }
+                    }
 
+                    @media (min-width: 768px) and (max-width: 991px) {
                         .app-navbar__left {
                             gap: 8px;
                         }
-
-                        .app-navbar__logo {
-                            max-width: 150px;
-                        }
-
-                        .app-navbar__soft-btn,
-                        .app-navbar__primary-btn {
-                            width: 40px;
-                            min-width: 40px;
-                            padding-inline: 0;
-                        }
-
                         .app-navbar__right {
-                            gap: 4px;
+                            gap: 6px;
+                        }
+                    }
+
+                    @media (min-width: 992px) and (max-width: 1199px) {
+                        /* Laptop – everything stays minimal; user name hidden already */
+                    }
+
+                    @media (min-width: 1200px) {
+                        .app-navbar__user-name {
+                            max-width: 130px;   /* a bit more room on wide screens */
                         }
                     }
                 `}

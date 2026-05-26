@@ -322,7 +322,7 @@ export default function BillAdd(props) {
           },
         },
         { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '70px', min: 0 },
-        { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0, addonBefore: ({ values }) => getCurrencySymbol(values), prefix: ({ values }) => getCurrencySymbol(values) },
+        { key: 'unit_price', name: 'unit_price', label: 'Rate', type: 'number', width: '90px', min: 0, prefix: ({ values }) => getCurrencySymbol(values) },
         { key: 'discount_value', name: 'discount_value', label: 'Discount', type: 'custom', width: '170px', component: LineDiscountInput },
         {
           key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '120px',

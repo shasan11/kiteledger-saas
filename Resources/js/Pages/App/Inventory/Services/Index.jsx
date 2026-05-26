@@ -11,6 +11,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Row,
   Select,
   Space,
@@ -51,6 +52,13 @@ const emptyService = {
   active: true,
 };
 
+const emptyQuickAdd = {
+  name: '',
+  short_name: '',
+  description: '',
+  accept_fractional: false,
+};
+
 const apiErrorMessage = (error, fallback = 'Something went wrong.') => {
   const data = error?.response?.data;
   if (data?.message) return data.message;
@@ -76,13 +84,23 @@ const optionLabel = (record) =>
   record.label ||
   record.id;
 
+const shortNameFromName = (value = '') =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '')
+    .slice(0, 12);
+
 export default function Services({ auth }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
   const [form] = Form.useForm();
+  const [quickForm] = Form.useForm();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [quickSaving, setQuickSaving] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [quickAdd, setQuickAdd] = useState({ open: false, type: null });
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [lookups, setLookups] = useState({
@@ -189,6 +207,53 @@ export default function Services({ auth }) {
       message.error(apiErrorMessage(error, 'Unable to save service.'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openQuickAdd = (type) => {
+    quickForm.setFieldsValue(emptyQuickAdd);
+    setQuickAdd({ open: true, type });
+  };
+
+  const closeQuickAdd = () => {
+    setQuickAdd({ open: false, type: null });
+    quickForm.resetFields();
+  };
+
+  const saveQuickAdd = async () => {
+    const values = await quickForm.validateFields();
+    const isUnit = quickAdd.type === 'unit';
+    const endpoint = isUnit ? '/api/product-units' : '/api/product-categories';
+    const targetField = isUnit ? 'product_unit_id' : 'product_category_id';
+    const payload = isUnit
+      ? {
+          name: values.name,
+          short_name: values.short_name || shortNameFromName(values.name),
+          description: values.description || null,
+          accept_fractional: values.accept_fractional === true,
+          active: true,
+        }
+      : {
+          name: values.name,
+          description: values.description || null,
+          active: true,
+        };
+
+    setQuickSaving(true);
+    try {
+      const { data } = await axios.post(api(endpoint), payload);
+      await loadLookups();
+
+      if (data?.id) {
+        form.setFieldsValue({ [targetField]: data.id });
+      }
+
+      message.success(`${values.name} added.`);
+      closeQuickAdd();
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to add item.'));
+    } finally {
+      setQuickSaving(false);
     }
   };
 
@@ -351,7 +416,7 @@ export default function Services({ auth }) {
             </Col>
             <Col xs={24} md={8}>
               <Form.Item name="sku" label="SKU / SAC">
-                <Input />
+                <Input placeholder="Auto generated on save" />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
@@ -366,12 +431,30 @@ export default function Services({ auth }) {
             </Col>
             <Col xs={24} md={12}>
               <Form.Item name="product_category_id" label="Category">
-                <Select allowClear showSearch optionFilterProp="label" options={lookupOptions.categories} />
+                <Space.Compact style={{ width: '100%' }}>
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    options={lookupOptions.categories}
+                    style={{ flex: 1 }}
+                  />
+                  <Button icon={<PlusOutlined />} onClick={() => openQuickAdd('category')} />
+                </Space.Compact>
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
               <Form.Item name="product_unit_id" label="Unit">
-                <Select allowClear showSearch optionFilterProp="label" options={lookupOptions.units} />
+                <Space.Compact style={{ width: '100%' }}>
+                  <Select
+                    allowClear
+                    showSearch
+                    optionFilterProp="label"
+                    options={lookupOptions.units}
+                    style={{ flex: 1 }}
+                  />
+                  <Button icon={<PlusOutlined />} onClick={() => openQuickAdd('unit')} />
+                </Space.Compact>
               </Form.Item>
             </Col>
             <Col xs={24} md={12}>
@@ -417,6 +500,37 @@ export default function Services({ auth }) {
           </Row>
         </Form>
       </Drawer>
+
+      <Modal
+        title={quickAdd.type === 'unit' ? 'Quick Add Unit' : 'Quick Add Category'}
+        open={quickAdd.open}
+        onCancel={closeQuickAdd}
+        onOk={saveQuickAdd}
+        confirmLoading={quickSaving}
+        okText="Add"
+        destroyOnHidden
+      >
+        <Form form={quickForm} layout="vertical" initialValues={emptyQuickAdd}>
+          <Form.Item name="name" label={quickAdd.type === 'unit' ? 'Unit Name' : 'Category Name'} rules={[{ required: true, message: 'Name is required.' }]}>
+            <Input autoFocus />
+          </Form.Item>
+
+          {quickAdd.type === 'unit' ? (
+            <>
+              <Form.Item name="short_name" label="Short Name">
+                <Input placeholder="Auto from name if blank" />
+              </Form.Item>
+              <Form.Item name="accept_fractional" label="Accept Fractional Quantity" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </>
+          ) : null}
+
+          <Form.Item name="description" label="Description">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </AuthenticatedLayout>
   );
 }

@@ -20,6 +20,7 @@ class Contact extends Model
     protected $fillable = [
         'contact_group_id',
         'account_id',
+        'payable_account_id',
         'crm_account_id',
         'contact_type',
         'tax_registration_no',
@@ -62,6 +63,11 @@ class Contact extends Model
     public function account(): BelongsTo
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function payableAccount(): BelongsTo
+    {
+        return $this->belongsTo(Account::class, 'payable_account_id');
     }
 
     public function crmAccount(): BelongsTo
@@ -162,5 +168,10 @@ class Contact extends Model
     public function supplierPayments(): HasMany
     {
         return $this->hasMany(SupplierPayment::class);
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
     }
 }

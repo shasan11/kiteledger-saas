@@ -64,12 +64,40 @@ class WarehouseItemController extends BaseCrudApiController
             $query->whereHas('product', fn (Builder $product) => $product->where('product_category_id', $categoryId));
         }
 
-        if (!$request->boolean('include_zero_stock')) {
+        $status = strtolower((string) $this->requestParam($request, 'stock_status', ''));
+
+        if (!$request->boolean('include_zero_stock') && $status !== 'out') {
             $query->where('qty_on_hand', '!=', 0);
         }
 
         if (!$request->boolean('include_inactive')) {
             $query->where('active', true);
+        }
+
+        if ($request->boolean('low_stock_only') || $status === 'low') {
+            $query->whereColumn('qty_on_hand', '>', 0)
+                ->where(function (Builder $lowStock) {
+                    $lowStock
+                        ->whereColumn('qty_on_hand', '<=', 'reorder_level')
+                        ->orWhereHas('product', fn (Builder $product) => $product->whereColumn('warehouse_items.qty_on_hand', '<=', 'products.reorder_level'));
+                });
+        }
+
+        if ($request->boolean('negative_stock_only') || $status === 'negative') {
+            $query->where('qty_on_hand', '<', 0);
+        }
+
+        if ($status === 'out') {
+            $query->where('qty_on_hand', '=', 0);
+        }
+
+        if ($status === 'in') {
+            $query->where('qty_on_hand', '>', 0)
+                ->where(function (Builder $inStock) {
+                    $inStock
+                        ->whereNull('reorder_level')
+                        ->orWhereColumn('qty_on_hand', '>', 'reorder_level');
+                });
         }
     }
 
@@ -98,7 +126,7 @@ class WarehouseItemController extends BaseCrudApiController
     {
         $qty = (float) $record->qty_on_hand;
         $reorder = (float) ($record->reorder_level ?? $record->product?->reorder_level ?? 0);
-        $data['stock_status'] = $qty <= 0 ? 'Out of Stock' : ($reorder > 0 && $qty <= $reorder ? 'Low Stock' : 'In Stock');
+        $data['stock_status'] = $qty < 0 ? 'Negative Stock' : ($qty == 0 ? 'Out of Stock' : ($reorder > 0 && $qty <= $reorder ? 'Low Stock' : 'In Stock'));
 
         return $data;
     }

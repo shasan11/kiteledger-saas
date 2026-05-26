@@ -20,6 +20,7 @@ class ChartOfAccount extends Model
     protected $fillable = [
         'account_id',
         'branch_id',
+        'currency_id',
         'type',
         'code',
         'name',
@@ -54,6 +55,11 @@ class ChartOfAccount extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function currency(): BelongsTo
+    {
+        return $this->belongsTo(Currency::class);
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(ChartOfAccount::class);
@@ -69,30 +75,4 @@ class ChartOfAccount extends Model
         return $this->hasMany(ChartOfAccount::class);
     }
 
-    public function journalVoucherLines(): HasMany
-    {
-        return $this->hasMany(JournalVoucherLine::class);
-    }
-
-    public function expenseLines(): HasMany
-    {
-        return $this->hasMany(ExpenseLine::class);
-    }
-
-    public function bankChargePayments(): HasMany
-    {
-        return $this->hasMany(CustomerPayment::class);
-    }
-
-    public function tdsPayments(): HasMany
-    {
-        return $this->hasMany(CustomerPayment::class);
-    }
-
-     
-
-    public function taxRateComponents(): HasMany
-    {
-        return $this->hasMany(TaxRateComponent::class);
-    }
 }

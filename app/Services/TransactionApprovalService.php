@@ -4,10 +4,16 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Models\Invoice;
+use App\Models\PosSale;
+use App\Models\PurchaseBill;
 use App\Models\InventoryAdjustment;
+use App\Models\WarehouseTransfer;
 use App\Models\ProductionOrder;
 use App\Models\ProductionJournal;
 use App\Services\Inventory\WarehouseStockService;
+use App\Services\Inventory\InvoiceStockPostingService;
+use App\Services\Inventory\PurchaseBillStockPostingService;
 
 class TransactionApprovalService
 {
@@ -33,6 +39,8 @@ class TransactionApprovalService
         protected LedgerValidationService $validationService,
         protected ParallelJournalVoucherService $jvService,
         protected WarehouseStockService $warehouseStockService,
+        protected InvoiceStockPostingService $invoiceStockService,
+        protected PurchaseBillStockPostingService $purchaseBillStockService,
     ) {
     }
 
@@ -44,7 +52,7 @@ class TransactionApprovalService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if ($this->validationService->hasApprovedField($fresh) && $fresh->approved) {
+            if ($this->validationService->hasApprovedField($fresh) && $fresh->approved && !$this->needsStockPosting($fresh)) {
                 return $fresh->refresh();
             }
 
@@ -59,7 +67,7 @@ class TransactionApprovalService
             }
 
             $numberField = $this->getNumberField($fresh);
-            if ($numberField && (!$fresh->{$numberField} || str_starts_with((string) $fresh->{$numberField}, '#draft'))) {
+            if ($numberField && (!$fresh->{$numberField} || $this->isDraftNumber((string) $fresh->{$numberField}))) {
                 $number = $this->numberingService->generateForApprovedModel($fresh);
                 if ($number) {
                     $fresh->{$numberField} = $number;
@@ -70,16 +78,25 @@ class TransactionApprovalService
 
             $fresh->saveQuietly();
 
-            if ($fresh instanceof \App\Models\Invoice) {
+            if ($fresh instanceof Invoice) {
                 $fresh->recalculatePaymentTotals();
+
+                if (!$this->isPosGeneratedInvoice($fresh)) {
+                    $this->invoiceStockService->post($fresh);
+                }
             }
 
-            if ($fresh instanceof \App\Models\PurchaseBill) {
+            if ($fresh instanceof PurchaseBill) {
                 $fresh->recalculatePaymentTotals();
+                $this->purchaseBillStockService->post($fresh);
             }
 
             if ($fresh instanceof InventoryAdjustment) {
                 $this->warehouseStockService->postInventoryAdjustment($fresh);
+            }
+
+            if ($fresh instanceof WarehouseTransfer) {
+                $this->warehouseStockService->postWarehouseTransfer($fresh);
             }
 
             if ($fresh instanceof ProductionOrder) {
@@ -99,11 +116,11 @@ class TransactionApprovalService
             }
 
             if ($fresh instanceof \App\Models\CustomerPayment) {
-                \App\Models\Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
+                Invoice::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             if ($fresh instanceof \App\Models\SupplierPayment) {
-                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
+                PurchaseBill::recalculatePaymentTotalsForContact($fresh->contact_id);
             }
 
             return $fresh->refresh();
@@ -118,7 +135,7 @@ class TransactionApprovalService
 
         DB::transaction(function () use ($transaction) {
             $numberField = $this->getNumberField($transaction);
-            if ($numberField && (!$transaction->{$numberField} || str_starts_with((string) $transaction->{$numberField}, '#draft'))) {
+            if ($numberField && (!$transaction->{$numberField} || $this->isDraftNumber((string) $transaction->{$numberField}))) {
                 $number = $this->numberingService->generateForApprovedModel($transaction);
                 if ($number) {
                     $transaction->saveQuietly([$numberField => $number]);
@@ -129,24 +146,28 @@ class TransactionApprovalService
                 $this->jvService->createForApprovedSource($transaction);
             }
 
-            if ($transaction instanceof \App\Models\Invoice) {
+            if ($transaction instanceof Invoice) {
                 $transaction->recalculatePaymentTotals();
             }
 
-            if ($transaction instanceof \App\Models\PurchaseBill) {
+            if ($transaction instanceof PurchaseBill) {
                 $transaction->recalculatePaymentTotals();
             }
 
             if ($transaction instanceof \App\Models\CustomerPayment) {
-                \App\Models\Invoice::recalculatePaymentTotalsForContact($transaction->contact_id);
+                Invoice::recalculatePaymentTotalsForContact($transaction->contact_id);
             }
 
             if ($transaction instanceof \App\Models\SupplierPayment) {
-                \App\Models\PurchaseBill::recalculatePaymentTotalsForContact($transaction->contact_id);
+                PurchaseBill::recalculatePaymentTotalsForContact($transaction->contact_id);
             }
 
             if ($transaction instanceof InventoryAdjustment) {
                 $this->warehouseStockService->postInventoryAdjustment($transaction);
+            }
+
+            if ($transaction instanceof WarehouseTransfer) {
+                $this->warehouseStockService->postWarehouseTransfer($transaction);
             }
 
             if ($transaction instanceof ProductionOrder) {
@@ -180,6 +201,32 @@ class TransactionApprovalService
         if ($this->validationService->hasStatusField($transaction) && $transaction->status === 'draft') {
             $transaction->status = $this->approvedStatusFor($transaction);
         }
+    }
+
+    protected function isPosGeneratedInvoice(Invoice $invoice): bool
+    {
+        return PosSale::query()
+            ->where('invoice_id', $invoice->getKey())
+            ->whereIn('status', ['completed', 'part_refunded', 'refunded'])
+            ->exists();
+    }
+
+    protected function needsStockPosting(Model $transaction): bool
+    {
+        if (!$transaction instanceof InventoryAdjustment && !$transaction instanceof WarehouseTransfer) {
+            return false;
+        }
+
+        return !(bool) ($transaction->stock_posted ?? false);
+    }
+
+    protected function isDraftNumber(string $number): bool
+    {
+        $normalized = strtolower(trim($number));
+
+        return $normalized === ''
+            || str_starts_with($normalized, '#draft')
+            || str_starts_with($normalized, 'draft-');
     }
 
     protected function approvedStatusFor(Model $transaction): string

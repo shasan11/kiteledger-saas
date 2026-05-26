@@ -4,10 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\InventoryAdjustment;
 use App\Models\InventoryConfiguration;
+use App\Models\DocumentNumbering;
 use App\Models\Product;
 use App\Models\Warehouse;
+use App\Models\WarehouseTransfer;
 use App\Models\WarehouseItem;
 use App\Services\Inventory\WarehouseStockService;
+use App\Services\TransactionApprovalService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -76,6 +79,82 @@ class WarehouseStockPostingTest extends TestCase
         $this->expectException(ValidationException::class);
 
         app(WarehouseStockService::class)->postInventoryAdjustment($adjustment);
+    }
+
+    public function test_warehouse_transfer_moves_stock_once_when_posted(): void
+    {
+        InventoryConfiguration::query()->create(['negative_stock_allowed' => false]);
+        $source = Warehouse::factory()->create();
+        $destination = Warehouse::factory()->create();
+        $product = Product::query()->create(['name' => 'Product X', 'code' => 'PX']);
+
+        WarehouseItem::query()->create([
+            'warehouse_id' => $source->id,
+            'product_id' => $product->id,
+            'qty_on_hand' => 10,
+            'avg_cost' => 25,
+            'total_value' => 250,
+            'active' => true,
+        ]);
+
+        $transfer = WarehouseTransfer::query()->create([
+            'transfer_no' => 'WT-' . str()->uuid(),
+            'transfer_date' => '2026-05-14',
+            'from_warehouse_id' => $source->id,
+            'to_warehouse_id' => $destination->id,
+            'status' => 'draft',
+            'approved' => false,
+        ]);
+        $transfer->warehouseTransferLines()->create([
+            'product_id' => $product->id,
+            'qty' => 4,
+        ]);
+
+        app(WarehouseStockService::class)->postWarehouseTransfer($transfer);
+        app(WarehouseStockService::class)->postWarehouseTransfer($transfer->fresh());
+
+        $sourceItem = WarehouseItem::query()->where('warehouse_id', $source->id)->where('product_id', $product->id)->sole();
+        $destinationItem = WarehouseItem::query()->where('warehouse_id', $destination->id)->where('product_id', $product->id)->sole();
+
+        $this->assertSame('6.0000', $sourceItem->qty_on_hand);
+        $this->assertSame('4.0000', $destinationItem->qty_on_hand);
+        $this->assertSame('25.000000', $destinationItem->avg_cost);
+    }
+
+    public function test_zero_value_inventory_adjustment_approval_posts_stock_without_blank_journal_error(): void
+    {
+        InventoryConfiguration::query()->create(['negative_stock_allowed' => false]);
+        DocumentNumbering::query()->create([
+            'document_type' => 'inventory_adjustment',
+            'prefix' => 'IA',
+            'next_number' => 1,
+            'type_of_account' => 'auto_numbering',
+            'active' => true,
+        ]);
+
+        $warehouse = Warehouse::factory()->create();
+        $product = Product::query()->create(['name' => 'Product X', 'code' => 'PX']);
+
+        $adjustment = InventoryAdjustment::query()->create([
+            'adjustment_no' => 'DRAFT-IA-TEST',
+            'adjustment_date' => '2026-05-14',
+            'warehouse_id' => $warehouse->id,
+            'status' => 'draft',
+            'approved' => false,
+        ]);
+        $adjustment->inventoryAdjustmentLines()->create([
+            'product_id' => $product->id,
+            'adjustment_type' => 'increase',
+            'qty' => 3,
+            'unit_cost' => 0,
+        ]);
+
+        app(TransactionApprovalService::class)->approve($adjustment);
+
+        $item = WarehouseItem::query()->where('warehouse_id', $warehouse->id)->where('product_id', $product->id)->sole();
+
+        $this->assertSame('3.0000', $item->qty_on_hand);
+        $this->assertTrue((bool) $adjustment->fresh()->approved);
     }
 
     protected function postLine(Warehouse $warehouse, Product $product, string $type, float $qty, float $unitCost): void

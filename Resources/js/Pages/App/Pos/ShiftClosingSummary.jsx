@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
-import { App, Button, Card, Descriptions, Empty, Result, Space, Spin, Tag, theme, Typography } from 'antd';
+import { App, Button, Card, Descriptions, Empty, Result, Space, Spin, Table, Tag, theme, Typography } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -13,6 +13,7 @@ export default function ShiftClosingSummary({ id }) {
     const { message } = App.useApp();
     const { token } = theme.useToken();
     const [shift, setShift] = useState(null);
+    const [company, setCompany] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -23,8 +24,12 @@ export default function ShiftClosingSummary({ id }) {
         setLoading(true);
 
         try {
-            const response = await axios.get(api(`/api/pos-shifts/${id}`));
+            const [response, companyResponse] = await Promise.all([
+                axios.get(api(`/api/pos-shifts/${id}`)),
+                axios.get(api('/api/app-settings/current')).catch(() => ({ data: null })),
+            ]);
             setShift(response.data || null);
+            setCompany(companyResponse.data?.data || companyResponse.data || null);
         } catch (error) {
             setShift(null);
             showApiError(message, error, 'Failed to load shift summary.');
@@ -83,7 +88,19 @@ export default function ShiftClosingSummary({ id }) {
             <Head title="Shift Closing Summary" />
 
             <div style={{ padding: token.padding, background: token.colorBgLayout, minHeight: 'calc(100vh - 120px)' }}>
+                <style>{`
+                    @media print {
+                        body * { visibility: hidden; }
+                        .pos-shift-print, .pos-shift-print * { visibility: visible; }
+                        .pos-shift-print { position: absolute; inset: 0; padding: 12mm; background: #fff; color: #111; }
+                        .pos-shift-print .ant-card { box-shadow: none !important; border: 0 !important; }
+                        .pos-shift-print .ant-card-head { border-bottom: 2px solid #111 !important; }
+                        .pos-shift-print .ant-btn { display: none !important; }
+                        .pos-shift-print table { page-break-inside: avoid; }
+                    }
+                `}</style>
                 <Card
+                    className="pos-shift-print"
                     bordered={false}
                     style={{
                         maxWidth: 980,
@@ -108,14 +125,30 @@ export default function ShiftClosingSummary({ id }) {
                         </Space>
                     }
                 >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, marginBottom: 16 }}>
+                        <div>
+                            <Title level={4} style={{ margin: 0 }}>{company?.company_name || company?.name || 'Company'}</Title>
+                            <Text>{[company?.address, company?.phone, company?.email].filter(Boolean).join(' | ')}</Text>
+                            <br />
+                            <Text>{company?.pan_vat || company?.pan || company?.vat ? `PAN/VAT: ${company?.pan_vat || company?.pan || company?.vat}` : ''}</Text>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <Text strong>Shift Closing Summary</Text>
+                            <br />
+                            <Text>{shift.shift_no}</Text>
+                        </div>
+                    </div>
                     {shift ? (
-                        <Descriptions
-                            bordered
-                            size="middle"
-                            column={{ xs: 1, sm: 1, md: 2 }}
-                            items={[
+                        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+                            <Descriptions
+                                bordered
+                                size="middle"
+                                column={{ xs: 1, sm: 1, md: 2 }}
+                                items={[
                                 { key: 'terminal', label: 'Terminal', children: shift.pos_terminal?.name || '-' },
+                                { key: 'branch', label: 'Branch', children: shift.branch?.name || shift.pos_terminal?.branch?.name || '-' },
                                 { key: 'cashier', label: 'Cashier', children: shift.cashier?.display_name || shift.cashier?.name || '-' },
+                                { key: 'closed_by', label: 'Closed By', children: shift.closed_by?.name || shift.closedBy?.name || '-' },
                                 { key: 'opened', label: 'Opened At', children: shift.opened_at ? dayjs(shift.opened_at).format('DD MMM YYYY, HH:mm') : '-' },
                                 { key: 'closed', label: 'Closed At', children: shift.closed_at ? dayjs(shift.closed_at).format('DD MMM YYYY, HH:mm') : '-' },
                                 { key: 'opening', label: 'Opening Cash', children: `Rs. ${money(shift.opening_cash)}` },
@@ -137,8 +170,35 @@ export default function ShiftClosingSummary({ id }) {
                                 },
                                 { key: 'total', label: 'Total Sales', children: `Rs. ${money(shift.total_sales)}` },
                                 { key: 'transactions', label: 'Number of Transactions', children: transactionCount },
+                                { key: 'notes', label: 'Notes', children: shift.notes || '-' },
                             ]}
-                        />
+                            />
+                            <Table
+                                size="small"
+                                title={() => 'Sales Breakdown'}
+                                pagination={false}
+                                rowKey={(row) => row.id}
+                                dataSource={shift.pos_sales || []}
+                                columns={[
+                                    { title: 'Sale No', dataIndex: 'sale_no' },
+                                    { title: 'Customer', dataIndex: 'customer_name' },
+                                    { title: 'Status', dataIndex: 'status' },
+                                    { title: 'Total', dataIndex: 'grand_total', align: 'right', render: (value) => `Rs. ${money(value)}` },
+                                ]}
+                            />
+                            <Table
+                                size="small"
+                                title={() => 'Cash Movements'}
+                                pagination={false}
+                                rowKey={(row) => row.id}
+                                dataSource={shift.pos_cash_movements || []}
+                                columns={[
+                                    { title: 'Type', dataIndex: 'type' },
+                                    { title: 'Reason', dataIndex: 'reason' },
+                                    { title: 'Amount', dataIndex: 'amount', align: 'right', render: (value) => `Rs. ${money(value)}` },
+                                ]}
+                            />
+                        </Space>
                     ) : (
                         <Empty />
                     )}

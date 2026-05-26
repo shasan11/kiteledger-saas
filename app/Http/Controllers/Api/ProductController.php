@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -154,6 +155,7 @@ class ProductController extends BaseCrudApiController
         $record = DB::transaction(function () use ($validated) {
             [$productData, $variantPayload] = $this->splitVariantPayload($validated);
             $productData = $this->normalizeByProductType($productData);
+            $productData = $this->assignSkuIfMissing($productData);
             $this->validateProductRules($productData);
 
             $product = Product::query()->create($productData);
@@ -183,6 +185,7 @@ class ProductController extends BaseCrudApiController
             [$productData, $variantPayload] = $this->splitVariantPayload($validated);
             $productData = array_merge($record->only(array_keys($this->storeRules)), $productData);
             $productData = $this->normalizeByProductType($productData);
+            $productData = $this->assignSkuIfMissing($productData, $record);
             $this->validateProductRules($productData, $record);
 
             $record->forceFill($productData)->save();
@@ -418,7 +421,7 @@ class ProductController extends BaseCrudApiController
             $data['parent_id'] = null;
             $data['variant_signature'] = null;
             $data['track_inventory'] = false;
-            $data['valuation_method'] = $data['valuation_method'] ?? null;
+            $data['valuation_method'] = ($data['valuation_method'] ?? null) ?: 'standard';
             $data['reorder_level'] = 0;
             $data['sku'] = $data['sku'] ?? null;
             $data['barcode'] = $data['barcode'] ?? null;
@@ -453,6 +456,38 @@ class ProductController extends BaseCrudApiController
             'sku' => ['nullable', Rule::unique('products', 'sku')->ignore($ignore)],
             'barcode' => ['nullable', Rule::unique('products', 'barcode')->ignore($ignore)],
         ])->validate();
+    }
+
+    private function assignSkuIfMissing(array $data, ?Product $record = null): array
+    {
+        if (!empty($data['sku'])) {
+            return $data;
+        }
+
+        if ($record && !empty($record->sku)) {
+            $data['sku'] = $record->sku;
+            return $data;
+        }
+
+        $prefix = ($data['product_type'] ?? 'simple') === 'service' ? 'SVC' : 'PRD';
+        $base = Str::upper(Str::slug((string) ($data['name'] ?? $prefix), '-'));
+        $base = $base !== '' ? Str::limit($base, 36, '') : $prefix;
+        $candidateBase = "{$prefix}-{$base}";
+
+        for ($index = 1; $index <= 9999; $index++) {
+            $candidate = Str::limit($candidateBase, 74, '') . '-' . str_pad((string) $index, 4, '0', STR_PAD_LEFT);
+            $exists = Product::query()
+                ->where('sku', $candidate)
+                ->when($record, fn ($query) => $query->whereKeyNot($record->getKey()))
+                ->exists();
+
+            if (!$exists) {
+                $data['sku'] = $candidate;
+                return $data;
+            }
+        }
+
+        throw ValidationException::withMessages(['sku' => ['Unable to generate a unique SKU.']]);
     }
 
     private function salesVariantPayload(Product $record): array

@@ -7,6 +7,7 @@ use App\Models\Milestone;
 use App\Models\Project;
 use App\Models\ProjectTeam;
 use App\Models\TaskStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -30,24 +31,25 @@ class ProjectController extends BaseCrudApiController
      |
      | So this controller requires:
      |
-     | projects.view
-     | projects.create
-     | projects.update
-     | projects.delete
+     | project.project.view
+     | project.project.create
+     | project.project.update
+     | project.project.delete
      |
      */
-    protected ?string $permissionPrefix = 'projects';
+    protected ?string $permissionPrefix = 'project.project';
 
     protected bool $usePolicyAuthorization = false;
 
     protected bool $branchScoped = false;
 
-    protected bool $autoFillBranchOnCreate = false;
+    protected bool $autoFillBranchOnCreate = true;
 
     protected bool $preventBranchChangeOnUpdate = false;
 
     protected array $relations = [
         'projectManager',
+        'branch',
         'milestones',
         'taskStatuses',
         'tasks.milestone',
@@ -60,6 +62,7 @@ class ProjectController extends BaseCrudApiController
 
     protected array $relationDetails = [
         'projectManager' => 'project_manager_id',
+        'branch' => 'branch_id',
     ];
 
     protected array $searchable = [
@@ -70,9 +73,11 @@ class ProjectController extends BaseCrudApiController
         'projectManager.last_name',
         'projectManager.username',
         'projectManager.email',
+        'branch.name',
     ];
 
     protected array $filterable = [
+        'branch_id',
         'project_manager_id',
         'status',
     ];
@@ -97,6 +102,7 @@ class ProjectController extends BaseCrudApiController
         'id',
         'name',
         'project_manager_id',
+        'branch_id',
         'start_date',
         'end_date',
         'status',
@@ -176,6 +182,7 @@ class ProjectController extends BaseCrudApiController
     ];
 
     protected array $storeRules = [
+        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'project_manager_id' => ['required', 'integer', 'exists:users,id'],
         'name' => ['required', 'string', 'max:180'],
         'start_date' => ['required', 'date'],
@@ -193,6 +200,7 @@ class ProjectController extends BaseCrudApiController
         $endDate = $request->input('end_date', $record->end_date?->format('Y-m-d'));
 
         return [
+            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
             'project_manager_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'start_date' => [
@@ -212,6 +220,20 @@ class ProjectController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function applyFilters(\Illuminate\Database\Eloquent\Builder $query, Request $request): void
+    {
+        parent::applyFilters($query, $request);
+
+        if ($request->boolean('overdue')) {
+            $query
+                ->whereDate('end_date', '<', now()->toDateString())
+                ->where(function (Builder $query) {
+                    $query->where('active', true)->orWhereNull('active');
+                })
+                ->whereNotIn('status', ['COMPLETED', 'CANCELLED']);
+        }
     }
 
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
@@ -234,7 +256,79 @@ class ProjectController extends BaseCrudApiController
             $parentData['user_add_id'] = auth()->id();
         }
 
+        if (empty($parentData['branch_id']) && $this->tableHasColumn('branch_id')) {
+            $parentData['branch_id'] = $this->defaultWriteBranchId(request());
+        }
+
         return $parentData;
+    }
+
+    public function show(Request $request, mixed $id)
+    {
+        $record = $this->findRecord($id);
+
+        $this->checkAccess($request, 'show', $record);
+        $this->assertRecordBranchAccess($request, $record);
+        $this->ensureDefaultTaskStatuses($record);
+
+        return response()->json(
+            $this->serializeRecord($record->fresh($this->validEagerLoadRelations($record)))
+        );
+    }
+
+    public function financialSummary(Request $request, mixed $id)
+    {
+        $project = $this->findRecord($id);
+
+        $this->checkAccess($request, 'show', $project);
+        $this->assertRecordBranchAccess($request, $project);
+
+        $invoiceQuery = $project->invoices()
+            ->with('contact')
+            ->where(function (Builder $query) {
+                $query->where('active', true)->orWhereNull('active');
+            })
+            ->where(function (Builder $query) {
+                $query->where('void', false)->orWhereNull('void');
+            })
+            ->whereNotIn('status', ['draft', 'void']);
+
+        $purchaseBillQuery = $project->purchaseBills()
+            ->with('contact')
+            ->where(function (Builder $query) {
+                $query->where('active', true)->orWhereNull('active');
+            })
+            ->where(function (Builder $query) {
+                $query->where('void', false)->orWhereNull('void');
+            })
+            ->whereNotIn('status', ['draft', 'void']);
+
+        $invoices = $invoiceQuery->latest('invoice_date')->get();
+        $purchaseBills = $purchaseBillQuery->latest('bill_date')->get();
+
+        $earningsTotal = (float) $invoices->sum('total');
+        $earningsPaid = (float) $invoices->sum('paid_total');
+        $costsTotal = (float) $purchaseBills->sum('total');
+        $costsPaid = (float) $purchaseBills->sum('paid_total');
+
+        return response()->json([
+            'project_id' => $project->id,
+            'earnings' => [
+                'invoice_count' => $invoices->count(),
+                'total' => round($earningsTotal, 2),
+                'paid_total' => round($earningsPaid, 2),
+                'balance_due' => round((float) $invoices->sum('balance_due'), 2),
+            ],
+            'costs' => [
+                'purchase_bill_count' => $purchaseBills->count(),
+                'total' => round($costsTotal, 2),
+                'paid_total' => round($costsPaid, 2),
+                'balance_due' => round((float) $purchaseBills->sum('balance_due'), 2),
+            ],
+            'profit_loss' => round($earningsTotal - $costsTotal, 2),
+            'invoices' => $invoices->values(),
+            'purchase_bills' => $purchaseBills->values(),
+        ]);
     }
 
     protected function mutateParentDataBeforeUpdate(
@@ -259,14 +353,21 @@ class ProjectController extends BaseCrudApiController
     ): Model {
         $record = parent::afterSave($record, $parentData, $nestedData, $isUpdate);
 
-        if (!$isUpdate && empty($nestedData['task_statuses']) && !$record->taskStatuses()->exists()) {
-            $record->taskStatuses()->createMany([
-                ['name' => 'To Do', 'color' => 'default', 'sort_order' => 1, 'active' => true],
-                ['name' => 'In Progress', 'color' => 'blue', 'sort_order' => 2, 'active' => true],
-                ['name' => 'Done', 'color' => 'green', 'sort_order' => 3, 'active' => true],
-            ]);
-        }
+        $this->ensureDefaultTaskStatuses($record);
 
         return $record;
+    }
+
+    protected function ensureDefaultTaskStatuses(Project $project): void
+    {
+        if ($project->taskStatuses()->exists()) {
+            return;
+        }
+
+        $project->taskStatuses()->createMany([
+            ['name' => 'To Do', 'color' => 'default', 'sort_order' => 1, 'active' => true],
+            ['name' => 'In Progress', 'color' => 'blue', 'sort_order' => 2, 'active' => true],
+            ['name' => 'Done', 'color' => 'green', 'sort_order' => 3, 'active' => true],
+        ]);
     }
 }

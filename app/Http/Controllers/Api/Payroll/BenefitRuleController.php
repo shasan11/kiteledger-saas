@@ -21,6 +21,6 @@ class BenefitRuleController extends BaseCrudApiController
         'calculation_base' => ['required', 'string', 'max:60'],
         'max_limit' => ['nullable', 'numeric', 'min:0'],
         'active' => ['nullable', 'boolean'],
-        'accounting_account_id' => ['nullable', 'uuid', 'exists:chart_of_accounts,id'],
+        'accounting_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
     ];
 }

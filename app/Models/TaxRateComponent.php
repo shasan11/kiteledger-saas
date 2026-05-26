@@ -24,7 +24,6 @@ class TaxRateComponent extends Model
         'account_id',
         'sort_order',
         'active',
-        'chart_of_account_id',
     ];
 
     /**
@@ -38,7 +37,6 @@ class TaxRateComponent extends Model
             'rate_percent' => 'decimal:4',
             'sort_order' => 'integer',
             'active' => 'boolean',
-            'chart_of_account_id' => 'integer',
         ];
     }
 
@@ -47,13 +45,8 @@ class TaxRateComponent extends Model
         return $this->belongsTo(TaxRate::class);
     }
 
-    public function chartOfAccount(): BelongsTo
-    {
-        return $this->belongsTo(ChartOfAccount::class);
-    }
-
     public function account(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 }

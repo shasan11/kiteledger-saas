@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseBill extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,10 +20,15 @@ class PurchaseBill extends Model
      */
     protected $fillable = [
         'branch_id',
+        'project_id',
+        'fiscal_year_id',
         'bill_no',
         'bill_date',
         'due_date',
         'contact_id',
+        'lead_id',
+        'deal_id',
+        'campaign_id',
         'warehouse_id',
         'currency_id',
         'reference',
@@ -78,9 +84,29 @@ class PurchaseBill extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(Lead::class);
+    }
+
+    public function deal(): BelongsTo
+    {
+        return $this->belongsTo(Deal::class);
+    }
+
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(CrmCampaign::class, 'campaign_id');
     }
 
     public function warehouse(): BelongsTo

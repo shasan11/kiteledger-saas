@@ -18,6 +18,7 @@ class Project extends Model
      * @var array
      */
     protected $fillable = [
+        'branch_id',
         'project_manager_id',
         'name',
         'start_date',
@@ -37,6 +38,7 @@ class Project extends Model
     protected function casts(): array
     {
         return [
+            'branch_id' => 'string',
             'project_manager_id' => 'integer',
             'start_date' => 'datetime',
             'end_date' => 'datetime',
@@ -58,7 +60,7 @@ class Project extends Model
 
     public function tasks(): HasMany
     {
-        return $this->hasMany(Task::class);
+        return $this->hasMany(Task::class)->orderBy('task_status_id')->orderBy('sort_order')->orderBy('created_at');
     }
 
     public function projectTeams(): HasMany
@@ -71,8 +73,23 @@ class Project extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public function userAdd(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class);
     }
 }

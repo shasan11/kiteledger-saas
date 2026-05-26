@@ -4,12 +4,16 @@ namespace App\Observers;
 
 use App\Models\ChequeRegister;
 use App\Domain\Accounting\Services\ChequeRegisterService;
+use App\Services\TransactionApprovalService;
+use App\Services\TransactionVoidService;
 use Illuminate\Validation\ValidationException;
 
 class ChequeRegisterObserver
 {
     public function __construct(
         protected ChequeRegisterService $chequeRegisterService,
+        protected TransactionApprovalService $approvalService,
+        protected TransactionVoidService $voidService,
     ) {
     }
 
@@ -31,6 +35,32 @@ class ChequeRegisterObserver
     public function saved(ChequeRegister $chequeRegister): void
     {
         $this->chequeRegisterService->recalculateTotal($chequeRegister);
+    }
+
+    public function updated(ChequeRegister $chequeRegister): void
+    {
+        if (
+            $chequeRegister->wasChanged('approved')
+            && (bool) $chequeRegister->approved === true
+        ) {
+            $this->approvalService->handleApprovedTransition($chequeRegister);
+        }
+
+        if (
+            $chequeRegister->wasChanged('status')
+            && $chequeRegister->status === 'cleared'
+            && ! (bool) $chequeRegister->approved
+        ) {
+            $this->approvalService->approve($chequeRegister, request()->user()?->getAuthIdentifier());
+        }
+
+        if ($chequeRegister->wasChanged('void') && (bool) $chequeRegister->void === true) {
+            $this->voidService->void($chequeRegister, $chequeRegister->voided_reason ?? 'Voided');
+        }
+
+        if ($chequeRegister->wasChanged('status') && in_array($chequeRegister->status, ['cancelled'], true)) {
+            $this->voidService->cancel($chequeRegister, $chequeRegister->voided_reason ?? 'Cancelled');
+        }
     }
 
     public function deleting(ChequeRegister $chequeRegister): void

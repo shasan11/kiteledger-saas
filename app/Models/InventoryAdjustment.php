@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class InventoryAdjustment extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,11 +20,15 @@ class InventoryAdjustment extends Model
      */
     protected $fillable = [
         'branch_id',
+        'fiscal_year_id',
         'adjustment_no',
         'adjustment_date',
         'warehouse_id',
         'reason',
         'notes',
+        'source_type',
+        'source_id',
+        'is_system_generated',
         'status',
         'active',
         'approved',
@@ -50,6 +55,7 @@ class InventoryAdjustment extends Model
     {
         return [
             'adjustment_date' => 'date',
+            'is_system_generated' => 'boolean',
             'active' => 'boolean',
             'approved' => 'boolean',
             'approved_at' => 'datetime',

@@ -1,102 +1,271 @@
-import { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ReusableCrud';
-import { Head, router } from '@inertiajs/react';
-import * as Yup from 'yup';
+import { useEffect, useMemo, useState } from 'react';
+import { router } from '@inertiajs/react';
+import { Form, Input, InputNumber, DatePicker, Button, Space, Row, Col, Table, message, Typography } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
+import axios from 'axios';
+import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
+import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 
-dayjs.extend(customParseFormat);
-
+const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
-const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
-const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
-const formatDate = (v) => {
-    if (!v) return null;
-    if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
-    const p = dayjs(v, ['YYYY-MM-DD', 'DD-MM-YYYY'], true);
-    if (p.isValid()) return p.format('YYYY-MM-DD');
-    const f = dayjs(v);
-    return f.isValid() ? f.format('YYYY-MM-DD') : null;
+const authHeaders = () => {
+    const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return t ? { Authorization: `Bearer ${t}` } : {};
 };
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const nullIfEmpty = (v) => (v === undefined || v === null || v === '' ? null : v);
+const formatMoney = (n) => Number(toNumber(n)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const emptyLine = { id: undefined, chart_of_account_id: null, description: '', tax_rate_id: null, amount: 0, tax_amount: 0, line_total: 0 };
+const emptyLine = () => ({
+    _key: Math.random().toString(36).slice(2),
+    chart_of_account_id: null,
+    account_detail: null,
+    description: '',
+    tax_rate_id: null,
+    tax_detail: null,
+    amount: 0,
+    tax_amount: 0,
+});
 
-export default function ExpenseAdd(props) {
-    const fields = useMemo(() => [
-        { name: 'contact_id', label: 'Party / Vendor', type: 'fkSelect', col: 16, placeholder: 'Select Party', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-        { name: 'expense_no', label: 'Expense No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
-        { name: 'expense_date', label: 'Expense Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
-        { name: 'due_date', label: 'Due Date', type: 'datePicker', col: 8, format: 'DD-MM-YYYY' },
-        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '', onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }) },
-        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0.000001 },
-        { name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-        {
-            name: 'items', label: 'Expense Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Expense Line', defaultItem: { ...emptyLine }, headerBg: '#4b5563', headerColor: '#ffffff',
-            columns: [
-                { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', placeholder: 'Select Account', fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
-                { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax', type: 'fkSelect', width: '130px', placeholder: 'No VAT', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-                { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0.000001 },
-                { key: 'tax_amount', name: 'tax_amount', label: 'Tax Amt', type: 'number', width: '110px', min: 0 },
-                { key: 'line_total', name: 'line_total', label: 'Total', type: 'number', width: '130px', min: 0, disabled: true },
-            ],
-        },
-        { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
-    ], []);
+export default function ExpenseAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
+    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+    const [items, setItems] = useState([emptyLine()]);
+    const [deletedItemIds, setDeletedItemIds] = useState([]);
 
-    const validationSchema = useMemo(() => Yup.object().shape({
-        expense_date: Yup.mixed().required('Date is required'),
-        exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').nullable(),
-        items: Yup.array().of(Yup.object().shape({ amount: Yup.number().typeError('Amount required').moreThan(0, 'Must be > 0').required() }).test('acct', 'Account is required', (l) => !!asId(l?.chart_of_account_id))).min(1, 'At least one expense line is required').required(),
-    }), []);
+    useEffect(() => {
+        if (initialRecord) {
+            form.setFieldsValue({
+                expense_no: displayDocumentNumber(initialRecord, 'expense_no'),
+                expense_date: initialRecord.expense_date ? dayjs(initialRecord.expense_date) : dayjs(),
+                due_date: initialRecord.due_date ? dayjs(initialRecord.due_date) : null,
+                contact_id: initialRecord.contact_id ?? initialRecord.contact?.id ?? null,
+                currency_id: initialRecord.currency_id ?? initialRecord.currency?.id ?? null,
+                exchange_rate: initialRecord.exchange_rate ?? 1,
+                tds_charges_account_id: initialRecord.tds_charges_account_id ?? null,
+                notes: initialRecord.notes || '',
+            });
+            const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
+            if (lines.length) {
+                setItems(lines.map((l) => ({
+                    _key: Math.random().toString(36).slice(2),
+                    id: l.id,
+                    chart_of_account_id: l.chart_of_account_id ?? l.account?.id ?? null,
+                    account_detail: l.account || l.chart_of_account_id_detail || null,
+                    description: l.description || '',
+                    tax_rate_id: l.tax_rate_id ?? l.tax_rate?.id ?? null,
+                    tax_detail: l.tax_rate || l.tax_rate_id_detail || null,
+                    amount: toNumber(l.amount),
+                    tax_amount: toNumber(l.tax_amount),
+                })));
+            }
+        } else {
+            form.setFieldsValue({ expense_date: dayjs(), exchange_rate: 1, expense_no: '#DRAFT' });
+        }
+    }, [initialRecord, form]);
 
-    const crudInitialValues = useMemo(() => ({
-        expense_no: '', expense_date: dayjs(), due_date: null, contact_id: null, currency_id: null, exchange_rate: 1, tds_charges_account_id: null, notes: '', items: [{ ...emptyLine }], deleted_item_ids: [],
-    }), []);
+    const updateLine = (idx, patch) => setItems((p) => { const n = [...p]; n[idx] = { ...n[idx], ...patch }; return n; });
+    const addLine = () => setItems((p) => [...p, emptyLine()]);
+    const removeLine = (idx) => setItems((prev) => {
+        const line = prev[idx];
+        if (line?.id) setDeletedItemIds((ids) => [...ids, line.id]);
+        const next = prev.filter((_, i) => i !== idx);
+        return next.length ? next : [emptyLine()];
+    });
 
-    const transformPayload = (values = {}) => {
-        const items = (Array.isArray(values.items) ? values.items : []).filter((l) => !!asId(l?.chart_of_account_id)).map((l) => ({
-            ...(l.id ? { id: l.id } : {}),
-            chart_of_account_id: asId(l.chart_of_account_id),
-            description: nullIfEmpty(l.description),
-            tax_rate_id: asId(l.tax_rate_id),
-            amount: toNumber(l.amount),
-            tax_amount: toNumber(l.tax_amount) || null,
-            line_total: toNumber(l.amount) + toNumber(l.tax_amount),
-        }));
-        return {
-            expense_no: nullIfEmpty(values.expense_no),
-            expense_date: formatDate(values.expense_date),
-            due_date: formatDate(values.due_date),
-            contact_id: asId(values.contact_id ?? values.contact),
-            currency_id: asId(values.currency_id ?? values.currency),
-            exchange_rate: toNumber(values.exchange_rate) || 1,
-            tds_charges_account_id: asId(values.tds_charges_account_id),
-            notes: nullIfEmpty(values.notes),
-            items,
-            deleted_item_ids: Array.isArray(values.deleted_item_ids) ? values.deleted_item_ids.filter(Boolean) : [],
-        };
+    const total = useMemo(() => items.reduce((s, r) => s + toNumber(r?.amount) + toNumber(r?.tax_amount), 0), [items]);
+
+    const validateLines = () => {
+        if (!items.length) return 'At least one expense line is required.';
+        for (const l of items) {
+            if (!l.chart_of_account_id) return 'Every line must have an account.';
+            if (toNumber(l.amount) <= 0) return 'Every line must have amount > 0.';
+        }
+        return null;
     };
 
+    const onSubmit = async () => {
+        const v = await form.validateFields().catch(() => null);
+        if (!v) return;
+        const err = validateLines();
+        if (err) { message.error(err); return; }
+
+        const payload = {
+            expense_no: v.expense_no === '#DRAFT' ? null : nullIfEmpty(v.expense_no),
+            expense_date: v.expense_date ? v.expense_date.format('YYYY-MM-DD') : null,
+            due_date: v.due_date ? v.due_date.format('YYYY-MM-DD') : null,
+            contact_id: v.contact_id || null,
+            currency_id: v.currency_id || null,
+            exchange_rate: toNumber(v.exchange_rate) || 1,
+            tds_charges_account_id: v.tds_charges_account_id || null,
+            notes: nullIfEmpty(v.notes),
+            items: items.map((l) => ({
+                ...(l.id ? { id: l.id } : {}),
+                chart_of_account_id: l.chart_of_account_id,
+                description: nullIfEmpty(l.description),
+                tax_rate_id: l.tax_rate_id || null,
+                amount: toNumber(l.amount),
+                tax_amount: toNumber(l.tax_amount) || null,
+                line_total: toNumber(l.amount) + toNumber(l.tax_amount),
+            })),
+            deleted_item_ids: deletedItemIds,
+        };
+
+        setSubmitting(true);
+        try {
+            const url = isEdit ? api(`/api/expenses/${recordId}/`) : api('/api/expenses/');
+            const res = await axios({ method: isEdit ? 'patch' : 'post', url, data: payload, headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+            message.success(isEdit ? 'Expense updated' : 'Expense created');
+            const id = res?.data?.id;
+            if (id) router.visit(route('payment-out.expenses.show', id));
+            else router.visit(route('payment-out.expenses.index'));
+        } catch (e) {
+            const data = e?.response?.data;
+            if (data && typeof data === 'object') {
+                const errs = data.errors || data;
+                const remain = [];
+                Object.entries(errs).forEach(([f, msgs]) => {
+                    const m = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+                    if (form.getFieldInstance(f)) form.setFields([{ name: f, errors: [m] }]);
+                    else remain.push(`${f}: ${m}`);
+                });
+                if (remain.length) message.error(remain.join(' | '));
+                else if (data.message) message.error(data.message);
+                else message.error('Validation failed');
+            } else message.error('Save failed');
+        } finally { setSubmitting(false); }
+    };
+
+    const lineColumns = [
+        {
+            title: 'Account', dataIndex: 'chart_of_account_id',
+            render: (val, row, idx) => (
+                <BackendSelect
+                    value={val}
+                    detailValue={row.account_detail}
+                    fkUrl="/api/chart-of-accounts/"
+                    labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')}
+                    placeholder="Select account"
+                    style={{ width: '100%' }}
+                    variant="borderless"
+                    onChange={(v, raw) => updateLine(idx, { chart_of_account_id: v, account_detail: raw })}
+                />
+            ),
+        },
+        {
+            title: 'Tax', dataIndex: 'tax_rate_id', width: 180,
+            render: (val, row, idx) => (
+                <BackendSelect
+                    value={val}
+                    detailValue={row.tax_detail}
+                    fkUrl="/api/tax-rates/"
+                    placeholder="No VAT"
+                    style={{ width: '100%' }}
+                    variant="borderless"
+                    onChange={(v, raw) => updateLine(idx, { tax_rate_id: v, tax_detail: raw })}
+                />
+            ),
+        },
+        {
+            title: 'Amount', dataIndex: 'amount', width: 140, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateLine(idx, { amount: v ?? 0 })} />
+            ),
+        },
+        {
+            title: 'Tax Amt', dataIndex: 'tax_amount', width: 130, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateLine(idx, { tax_amount: v ?? 0 })} />
+            ),
+        },
+        {
+            title: 'Total', key: 'line_total', width: 130, align: 'right',
+            render: (_, row) => <Text>{formatMoney(toNumber(row.amount) + toNumber(row.tax_amount))}</Text>,
+        },
+        {
+            title: '', key: 'remove', width: 50,
+            render: (_, __, idx) => (
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeLine(idx)} disabled={items.length <= 1} />
+            ),
+        },
+    ];
+
     return (
-        <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="New Expense" />
-            <ReusableCrud
-                title="Expenses"
-                addTitle="New Expense"
-                apiUrl={api('/api/expenses/')}
-                fields={fields}
-                validationSchema={validationSchema}
-                crudInitialValues={crudInitialValues}
-                transformPayload={transformPayload}
-                ui_type="add form"
-                form_ui="drawer"
-                drawerWidth="calc(100vw - 24px)"
-                onAddSuccess={(record) => router.visit(route('payment-out.expenses.show', record.id))}
-            />
-        </AuthenticatedLayout>
+        <TransactionFormShell
+            auth={props.auth}
+            title={isEdit ? 'Edit Expense' : 'New Expense'}
+            headTitle={isEdit ? 'Edit Expense' : 'New Expense'}
+            onBack={() => router.visit(route('payment-out.expenses.index'))}
+            onCancel={() => router.visit(route('payment-out.expenses.index'))}
+            onSubmit={onSubmit}
+            submitting={submitting}
+            submitLabel={isEdit ? 'Update' : 'Save'}
+        >
+            <Form form={form} layout="vertical" requiredMark>
+                <FormSection title="Expense details">
+                    <Row gutter={16}>
+                        <Col xs={24} sm={16}>
+                            <Form.Item label="Party / Vendor" name="contact_id">
+                                <BackendSelect fkUrl="/api/contacts/" placeholder="Select party" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Expense No" name="expense_no">
+                                <Input placeholder="Auto-generated" disabled />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Expense Date" name="expense_date" rules={[{ required: true, message: 'Date is required' }]}>
+                                <DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Due Date" name="due_date">
+                                <DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Currency" name="currency_id">
+                                <BackendSelect fkUrl="/api/currencies/" labelFn={(r) => r?.name || r?.code || ''} placeholder="Currency" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                                <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="TDS Account" name="tds_charges_account_id">
+                                <BackendSelect fkUrl="/api/chart-of-accounts/" labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')} placeholder="Select TDS account" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+
+                <FormSection title="Expense lines">
+                    <Table rowKey="_key" size="small" columns={lineColumns} dataSource={items} pagination={false} bordered
+                        footer={() => (
+                            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                <Button icon={<PlusOutlined />} onClick={addLine} type="dashed">Add Line</Button>
+                                <Text style={{ fontWeight: 700 }}>Total: {formatMoney(total)}</Text>
+                            </Space>
+                        )}
+                    />
+                </FormSection>
+
+                <FormSection title="Additional">
+                    <Row>
+                        <Col xs={24}>
+                            <Form.Item label="Notes" name="notes">
+                                <Input.TextArea rows={3} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+            </Form>
+        </TransactionFormShell>
     );
 }

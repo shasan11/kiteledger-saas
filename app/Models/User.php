@@ -241,4 +241,29 @@ class User extends Authenticatable
     {
         return $this->hasMany(Project::class, 'project_manager_id');
     }
+
+    public function canViewAllBranches(): bool
+    {
+        return app(\App\Services\BranchScopeService::class)->canViewAllBranches($this);
+    }
+
+    public function isMainBranchAdminOrAbove(): bool
+    {
+        return $this->canViewAllBranches();
+    }
+
+    public function isBranchLimited(): bool
+    {
+        return !$this->canViewAllBranches();
+    }
+
+    public function assignedBranchIds(): array
+    {
+        return app(\App\Services\BranchScopeService::class)->assignedBranchIds($this);
+    }
+
+    public function canAccessBranch(?string $branchId): bool
+    {
+        return app(\App\Services\BranchScopeService::class)->canAccessBranch($this, $branchId);
+    }
 }

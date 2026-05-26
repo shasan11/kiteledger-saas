@@ -17,12 +17,15 @@ import {
     TeamOutlined,
     UserOutlined,
     WalletOutlined,
+    PlusOutlined,
 } from '@ant-design/icons';
-import { Grid, Layout, theme } from 'antd';
+import { Button, Dropdown, Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
+import { AppContextProvider } from '@/Contexts/AppContext';
+import KiteAiFloatingButton from '@/Components/AI/KiteAiFloatingButton';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -100,52 +103,7 @@ export default function AuthenticatedLayout({ header, children }) {
                           key: 'pos',
                           icon: <ShopOutlined />,
                           label: 'POS',
-                          children: [
-                              can('pos.terminal.view') && {
-                                  key: 'pos-screen',
-                                  label: 'Terminal Selection',
-                                  onClick: () => visit('pos.index', '/pos'),
-                              },
-                              can('pos.sale.view') && {
-                                  key: 'pos-sales',
-                                  label: 'Sales',
-                                  onClick: () =>
-                                      visit('pos.sales.index', '/pos/sales'),
-                              },
-                              can('pos.shift.view') && {
-                                  key: 'pos-shifts',
-                                  label: 'Shifts',
-                                  onClick: () =>
-                                      visit('pos.shifts.index', '/pos/shifts'),
-                              },
-                              can('pos.terminal.view') && {
-                                  key: 'pos-terminals',
-                                  label: 'Terminals',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.terminals.index',
-                                          '/pos/terminals',
-                                      ),
-                              },
-                              can('pos.cash_movement.view') && {
-                                  key: 'pos-cash-movements',
-                                  label: 'Cash Movements',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.cash-movements.index',
-                                          '/pos/cash-movements',
-                                      ),
-                              },
-                              can('pos.return.view') && {
-                                  key: 'pos-returns',
-                                  label: 'Returns',
-                                  onClick: () =>
-                                      visit(
-                                          'pos.returns.index',
-                                          '/pos/returns',
-                                      ),
-                              },
-                          ].filter(Boolean),
+                          onClick: () => visit('pos.index', '/pos'),
                       },
                   ]
                 : []),
@@ -184,6 +142,17 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () =>
                             visit('crm.activities.index', '/crm/activities'),
                     },
+                    {
+                        key: 'campaigns',
+                        label: 'Campaigns',
+                        onClick: () =>
+                            visit('crm.campaigns.index', '/crm/campaigns'),
+                    },
+                    {
+                        key: 'crm-tickets',
+                        label: 'Tickets',
+                        onClick: () => visit('crm.tickets.index', '/crm/tickets'),
+                    },
                 ],
             },
             {
@@ -217,12 +186,6 @@ export default function AuthenticatedLayout({ header, children }) {
                                 'payment-in.invoices.index',
                                 '/payment-in/invoices',
                             ),
-                    },
-                    {
-                        key: 'pi-bills',
-                        label: 'Bills',
-                        onClick: () =>
-                            visit('payment-in.bills.index', '/payment-in/bills'),
                     },
                     {
                         key: 'pi-payment',
@@ -716,12 +679,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
 
-        if (isActive('/pos/returns')) return ['pos-returns'];
-        if (isActive('/pos/cash-movements')) return ['pos-cash-movements'];
-        if (isActive('/pos/terminals')) return ['pos-terminals'];
-        if (isActive('/pos/shifts')) return ['pos-shifts'];
-        if (isActive('/pos/sales')) return ['pos-sales'];
-        if (isActive('/pos')) return ['pos-screen'];
+        if (isActive('/pos')) return ['pos'];
 
         if (page.url === '/crm') return ['leads'];
         if (isActive('/crm/contacts')) return ['contacts'];
@@ -729,6 +687,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/crm/deals')) return ['deals'];
         if (isActive('/crm/activity-inbox')) return ['activity-inbox'];
         if (isActive('/crm/activities')) return ['activities'];
+        if (isActive('/crm/tickets') || isActive('/support/tickets')) return ['crm-tickets'];
 
         if (isActive('/workflow')) return ['workflow'];
 
@@ -740,7 +699,6 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/sales/sales-returns')) return ['sales-sales-returns'];
 
         if (isActive('/payment-in/quotations')) return ['pi-quotations'];
-        if (isActive('/payment-in/bills')) return ['pi-bills'];
         if (isActive('/payment-in/proforma-invoices')) return ['pi-proforma-invoices'];
         if (isActive('/payment-in/sales-orders')) return ['pi-sales-orders'];
         if (isActive('/payment-in/invoices')) return ['pi-invoices'];
@@ -895,54 +853,54 @@ export default function AuthenticatedLayout({ header, children }) {
         return items;
     }, [branchContext]);
 
+    const quickAction = (key, label, icon, routeName, fallback, permission = null) => {
+        if (permission && !can(permission)) return null;
+
+        return {
+            key,
+            icon,
+            label,
+            onClick: () => visit(routeName, fallback),
+        };
+    };
+
+    const quickGroup = (key, label, children) => {
+        const visibleChildren = children.filter(Boolean);
+
+        if (!visibleChildren.length) return null;
+
+        return { key, type: 'group', label, children: visibleChildren };
+    };
+
     const quickAddItems = [
-        {
-            key: 'invoice',
-            icon: <FileTextOutlined />,
-            label: 'New Invoice',
-            onClick: () =>
-                visit(
-                    'payment-in.invoices.create',
-                    '/payment-in/invoices/create',
-                ),
-        },
-        {
-            key: 'bill',
-            icon: <BookOutlined />,
-            label: 'New Purchase Bill',
-            onClick: () =>
-                visit(
-                    'payment-out.purchase-bills.create',
-                    '/payment-out/purchase-bills/create',
-                ),
-        },
-        {
-            key: 'receipt',
-            icon: <AuditOutlined />,
-            label: 'Quick Receipt',
-            onClick: () =>
-                visit(
-                    'accounting.quick-receipts.create',
-                    '/accounting/quick-receipts/create',
-                ),
-        },
-        {
-            key: 'transfer',
-            icon: <SwapOutlined />,
-            label: 'Cash Transfer',
-            onClick: () =>
-                visit(
-                    'accounting.cash-transfers.create',
-                    '/accounting/cash-transfers/create',
-                ),
-        },
-        {
-            key: 'contact',
-            icon: <UserOutlined />,
-            label: 'New Contact',
-            onClick: () => visit('crm.contacts.create', '/crm/contacts/create'),
-        },
-    ];
+        quickGroup('quick-sales', 'Sales', [
+            quickAction('invoice', 'Invoice', <FileTextOutlined />, 'payment-in.invoices.add', '/payment-in/invoices/add', 'sales.invoice.create'),
+            quickAction('quotation', 'Quotation', <FileTextOutlined />, 'payment-in.quotations.add', '/payment-in/quotations/add', 'sales.quotation.create'),
+            quickAction('sales-order', 'Sales Order', <ProfileOutlined />, 'payment-in.sales-orders.add', '/payment-in/sales-orders/add', 'sales.sales_order.create'),
+            quickAction('payment-in', 'Payment In', <CreditCardOutlined />, 'payment-in.payments.add', '/payment-in/payments/add', 'sales.customer_payment.create'),
+            quickAction('credit-note', 'Credit Note', <AuditOutlined />, 'payment-in.credit-notes.add', '/payment-in/credit-notes/add', 'sales.credit_note.create'),
+        ]),
+        quickGroup('quick-purchase', 'Purchase', [
+            quickAction('purchase-bill', 'Purchase Bill', <BookOutlined />, 'payment-out.purchase-bills.add', '/payment-out/purchase-bills/add', 'purchase.purchase_bill.create'),
+            quickAction('purchase-order', 'Purchase Order', <InboxOutlined />, 'payment-out.purchase-orders.add', '/payment-out/purchase-orders/add', 'purchase.purchase_order.create'),
+            quickAction('supplier-payment', 'Supplier Payment', <WalletOutlined />, 'payment-out.supplier-payments.add', '/payment-out/supplier-payments/add', 'purchase.supplier_payment.create'),
+            quickAction('expense', 'Expense', <AuditOutlined />, 'payment-out.expenses.add', '/payment-out/expenses/add', 'purchase.expense.create'),
+            quickAction('debit-note', 'Debit Note', <SwapOutlined />, 'payment-out.debit-notes.add', '/payment-out/debit-notes/add', 'purchase.debit_note.create'),
+        ]),
+        quickGroup('quick-accounting', 'Accounting', [
+            quickAction('journal-voucher', 'Journal Voucher', <CalculatorOutlined />, 'accounting.journal-vouchers.add', '/accounting/journal-vouchers/add', 'accounting.journal_voucher.create'),
+            quickAction('cash-transfer', 'Cash Transfer', <SwapOutlined />, 'accounting.cash-transfers.add', '/accounting/cash-transfers/add', 'accounting.cash_transfer.create'),
+            quickAction('chart-account', 'Chart Account', <BookOutlined />, null, '/accounting/chart-of-accounts?create=1', 'accounting.chart_of_account.create'),
+        ]),
+        quickGroup('quick-records', 'Records', [
+            quickAction('contact', 'Contact', <UserOutlined />, null, '/crm/contacts?create=1', 'crm.contacts.create'),
+            quickAction('lead', 'Lead', <ContactsOutlined />, null, '/crm/leads?create=1', 'crm.lead.create'),
+            quickAction('deal', 'Deal', <ProjectOutlined />, null, '/crm/deals?create=1', 'crm.deal.create'),
+            quickAction('product', 'Product', <ShopOutlined />, null, '/inventory/products?create=1', 'inventory.product.create'),
+            quickAction('service', 'Service', <ProfileOutlined />, null, '/inventory/services?create=1', 'inventory.product.create'),
+            quickAction('warehouse', 'Warehouse', <InboxOutlined />, null, '/warehouse?create=1', 'inventory.warehouse.create'),
+        ]),
+    ].filter(Boolean);
 
     const profileItems = [
         {
@@ -964,13 +922,11 @@ export default function AuthenticatedLayout({ header, children }) {
     ];
 
     return (
+        <AppContextProvider initialContext={branchContext}>
         <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
             <AppNavbar
                 user={user}
-                branch={branch}
-                setBranch={setBranch}
                 branchContext={branchContext}
-                branchOptions={branchOptions}
                 quickAddItems={quickAddItems}
                 profileItems={profileItems}
                 getUrl={getUrl}
@@ -1018,6 +974,49 @@ export default function AuthenticatedLayout({ header, children }) {
                     </Content>
                 </Layout>
             </Layout>
+
+            <KiteAiFloatingButton />
+
+            {quickAddItems.length > 0 && (
+                <Dropdown
+                    menu={{ items: quickAddItems }}
+                    placement="topRight"
+                    trigger={['click']}
+                    overlayClassName="app-floating-quick-add-menu"
+                >
+                    <Button
+                        type="primary"
+                        shape="circle"
+                        size="large"
+                        icon={<PlusOutlined />}
+                        title="Quick Add"
+                        aria-label="Quick Add"
+                        className="app-floating-quick-add"
+                    />
+                </Dropdown>
+            )}
+
+            <style>
+                {`
+                    .app-floating-quick-add {
+                        position: fixed !important;
+                        right: ${isMobile ? '18px' : '28px'};
+                        bottom: ${isMobile ? '18px' : '28px'};
+                        width: ${isMobile ? '52px' : '56px'} !important;
+                        height: ${isMobile ? '52px' : '56px'} !important;
+                        z-index: 150;
+                        box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24) !important;
+                        display: inline-flex !important;
+                        align-items: center;
+                        justify-content: center;
+                    }
+
+                    .app-floating-quick-add .anticon {
+                        font-size: 20px;
+                    }
+                `}
+            </style>
         </Layout>
+        </AppContextProvider>
     );
 }

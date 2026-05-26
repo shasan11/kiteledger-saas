@@ -131,10 +131,10 @@ class ReportExportService
 
     protected function cellValue(mixed $value): mixed
     {
-        if (is_bool($value)) {
-            return $value ? 'Yes' : 'No';
-        }
-
+        if (is_null($value)) return '';
+        if (is_bool($value)) return $value ? 'Yes' : 'No';
+        if (is_array($value)) return data_get($value, 'name') ?? data_get($value, 'code') ?? json_encode($value);
+        if (is_object($value)) return data_get($value, 'name') ?? data_get($value, 'code') ?? (string) $value;
         return $value;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WarehouseTransfer extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,6 +20,7 @@ class WarehouseTransfer extends Model
      */
     protected $fillable = [
         'branch_id',
+        'fiscal_year_id',
         'transfer_no',
         'transfer_date',
         'from_warehouse_id',
@@ -29,6 +31,8 @@ class WarehouseTransfer extends Model
         'approved',
         'approved_at',
         'approved_by_id',
+        'stock_posted',
+        'stock_posted_at',
         'void',
         'voided_by_id',
         'voided_reason',
@@ -51,6 +55,8 @@ class WarehouseTransfer extends Model
             'approved' => 'boolean',
             'approved_at' => 'datetime',
             'approved_by_id' => 'integer',
+            'stock_posted' => 'boolean',
+            'stock_posted_at' => 'datetime',
             'void' => 'boolean',
             'voided_by_id' => 'integer',
             'voided_at' => 'datetime',

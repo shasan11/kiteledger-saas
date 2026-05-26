@@ -19,6 +19,10 @@ class ChartOfAccountService
             return;
         }
 
+        if (empty($chartOfAccount->type)) {
+            $chartOfAccount->type = 'asset';
+        }
+
         [$start, $end] = $this->rangeForType($chartOfAccount->type);
 
         $chartOfAccount->code = DB::transaction(function () use ($chartOfAccount, $start, $end) {
@@ -30,6 +34,20 @@ class ChartOfAccountService
                 branchId: $chartOfAccount->branch_id
             );
         });
+
+        if (empty($chartOfAccount->account_id)) {
+            $account = Account::query()->create([
+                'name' => $chartOfAccount->name,
+                'code' => $chartOfAccount->code,
+                'nature' => 'coa',
+                'currency_id' => $chartOfAccount->currency_id,
+                'active' => (bool) ($chartOfAccount->active ?? true),
+                'is_system_generated' => true,
+                'user_add_id' => $chartOfAccount->user_add_id,
+            ]);
+
+            $chartOfAccount->account_id = $account->id;
+        }
     }
 
     public function syncLinkedAccount(ChartOfAccount $chartOfAccount): void
@@ -43,8 +61,9 @@ class ChartOfAccountService
                 'name' => $chartOfAccount->name,
                 'code' => $chartOfAccount->code,
                 'nature' => 'coa',
+                'currency_id' => $chartOfAccount->currency_id,
                 'active' => (bool) $chartOfAccount->active,
-                'is_system_generated' => (bool) ($chartOfAccount->is_system_generated ?? false),
+                'is_system_generated' => true,
                 'user_add_id' => $chartOfAccount->user_add_id,
             ];
 

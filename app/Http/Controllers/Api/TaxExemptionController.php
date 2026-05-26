@@ -40,7 +40,7 @@ class TaxExemptionController extends BaseCrudApiController
     protected array $storeRules = [
         'contact_id' => ['nullable', 'uuid', 'exists:contacts,id'],
         'product_tax_category_id' => ['nullable', 'uuid', 'exists:product_tax_categories,id'],
-        'country_code' => ['required', 'in:NP,IN,US'],
+        'country_code' => ['required', 'string', 'size:2'],
         'exemption_no' => ['nullable', 'string', 'max:80'],
         'reason' => ['nullable', 'string', 'max:180'],
         'effective_from' => ['nullable', 'date'],
@@ -56,7 +56,7 @@ class TaxExemptionController extends BaseCrudApiController
         return [
             'contact_id' => ['sometimes', 'nullable', 'uuid', 'exists:contacts,id'],
             'product_tax_category_id' => ['sometimes', 'nullable', 'uuid', 'exists:product_tax_categories,id'],
-            'country_code' => ['sometimes', 'required', 'in:NP,IN,US'],
+            'country_code' => ['sometimes', 'required', 'string', 'size:2'],
             'exemption_no' => ['sometimes', 'nullable', 'string', 'max:80'],
             'reason' => ['sometimes', 'nullable', 'string', 'max:180'],
             'effective_from' => ['sometimes', 'nullable', 'date'],

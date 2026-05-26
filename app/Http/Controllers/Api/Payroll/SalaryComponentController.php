@@ -31,7 +31,7 @@ class SalaryComponentController extends BaseCrudApiController
             'accounting_account_id' => [
                 'nullable',
                 'uuid',
-                Rule::exists('chart_of_accounts', 'id')->where(fn ($query) => $query->where('active', true)),
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('active', true)),
             ],
             'active' => ['nullable', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
@@ -51,7 +51,7 @@ class SalaryComponentController extends BaseCrudApiController
                 'sometimes',
                 'nullable',
                 'uuid',
-                Rule::exists('chart_of_accounts', 'id')->where(fn ($query) => $query->where('active', true)),
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('active', true)),
             ],
             'active' => ['sometimes', 'nullable', 'boolean'],
             'sort_order' => ['sometimes', 'nullable', 'integer', 'min:0'],

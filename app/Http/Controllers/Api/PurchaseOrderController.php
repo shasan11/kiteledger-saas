@@ -16,6 +16,8 @@ class PurchaseOrderController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'purchase_order_date';
 
     protected array $relations = ['branch', 'contact', 'creditTerm', 'currency'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'creditTerm' => 'credit_term_id', 'currency' => 'currency_id'];

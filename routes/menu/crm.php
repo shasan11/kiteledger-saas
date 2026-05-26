@@ -16,4 +16,8 @@ Route::prefix('crm')->name('crm.')->group(function () {
     Route::get('/projects', fn () => Inertia::render('App/Crm/Projects/Index'))->name('projects.index');
     Route::get('/activities', fn () => Inertia::render('App/Crm/Activities/Index'))->name('activities.index');
     Route::get('/activities/{id}', fn (string $id) => Inertia::render('App/Crm/Activities/Show', ['id' => $id]))->name('activities.show');
+    Route::get('/campaigns', fn () => Inertia::render('App/Crm/Campaigns/Index'))->name('campaigns.index');
+    Route::get('/campaigns/{id}', fn (string $id) => Inertia::render('App/Crm/Campaigns/Show', ['id' => $id]))->name('campaigns.show');
+    Route::get('/tickets', fn () => Inertia::render('App/Support/Tickets/Index'))->middleware('can:support.ticket.view')->name('tickets.index');
+    Route::get('/tickets/{id}', fn (string $id) => Inertia::render('App/Support/Tickets/Show', ['id' => $id]))->middleware('can:support.ticket.view')->name('tickets.show');
 });

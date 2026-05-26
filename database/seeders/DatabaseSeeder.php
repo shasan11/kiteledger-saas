@@ -29,8 +29,12 @@ class DatabaseSeeder extends Seeder
             HRMTransactionalSeeder::class,
             MasterDealDataSeeder::class,
             MasterDataTypesSeeder::class,
+            TaxSystemSeeder::class,
             MasterTaxJurisdictionSeeder::class,
+            MasterProductDataSeeder::class,
+            ProductSeeder::class,
             TaxRateSeeder::class,
+            TaxReportTemplateSeeder::class,
             SettingsPermissionSeeder::class,
             PermissionSeeder::class,
             AdminAccessSeeder::class,
@@ -46,6 +50,7 @@ class DatabaseSeeder extends Seeder
             PosSeeder::class,
             RolesAndPermissionsSeeder::class,
             FullPermissionUserSeeder::class,
+            AiPermissionSeeder::class,
          ]);
     }
 }

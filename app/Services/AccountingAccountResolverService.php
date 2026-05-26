@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Account;
 use App\Models\ChartOfAccount;
 use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
@@ -26,6 +25,8 @@ class AccountingAccountResolverService
         'tds_payable' => ['codes' => ['2120'], 'names' => ['TDS Payable']],
         'loan_payable' => ['codes' => ['2130'], 'names' => ['Loan Payable', 'Loans']],
         'bank_charges_expense' => ['codes' => ['5100'], 'names' => ['Bank Charges Expense', 'Bank Charges']],
+        'foreign_exchange_gain' => ['codes' => ['4100'], 'names' => ['Foreign Exchange Gain', 'FX Gain']],
+        'foreign_exchange_loss' => ['codes' => ['5100'], 'names' => ['Foreign Exchange Loss', 'FX Loss']],
         'loan_interest_expense' => ['codes' => ['5100'], 'names' => ['Loan Interest Expense', 'Interest Expense']],
         'processing_fee_expense' => ['codes' => ['5100'], 'names' => ['Processing Fee Expense', 'Processing Fee']],
         'cash' => ['codes' => ['1110'], 'names' => ['Cash in Hand', 'Cash']],
@@ -114,6 +115,16 @@ class AccountingAccountResolverService
         return $this->resolveAccount('bank_charges_expense');
     }
 
+    public function getForeignExchangeGainAccount(): ChartOfAccount
+    {
+        return $this->resolveAccount('foreign_exchange_gain');
+    }
+
+    public function getForeignExchangeLossAccount(): ChartOfAccount
+    {
+        return $this->resolveAccount('foreign_exchange_loss');
+    }
+
     public function getLoanInterestExpenseAccount(): ChartOfAccount
     {
         return $this->resolveAccount('loan_interest_expense');
@@ -149,7 +160,7 @@ class AccountingAccountResolverService
         $id = Cache::remember("accounting_account_{$accountType}_id", 3600, function () use ($accountType) {
             $mapping = $this->accountMapping[$accountType] ?? null;
 
-            if (!$mapping) {
+            if (! $mapping) {
                 throw new InvalidArgumentException("Unknown account type: {$accountType}");
             }
 
@@ -175,7 +186,7 @@ class AccountingAccountResolverService
 
         $account = ChartOfAccount::find($id);
 
-        if (!$account) {
+        if (! $account) {
             Cache::forget("accounting_account_{$accountType}_id");
             throw new InvalidArgumentException("Required account '{$accountType}' not found. Please seed your chart of accounts.");
         }

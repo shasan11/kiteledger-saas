@@ -6,6 +6,7 @@ import { Modal, Input, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -18,7 +19,7 @@ export default function WarehouseTransfersIndex(props) {
     const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
 
     const columns = useMemo(() => [
-        { title: 'Transfer No', dataIndex: 'transfer_no', key: 'transfer_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        { title: 'Transfer No', dataIndex: 'transfer_no', key: 'transfer_no', sorter: true, width: 140, render: (_, r) => <Text strong>{displayDocumentNumber(r, r?.warehouse_transfer_no ? 'warehouse_transfer_no' : 'transfer_no')}</Text> },
         { title: 'Date', dataIndex: 'transfer_date', key: 'transfer_date', sorter: true, width: 120, render: displayDate },
         { title: 'From Warehouse', dataIndex: 'fromWarehouse', key: 'fromWarehouse', render: (_, r) => r?.fromWarehouse?.name || r?.from_warehouse?.name || '-' },
         { title: 'To Warehouse', dataIndex: 'toWarehouse', key: 'toWarehouse', render: (_, r) => r?.toWarehouse?.name || r?.to_warehouse?.name || '-' },
@@ -32,7 +33,7 @@ export default function WarehouseTransfersIndex(props) {
             requiresSelection: true,
             onClick: async ({ selectedRowKeys, fetchData, clearSelection, message }) => {
                 try {
-                    await axios.patch(api('/api/warehouse-transfers/bulk'), { records: selectedRowKeys.map((id) => ({ id, approved: true })) });
+                    await axios.post(api('/api/warehouse-transfers/bulk-approve'), { ids: selectedRowKeys });
                     message.success('Records approved');
                     clearSelection();
                     fetchData();
@@ -55,7 +56,7 @@ export default function WarehouseTransfersIndex(props) {
         if (!ctx) return;
         setVoidState((s) => ({ ...s, loading: true }));
         try {
-            await axios.patch(api('/api/warehouse-transfers/bulk'), { records: ctx.selectedRowKeys.map((id) => ({ id, void: true, voided_reason: reason })) });
+            await axios.post(api('/api/warehouse-transfers/bulk-void'), { ids: ctx.selectedRowKeys, voided_reason: reason });
             ctx.message.success('Records voided');
             ctx.clearSelection();
             ctx.fetchData();

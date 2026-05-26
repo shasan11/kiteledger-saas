@@ -9,6 +9,8 @@ class PayrollPaymentController extends BaseCrudApiController
 {
     protected string $modelClass = PayrollPayment::class;
     protected ?string $permissionPrefix = 'hrm.payroll';
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'payment_date';
     protected array $relations = ['payroll', 'payrollRun', 'payslip'];
     protected array $relationDetails = ['payroll' => 'payroll_id', 'payrollRun' => 'payroll_run_id', 'payslip' => 'payslip_id'];
     protected array $filterable = ['payroll_id', 'payroll_run_id', 'payslip_id', 'employee_id', 'status'];

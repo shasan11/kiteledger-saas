@@ -9,17 +9,29 @@ import {
 } from '@ant-design/icons';
 
 const { Text } = Typography;
+
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
+const uuidRegex =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const extractId = (value) => {
-  if (!value) return null;
+  if (value === undefined || value === null || value === '') return null;
 
   if (typeof value === 'object') {
     return value.id || value.value || null;
   }
 
   return value;
+};
+
+const cleanText = (value) => {
+  if (value === undefined || value === null) return null;
+
+  const text = String(value).trim();
+
+  return text || null;
 };
 
 export default function Warehouses(props) {
@@ -44,7 +56,7 @@ export default function Warehouses(props) {
       key: 'code',
       backendSort: true,
       sortField: 'code',
-      render: (val) => val ? <Tag color="blue">{val}</Tag> : '-',
+      render: (val) => (val ? <Tag color="blue">{val}</Tag> : '-'),
     },
     {
       title: 'Branch',
@@ -55,6 +67,7 @@ export default function Warehouses(props) {
         [record?.branch?.code, record?.branch?.name].filter(Boolean).join(' - ') ||
         record?.branch_name ||
         record?.branch_id_detail?.label ||
+        record?.branch_id_detail?.name ||
         '-',
     },
     {
@@ -71,7 +84,9 @@ export default function Warehouses(props) {
       backendSort: true,
       sortField: 'active',
       render: (active) => (
-        <Tag color={active ? 'green' : 'red'}>{active ? 'Active' : 'Inactive'}</Tag>
+        <Tag color={active ? 'green' : 'red'}>
+          {active ? 'Active' : 'Inactive'}
+        </Tag>
       ),
     },
     {
@@ -114,11 +129,25 @@ export default function Warehouses(props) {
       fkValueKey: 'id',
       fkLabelKey: 'name',
       labelField: 'branch_name',
-      fkLabel: (row) => [row?.code, row?.name].filter(Boolean).join(' - ') || row?.name || '',
+      fkLabel: (row) =>
+        [row?.code, row?.name].filter(Boolean).join(' - ') || row?.name || '',
       allowClear: true,
+      storeFullObject: false,
     },
-    { name: 'active', label: 'Active', type: 'switch', col: 12 },
-    { name: 'is_system_generated', label: 'System Generated', type: 'switch', col: 12, readOnly: true },
+    {
+      name: 'active',
+      label: 'Active',
+      type: 'switch',
+      col: 12,
+    },
+    {
+      name: 'is_system_generated',
+      label: 'System Generated',
+      type: 'switch',
+      col: 12,
+      readOnly: true,
+      disabled: true,
+    },
     {
       name: 'address',
       label: 'Address',
@@ -130,11 +159,39 @@ export default function Warehouses(props) {
   ];
 
   const validationSchema = Yup.object().shape({
-    name: Yup.string().trim().required('Warehouse name is required').max(150),
-    code: Yup.string().nullable().max(30, 'Code cannot exceed 30 characters'),
-    branch_id: Yup.string().nullable().uuid('Invalid branch selected'),
-    address: Yup.string().nullable(),
+    name: Yup.string()
+      .transform((value) => (value === undefined || value === null ? '' : String(value)))
+      .trim()
+      .required('Warehouse name is required')
+      .max(150, 'Warehouse name cannot exceed 150 characters'),
+
+    code: Yup.string()
+      .nullable()
+      .transform((value) => {
+        if (value === undefined || value === null || value === '') return null;
+        return String(value).trim();
+      })
+      .max(30, 'Code cannot exceed 30 characters'),
+
+    branch_id: Yup.mixed()
+      .nullable()
+      .test('valid-branch', 'Invalid branch selected', (value) => {
+        const id = extractId(value);
+
+        if (!id) return true;
+
+        return uuidRegex.test(String(id));
+      }),
+
+    address: Yup.string()
+      .nullable()
+      .transform((value) => {
+        if (value === undefined || value === null || value === '') return null;
+        return String(value).trim();
+      }),
+
     active: Yup.boolean().nullable(),
+
     is_system_generated: Yup.boolean().nullable(),
   });
 
@@ -148,21 +205,30 @@ export default function Warehouses(props) {
     is_system_generated: false,
   };
 
-  const transformPayload = (values) => {
-    const p = { ...values };
-    p.name = p.name?.trim() || null;
-    p.code = p.code?.trim() || null;
-    p.address = p.address?.trim() || null;
-    p.branch_id = extractId(p.branch_id);
-    p.active = Boolean(p.active);
-    p.is_system_generated = Boolean(p.is_system_generated);
-    Object.keys(p).forEach((k) => p[k] === '' && (p[k] = null));
-    return p;
+  const transformPayload = (values = {}) => {
+    const payload = {
+      ...values,
+      name: cleanText(values.name),
+      code: cleanText(values.code),
+      address: cleanText(values.address),
+      branch_id: extractId(values.branch_id),
+      active: values.active !== false,
+      is_system_generated: Boolean(values.is_system_generated),
+    };
+
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === '') {
+        payload[key] = null;
+      }
+    });
+
+    return payload;
   };
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
       <Head title="Warehouses" />
+
       <ReusableCrud
         icon={<HomeOutlined />}
         title="Warehouses"
@@ -208,7 +274,14 @@ export default function Warehouses(props) {
         canView={true}
         activeTableRowFunction={(record) => ({
           onClick: (event) => {
-            if (event.target.closest('button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger')) return;
+            if (
+              event.target.closest(
+                'button,a,input,textarea,.ant-checkbox-wrapper,.ant-dropdown-trigger,.ant-select,.ant-picker'
+              )
+            ) {
+              return;
+            }
+
             router.visit(route('warehouse.show', record.id));
           },
           style: { cursor: 'pointer' },

@@ -20,6 +20,8 @@ class SupplierPaymentController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'payment_date';
 
     protected array $relations = [
         'branch',
@@ -55,8 +57,8 @@ class SupplierPaymentController extends BaseCrudApiController
             'model' => SupplierPaymentLine::class,
             'foreign_key' => 'supplier_payment_id',
             'delete_key' => 'deleted_item_ids',
-            'required' => true,
-            'min' => 1,
+            'required' => false,
+            'min' => 0,
             'replace_on_update' => false,
             'relations' => ['purchaseBill'],
             'relation_details' => ['purchaseBill' => 'purchase_bill_id'],
@@ -297,6 +299,10 @@ class SupplierPaymentController extends BaseCrudApiController
                     'allocated_amount' => $line->allocated_amount,
                 ])
                 : collect());
+
+        if ($rows->isEmpty()) {
+            return;
+        }
 
         $amount = (float) ($parentData['amount'] ?? $record?->amount ?? 0);
         $contactId = $parentData['contact_id'] ?? $record?->contact_id;

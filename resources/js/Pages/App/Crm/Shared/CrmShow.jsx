@@ -6,12 +6,14 @@ import {
   Avatar,
   Button,
   Card,
+  Checkbox,
   Col,
   Drawer,
   Empty,
   Form,
   Input,
   Modal,
+  Progress,
   Row,
   Skeleton,
   Space,
@@ -44,7 +46,24 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
   EditOutlined,
+  BankOutlined,
+  RiseOutlined,
+  FallOutlined,
+  WalletOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+  Legend,
+} from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import SendEmail from '@/Components/SendEmail';
@@ -251,11 +270,60 @@ function RailTable({ rows = [] }) {
   );
 }
 
-function DetailsCard({ title, extra, children }) {
+function DetailsCard({ title, extra, children, headless = false, className = '' }) {
   return (
-    <Card size="small" title={title} extra={extra} className="crm-show__card">
+    <Card
+      size="small"
+       extra={headless ? null : extra}
+      className={`crm-show__card ${headless ? 'crm-show__card--headless' : ''} ${className}`.trim()}
+    >
+      {headless && (title || extra) ? (
+        <div className="crm-show__section-head">
+          {title ? <Text strong className="crm-show__section-title">{title}</Text> : <span />}
+          {extra ? <div className="crm-show__section-extra">{extra}</div> : null}
+        </div>
+      ) : null}
+
       {children}
     </Card>
+  );
+}
+
+function OverviewPanel({ title, extra, children, compact = false }) {
+  return (
+    <section className={`crm-show__overview-panel ${compact ? 'is-compact' : ''}`.trim()}>
+      {(title || extra) ? (
+        <div className="crm-show__overview-panel-head">
+          {title ? <Text strong>{title}</Text> : <span />}
+          {extra ? <div className="crm-show__overview-panel-extra">{extra}</div> : null}
+        </div>
+      ) : null}
+
+      <div className="crm-show__overview-panel-body">{children}</div>
+    </section>
+  );
+}
+
+function OverviewField({ label, value }) {
+  return (
+    <div className="crm-show__overview-field">
+      <Text type="secondary">{label}</Text>
+      <div>{value ?? <Text type="secondary">-</Text>}</div>
+    </div>
+  );
+}
+
+function OverviewFields({ rows = [] }) {
+  const validRows = rows.filter(Boolean);
+
+  if (!validRows.length) return null;
+
+  return (
+    <div className="crm-show__overview-fields">
+      {validRows.map((row) => (
+        <OverviewField key={row.label} label={row.label} value={row.value} />
+      ))}
+    </div>
   );
 }
 
@@ -353,6 +421,154 @@ const activityColumns = [
     render: formatDateTime,
   },
 ];
+
+/**
+ * ActivityTodoTable – wraps ReusableCrud with a todo-style checkbox column,
+ * status-based anchor filters, and a completion progress bar.
+ */
+function ActivityTodoTable({ activityCrud, baseFilters, rowUrl }) {
+  const { token } = theme.useToken();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [toggling, setToggling] = useState({});
+  const [stats, setStats] = useState({ total: 0, completed: 0 });
+
+  // Fetch completion stats
+  useEffect(() => {
+    axios
+      .get(api('/api/crm-activities/'), { params: { ...baseFilters, page_size: 500, status: '' } })
+      .then((res) => {
+        const rows = Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data?.results) ? res.data.results : [];
+        const total = rows.length;
+        const completed = rows.filter((r) => r.status === 'completed').length;
+        setStats({ total, completed });
+      })
+      .catch(() => {});
+  }, [JSON.stringify(baseFilters), refreshKey]);
+
+  const handleToggle = async (record, e) => {
+    e?.stopPropagation?.();
+    if (toggling[record.id]) return;
+    setToggling((prev) => ({ ...prev, [record.id]: true }));
+    try {
+      await axios.patch(api(`/api/crm-activities/${record.id}/toggle-complete`));
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Failed to update');
+    } finally {
+      setToggling((prev) => ({ ...prev, [record.id]: false }));
+    }
+  };
+
+  const isOverdue = (r) => r.status !== 'completed' && r.due_at && new Date(r.due_at) < new Date();
+
+  const todoCrudColumns = [
+    {
+      title: '',
+      key: 'done',
+      width: 40,
+      render: (_, record) => (
+        <Checkbox
+          checked={record.status === 'completed'}
+          loading={toggling[record.id]}
+          onChange={(e) => handleToggle(record, e)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+    },
+    {
+      title: 'Subject',
+      dataIndex: 'subject',
+      key: 'subject',
+      sorter: true,
+      render: (value, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong delete={record.status === 'completed'} type={record.status === 'completed' ? 'secondary' : undefined}>
+            {value || '-'}
+          </Text>
+          <Space size={4} wrap>
+            <Tag className="crm-show__tag">{labelize(record?.activity_type)}</Tag>
+            {isOverdue(record) && <Tag color="error" style={{ fontSize: 10 }}>Overdue</Tag>}
+          </Space>
+        </Space>
+      ),
+    },
+    {
+      title: 'Priority',
+      dataIndex: 'priority',
+      key: 'priority',
+      width: 100,
+      render: (value) => <SmartTag value={value || 'medium'} />,
+    },
+    {
+      title: 'Due',
+      dataIndex: 'due_at',
+      key: 'due_at',
+      width: 160,
+      render: (v, record) => (
+        <Text type={isOverdue(record) ? 'danger' : undefined}>
+          {formatDateTime(v)}
+        </Text>
+      ),
+    },
+    {
+      title: 'Assigned',
+      key: 'assigned_to',
+      width: 130,
+      render: (_, record) => record?.assigned_to?.name || record?.assignedTo?.name || '-',
+    },
+  ];
+
+  const activityStatusFilters = [
+    { key: 'all', label: 'All', params: {} },
+    { key: 'pending', label: 'Pending', params: { status: 'pending' } },
+    { key: 'in_progress', label: 'In Progress', params: { status: 'in_progress' } },
+    { key: 'completed', label: 'Completed', params: { status: 'completed' } },
+    { key: 'overdue', label: 'Overdue', params: { status: 'pending', due_to: new Date().toISOString().split('T')[0] } },
+  ];
+
+  const pct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
+  return (
+    <DetailsCard title="Activities">
+      {stats.total > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Space size={8} align="center" style={{ width: '100%' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>{stats.completed}/{stats.total} completed</Text>
+            <Progress percent={pct} size="small" style={{ flex: 1, minWidth: 120 }} strokeColor={token.colorSuccess} />
+          </Space>
+        </div>
+      )}
+      <ReusableCrud
+        key={refreshKey}
+        title="Activities"
+        apiUrl={activityCrud.apiUrl}
+        columns={todoCrudColumns}
+        fields={activityCrud.fields}
+        validationSchema={activityCrud.validationSchema}
+        crudInitialValues={activityCrud.crudInitialValues}
+        transformPayload={activityCrud.transformPayload}
+        baseFilters={baseFilters}
+        form_ui="modal"
+        modalWidth={900}
+        searchParam="search"
+        pageParam="page"
+        pageSizeParam="page_size"
+        sortMode="ordering"
+        orderingParam="ordering"
+        enableServerPagination
+        showSearch
+        canAdd
+        canEdit
+        canDelete
+        hasActions
+        hasActionColumns
+        anchorFilters={activityStatusFilters}
+        defaultAnchorKey="all"
+        onRowClick={rowUrl ? (r) => router.visit(typeof rowUrl === 'function' ? rowUrl(r) : rowUrl) : undefined}
+      />
+    </DetailsCard>
+  );
+}
 
 const leadColumns = [
   {
@@ -1056,7 +1272,7 @@ function LeadCommentsTab({ leadId }) {
   );
 }
 
-function ShowShell({ auth, id, endpoint, children, mapRecord }) {
+function ShowShell({ auth, id, endpoint, children, mapRecord, flush = false }) {
   const { token } = theme.useToken();
   const [messageApi, contextHolder] = message.useMessage();
   const [record, setRecord] = useState(null);
@@ -1129,7 +1345,11 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           min-height: calc(100vh - 64px);
           background: var(--crm-bg);
           color: var(--crm-text);
-          padding: var(--crm-padding);
+          
+        }
+
+        .crm-show--flush {
+          padding: 0;
         }
 
         .crm-show__shell {
@@ -1138,6 +1358,16 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           display: flex;
           flex-direction: column;
           gap: var(--crm-padding);
+        }
+
+        .crm-show--flush .crm-show__shell {
+          max-width: none;
+          margin: 0;
+          gap: 0;
+        }
+
+        .crm-show--flush .crm-show__body {
+          padding: 0;
         }
 
         .crm-show__bar-card.ant-card,
@@ -1463,6 +1693,41 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           color: var(--crm-primary);
         }
 
+        .crm-show__stat-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__stat-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 16px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius);
+          background: var(--crm-surface);
+          box-shadow: var(--crm-shadow);
+        }
+
+        .crm-show__stat-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          flex: none;
+        }
+
+        .crm-show__stat-body {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
         .crm-show__contact-grid {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1503,6 +1768,36 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .crm-show__contact-overview {
+          display: grid;
+          grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr);
+          gap: var(--crm-padding);
+          align-items: start;
+        }
+
+        .crm-show__contact-section {
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__contact-note {
+          padding: var(--crm-padding-sm) var(--crm-padding);
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+        }
+
+        .crm-show__account-panel {
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__account-panel .crm-show__stat-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .crm-show__kanban {
@@ -1599,6 +1894,220 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
           box-shadow: var(--crm-shadow);
         }
 
+
+        .crm-show__tabs-card {
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius);
+          background: var(--crm-surface);
+          box-shadow: var(--crm-shadow);
+          overflow: hidden;
+          min-width: 0;
+        }
+
+        .crm-show__main-tabs > .ant-tabs-nav {
+          margin: 0;
+          padding: 0 var(--crm-padding);
+          background: var(--crm-elevated);
+          border-bottom: 1px solid var(--crm-border);
+        }
+
+        .crm-show__main-tabs > .ant-tabs-content-holder {
+          padding: var(--crm-padding);
+        }
+
+        .crm-show__main-tabs .ant-tabs-tab {
+          font-weight: 700;
+        }
+
+        .crm-show__tab-content {
+          min-width: 0;
+        }
+
+        .crm-show__tab-stack {
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding);
+          min-width: 0;
+        }
+
+        .crm-show__card--headless .ant-card-head {
+          display: none;
+        }
+
+        .crm-show__card--headless .ant-card-body {
+          padding: var(--crm-padding);
+        }
+
+        .crm-show__section-head,
+        .crm-show__overview-panel-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--crm-padding-sm);
+          margin-bottom: var(--crm-padding-sm);
+          min-width: 0;
+        }
+
+        .crm-show__section-extra,
+        .crm-show__overview-panel-extra {
+          display: flex;
+          justify-content: flex-end;
+          min-width: 0;
+        }
+
+        .crm-show__section-title {
+          font-size: var(--crm-font);
+        }
+
+        .crm-show__overview-grid {
+          display: grid;
+        
+          align-items: start;
+          min-width: 0;
+        }
+
+        .crm-show__overview-grid--single {
+          grid-template-columns: 1fr;
+        }
+
+        .crm-show__overview-side {
+          display: flex;
+          flex-direction: row;
+          gap: var(--crm-padding);
+          min-width: 0;
+        }
+
+        .crm-show__overview-panel {
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius);
+          background: var(--crm-surface);
+          box-shadow: var(--crm-shadow);
+          padding: var(--crm-padding);
+          min-width: 0;
+        }
+
+        .crm-show__overview-panel.is-compact {
+          padding: var(--crm-padding-sm);
+        }
+
+        .crm-show__overview-panel-body {
+          display: flex;
+          flex-direction: column;
+          gap: var(--crm-padding-sm);
+          min-width: 0;
+        }
+
+        .crm-show__overview-fields {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__overview-fields--three {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .crm-show__overview-field {
+          min-width: 0;
+          padding: 10px 12px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+        }
+
+        .crm-show__overview-field > span {
+          display: block;
+          font-size: var(--crm-font-sm);
+          margin-bottom: 4px;
+        }
+
+        .crm-show__overview-field > div {
+          color: var(--crm-text);
+          font-weight: 600;
+          line-height: 1.35;
+          word-break: break-word;
+        }
+
+        .crm-show__overview-note {
+          padding: 10px 12px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+        }
+
+        .crm-show__overview-note > span {
+          display: block;
+          font-size: var(--crm-font-sm);
+          margin-bottom: 4px;
+        }
+
+        .crm-show__overview-note .ant-typography {
+          margin: 0;
+          color: var(--crm-text);
+        }
+
+        .crm-show__overview-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+
+        .crm-show__communication-list {
+          display: grid;
+          gap: var(--crm-padding-sm);
+        }
+
+        .crm-show__communication-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          padding: 10px 12px;
+          border: 1px solid var(--crm-border);
+          border-radius: var(--crm-radius-sm);
+          background: var(--crm-muted);
+        }
+
+        .crm-show__communication-icon {
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--crm-primary);
+          background: var(--crm-primary-bg);
+          flex: none;
+        }
+
+        .crm-show__communication-content {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+
+        .crm-show__communication-content span:last-child {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .crm-show__account-panel .crm-show__stat-grid,
+        .crm-show__overview-panel .crm-show__stat-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .crm-show__overview-panel .crm-show__stat-card {
+          box-shadow: none;
+          padding: 11px 12px;
+        }
+
+        .crm-show__overview-panel .crm-show__stat-body .ant-typography:last-child {
+          font-size: 16px !important;
+        }
+
         @media (max-width: 1180px) {
           .crm-show__body {
             grid-template-columns: 1fr;
@@ -1648,7 +2157,15 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
             align-items: flex-start;
           }
 
+          .crm-show__stat-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
           .crm-show__contact-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .crm-show__contact-overview {
             grid-template-columns: 1fr;
           }
 
@@ -1669,9 +2186,71 @@ function ShowShell({ auth, id, endpoint, children, mapRecord }) {
             border-bottom: 1px solid var(--crm-border);
           }
         }
+
+
+        @media (max-width: 1180px) {
+          .crm-show__overview-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .crm-show__contact-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 920px) {
+          .crm-show__contact-grid,
+          .crm-show__overview-fields,
+          .crm-show__overview-fields--three {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .crm-show__main-tabs > .ant-tabs-nav {
+            padding: 0 var(--crm-padding-sm);
+            overflow-x: auto;
+          }
+
+          .crm-show__main-tabs > .ant-tabs-content-holder {
+            padding: var(--crm-padding-sm);
+          }
+
+          .crm-show__overview-grid,
+          .crm-show__contact-overview {
+            grid-template-columns: 1fr;
+          }
+
+          .crm-show__overview-panel {
+            padding: var(--crm-padding-sm);
+          }
+
+          .crm-show__overview-panel-head,
+          .crm-show__section-head {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
+          .crm-show__overview-actions,
+          .crm-show__section-extra,
+          .crm-show__overview-panel-extra {
+            justify-content: flex-start;
+            width: 100%;
+          }
+
+          .crm-show__overview-actions .ant-btn {
+            flex: 1 1 auto;
+          }
+
+          .crm-show__stat-grid,
+          .crm-show__account-panel .crm-show__stat-grid,
+          .crm-show__overview-panel .crm-show__stat-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
 
-      <div className="crm-show" style={uiVars}>
+      <div className={`crm-show${flush ? ' crm-show--flush' : ''}`} style={uiVars}>
         <div className="crm-show__shell">
           {error ? (
             <div className="crm-show__state">
@@ -1892,18 +2471,19 @@ function RecordLayout({
         </aside>
 
         <main className="crm-show__main">
-          <Card className="crm-show__card">
+          <div className="crm-show__tabs-card">
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
               tabPosition={tabPosition}
+              className="crm-show__main-tabs"
               items={tabs.map((tab) => ({
                 key: tab.key,
                 label: tab.count !== undefined ? `${tab.label} (${tab.count})` : tab.label,
-                children: tab.children,
+                children: <div className="crm-show__tab-content">{tab.children}</div>,
               }))}
             />
-          </Card>
+          </div>
         </main>
       </div>
     </>
@@ -1994,23 +2574,320 @@ function LeadContactBlocks({ lead }) {
   );
 }
 
+function AccountSummaryCards({ summary }) {
+  if (!summary) return null;
+
+  const { token } = theme.useToken();
+  const balance = summary.balance ?? 0;
+  const dr = summary.dr_amount ?? 0;
+  const cr = summary.cr_amount ?? 0;
+
+  const cards = [
+    { label: 'Account Balance', value: balance, icon: <WalletOutlined />, color: token.colorPrimary, bg: token.colorPrimaryBg },
+    { label: 'Total Debit', value: dr, icon: <RiseOutlined />, color: token.colorSuccess, bg: token.colorSuccessBg },
+    { label: 'Total Credit', value: cr, icon: <FallOutlined />, color: token.colorError, bg: token.colorErrorBg },
+    { label: 'Net Movement', value: balance, icon: <SwapOutlined />, color: token.colorWarning, bg: token.colorWarningBg },
+  ];
+
+  return (
+    <div className="crm-show__stat-grid">
+      {cards.map((c) => (
+        <div className="crm-show__stat-card" key={c.label}>
+          <div className="crm-show__stat-icon" style={{ color: c.color, background: c.bg }}>
+            {c.icon}
+          </div>
+          <div className="crm-show__stat-body">
+            <Text type="secondary" style={{ fontSize: 12 }}>{c.label}</Text>
+            <Text strong style={{ fontSize: 18, lineHeight: 1.2 }}>{formatMoney(c.value)}</Text>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AccountChart({ data = [] }) {
+  const { token } = theme.useToken();
+
+  if (!data.length) {
+    return (
+      <DetailsCard title="Account Activity (12 Months)">
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No account activity yet" />
+      </DetailsCard>
+    );
+  }
+
+  const chartData = data.map((d) => ({
+    ...d,
+    label: d.month ? new Date(d.month + '-01').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }) : d.month,
+  }));
+
+  return (
+    <DetailsCard title="Account Activity (12 Months)">
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={chartData} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={token.colorBorderSecondary} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: token.colorTextSecondary }} />
+          <YAxis tick={{ fontSize: 11, fill: token.colorTextSecondary }} />
+          <ChartTooltip
+            contentStyle={{
+              background: token.colorBgElevated,
+              border: `1px solid ${token.colorBorderSecondary}`,
+              borderRadius: token.borderRadius,
+              fontSize: 12,
+            }}
+            formatter={(value) => formatMoney(value)}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar dataKey="debit" name="Debit" fill={token.colorSuccess} radius={[3, 3, 0, 0]} />
+          <Bar dataKey="credit" name="Credit" fill={token.colorError} radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </DetailsCard>
+  );
+}
+
+function ContactTransactionsTab({ contactId }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+
+    axios
+      .get(api(`/api/contacts/${contactId}/transactions`), { headers: authHeaders() })
+      .then((res) => {
+        if (mounted) setRows(res.data?.data || []);
+      })
+      .catch(() => {
+        if (mounted) setRows([]);
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, [contactId]);
+
+  const columns = [
+    {
+      title: 'Document',
+      dataIndex: 'number',
+      key: 'number',
+      render: (value, row) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{value || '-'}</Text>
+          <Tag className="crm-show__tag" style={{ width: 'fit-content' }}>{labelize(row.type)}</Tag>
+        </Space>
+      ),
+    },
+    { title: 'Date', dataIndex: 'date', key: 'date', width: 140, render: formatDate },
+    { title: 'Amount', dataIndex: 'amount', key: 'amount', width: 130, align: 'right', render: formatMoney },
+    { title: 'Balance', dataIndex: 'balance', key: 'balance', width: 130, align: 'right', render: (v) => v ? formatMoney(v) : '-' },
+    { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <SmartTag value={v} /> },
+  ];
+
+  return (
+    <DetailsCard title="Transactions">
+      <Table
+        size="small"
+        loading={loading}
+        dataSource={rows}
+        rowKey={(r, i) => `${r.type}-${r.id || i}`}
+        columns={columns}
+        pagination={{ pageSize: 15, hideOnSinglePage: true }}
+        scroll={{ x: 700 }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No transactions" /> }}
+        onRow={(record) => ({
+          onClick: () => { if (record.action_url) router.visit(record.action_url); },
+          style: { cursor: record.action_url ? 'pointer' : 'default' },
+        })}
+      />
+    </DetailsCard>
+  );
+}
+
+const supportTicketColumns = [
+  {
+    title: 'Ticket',
+    dataIndex: 'ticket_no',
+    key: 'ticket_no',
+    render: (value, row) => (
+      <Space direction="vertical" size={0}>
+        <Text strong>{value || '-'}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>{row.subject}</Text>
+      </Space>
+    ),
+  },
+  { title: 'Status', dataIndex: 'status', key: 'status', width: 130, render: (v) => <SmartTag value={v} /> },
+  { title: 'Priority', dataIndex: 'priority', key: 'priority', width: 100, render: (v) => <SmartTag value={v} /> },
+  { title: 'Assigned', key: 'assigned', width: 140, render: (_, row) => row.assigned_to?.name || '-' },
+  { title: 'Updated', dataIndex: 'updated_at', key: 'updated_at', width: 160, render: formatDateTime },
+];
+
+function SendSmsModal({ contactId, phone, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [form] = Form.useForm();
+
+  const handleSubmit = async () => {
+    setSending(true);
+    try {
+      const values = await form.validateFields();
+      await axios.post(api(`/api/contacts/${contactId}/send-sms`), values);
+      message.success('SMS sent successfully.');
+      setOpen(false);
+      form.resetFields();
+    } catch (error) {
+      if (!error?.errorFields) {
+        message.error(error?.response?.data?.message || 'Failed to send SMS.');
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <Button type="link" icon={<PhoneOutlined />} disabled={disabled} onClick={() => setOpen(true)} size="small">
+        SMS
+      </Button>
+      <Modal title="Send SMS" open={open} okText="Send" confirmLoading={sending} onOk={handleSubmit} onCancel={() => setOpen(false)} destroyOnClose>
+        <Form form={form} layout="vertical" initialValues={{ phone: phone || '', message: '' }}>
+          <Form.Item name="phone" label="Phone" rules={[{ required: true, message: 'Phone is required.' }]}>
+            <Input placeholder="+92..." readOnly />
+          </Form.Item>
+          <Form.Item name="message" label="Message" rules={[{ required: true, message: 'Message is required.' }]}>
+            <Input.TextArea rows={4} placeholder="Type your message..." maxLength={480} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+function ContactEditDrawer({ contact, open, onClose, onSaved }) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+  const [msgApi, ctx] = message.useMessage();
+
+  useEffect(() => {
+    if (open && contact) {
+      form.setFieldsValue({
+        name: contact.name,
+        contact_type: contact.contact_type,
+        phone: contact.phone,
+        email: contact.email,
+        pan: contact.pan,
+        tax_registration_no: contact.tax_registration_no,
+        credit_limit: contact.credit_limit,
+        address: contact.address,
+        accept_purchase: contact.accept_purchase,
+      });
+    }
+  }, [open, contact, form]);
+
+  const handleSave = async (values) => {
+    setSaving(true);
+    try {
+      await axios.patch(api(`/api/contacts/${contact.id}`), values, { headers: authHeaders() });
+      msgApi.success('Contact updated');
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      msgApi.error(err?.response?.data?.message || 'Failed to update contact');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      {ctx}
+      <Drawer
+        title="Edit Contact"
+        open={open}
+        onClose={onClose}
+        width={480}
+        destroyOnClose
+        footer={
+          <Space style={{ float: 'right' }}>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="primary" loading={saving} onClick={() => form.submit()}>Save</Button>
+          </Space>
+        }
+      >
+        <Form form={form} layout="vertical" onFinish={handleSave}>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="contact_type" label="Type" rules={[{ required: true }]}>
+                <Input readOnly disabled />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="phone" label="Phone">
+                <Input />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="email" label="Email">
+            <Input />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="pan" label="PAN / Tax ID">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="tax_registration_no" label="Tax Reg No">
+                <Input />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="credit_limit" label="Credit Limit">
+            <Input type="number" min={0} />
+          </Form.Item>
+          <Form.Item name="address" label="Address">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Drawer>
+    </>
+  );
+}
+
 export function ContactShow({ auth, id }) {
+  const [editOpen, setEditOpen] = useState(false);
+
   return (
     <ShowShell
       auth={auth}
       id={id}
       endpoint="/api/contacts/"
       mapRecord={(record) => ({ title: displayName(record) })}
+      flush
     >
-      {(contact) => {
+      {(contact, { reload }) => {
         const title = displayName(contact);
+        const acctSummary = contact?.account_summary;
+        const acctChart = contact?.account_chart || [];
+
+        const accountLabel = acctSummary
+          ? `${acctSummary.name || ''}${acctSummary.code ? ` (${acctSummary.code})` : ''}`.trim()
+          : (contact?.account?.name || contact?.account?.code);
 
         const overview = (
-          <>
-            <DetailsCard
-              title="Overview"
+          <div className="crm-show__overview-grid">
+            <OverviewPanel
+              title="Contact Information"
               extra={
                 <SendEmail
+                  endpoint={`/api/contacts/${id}/send-email`}
                   defaultValues={{
                     sender_email: auth?.user?.email || '',
                     receiver_email: contact?.email || '',
@@ -2020,42 +2897,59 @@ export function ContactShow({ auth, id }) {
                 />
               }
             >
-              <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                <ContactBlocks contact={contact} />
+              <ContactBlocks contact={contact} />
 
-                <InfoTable
-                  rows={[
-                    { label: 'Name', value: contact?.name },
-                    { label: 'Code', value: contact?.code },
-                    { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
-                    {
-                      label: 'Group',
-                      value: contact?.contact_group?.name || contact?.contactGroup?.name,
-                    },
-                    { label: 'Phone', value: contact?.phone },
-                    { label: 'Email', value: contact?.email },
-                    { label: 'PAN', value: contact?.pan },
-                    { label: 'Tax Reg No', value: contact?.tax_registration_no },
-                    {
-                      label: 'Credit Term',
-                      value: contact?.credit_term?.name || contact?.creditTerm?.name,
-                    },
-                    { label: 'Credit Limit', value: formatMoney(contact?.credit_limit) },
-                    { label: 'Accept Purchase', value: contact?.accept_purchase ? 'Yes' : 'No' },
-                    { label: 'Account', value: contact?.account?.name || contact?.account?.code },
-                  ]}
-                />
-              </Space>
-            </DetailsCard>
+              {contact?.address ? (
+                <div className="crm-show__overview-note">
+                  <Text type="secondary">Address</Text>
+                  <Paragraph>{contact.address}</Paragraph>
+                </div>
+              ) : null}
 
-            <DetailsCard title="Address">
-              <Paragraph style={{ margin: 0 }}>
-                <Value value={contact?.address} />
-              </Paragraph>
-            </DetailsCard>
+              <OverviewFields
+                rows={[
+                  { label: 'Code', value: contact?.code },
+                  { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
+                  {
+                    label: 'Group',
+                    value: contact?.contact_group?.name || contact?.contactGroup?.name,
+                  },
+                  { label: 'PAN', value: contact?.pan },
+                  { label: 'Tax Reg No', value: contact?.tax_registration_no },
+                  {
+                    label: 'Credit Term',
+                    value: contact?.credit_term?.name || contact?.creditTerm?.name,
+                  },
+                  { label: 'Credit Limit', value: formatMoney(contact?.credit_limit) },
+                  { label: 'Accept Purchase', value: contact?.accept_purchase ? 'Yes' : 'No' },
+                ]}
+              />
+            </OverviewPanel>
 
-          </>
-        );
+             
+              <OverviewPanel title="Account Snapshot" compact>
+                {acctSummary ? (
+                  <>
+                    <OverviewFields
+                      rows={[
+                        { label: 'Account', value: accountLabel },
+                        { label: 'Nature', value: acctSummary.nature },
+                        {
+                          label: 'Balance',
+                          value: <Text strong>{formatMoney(acctSummary.balance)}</Text>,
+                        },
+                      ]}
+                    />
+                    <AccountSummaryCards summary={acctSummary} />
+                  </>
+                ) : (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No linked account" />
+                )}
+              </OverviewPanel>
+
+              {acctChart.length ? <AccountChart data={acctChart} /> : null}
+            </div>
+         );
 
         const tabs = [
           {
@@ -2064,21 +2958,32 @@ export function ContactShow({ auth, id }) {
             children: overview,
           },
           {
-            key: 'recent_transactions',
-            label: 'Recent Transactions',
-            children: <RecentTransactions rows={contact?.recent_transactions} />,
+            key: 'transactions',
+            label: 'Transactions',
+            children: <ContactTransactionsTab contactId={id} />,
           },
           {
             key: 'activities',
             label: 'Activities',
             children: (
+              <ActivityTodoTable
+                activityCrud={buildActivityCrud({ locked: { contact_id: id } })}
+                baseFilters={{ contact_id: id }}
+                rowUrl={(r) => safeRoute('crm.activities.show', r.id, `/crm/activities/${r.id}`)}
+              />
+            ),
+          },
+          {
+            key: 'deals',
+            label: 'Deals',
+            children: (
               <RelatedTable
-                title="Activities"
-                endpoint="/api/crm-activities/"
+                title="Deals"
+                endpoint="/api/deals/"
                 params={{ contact_id: id }}
-                columns={activityColumns}
+                columns={dealColumns}
                 rowUrl={(row) =>
-                  safeRoute('crm.activities.show', row.id, `/crm/activities/${row.id}`)
+                  safeRoute('crm.deals.show', row.id, `/crm/deals/${row.id}`)
                 }
               />
             ),
@@ -2094,6 +2999,21 @@ export function ContactShow({ auth, id }) {
                 columns={leadColumns}
                 rowUrl={(row) =>
                   safeRoute('crm.leads.show', row.id, `/crm/leads/${row.id}`)
+                }
+              />
+            ),
+          },
+          {
+            key: 'support_tickets',
+            label: 'Support Tickets',
+            children: (
+              <RelatedTable
+                title="Support Tickets"
+                endpoint="/api/support-tickets/"
+                params={{ contact_id: id }}
+                columns={supportTicketColumns}
+                rowUrl={(row) =>
+                  safeRoute('crm.tickets.show', row.id, `/crm/tickets/${row.id}`)
                 }
               />
             ),
@@ -2125,31 +3045,47 @@ export function ContactShow({ auth, id }) {
         ];
 
         return (
-          <RecordLayout
-            record={contact}
-            title={title}
-            subtitle={[contact?.code, contact?.email, contact?.phone].filter(Boolean).join(' | ')}
-            icon={<ContactsOutlined />}
-            tags={
-              <>
-                <SmartTag value={contact?.contact_type} />
-                <SmartTag value={contact?.active === false ? 'inactive' : 'active'} />
-              </>
-            }
-            backLabel="Contacts"
-            backUrl={safeRoute('crm.contacts.index', null, '/crm/contacts')}
-            amountLabel="Credit Limit"
-            amount={formatMoney(contact?.credit_limit)}
-            amountIcon={<DollarCircleOutlined />}
-            railRows={[
-              { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
-              { label: 'Phone', value: contact?.phone },
-              { label: 'Email', value: contact?.email },
-              { label: 'Created', value: formatDateTime(contact?.created_at) },
-              { label: 'Updated', value: formatDateTime(contact?.updated_at) },
-            ]}
-            tabs={tabs}
-          />
+          <>
+            <RecordLayout
+              record={contact}
+              title={title}
+              subtitle={[contact?.code, contact?.email, contact?.phone].filter(Boolean).join(' | ')}
+              icon={<ContactsOutlined />}
+              tags={
+                <>
+                  <SmartTag value={contact?.contact_type} />
+                  <SmartTag value={contact?.active === false ? 'inactive' : 'active'} />
+                </>
+              }
+              backLabel="Contacts"
+              backUrl={safeRoute('crm.contacts.index', null, '/crm/contacts')}
+              amountLabel="Account Balance"
+              amount={formatMoney(acctSummary?.balance ?? 0)}
+              amountIcon={<BankOutlined />}
+              railRows={[
+                { label: 'Type', value: <SmartTag value={contact?.contact_type} /> },
+                { label: 'Account', value: accountLabel || '-' },
+                { label: 'Balance', value: <Text strong>{formatMoney(acctSummary?.balance ?? 0)}</Text> },
+                { label: 'Group', value: contact?.contact_group?.name || contact?.contactGroup?.name },
+                { label: 'Phone', value: contact?.phone },
+                { label: 'Email', value: contact?.email },
+                { label: 'Created', value: formatDateTime(contact?.created_at) },
+              ]}
+              tabs={tabs}
+              headerActions={
+                <Space size={4}>
+                  <SendSmsModal contactId={id} phone={contact?.phone} disabled={!contact?.phone} />
+                  <Button size="small" icon={<EditOutlined />} onClick={() => setEditOpen(true)}>Edit</Button>
+                </Space>
+              }
+            />
+            <ContactEditDrawer
+              contact={contact}
+              open={editOpen}
+              onClose={() => setEditOpen(false)}
+              onSaved={reload}
+            />
+          </>
         );
       }}
     </ShowShell>
@@ -2246,63 +3182,89 @@ export function LeadShow({ auth, id }) {
         );
 
         const overview = (
-          <>
-            <DetailsCard title="Overview" extra={actionButtons}>
-              <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                <LeadContactBlocks lead={lead} />
+          <div className="crm-show__overview-grid">
+            <OverviewPanel
+              title="Lead Overview"
+              extra={<div className="crm-show__overview-actions">{actionButtons}</div>}
+            >
+              <LeadContactBlocks lead={lead} />
 
-                <InfoTable
-                  rows={[
-                    { label: 'Lead No', value: lead?.lead_no },
-                    { label: 'Name', value: lead?.name },
-                    { label: 'Company', value: lead?.company_name },
-                    { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
-                    { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
-                    { label: 'Source', value: lead?.lead_source },
-                    { label: 'Pipeline', value: lead?.deal_pipeline?.name || lead?.dealPipeline?.name },
-                    { label: 'Expected Value', value: formatMoney(lead?.expected_value) },
-                    {
-                      label: 'Assigned To',
-                      value: lead?.assigned_to?.name || lead?.assignedTo?.name,
-                    },
-                    { label: 'Contact', value: lead?.contact?.name },
-                    { label: 'Next Follow Up', value: formatDateTime(lead?.next_follow_up_at || lead?.next_follow_up_date) },
-                    { label: 'Last Contacted', value: formatDateTime(lead?.last_contacted_at) },
-                    lead?.status === 'converted' && lead?.converted_deal
-                      ? { label: 'Converted Deal', value: <Button type="link" size="small" style={{ padding: 0 }} onClick={() => router.visit(`/crm/deals/${lead.converted_deal.id}`)}>{lead.converted_deal.title}</Button> }
-                      : null,
-                    lead?.lost_reason ? { label: 'Lost Reason', value: lead.lost_reason } : null,
-                  ].filter(Boolean)}
-                />
-              </Space>
-            </DetailsCard>
+              <OverviewFields
+                rows={[
+                  { label: 'Lead No', value: lead?.lead_no },
+                  { label: 'Name', value: lead?.name },
+                  { label: 'Company', value: lead?.company_name },
+                  { label: 'Status', value: <SmartTag value={lead?.status || 'new'} /> },
+                  { label: 'Priority', value: <SmartTag value={lead?.priority || 'medium'} /> },
+                  { label: 'Source', value: lead?.lead_source },
+                  { label: 'Pipeline', value: lead?.deal_pipeline?.name || lead?.dealPipeline?.name },
+                  { label: 'Expected Value', value: formatMoney(lead?.expected_value) },
+                  {
+                    label: 'Assigned To',
+                    value: lead?.assigned_to?.name || lead?.assignedTo?.name,
+                  },
+                  { label: 'Contact', value: lead?.contact?.name },
+                  {
+                    label: 'Next Follow Up',
+                    value: formatDateTime(lead?.next_follow_up_at || lead?.next_follow_up_date),
+                  },
+                  { label: 'Last Contacted', value: formatDateTime(lead?.last_contacted_at) },
+                  lead?.status === 'converted' && lead?.converted_deal
+                    ? {
+                        label: 'Converted Deal',
+                        value: (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ padding: 0 }}
+                            onClick={() => router.visit(`/crm/deals/${lead.converted_deal.id}`)}
+                          >
+                            {lead.converted_deal.title}
+                          </Button>
+                        ),
+                      }
+                    : null,
+                  lead?.lost_reason ? { label: 'Lost Reason', value: lead.lost_reason } : null,
+                ].filter(Boolean)}
+              />
+            </OverviewPanel>
 
-            <Row gutter={[14, 14]}>
-              <Col xs={24} lg={12}>
-                <DetailsCard title="Communication">
-                  <Space direction="vertical" size={8}>
-                    <Text>
-                      <MailOutlined /> <Value value={lead?.email} />
-                    </Text>
-                    <Text>
-                      <PhoneOutlined /> <Value value={lead?.phone || lead?.mobile} />
-                    </Text>
-                    <Text>
-                      <CalendarOutlined /> <Value value={lead?.website} />
-                    </Text>
-                  </Space>
-                </DetailsCard>
-              </Col>
+            <div className="crm-show__overview-side">
+              <OverviewPanel title="Communication" compact>
+                <div className="crm-show__communication-list">
+                  <div className="crm-show__communication-item">
+                    <div className="crm-show__communication-icon"><MailOutlined /></div>
+                    <div className="crm-show__communication-content">
+                      <Text type="secondary">Email</Text>
+                      <Text strong><Value value={lead?.email} /></Text>
+                    </div>
+                  </div>
+                  <div className="crm-show__communication-item">
+                    <div className="crm-show__communication-icon"><PhoneOutlined /></div>
+                    <div className="crm-show__communication-content">
+                      <Text type="secondary">Phone</Text>
+                      <Text strong><Value value={lead?.phone || lead?.mobile} /></Text>
+                    </div>
+                  </div>
+                  <div className="crm-show__communication-item">
+                    <div className="crm-show__communication-icon"><CalendarOutlined /></div>
+                    <div className="crm-show__communication-content">
+                      <Text type="secondary">Website</Text>
+                      <Text strong><Value value={lead?.website} /></Text>
+                    </div>
+                  </div>
+                </div>
+              </OverviewPanel>
 
-              <Col xs={24} lg={12}>
-                <DetailsCard title="Notes">
-                  <Paragraph style={{ margin: 0 }}>
+              <OverviewPanel title="Notes" compact>
+                <div className="crm-show__overview-note">
+                  <Paragraph>
                     <Value value={lead?.notes} />
                   </Paragraph>
-                </DetailsCard>
-              </Col>
-            </Row>
-          </>
+                </div>
+              </OverviewPanel>
+            </div>
+          </div>
         );
 
         const activityCrud = buildActivityCrud({ locked: { lead_id: id } });
@@ -2390,14 +3352,6 @@ export function LeadShow({ auth, id }) {
           },
         ];
 
-        const activityPriorityFilters = [
-          { key: 'all', label: 'All', params: {} },
-          { key: 'low', label: 'Low', params: { priority: 'low' } },
-          { key: 'medium', label: 'Medium', params: { priority: 'medium' } },
-          { key: 'high', label: 'High', params: { priority: 'high' } },
-          { key: 'urgent', label: 'Urgent', params: { priority: 'urgent' } },
-        ];
-
         const timeline = (
           <DetailsCard title="Timeline">
             <RelatedTable
@@ -2416,34 +3370,11 @@ export function LeadShow({ auth, id }) {
             key: 'activities',
             label: 'Activities',
             children: (
-              <DetailsCard title="Activities">
-                <ReusableCrud
-                  title="Activities"
-                  apiUrl={activityCrud.apiUrl}
-                  columns={activityCrudColumns}
-                  fields={activityCrud.fields}
-                  validationSchema={activityCrud.validationSchema}
-                  crudInitialValues={activityCrud.crudInitialValues}
-                  transformPayload={activityCrud.transformPayload}
-                  baseFilters={{ lead_id: id }}
-                  form_ui="modal"
-                  modalWidth={900}
-                  searchParam="search"
-                  pageParam="page"
-                  pageSizeParam="page_size"
-                  sortMode="ordering"
-                  orderingParam="ordering"
-                  enableServerPagination
-                  showSearch
-                  canAdd
-                  canEdit
-                  canDelete
-                  hasActions
-                  hasActionColumns
-                  anchorFilters={activityPriorityFilters}
-                  defaultAnchorKey="all"
-                />
-              </DetailsCard>
+              <ActivityTodoTable
+                activityCrud={activityCrud}
+                baseFilters={{ lead_id: id }}
+                rowUrl={(r) => safeRoute('crm.activities.show', r.id, `/crm/activities/${r.id}`)}
+              />
             ),
           },
           {
@@ -2455,6 +3386,33 @@ export function LeadShow({ auth, id }) {
                 leadId={id}
                 dealCrud={dealCrud}
                 dealCrudColumns={dealCrudColumns}
+              />
+            ),
+          },
+          {
+            key: 'support_tickets',
+            label: 'Support Tickets',
+            children: (
+              <RelatedTable
+                title="Support Tickets"
+                endpoint="/api/support-tickets/"
+                params={{ lead_id: id }}
+                columns={supportTicketColumns}
+                rowUrl={(row) =>
+                  safeRoute('crm.tickets.show', row.id, `/crm/tickets/${row.id}`)
+                }
+              />
+            ),
+          },
+          {
+            key: 'purchase_bills',
+            label: 'Costs',
+            children: (
+              <RelatedTable
+                title="Purchase Bills / Costs"
+                endpoint="/api/purchase-bills/"
+                params={{ lead_id: id }}
+                columns={documentColumns('bill_no', 'bill_date', 'grand_total')}
               />
             ),
           },
@@ -2637,9 +3595,9 @@ export function ActivityShow({ auth, id }) {
           [];
 
         const overview = (
-          <>
-            <DetailsCard title="Overview">
-              <InfoTable
+          <div className="crm-show__overview-grid crm-show__overview-grid--single">
+            <OverviewPanel title="Activity Overview">
+              <OverviewFields
                 rows={[
                   { label: 'Type', value: <SmartTag value={activity?.activity_type} /> },
                   { label: 'Status', value: <SmartTag value={activity?.status || 'pending'} /> },
@@ -2657,14 +3615,15 @@ export function ActivityShow({ auth, id }) {
                   { label: 'Outcome', value: activity?.outcome },
                 ]}
               />
-            </DetailsCard>
 
-            <DetailsCard title="Description">
-              <Paragraph style={{ margin: 0 }}>
-                <Value value={activity?.description} />
-              </Paragraph>
-            </DetailsCard>
-          </>
+              <div className="crm-show__overview-note">
+                <Text type="secondary">Description</Text>
+                <Paragraph>
+                  <Value value={activity?.description} />
+                </Paragraph>
+              </div>
+            </OverviewPanel>
+          </div>
         );
 
         const commentsContent = (

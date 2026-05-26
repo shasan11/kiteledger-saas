@@ -36,4 +36,24 @@ class CrmCampaign extends Model
     {
         return $this->hasMany(CrmAttribution::class, 'campaign_id');
     }
+
+    public function purchaseBills(): HasMany
+    {
+        return $this->hasMany(PurchaseBill::class, 'campaign_id');
+    }
+
+    public function leads(): HasMany
+    {
+        return $this->hasMany(Lead::class, 'campaign_id');
+    }
+
+    public function deals(): HasMany
+    {
+        return $this->hasMany(Deal::class, 'campaign_id');
+    }
+
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class, 'campaign_id');
+    }
 }

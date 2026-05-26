@@ -2,7 +2,6 @@
 
 namespace App\Domain\Accounting\Services;
 
-use App\Models\ChartOfAccount;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use Illuminate\Support\Facades\DB;
@@ -160,9 +159,9 @@ class JournalVoucherService
                 ]);
             }
 
-            if (empty($line->chart_of_account_id)) {
+            if (empty($line->account_id)) {
                 throw ValidationException::withMessages([
-                    'lines' => 'Every journal line must have a chart of account.',
+                    'lines' => 'Every journal line must have an account.',
                 ]);
             }
 
@@ -170,7 +169,7 @@ class JournalVoucherService
 
             if (!$accountId) {
                 throw ValidationException::withMessages([
-                    'lines' => 'Every journal line must resolve to a linked account from chart_of_account_id.',
+                    'lines' => 'Every journal line must have an account.',
                 ]);
             }
 
@@ -219,12 +218,6 @@ class JournalVoucherService
             return $line->account_id;
         }
 
-        if (!empty($line->chart_of_account_id)) {
-            return ChartOfAccount::query()
-                ->whereKey($line->chart_of_account_id)
-                ->value('account_id');
-        }
-
         return null;
     }
 
@@ -243,7 +236,7 @@ class JournalVoucherService
 
             if (!$accountId) {
                 throw ValidationException::withMessages([
-                    'lines' => 'Every journal line must resolve to a linked account from chart_of_account_id.',
+                    'lines' => 'Every journal line must have an account.',
                 ]);
             }
 

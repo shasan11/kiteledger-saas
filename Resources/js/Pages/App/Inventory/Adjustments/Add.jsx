@@ -1,85 +1,328 @@
-import { useMemo } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ReusableCrud';
-import { Head, router } from '@inertiajs/react';
-import * as Yup from 'yup';
+import { useEffect, useState } from 'react';
+import { router } from '@inertiajs/react';
+import { Form, Input, InputNumber, DatePicker, Button, Space, Row, Col, Table, Select, Typography, message } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-
-dayjs.extend(customParseFormat);
+import axios from 'axios';
+import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
+import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
-const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
-const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
-const formatDate = (v) => {
-    if (!v) return null;
-    if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
-    const p = dayjs(v, ['YYYY-MM-DD', 'DD-MM-YYYY'], true);
-    if (p.isValid()) return p.format('YYYY-MM-DD');
-    const f = dayjs(v);
-    return f.isValid() ? f.format('YYYY-MM-DD') : null;
+const authHeaders = () => {
+    const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return t ? { Authorization: `Bearer ${t}` } : {};
 };
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const nullIfEmpty = (v) => (v === undefined || v === null || v === '' ? null : v);
+const fmtQty = (v) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const money = (v) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const productCode = (product) => product?.code || product?.sku || product?.barcode || '-';
 
-export default function AdjustmentAdd(props) {
-    const fields = useMemo(() => [
-        { name: 'warehouse_id', label: 'Warehouse', type: 'fkSelect', required: true, col: 16, placeholder: 'Select Warehouse', fkUrl: api('/api/warehouses/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-        { name: 'adjustment_no', label: 'Adjustment No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
-        { name: 'adjustment_date', label: 'Adjustment Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
-        { name: 'reason', label: 'Reason', type: 'text', col: 16, placeholder: 'Reason for adjustment' },
-        { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 2, placeholder: 'Notes' },
-        {
-            name: 'items', label: 'Adjustment Lines', type: 'objectArray', col: 24, addButtonLabel: 'Add Product', defaultItem: { product_id: null, adjustment_type: 'increase', qty: 0, unit_cost: 0, remarks: '' }, headerBg: '#4b5563', headerColor: '#ffffff',
-            columns: [
-                { key: 'product_id', name: 'product_id', label: 'Product', type: 'fkSelect', width: '3fr', placeholder: 'Select Product', fkUrl: api('/api/products/search'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'label' },
-                { key: 'adjustment_type', name: 'adjustment_type', label: 'Type', type: 'select', width: '130px', options: [{ value: 'increase', label: 'Increase' }, { value: 'decrease', label: 'Decrease' }] },
-                { key: 'qty', name: 'qty', label: 'Qty', type: 'number', width: '100px', min: 0 },
-                { key: 'unit_cost', name: 'unit_cost', label: 'Unit Cost', type: 'number', width: '130px', min: 0 },
-                { key: 'remarks', name: 'remarks', label: 'Remarks', type: 'text', width: '2fr' },
-            ],
-        },
-    ], []);
+const emptyLine = () => ({
+    _key: Math.random().toString(36).slice(2),
+    product_id: null,
+    product_detail: null,
+    adjustment_type: 'increase',
+    qty: 0,
+    unit_cost: 0,
+    remarks: '',
+});
 
-    const validationSchema = useMemo(() => Yup.object().shape({
-        warehouse_id: Yup.mixed().test('req', 'Warehouse is required', (v) => !!asId(v)).required(),
-        adjustment_date: Yup.mixed().required('Date is required'),
-        items: Yup.array().min(1, 'At least one product is required').required(),
-    }), []);
+export default function AdjustmentAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
+    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+    const [items, setItems] = useState([emptyLine()]);
+    const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const warehouseId = Form.useWatch('warehouse_id', form);
 
-    const crudInitialValues = useMemo(() => ({
-        adjustment_no: '', adjustment_date: dayjs(), warehouse_id: null, reason: '', notes: '', items: [{ product_id: null, adjustment_type: 'increase', qty: 0, unit_cost: 0, remarks: '' }], deleted_item_ids: [],
-    }), []);
+    const fetchWarehouseItem = async (productId, selectedWarehouseId) => {
+        if (!productId || !selectedWarehouseId) return null;
 
-    const transformPayload = (values = {}) => {
-        const items = (Array.isArray(values.items) ? values.items : []).filter((l) => !!asId(l?.product_id)).map((l) => ({ ...(l.id ? { id: l.id } : {}), product_id: asId(l.product_id), adjustment_type: l.adjustment_type || 'increase', qty: toNumber(l.qty), unit_cost: toNumber(l.unit_cost) || null, remarks: nullIfEmpty(l.remarks) }));
-        return {
-            adjustment_no: nullIfEmpty(values.adjustment_no),
-            adjustment_date: formatDate(values.adjustment_date),
-            warehouse_id: asId(values.warehouse_id ?? values.warehouse),
-            reason: nullIfEmpty(values.reason),
-            notes: nullIfEmpty(values.notes),
-            items,
-            deleted_item_ids: Array.isArray(values.deleted_item_ids) ? values.deleted_item_ids.filter(Boolean) : [],
-        };
+        const { data } = await axios.get(api('/api/warehouse-items/'), {
+            params: {
+                product_id: productId,
+                warehouse_id: selectedWarehouseId,
+                include_zero_stock: 1,
+                include_inactive: 1,
+                page_size: 1,
+            },
+            headers: authHeaders(),
+        });
+
+        return data?.results?.[0] || null;
     };
 
+    useEffect(() => {
+        if (initialRecord) {
+            form.setFieldsValue({
+                adjustment_no: displayDocumentNumber(initialRecord, 'adjustment_no'),
+                adjustment_date: initialRecord.adjustment_date ? dayjs(initialRecord.adjustment_date) : dayjs(),
+                warehouse_id: initialRecord.warehouse_id ?? initialRecord.warehouse?.id ?? null,
+                reason: initialRecord.reason || '',
+                notes: initialRecord.notes || '',
+            });
+            const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
+            if (lines.length) {
+                setItems(lines.map((l) => ({
+                    _key: Math.random().toString(36).slice(2),
+                    id: l.id,
+                    product_id: l.product_id ?? l.product?.id ?? null,
+                    product_detail: l.product || l.product_id_detail || null,
+                    adjustment_type: l.adjustment_type || 'increase',
+                    qty: toNumber(l.qty),
+                    unit_cost: toNumber(l.unit_cost),
+                    remarks: l.remarks || '',
+                })));
+            }
+        } else {
+            form.setFieldsValue({ adjustment_date: dayjs(), adjustment_no: '#DRAFT' });
+        }
+    }, [initialRecord, form]);
+
+    useEffect(() => {
+        if (warehouseId) {
+            refreshCurrentStock(warehouseId);
+        }
+    }, [warehouseId]);
+
+    const updateLine = (idx, patch) => setItems((p) => { const n = [...p]; n[idx] = { ...n[idx], ...patch }; return n; });
+    const updateLineProduct = async (idx, productId, raw) => {
+        updateLine(idx, { product_id: productId, product_detail: raw, current_stock: null });
+        const item = await fetchWarehouseItem(productId, form.getFieldValue('warehouse_id')).catch(() => null);
+        updateLine(idx, {
+            current_stock: item ? toNumber(item.qty_on_hand) : 0,
+            unit_cost: toNumber(item?.avg_cost ?? raw?.purchase_price ?? 0),
+        });
+    };
+    const addLine = () => setItems((p) => [...p, emptyLine()]);
+    const removeLine = (idx) => setItems((prev) => {
+        const line = prev[idx];
+        if (line?.id) setDeletedItemIds((ids) => [...ids, line.id]);
+        const next = prev.filter((_, i) => i !== idx);
+        return next.length ? next : [emptyLine()];
+    });
+
+    const validateLines = () => {
+        if (!items.length) return 'At least one product is required.';
+        for (const l of items) {
+            if (!l.product_id) return 'Every line must have a product.';
+            if (toNumber(l.qty) <= 0) return 'Every line must have qty > 0.';
+        }
+        return null;
+    };
+
+    const refreshCurrentStock = async (selectedWarehouseId) => {
+        const next = await Promise.all(items.map(async (line) => {
+            const item = await fetchWarehouseItem(line.product_id, selectedWarehouseId).catch(() => null);
+            return {
+                ...line,
+                current_stock: item ? toNumber(item.qty_on_hand) : 0,
+                unit_cost: toNumber(line.unit_cost) || toNumber(item?.avg_cost),
+            };
+        }));
+        setItems(next);
+    };
+
+    const totalItems = items.filter((line) => line.product_id).length;
+    const increaseQty = items.filter((line) => line.adjustment_type === 'increase').reduce((sum, line) => sum + toNumber(line.qty), 0);
+    const decreaseQty = items.filter((line) => line.adjustment_type === 'decrease').reduce((sum, line) => sum + toNumber(line.qty), 0);
+    const totalValue = items.reduce((sum, line) => sum + toNumber(line.qty) * toNumber(line.unit_cost), 0);
+
+    const onSubmit = async () => {
+        const v = await form.validateFields().catch(() => null);
+        if (!v) return;
+        const err = validateLines();
+        if (err) { message.error(err); return; }
+
+        const payload = {
+            adjustment_no: v.adjustment_no === '#DRAFT' ? null : nullIfEmpty(v.adjustment_no),
+            adjustment_date: v.adjustment_date ? v.adjustment_date.format('YYYY-MM-DD') : null,
+            warehouse_id: v.warehouse_id || null,
+            reason: nullIfEmpty(v.reason),
+            notes: nullIfEmpty(v.notes),
+            items: items.map((l) => ({
+                ...(l.id ? { id: l.id } : {}),
+                product_id: l.product_id,
+                adjustment_type: l.adjustment_type || 'increase',
+                qty: toNumber(l.qty),
+                unit_cost: toNumber(l.unit_cost) || null,
+                remarks: nullIfEmpty(l.remarks),
+            })),
+            deleted_item_ids: deletedItemIds,
+        };
+
+        setSubmitting(true);
+        try {
+            const url = isEdit ? api(`/api/inventory-adjustments/${recordId}/`) : api('/api/inventory-adjustments/');
+            const res = await axios({ method: isEdit ? 'patch' : 'post', url, data: payload, headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+            message.success(isEdit ? 'Adjustment updated' : 'Adjustment created');
+            const id = res?.data?.id;
+            if (id) router.visit(route('inventory.adjustments.show', id));
+            else router.visit(route('inventory.adjustments.index'));
+        } catch (e) {
+            const data = e?.response?.data;
+            if (data && typeof data === 'object') {
+                const errs = data.errors || data;
+                const remain = [];
+                Object.entries(errs).forEach(([f, msgs]) => {
+                    const m = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+                    if (form.getFieldInstance(f)) form.setFields([{ name: f, errors: [m] }]);
+                    else remain.push(`${f}: ${m}`);
+                });
+                if (remain.length) message.error(remain.join(' | '));
+                else if (data.message) message.error(data.message);
+                else message.error('Validation failed');
+            } else message.error('Save failed');
+        } finally { setSubmitting(false); }
+    };
+
+    const onApprove = async () => {
+        if (!recordId) return;
+        setSubmitting(true);
+        try {
+            await axios.post(api(`/api/inventory-adjustments/${recordId}/approve`), {}, { headers: authHeaders() });
+            message.success('Adjustment approved and posted');
+            router.visit(route('inventory.adjustments.show', recordId));
+        } catch (e) {
+            const data = e?.response?.data;
+            const first = data && typeof data === 'object' ? Object.values(data).flat().filter(Boolean)[0] : null;
+            message.error(first || data?.message || 'Approval failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const lineColumns = [
+        {
+            title: 'Product', dataIndex: 'product_id',
+            render: (val, row, idx) => (
+                <BackendSelect
+                    value={val}
+                    detailValue={row.product_detail}
+                    fkUrl="/api/products/search"
+                    labelKey="label"
+                    placeholder="Select product"
+                    style={{ width: '100%' }}
+                    variant="borderless"
+                    onChange={(v, raw) => updateLineProduct(idx, v, raw)}
+                />
+            ),
+        },
+        { title: 'Code / SKU', key: 'code', width: 130, render: (_, row) => productCode(row.product_detail) },
+        { title: 'Current Stock', dataIndex: 'current_stock', width: 130, align: 'right', render: (v) => v === null || v === undefined ? '-' : fmtQty(v) },
+        {
+            title: 'Type', dataIndex: 'adjustment_type', width: 130,
+            render: (val, _, idx) => (
+                <Select
+                    variant="borderless"
+                    value={val}
+                    style={{ width: '100%' }}
+                    options={[{ value: 'increase', label: 'Increase' }, { value: 'decrease', label: 'Decrease' }]}
+                    onChange={(v) => updateLine(idx, { adjustment_type: v })}
+                />
+            ),
+        },
+        {
+            title: 'Qty', dataIndex: 'qty', width: 100, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateLine(idx, { qty: v ?? 0 })} />
+            ),
+        },
+        {
+            title: 'Unit Cost', dataIndex: 'unit_cost', width: 130, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateLine(idx, { unit_cost: v ?? 0 })} />
+            ),
+        },
+        { title: 'Value', key: 'value', width: 120, align: 'right', render: (_, row) => money(toNumber(row.qty) * toNumber(row.unit_cost)) },
+        {
+            title: 'Remarks', dataIndex: 'remarks',
+            render: (val, _, idx) => (
+                <Input variant="borderless" value={val} onChange={(e) => updateLine(idx, { remarks: e.target.value })} placeholder="Optional" />
+            ),
+        },
+        {
+            title: '', key: 'remove', width: 50,
+            render: (_, __, idx) => (
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeLine(idx)} disabled={items.length <= 1} />
+            ),
+        },
+    ];
+
     return (
-        <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="New Inventory Adjustment" />
-            <ReusableCrud
-                title="Inventory Adjustments"
-                addTitle="New Inventory Adjustment"
-                apiUrl={api('/api/inventory-adjustments/')}
-                fields={fields}
-                validationSchema={validationSchema}
-                crudInitialValues={crudInitialValues}
-                transformPayload={transformPayload}
-                ui_type="add form"
-                form_ui="drawer"
-                drawerWidth="calc(100vw - 24px)"
-                onAddSuccess={(record) => router.visit(route('inventory.adjustments.show', record.id))}
-            />
-        </AuthenticatedLayout>
+        <TransactionFormShell
+            auth={props.auth}
+            title={isEdit ? 'Edit Inventory Adjustment' : 'New Inventory Adjustment'}
+            headTitle={isEdit ? 'Edit Inventory Adjustment' : 'New Inventory Adjustment'}
+            onBack={() => router.visit(route('inventory.adjustments.index'))}
+            onCancel={() => router.visit(route('inventory.adjustments.index'))}
+            onSubmit={onSubmit}
+            submitting={submitting}
+            submitLabel={isEdit ? 'Update' : 'Save'}
+            actions={isEdit && initialRecord && !isApproved(initialRecord) ? (
+                <Button icon={<CheckCircleOutlined />} onClick={onApprove} loading={submitting}>
+                    Approve
+                </Button>
+            ) : null}
+        >
+            <Form form={form} layout="vertical" requiredMark>
+                <FormSection title="Adjustment details">
+                    <Row gutter={16}>
+                        <Col xs={24} sm={12} md={16}>
+                            <Form.Item label="Warehouse" name="warehouse_id" rules={[{ required: true, message: 'Warehouse is required' }]}>
+                                <BackendSelect fkUrl="/api/warehouses/" placeholder="Select warehouse" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Adjustment No" name="adjustment_no">
+                                <Input placeholder="Auto-generated" disabled />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={8}>
+                            <Form.Item label="Adjustment Date" name="adjustment_date" rules={[{ required: true, message: 'Date is required' }]}>
+                                <DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={12} md={16}>
+                            <Form.Item label="Reason" name="reason">
+                                <Input placeholder="Reason for adjustment" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Notes" name="notes">
+                                <Input.TextArea rows={2} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+
+                <FormSection title="Adjustment lines">
+                    <Table rowKey="_key" size="small" columns={lineColumns} dataSource={items} pagination={false} bordered
+                        footer={() => (
+                            <Button icon={<PlusOutlined />} onClick={addLine} type="dashed">Add Line</Button>
+                        )}
+                        summary={() => (
+                            <Table.Summary.Row>
+                                <Table.Summary.Cell index={0} colSpan={3}>
+                                    <Typography.Text strong>Total Items: {totalItems}</Typography.Text>
+                                </Table.Summary.Cell>
+                                <Table.Summary.Cell index={3}>
+                                    <Typography.Text strong>Increase: {fmtQty(increaseQty)}</Typography.Text>
+                                </Table.Summary.Cell>
+                                <Table.Summary.Cell index={4}>
+                                    <Typography.Text strong>Decrease: {fmtQty(decreaseQty)}</Typography.Text>
+                                </Table.Summary.Cell>
+                                <Table.Summary.Cell index={5} colSpan={2} align="right">
+                                    <Typography.Text strong>Total Value: {money(totalValue)}</Typography.Text>
+                                </Table.Summary.Cell>
+                                <Table.Summary.Cell index={7} colSpan={2} />
+                            </Table.Summary.Row>
+                        )}
+                    />
+                </FormSection>
+            </Form>
+        </TransactionFormShell>
     );
 }

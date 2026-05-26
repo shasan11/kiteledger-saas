@@ -15,6 +15,8 @@ class ProformaInvoiceController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'proforma_date';
 
     protected array $relations = ['branch', 'contact', 'currency'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'currency' => 'currency_id'];

@@ -1,225 +1,300 @@
 import { useEffect, useMemo, useState } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReusableCrud from '@/Components/ReusableCrud';
-import { Head, router } from '@inertiajs/react';
-import * as Yup from 'yup';
-import { Space, Switch, Typography } from 'antd';
+import { router } from '@inertiajs/react';
+import { Form, Input, InputNumber, DatePicker, Button, Space, Row, Col, Select, Switch, Table, message, Typography } from 'antd';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-
-dayjs.extend(customParseFormat);
-
-const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
-const api = (path) => `${BACKEND_BASE}${path}`;
-const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const asId = (v) => { if (v === undefined || v === null || v === '') return null; if (typeof v === 'object') return v.id ?? v.value ?? null; return v; };
-const nullIfEmpty = (v) => { if (v === undefined || v === null || v === '') return null; return v; };
-const formatDate = (v) => {
-    if (!v) return null;
-    if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
-    const p = dayjs(v, ['YYYY-MM-DD', 'DD-MM-YYYY'], true);
-    if (p.isValid()) return p.format('YYYY-MM-DD');
-    const f = dayjs(v);
-    return f.isValid() ? f.format('YYYY-MM-DD') : null;
-};
+import axios from 'axios';
+import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
+import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 
 const { Text } = Typography;
+const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+const api = (path) => `${BACKEND_BASE}${path}`;
+const authHeaders = () => {
+    const t = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return t ? { Authorization: `Bearer ${t}` } : {};
+};
+const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const nullIfEmpty = (v) => (v === undefined || v === null || v === '' ? null : v);
+const formatMoney = (n) => Number(toNumber(n)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const bankChargesEnabled = (values = {}) =>
-    values._bank_charges_applicable ?? (toNumber(values.bank_charges) > 0 || !!asId(values.bank_charges_account_id));
+const emptyAlloc = () => ({
+    _key: Math.random().toString(36).slice(2),
+    purchase_bill_id: null,
+    purchase_bill_detail: null,
+    allocated_amount: 0,
+});
 
-const tdsEnabled = (values = {}) =>
-    values._tds_applicable ?? (toNumber(values.tds_charges) > 0 || !!asId(values.tds_charges_account_id));
-
-export default function SupplierPaymentAdd(props) {
-    const [prefillData, setPrefillData] = useState(null);
+export default function SupplierPaymentAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
+    const [form] = Form.useForm();
+    const [submitting, setSubmitting] = useState(false);
+    const [items, setItems] = useState([]);
+    const [bankChargesEnabled, setBankChargesEnabled] = useState(false);
+    const [tdsEnabled, setTdsEnabled] = useState(false);
+    const [deletedItemIds, setDeletedItemIds] = useState([]);
 
     useEffect(() => {
+        if (initialRecord) {
+            const hasBC = toNumber(initialRecord.bank_charges) > 0 || !!initialRecord.bank_charges_account_id;
+            const hasTDS = toNumber(initialRecord.tds_charges) > 0 || !!initialRecord.tds_charges_account_id;
+            setBankChargesEnabled(hasBC);
+            setTdsEnabled(hasTDS);
+            form.setFieldsValue({
+                payment_no: displayDocumentNumber(initialRecord, initialRecord.supplier_payment_no ? 'supplier_payment_no' : 'payment_no'),
+                payment_date: initialRecord.payment_date ? dayjs(initialRecord.payment_date) : dayjs(),
+                contact_id: initialRecord.contact_id ?? initialRecord.contact?.id ?? null,
+                account_id: initialRecord.account_id ?? initialRecord.account?.id ?? null,
+                method: initialRecord.method || null,
+                currency_id: initialRecord.currency_id ?? initialRecord.currency?.id ?? null,
+                exchange_rate: initialRecord.exchange_rate ?? 1,
+                amount: toNumber(initialRecord.amount),
+                bank_charges_account_id: initialRecord.bank_charges_account_id ?? null,
+                bank_charges: toNumber(initialRecord.bank_charges),
+                tds_charges_account_id: initialRecord.tds_charges_account_id ?? null,
+                tds_charges: toNumber(initialRecord.tds_charges),
+                reference: initialRecord.reference || '',
+                notes: initialRecord.notes || '',
+            });
+            const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
+            setItems(lines.map((l) => ({
+                _key: Math.random().toString(36).slice(2),
+                id: l.id,
+                purchase_bill_id: l.purchase_bill_id ?? l.purchase_bill?.id ?? null,
+                purchase_bill_detail: l.purchase_bill || l.purchase_bill_id_detail || null,
+                allocated_amount: toNumber(l.allocated_amount),
+            })));
+        } else {
+            form.setFieldsValue({ payment_date: dayjs(), exchange_rate: 1, amount: 0, payment_no: '#DRAFT' });
+        }
+    }, [initialRecord, form]);
+
+    const updateItem = (idx, patch) => setItems((p) => { const n = [...p]; n[idx] = { ...n[idx], ...patch }; return n; });
+    const addItem = () => setItems((p) => [...p, emptyAlloc()]);
+    const removeItem = (idx) => setItems((prev) => {
+        const l = prev[idx];
+        if (l?.id) setDeletedItemIds((ids) => [...ids, l.id]);
+        return prev.filter((_, i) => i !== idx);
+    });
+
+    const allocated = useMemo(() => items.reduce((s, r) => s + toNumber(r.allocated_amount), 0), [items]);
+
+    const onSubmit = async () => {
+        const v = await form.validateFields().catch(() => null);
+        if (!v) return;
+
+        const payload = {
+            payment_no: v.payment_no === '#DRAFT' ? null : nullIfEmpty(v.payment_no),
+            payment_date: v.payment_date ? v.payment_date.format('YYYY-MM-DD') : null,
+            contact_id: v.contact_id,
+            account_id: v.account_id || null,
+            currency_id: v.currency_id || null,
+            exchange_rate: toNumber(v.exchange_rate) || 1,
+            amount: toNumber(v.amount),
+            method: nullIfEmpty(v.method),
+            bank_charges_account_id: bankChargesEnabled ? (v.bank_charges_account_id || null) : null,
+            bank_charges: bankChargesEnabled && toNumber(v.bank_charges) ? toNumber(v.bank_charges) : null,
+            tds_charges_account_id: tdsEnabled ? (v.tds_charges_account_id || null) : null,
+            tds_charges: tdsEnabled && toNumber(v.tds_charges) ? toNumber(v.tds_charges) : null,
+            reference: nullIfEmpty(v.reference),
+            notes: nullIfEmpty(v.notes),
+            items: items.filter((l) => l.purchase_bill_id).map((l) => ({
+                ...(l.id ? { id: l.id } : {}),
+                purchase_bill_id: l.purchase_bill_id,
+                allocated_amount: toNumber(l.allocated_amount),
+            })),
+            deleted_item_ids: deletedItemIds,
+        };
+
+        setSubmitting(true);
         try {
-            const raw = sessionStorage.getItem('kiteledger_supplier_payment_prefill');
-            if (raw) {
-                sessionStorage.removeItem('kiteledger_supplier_payment_prefill');
-                setPrefillData(JSON.parse(raw));
-            }
-        } catch {}
-    }, []);
-
-    const fields = useMemo(() => [
-        {
-            name: 'contact_id', label: 'Supplier', type: 'fkSelect', required: true, col: 16,
-            placeholder: 'Select Supplier',
-            fkUrl: api('/api/contacts/?contact_type=supplier'),
-            fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
-            quickAdd: {
-                title: 'Supplier',
-                buttonLabel: 'Add New Supplier',
-                apiUrl: api('/api/contacts/'),
-                initialValues: { contact_type: 'supplier', type: 'supplier', name: '', phone: '', email: '', address: '', active: true },
-                validationSchema: Yup.object({ name: Yup.string().required('Supplier name is required') }),
-                fields: [
-                    { name: 'name', label: 'Supplier Name', type: 'text', col: 24, required: true },
-                    { name: 'phone', label: 'Phone', type: 'phone', col: 12, defaultCountryCode: '+977' },
-                    { name: 'email', label: 'Email', type: 'text', col: 12 },
-                    { name: 'address', label: 'Address', type: 'textarea', col: 24, rows: 2 },
-                ],
-                transformPayload: (v) => ({ ...v, contact_type: v.contact_type || 'supplier', type: v.type || 'supplier', active: true }),
-            },
-        },
-        { name: 'payment_no', label: 'Payment No', type: 'text', col: 8, placeholder: 'Auto-generated', disabled: true },
-        { name: 'payment_date', label: 'Payment Date', type: 'datePicker', required: true, col: 8, format: 'DD-MM-YYYY' },
-        { name: 'account_id', label: 'Payment Account', type: 'fkSelect', col: 8, placeholder: 'Select Account', fkUrl: api('/api/accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
-        { name: 'method', label: 'Payment Method', type: 'select', col: 8, options: [{ value: 'cash', label: 'Cash' }, { value: 'cheque', label: 'Cheque' }, { value: 'bank_transfer', label: 'Bank Transfer' }, { value: 'online', label: 'Online' }] },
-        { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 8, placeholder: 'Currency', fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkLabel: (r) => r?.name || r?.code || '', onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }) },
-        { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', col: 8, min: 0.000001 },
-        { name: 'amount', label: 'Payment Amount', type: 'number', required: true, col: 8, min: 0.000001 },
-        {
-            name: '_bank_charges_applicable',
-            label: 'Bank Charges',
-            type: 'custom',
-            col: 8,
-            render: ({ values, setFieldValue }) => (
-                <Space align="center">
-                    <Switch
-                        checked={!!bankChargesEnabled(values)}
-                        onChange={(checked) => {
-                            setFieldValue('_bank_charges_applicable', checked);
-                            if (!checked) {
-                                setFieldValue('bank_charges_account_id', null);
-                                setFieldValue('bank_charges_account_id_detail', null, false);
-                                setFieldValue('bank_charges', 0);
-                            }
-                        }}
-                    />
-                    <Text>Bank Charges Applicable</Text>
-                </Space>
-            ),
-        },
-        {
-            name: '_tds_applicable',
-            label: 'TDS',
-            type: 'custom',
-            col: 8,
-            render: ({ values, setFieldValue }) => (
-                <Space align="center">
-                    <Switch
-                        checked={!!tdsEnabled(values)}
-                        onChange={(checked) => {
-                            setFieldValue('_tds_applicable', checked);
-                            if (!checked) {
-                                setFieldValue('tds_charges_account_id', null);
-                                setFieldValue('tds_charges_account_id_detail', null, false);
-                                setFieldValue('tds_charges', 0);
-                            }
-                        }}
-                    />
-                    <Text>TDS Applicable</Text>
-                </Space>
-            ),
-        },
-        {
-            name: 'bank_charges_account_id', label: 'Bank Charges Account', type: 'fkSelect', col: 8,
-            condition: bankChargesEnabled,
-            placeholder: 'Select Account',
-            fkUrl: api('/api/accounts/?active=true'),
-            fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true,
-        },
-        { name: 'bank_charges', label: 'Bank Charges', type: 'number', col: 8, min: 0, condition: bankChargesEnabled },
-        {
-            name: 'tds_charges_account_id', label: 'TDS Account', type: 'fkSelect', col: 8,
-            condition: tdsEnabled,
-            placeholder: 'Select Account',
-            fkUrl: api('/api/accounts/?active=true'),
-            fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', allowClear: true,
-        },
-        { name: 'tds_charges', label: 'TDS Amount', type: 'number', col: 8, min: 0, condition: tdsEnabled },
-        { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
-        {
-            name: 'items', label: 'Bill Allocations', type: 'objectArray', col: 24, addButtonLabel: 'Add Bill',
-            defaultItem: { purchase_bill_id: null, allocated_amount: 0 },
-            headerBg: '#4b5563', headerColor: '#ffffff',
-            columns: [
-                { key: 'purchase_bill_id', name: 'purchase_bill_id', label: 'Purchase Bill', type: 'fkSelect', width: '3fr', placeholder: 'Select Bill', fkUrl: api('/api/purchase-bills/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'bill_no' },
-                { key: 'allocated_amount', name: 'allocated_amount', label: 'Allocated Amount', type: 'number', width: '200px', min: 0.000001 },
-            ],
-        },
-        { name: 'notes', label: 'Notes', type: 'textarea', col: 24, rows: 3, placeholder: 'Notes' },
-    ], []);
-
-    const validationSchema = useMemo(() => Yup.object().shape({
-        contact_id: Yup.mixed().test('req', 'Supplier is required', (v) => !!asId(v)).required(),
-        payment_date: Yup.mixed().required('Date is required'),
-        exchange_rate: Yup.number().typeError('Exchange rate required').moreThan(0, 'Must be > 0').nullable(),
-        amount: Yup.number().typeError('Amount required').moreThan(0, 'Must be > 0').required('Amount is required'),
-    }), []);
-
-    const crudInitialValues = useMemo(() => {
-        const base = {
-            payment_no: '', payment_date: dayjs(), contact_id: null, account_id: null,
-            currency_id: null, exchange_rate: 1, amount: 0, method: null,
-            _bank_charges_applicable: false,
-            bank_charges_account_id: null, bank_charges: 0,
-            _tds_applicable: false,
-            tds_charges_account_id: null, tds_charges: 0,
-            reference: '', notes: '', items: [], deleted_item_ids: [],
-        };
-        if (!prefillData) return base;
-        const items = Array.isArray(prefillData.items) && prefillData.items.length > 0
-            ? prefillData.items.map((alloc) => ({
-                purchase_bill_id: alloc.purchase_bill_id_detail ?? alloc.purchase_bill_id ?? null,
-                allocated_amount: toNumber(alloc.allocated_amount ?? 0),
-            }))
-            : [];
-        return {
-            ...base,
-            contact_id: prefillData.contact_id_detail ?? prefillData.contact_id ?? null,
-            currency_id: prefillData.currency_id_detail ?? prefillData.currency_id ?? null,
-            exchange_rate: toNumber(prefillData.exchange_rate) || 1,
-            amount: toNumber(prefillData.amount ?? 0),
-            items,
-        };
-    }, [prefillData]);
-
-    const transformPayload = (values = {}) => {
-        const items = (Array.isArray(values.items) ? values.items : [])
-            .filter((l) => !!asId(l?.purchase_bill_id))
-            .map((l) => ({ ...(l.id ? { id: l.id } : {}), purchase_bill_id: asId(l.purchase_bill_id), allocated_amount: toNumber(l.allocated_amount) }));
-        return {
-            payment_no: nullIfEmpty(values.payment_no),
-            payment_date: formatDate(values.payment_date),
-            contact_id: asId(values.contact_id ?? values.contact),
-            account_id: asId(values.account_id ?? values.account),
-            currency_id: asId(values.currency_id ?? values.currency),
-            exchange_rate: toNumber(values.exchange_rate) || 1,
-            amount: toNumber(values.amount),
-            method: nullIfEmpty(values.method),
-            bank_charges_account_id: bankChargesEnabled(values) ? asId(values.bank_charges_account_id) : null,
-            bank_charges: bankChargesEnabled(values) && toNumber(values.bank_charges) ? toNumber(values.bank_charges) : null,
-            tds_charges_account_id: tdsEnabled(values) ? asId(values.tds_charges_account_id) : null,
-            tds_charges: tdsEnabled(values) && toNumber(values.tds_charges) ? toNumber(values.tds_charges) : null,
-            reference: nullIfEmpty(values.reference),
-            notes: nullIfEmpty(values.notes),
-            items,
-            deleted_item_ids: Array.isArray(values.deleted_item_ids) ? values.deleted_item_ids.filter(Boolean) : [],
-        };
+            const url = isEdit ? api(`/api/supplier-payments/${recordId}/`) : api('/api/supplier-payments/');
+            const res = await axios({ method: isEdit ? 'patch' : 'post', url, data: payload, headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+            message.success(isEdit ? 'Payment updated' : 'Payment created');
+            const id = res?.data?.id;
+            if (id) router.visit(route('payment-out.supplier-payments.show', id));
+            else router.visit(route('payment-out.supplier-payments.index'));
+        } catch (e) {
+            const data = e?.response?.data;
+            if (data && typeof data === 'object') {
+                const errs = data.errors || data;
+                const remain = [];
+                Object.entries(errs).forEach(([f, msgs]) => {
+                    const m = Array.isArray(msgs) ? msgs.join(', ') : String(msgs);
+                    if (form.getFieldInstance(f)) form.setFields([{ name: f, errors: [m] }]);
+                    else remain.push(`${f}: ${m}`);
+                });
+                if (remain.length) message.error(remain.join(' | '));
+                else if (data.message) message.error(data.message);
+                else message.error('Validation failed');
+            } else message.error('Save failed');
+        } finally { setSubmitting(false); }
     };
 
+    const itemColumns = [
+        {
+            title: 'Purchase Bill', dataIndex: 'purchase_bill_id',
+            render: (val, row, idx) => (
+                <BackendSelect
+                    value={val}
+                    detailValue={row.purchase_bill_detail}
+                    fkUrl="/api/purchase-bills/"
+                    labelKey="bill_no"
+                    placeholder="Select bill"
+                    style={{ width: '100%' }}
+                    variant="borderless"
+                    onChange={(v, raw) => updateItem(idx, { purchase_bill_id: v, purchase_bill_detail: raw })}
+                />
+            ),
+        },
+        {
+            title: 'Allocated Amount', dataIndex: 'allocated_amount', width: 200, align: 'right',
+            render: (val, _, idx) => (
+                <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateItem(idx, { allocated_amount: v ?? 0 })} />
+            ),
+        },
+        {
+            title: '', key: 'remove', width: 50,
+            render: (_, __, idx) => (
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeItem(idx)} />
+            ),
+        },
+    ];
+
     return (
-        <AuthenticatedLayout user={props.auth?.user}>
-            <Head title="New Supplier Payment" />
-            <ReusableCrud
-                key={prefillData?._source_id ?? 'supplier-payment-add'}
-                title="Supplier Payments"
-                addTitle="New Supplier Payment"
-                apiUrl={api('/api/supplier-payments/')}
-                fields={fields}
-                validationSchema={validationSchema}
-                crudInitialValues={crudInitialValues}
-                transformPayload={transformPayload}
-                ui_type="add form"
-                form_ui="drawer"
-                drawerWidth="calc(100vw - 24px)"
-                onAddSuccess={(record) => router.visit(route('payment-out.supplier-payments.show', record.id))}
-            />
-        </AuthenticatedLayout>
+        <TransactionFormShell
+            auth={props.auth}
+            title={isEdit ? 'Edit Supplier Payment' : 'New Supplier Payment'}
+            headTitle={isEdit ? 'Edit Supplier Payment' : 'New Supplier Payment'}
+            onBack={() => router.visit(route('payment-out.supplier-payments.index'))}
+            onCancel={() => router.visit(route('payment-out.supplier-payments.index'))}
+            onSubmit={onSubmit}
+            submitting={submitting}
+            submitLabel={isEdit ? 'Update' : 'Save'}
+        >
+            <Form form={form} layout="vertical" requiredMark>
+                <FormSection title="Payment details">
+                    <Row gutter={16}>
+                        <Col xs={24} sm={16}>
+                            <Form.Item label="Supplier" name="contact_id" rules={[{ required: true, message: 'Supplier is required' }]}>
+                                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'supplier' }} placeholder="Select supplier" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Payment No" name="payment_no">
+                                <Input placeholder="Auto-generated" disabled />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Payment Date" name="payment_date" rules={[{ required: true, message: 'Date is required' }]}>
+                                <DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Payment Account" name="account_id">
+                                <BackendSelect fkUrl="/api/accounts/" labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')} placeholder="Select account" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Payment Method" name="method">
+                                <Select allowClear placeholder="Select method" options={[
+                                    { value: 'cash', label: 'Cash' },
+                                    { value: 'cheque', label: 'Cheque' },
+                                    { value: 'bank_transfer', label: 'Bank Transfer' },
+                                    { value: 'online', label: 'Online' },
+                                ]} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Currency" name="currency_id">
+                                <BackendSelect fkUrl="/api/currencies/" labelFn={(r) => r?.name || r?.code || ''} placeholder="Currency" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                                <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Payment Amount" name="amount" rules={[{ required: true, message: 'Amount is required' }]}>
+                                <InputNumber min={0} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={8}>
+                            <Form.Item label="Reference" name="reference">
+                                <Input placeholder="Reference" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+
+                <FormSection title="Adjustments">
+                    <Row gutter={16}>
+                        <Col xs={24} sm={12}>
+                            <Space>
+                                <Switch checked={bankChargesEnabled} onChange={(v) => { setBankChargesEnabled(v); if (!v) form.setFieldsValue({ bank_charges_account_id: null, bank_charges: 0 }); }} />
+                                <Text>Bank charges applicable</Text>
+                            </Space>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <Space>
+                                <Switch checked={tdsEnabled} onChange={(v) => { setTdsEnabled(v); if (!v) form.setFieldsValue({ tds_charges_account_id: null, tds_charges: 0 }); }} />
+                                <Text>TDS applicable</Text>
+                            </Space>
+                        </Col>
+                        {bankChargesEnabled && (
+                            <>
+                                <Col xs={24} sm={12}>
+                                    <Form.Item label="Bank Charges Account" name="bank_charges_account_id">
+                                        <BackendSelect fkUrl="/api/accounts/" extraParams={{ active: true }} placeholder="Select account" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12}>
+                                    <Form.Item label="Bank Charges" name="bank_charges">
+                                        <InputNumber min={0} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                </Col>
+                            </>
+                        )}
+                        {tdsEnabled && (
+                            <>
+                                <Col xs={24} sm={12}>
+                                    <Form.Item label="TDS Account" name="tds_charges_account_id">
+                                        <BackendSelect fkUrl="/api/accounts/" extraParams={{ active: true }} placeholder="Select account" />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} sm={12}>
+                                    <Form.Item label="TDS Amount" name="tds_charges">
+                                        <InputNumber min={0} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                </Col>
+                            </>
+                        )}
+                    </Row>
+                </FormSection>
+
+                <FormSection title="Bill allocations">
+                    <Table rowKey="_key" size="small" columns={itemColumns} dataSource={items} pagination={false} bordered
+                        locale={{ emptyText: 'No bill allocations yet — payment will be unallocated' }}
+                        footer={() => (
+                            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                <Button icon={<PlusOutlined />} onClick={addItem} type="dashed">Add Bill</Button>
+                                <Text>Allocated total: <b>{formatMoney(allocated)}</b></Text>
+                            </Space>
+                        )}
+                    />
+                </FormSection>
+
+                <FormSection title="Notes">
+                    <Row>
+                        <Col xs={24}>
+                            <Form.Item label="Notes" name="notes">
+                                <Input.TextArea rows={3} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </FormSection>
+            </Form>
+        </TransactionFormShell>
     );
 }

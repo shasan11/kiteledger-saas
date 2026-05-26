@@ -15,7 +15,7 @@ class LoanAccountService
 
     public function snapshotEffect(LoanAccount $loanAccount): array
     {
-        if (!$this->isFinanciallyActive($loanAccount)) {
+        if (! $this->isFinanciallyActive($loanAccount)) {
             return [];
         }
 
@@ -44,7 +44,7 @@ class LoanAccountService
         if ($processingFee > 0) {
             $expenseAccountId = config('accounting.loan_processing_fee_expense_account_id');
 
-            if (!$expenseAccountId) {
+            if (! $expenseAccountId) {
                 throw ValidationException::withMessages([
                     'processing_fee' => 'Set accounting.loan_processing_fee_expense_account_id before posting loan processing fee.',
                 ]);
@@ -68,7 +68,7 @@ class LoanAccountService
 
     public function syncFinancials(LoanAccount $loanAccount, array $oldEffect = []): void
     {
-        DB::transaction(function () use ($loanAccount, $oldEffect) {
+        DB::transaction(function () use ($loanAccount) {
             $loanAccount = LoanAccount::query()
                 ->with('loanTopUps')
                 ->lockForUpdate()
@@ -77,10 +77,6 @@ class LoanAccountService
             $this->validate($loanAccount);
             $this->recalculateCurrentBalance($loanAccount);
             $this->syncGeneratedJournalVoucher($loanAccount);
-
-            $newEffect = $this->snapshotEffect($loanAccount);
-
-            $this->postingService->applyEffectDiff($oldEffect, $newEffect);
         });
     }
 
@@ -111,20 +107,20 @@ class LoanAccountService
         }
 
         if ((float) $loanAccount->opening_balance > 0) {
-            if (!$loanAccount->loan_received_in_account_id) {
+            if (! $loanAccount->loan_received_in_account_id) {
                 throw ValidationException::withMessages([
                     'loan_received_in_account_id' => 'Loan received-in account is required.',
                 ]);
             }
 
-            if (!$loanAccount->related_account_id) {
+            if (! $loanAccount->related_account_id) {
                 throw ValidationException::withMessages([
                     'related_account_id' => 'Loan liability account is required.',
                 ]);
             }
         }
 
-        if ((float) $loanAccount->processing_fee > 0 && !$loanAccount->processing_fee_paid_from_account_id) {
+        if ((float) $loanAccount->processing_fee > 0 && ! $loanAccount->processing_fee_paid_from_account_id) {
             throw ValidationException::withMessages([
                 'processing_fee_paid_from_account_id' => 'Processing fee paid-from account is required.',
             ]);
@@ -196,7 +192,7 @@ class LoanAccountService
             branchId: null,
             currencyId: null,
             status: $this->isFinanciallyActive($loanAccount) ? 'posted' : 'draft',
-            narration: 'System generated journal voucher from loan account ' . $loanAccount->name,
+            narration: 'System generated journal voucher from loan account '.$loanAccount->name,
             exchangeRate: 1
         );
     }

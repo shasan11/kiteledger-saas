@@ -17,24 +17,31 @@ class DashboardController extends Controller
             'user_id' => $request->user()?->id,
         ];
 
-        return response()->json([
-            'summary' => $dashboardService->getSummary($filters),
-            'business_health' => $dashboardService->getBusinessHealth($filters),
-            'approvals' => $dashboardService->getPendingApprovals($filters),
-            'accounting_health' => $dashboardService->getAccountingHealth($filters),
-            'accounting_issues' => $dashboardService->getAccountingIssues($filters),
-            'cash_flow' => $dashboardService->getCashFlow($filters),
-            'revenue_expense' => $dashboardService->getRevenueExpenseChart($filters),
-            'receivable_ageing' => $dashboardService->getReceivableAgeing($filters),
-            'payable_ageing' => $dashboardService->getPayableAgeing($filters),
-            'sales_purchase' => $dashboardService->getSalesPurchase($filters),
-            'inventory' => $dashboardService->getInventorySnapshot($filters),
-            'crm' => $dashboardService->getCrmSnapshot($filters),
-            'top_customers' => $dashboardService->getTopCustomers($filters),
-            'top_suppliers' => $dashboardService->getTopSuppliers($filters),
-            'alerts' => $dashboardService->getSmartAlerts($filters),
-            'recent_activity' => $dashboardService->getRecentActivity($filters),
+        $data = [
+            'financial_summary' => $dashboardService->getFinancialSummary($filters),
+            'metric_sparklines' => $dashboardService->getMetricSparklines($filters),
+            'cash_position' => $dashboardService->getCashPosition($filters),
+            'revenue_expense_profit_chart' => $dashboardService->getRevenueExpenseChart($filters),
+            'recent_transactions' => $dashboardService->getRecentTransactions($filters),
             'branches' => $dashboardService->getBranches(),
-        ]);
+        ];
+
+        $data['sales_summary'] = $dashboardService->getSalesSummary($filters);
+        $data['purchase_summary'] = $dashboardService->getPurchaseSummary($filters);
+        $data['cashflow_summary'] = $dashboardService->getCashflowSummary($filters);
+        $data['inventory_summary'] = $dashboardService->getInventorySummaryCard($filters);
+        $data['crm_summary'] = $dashboardService->getCrmSummaryCard($filters);
+        $data['hrm_summary'] = $dashboardService->getHrmSummaryCard($filters);
+        $data['project_summary'] = $dashboardService->getProjectSummaryCard($filters);
+        $data['approaching_deadline_projects'] = $dashboardService->getProjectDeadlineProjects($filters, 'approaching');
+        $data['overdue_projects'] = $dashboardService->getProjectDeadlineProjects($filters, 'overdue');
+        $data['receivable_ageing'] = $dashboardService->getReceivableAgeing($filters);
+        $data['payable_ageing'] = $dashboardService->getPayableAgeing($filters);
+        $data['top_customers'] = $dashboardService->getTopCustomers($filters);
+        $data['top_suppliers'] = $dashboardService->getTopSuppliers($filters);
+        $data['expense_breakdown'] = $dashboardService->getExpenseBreakdown($filters);
+        $data['cashflow_chart'] = $dashboardService->getCashFlowChart($filters);
+
+        return response()->json($data);
     }
 }

@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, router } from '@inertiajs/react';
-import { Button, Tag, Typography } from 'antd';
+import { Button, Tag, Typography, message } from 'antd';
+import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ReusableCrud';
+import axios from 'axios';
 const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -121,6 +123,9 @@ const initialValues = {
     date: dayjs().format('YYYY-MM-DD'),
     reference: '',
 
+    production_order_id: null,
+    production_order_id_detail: null,
+
     finished_product_id: null,
     finished_product_id_detail: null,
     finished_product_name: '',
@@ -207,6 +212,93 @@ const validationSchema = Yup.object().shape({
 export default function Index() {
     const fields = useMemo(
         () => [
+            {
+                name: 'production_order_id',
+                label: 'Production Order (optional)',
+                type: 'fkSelect',
+                col: 16,
+                placeholder: 'Select to pre-fill from Production Order',
+                fkUrl: '/api/production-orders/',
+                fkSearchParam: 'search',
+                fkPageSize: 20,
+                fkValueKey: 'id',
+                fkLabelKey: 'code',
+                fkExtraParams: { approved: true },
+                fkLabel: (row) => {
+                    const code = row?.code?.startsWith?.('#draft') ? 'DRAFT' : (row?.code || '-');
+                    const name = row?.finishedProduct?.name || row?.finished_product?.name || '';
+                    return [code, name ? `— ${name}` : ''].filter(Boolean).join(' ');
+                },
+            },
+            {
+                name: '_load_from_po',
+                label: '',
+                type: 'custom',
+                col: 8,
+                render: ({ values, setFieldValue }) => {
+                    const loadFromPO = async () => {
+                        const poId = values.production_order_id;
+                        if (!poId) { message.warning('Please select a Production Order first.'); return; }
+                        try {
+                            const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
+                            const res = await axios.get(`${BACKEND_BASE}/api/production-orders/${poId}`);
+                            const po = res.data;
+
+                            if (po.finished_product_id) setFieldValue('finished_product_id', po.finished_product_id, false);
+                            if (po.warehouse_id) setFieldValue('warehouse_id', po.warehouse_id, false);
+                            if (po.output_quantity) setFieldValue('output_quantity', toNumber(po.output_quantity), false);
+
+                            const rawLines = (po.raw_materials || po.raw_material_lines || [])
+                                .filter((r) => r.product_id)
+                                .map((r) => ({
+                                    ...emptyRawMaterial,
+                                    product_id: r.product_id,
+                                    product_id_detail: r.product || null,
+                                    quantity: toNumber(r.quantity),
+                                    unit_code: r.unit_code || '',
+                                    rate: 0,
+                                    amount: 0,
+                                    notes: r.notes || '',
+                                }));
+
+                            if (rawLines.length > 0) setFieldValue('raw_materials', rawLines, false);
+
+                            const byProductLines = (po.byproducts || [])
+                                .filter((r) => r.product_id)
+                                .map((r) => ({
+                                    ...emptyByProduct,
+                                    product_id: r.product_id,
+                                    product_id_detail: r.product || null,
+                                    cost_percent: toNumber(r.cost_share_percent),
+                                    quantity: toNumber(r.quantity),
+                                    unit_code: r.unit_code || '',
+                                }));
+
+                            if (byProductLines.length > 0) {
+                                setFieldValue('show_by_products', true, false);
+                                setFieldValue('by_products', byProductLines, false);
+                            }
+
+                            message.success('Form pre-filled from Production Order.');
+                        } catch (e) {
+                            message.error('Failed to load Production Order. ' + (e?.response?.data?.message || e.message || ''));
+                        }
+                    };
+
+                    return (
+                        <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', paddingBottom: 1 }}>
+                            <Button
+                                size="small"
+                                icon={<DownloadOutlined />}
+                                onClick={loadFromPO}
+                                style={{ marginTop: 20 }}
+                            >
+                                Load from PO
+                            </Button>
+                        </div>
+                    );
+                },
+            },
             {
                 name: 'date',
                 label: 'Date',
@@ -1161,16 +1253,22 @@ export default function Index() {
                 renderSubmitButton={renderSaveButton}
                 anchorFilters={[
                     {
-                        key: 'approved',
-                        label: 'Approved',
-                        title: 'Production Journal',
-                        params: { approved: true },
-                    },
-                    {
                         key: 'draft',
                         label: 'Draft',
                         title: 'Production Journal',
-                        params: { approved: false },
+                        params: { status: 'draft' },
+                    },
+                    {
+                        key: 'posted',
+                        label: 'Posted',
+                        title: 'Production Journal',
+                        params: { status: 'posted' },
+                    },
+                    {
+                        key: 'cancelled',
+                        label: 'Cancelled',
+                        title: 'Production Journal',
+                        params: { status: 'cancelled' },
                     },
                     {
                         key: 'all',
@@ -1179,7 +1277,7 @@ export default function Index() {
                         params: {},
                     },
                 ]}
-                defaultAnchorKey="approved"
+                defaultAnchorKey="draft"
                 anchorSyncWithHash
                 showSearch
                 canAdd

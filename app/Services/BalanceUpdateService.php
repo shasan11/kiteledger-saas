@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\Account;
 use App\Models\JournalVoucher;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 class BalanceUpdateService
@@ -34,18 +35,22 @@ class BalanceUpdateService
 
     public function recalculateAccount(Account $account): void
     {
-        DB::transaction(function () use ($account) {
+        DB::transaction(function () use ($account): void {
             $result = DB::table('journal_voucher_lines')
-                ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
-                ->leftJoin('chart_of_accounts', 'chart_of_accounts.id', '=', 'journal_voucher_lines.chart_of_account_id')
-                ->where(function ($query) use ($account) {
-                    $query->where('journal_voucher_lines.account_id', $account->id)
-                        ->orWhere('chart_of_accounts.account_id', $account->id);
-                })
+                ->join(
+                    'journal_vouchers',
+                    'journal_voucher_lines.journal_voucher_id',
+                    '=',
+                    'journal_vouchers.id'
+                )
+                ->where('journal_voucher_lines.account_id', $account->id)
                 ->where('journal_vouchers.status', 'posted')
                 ->where('journal_vouchers.active', true)
                 ->where('journal_vouchers.void', false)
-                ->selectRaw('SUM(COALESCE(journal_voucher_lines.debit, 0)) as total_debit, SUM(COALESCE(journal_voucher_lines.credit, 0)) as total_credit')
+                ->selectRaw('
+                    COALESCE(SUM(COALESCE(journal_voucher_lines.debit, 0)), 0) as total_debit,
+                    COALESCE(SUM(COALESCE(journal_voucher_lines.credit, 0)), 0) as total_credit
+                ')
                 ->first();
 
             $drAmount = (float) ($result?->total_debit ?? 0);
@@ -62,13 +67,13 @@ class BalanceUpdateService
 
     public function recalculateAll(): void
     {
-        DB::transaction(function () {
-            Account::chunk(100, function ($accounts) {
+        Account::query()
+            ->orderBy('id')
+            ->chunk(100, function (Collection $accounts): void {
+                /** @var Account $account */
                 foreach ($accounts as $account) {
                     $this->recalculateAccount($account);
                 }
             });
-        });
     }
-
 }

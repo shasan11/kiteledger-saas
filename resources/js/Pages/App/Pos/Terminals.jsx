@@ -156,8 +156,8 @@ export default function PosTerminalsPage() {
                     is_default: false,
                     active: true,
                 }}
-                form_ui="modal"
-                modalWidth={760}
+                form_ui="drawer"
+                drawerWidth="min(640px, 100vw)"
                 enableServerPagination
                 showSearch
                 searchParam="search"

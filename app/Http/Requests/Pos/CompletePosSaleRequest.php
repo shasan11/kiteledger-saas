@@ -19,6 +19,7 @@ class CompletePosSaleRequest extends FormRequest
             'customer_phone' => ['nullable', 'string', 'max:40'],
             'customer_email' => ['nullable', 'email', 'max:120'],
             'sale_date' => ['nullable', 'date'],
+            'warehouse_id' => ['nullable', 'uuid', 'exists:warehouses,id'],
             'approved' => ['nullable', 'boolean'],
             'receipt_note' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],

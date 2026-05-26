@@ -17,11 +17,13 @@ class PurchaseBillController extends BaseCrudApiController
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
     protected bool $preventBranchChangeOnUpdate = true;
+    protected bool $fiscalYearScoped = true;
+    protected ?string $businessDateColumn = 'bill_date';
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
-    protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
+    protected array $relations = ['branch', 'project', 'contact', 'lead', 'deal', 'campaign', 'warehouse', 'currency', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
+    protected array $relationDetails = ['branch' => 'branch_id', 'project' => 'project_id', 'contact' => 'contact_id', 'lead' => 'lead_id', 'deal' => 'deal_id', 'campaign' => 'campaign_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['bill_no', 'reference', 'notes', 'status'];
-    protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
+    protected array $filterable = ['branch_id', 'project_id', 'contact_id', 'lead_id', 'deal_id', 'campaign_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
     protected array $amountRangeFilters = ['total' => ['min' => 'amount_min', 'max' => 'amount_max']];
     protected array $dateRangeFilters = ['bill_date' => ['from' => 'date_from', 'to' => 'date_to']];
@@ -74,6 +76,7 @@ class PurchaseBillController extends BaseCrudApiController
 
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        'project_id' => ['nullable', 'uuid', 'exists:projects,id'],
         'bill_no' => ['nullable', 'string', 'max:40', 'unique:purchase_bills,bill_no'],
         'bill_date' => ['required', 'date'],
         'due_date' => ['nullable', 'date'],
@@ -85,6 +88,9 @@ class PurchaseBillController extends BaseCrudApiController
         'import_country' => ['nullable', 'string', 'max:80'],
         'import_date' => ['nullable', 'date'],
         'import_document_number' => ['nullable', 'string', 'max:80'],
+        'lead_id' => ['nullable', 'uuid', 'exists:leads,id'],
+        'deal_id' => ['nullable', 'uuid', 'exists:deals,id'],
+        'campaign_id' => ['nullable', 'uuid', 'exists:crm_campaigns,id'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'paid_total' => ['nullable', 'numeric', 'min:0'],
         'balance_due' => ['nullable', 'numeric', 'min:0'],
@@ -96,6 +102,7 @@ class PurchaseBillController extends BaseCrudApiController
     {
         return [
             'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            'project_id' => ['sometimes', 'nullable', 'uuid', 'exists:projects,id'],
             'bill_no' => ['sometimes', 'nullable', 'string', 'max:40', 'unique:purchase_bills,bill_no,' . $record->id . ',id'],
             'bill_date' => ['sometimes', 'required', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date'],
@@ -107,6 +114,9 @@ class PurchaseBillController extends BaseCrudApiController
             'import_country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'import_date' => ['sometimes', 'nullable', 'date'],
             'import_document_number' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'lead_id' => ['sometimes', 'nullable', 'uuid', 'exists:leads,id'],
+            'deal_id' => ['sometimes', 'nullable', 'uuid', 'exists:deals,id'],
+            'campaign_id' => ['sometimes', 'nullable', 'uuid', 'exists:crm_campaigns,id'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'paid_total' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'balance_due' => ['sometimes', 'nullable', 'numeric', 'min:0'],

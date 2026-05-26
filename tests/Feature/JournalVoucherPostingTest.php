@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Domain\Accounting\Services\JournalVoucherService;
+use App\Domain\Accounting\Services\SystemJournalVoucherService;
 use App\Models\Account;
 use App\Models\Branch;
 use App\Models\ChartOfAccount;
@@ -95,6 +96,69 @@ class JournalVoucherPostingTest extends TestCase
 
         $posted = app(JournalVoucherService::class)->post($voucher);
         app(JournalVoucherService::class)->void($posted, 'Incorrect entry');
+
+        $this->assertAccountAmounts($cash->refresh(), 0, 0, 0);
+        $this->assertAccountAmounts($capital->refresh(), 0, 0, 0);
+    }
+
+    public function test_system_generated_journal_voucher_is_the_balance_update_layer(): void
+    {
+        [$cash, $capital, $cashCoa, $capitalCoa, $branch, $currency] = $this->accounts();
+        $source = $this->draftVoucher($branch, $currency);
+
+        app(SystemJournalVoucherService::class)->syncFromEntries(
+            sourceType: 'test_source',
+            source: $source,
+            date: now()->toDateString(),
+            entries: [
+                ['account_id' => $cash->id, 'debit' => 1000, 'credit' => 0],
+                ['account_id' => $capital->id, 'debit' => 0, 'credit' => 1000],
+            ],
+            branchId: $branch->id,
+            currencyId: $currency->id,
+            status: 'posted',
+            exchangeRate: 1
+        );
+
+        $this->assertAccountAmounts($cash->refresh(), 1000, 0, 1000);
+        $this->assertAccountAmounts($capital->refresh(), 0, 1000, -1000);
+
+        app(SystemJournalVoucherService::class)->syncFromEntries(
+            sourceType: 'test_source',
+            source: $source,
+            date: now()->toDateString(),
+            entries: [
+                ['account_id' => $cash->id, 'debit' => 1250, 'credit' => 0],
+                ['account_id' => $capital->id, 'debit' => 0, 'credit' => 1250],
+            ],
+            branchId: $branch->id,
+            currencyId: $currency->id,
+            status: 'posted',
+            exchangeRate: 1
+        );
+
+        $this->assertAccountAmounts($cash->refresh(), 1250, 0, 1250);
+        $this->assertAccountAmounts($capital->refresh(), 0, 1250, -1250);
+    }
+
+    public function test_system_generated_draft_journal_voucher_does_not_affect_accounts(): void
+    {
+        [$cash, $capital, $cashCoa, $capitalCoa, $branch, $currency] = $this->accounts();
+        $source = $this->draftVoucher($branch, $currency);
+
+        app(SystemJournalVoucherService::class)->syncFromEntries(
+            sourceType: 'draft_source',
+            source: $source,
+            date: now()->toDateString(),
+            entries: [
+                ['account_id' => $cash->id, 'debit' => 1000, 'credit' => 0],
+                ['account_id' => $capital->id, 'debit' => 0, 'credit' => 1000],
+            ],
+            branchId: $branch->id,
+            currencyId: $currency->id,
+            status: 'draft',
+            exchangeRate: 1
+        );
 
         $this->assertAccountAmounts($cash->refresh(), 0, 0, 0);
         $this->assertAccountAmounts($capital->refresh(), 0, 0, 0);

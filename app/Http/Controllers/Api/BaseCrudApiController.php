@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\FiscalYear;
+use App\Services\BranchScopeService;
 use App\Services\DocumentNumberingService;
+use App\Services\AppContextService;
 use App\Services\TransactionApprovalService;
 use App\Services\TransactionVoidService;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
@@ -70,7 +74,21 @@ abstract class BaseCrudApiController extends Controller
 
     protected bool $preventBranchChangeOnUpdate = false;
 
-    protected ?string $branchBypassPermission = 'branches.view-all';
+    protected ?string $branchBypassPermission = BranchScopeService::PERMISSION_VIEW_ALL;
+
+    protected bool $fiscalYearScoped = false;
+
+    protected string $fiscalYearColumn = 'fiscal_year_id';
+
+    protected ?string $businessDateColumn = null;
+
+    protected string $fiscalYearRequestKey = 'fiscal_year_id';
+
+    protected string $fiscalYearHeaderKey = 'X-Fiscal-Year-ID';
+
+    protected bool $autoFillFiscalYearOnCreate = true;
+
+    protected bool $preventFiscalYearChangeOnUpdate = true;
 
     protected array $nested = [];
 
@@ -90,6 +108,7 @@ abstract class BaseCrudApiController extends Controller
         $query = $this->baseQuery();
 
         $this->applyBranchScope($query, $request);
+        $this->applyFiscalYearScope($query, $request);
         $this->applySearch($query, $request);
         $this->applyFilters($query, $request);
         $this->applyOrdering($query, $request);
@@ -112,11 +131,14 @@ abstract class BaseCrudApiController extends Controller
 
         $input = $this->prepareIncomingPayload($request->all());
         $input = $this->applyBranchToCreatePayload($input, $request);
+        $input = $this->applyFiscalYearToCreatePayload($input, $request);
 
         $validated = $this->validateCompat(
             $input,
             $this->rulesForStore($request)
         );
+
+        $this->assertFiscalYearWriteAllowed($validated, $request);
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
@@ -160,11 +182,14 @@ abstract class BaseCrudApiController extends Controller
 
         $input = $this->prepareIncomingPayload($request->all());
         $input = $this->applyBranchToUpdatePayload($input, $request, $record);
+        $input = $this->applyFiscalYearToUpdatePayload($input, $request, $record);
 
         $validated = $this->validateCompat(
             $input,
             $this->rulesForUpdate($request, $record)
         );
+
+        $this->assertFiscalYearWriteAllowed($validated ?: $record, $request, $record);
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
@@ -235,6 +260,7 @@ abstract class BaseCrudApiController extends Controller
 
             $row = $this->prepareIncomingPayload($row);
             $row = $this->applyBranchToCreatePayload($row, $request);
+            $row = $this->applyFiscalYearToCreatePayload($row, $request);
 
             $rowRequest = $this->requestFromArray($request, $row);
 
@@ -251,6 +277,7 @@ abstract class BaseCrudApiController extends Controller
                 continue;
             }
 
+            $this->assertFiscalYearWriteAllowed($validated, $rowRequest);
             $validatedRows[] = $validated;
         }
 
@@ -343,6 +370,7 @@ abstract class BaseCrudApiController extends Controller
 
             $row = $this->prepareIncomingPayload($row);
             $row = $this->applyBranchToUpdatePayload($row, $request, $record);
+            $row = $this->applyFiscalYearToUpdatePayload($row, $request, $record);
 
             $rowRequest = $this->requestFromArray($request, $row);
 
@@ -360,6 +388,7 @@ abstract class BaseCrudApiController extends Controller
             }
 
             unset($validated[$this->primaryKeyName()]);
+            $this->assertFiscalYearWriteAllowed($validated ?: $record, $rowRequest, $record);
 
             $pairs[] = [$record, $validated];
         }
@@ -445,6 +474,7 @@ abstract class BaseCrudApiController extends Controller
 
         $this->checkAccess($request, 'update', $record);
         $this->assertRecordBranchAccess($request, $record);
+        $this->assertFiscalYearWriteAllowed($record, $request, $record);
 
         $approved = app(TransactionApprovalService::class)->approve(
             $record,
@@ -471,6 +501,7 @@ abstract class BaseCrudApiController extends Controller
                 $record = $this->findRecord($id);
                 $this->checkAccess($request, 'update', $record);
                 $this->assertRecordBranchAccess($request, $record);
+                $this->assertFiscalYearWriteAllowed($record, $request, $record);
                 app(TransactionApprovalService::class)->approve($record, $request->user()?->getAuthIdentifier());
                 $approvedCount++;
             } catch (Throwable $e) {
@@ -549,10 +580,19 @@ abstract class BaseCrudApiController extends Controller
             'format' => ['nullable', 'string', 'in:csv'],
         ]);
 
-        $records = $this->newQuery()
-            ->with($this->validEagerLoadRelations())
-            ->whereIn($this->primaryKeyName(), array_values(array_unique($data['ids'])))
+        $requestedIds = array_values(array_unique($data['ids']));
+
+        $scopedQuery = $this->newQuery()->with($this->validEagerLoadRelations());
+        $this->applyBranchScope($scopedQuery, $request);
+
+        $records = (clone $scopedQuery)
+            ->whereIn($this->primaryKeyName(), $requestedIds)
             ->get();
+
+        if ($records->count() !== count($requestedIds)) {
+            // Some requested ids were outside the user's branch scope.
+            abort(403, 'You do not have access to one or more of the selected records.');
+        }
 
         $filename = Str::slug(class_basename($this->modelClass)) . '-selected-' . now()->format('YmdHis') . '.csv';
 
@@ -602,18 +642,18 @@ abstract class BaseCrudApiController extends Controller
 
     protected function rulesForStore(Request $request): array
     {
-        return $this->withNestedRules(
+        return $this->withFiscalYearRules($this->withNestedRules(
             $this->withApprovalRules($this->storeRules($request)),
             false
-        );
+        ));
     }
 
     protected function rulesForUpdate(Request $request, Model $record): array
     {
-        return $this->withNestedRules(
+        return $this->withFiscalYearRules($this->withNestedRules(
             $this->withApprovalRules($this->updateRules($request, $record), true),
             true
-        );
+        ), true);
     }
 
     protected function storeRules(Request $request): array
@@ -903,35 +943,18 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        if ($this->userCanAccessAllBranches($request)) {
-            $requestedBranchId = $this->requestedBranchId($request);
+        app(BranchScopeService::class)->applyToQuery(
+            $query,
+            $request,
+            $request->user(),
+            $this->branchColumn,
+            $this->modelTable()
+        );
+    }
 
-            if ($requestedBranchId) {
-                $query->where($this->qualifiedColumn($this->branchColumn), $requestedBranchId);
-            }
-
-            return;
-        }
-
-        $allowedBranchIds = $this->accessibleBranchIds($request);
-
-        if (empty($allowedBranchIds)) {
-            $query->whereRaw('1 = 0');
-            return;
-        }
-
-        $requestedBranchId = $this->requestedBranchId($request);
-
-        if ($requestedBranchId) {
-            if (!in_array((string) $requestedBranchId, $allowedBranchIds, true)) {
-                abort(403, 'You do not have access to this branch.');
-            }
-
-            $query->where($this->qualifiedColumn($this->branchColumn), $requestedBranchId);
-            return;
-        }
-
-        $query->whereIn($this->qualifiedColumn($this->branchColumn), $allowedBranchIds);
+    protected function modelTable(): string
+    {
+        return $this->newModelInstance()->getTable();
     }
 
     protected function applyBranchToCreatePayload(array $data, Request $request): array
@@ -941,9 +964,11 @@ abstract class BaseCrudApiController extends Controller
         }
 
         $providedBranchId = $data[$this->branchColumn] ?? null;
+        $scope = app(BranchScopeService::class);
+        $user = $request->user();
 
         if (!empty($providedBranchId)) {
-            $this->assertBranchIdAllowed($request, $providedBranchId);
+            $scope->assertCanAccessBranch($user, (string) $providedBranchId);
             $data[$this->branchColumn] = (string) $providedBranchId;
 
             return $data;
@@ -953,7 +978,7 @@ abstract class BaseCrudApiController extends Controller
             $defaultBranchId = $this->defaultWriteBranchId($request, true);
 
             if ($defaultBranchId) {
-                $this->assertBranchIdAllowed($request, $defaultBranchId);
+                $scope->assertCanAccessBranch($user, (string) $defaultBranchId);
                 $data[$this->branchColumn] = (string) $defaultBranchId;
             }
         }
@@ -969,12 +994,18 @@ abstract class BaseCrudApiController extends Controller
 
         $this->assertRecordBranchAccess($request, $record);
 
-        if ($this->preventBranchChangeOnUpdate && array_key_exists($this->branchColumn, $data)) {
+        $scope = app(BranchScopeService::class);
+        $user = $request->user();
+
+        if ($scope->isBranchLimited($user) || $this->preventBranchChangeOnUpdate) {
+            // Branch-limited users may never change branch on update; same when
+            // controllers explicitly opt in to preventBranchChangeOnUpdate.
             unset($data[$this->branchColumn]);
+            return $data;
         }
 
-        if (!$this->preventBranchChangeOnUpdate && !empty($data[$this->branchColumn])) {
-            $this->assertBranchIdAllowed($request, $data[$this->branchColumn]);
+        if (!empty($data[$this->branchColumn])) {
+            $scope->assertCanAccessBranch($user, (string) $data[$this->branchColumn]);
         }
 
         return $data;
@@ -986,148 +1017,277 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        if ($this->userCanAccessAllBranches($request)) {
-            return;
-        }
-
         $branchId = $record->{$this->branchColumn} ?? null;
 
         if (!$branchId) {
             return;
         }
 
-        $this->assertBranchIdAllowed($request, $branchId);
-    }
-
-    protected function assertBranchIdAllowed(Request $request, mixed $branchId): void
-    {
-        if (!$this->usesBranchScope()) {
-            return;
-        }
-
-        if ($this->userCanAccessAllBranches($request)) {
-            return;
-        }
-
-        if (!$branchId) {
-            abort(403, 'Branch is required.');
-        }
-
-        $allowedBranchIds = $this->accessibleBranchIds($request);
-
-        if (!in_array((string) $branchId, $allowedBranchIds, true)) {
-            abort(403, 'You do not have access to this branch.');
-        }
+        app(BranchScopeService::class)->assertCanAccessBranch($request->user(), (string) $branchId);
     }
 
     protected function requestedBranchId(Request $request): ?string
     {
-        $branchId = $request->query($this->branchRequestKey);
+        $value = app(BranchScopeService::class)->normalizeRequestedBranch($request);
 
-        if (!$branchId) {
-            $branchId = $request->header($this->branchHeaderKey);
-        }
-
-        if (!$branchId) {
-            $branchId = $request->input($this->branchRequestKey);
-        }
-
-        return $branchId ? (string) $branchId : null;
+        return $value === 'all' ? null : $value;
     }
 
     protected function defaultWriteBranchId(Request $request, bool $allowRequestedBranch = true): ?string
     {
-        $requested = $allowRequestedBranch ? $this->requestedBranchId($request) : null;
-
-        if ($requested) {
-            return (string) $requested;
-        }
-
+        $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if ($user) {
-            if (!empty($user->current_branch_id)) {
-                return (string) $user->current_branch_id;
-            }
+        if ($allowRequestedBranch) {
+            $selected = $scope->selectedBranchId($request, $user);
 
-            if (!empty($user->branch_id)) {
-                return (string) $user->branch_id;
-            }
-
-            $branchIds = $this->accessibleBranchIds($request);
-
-            if (count($branchIds) === 1) {
-                return $branchIds[0];
+            if ($selected !== null) {
+                return $selected;
             }
         }
 
-        return Branch::query()->where('code', 'MAIN')->value('id')
-            ?: Branch::query()->value('id');
+        // For above-branch users with "all" selected and no requested branch,
+        // we have no safe default — let validation surface "branch required".
+        if ($scope->canViewAllBranches($user)) {
+            return null;
+        }
+
+        $assigned = $scope->assignedBranchIds($user);
+
+        return $assigned[0] ?? null;
     }
 
     protected function accessibleBranchIds(Request $request): array
     {
-        $user = $request->user();
-
-        $ids = [];
-
-        if ($user) {
-            if (!empty($user->current_branch_id)) {
-                $ids[] = (string) $user->current_branch_id;
-            }
-
-            if (!empty($user->branch_id)) {
-                $ids[] = (string) $user->branch_id;
-            }
-
-            if (!empty($user->branch_ids) && is_array($user->branch_ids)) {
-                foreach ($user->branch_ids as $id) {
-                    if ($id) {
-                        $ids[] = (string) $id;
-                    }
-                }
-            }
-
-            try {
-                if (method_exists($user, 'branches')) {
-                    $relationIds = $user->branches()->pluck('branches.id')->toArray();
-
-                    foreach ($relationIds as $id) {
-                        if ($id) {
-                            $ids[] = (string) $id;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                //
-            }
-        }
-
-        $ids = array_values(array_unique(array_filter($ids)));
-
-        if (!empty($ids)) {
-            return $ids;
-        }
-
-        $fallbackBranchId = Branch::query()->where('code', 'MAIN')->value('id')
-            ?: Branch::query()->value('id');
-
-        return $fallbackBranchId ? [(string) $fallbackBranchId] : [];
+        return app(BranchScopeService::class)->accessibleBranchIds($request->user());
     }
 
     protected function userCanAccessAllBranches(Request $request): bool
     {
-        $user = $request->user();
+        return app(BranchScopeService::class)->canViewAllBranches($request->user());
+    }
 
-        if (!$user || !$this->branchBypassPermission || !method_exists($user, 'can')) {
-            return false;
+    protected function applyFiscalYearScope(Builder $query, Request $request): void
+    {
+        if (!$this->usesFiscalYearScope()) {
+            return;
+        }
+
+        $fiscalYear = $this->requestedFiscalYear($request);
+
+        if (!$fiscalYear) {
+            return;
+        }
+
+        if ($this->tableHasColumn($this->fiscalYearColumn)) {
+            $query->where($this->qualifiedColumn($this->fiscalYearColumn), $fiscalYear->id);
+            return;
+        }
+
+        if ($this->businessDateColumn && $this->tableHasColumn($this->businessDateColumn)) {
+            $query->whereDate($this->qualifiedColumn($this->businessDateColumn), '>=', $fiscalYear->start_date)
+                ->whereDate($this->qualifiedColumn($this->businessDateColumn), '<=', $fiscalYear->end_date);
+        }
+    }
+
+    protected function applyFiscalYearToCreatePayload(array $data, Request $request): array
+    {
+        if (!$this->usesFiscalYearScope()) {
+            return $data;
+        }
+
+        $providedFiscalYearId = $data[$this->fiscalYearColumn] ?? null;
+
+        if (!empty($providedFiscalYearId)) {
+            $data[$this->fiscalYearColumn] = (string) $providedFiscalYearId;
+            return $data;
+        }
+
+        if ($this->autoFillFiscalYearOnCreate && $this->tableHasColumn($this->fiscalYearColumn)) {
+            $defaultFiscalYearId = $this->defaultWriteFiscalYearId($request);
+
+            if ($defaultFiscalYearId) {
+                $data[$this->fiscalYearColumn] = (string) $defaultFiscalYearId;
+            }
+        }
+
+        return $data;
+    }
+
+    protected function applyFiscalYearToUpdatePayload(array $data, Request $request, Model $record): array
+    {
+        if (!$this->usesFiscalYearScope()) {
+            return $data;
+        }
+
+        if (!$this->tableHasColumn($this->fiscalYearColumn)) {
+            return $data;
+        }
+
+        if ($this->preventFiscalYearChangeOnUpdate && array_key_exists($this->fiscalYearColumn, $data)) {
+            $incoming = (string) $data[$this->fiscalYearColumn];
+            $existing = (string) ($record->{$this->fiscalYearColumn} ?? '');
+
+            if ($incoming !== $existing && $this->isRecordPostedOrClosed($record)) {
+                unset($data[$this->fiscalYearColumn]);
+            }
+        }
+
+        return $data;
+    }
+
+    protected function requestedFiscalYearId(Request $request): ?string
+    {
+        $fiscalYearId = $request->header($this->fiscalYearHeaderKey);
+
+        if (!$fiscalYearId) {
+            $fiscalYearId = $request->query($this->fiscalYearRequestKey);
+        }
+
+        if (!$fiscalYearId) {
+            $fiscalYearId = $request->input($this->fiscalYearRequestKey);
+        }
+
+        return $fiscalYearId ? (string) $fiscalYearId : null;
+    }
+
+    protected function defaultWriteFiscalYearId(Request $request): ?string
+    {
+        $requested = $this->requestedFiscalYearId($request);
+
+        if ($requested) {
+            return $requested;
         }
 
         try {
-            return $user->can($this->branchBypassPermission);
-        } catch (\Throwable $e) {
+            $fiscalYear = app(AppContextService::class)->resolveFiscalYearForRequest($request);
+
+            if ($fiscalYear) {
+                return (string) $fiscalYear->id;
+            }
+        } catch (\Throwable) {
+            //
+        }
+
+        return FiscalYear::query()->where('is_current', true)->where('active', true)->value('id')
+            ?: FiscalYear::query()
+                ->where('active', true)
+                ->whereDate('start_date', '<=', now()->toDateString())
+                ->whereDate('end_date', '>=', now()->toDateString())
+                ->value('id');
+    }
+
+    protected function assertFiscalYearDateAllowed(array|Model $recordOrData, FiscalYear $fy): void
+    {
+        $date = $this->fiscalDateValue($recordOrData);
+
+        if (!$date) {
+            return;
+        }
+
+        $businessDate = Carbon::parse($date)->toDateString();
+        $start = Carbon::parse($fy->start_date)->toDateString();
+        $end = Carbon::parse($fy->end_date)->toDateString();
+
+        if ($businessDate < $start || $businessDate > $end) {
+            $this->throwValidation([
+                $this->businessDateColumn ?: 'date' => ["The business date must fall inside fiscal year {$fy->name} ({$start} to {$end})."],
+            ]);
+        }
+    }
+
+    protected function fiscalDateValue(array|Model $recordOrData): ?string
+    {
+        if (!$this->businessDateColumn) {
+            return null;
+        }
+
+        $value = is_array($recordOrData)
+            ? ($recordOrData[$this->businessDateColumn] ?? null)
+            : ($recordOrData->{$this->businessDateColumn} ?? null);
+
+        return $value ? (string) $value : null;
+    }
+
+    protected function withFiscalYearRules(array $rules, bool $update = false): array
+    {
+        if (!$this->usesFiscalYearScope() || !$this->tableHasColumn($this->fiscalYearColumn)) {
+            return $rules;
+        }
+
+        $rules[$this->fiscalYearColumn] ??= [
+            $update ? 'sometimes' : 'nullable',
+            'nullable',
+            'uuid',
+            'exists:fiscal_years,id',
+        ];
+
+        return $rules;
+    }
+
+    protected function assertFiscalYearWriteAllowed(array|Model $recordOrData, Request $request, ?Model $record = null): void
+    {
+        if (!$this->usesFiscalYearScope()) {
+            return;
+        }
+
+        $fiscalYearId = is_array($recordOrData)
+            ? ($recordOrData[$this->fiscalYearColumn] ?? $record?->{$this->fiscalYearColumn} ?? $this->defaultWriteFiscalYearId($request))
+            : ($recordOrData->{$this->fiscalYearColumn} ?? $this->defaultWriteFiscalYearId($request));
+
+        if (!$fiscalYearId) {
+            return;
+        }
+
+        $fiscalYear = FiscalYear::query()->whereKey($fiscalYearId)->where('active', true)->first();
+
+        if (!$fiscalYear) {
+            $this->throwValidation([$this->fiscalYearColumn => ['The selected fiscal year is invalid or inactive.']]);
+        }
+
+        if (app(AppContextService::class)->isFiscalYearLocked($fiscalYear) && !app(AppContextService::class)->canOverrideFiscalYearLock($request->user())) {
+            $this->throwValidation([$this->fiscalYearColumn => ['The selected fiscal year is closed or locked.']]);
+        }
+
+        if ($record && $this->preventFiscalYearChangeOnUpdate && $this->isRecordPostedOrClosed($record)) {
+            $incomingFiscalYearId = is_array($recordOrData)
+                ? ($recordOrData[$this->fiscalYearColumn] ?? $record->{$this->fiscalYearColumn})
+                : $recordOrData->{$this->fiscalYearColumn};
+
+            if ($incomingFiscalYearId && (string) $incomingFiscalYearId !== (string) $record->{$this->fiscalYearColumn}) {
+                $this->throwValidation([$this->fiscalYearColumn => ['Fiscal year cannot be changed after posting, approval, or voiding.']]);
+            }
+        }
+
+        $payloadForDate = is_array($recordOrData) && $record
+            ? array_merge($record->getAttributes(), $recordOrData)
+            : $recordOrData;
+
+        $this->assertFiscalYearDateAllowed($payloadForDate, $fiscalYear);
+    }
+
+    protected function requestedFiscalYear(Request $request): ?FiscalYear
+    {
+        $id = $this->defaultWriteFiscalYearId($request);
+
+        return $id ? FiscalYear::query()->whereKey($id)->where('active', true)->first() : null;
+    }
+
+    protected function usesFiscalYearScope(): bool
+    {
+        if (!$this->fiscalYearScoped) {
             return false;
         }
+
+        return $this->tableHasColumn($this->fiscalYearColumn)
+            || ($this->businessDateColumn && $this->tableHasColumn($this->businessDateColumn));
+    }
+
+    protected function isRecordPostedOrClosed(Model $record): bool
+    {
+        return (bool) ($record->approved ?? false)
+            || (bool) ($record->void ?? false)
+            || in_array((string) ($record->status ?? ''), ['posted', 'approved', 'void', 'voided', 'completed', 'closed', 'paid'], true);
     }
 
     protected function prepareIncomingPayload(array $data): array

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\BankAccount;
+use App\Models\BankStatementLine;
+use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -123,8 +125,10 @@ class BankAccountController extends BaseCrudApiController
 
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
-        $statementBalance = (float) ($record->opening_balance ?? 0);
-        $softwareBalance = (float) optional($record->account)->balance ?: $statementBalance;
+        $openingBalance = (float) ($record->opening_balance ?? 0);
+        $ledgerBalance = (float) (optional($record->account)->balance ?? 0);
+        $statementBalance = $openingBalance;
+        $softwareBalance = $openingBalance + $ledgerBalance;
         $difference = round($statementBalance - $softwareBalance, 2);
 
         $data['statement_balance'] = $statementBalance;
@@ -139,5 +143,96 @@ class BankAccountController extends BaseCrudApiController
         $data['bank_transactions'] = [];
 
         return $data;
+    }
+
+    public function ledger(Request $request, BankAccount $bankAccount)
+    {
+        $accountId = $bankAccount->account_id;
+        $query = JournalVoucherLine::query()
+            ->with(['journalVoucher.branch'])
+            ->when($accountId, fn ($q) => $q->where('account_id', $accountId))
+            ->whereHas('journalVoucher', function ($voucherQuery) use ($request) {
+                $voucherQuery
+                    ->when($request->filled('date_from'), fn ($q) => $q->whereDate('voucher_date', '>=', $request->date('date_from')))
+                    ->when($request->filled('date_to'), fn ($q) => $q->whereDate('voucher_date', '<=', $request->date('date_to')))
+                    ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->string('branch_id')))
+                    ->when($request->filled('fiscal_year_id'), fn ($q) => $q->where('fiscal_year_id', $request->string('fiscal_year_id')));
+            })
+            ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
+            ->orderBy('journal_vouchers.voucher_date')
+            ->orderBy('journal_voucher_lines.created_at')
+            ->select('journal_voucher_lines.*')
+            ->get();
+
+        $balance = (float) ($bankAccount->opening_balance ?? 0);
+
+        $rows = $query->map(function (JournalVoucherLine $line) use (&$balance) {
+            $debit = (float) $line->debit;
+            $credit = (float) $line->credit;
+            $balance += $debit - $credit;
+            $voucher = $line->journalVoucher;
+
+            return [
+                'id' => $line->id,
+                'date' => optional($voucher?->voucher_date)->toDateString(),
+                'voucher_no' => $voucher?->voucher_no,
+                'journal_voucher_id' => $voucher?->id,
+                'description' => $line->description ?: $voucher?->narration,
+                'branch' => $voucher?->branch?->name,
+                'debit' => round($debit, 2),
+                'credit' => round($credit, 2),
+                'balance' => round($balance, 2),
+            ];
+        })->values();
+
+        $statementBalance = BankStatementLine::query()
+            ->where('bank_account_id', $bankAccount->id)
+            ->latest('statement_date')
+            ->value('balance');
+
+        return response()->json([
+            'bank_account' => $bankAccount->load(['branch', 'currency', 'account']),
+            'statement_balance' => $statementBalance !== null ? (float) $statementBalance : (float) ($bankAccount->opening_balance ?? 0),
+            'software_balance' => round($balance, 2),
+            'last_transaction_date' => $rows->last()['date'] ?? null,
+            'rows' => $rows,
+        ]);
+    }
+
+    public function importStatement(Request $request, BankAccount $bankAccount)
+    {
+        $validated = $request->validate([
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.date' => ['required', 'date'],
+            'lines.*.description' => ['nullable', 'string'],
+            'lines.*.reference' => ['nullable', 'string', 'max:120'],
+            'lines.*.debit' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.credit' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.balance' => ['nullable', 'numeric'],
+            'lines.*.counterparty' => ['nullable', 'string', 'max:150'],
+            'lines.*.remarks' => ['nullable', 'string'],
+        ]);
+
+        $created = collect($validated['lines'])->map(function (array $line) use ($bankAccount) {
+            return BankStatementLine::create([
+                'bank_account_id' => $bankAccount->id,
+                'account_id' => $bankAccount->account_id,
+                'statement_date' => $line['date'],
+                'description' => $line['description'] ?? null,
+                'reference' => $line['reference'] ?? null,
+                'debit' => $line['debit'] ?? 0,
+                'credit' => $line['credit'] ?? 0,
+                'balance' => $line['balance'] ?? null,
+                'counterparty' => $line['counterparty'] ?? null,
+                'remarks' => $line['remarks'] ?? null,
+                'status' => 'imported',
+                'imported_by_id' => $request->user()?->getAuthIdentifier(),
+            ]);
+        });
+
+        return response()->json([
+            'message' => 'Bank statement imported for review.',
+            'created' => $created->count(),
+        ], 201);
     }
 }

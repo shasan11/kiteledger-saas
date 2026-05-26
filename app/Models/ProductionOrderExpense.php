@@ -19,5 +19,5 @@ class ProductionOrderExpense extends Model
     }
 
     public function productionOrder(): BelongsTo { return $this->belongsTo(ProductionOrder::class); }
-    public function expenseAccount(): BelongsTo { return $this->belongsTo(ChartOfAccount::class, 'expense_account_id'); }
+    public function expenseAccount(): BelongsTo { return $this->belongsTo(Account::class, 'expense_account_id'); }
 }

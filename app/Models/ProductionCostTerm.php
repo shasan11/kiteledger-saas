@@ -15,7 +15,7 @@ class ProductionCostTerm extends Model
         'branch_id',
         'name',
         'code',
-        'chart_of_account_id',
+        'account_id',
         'active',
     ];
 
@@ -31,8 +31,8 @@ class ProductionCostTerm extends Model
         return $this->belongsTo(Branch::class);
     }
 
-    public function chartOfAccount(): BelongsTo
+    public function account(): BelongsTo
     {
-        return $this->belongsTo(ChartOfAccount::class);
+        return $this->belongsTo(Account::class);
     }
 }

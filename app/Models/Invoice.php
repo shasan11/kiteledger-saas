@@ -2,15 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFiscalYear;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Invoice extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory, HasFiscalYear, HasUuids;
 
     /**
      * The attributes that are mass assignable.
@@ -19,6 +21,8 @@ class Invoice extends Model
      */
     protected $fillable = [
         'branch_id',
+        'project_id',
+        'fiscal_year_id',
         'invoice_no',
         'invoice_date',
         'due_date',
@@ -78,6 +82,11 @@ class Invoice extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
@@ -121,6 +130,21 @@ class Invoice extends Model
     public function customerPaymentLines(): HasMany
     {
         return $this->hasMany(CustomerPaymentLine::class);
+    }
+
+    public function paymentLinks(): HasMany
+    {
+        return $this->hasMany(InvoicePaymentLink::class);
+    }
+
+    public function paymentLink(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(InvoicePaymentLink::class)->where('active', true)->latest();
+    }
+
+    public function onlinePayments(): HasMany
+    {
+        return $this->hasMany(OnlinePayment::class);
     }
 
     public function recalculatePaymentTotals(): self

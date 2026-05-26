@@ -8,21 +8,29 @@ import {
   Card,
   Drawer,
   Empty,
+  Descriptions,
   Skeleton,
   Space,
   Table,
   Tag,
   Typography,
+  Modal,
+  message,
   theme,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, BarcodeOutlined, CheckCircleOutlined, EditOutlined, PrinterOutlined } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
+const authHeaders = () => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const APPROVED_STATUSES = new Set([
   'posted',
@@ -260,6 +268,16 @@ function sectionTitle(documentType) {
 }
 
 function getDocumentCode(record, documentType) {
+  if (!record) return '#DRAFT';
+
+  if (documentType === 'warehouse_transfer') {
+    return displayDocumentNumber(record, record?.warehouse_transfer_no ? 'warehouse_transfer_no' : 'transfer_no');
+  }
+
+  if (documentType === 'inventory_adjustment') {
+    return displayDocumentNumber(record, record?.inventory_adjustment_no ? 'inventory_adjustment_no' : 'adjustment_no');
+  }
+
   return firstPresent(
     record?.transfer_no,
     record?.adjustment_no,
@@ -757,6 +775,8 @@ export default function InventoryRecordShow({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [printOpen, setPrintOpen] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -793,10 +813,47 @@ export default function InventoryRecordShow({
     };
   }, [endpoint, id, title]);
 
+  const reloadRecord = async () => {
+    const { data } = await axios.get(api(`${endpoint}${id}`), { headers: authHeaders() });
+    setRecord(data);
+  };
+
+  const approveRecord = () => {
+    Modal.confirm({
+      title: documentType === 'warehouse_transfer' ? 'Post warehouse transfer?' : 'Post inventory adjustment?',
+      content: 'This will update warehouse stock and lock the document from normal editing.',
+      okText: 'Approve / Post',
+      onOk: async () => {
+        setApproving(true);
+        try {
+          const cleanEndpoint = endpoint.replace(/\/$/, '');
+          await axios.post(api(`${cleanEndpoint}/${id}/approve`), {}, { headers: authHeaders() });
+          await reloadRecord();
+          message.success('Document approved and posted.');
+        } catch (err) {
+          const data = err?.response?.data;
+          const errors = data?.errors || data || {};
+          const firstError = typeof errors === 'object'
+            ? Object.values(errors).flat().filter(Boolean)[0]
+            : null;
+          message.error(firstError || data?.message || 'Approval failed.');
+          throw err;
+        } finally {
+          setApproving(false);
+        }
+      },
+    });
+  };
+
   const documentCode = getDocumentCode(record, documentType);
   const railRows = useMemo(() => buildRailRows(record, documentType), [record, documentType]);
   const overview = useMemo(() => overviewRows(record, documentType), [record, documentType]);
   const cards = useMemo(() => (record ? buildLineCards(record, documentType) : []), [record, documentType]);
+  const increasedLines = useMemo(() => getLines(record, documentType).filter((line) => {
+    const type = String(line?.adjustment_type || line?.type || '').toLowerCase();
+    if (type) return type === 'increase';
+    return Number(firstPresent(line?.increase_qty, 0)) > 0;
+  }), [record, documentType]);
 
   const amount = useMemo(() => {
     if (!record) return formatMoney(0);
@@ -999,14 +1056,30 @@ export default function InventoryRecordShow({
           <Space size={8}>
             {editRoute && (
               <Link href={route(editRoute, id)}>
-                <Button size="small" icon={<EditOutlined />} disabled={loading || !record}>
+                <Button size="small" icon={<EditOutlined />} disabled={loading || !record || isApproved(record)}>
                   Edit
                 </Button>
               </Link>
             )}
+            {!isApproved(record) && ['warehouse_transfer', 'inventory_adjustment'].includes(documentType) ? (
+              <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={approving} disabled={loading || !record} onClick={approveRecord}>
+                Approve / Post
+              </Button>
+            ) : null}
             <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>
               Print Preview
             </Button>
+            {documentType === 'inventory_adjustment' ? (
+              <Button size="small" icon={<BarcodeOutlined />} onClick={() => {
+                if (!increasedLines.length) {
+                  window.alert('No increased stock lines available for label printing.');
+                  return;
+                }
+                setLabelsOpen(true);
+              }}>
+                Print Labels
+              </Button>
+            ) : null}
           </Space>
         </div>
 
@@ -1046,9 +1119,116 @@ export default function InventoryRecordShow({
         title="Print Preview"
         open={printOpen}
         onClose={() => setPrintOpen(false)}
-        width={720}
+        width="min(820px, 100vw)"
+        extra={<Button icon={<PrinterOutlined />} onClick={() => window.print()}>Print</Button>}
       >
-        <Text>Print template will be configured later.</Text>
+        <div className="inventory-print-document">
+          <style>{`
+            .inventory-print-document{font-family:Arial,sans-serif;color:#111827;font-size:12px;background:#fff;padding:24px}
+            .inventory-print-header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}
+            .inventory-print-header h2{margin:0;font-size:22px}
+            .inventory-print-meta{text-align:right}
+            .inventory-print-table{width:100%;border-collapse:collapse;margin-top:14px}
+            .inventory-print-table th,.inventory-print-table td{border:1px solid #d1d5db;padding:7px;vertical-align:top}
+            .inventory-print-table th{background:#f3f4f6;text-align:left}
+            .num{text-align:right}
+            @media print{body *{visibility:hidden}.inventory-print-document,.inventory-print-document *{visibility:visible}.inventory-print-document{position:absolute;inset:0;padding:12mm;box-shadow:none}.ant-drawer,.ant-drawer-content{position:static!important;box-shadow:none!important}}
+          `}</style>
+          <div className="inventory-print-header">
+            <div>
+              <h2>{title}</h2>
+              <Text>{documentCode}</Text>
+            </div>
+            <div className="inventory-print-meta">
+              <div>{formatDate(firstPresent(record?.transfer_date, record?.adjustment_date, record?.date, record?.created_at))}</div>
+              <div>{String(record?.status || 'draft').replace(/_/g, ' ')}</div>
+              <div>{warehouseLabel(firstPresent(record?.warehouse, record?.fromWarehouse, record?.from_warehouse))}</div>
+            </div>
+          </div>
+          <Descriptions size="small" bordered column={2} items={overview.map((row) => ({ key: row.label, label: row.label, children: row.value }))} />
+          <table className="inventory-print-table">
+            <thead>
+              <tr><th>Product</th><th className="num">Qty</th><th>Unit</th><th>Type</th><th>Remarks</th></tr>
+            </thead>
+            <tbody>
+              {getLines(record, documentType).map((line, index) => (
+                <tr key={line.id || index}>
+                  <td>{productLabel(line)}</td>
+                  <td className="num">{formatQty(firstPresent(line.qty, line.quantity))}</td>
+                  <td>{relationLabel(firstPresent(line.unit, line.productUnit, line.product_unit))}</td>
+                  <td>{firstPresent(line.adjustment_type, line.type, '-')}</td>
+                  <td>{firstPresent(line.remarks, line.description, '-')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {getMaterialLines(record, documentType).length ? (
+            <table className="inventory-print-table">
+              <thead>
+                <tr><th colSpan={5}>Raw Materials</th></tr>
+                <tr><th>Product</th><th className="num">Qty</th><th>Warehouse</th><th className="num">Cost</th><th>Remarks</th></tr>
+              </thead>
+              <tbody>
+                {getMaterialLines(record, documentType).map((line, index) => (
+                  <tr key={line.id || index}>
+                    <td>{productLabel(line)}</td>
+                    <td className="num">{formatQty(firstPresent(line.qty, line.quantity, line.required_qty, line.consumed_qty))}</td>
+                    <td>{warehouseLabel(firstPresent(line.warehouse, line.warehouse_detail))}</td>
+                    <td className="num">{formatMoney(lineCost(line))}</td>
+                    <td>{firstPresent(line.remarks, line.description, '-')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+          {getOutputLines(record, documentType).length ? (
+            <table className="inventory-print-table">
+              <thead>
+                <tr><th colSpan={5}>Byproducts / Outputs</th></tr>
+                <tr><th>Product</th><th className="num">Qty</th><th>Warehouse</th><th className="num">Cost</th><th>Remarks</th></tr>
+              </thead>
+              <tbody>
+                {getOutputLines(record, documentType).map((line, index) => (
+                  <tr key={line.id || index}>
+                    <td>{productLabel(line)}</td>
+                    <td className="num">{formatQty(firstPresent(line.qty, line.quantity, line.output_quantity, line.produced_qty))}</td>
+                    <td>{warehouseLabel(firstPresent(line.warehouse, line.warehouse_detail))}</td>
+                    <td className="num">{formatMoney(lineCost(line))}</td>
+                    <td>{firstPresent(line.remarks, line.description, '-')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="Product Labels"
+        open={labelsOpen}
+        onClose={() => setLabelsOpen(false)}
+        width="min(760px, 100vw)"
+        extra={<Button icon={<PrinterOutlined />} onClick={() => window.print()}>Print</Button>}
+      >
+        <div className="inventory-label-print">
+          <style>{`
+            .inventory-label-print{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;background:#fff}
+            .inventory-label{border:1px solid #111;padding:10px;min-height:120px;break-inside:avoid}
+            .inventory-label strong{display:block;font-size:13px}
+            .inventory-label .barcode{font-family:monospace;border-top:1px dashed #999;border-bottom:1px dashed #999;margin:8px 0;padding:5px 0;text-align:center}
+            @media print{body *{visibility:hidden}.inventory-label-print,.inventory-label-print *{visibility:visible}.inventory-label-print{position:absolute;inset:0;padding:8mm;grid-template-columns:repeat(3,1fr)}}
+          `}</style>
+          {increasedLines.map((line, index) => (
+            <div className="inventory-label" key={line.id || index}>
+              <strong>{productLabel(line)}</strong>
+              <Text>{firstPresent(line.product?.sku, line.product?.code, line.product?.barcode, '-')}</Text>
+              <div className="barcode">{firstPresent(line.product?.barcode, line.product?.sku, line.product?.code, 'BARCODE')}</div>
+              <div>Warehouse: {warehouseLabel(firstPresent(record?.warehouse, record?.warehouse_detail))}</div>
+              <div>Qty: {formatQty(firstPresent(line.qty, line.quantity))}</div>
+              <div>{documentCode} / {formatDate(firstPresent(record?.adjustment_date, record?.date))}</div>
+            </div>
+          ))}
+        </div>
       </Drawer>
     </AuthenticatedLayout>
   );

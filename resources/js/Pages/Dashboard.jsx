@@ -2,54 +2,34 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
     Alert,
-    Badge,
     Button,
     Card,
-    Col,
     DatePicker,
-    Dropdown,
     Empty,
-    Flex,
-    List,
-    Progress,
-    Row,
     Select,
     Skeleton,
-    Space,
+    Table,
     Tabs,
     Tag,
-    Timeline,
     Tooltip,
     Typography,
     theme,
 } from 'antd';
-import {
-    ArrowDownOutlined,
-    ArrowUpOutlined,
-    BankOutlined,
-    BookOutlined,
-    CheckCircleOutlined,
-    ClockCircleOutlined,
-    DollarOutlined,
-    DownOutlined,
-    FileAddOutlined,
-    FileDoneOutlined,
-    FileTextOutlined,
-    PlusOutlined,
-    ReloadOutlined,
-    RightOutlined,
-    SendOutlined,
-    WalletOutlined,
-    WarningOutlined,
-} from '@ant-design/icons';
+import { ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import {
+    Area,
+    AreaChart,
     Bar,
     BarChart,
     CartesianGrid,
-    ComposedChart,
+    Cell,
+    Legend,
     Line,
+    LineChart,
+    Pie,
+    PieChart,
     ResponsiveContainer,
     Tooltip as ChartTooltip,
     XAxis,
@@ -59,724 +39,879 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
+const DASH = '-';
 
-const money = (value, compact = false) =>
-    new Intl.NumberFormat('en-NP', {
-        style: 'currency',
-        currency: 'NPR',
-        notation: compact ? 'compact' : 'standard',
-        maximumFractionDigits: compact ? 1 : 0,
-    }).format(Number(value || 0));
-
-const number = (value) => new Intl.NumberFormat('en-NP').format(Number(value || 0));
-const toAmount = (value) => Number(value || 0);
-
-const visit = (url) => {
-    if (url && url !== '#') router.visit(url);
+const COLORS = {
+    indigo: '#4F46E5',
+    blue: '#3B82F6',
+    emerald: '#10B981',
+    amber: '#F59E0B',
+    red: '#EF4444',
+    purple: '#8B5CF6',
+    pink: '#EC4899',
+    cyan: '#06B6D4',
+    lime: '#84CC16',
+    slate: '#64748B',
 };
 
-const routeOr = (routeName, fallback) => {
-    try {
-        if (typeof route === 'function' && route().has(routeName)) return route(routeName);
-    } catch {
-        return fallback;
-    }
-    return fallback;
-};
+const PIE_PALETTE = [COLORS.indigo, COLORS.emerald, COLORS.amber, COLORS.blue, COLORS.pink, COLORS.purple, COLORS.cyan, COLORS.lime];
+
+const currFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 });
+const compactFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', notation: 'compact', maximumFractionDigits: 1 });
+const numFmt = new Intl.NumberFormat('en-NP');
+
+const fmtMoney = (v, compact) => (v == null || v === '' ? DASH : (compact ? compactFmt : currFmt).format(Number(v || 0)));
+const fmtNum = (v) => (v == null || v === '' ? DASH : numFmt.format(Number(v || 0)));
+const fmtDate = (v) => (v ? dayjs(v).format('DD MMM YYYY') : DASH);
+const toNum = (v) => Number(v || 0);
+const visit = (url) => { if (url && url !== '#') router.visit(url); };
+
+function calcTrend(sparkline) {
+    if (!sparkline || sparkline.length < 6) return null;
+    const mid = Math.floor(sparkline.length / 2);
+    const earlier = sparkline.slice(0, mid);
+    const recent = sparkline.slice(mid);
+    const sumE = earlier.reduce((s, d) => s + toNum(d.value), 0);
+    const sumR = recent.reduce((s, d) => s + toNum(d.value), 0);
+    if (sumE === 0) return sumR > 0 ? 100 : null;
+    return ((sumR - sumE) / Math.abs(sumE)) * 100;
+}
 
 export default function Dashboard() {
     const { token } = theme.useToken();
     const page = usePage();
-    const user = page.props.auth?.user || {};
-    const permissions = page.props.auth?.permissions || [];
-    const branchContext = page.props.branchContext || {};
-
+    const bc = page.props.branchContext || {};
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [data, setData] = useState({});
     const [filters, setFilters] = useState({
-        branch_id: branchContext.selectedBranchId || 'all',
+        branch_id: bc.selectedBranchId || 'all',
         date_from: dayjs().startOf('month').format('YYYY-MM-DD'),
         date_to: dayjs().format('YYYY-MM-DD'),
     });
 
-    const fetchDashboard = useCallback(async () => {
+    const fetch = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const { data: response } = await axios.get('/dashboard-data', {
+            const r = await axios.get('/dashboard-data', {
                 params: {
                     branch_id: filters.branch_id === 'all' ? undefined : filters.branch_id,
                     date_from: filters.date_from,
                     date_to: filters.date_to,
                 },
             });
-            setData(response || {});
-        } catch (e) {
-            setError(e?.response?.data?.message || 'Unable to load dashboard data.');
+            setData(r.data || {});
+        } catch (ex) {
+            setError(ex?.response?.data?.message || 'Unable to load dashboard data.');
         } finally {
             setLoading(false);
         }
     }, [filters]);
 
-    useEffect(() => {
-        fetchDashboard();
-    }, [fetchDashboard]);
+    useEffect(() => { fetch(); }, [fetch]);
 
-    const model = useMemo(() => buildDashboardModel(data, permissions), [data, permissions]);
-    const gap = token.marginLG;
+    const m = useMemo(() => buildModel(data), [data]);
+    const branches = data.branches || bc.branches || [];
 
     return (
         <AuthenticatedLayout
-            header={
-                <HeroHeader
-                    token={token}
-                    user={user}
-                    branches={data.branches || branchContext.branches || []}
-                    filters={filters}
-                    setFilters={setFilters}
-                    loading={loading}
-                    refresh={fetchDashboard}
-                    permissions={model.permissions}
-                    health={model.health}
-                />
-            }
+            header={<DashHeader branches={branches} filters={filters} loading={loading} onRefresh={fetch} onChange={setFilters} />}
         >
             <Head title="Dashboard" />
-            <main style={{ minHeight: 'calc(100vh - 100px)', background: '#f7f8fa', padding: gap }}>
-                {error && (
-                    <Alert
-                        showIcon
-                        type="error"
-                        message="Could not load dashboard"
-                        description={error}
-                        action={<Button onClick={fetchDashboard}>Retry</Button>}
-                        style={{ marginBottom: gap }}
-                    />
-                )}
+            <Styles token={token} />
+            <main className="kd">
+                <div className="kd-wrap">
+                    {error && (
+                        <Alert showIcon type="error" message="Dashboard could not be loaded" description={error}
+                            action={<Button onClick={fetch}>Retry</Button>} />
+                    )}
+                    {loading ? <DashSkeleton /> : (
+                        <>
+                            {/* KPI Strip */}
+                            <section className="kd-kpis">
+                                {m.kpis.map((k) => <KpiCard key={k.key} {...k} />)}
+                            </section>
 
-                {loading ? (
-                    <DashboardSkeleton token={token} />
-                ) : (
-                    <Flex vertical gap={gap}>
-                        <KpiCards cards={model.kpis} token={token} />
+                            {/* Row 2: Financial + Expense Breakdown */}
+                            <section className="kd-row-2">
+                                <FinancialChart data={m.chartData} />
+                                <ExpenseDonut data={m.expenseBreakdown} />
+                            </section>
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={16}>
-                                <RevenueExpenseChart data={model.revenueExpense} token={token} />
-                            </Col>
-                            <Col xs={24} xl={8}>
-                                <HealthPanel health={model.health} accounting={model.accountingHealth} token={token} />
-                            </Col>
-                        </Row>
+                            {/* Row 3: Cash Flow + Ageing */}
+                            <section className="kd-row-3">
+                                <CashFlowChart data={m.cashflowChart} />
+                                <AgeingChart data={m.ageingData} />
+                            </section>
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={12}>
-                                <CashForecastChart data={model.cashForecast} token={token} />
-                            </Col>
-                            <Col xs={24} xl={12}>
-                                <AgeingChart data={model.receivableAgeing} token={token} />
-                            </Col>
-                        </Row>
+                            {/* Business Cards */}
+                            {m.bizCards.length > 0 && (
+                                <section className="kd-biz-grid">
+                                    {m.bizCards.map((c) => <BizCard key={c.key} card={c} />)}
+                                </section>
+                            )}
 
-                        <Row gutter={[gap, gap]}>
-                            <Col xs={24} xl={10}>
-                                <ActionCenter actions={model.actions} token={token} />
-                            </Col>
-                            <Col xs={24} xl={14}>
-                                <BusinessTabs model={model} token={token} />
-                            </Col>
-                        </Row>
+                            <ProjectDeadlines approaching={m.approachingProjects} overdue={m.overdueProjects} />
 
-                        <RecentActivity activity={model.activity} token={token} />
-                    </Flex>
-                )}
+                            {/* Transactions Table */}
+                            <TxnTable transactions={m.transactions} />
+
+                            {/* Bottom: Top Parties + Bank Accounts */}
+                            <section className="kd-bottom">
+                                {m.topCustomers.length > 0 && <TopPartiesBar title="Top Customers" data={m.topCustomers} color={COLORS.indigo} />}
+                                {m.topSuppliers.length > 0 && <TopPartiesBar title="Top Suppliers" data={m.topSuppliers} color={COLORS.amber} />}
+                                {m.bankAccounts.length > 0 && <BankList accounts={m.bankAccounts} />}
+                            </section>
+                        </>
+                    )}
+                </div>
             </main>
         </AuthenticatedLayout>
     );
 }
 
-function HeroHeader({ token, user, branches, filters, setFilters, loading, refresh, permissions, health }) {
-    const quickActions = [
-        permissions.canCreateInvoice && {
-            key: 'invoice',
-            icon: <FileAddOutlined />,
-            label: 'Create invoice',
-            onClick: () => visit(routeOr('payment-in.invoices.create', '/payment-in/invoices/create')),
-        },
-        permissions.canRecordPayment && {
-            key: 'payment',
-            icon: <DollarOutlined />,
-            label: 'Record payment',
-            onClick: () => visit(routeOr('payment-in.payments.create', '/payment-in/payments/create')),
-        },
-        permissions.canAddExpense && {
-            key: 'expense',
-            icon: <WalletOutlined />,
-            label: 'Add expense',
-            onClick: () => visit(routeOr('payment-out.expenses.create', '/payment-out/expenses/create')),
-        },
-        permissions.canCreateBill && {
-            key: 'bill',
-            icon: <BookOutlined />,
-            label: 'Create bill',
-            onClick: () => visit(routeOr('payment-out.purchase-bills.create', '/payment-out/purchase-bills/create')),
-        },
-    ].filter(Boolean);
-
+function DashHeader({ branches, filters, loading, onRefresh, onChange }) {
+    const opts = [{ value: 'all', label: 'All branches' }, ...(branches || []).map((b) => ({
+        value: b.value ?? b.id, label: b.label ?? b.name ?? `Branch #${b.id}`,
+    }))];
     return (
-        <Flex justify="space-between" align="center" wrap="wrap" gap={token.marginMD}>
-            <div style={{ minWidth: 260 }}>
-                <Space size={8} align="center" wrap>
-                    <Title level={4} style={{ margin: 0, fontWeight: 650, letterSpacing: 0 }}>
-                        Good {dayjs().hour() < 12 ? 'morning' : dayjs().hour() < 18 ? 'afternoon' : 'evening'}, {user.name || 'there'}
-                    </Title>
-                    <Tag color={health.score >= 75 ? 'success' : health.score >= 55 ? 'warning' : 'error'} bordered={false}>
-                        {health.status}
-                    </Tag>
-                </Space>
-                <Text type="secondary" style={{ display: 'block', marginTop: 4, fontSize: token.fontSizeSM }}>
-                    {health.message}
-                </Text>
+        <div className="kd-hdr">
+            <div>
+                <Title level={4} style={{ margin: '0 0 2px', fontWeight: 650 }}>Dashboard</Title>
+                <Text type="secondary" style={{ fontSize: 13 }}>Financial overview for the selected period</Text>
             </div>
-
-            <Flex wrap="wrap" gap={8} align="center">
-                <Select
-                    value={filters.branch_id}
-                    options={branchOptions(branches)}
-                    style={{ minWidth: 168 }}
-                    onChange={(branch_id) => setFilters((f) => ({ ...f, branch_id: branch_id || 'all' }))}
-                />
+            <div className="kd-hdr__ctl">
+                <Select value={filters.branch_id} options={opts} style={{ width: 170 }}
+                    onChange={(v) => onChange((c) => ({ ...c, branch_id: v || 'all' }))} />
                 <RangePicker
                     value={filters.date_from && filters.date_to ? [dayjs(filters.date_from), dayjs(filters.date_to)] : null}
-                    onChange={(dates) =>
-                        setFilters((f) => ({
-                            ...f,
-                            date_from: dates?.[0]?.format('YYYY-MM-DD'),
-                            date_to: dates?.[1]?.format('YYYY-MM-DD'),
-                        }))
-                    }
+                    style={{ width: 260 }}
+                    onChange={(d) => onChange((c) => ({ ...c, date_from: d?.[0]?.format('YYYY-MM-DD'), date_to: d?.[1]?.format('YYYY-MM-DD') }))}
                 />
-                <Tooltip title="Refresh dashboard">
-                    <Button icon={<ReloadOutlined spin={loading} />} onClick={refresh} />
-                </Tooltip>
-                {quickActions.length > 0 && (
-                    <Dropdown menu={{ items: quickActions }} trigger={['click']}>
-                        <Button type="primary" icon={<PlusOutlined />}>
-                            Quick action <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
-                        </Button>
-                    </Dropdown>
-                )}
-            </Flex>
-        </Flex>
-    );
-}
-
-const cardStyle = (token) => ({
-    height: '100%',
-    borderRadius: token.borderRadiusLG,
-    border: `1px solid ${token.colorBorderSecondary}`,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)',
-});
-
-function KpiCards({ cards, token }) {
-    return (
-        <Row gutter={[token.marginMD, token.marginMD]}>
-            {cards.map((card) => (
-                <Col key={card.key} xs={24} sm={12} lg={8} xl={4}>
-                    <Card hoverable onClick={() => visit(card.url)} style={cardStyle(token)} styles={{ body: { padding: 18 } }}>
-                        <Flex vertical gap={10}>
-                            <Flex justify="space-between" align="center" gap={12}>
-                                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                                    {card.title}
-                                </Text>
-                                <span style={{ color: token.colorTextTertiary, fontSize: 16 }}>{card.icon}</span>
-                            </Flex>
-                            <div style={{ color: token.colorTextHeading, fontSize: 23, fontWeight: 650, lineHeight: 1.15 }}>
-                                {card.display}
-                            </div>
-                            <Text type="secondary" style={{ minHeight: 34, fontSize: token.fontSizeSM - 1 }}>
-                                {card.helper}
-                            </Text>
-                            <Flex justify="space-between" align="center">
-                                <Tag color={card.statusColor} bordered={false} style={{ margin: 0 }}>
-                                    {card.status}
-                                </Tag>
-                                <Text style={{ color: card.trendColor, fontSize: token.fontSizeSM }}>
-                                    {card.trendIcon} {card.trend}
-                                </Text>
-                            </Flex>
-                        </Flex>
-                    </Card>
-                </Col>
-            ))}
-        </Row>
-    );
-}
-
-function HealthPanel({ health, accounting, token }) {
-    return (
-        <Card title="Business health" style={cardStyle(token)}>
-            <Flex align="center" gap={20}>
-                <Progress type="circle" percent={health.score} size={108} strokeColor={health.score >= 75 ? token.colorSuccess : health.score >= 55 ? token.colorWarning : token.colorError} />
-                <Flex vertical gap={10} style={{ flex: 1 }}>
-                    <Insight label="Net profit" value={money(health.profit)} tone={health.profit >= 0 ? 'success' : 'error'} />
-                    <Insight label="Accounting score" value={`${accounting.score || 0}%`} tone={(accounting.score || 0) >= 80 ? 'success' : 'warning'} />
-                    <Insight label="Payables due soon" value={number(health.payables_due_soon)} tone={health.payables_due_soon ? 'warning' : 'success'} />
-                    <Insight label="CRM follow-ups" value={number(health.crm_followups)} tone={health.crm_followups ? 'warning' : 'success'} />
-                </Flex>
-            </Flex>
-        </Card>
-    );
-}
-
-function RevenueExpenseChart({ data, token }) {
-    return (
-        <Card title="Revenue vs expenses" extra={<Text type="secondary">Selected period</Text>} style={cardStyle(token)}>
-            {data.length === 0 ? (
-                <Empty description="No revenue or expense activity" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={310}>
-                    <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="date" tickFormatter={(v) => dayjs(v).format('MMM D')} tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Revenue" dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                        <Bar name="Expenses" dataKey="expenses" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                        <Line name="Net profit" dataKey="profit" stroke="#111827" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function CashForecastChart({ data, token }) {
-    return (
-        <Card title="Cash flow forecast" extra={<Button type="text" size="small" onClick={() => visit('/reports/accounting/cash-flow-summary')}>Report <RightOutlined /></Button>} style={cardStyle(token)}>
-            {data.length === 0 ? (
-                <Empty description="No due receivables or payables" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                    <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="date" tickFormatter={(v) => dayjs(v).format('MMM D')} tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Expected in" dataKey="cash_in" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                        <Bar name="Expected out" dataKey="cash_out" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                        <Line name="Projected cash" dataKey="projected_cash" stroke="#111827" strokeWidth={2} dot={false} />
-                    </ComposedChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function AgeingChart({ data, token }) {
-    return (
-        <Card title="Receivable ageing" extra={<Button type="text" size="small" onClick={() => visit('/reports/receivable/customer-receivable-summary')}>View <RightOutlined /></Button>} style={cardStyle(token)}>
-            {data.every((item) => toAmount(item.amount) === 0) ? (
-                <Empty description="No outstanding receivables" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke={token.colorBorderSecondary} vertical={false} />
-                        <XAxis dataKey="bucket" tickLine={false} axisLine={false} fontSize={12} />
-                        <YAxis tickFormatter={(v) => money(v, true)} width={72} tickLine={false} axisLine={false} fontSize={12} />
-                        <ChartTooltip content={<MoneyTooltip token={token} />} />
-                        <Bar name="Outstanding" dataKey="amount" fill="#2563eb" radius={[5, 5, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-            )}
-        </Card>
-    );
-}
-
-function ActionCenter({ actions, token }) {
-    return (
-        <Card
-            title={<Space><span>Action center</span><Badge count={actions.length} size="small" /></Space>}
-            style={cardStyle(token)}
-            styles={{ body: { padding: actions.length ? 0 : 24 } }}
-        >
-            {actions.length === 0 ? (
-                <Empty description="Nothing urgent today" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <List
-                    dataSource={actions}
-                    renderItem={(item) => (
-                        <List.Item
-                            actions={[<Button key="open" type="text" icon={<RightOutlined />} onClick={() => visit(item.action_url)} />]}
-                            style={{ padding: '14px 20px' }}
-                        >
-                            <List.Item.Meta
-                                avatar={item.severity === 'critical' ? <WarningOutlined style={{ color: token.colorError }} /> : <ClockCircleOutlined style={{ color: token.colorWarning }} />}
-                                title={<Flex justify="space-between" gap={12}><Text strong>{item.title}</Text><Tag bordered={false} color={severityColor(item.severity)}>{item.module}</Tag></Flex>}
-                                description={<Text type="secondary">{item.description}</Text>}
-                            />
-                        </List.Item>
-                    )}
-                />
-            )}
-        </Card>
-    );
-}
-
-function BusinessTabs({ model, token }) {
-    const items = [
-        {
-            key: 'sales',
-            label: 'Sales',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Invoices', number(model.sales.invoices)],
-                        ['Overdue invoices', number(model.sales.overdue_invoices)],
-                        ['Top customer', model.topCustomers[0]?.name || '-'],
-                    ]}
-                    listTitle="Top customers"
-                    list={model.topCustomers.map((item) => ({ title: item.name, value: money(item.amount) }))}
-                />
-            ),
-        },
-        {
-            key: 'purchase',
-            label: 'Purchase',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Bills', number(model.purchase.purchase_bills)],
-                        ['Due soon', number(model.purchase.upcoming_bills)],
-                        ['Top supplier', model.topSuppliers[0]?.name || '-'],
-                    ]}
-                    listTitle="Payable ageing"
-                    list={model.payableAgeing.map((item) => ({ title: item.bucket, value: money(item.amount) }))}
-                />
-            ),
-        },
-        {
-            key: 'inventory',
-            label: 'Inventory',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Products', number(model.inventory.summary.total_products)],
-                        ['Low stock', number(model.inventory.summary.low_stock_products)],
-                        ['Inventory value', money(model.inventory.summary.inventory_value, true)],
-                    ]}
-                    listTitle="Warnings"
-                    list={model.inventory.warnings.map((item) => ({ title: item.product, value: `${number(item.current_stock)} in stock`, url: item.action_url }))}
-                />
-            ),
-        },
-        {
-            key: 'crm',
-            label: 'CRM',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Open deals', number(model.crm.summary.open_deals)],
-                        ['Forecast', money(model.crm.summary.forecast_this_month, true)],
-                        ['Win rate', `${model.crm.summary.win_rate || 0}%`],
-                    ]}
-                    listTitle="Follow-ups"
-                    list={model.crm.followups.map((item) => ({ title: item.name, value: item.assigned_to || 'Unassigned', url: item.action_url }))}
-                />
-            ),
-        },
-        {
-            key: 'accounting',
-            label: 'Accounting',
-            children: (
-                <CompactPanel
-                    token={token}
-                    stats={[
-                        ['Health score', `${model.accountingHealth.score || 0}%`],
-                        ['Missing JV', number(model.accountingHealth.approved_jv_missing)],
-                        ['Unbalanced JV', number(model.accountingHealth.unbalanced_jvs)],
-                    ]}
-                    listTitle="Issues"
-                    list={model.accountingIssues.map((item) => ({ title: item.issue_type, value: item.record, url: item.action_url }))}
-                />
-            ),
-        },
-    ];
-
-    return (
-        <Card title="Business tabs" style={cardStyle(token)}>
-            <Tabs items={items} />
-        </Card>
-    );
-}
-
-function CompactPanel({ stats, listTitle, list, token }) {
-    return (
-        <Row gutter={[token.marginLG, token.marginMD]}>
-            <Col xs={24} md={10}>
-                <Flex vertical gap={12}>
-                    {stats.map(([label, value]) => (
-                        <Insight key={label} label={label} value={value} />
-                    ))}
-                </Flex>
-            </Col>
-            <Col xs={24} md={14}>
-                <Text strong>{listTitle}</Text>
-                <div style={{ marginTop: 8 }}>
-                    {list.length === 0 ? (
-                        <Empty description="No records" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                    ) : (
-                        list.slice(0, 5).map((item) => (
-                            <Flex key={`${item.title}-${item.value}`} justify="space-between" align="center" gap={12} style={{ padding: '9px 0', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
-                                <Text ellipsis style={{ minWidth: 0 }}>{item.title}</Text>
-                                <Button type="text" size="small" onClick={() => visit(item.url)} style={{ maxWidth: 180 }}>
-                                    <Text ellipsis>{item.value}</Text>
-                                </Button>
-                            </Flex>
-                        ))
-                    )}
-                </div>
-            </Col>
-        </Row>
-    );
-}
-
-function Insight({ label, value, tone }) {
-    const color = tone === 'success' ? 'success' : tone === 'error' ? 'danger' : tone === 'warning' ? 'warning' : 'secondary';
-    return (
-        <Flex justify="space-between" align="center" gap={12}>
-            <Text type="secondary">{label}</Text>
-            <Text strong type={color === 'secondary' ? undefined : color}>{value}</Text>
-        </Flex>
-    );
-}
-
-function RecentActivity({ activity, token }) {
-    return (
-        <Card title="Recent activity" style={cardStyle(token)}>
-            {activity.length === 0 ? (
-                <Empty description="No recent activity" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-            ) : (
-                <Timeline
-                    items={activity.slice(0, 8).map((item) => ({
-                        color: activityColor(item.status, token),
-                        children: (
-                            <Flex justify="space-between" align="start" gap={16}>
-                                <div style={{ minWidth: 0 }}>
-                                    <Text strong>{item.description}</Text>
-                                    <br />
-                                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                                        {item.module || 'Business'} · {item.user || 'System'} · {dayjs(item.time).isValid() ? dayjs(item.time).format('MMM D, HH:mm') : 'Recent'}
-                                    </Text>
-                                </div>
-                                {item.action_url && <Button type="text" size="small" icon={<RightOutlined />} onClick={() => visit(item.action_url)} />}
-                            </Flex>
-                        ),
-                    }))}
-                />
-            )}
-        </Card>
-    );
-}
-
-function MoneyTooltip({ active, payload, label, token }) {
-    if (!active || !payload?.length) return null;
-
-    return (
-        <div style={{ background: token.colorBgElevated, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: token.borderRadius, boxShadow: token.boxShadowSecondary, padding: '10px 12px', minWidth: 160 }}>
-            {label && (
-                <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 12 }}>
-                    {dayjs(label).isValid() ? dayjs(label).format('MMM D, YYYY') : label}
-                </Text>
-            )}
-            <Flex vertical gap={4}>
-                {payload.map((item) => (
-                    <Flex key={`${item.name}-${item.dataKey}`} justify="space-between" gap={16}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{item.name}</Text>
-                        <Text strong style={{ fontSize: 12 }}>{money(item.value)}</Text>
-                    </Flex>
-                ))}
-            </Flex>
+                <Tooltip title="Refresh"><Button icon={<ReloadOutlined spin={loading} />} onClick={onRefresh} /></Tooltip>
+            </div>
         </div>
     );
 }
 
-function DashboardSkeleton({ token }) {
+function KpiCard({ label, value, sparkline, color, trend, invertTrend, helper }) {
+    const isUp = trend > 0;
+    const trendColor = invertTrend ? (isUp ? COLORS.red : COLORS.emerald) : (isUp ? COLORS.emerald : COLORS.red);
+    const hasSpark = Array.isArray(sparkline) && sparkline.some((d) => toNum(d.value) !== 0);
+
     return (
-        <Flex vertical gap={token.marginLG}>
-            <Row gutter={[token.marginMD, token.marginMD]}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                    <Col key={i} xs={24} sm={12} lg={8} xl={4}>
-                        <Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 2 }} /></Card>
-                    </Col>
-                ))}
-            </Row>
-            <Row gutter={[token.marginLG, token.marginLG]}>
-                <Col xs={24} xl={16}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 8 }} /></Card></Col>
-                <Col xs={24} xl={8}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 8 }} /></Card></Col>
-            </Row>
-            <Row gutter={[token.marginLG, token.marginLG]}>
-                <Col xs={24} xl={12}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 7 }} /></Card></Col>
-                <Col xs={24} xl={12}><Card style={cardStyle(token)}><Skeleton active paragraph={{ rows: 7 }} /></Card></Col>
-            </Row>
-        </Flex>
+        <Card className="kd-card kd-kpi" styles={{ body: { padding: 10, height: '100%', position: 'relative', overflow: 'hidden' } }}>
+            <div className="kd-kpi__body">
+                <Text type="secondary" style={{ fontSize: 12, fontWeight: 500, letterSpacing: '0.02em' }}>{label}</Text>
+                <div className="kd-kpi__val">{fmtMoney(value)}</div>
+                <div className="kd-kpi__foot">
+                    {trend != null && (
+                        <span style={{ color: trendColor, fontSize: 12, fontWeight: 600 }}>
+                            {isUp ? '+' : '-'} {Math.abs(trend).toFixed(1)}%
+                        </span>
+                    )}
+                    {helper && <Text type="secondary" style={{ fontSize: 11 }}>{helper}</Text>}
+                </div>
+            </div>
+            {hasSpark && (
+                <div className="kd-kpi__spark" aria-hidden>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={sparkline}>
+                            <defs>
+                                <linearGradient id={`kpi-g-${label}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+                                    <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                                </linearGradient>
+                            </defs>
+                            <Area type="monotone" dataKey="value" stroke={color} strokeWidth={1.5}
+                                fill={`url(#kpi-g-${label})`} dot={false} isAnimationActive={false} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
+        </Card>
     );
 }
 
-function buildDashboardModel(data, permissions) {
-    const summary = data.summary || {};
-    const sales = data.sales_purchase?.sales || {};
-    const purchase = data.sales_purchase?.purchase || {};
-    const inventory = data.inventory || { summary: {}, warnings: [] };
-    const crm = data.crm || { summary: {}, pipeline: [], followups: [] };
-    const accountingHealth = data.accounting_health || {};
-    const health = data.business_health || {};
+function FinancialChart({ data }) {
+    const hasData = data.some((d) => toNum(d.revenue) || toNum(d.expenses) || toNum(d.profit));
 
-    const revenue = toAmount(summary.sales_this_month);
-    const expenses = sumSeries(data.revenue_expense, 'expenses') || toAmount(data.sales_purchase?.chart?.find((item) => item.name === 'Purchase')?.amount);
-    const profit = health.profit ?? revenue - expenses;
-    const cash = toAmount(summary.cash_bank_balance);
-    const receivables = toAmount(summary.receivables);
-    const payables = toAmount(summary.payables);
-    const overdueReceivables = sumSeries((data.receivable_ageing || []).filter((item) => item.bucket !== 'Current'), 'amount');
-
-    return {
-        permissions: dashboardPermissions(permissions),
-        health: {
-            score: toAmount(health.score || 0),
-            status: health.status || 'Review',
-            message: health.message || 'Review cash, collections, payables, and operational exceptions.',
-            profit,
-            payables_due_soon: toAmount(health.payables_due_soon || purchase.upcoming_bills),
-            crm_followups: toAmount(health.crm_followups || crm.followups?.length),
-        },
-        accountingHealth: { score: 100, ...accountingHealth },
-        kpis: [
-            kpi('cash', 'Cash & Bank', cash, 'Total cash and bank balance', cash >= 0 ? 'Healthy' : 'Negative', cash >= 0 ? 'success' : 'error', cash >= 0 ? 'Stable' : 'Review', <BankOutlined />, '/accounting/bank-accounts'),
-            kpi('revenue', 'Revenue', revenue, 'Approved sales in the selected period', revenue >= expenses ? 'On track' : 'Below cost', revenue >= expenses ? 'success' : 'warning', revenue >= expenses ? 'Up' : 'Watch', <DollarOutlined />, '/reports/sales/sales-summary'),
-            kpi('expenses', 'Expenses', expenses, 'Bills and expenses in the selected period', expenses > revenue ? 'High' : 'Controlled', expenses > revenue ? 'error' : 'default', expenses > revenue ? 'Up' : 'Normal', <WalletOutlined />, '/payment-out/expenses'),
-            kpi('profit', 'Net Profit', profit, 'Revenue minus expenses', profit >= 0 ? 'Profit' : 'Loss', profit >= 0 ? 'success' : 'error', profit >= 0 ? 'Positive' : 'Negative', <FileDoneOutlined />, '/reports/accounting/income-statement'),
-            kpi('receivables', 'Receivables', receivables, `${money(overdueReceivables, true)} overdue`, overdueReceivables ? 'Collect' : 'Current', overdueReceivables ? 'warning' : 'success', `${number(sales.overdue_invoices)} overdue`, <FileTextOutlined />, '/reports/receivable/customer-receivable-summary'),
-            kpi('payables', 'Payables', payables, 'Supplier balances and due bills', purchase.upcoming_bills ? 'Due soon' : 'Clear', purchase.upcoming_bills ? 'warning' : 'success', `${number(purchase.upcoming_bills)} due`, <BookOutlined />, '/reports/payable/supplier-payable-summary'),
-        ],
-        revenueExpense: normalizeSeries(data.revenue_expense),
-        cashForecast: normalizeSeries(data.cash_flow?.forecast || []),
-        receivableAgeing: normalizeAgeing(data.receivable_ageing),
-        payableAgeing: normalizeAgeing(data.payable_ageing),
-        actions: buildActions(data, sales, purchase),
-        sales,
-        purchase,
-        inventory: { summary: inventory.summary || {}, warnings: inventory.warnings || [] },
-        crm: { summary: crm.summary || {}, pipeline: crm.pipeline || [], followups: crm.followups || [] },
-        accountingIssues: data.accounting_issues || [],
-        topCustomers: normalizeParties(data.top_customers || sales.top_customers),
-        topSuppliers: normalizeParties(data.top_suppliers || purchase.top_suppliers),
-        activity: Array.isArray(data.recent_activity) ? data.recent_activity : [],
-    };
+    return (
+        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Financial Performance</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Revenue, expenses & net profit trend</Text>
+            </div>
+            {hasData ? (
+                <div style={{ height: 230 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                            <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={68} />
+                            <ChartTooltip content={<MoneyTip />} />
+                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                            <Line type="monotone" dataKey="revenue" name="Revenue" stroke={COLORS.indigo} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="expenses" name="Expenses" stroke={COLORS.amber} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={COLORS.emerald} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <EmptyState title="No financial data" desc="Revenue and expense activity will appear here." />
+            )}
+        </Card>
+    );
 }
 
-function kpi(key, title, value, helper, status, statusColor, trend, icon, url) {
-    const positive = ['cash', 'revenue', 'profit'].includes(key) ? value >= 0 : true;
-    return {
-        key,
-        title,
-        value,
-        display: money(value),
-        helper,
-        status,
-        statusColor,
-        trend,
-        trendIcon: positive ? <ArrowUpOutlined /> : <ArrowDownOutlined />,
-        trendColor: positive ? '#15803d' : '#b91c1c',
-        icon,
-        url,
-    };
+function ExpenseDonut({ data }) {
+    const total = data.reduce((s, d) => s + toNum(d.value), 0);
+
+    return (
+        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Expense Breakdown</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Where your money goes</Text>
+            </div>
+            {data.length > 0 && total > 0 ? (
+                <div style={{ height: 230, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%"
+                                innerRadius="52%" outerRadius="78%" paddingAngle={2} strokeWidth={0}>
+                                {data.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
+                            </Pie>
+                            <ChartTooltip content={<PieTip total={total} />} />
+                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, lineHeight: '20px' }}
+                                formatter={(val) => <span style={{ color: 'var(--kd-text)', fontSize: 11 }}>{val}</span>} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <EmptyState title="No expense data" desc="Expense categories will appear here." compact />
+            )}
+        </Card>
+    );
 }
 
-function buildActions(data, sales, purchase) {
-    const alerts = Array.isArray(data.alerts) ? data.alerts : [];
-    const base = [
-        toAmount(sales.overdue_invoices) > 0 && {
-            severity: 'critical',
-            module: 'Sales',
-            title: `${number(sales.overdue_invoices)} overdue invoices`,
-            description: 'Collections need follow-up today.',
-            action_url: '/payment-in/invoices?status=overdue',
-        },
-        toAmount(purchase.upcoming_bills) > 0 && {
-            severity: 'warning',
-            module: 'Purchase',
-            title: `${number(purchase.upcoming_bills)} bills due soon`,
-            description: 'Review supplier payment timing.',
-            action_url: '/payment-out/purchase-bills',
-        },
-        toAmount(data.summary?.pending_approvals) > 0 && {
-            severity: 'info',
-            module: 'Approval',
-            title: `${number(data.summary.pending_approvals)} pending approvals`,
-            description: 'Documents are waiting to be posted.',
-            action_url: '/workflow',
-        },
-    ].filter(Boolean);
-
-    return [...base, ...alerts].slice(0, 8);
+function PieTip({ active, payload, total }) {
+    if (!active || !payload?.length) return null;
+    const d = payload[0];
+    const pct = total > 0 ? ((toNum(d.value) / total) * 100).toFixed(1) : 0;
+    return (
+        <div className="kd-tip">
+            <Text strong>{d.name}</Text>
+            <div className="kd-tip__row">
+                <span style={{ background: d.payload?.fill }} />
+                <Text type="secondary">Amount</Text>
+                <Text>{fmtMoney(d.value)}</Text>
+            </div>
+            <div className="kd-tip__row">
+                <span style={{ background: 'transparent' }} />
+                <Text type="secondary">Share</Text>
+                <Text>{pct}%</Text>
+            </div>
+        </div>
+    );
 }
 
-function dashboardPermissions(permissions) {
-    const can = (p) => permissions.includes(p);
-    const unrestricted = permissions.length === 0;
-    return {
-        canCreateInvoice: unrestricted || can('payment-in.invoice.create') || can('sales.invoice.create'),
-        canRecordPayment: unrestricted || can('payment-in.payment.create'),
-        canAddExpense: unrestricted || can('payment-out.expense.create'),
-        canCreateBill: unrestricted || can('payment-out.purchase_bill.create'),
-    };
+function CashFlowChart({ data }) {
+    const hasData = data.some((d) => toNum(d.cash_in) || toNum(d.cash_out));
+
+    return (
+        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Cash Flow</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Daily cash inflows and outflows</Text>
+            </div>
+            {hasData ? (
+                <div style={{ height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                            <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={68} />
+                            <ChartTooltip content={<MoneyTip />} />
+                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                            <Line type="monotone" dataKey="cash_in" name="Cash In" stroke={COLORS.blue} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="cash_out" name="Cash Out" stroke={COLORS.red} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Line type="monotone" dataKey="net" name="Net" stroke={COLORS.purple} strokeWidth={2} strokeDasharray="6 3" dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <EmptyState title="No cash flow data" desc="Cash inflows and outflows will appear here." />
+            )}
+        </Card>
+    );
 }
 
-function branchOptions(branches) {
-    const items = Array.isArray(branches) ? branches : [];
-    return [
-        { value: 'all', label: 'All branches' },
-        ...items.map((b) => ({ value: b.value ?? b.id, label: b.label ?? b.name ?? `Branch #${b.id}` })),
+function AgeingChart({ data }) {
+    const hasData = data.some((d) => toNum(d.receivables) > 0 || toNum(d.payables) > 0);
+
+    return (
+        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Receivables vs Payables Ageing</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Outstanding amounts by age</Text>
+            </div>
+            {hasData ? (
+                <div style={{ height: 220 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                            <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
+                            <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={60} />
+                            <ChartTooltip content={<MoneyTip />} />
+                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
+                            <Bar dataKey="receivables" name="Receivables" fill={COLORS.blue} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                            <Bar dataKey="payables" name="Payables" fill={COLORS.amber} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            ) : (
+                <EmptyState title="No ageing data" desc="Receivable and payable ageing will appear here." compact />
+            )}
+        </Card>
+    );
+}
+
+function MoneyTip({ active, payload, label }) {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="kd-tip">
+            <Text strong style={{ fontSize: 12 }}>{label}</Text>
+            {payload.map((p) => (
+                <div className="kd-tip__row" key={p.dataKey}>
+                    <span style={{ background: p.color || p.fill }} />
+                    <Text type="secondary">{p.name}</Text>
+                    <Text>{fmtMoney(p.value)}</Text>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function BizCard({ card }) {
+    return (
+        <Card className="kd-card kd-biz" styles={{ body: { padding: 10 } }}>
+            <div className="kd-biz__head">
+                <Text strong style={{ fontSize: 13, fontWeight: 650 }}>{card.title}</Text>
+                {card.href && <Button type="link" size="small" style={{ padding: 0, fontSize: 12, fontWeight: 600 }} onClick={() => visit(card.href)}>{card.linkText || 'View'}</Button>}
+            </div>
+            <div className="kd-biz__rows">
+                {card.items.map((i) => (
+                    <div className="kd-biz__row" key={i.label}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{i.label}</Text>
+                        <Text strong style={{ fontSize: 12 }}>
+                            {i.format === 'money' ? fmtMoney(i.value, true) : i.format === 'text' ? (i.value || DASH) : fmtNum(i.value)}
+                        </Text>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
+}
+
+function TxnTable({ transactions }) {
+    const cols = [
+        { title: 'Date', dataIndex: 'date', render: fmtDate, width: 110 },
+        { title: 'Type', dataIndex: 'type', width: 140 },
+        {
+            title: 'Number', dataIndex: 'number',
+            render: (n, r) => r.action_url
+                ? <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={(e) => { e.stopPropagation(); visit(r.action_url); }}>{n || DASH}</Button>
+                : (n || DASH),
+        },
+        { title: 'Party', dataIndex: 'party', ellipsis: true, render: (v) => v || DASH },
+        { title: 'Amount', dataIndex: 'amount', align: 'right', render: (v) => fmtMoney(v) },
+        {
+            title: 'Status', dataIndex: 'status', width: 100,
+            render: (s) => <span className="kd-pill">{s || 'posted'}</span>,
+        },
     ];
+
+    return (
+        <Card className="kd-card" styles={{ body: { padding: transactions.length ? 0 : 10 } }}>
+            <div className="kd-card-hdr" style={{ padding: transactions.length ? '10px' : 0, borderBottom: transactions.length ? '1px solid var(--kd-grid)' : 'none' }}>
+                <span className="kd-card-hdr__t">Recent Transactions</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Latest financial documents</Text>
+            </div>
+            {transactions.length > 0 ? (
+                <Table rowKey="key" columns={cols} dataSource={transactions} pagination={false} size="small"
+                    scroll={{ x: 700 }} onRow={(r) => ({ onClick: () => visit(r.action_url), className: r.action_url ? 'kd-row--click' : '' })} />
+            ) : (
+                <EmptyState title="No recent transactions" desc="Posted documents will appear here." compact />
+            )}
+        </Card>
+    );
 }
 
-function normalizeSeries(items) {
-    return Array.isArray(items) ? items.map((item) => Object.fromEntries(Object.entries(item).map(([key, value]) => [key, key === 'date' || key === 'bucket' ? value : toAmount(value)]))) : [];
+function TopPartiesBar({ title, data, color }) {
+    const chartData = data.slice(0, 5).map((d) => ({ ...d, name: truncate(d.name, 18) }));
+
+    return (
+        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
+                <span className="kd-card-hdr__t">{title}</span>
+            </div>
+            <div style={{ height: 150 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 4 }}>
+                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }}
+                            tickFormatter={(v) => compactFmt.format(v)} />
+                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={110}
+                            tick={{ fill: 'var(--kd-text)', fontSize: 11 }} />
+                        <ChartTooltip content={<MoneyTip />} />
+                        <Bar dataKey="amount" name="Amount" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} />
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+        </Card>
+    );
 }
 
-function normalizeAgeing(items) {
-    if (!Array.isArray(items)) return [];
-    return items.map((item) => ({ ...item, amount: toAmount(item.amount), count: toAmount(item.count) }));
+function BankList({ accounts }) {
+    return (
+        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
+                <span className="kd-card-hdr__t">Bank Accounts</span>
+            </div>
+            <div className="kd-bank-list">
+                {accounts.map((a) => (
+                    <div className="kd-bank-row" key={a.key}>
+                        <div style={{ minWidth: 0 }}>
+                            <Text style={{ fontWeight: 600, fontSize: 13 }} ellipsis>{a.bank_name || DASH}</Text>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block' }} ellipsis>
+                                {[a.account_name, a.account_number].filter(Boolean).join(' / ') || DASH}
+                            </Text>
+                        </div>
+                        <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            <Text style={{ fontWeight: 650, fontSize: 13 }}>{fmtMoney(a.balance)}</Text>
+                            {a.currency && <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>{a.currency}</Text>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </Card>
+    );
 }
 
-function normalizeParties(items) {
-    if (!Array.isArray(items)) return [];
-    return items.map((item, index) => ({
-        key: item.key || item.id || `${item.name}-${index}`,
-        name: item.name || item.customer || item.supplier || 'Unknown',
-        amount: toAmount(item.amount || item.total || item.balance),
-    })).filter((item) => item.amount > 0);
+function EmptyState({ title, desc, compact }) {
+    return (
+        <div style={{ minHeight: compact ? 140 : 240, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 16 }}>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false}>
+                <Title level={5} style={{ margin: '0 0 4px' }}>{title}</Title>
+                <Text type="secondary" style={{ fontSize: 12 }}>{desc}</Text>
+            </Empty>
+        </div>
+    );
 }
 
-function sumSeries(items, key) {
-    return Array.isArray(items) ? items.reduce((sum, item) => sum + toAmount(item[key]), 0) : 0;
+function DashSkeleton() {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 10 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
+            <div className="kd-row-2">
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
+            </div>
+            <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
+        </div>
+    );
 }
 
-function severityColor(severity) {
-    if (severity === 'critical') return 'error';
-    if (severity === 'warning') return 'warning';
-    return 'processing';
+function buildModel(data) {
+    const fin = data.financial_summary || {};
+    const sparklines = data.metric_sparklines || {};
+    const chartRaw = data.revenue_expense_profit_chart || [];
+    const cashflowRaw = data.cashflow_chart || [];
+
+    const chartData = chartRaw.map((d) => ({
+        date: d.date,
+        label: d.date ? dayjs(d.date).format('DD MMM') : '',
+        revenue: toNum(d.revenue),
+        expenses: toNum(d.expenses),
+        profit: toNum(d.profit),
+    }));
+
+    const cashflowChart = cashflowRaw.map((d) => ({
+        date: d.date,
+        label: d.date ? dayjs(d.date).format('DD MMM') : '',
+        cash_in: toNum(d.cash_in),
+        cash_out: toNum(d.cash_out),
+        net: toNum(d.net),
+    }));
+
+    const revSparkline = chartRaw.map((d) => ({ date: d.date, value: toNum(d.revenue) }));
+    const expSparkline = chartRaw.map((d) => ({ date: d.date, value: toNum(d.expenses) }));
+    const profitSparkline = (sparklines.net_profit || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
+    const cashSparkline = (sparklines.cash_bank || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
+    const recSparkline = (sparklines.receivables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
+    const paySparkline = (sparklines.payables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
+
+    const kpis = [
+        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: COLORS.indigo, trend: calcTrend(revSparkline), helper: 'This period' },
+        { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: COLORS.amber, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
+        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: COLORS.emerald, trend: calcTrend(profitSparkline) },
+        { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: COLORS.cyan, trend: calcTrend(cashSparkline), helper: 'Available' },
+        { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: COLORS.blue, helper: 'Outstanding' },
+        { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: COLORS.red, helper: 'Outstanding' },
+    ];
+
+    const expenseBreakdown = data.expense_breakdown || [];
+
+    const ageingData = mergeAgeing(data.receivable_ageing, data.payable_ageing);
+
+    const cp = data.cash_position || {};
+    const bankAccounts = Array.isArray(cp.bank_accounts) ? cp.bank_accounts : [];
+    const transactions = Array.isArray(data.recent_transactions) ? data.recent_transactions : [];
+    const topCustomers = Array.isArray(data.top_customers) ? data.top_customers : [];
+    const topSuppliers = Array.isArray(data.top_suppliers) ? data.top_suppliers : [];
+
+    const bizCards = [];
+    const sales = data.sales_summary;
+    if (sales) {
+        bizCards.push({
+            key: 'sales', title: 'Sales', href: '/payment-in/invoices', linkText: 'View invoices',
+            items: [
+                { label: 'Total sales', value: sales.sales_total, format: 'money' },
+                { label: 'Invoices', value: sales.invoice_count },
+                { label: 'Paid', value: sales.paid_amount, format: 'money' },
+                { label: 'Unpaid', value: sales.unpaid_amount, format: 'money' },
+                { label: 'Overdue', value: sales.overdue_amount, format: 'money' },
+            ],
+        });
+    }
+    const purchase = data.purchase_summary;
+    if (purchase) {
+        bizCards.push({
+            key: 'purchase', title: 'Purchases', href: '/payment-out/purchase-bills', linkText: 'View bills',
+            items: [
+                { label: 'Total purchases', value: purchase.purchase_total, format: 'money' },
+                { label: 'Bills', value: purchase.bill_count },
+                { label: 'Paid', value: purchase.paid_amount, format: 'money' },
+                { label: 'Unpaid bills', value: purchase.unpaid_amount, format: 'money' },
+                { label: 'Expense payables', value: purchase.expense_payables, format: 'money' },
+                { label: 'Total payables', value: purchase.total_payables ?? purchase.unpaid_amount, format: 'money' },
+                { label: 'Upcoming', value: purchase.upcoming_payables, format: 'money' },
+            ],
+        });
+    }
+    const cf = data.cashflow_summary;
+    if (cf) {
+        const items = [
+            { label: 'Cash in', value: cf.cash_in, format: 'money' },
+            { label: 'Cash out', value: cf.cash_out, format: 'money' },
+            { label: 'Net cash flow', value: cf.net_cash_flow, format: 'money' },
+        ];
+        if (cf.biggest_inflow) items.push({ label: 'Top inflow', value: cf.biggest_inflow, format: 'text' });
+        if (cf.biggest_outflow) items.push({ label: 'Top outflow', value: cf.biggest_outflow, format: 'text' });
+        bizCards.push({ key: 'cashflow', title: 'Cash Flow', items });
+    }
+    const inv = data.inventory_summary;
+    if (inv) {
+        bizCards.push({
+            key: 'inventory', title: 'Inventory', href: '/inventory/products', linkText: 'View',
+            items: [
+                { label: 'Products', value: inv.total_products },
+                { label: 'Low stock', value: inv.low_stock_items },
+                { label: 'Value', value: inv.inventory_value, format: 'money' },
+                { label: 'Warehouses', value: inv.warehouse_count },
+            ],
+        });
+    }
+    const crm = data.crm_summary;
+    if (crm) {
+        bizCards.push({
+            key: 'crm', title: 'CRM', href: '/crm', linkText: 'View',
+            items: [
+                { label: 'Open leads', value: crm.open_leads },
+                { label: 'Open deals', value: crm.open_deals },
+                { label: 'Pipeline', value: crm.pipeline_value, format: 'money' },
+                { label: 'Won', value: crm.won_value, format: 'money' },
+            ],
+        });
+    }
+    const hrm = data.hrm_summary;
+    if (hrm) {
+        const items = [{ label: 'Employees', value: hrm.active_employees }];
+        if (hrm.on_leave_today > 0) items.push({ label: 'On leave', value: hrm.on_leave_today });
+        if (hrm.attendance_today > 0) items.push({ label: 'Attendance', value: hrm.attendance_today });
+        if (hrm.payroll_this_period > 0) items.push({ label: 'Payroll', value: hrm.payroll_this_period, format: 'money' });
+        bizCards.push({ key: 'hrm', title: 'HRM', href: '/hrm/users', linkText: 'View', items });
+    }
+    const proj = data.project_summary;
+    if (proj) {
+        const items = [
+            { label: 'Active', value: proj.active_projects },
+            { label: 'Completed', value: proj.completed_this_period },
+        ];
+        if (proj.overdue_tasks > 0) items.push({ label: 'Overdue tasks', value: proj.overdue_tasks });
+        if (proj.billing_value > 0) items.push({ label: 'Billing', value: proj.billing_value, format: 'money' });
+        bizCards.push({ key: 'projects', title: 'Projects', href: '/hrm/projects', linkText: 'View', items });
+    }
+
+    return {
+        kpis, chartData, cashflowChart, expenseBreakdown, ageingData, bizCards,
+        transactions, topCustomers, topSuppliers, bankAccounts,
+        approachingProjects: Array.isArray(data.approaching_deadline_projects) ? data.approaching_deadline_projects : [],
+        overdueProjects: Array.isArray(data.overdue_projects) ? data.overdue_projects : [],
+    };
 }
 
-function activityColor(status, token) {
-    if (['approved', 'posted', 'paid', 'success'].includes(status)) return token.colorSuccess;
-    if (['pending', 'draft', 'warning'].includes(status)) return token.colorWarning;
-    if (['failed', 'void', 'cancelled', 'error'].includes(status)) return token.colorError;
-    return token.colorPrimary;
+function ProjectDeadlines({ approaching, overdue }) {
+    const cols = (bucket) => [
+        {
+            title: 'Project',
+            dataIndex: 'name',
+            render: (v, row) => <Button type="link" style={{ padding: 0, fontWeight: 600 }} onClick={() => visit(row.action_url)}>{v || DASH}</Button>,
+        },
+        { title: 'Manager', dataIndex: 'manager', ellipsis: true, render: (v) => v || DASH },
+        { title: 'End Date', dataIndex: 'end_date', width: 120, render: fmtDate },
+        {
+            title: bucket === 'overdue' ? 'Overdue' : 'Time Left',
+            width: 115,
+            render: (_, row) => bucket === 'overdue'
+                ? `${row.days_overdue || 0} day${Number(row.days_overdue) === 1 ? '' : 's'}`
+                : `${row.days_left || 0} day${Number(row.days_left) === 1 ? '' : 's'}`,
+        },
+        { title: 'Status', dataIndex: 'status', width: 120, render: (v) => <Tag>{String(v || DASH).replace(/_/g, ' ')}</Tag> },
+    ];
+
+    const table = (rows, bucket) => rows.length ? (
+        <Table size="small" rowKey="id" pagination={false} dataSource={rows} columns={cols(bucket)} scroll={{ x: 650 }} />
+    ) : (
+        <EmptyState title="No projects" desc="Project deadlines that need attention will appear here." compact />
+    );
+
+    return (
+        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+            <div className="kd-card-hdr">
+                <span className="kd-card-hdr__t">Project Deadlines</span>
+                <Text type="secondary" style={{ fontSize: 12 }}>Approaching and overdue internal project dates</Text>
+            </div>
+            <Tabs
+                size="small"
+                items={[
+                    { key: 'approaching', label: `Approaching Deadline (${approaching.length})`, children: table(approaching, 'approaching') },
+                    { key: 'overdue', label: `Overdue (${overdue.length})`, children: table(overdue, 'overdue') },
+                ]}
+            />
+        </Card>
+    );
+}
+
+function mergeAgeing(receivables = [], payables = []) {
+    const map = new Map();
+    const order = [];
+    (receivables || []).forEach((b) => {
+        map.set(b.bucket, { bucket: b.bucket, receivables: toNum(b.amount), payables: 0 });
+        order.push(b.bucket);
+    });
+    (payables || []).forEach((b) => {
+        const existing = map.get(b.bucket);
+        if (existing) {
+            existing.payables = toNum(b.amount);
+        } else {
+            map.set(b.bucket, { bucket: b.bucket, receivables: 0, payables: toNum(b.amount) });
+            order.push(b.bucket);
+        }
+    });
+    return order.filter((v, i, a) => a.indexOf(v) === i).map((k) => map.get(k));
+}
+
+function truncate(str, max) {
+    if (!str) return DASH;
+    return str.length > max ? str.slice(0, max - 3) + '...' : str;
+}
+
+function Styles({ token }) {
+    return (
+        <style>{`
+            .kd {
+                --kd-bg: ${token.colorBgLayout};
+                --kd-card: ${token.colorBgContainer};
+                --kd-card-muted: ${token.colorFillQuaternary || token.colorFillTertiary};
+                --kd-border: ${token.colorBorderSecondary};
+                --kd-grid: ${token.colorSplit || token.colorBorderSecondary};
+                --kd-text: ${token.colorText};
+                --kd-muted: ${token.colorTextSecondary};
+                --kd-hover: ${token.controlItemBgHover};
+                --kd-shadow: ${token.boxShadowTertiary || '0 1px 2px rgba(0,0,0,.04)'};
+                --kd-radius: ${Math.min(token.borderRadiusLG || 8, 8)}px;
+                --kd-radius-sm: ${Math.min(token.borderRadius || 6, 6)}px;
+                --kd-gap: ${Math.max(token.paddingXS || 8, 8)}px;
+                --kd-pad: ${Math.max(token.paddingSM || 10, 10)}px;
+                min-height: calc(100vh - 96px);
+                background: var(--kd-bg);
+                padding: clamp(var(--kd-pad), 1.4vw, ${token.paddingLG || 18}px);
+            }
+            .kd-wrap {
+                width: min(1440px, 100%);
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                gap: var(--kd-gap);
+            }
+
+            /* Header */
+            .kd-hdr { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--kd-gap); }
+            .kd-hdr__ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--kd-gap); }
+
+            /* Card base */
+            .kd-card {
+                background: var(--kd-card) !important;
+                border: 1px solid var(--kd-border) !important;
+                border-radius: var(--kd-radius) !important;
+                box-shadow: var(--kd-shadow) !important;
+            }
+            .kd-card-hdr {
+                display: flex;
+                flex-direction: column;
+                gap: 1px;
+                margin-bottom: 8px;
+            }
+            .kd-card-hdr__t { font-size: 14px; font-weight: 650; color: var(--kd-text); }
+
+            /* KPI Strip */
+            .kd-kpis {
+                display: grid;
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+                gap: var(--kd-gap);
+            }
+            .kd-kpi { min-height: 90px; overflow: hidden; }
+            .kd-kpi__body {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                min-height: 72px;
+            }
+            .kd-kpi__val {
+                color: var(--kd-text);
+                font-size: clamp(18px, 1.45vw, 22px);
+                font-weight: 700;
+                line-height: 1.15;
+                margin-top: 5px;
+                overflow-wrap: anywhere;
+            }
+            .kd-kpi__foot {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-top: auto;
+                padding-top: 5px;
+            }
+            .kd-kpi__spark {
+                position: absolute;
+                right: 0; bottom: 0;
+                width: 68%; height: 42px;
+                opacity: 0.3;
+                pointer-events: none;
+            }
+
+            /* Chart rows */
+            .kd-row-2, .kd-row-3 {
+                display: grid;
+                grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+                gap: var(--kd-gap);
+                align-items: stretch;
+            }
+
+            /* Business cards */
+            .kd-biz-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+                gap: var(--kd-gap);
+            }
+            .kd-biz__head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-bottom: 6px;
+            }
+            .kd-biz__rows { display: flex; flex-direction: column; gap: 4px; }
+            .kd-biz__row {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 8px;
+            }
+
+            /* Bottom row */
+            .kd-bottom {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap: var(--kd-gap);
+            }
+
+            /* Bank list */
+            .kd-bank-list { display: flex; flex-direction: column; }
+            .kd-bank-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                padding: 6px 0;
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-bank-row:last-child { border-bottom: 0; padding-bottom: 0; }
+
+            /* Table */
+            .kd-pill {
+                display: inline-flex;
+                padding: 1px 8px;
+                border: 1px solid var(--kd-border);
+                border-radius: var(--kd-radius-sm);
+                color: var(--kd-muted);
+                background: var(--kd-card-muted);
+                font-size: 11px;
+                text-transform: capitalize;
+            }
+            .kd-row--click { cursor: pointer; }
+            .kd-row--click:hover td { background: var(--kd-hover) !important; }
+
+            /* Tooltip */
+            .kd-tip {
+                min-width: 170px;
+                padding: 10px;
+                background: var(--kd-card);
+                border: 1px solid var(--kd-border);
+                border-radius: var(--kd-radius);
+                box-shadow: var(--kd-shadow);
+            }
+            .kd-tip__row {
+                display: grid;
+                grid-template-columns: 8px 1fr auto;
+                align-items: center;
+                gap: 6px;
+                margin-top: 4px;
+                font-size: 12px;
+            }
+            .kd-tip__row span:first-child { width: 8px; height: 8px; border-radius: 50%; }
+
+            /* Responsive */
+            @media (max-width: 1180px) {
+                .kd-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+                .kd-row-2, .kd-row-3 { grid-template-columns: minmax(0, 1fr); }
+            }
+            @media (max-width: 768px) {
+                .kd { padding: 12px; }
+                .kd-hdr { flex-direction: column; align-items: flex-start; }
+                .kd-hdr__ctl { width: 100%; }
+                .kd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                .kd-biz-grid { grid-template-columns: minmax(0, 1fr); }
+                .kd-bottom { grid-template-columns: minmax(0, 1fr); }
+            }
+            @media (max-width: 480px) {
+                .kd-kpis { grid-template-columns: minmax(0, 1fr); }
+            }
+        `}</style>
+    );
 }

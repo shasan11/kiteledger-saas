@@ -34,10 +34,10 @@ class TaxClassController extends BaseCrudApiController
 
     protected array $storeRules = [
         'tax_jurisdiction_id' => ['nullable', 'uuid', 'exists:tax_jurisdictions,id'],
-        'country_code' => ['required', 'in:NP,IN,US'],
+        'country_code' => ['required', 'string', 'size:2'],
         'name' => ['required', 'string', 'max:120'],
         'code' => ['required', 'string', 'max:30'],
-        'tax_type' => ['required', 'in:vat,gst,sales_tax,use_tax,withholding,tds,tcs,exempt,zero_rated'],
+        'tax_type' => ['required', 'string', 'max:50'],
         'tax_behavior' => ['nullable', 'in:standard,exempt,zero_rated,reverse_charge,out_of_scope'],
         'description' => ['nullable', 'string'],
         'active' => ['nullable', 'boolean'],
@@ -49,10 +49,10 @@ class TaxClassController extends BaseCrudApiController
     {
         return [
             'tax_jurisdiction_id' => ['sometimes', 'nullable', 'uuid', 'exists:tax_jurisdictions,id'],
-            'country_code' => ['sometimes', 'required', 'in:NP,IN,US'],
+            'country_code' => ['sometimes', 'required', 'string', 'size:2'],
             'name' => ['sometimes', 'required', 'string', 'max:120'],
             'code' => ['sometimes', 'required', 'string', 'max:30'],
-            'tax_type' => ['sometimes', 'required', 'in:vat,gst,sales_tax,use_tax,withholding,tds,tcs,exempt,zero_rated'],
+            'tax_type' => ['sometimes', 'required', 'string', 'max:50'],
             'tax_behavior' => ['sometimes', 'nullable', 'in:standard,exempt,zero_rated,reverse_charge,out_of_scope'],
             'description' => ['sometimes', 'nullable', 'string'],
             'active' => ['sometimes', 'nullable', 'boolean'],
