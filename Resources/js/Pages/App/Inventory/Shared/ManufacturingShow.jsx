@@ -11,6 +11,7 @@ import {
 import dayjs from 'dayjs';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import { RecordMetaPanel } from '@/Components/Transactions';
 
 const { Title, Text } = Typography;
 
@@ -333,12 +334,24 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
           />
         )}
 
-        {/* Notes */}
+        {/* Notes / Description */}
         {record?.notes && (
-          <Card size="small" title={<Text strong>Notes</Text>} style={{ marginTop: 16 }}>
+          <Card size="small" title={<Text strong>Description</Text>} style={{ marginTop: 16 }}>
             <Text>{record.notes}</Text>
           </Card>
         )}
+
+        {/* Remarks */}
+        {record?.remarks && (
+          <Card size="small" title={<Text strong>Remarks</Text>} style={{ marginTop: 16 }}>
+            <Text>{record.remarks}</Text>
+          </Card>
+        )}
+
+        {/* Record Info */}
+        <Card size="small" title={<Text strong>Record Info</Text>} style={{ marginTop: 16 }}>
+          <RecordMetaPanel record={record} />
+        </Card>
       </div>
 
       {/* ── Void Modal ────────────────────────────────────────── */}

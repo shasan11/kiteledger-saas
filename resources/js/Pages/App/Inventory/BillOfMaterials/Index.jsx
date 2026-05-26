@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import * as Yup from 'yup';
 
 import ReusableCrud from '@/Components/ReusableCrud';
+import { branchColumn } from '@/Components/Transactions';
 const { Text } = Typography;
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -515,6 +516,7 @@ export default function Index() {
                 sortField: 'bom_number',
                 render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
             },
+            branchColumn(),
             {
                 title: 'Product',
                 dataIndex: 'product_name',
@@ -827,6 +829,9 @@ export default function Index() {
                 columns={columns}
                 validationSchema={validationSchema}
                 crudInitialValues={initialValues}
+                custom_add={true}
+                custom_add_link={route('inventory.bill-of-materials.add')}
+                editPathBuilder={(record) => route('inventory.bill-of-materials.edit', record.id)}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 32px)"
                 modalWidth={1300}

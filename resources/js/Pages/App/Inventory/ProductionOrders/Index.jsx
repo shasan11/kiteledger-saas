@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
+import { branchColumn } from '@/Components/Transactions';
 import { Head, router } from '@inertiajs/react';
 import { Button, Tag, Typography, message, Tooltip } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -90,6 +91,7 @@ export default function Index({ auth }) {
             sortField: 'code',
             render: (v) => <Text strong>{v?.startsWith('#draft') ? 'DRAFT' : (v || 'DRAFT')}</Text>,
         },
+        branchColumn(),
         {
             title: 'Date',
             dataIndex: 'date',
@@ -562,6 +564,9 @@ export default function Index({ auth }) {
                 anchorFilters={anchorFilters}
                 defaultAnchorKey="approved"
                 anchorSyncWithHash
+                custom_add={true}
+                custom_add_link={route('inventory.production-orders.add')}
+                editPathBuilder={(record) => route('inventory.production-orders.edit', record.id)}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 24px)"
                 searchParam="search"

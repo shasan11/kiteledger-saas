@@ -6,6 +6,7 @@ import { DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ReusableCrud';
+import { branchColumn } from '@/Components/Transactions';
 import axios from 'axios';
 const { Text } = Typography;
 
@@ -840,6 +841,7 @@ export default function Index() {
                 sortField: 'code',
                 render: (value) => <Text strong>{value || 'DRAFT'}</Text>,
             },
+            branchColumn(),
             {
                 title: 'Date',
                 dataIndex: 'date',
@@ -1236,6 +1238,9 @@ export default function Index() {
                 columns={columns}
                 validationSchema={validationSchema}
                 crudInitialValues={initialValues}
+                custom_add={true}
+                custom_add_link={route('inventory.production-journals.add')}
+                editPathBuilder={(record) => route('inventory.production-journals.edit', record.id)}
                 form_ui="drawer"
                 drawerWidth="calc(100vw - 32px)"
                 modalWidth={1300}

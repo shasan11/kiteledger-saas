@@ -32,6 +32,8 @@ class ProductionJournalController extends BaseCrudApiController
         'productionExpenses.costTerm',
         'byProducts.product',
         'journalVoucher',
+        'userAdd',
+        'approvedBy',
     ];
     protected array $relationDetails = [
         'branch' => 'branch_id',
@@ -137,6 +139,7 @@ class ProductionJournalController extends BaseCrudApiController
         'finished_goods_cost' => ['nullable', 'numeric', 'min:0'],
         'cost_per_unit' => ['nullable', 'numeric', 'min:0'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
         'approved' => ['nullable', 'boolean'],
         'active' => ['nullable', 'boolean'],
@@ -160,6 +163,7 @@ class ProductionJournalController extends BaseCrudApiController
             'finished_goods_cost' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'cost_per_unit' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
             'approved' => ['sometimes', 'nullable', 'boolean'],
             'active' => ['sometimes', 'nullable', 'boolean'],
