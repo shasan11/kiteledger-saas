@@ -126,6 +126,8 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         $data['items'] = $data['items'] ?? $data['inventory_adjustment_lines'] ?? [];
+        $data['purchase_order'] = $data['purchase_order'] ?? $data['purchaseOrder'] ?? null;
+        $data['purchase_order_id'] = ($record->source_type === 'purchase_order') ? $record->source_id : null;
         $data['stock_posting_status'] = $record->status === 'cancelled'
             ? 'Cancelled/Void'
             : ((bool) $record->stock_posted ? 'Posted to Warehouse Stock' : 'Draft');

@@ -34,6 +34,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
     const [bankChargesEnabled, setBankChargesEnabled] = useState(false);
     const [tdsEnabled, setTdsEnabled] = useState(false);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
 
     useEffect(() => {
         if (initialRecord) {
@@ -67,9 +68,38 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                 allocated_amount: toNumber(l.allocated_amount),
             })));
         } else {
+            try {
+                const raw = sessionStorage.getItem('kiteledger_supplier_payment_prefill');
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    form.setFieldsValue({
+                        payment_no: '#DRAFT',
+                        payment_date: dayjs(),
+                        contact_id: p.contact_id || null,
+                        currency_id: p.currency_id || null,
+                        exchange_rate: toNumber(p.exchange_rate) || 1,
+                        amount: toNumber(p.amount),
+                        reference: p._source_no || '',
+                    });
+                    if (Array.isArray(p.items)) {
+                        setItems(p.items.map((l) => ({
+                            _key: Math.random().toString(36).slice(2),
+                            purchase_bill_id: l.purchase_bill_id ?? l.purchase_bill?.id ?? null,
+                            purchase_bill_detail: l.purchase_bill || l.purchase_bill_id_detail || null,
+                            allocated_amount: toNumber(l.allocated_amount),
+                        })));
+                    }
+                    sessionStorage.removeItem('kiteledger_supplier_payment_prefill');
+                    return;
+                }
+            } catch {}
             form.setFieldsValue({ payment_date: dayjs(), exchange_rate: 1, amount: 0, payment_no: '#DRAFT' });
         }
     }, [initialRecord, form]);
+
+    useEffect(() => {
+        if (!initialRecord) applyDefaultCurrency(form, defaultCurrency);
+    }, [defaultCurrency, form, initialRecord]);
 
     const updateItem = (idx, patch) => setItems((p) => { const n = [...p]; n[idx] = { ...n[idx], ...patch }; return n; });
     const addItem = () => setItems((p) => [...p, emptyAlloc()]);
@@ -194,7 +224,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
-                            <Form.Item label="Payment Account" name="account_id">
+                            <Form.Item label="Payment Account" name="account_id" rules={[{ required: true, message: 'Payment account is required' }]}>
                                 <BackendSelect fkUrl="/api/accounts/" labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')} placeholder="Select account" />
                             </Form.Item>
                         </Col>

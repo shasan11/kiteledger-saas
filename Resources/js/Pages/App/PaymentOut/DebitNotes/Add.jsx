@@ -31,6 +31,7 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
   const [topError, setTopError] = useState(null);
   const [purchaseBillId, setPurchaseBillId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
   const { defaultCurrency } = usePage().props;
 
@@ -65,6 +66,10 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
       }
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onPickPB = (rec) => {
     if (!rec) return;

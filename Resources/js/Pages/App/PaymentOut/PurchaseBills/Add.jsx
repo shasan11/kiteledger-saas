@@ -31,6 +31,7 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
   const [topError, setTopError] = useState(null);
   const [purchaseOrderId, setPurchaseOrderId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
   const { defaultCurrency } = usePage().props;
 
@@ -66,6 +67,10 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
       }
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onPickPO = (rec) => {
     if (!rec) return;

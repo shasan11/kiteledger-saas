@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Form, Input, InputNumber, DatePicker, Button, Space, Row, Col, Table, Select, Typography, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Form, Input, InputNumber, DatePicker, Button, Space, Row, Col, Table, Select, Typography, message, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -35,6 +35,9 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const [purchaseOrderId, setPurchaseOrderId] = useState(null);
+    const [purchaseOrderDetail, setPurchaseOrderDetail] = useState(null);
+    const [loadingPurchaseOrder, setLoadingPurchaseOrder] = useState(false);
     const warehouseId = Form.useWatch('warehouse_id', form);
 
     const fetchWarehouseItem = async (productId, selectedWarehouseId) => {
@@ -64,6 +67,10 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                 notes: initialRecord.notes || '',
                 remarks: initialRecord.remarks || '',
             });
+            if (initialRecord.source_type === 'purchase_order' || initialRecord.purchase_order_id) {
+                setPurchaseOrderId(initialRecord.source_id || initialRecord.purchase_order_id || null);
+                setPurchaseOrderDetail(initialRecord.purchase_order || initialRecord.purchaseOrder || null);
+            }
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
                 setItems(lines.map((l) => ({
@@ -78,6 +85,37 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                 })));
             }
         } else {
+            const raw = sessionStorage.getItem('kiteledger_inventory_adjustment_prefill');
+            if (raw) {
+                try {
+                    const prefill = JSON.parse(raw);
+                    setPurchaseOrderId(prefill.purchase_order_id || prefill.source_id || prefill._source_id || null);
+                    setPurchaseOrderDetail(prefill.purchase_order_detail || null);
+                    form.setFieldsValue({
+                        adjustment_date: dayjs(),
+                        adjustment_no: '#DRAFT',
+                        reason: prefill.reason || '',
+                        notes: prefill.notes || '',
+                    });
+                    const prefillLines = Array.isArray(prefill.items) ? prefill.items : [];
+                    if (prefillLines.length) {
+                        setItems(prefillLines.map((line) => ({
+                            _key: Math.random().toString(36).slice(2),
+                            product_id: line.product_id ?? line.product?.id ?? null,
+                            product_detail: line.product_detail || line.product || null,
+                            adjustment_type: line.adjustment_type || 'increase',
+                            qty: toNumber(line.qty || line.quantity),
+                            unit_cost: toNumber(line.unit_cost ?? line.unit_price ?? 0),
+                            remarks: line.remarks || '',
+                        })));
+                    }
+                    sessionStorage.removeItem('kiteledger_inventory_adjustment_prefill');
+                    return;
+                } catch {
+                    sessionStorage.removeItem('kiteledger_inventory_adjustment_prefill');
+                }
+            }
+
             form.setFieldsValue({ adjustment_date: dayjs(), adjustment_no: '#DRAFT' });
         }
     }, [initialRecord, form]);
@@ -124,6 +162,54 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
             };
         }));
         setItems(next);
+    };
+
+    const loadFromPurchaseOrder = async () => {
+        if (!purchaseOrderId) {
+            message.warning('Select a purchase order first.');
+            return;
+        }
+
+        setLoadingPurchaseOrder(true);
+        try {
+            const { data: purchaseOrder } = await axios.get(api(`/api/purchase-orders/${purchaseOrderId}/`), {
+                headers: authHeaders(),
+            });
+            setPurchaseOrderDetail(purchaseOrder);
+
+            const sourceLines = Array.isArray(purchaseOrder.items)
+                ? purchaseOrder.items
+                : Array.isArray(purchaseOrder.purchaseOrderLines)
+                    ? purchaseOrder.purchaseOrderLines
+                    : Array.isArray(purchaseOrder.purchase_order_lines)
+                        ? purchaseOrder.purchase_order_lines
+                        : [];
+
+            const nextLines = sourceLines
+                .filter((line) => line.product_id || line.product?.id)
+                .map((line) => ({
+                    _key: Math.random().toString(36).slice(2),
+                    product_id: line.product_id ?? line.product?.id ?? null,
+                    product_detail: line.product || line.product_id_detail || null,
+                    adjustment_type: 'increase',
+                    qty: toNumber(line.qty || line.quantity),
+                    unit_cost: toNumber(line.unit_price ?? line.purchase_price ?? line.product?.purchase_price ?? 0),
+                    remarks: line.description || 'Loaded from purchase order',
+                }));
+
+            if (!nextLines.length) {
+                message.warning('This purchase order has no product lines to load.');
+                return;
+            }
+
+            setItems(nextLines);
+            form.setFieldValue('reason', `Stock received from PO ${purchaseOrder.purchase_order_no || ''}`.trim());
+            message.success('Purchase order items loaded.');
+        } catch (error) {
+            message.error(error?.response?.data?.message || 'Failed to load purchase order.');
+        } finally {
+            setLoadingPurchaseOrder(false);
+        }
     };
 
     const totalItems = items.filter((line) => line.product_id).length;
@@ -290,6 +376,39 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                         <Col xs={24} sm={12} md={16}>
                             <Form.Item label="Reason" name="reason">
                                 <Input placeholder="Reason for adjustment" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Link Purchase Order">
+                                <Row gutter={8}>
+                                    <Col flex="1">
+                                        <BackendSelect
+                                            value={purchaseOrderId}
+                                            detailValue={purchaseOrderDetail}
+                                            fkUrl="/api/purchase-orders/"
+                                            labelKey="purchase_order_no"
+                                            placeholder="Search purchase order"
+                                            extraParams={{ active: true }}
+                                            onChange={(value, raw) => {
+                                                setPurchaseOrderId(value);
+                                                setPurchaseOrderDetail(raw);
+                                            }}
+                                            allowClear={!isEdit}
+                                        />
+                                    </Col>
+                                    <Col>
+                                        <Tooltip title="Load PO product lines as stock increase rows">
+                                            <Button
+                                                icon={<DownloadOutlined />}
+                                                onClick={loadFromPurchaseOrder}
+                                                loading={loadingPurchaseOrder}
+                                                disabled={!purchaseOrderId || isApproved(initialRecord)}
+                                            >
+                                                Load PO Items
+                                            </Button>
+                                        </Tooltip>
+                                    </Col>
+                                </Row>
                             </Form.Item>
                         </Col>
                         <Col xs={24}>

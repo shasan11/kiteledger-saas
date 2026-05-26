@@ -36,6 +36,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
   const [deletedItemIds, setDeletedItemIds] = useState([]);
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
   const { defaultCurrency } = usePage().props;
 
@@ -70,6 +71,10 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
       }
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onSubmit = async () => {
     setTopError(null);

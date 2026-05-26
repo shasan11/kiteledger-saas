@@ -138,6 +138,8 @@ abstract class BaseCrudApiController extends Controller
             $this->rulesForStore($request)
         );
 
+        $validated = $this->applyBranchToCreatePayload($validated, $request);
+
         $this->assertFiscalYearWriteAllowed($validated, $request);
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
@@ -276,6 +278,8 @@ abstract class BaseCrudApiController extends Controller
 
                 continue;
             }
+
+            $validated = $this->applyBranchToCreatePayload($validated, $rowRequest);
 
             $this->assertFiscalYearWriteAllowed($validated, $rowRequest);
             $validatedRows[] = $validated;
@@ -2177,6 +2181,10 @@ abstract class BaseCrudApiController extends Controller
 
             $permissionName = "{$this->permissionPrefix}.{$crudPermission}";
 
+            if ($this->userHasAdministrativeBypass($user)) {
+                return;
+            }
+
             abort_unless(
                 method_exists($user, 'can') && $user->can($permissionName),
                 403,
@@ -2215,6 +2223,46 @@ abstract class BaseCrudApiController extends Controller
         $filterValue = $request->input("filter.{$key}");
 
         return $filterValue !== null ? $filterValue : $default;
+    }
+
+    protected function userHasAdministrativeBypass(mixed $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        $roles = [
+            'Super Admin',
+            'Company Owner',
+            'Admin',
+            'Branch Admin',
+            'Full Access User',
+            'Full Access Admin',
+            'super-admin',
+            'admin',
+        ];
+
+        $legacyRole = method_exists($user, 'relationLoaded') && $user->relationLoaded('role')
+            ? $user->getRelation('role')
+            : ($user->role ?? null);
+
+        if ($legacyRole && in_array((string) $legacyRole->name, $roles, true)) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasAnyRole')) {
+            try {
+                return $user->hasAnyRole($roles);
+            } catch (Throwable) {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     protected function validateCompat(array $data, array $rules): array

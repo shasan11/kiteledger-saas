@@ -59,6 +59,12 @@ class BranchScopeService
             return true;
         }
 
+        $legacyRole = $user->relationLoaded('role') ? $user->getRelation('role') : ($user->role ?? null);
+
+        if ($legacyRole && in_array((string) $legacyRole->name, self::ABOVE_BRANCH_ROLES, true)) {
+            return true;
+        }
+
         if (method_exists($user, 'hasAnyRole')) {
             try {
                 if ($user->hasAnyRole(self::ABOVE_BRANCH_ROLES)) {

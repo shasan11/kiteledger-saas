@@ -11,6 +11,7 @@ import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomple
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, getTaxJurisdictionId, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -38,6 +39,7 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
   const [topError, setTopError] = useState(null);
   const [sourceQuotationId, setSourceQuotationId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
   const { defaultCurrency } = usePage().props;
 
@@ -75,6 +77,10 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
       }
     }
   }, [initialRecord]);
+
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+  }, [defaultCurrency, form, initialRecord]);
 
   const onPickQuotation = (rec) => {
     if (!rec) return;

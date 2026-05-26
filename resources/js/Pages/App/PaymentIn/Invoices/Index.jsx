@@ -54,10 +54,11 @@ export default function InvoicesIndex(props) {
                     style: { cursor: 'pointer' },
                 })}
                 anchorFilters={[
-                    { key: 'approved', label: 'Approved', params: { approved: true } },
+                    { key: 'all', label: 'All', params: {} },
                     { key: 'draft', label: 'Draft', params: { approved: false } },
+                    { key: 'approved', label: 'Approved', params: { approved: true } },
                 ]}
-                defaultAnchorKey="approved"
+                defaultAnchorKey="all"
                 anchorSyncWithHash
             />
         </AuthenticatedLayout>

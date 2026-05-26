@@ -553,6 +553,26 @@ const buildBillPrefillFromPO = (record) => ({
     })),
 });
 
+const buildInventoryAdjustmentPrefillFromPO = (record) => ({
+    _source: 'purchase_order',
+    _source_id: record?.id,
+    _source_no: record?.purchase_order_no,
+    source_type: 'purchase_order',
+    source_id: record?.id,
+    purchase_order_id: record?.id,
+    purchase_order_detail: record,
+    reason: `Stock received from PO ${record?.purchase_order_no || ''}`.trim(),
+    notes: record?.notes ?? '',
+    items: asArray(getLines(record, 'purchase_order')).map((line) => ({
+        product_id: line?.product?.id ?? line?.product_id ?? null,
+        product_detail: line?.product ?? line?.product_id_detail ?? null,
+        adjustment_type: 'increase',
+        qty: numeric(firstPresent(line?.qty, line?.quantity, 1)),
+        unit_cost: numeric(firstPresent(line?.unit_price, line?.rate, line?.product?.purchase_price, 0)),
+        remarks: line?.description || 'Loaded from purchase order',
+    })),
+});
+
 const buildSupplierPaymentPrefillFromBill = (record) => {
     const total = numeric(firstPresent(record?.grand_total, record?.total, 0));
     const balanceDue = numeric(firstPresent(record?.balance_due, total));
@@ -816,6 +836,7 @@ function HeaderBlock({
     recordId,
     documentType,
     onConvertToBill,
+    onCreateInventoryAdjustment,
     onProcessPayment,
 }) {
     const normalizedType = normalizeDocumentType(documentType);
@@ -845,17 +866,28 @@ function HeaderBlock({
                 </div>
                 <Space wrap>
                     {normalizedType === 'purchase_order' && isApproved && (
-                        <Tooltip title="Create a Purchase Bill from this Purchase Order">
-                            <Button
-                                type="primary"
-                                ghost
-                                icon={<ArrowRightOutlined />}
-                                disabled={loading || !record}
-                                onClick={onConvertToBill}
-                            >
-                                Convert to Bill
-                            </Button>
-                        </Tooltip>
+                        <>
+                            <Tooltip title="Create an Inventory Adjustment from this Purchase Order">
+                                <Button
+                                    icon={<ArrowRightOutlined />}
+                                    disabled={loading || !record}
+                                    onClick={onCreateInventoryAdjustment}
+                                >
+                                    Create Stock Adjustment
+                                </Button>
+                            </Tooltip>
+                            <Tooltip title="Create a Purchase Bill from this Purchase Order">
+                                <Button
+                                    type="primary"
+                                    ghost
+                                    icon={<ArrowRightOutlined />}
+                                    disabled={loading || !record}
+                                    onClick={onConvertToBill}
+                                >
+                                    Convert to Bill
+                                </Button>
+                            </Tooltip>
+                        </>
                     )}
                     {normalizedType === 'purchase_bill' && isApproved && (
                         <Tooltip title="Process payment for this Purchase Bill">
@@ -1285,6 +1317,21 @@ export default function PaymentOutRecordShow({
         }
     };
 
+    const handleCreateInventoryAdjustment = () => {
+        if (!record) return;
+        try {
+            sessionStorage.setItem(
+                'kiteledger_inventory_adjustment_prefill',
+                JSON.stringify(buildInventoryAdjustmentPrefillFromPO(record))
+            );
+        } catch {}
+        if (typeof route === 'function') {
+            router.visit(route('inventory.adjustments.add'));
+        } else {
+            router.visit('/inventory/adjustments/add');
+        }
+    };
+
     const handleProcessPayment = () => {
         if (!record) return;
         try {
@@ -1412,6 +1459,7 @@ export default function PaymentOutRecordShow({
                     recordId={id}
                     documentType={normalizedDocumentType}
                     onConvertToBill={handleConvertToBill}
+                    onCreateInventoryAdjustment={handleCreateInventoryAdjustment}
                     onProcessPayment={handleProcessPayment}
                 />
             }

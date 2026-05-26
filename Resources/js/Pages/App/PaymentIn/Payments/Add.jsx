@@ -9,6 +9,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs, money } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const newKey = () => Math.random().toString(36).slice(2);
@@ -35,6 +36,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
         account_id: initialRecord.account_id ?? initialRecord.account?.id ?? null,
         payment_method: initialRecord.payment_method || 'cash',
         currency_id: initialRecord.currency_id ?? initialRecord.currency?.id ?? null,
+        exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         amount: toNumber(initialRecord.amount),
         bank_charges_account_id: initialRecord.bank_charges_account_id ?? initialRecord.bank_charges_account?.id ?? null,
         bank_charges: toNumber(initialRecord.bank_charges),
@@ -67,6 +69,10 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
     }
   }, [initialRecord]);
 
+  useEffect(() => {
+    if (!initialRecord) applyDefaultCurrency(form, defaultCurrency);
+  }, [defaultCurrency, form, initialRecord]);
+
   const updateAlloc = (idx, patch) => setAllocations((p) => p.map((r, i) => i === idx ? { ...r, ...patch } : r));
   const addAlloc = () => setAllocations((p) => [...p, { _key: newKey(), invoice_id: null, invoice_detail: null, allocated_amount: 0 }]);
   const removeAlloc = (idx) => setAllocations((prev) => {
@@ -90,6 +96,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
       contact_id: asId(v.contact_id),
       account_id: asId(v.account_id),
       currency_id: asId(v.currency_id),
+      exchange_rate: toNumber(v.exchange_rate) || 1,
       amount: toNumber(v.amount),
       payment_method: nullIfEmpty(v.payment_method),
       bank_charges_account_id: bankApplicable ? asId(v.bank_charges_account_id) : null,
@@ -129,13 +136,18 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
             </Col>
             <Col xs={24} md={8}><Form.Item label="Payment No" name="payment_no"><Input disabled /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Payment Date" name="payment_date" rules={[{ required: true, message: 'Date is required' }]}><DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} /></Form.Item></Col>
-            <Col xs={24} sm={12} md={8}><Form.Item label="Payment Account" name="account_id"><BackendSelect fkUrl="/api/accounts/" placeholder="Select account" allowClear /></Form.Item></Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Payment Account" name="account_id" rules={[{ required: true, message: 'Payment account is required' }]}>
+                <BackendSelect fkUrl="/api/accounts/" placeholder="Select account" />
+              </Form.Item>
+            </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="Payment Method" name="payment_method">
                 <Select options={[{ value: 'cash', label: 'Cash' }, { value: 'cheque', label: 'Cheque' }, { value: 'bank_transfer', label: 'Bank Transfer' }, { value: 'online', label: 'Online' }]} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Currency" name="currency_id"><BackendSelect fkUrl="/api/currencies/" placeholder="Currency" labelFn={(r) => r?.name || r?.code || ''} allowClear /></Form.Item></Col>
+            <Col xs={24} sm={12} md={8}><Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}><InputNumber min={0} step={0.0001} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Amount" name="amount" rules={[{ required: true, message: 'Amount required' }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Reference" name="reference"><Input placeholder="Reference" /></Form.Item></Col>
           </Row>

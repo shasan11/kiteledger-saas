@@ -16,7 +16,7 @@ use App\Models\{
     Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
     Contact, Product, Lead, Deal,
     PosCashMovement, PosReturn, PosSale, PosShift,
-    ProductionOrder, ProductionJournal
+    ProductionOrder, ProductionJournal, WarehouseTransfer
 };
 
 use App\Observers\{
@@ -33,7 +33,8 @@ use App\Observers\{
     ContactObserver, ProductObserver, LeadObserver, DealObserver,
     PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver,
     SubsequentJournalVoucherObserver,
-    ProductionOrderObserver, ProductionJournalObserver
+    ProductionOrderObserver, ProductionJournalObserver,
+    AssignsDefaultBranchObserver
 };
 
 class AppServiceProvider extends ServiceProvider
@@ -87,6 +88,33 @@ class AppServiceProvider extends ServiceProvider
 
         CashTransfer::observe(CashTransferObserver::class);
         CashTransferLine::observe(CashTransferLineObserver::class);
+
+        foreach ([
+            CashTransfer::class,
+            JournalVoucher::class,
+            ChequeRegister::class,
+            Quotation::class,
+            SalesOrder::class,
+            ProformaInvoice::class,
+            Invoice::class,
+            CustomerPayment::class,
+            SalesReturn::class,
+            PurchaseOrder::class,
+            PurchaseBill::class,
+            Expense::class,
+            DebitNote::class,
+            SupplierPayment::class,
+            InventoryAdjustment::class,
+            WarehouseTransfer::class,
+            PosShift::class,
+            PosSale::class,
+            PosCashMovement::class,
+            PosReturn::class,
+            ProductionOrder::class,
+            ProductionJournal::class,
+        ] as $branchAssignedTransaction) {
+            $branchAssignedTransaction::observe(AssignsDefaultBranchObserver::class);
+        }
 
         JournalVoucher::observe(JournalVoucherObserver::class);
         JournalVoucherLine::observe(JournalVoucherLineObserver::class);

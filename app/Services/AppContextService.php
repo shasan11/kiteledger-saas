@@ -117,6 +117,10 @@ class AppContextService
 
     public function canOverrideFiscalYearLock(?User $user): bool
     {
+        if ($this->hasAdministrativeBypass($user)) {
+            return true;
+        }
+
         return $this->userCan($user, ['fiscal-years.override-lock', 'fiscal_years.override_lock', 'settings.fiscal-years.override-lock']);
     }
 
@@ -277,6 +281,44 @@ class AppContextService
                 }
             } catch (\Throwable) {
                 //
+            }
+        }
+
+        return false;
+    }
+
+    private function hasAdministrativeBypass(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (!empty($user->is_super_admin)) {
+            return true;
+        }
+
+        $roles = [
+            'Super Admin',
+            'Company Owner',
+            'Admin',
+            'Branch Admin',
+            'Full Access User',
+            'Full Access Admin',
+            'super-admin',
+            'admin',
+        ];
+
+        $legacyRole = $user->relationLoaded('role') ? $user->getRelation('role') : ($user->role ?? null);
+
+        if ($legacyRole && in_array((string) $legacyRole->name, $roles, true)) {
+            return true;
+        }
+
+        if (method_exists($user, 'hasAnyRole')) {
+            try {
+                return $user->hasAnyRole($roles);
+            } catch (\Throwable) {
+                return false;
             }
         }
 
