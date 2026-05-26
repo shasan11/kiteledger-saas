@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\Account;
+use App\Models\Branch;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\JournalVoucher;
@@ -1218,6 +1219,7 @@ class ParallelJournalVoucherService
         float|int $total
     ): array {
         $currencyId = $currencyId ?? Currency::where('is_base', true)->first()?->id;
+        $branchId = $branchId ?: $this->fallbackBranchId();
 
         $payload = [
             'voucher_date' => $date,
@@ -1245,6 +1247,18 @@ class ParallelJournalVoucherService
         }
 
         return $payload;
+    }
+
+    protected function fallbackBranchId(): ?string
+    {
+        return Branch::query()
+            ->where('active', true)
+            ->where('is_head_office', true)
+            ->value('id')
+            ?: Branch::query()
+                ->where('active', true)
+                ->oldest()
+                ->value('id');
     }
 
     protected function resolveJournalExchangeRate(?Model $sourceModel, ?string $currencyId): float
@@ -1467,7 +1481,6 @@ class ParallelJournalVoucherService
         return $lines;
     }
 }
-
 
 
 

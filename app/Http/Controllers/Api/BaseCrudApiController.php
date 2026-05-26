@@ -138,6 +138,8 @@ abstract class BaseCrudApiController extends Controller
             $this->rulesForStore($request)
         );
 
+        $validated = $this->applyBranchToCreatePayload($validated, $request);
+
         $this->assertFiscalYearWriteAllowed($validated, $request);
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
@@ -276,6 +278,8 @@ abstract class BaseCrudApiController extends Controller
 
                 continue;
             }
+
+            $validated = $this->applyBranchToCreatePayload($validated, $rowRequest);
 
             $this->assertFiscalYearWriteAllowed($validated, $rowRequest);
             $validatedRows[] = $validated;

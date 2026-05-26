@@ -9,6 +9,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { getJson, postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const authHeaders = () => {
@@ -55,6 +56,7 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
         output_quantity: toNumber(initialRecord.output_quantity) || 1,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       setBomId(initialRecord.bill_of_material_id || null);
 
@@ -174,6 +176,7 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
       output_quantity: toNumber(v.output_quantity) || 1,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       raw_materials: validMats.map((m) => ({
         ...(m.id ? { id: m.id } : {}),
         product_id: asId(m.product_id),
@@ -369,8 +372,8 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
           </Row>
         </FormSection>
 
-        <FormSection title="Notes">
-          <Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

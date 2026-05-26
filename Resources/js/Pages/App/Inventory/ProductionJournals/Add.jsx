@@ -9,6 +9,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { getJson, postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const authHeaders = () => {
@@ -48,6 +49,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
         warehouse_id: initialRecord.warehouse_id ?? initialRecord.warehouse?.id ?? null,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       setPoId(initialRecord.production_order_id || null);
 
@@ -164,6 +166,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
       warehouse_id: asId(v.warehouse_id),
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       raw_materials: validMats.map((m) => ({
         ...(m.id ? { id: m.id } : {}),
         product_id: asId(m.product_id),
@@ -348,8 +351,8 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
           />
         </FormSection>
 
-        <FormSection title="Notes">
-          <Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

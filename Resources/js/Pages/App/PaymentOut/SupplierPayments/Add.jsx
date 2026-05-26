@@ -222,7 +222,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
-                            <Form.Item label="Payment Account" name="account_id">
+                            <Form.Item label="Payment Account" name="account_id" rules={[{ required: true, message: 'Payment account is required' }]}>
                                 <BackendSelect fkUrl="/api/accounts/" labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')} placeholder="Select account" />
                             </Form.Item>
                         </Col>

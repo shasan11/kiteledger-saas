@@ -8,6 +8,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyRaw = () => ({ _key: newKey(), product_id: null, product_detail: null, quantity: 1, unit_code: '', wastage_percent: 0, notes: '' });
@@ -39,6 +40,7 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
         manufacture_on_every_sale: !!initialRecord.manufacture_on_every_sale,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       setActive(initialRecord.active !== false);
 
@@ -117,6 +119,7 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
       manufacture_on_every_sale: !!v.manufacture_on_every_sale,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       active,
       raw_materials: validRaw.map((l) => ({
         ...(l.id ? { id: l.id } : {}),
@@ -265,8 +268,8 @@ export default function BomAdd({ initialRecord = null, isEdit = false, recordId 
           />
         </FormSection>
 
-        <FormSection title="Notes">
-          <Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

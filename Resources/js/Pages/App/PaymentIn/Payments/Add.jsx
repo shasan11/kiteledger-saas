@@ -153,7 +153,11 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
             </Col>
             <Col xs={24} md={8}><Form.Item label="Payment No" name="payment_no"><Input disabled /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Payment Date" name="payment_date" rules={[{ required: true, message: 'Date is required' }]}><DatePicker format="DD-MM-YYYY" style={{ width: '100%' }} /></Form.Item></Col>
-            <Col xs={24} sm={12} md={8}><Form.Item label="Payment Account" name="account_id"><BackendSelect fkUrl="/api/accounts/" placeholder="Select account" allowClear /></Form.Item></Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Payment Account" name="account_id" rules={[{ required: true, message: 'Payment account is required' }]}>
+                <BackendSelect fkUrl="/api/accounts/" placeholder="Select account" />
+              </Form.Item>
+            </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="Payment Method" name="payment_method">
                 <Select options={[{ value: 'cash', label: 'Cash' }, { value: 'cheque', label: 'Cheque' }, { value: 'bank_transfer', label: 'Bank Transfer' }, { value: 'online', label: 'Online' }]} />
