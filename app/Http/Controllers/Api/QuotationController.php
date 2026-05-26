@@ -29,6 +29,8 @@ class QuotationController extends BaseCrudApiController
         'deal',
         'creditTerm',
         'currency',
+        'userAdd',
+        'approvedBy',
     ];
 
     protected array $relationDetails = [
@@ -276,6 +278,10 @@ class QuotationController extends BaseCrudApiController
             'nullable',
             'string',
         ],
+        'remarks' => [
+            'nullable',
+            'string',
+        ],
         'status' => [
             'nullable',
             'in:draft,sent,accepted,rejected,expired,cancelled',
@@ -339,6 +345,11 @@ class QuotationController extends BaseCrudApiController
                 'gt:0',
             ],
             'notes' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+            'remarks' => [
                 'sometimes',
                 'nullable',
                 'string',

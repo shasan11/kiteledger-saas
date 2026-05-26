@@ -60,6 +60,7 @@ export default function WarehouseTransferAdd({ initialRecord = null, isEdit = fa
                 from_warehouse_id: initialRecord.from_warehouse_id ?? initialRecord.from_warehouse?.id ?? null,
                 to_warehouse_id: initialRecord.to_warehouse_id ?? initialRecord.to_warehouse?.id ?? null,
                 notes: initialRecord.notes || '',
+                remarks: initialRecord.remarks || '',
             });
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
@@ -133,6 +134,7 @@ export default function WarehouseTransferAdd({ initialRecord = null, isEdit = fa
             from_warehouse_id: v.from_warehouse_id,
             to_warehouse_id: v.to_warehouse_id,
             notes: nullIfEmpty(v.notes),
+            remarks: nullIfEmpty(v.remarks),
             items: items.map((l) => ({
                 ...(l.id ? { id: l.id } : {}),
                 product_id: l.product_id,
@@ -264,6 +266,11 @@ export default function WarehouseTransferAdd({ initialRecord = null, isEdit = fa
                         <Col xs={24}>
                             <Form.Item label="Notes" name="notes">
                                 <Input.TextArea rows={2} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Remarks" name="remarks">
+                                <Input.TextArea rows={2} placeholder="Internal remarks (optional)" />
                             </Form.Item>
                         </Col>
                     </Row>

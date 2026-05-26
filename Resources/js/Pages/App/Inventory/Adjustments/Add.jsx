@@ -62,6 +62,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                 warehouse_id: initialRecord.warehouse_id ?? initialRecord.warehouse?.id ?? null,
                 reason: initialRecord.reason || '',
                 notes: initialRecord.notes || '',
+                remarks: initialRecord.remarks || '',
             });
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
@@ -142,6 +143,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
             warehouse_id: v.warehouse_id || null,
             reason: nullIfEmpty(v.reason),
             notes: nullIfEmpty(v.notes),
+            remarks: nullIfEmpty(v.remarks),
             items: items.map((l) => ({
                 ...(l.id ? { id: l.id } : {}),
                 product_id: l.product_id,
@@ -293,6 +295,11 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                         <Col xs={24}>
                             <Form.Item label="Notes" name="notes">
                                 <Input.TextArea rows={2} placeholder="Notes" />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24}>
+                            <Form.Item label="Remarks" name="remarks">
+                                <Input.TextArea rows={2} placeholder="Internal remarks (optional)" />
                             </Form.Item>
                         </Col>
                     </Row>

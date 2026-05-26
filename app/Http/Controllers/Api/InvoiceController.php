@@ -23,7 +23,7 @@ class InvoiceController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'invoice_date';
 
-    protected array $relations = ['branch', 'project', 'contact', 'warehouse', 'currency', 'customerPaymentLines', 'customerPaymentLines.customerPayment'];
+    protected array $relations = ['branch', 'project', 'contact', 'warehouse', 'currency', 'userAdd', 'approvedBy', 'customerPaymentLines', 'customerPaymentLines.customerPayment'];
     protected array $relationDetails = ['branch' => 'branch_id', 'project' => 'project_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['invoice_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'project_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
@@ -88,6 +88,7 @@ class InvoiceController extends BaseCrudApiController
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'paid_total' => ['nullable', 'numeric', 'min:0'],
         'balance_due' => ['nullable', 'numeric', 'min:0'],
@@ -110,6 +111,7 @@ class InvoiceController extends BaseCrudApiController
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'paid_total' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'balance_due' => ['sometimes', 'nullable', 'numeric', 'min:0'],

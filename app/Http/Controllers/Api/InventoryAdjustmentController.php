@@ -22,7 +22,7 @@ class InventoryAdjustmentController extends BaseCrudApiController
     protected bool $preventBranchChangeOnUpdate = true;
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'adjustment_date';
-    protected array $relations = ['branch','warehouse'];
+    protected array $relations = ['branch','warehouse', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch'=>'branch_id','warehouse'=>'warehouse_id'];
     protected array $searchable = ['adjustment_no','reason','notes','status'];
     protected array $filterable = ['branch_id','warehouse_id','status'];
@@ -36,8 +36,8 @@ class InventoryAdjustmentController extends BaseCrudApiController
         'rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
         'update_rules'=>['product_id'=>['required','uuid','exists:products,id'],'adjustment_type'=>['required','in:increase,decrease'],'qty'=>['required','numeric','min:0.0001'],'unit_cost'=>['nullable','numeric','min:0'],'remarks'=>['nullable','string','max:200'],'active'=>['nullable','boolean']],
     ]];
-    protected array $storeRules = ['branch_id'=>['nullable','uuid','exists:branches,id'],'adjustment_no'=>['nullable','string','max:40','unique:inventory_adjustments,adjustment_no'],'adjustment_date'=>['required','date'],'warehouse_id'=>['required','uuid','exists:warehouses,id'],'reason'=>['nullable','string','max:150'],'notes'=>['nullable','string'],'status'=>['nullable','in:draft,posted,cancelled']];
-    protected function updateRules(Request $request, Model $record): array { return ['branch_id'=>['sometimes','nullable','uuid','exists:branches,id'],'adjustment_no'=>['sometimes','required','string','max:40','unique:inventory_adjustments,adjustment_no,'.$record->id.',id'],'adjustment_date'=>['sometimes','required','date'],'warehouse_id'=>['sometimes','required','uuid','exists:warehouses,id'],'reason'=>['sometimes','nullable','string','max:150'],'notes'=>['sometimes','nullable','string'],'status'=>['sometimes','nullable','in:draft,posted,cancelled']]; }
+    protected array $storeRules = ['branch_id'=>['nullable','uuid','exists:branches,id'],'adjustment_no'=>['nullable','string','max:40','unique:inventory_adjustments,adjustment_no'],'adjustment_date'=>['required','date'],'warehouse_id'=>['required','uuid','exists:warehouses,id'],'reason'=>['nullable','string','max:150'],'notes'=>['nullable','string'],'remarks'=>['nullable','string'],'status'=>['nullable','in:draft,posted,cancelled']];
+    protected function updateRules(Request $request, Model $record): array { return ['branch_id'=>['sometimes','nullable','uuid','exists:branches,id'],'adjustment_no'=>['sometimes','required','string','max:40','unique:inventory_adjustments,adjustment_no,'.$record->id.',id'],'adjustment_date'=>['sometimes','required','date'],'warehouse_id'=>['sometimes','required','uuid','exists:warehouses,id'],'reason'=>['sometimes','nullable','string','max:150'],'notes'=>['sometimes','nullable','string'],'remarks'=>['sometimes','nullable','string'],'status'=>['sometimes','nullable','in:draft,posted,cancelled']]; }
     protected function afterSave(Model $record, array $parentData, array $nestedData, bool $isUpdate): Model
     {
         $total = $record->inventoryAdjustmentLines()->get()->sum(fn ($i) => (float) $i->qty * (float) ($i->unit_cost ?? 0));

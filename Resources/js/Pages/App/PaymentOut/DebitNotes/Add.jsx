@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
@@ -10,6 +10,7 @@ import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomple
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -31,6 +32,7 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
   const [purchaseBillId, setPurchaseBillId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const currencySymbol = currencySymbolOf(currencyDetail);
+  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'debit_note_no') : '#DRAFT';
 
@@ -45,13 +47,22 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
       if (lines.length) setItems(mapLines(lines));
       setPurchaseBillId(initialRecord.purchase_bill_id || null);
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
-      form.setFieldsValue({ debit_note_no: '#DRAFT', debit_note_date: dayjs(), exchange_rate: 1 });
+      form.setFieldsValue({
+        debit_note_no: '#DRAFT',
+        debit_note_date: dayjs(),
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
+      if (defaultCurrency?.id) {
+        setCurrencyDetail(defaultCurrency);
+      }
     }
   }, [initialRecord]);
 
@@ -83,6 +94,7 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
       exchange_rate: toNumber(v.exchange_rate) || 1,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       purchase_bill_id: purchaseBillId || null,
       total: totals.grand_total, sub_total: totals.subtotal, discount_total: totals.discount_total, tax_total: totals.tax_total,
       items: normalized, deleted_item_ids: deletedItemIds,
@@ -131,7 +143,9 @@ export default function DebitNoteAdd({ initialRecord = null, isEdit = false, rec
           <TransactionLineItems items={items} onChange={setItems} onDeleteExistingId={(id) => setDeletedItemIds((p) => [...p, id])} productSearchUrl="/api/products/search?transaction=purchase" priceField="purchase_price" currencySymbol={currencySymbol} />
         </FormSection>
         <FormSection title=""><TransactionTotals items={items} currencySymbol={currencySymbol} /></FormSection>
-        <FormSection title="Reason / Notes"><Form.Item name="notes"><Input.TextArea rows={3} placeholder="Reason for debit note" /></Form.Item></FormSection>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
+        </FormSection>
       </Form>
     </TransactionFormShell>
   );

@@ -30,6 +30,7 @@ class SupplierPayment extends Model
         'method',
         'reference',
         'notes',
+        'remarks',
         'bank_charges_account_id',
         'bank_charges',
         'tds_charges_account_id',

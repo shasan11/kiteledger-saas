@@ -7,6 +7,7 @@ import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -47,6 +48,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                 exchange_rate: initialRecord.exchange_rate ?? 1,
                 tds_charges_account_id: initialRecord.tds_charges_account_id ?? null,
                 notes: initialRecord.notes || '',
+                remarks: initialRecord.remarks || '',
             });
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
@@ -102,6 +104,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
             exchange_rate: toNumber(v.exchange_rate) || 1,
             tds_charges_account_id: v.tds_charges_account_id || null,
             notes: nullIfEmpty(v.notes),
+            remarks: nullIfEmpty(v.remarks),
             items: items.map((l) => ({
                 ...(l.id ? { id: l.id } : {}),
                 chart_of_account_id: l.chart_of_account_id,
@@ -256,14 +259,8 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                     />
                 </FormSection>
 
-                <FormSection title="Additional">
-                    <Row>
-                        <Col xs={24}>
-                            <Form.Item label="Notes" name="notes">
-                                <Input.TextArea rows={3} placeholder="Notes" />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                <FormSection title="Description &amp; Remarks">
+                    <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
                 </FormSection>
             </Form>
         </TransactionFormShell>

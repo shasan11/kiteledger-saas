@@ -22,6 +22,7 @@ class LoanAccountController extends BaseCrudApiController
         'loanReceivedInAccount',
         'relatedAccount',
         'processingFeePaidFromAccount',
+        'userAdd',
         'loanTopUps',
         'loanCharges',
     ];
@@ -133,6 +134,7 @@ class LoanAccountController extends BaseCrudApiController
         'bank_name' => ['nullable', 'string', 'max:150'],
         'loan_number' => ['nullable', 'string', 'max:80'],
         'description' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'opening_balance' => ['nullable', 'numeric', 'min:0'],
         'current_balance' => ['nullable', 'numeric', 'min:0'],
         'balance_as_of' => ['nullable', 'date'],
@@ -155,6 +157,7 @@ class LoanAccountController extends BaseCrudApiController
             'bank_name' => ['sometimes', 'nullable', 'string', 'max:150'],
             'loan_number' => ['sometimes', 'nullable', 'string', 'max:80'],
             'description' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'opening_balance' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'current_balance' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'balance_as_of' => ['sometimes', 'nullable', 'date'],

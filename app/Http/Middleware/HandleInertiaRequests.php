@@ -45,7 +45,35 @@ class HandleInertiaRequests extends Middleware
                 'currentBranchId' => fn () => $scope->selectedBranchId($request, $user),
             ],
             'branchContext' => fn () => $scope->resolveContext($request),
+            'defaultCurrency' => fn () => $this->defaultCurrencyPayload(),
         ];
+    }
+
+    /**
+     * System default currency, shared on every Inertia response so transaction
+     * Add forms can prefill the currency selector without an extra round-trip.
+     * Returns null when AppSettings has not been seeded yet (early install).
+     */
+    protected function defaultCurrencyPayload(): ?array
+    {
+        try {
+            $setting = \App\Models\AppSetting::query()->with('defaultCurrency')->first();
+            $currency = $setting?->defaultCurrency;
+
+            if (!$currency) {
+                return null;
+            }
+
+            return [
+                'id' => (string) $currency->id,
+                'code' => $currency->code,
+                'name' => $currency->name,
+                'symbol' => $currency->symbol,
+                'decimal_places' => (int) ($currency->decimal_places ?? 2),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected function canBypassPermissions($user): bool
@@ -66,6 +94,9 @@ class HandleInertiaRequests extends Middleware
             'Super Admin',
             'Company Owner',
             'Admin',
+            'Company Admin',
+            'Full Access User',
+            'Full Access Admin',
             'super-admin',
             'admin',
         ]);

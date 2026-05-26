@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -38,6 +39,7 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
   const [sourceQuotationId, setSourceQuotationId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const currencySymbol = currencySymbolOf(currencyDetail);
+  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'sales_order_no') : '#DRAFT';
 
@@ -53,6 +55,7 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
       if (lines.length) {
@@ -61,7 +64,15 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
       if (initialRecord.quotation_id) setSourceQuotationId(initialRecord.quotation_id);
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
-      form.setFieldsValue({ sales_order_no: '#DRAFT', sales_order_date: dayjs(), exchange_rate: 1 });
+      form.setFieldsValue({
+        sales_order_no: '#DRAFT',
+        sales_order_date: dayjs(),
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
+      if (defaultCurrency?.id) {
+        setCurrencyDetail(defaultCurrency);
+      }
     }
   }, [initialRecord]);
 
@@ -98,6 +109,7 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
       exchange_rate: toNumber(v.exchange_rate) || 1,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       quotation_id: sourceQuotationId || null,
       total: totals.grand_total,
       sub_total: totals.subtotal,
@@ -208,8 +220,8 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
           <TransactionTotals items={items} currencySymbol={currencySymbol} />
         </FormSection>
 
-        <FormSection title="Notes">
-          <Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

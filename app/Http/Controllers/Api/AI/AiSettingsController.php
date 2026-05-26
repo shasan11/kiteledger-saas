@@ -3,116 +3,114 @@
 namespace App\Http\Controllers\Api\AI;
 
 use App\Http\Controllers\Controller;
-use App\Models\AiSetting;
-use App\Services\AI\AiActionGuard;
-use App\Services\AI\AiProviderService;
-use App\Services\AI\AiUsageLogger;
+use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiProviderManager;
+use App\Services\AI\AiSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class AiSettingsController extends Controller
 {
     public function __construct(
-        protected AiActionGuard     $guard,
-        protected AiUsageLogger     $usageLogger,
+        protected AiSettingsService $settings,
+        protected AiProviderManager $provider,
+        protected AiPermissionService $permissions,
     ) {}
 
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
-        $user = Auth::user();
-
-        if (!$user || !$user->hasPermissionTo('ai.settings.view')) {
-            abort(403, 'You do not have permission to view AI settings.');
+        $user = $request->user();
+        if (!$this->permissions->canViewSettings($user)) {
+            return $this->denied('ai.settings.view');
         }
 
-        $settings = AiSetting::current();
-
-        return response()->json($this->formatSettings($settings));
+        return response()->json([
+            'settings' => $this->settings->all(),
+            'supported_providers' => ['openai', 'groq', 'gemini', 'ollama'],
+            'model_suggestions' => [
+                'openai' => ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'],
+                'groq' => ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
+                'gemini' => ['gemini-1.5-flash', 'gemini-1.5-pro'],
+                'ollama' => ['llama3.1:8b', 'mistral', 'qwen2.5'],
+            ],
+            'default_base_urls' => [
+                'openai' => 'https://api.openai.com/v1',
+                'groq' => 'https://api.groq.com/openai/v1',
+                'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
+                'ollama' => 'http://localhost:11434',
+            ],
+        ]);
     }
 
     public function update(Request $request): JsonResponse
     {
-        $user = Auth::user();
-
-        if (!$user || !$user->hasPermissionTo('ai.settings.manage')) {
-            abort(403, 'You do not have permission to manage AI settings.');
+        $user = $request->user();
+        if (!$this->permissions->canManage($user)) {
+            return $this->denied('ai.settings.update');
         }
 
         $validated = $request->validate([
-            'enabled'               => 'boolean',
-            'provider'              => ['sometimes', Rule::in(config('ai.supported_providers'))],
-            'model'                 => 'nullable|string|max:100',
-            'fallback_provider'     => ['nullable', Rule::in(config('ai.supported_providers'))],
-            'fallback_model'        => 'nullable|string|max:100',
-            'api_key'               => 'nullable|string|max:500',
-            'base_url'              => 'nullable|url|max:500',
-            'temperature'           => 'nullable|numeric|min:0|max:2',
-            'max_tokens'            => 'nullable|integer|min:100|max:32000',
-            'daily_request_limit'   => 'nullable|integer|min:1',
-            'monthly_token_limit'   => 'nullable|integer|min:1',
-            'enabled_modules'       => 'nullable|array',
-            'enabled_modules.*'     => 'boolean',
-            'safety_mode'           => 'nullable|string|in:strict,permissive',
-            'log_prompts'           => 'boolean',
-            'log_responses'         => 'boolean',
+            'ai_enabled' => 'nullable|boolean',
+            'ai_provider' => ['nullable', Rule::in(['openai', 'groq', 'gemini', 'ollama'])],
+            'ai_model' => 'nullable|string|max:120',
+            'ai_api_key' => 'nullable|string|max:500',
+            'ai_base_url' => 'nullable|string|max:500',
+            'ai_temperature' => 'nullable|numeric|min:0|max:2',
+            'ai_max_tokens' => 'nullable|integer|min:50|max:32000',
+            'ai_timeout_seconds' => 'nullable|integer|min:5|max:300',
+            'ai_connect_timeout_seconds' => 'nullable|integer|min:2|max:60',
+            'ai_stream_enabled' => 'nullable|boolean',
+            'ai_cache_enabled' => 'nullable|boolean',
+            'ai_cache_ttl' => 'nullable|integer|min:30|max:86400',
+            'ai_context_max_rows' => 'nullable|integer|min:1|max:500',
+            'ai_context_max_chars' => 'nullable|integer|min:500|max:200000',
+            'ai_fast_mode' => 'nullable|boolean',
         ]);
 
-        $settings = AiSetting::current();
-
-        // Handle API key: only update if a new key is provided
-        if (!empty($validated['api_key'])) {
-            $settings->setApiKeyRawAttribute($validated['api_key']);
+        // API key: only update if a real value provided. Reject masked values.
+        if (isset($validated['ai_api_key'])) {
+            $key = trim((string) $validated['ai_api_key']);
+            if ($key === '' || str_contains($key, '...')) {
+                unset($validated['ai_api_key']);
+            } else {
+                $this->settings->setApiKey($key);
+                unset($validated['ai_api_key']);
+            }
         }
-        unset($validated['api_key']);
 
-        $settings->fill($validated);
-        $settings->updated_by_id = $user->id;
-        $settings->save();
+        $this->settings->setMany($validated);
 
         return response()->json([
-            'message'  => 'AI settings saved.',
-            'settings' => $this->formatSettings($settings->fresh()),
+            'ok' => true,
+            'message' => 'AI settings saved.',
+            'settings' => $this->settings->all(),
         ]);
     }
 
-    public function testConnection(): JsonResponse
+    public function test(Request $request): JsonResponse
     {
-        $user = Auth::user();
-
-        if (!$user || !$user->hasPermissionTo('ai.settings.manage')) {
-            abort(403, 'You do not have permission to manage AI settings.');
+        $user = $request->user();
+        if (!$this->permissions->canManage($user)) {
+            return $this->denied('ai.settings.update');
         }
 
-        $providerService = app(AiProviderService::class);
-        $result = $providerService->testConnection();
-
-        return response()->json($result, $result['success'] ? 200 : 422);
+        $result = $this->provider->testConnection();
+        return response()->json($result, ($result['success'] ?? false) ? 200 : 422);
     }
 
-    private function formatSettings(AiSetting $settings): array
+    // Backward compatibility: old route is /ai/settings/test-connection
+    public function testConnection(Request $request): JsonResponse
     {
-        return [
-            'id'                    => $settings->id,
-            'enabled'               => $settings->enabled,
-            'provider'              => $settings->provider,
-            'model'                 => $settings->model,
-            'fallback_provider'     => $settings->fallback_provider,
-            'fallback_model'        => $settings->fallback_model,
-            'api_key_masked'        => $settings->getMaskedApiKey(),
-            'has_api_key'           => !empty($settings->api_key_encrypted),
-            'base_url'              => $settings->base_url,
-            'temperature'           => $settings->temperature,
-            'max_tokens'            => $settings->max_tokens,
-            'daily_request_limit'   => $settings->daily_request_limit,
-            'monthly_token_limit'   => $settings->monthly_token_limit,
-            'enabled_modules'       => $settings->enabled_modules ?? config('ai.default_modules_enabled'),
-            'safety_mode'           => $settings->safety_mode,
-            'log_prompts'           => $settings->log_prompts,
-            'log_responses'         => $settings->log_responses,
-            'supported_providers'   => config('ai.supported_providers'),
-            'available_modules'     => config('ai.modules'),
-        ];
+        return $this->test($request);
+    }
+
+    private function denied(string $perm): JsonResponse
+    {
+        return response()->json([
+            'message' => 'You do not have permission to manage AI settings.',
+            'code' => 'AI_PERMISSION_DENIED',
+            'required_permission' => $perm,
+        ], 403);
     }
 }

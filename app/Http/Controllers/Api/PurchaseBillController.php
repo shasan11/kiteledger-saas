@@ -20,7 +20,7 @@ class PurchaseBillController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'bill_date';
 
-    protected array $relations = ['branch', 'project', 'contact', 'lead', 'deal', 'campaign', 'warehouse', 'currency', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
+    protected array $relations = ['branch', 'project', 'contact', 'lead', 'deal', 'campaign', 'warehouse', 'currency', 'userAdd', 'approvedBy', 'supplierPaymentLines', 'supplierPaymentLines.supplierPayment'];
     protected array $relationDetails = ['branch' => 'branch_id', 'project' => 'project_id', 'contact' => 'contact_id', 'lead' => 'lead_id', 'deal' => 'deal_id', 'campaign' => 'campaign_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['bill_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'project_id', 'contact_id', 'lead_id', 'deal_id', 'campaign_id', 'warehouse_id', 'currency_id', 'status'];
@@ -85,6 +85,7 @@ class PurchaseBillController extends BaseCrudApiController
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'import_country' => ['nullable', 'string', 'max:80'],
         'import_date' => ['nullable', 'date'],
         'import_document_number' => ['nullable', 'string', 'max:80'],
@@ -111,6 +112,7 @@ class PurchaseBillController extends BaseCrudApiController
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'import_country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'import_date' => ['sometimes', 'nullable', 'date'],
             'import_document_number' => ['sometimes', 'nullable', 'string', 'max:80'],

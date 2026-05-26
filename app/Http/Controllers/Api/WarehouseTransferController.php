@@ -22,7 +22,7 @@ class WarehouseTransferController extends BaseCrudApiController
     protected bool $preventBranchChangeOnUpdate = true;
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'transfer_date';
-    protected array $relations = ['branch', 'fromWarehouse', 'toWarehouse'];
+    protected array $relations = ['branch', 'fromWarehouse', 'toWarehouse', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'fromWarehouse' => 'from_warehouse_id', 'toWarehouse' => 'to_warehouse_id'];
     protected array $searchable = ['transfer_no', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'from_warehouse_id', 'to_warehouse_id', 'status'];
@@ -60,6 +60,7 @@ class WarehouseTransferController extends BaseCrudApiController
         'from_warehouse_id' => ['required','uuid','exists:warehouses,id'],
         'to_warehouse_id' => ['required','uuid','exists:warehouses,id','different:from_warehouse_id'],
         'notes' => ['nullable','string'],
+        'remarks' => ['nullable','string'],
         'status' => ['nullable','in:draft,posted,cancelled'],
     ];
     protected function updateRules(Request $request, Model $record): array
@@ -71,6 +72,7 @@ class WarehouseTransferController extends BaseCrudApiController
             'from_warehouse_id' => ['sometimes','required','uuid','exists:warehouses,id'],
             'to_warehouse_id' => ['sometimes','required','uuid','exists:warehouses,id','different:from_warehouse_id'],
             'notes' => ['sometimes','nullable','string'],
+            'remarks' => ['sometimes','nullable','string'],
             'status' => ['sometimes','nullable','in:draft,posted,cancelled'],
         ];
     }

@@ -28,6 +28,7 @@ class SalesOrder extends Model
         'currency_id',
         'reference',
         'notes',
+        'remarks',
         'subtotal',
         'discount_total',
         'tax_total',

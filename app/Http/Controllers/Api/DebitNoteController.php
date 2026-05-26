@@ -19,7 +19,7 @@ class DebitNoteController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'debit_note_date';
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency'];
+    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['debit_note_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
@@ -83,6 +83,7 @@ class DebitNoteController extends BaseCrudApiController
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
     ];
 
@@ -98,6 +99,7 @@ class DebitNoteController extends BaseCrudApiController
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
         ];
     }

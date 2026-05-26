@@ -7,6 +7,7 @@ import { CheckCircleOutlined, StopOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -19,6 +20,7 @@ export default function AdjustmentsIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'Adjustment No', dataIndex: 'adjustment_no', key: 'adjustment_no', sorter: true, width: 140, render: (_, r) => <Text strong>{displayDocumentNumber(r, r?.inventory_adjustment_no ? 'inventory_adjustment_no' : 'adjustment_no')}</Text> },
+        branchColumn(),
         { title: 'Date', dataIndex: 'adjustment_date', key: 'adjustment_date', sorter: true, width: 120, render: displayDate },
         { title: 'Warehouse', dataIndex: 'warehouse', key: 'warehouse', render: (_, r) => r?.warehouse?.name || r?.warehouse_name || '-' },
         { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (v) => v || '-' },

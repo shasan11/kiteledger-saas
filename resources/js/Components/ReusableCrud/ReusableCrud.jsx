@@ -131,6 +131,7 @@ export default function ReusableCrud({
   canDelete = true,
   showViewColumn = false,
   viewPathBuilder = null,
+  editPathBuilder = null,
 
   searchFields = EMPTY_ARRAY,
 
@@ -2085,6 +2086,15 @@ export default function ReusableCrud({
         icon: <EditOutlined />,
         label: "Edit",
         onClick: () => {
+          // If a path builder is provided, navigate to the custom edit page
+          // instead of opening the inline edit drawer.
+          if (typeof editPathBuilder === "function") {
+            const path = editPathBuilder(record);
+            if (path) {
+              router.visit(path);
+              return;
+            }
+          }
           setSubmitErrors(EMPTY_ARRAY);
           setEditingRecord(applyRecordTransform(record));
           setVisible(true);

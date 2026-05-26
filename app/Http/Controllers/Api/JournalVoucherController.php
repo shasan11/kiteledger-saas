@@ -31,6 +31,8 @@ class JournalVoucherController extends BaseCrudApiController
     protected array $relations = [
         'branch',
         'currency',
+        'userAdd',
+        'approvedBy',
         'items',
         'items.account',
     ];
@@ -185,6 +187,7 @@ class JournalVoucherController extends BaseCrudApiController
 
         'reference' => ['nullable', 'string', 'max:120'],
         'narration' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
 
         'status' => ['nullable', 'in:draft,posted,cancelled'],
         'active' => ['nullable', 'boolean'],
@@ -222,6 +225,7 @@ class JournalVoucherController extends BaseCrudApiController
 
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'narration' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
 
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
             'active' => ['sometimes', 'nullable', 'boolean'],

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -21,6 +22,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const currencySymbol = currencySymbolOf(currencyDetail);
+  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'quotation_no') : '#DRAFT';
 
@@ -35,6 +37,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
         currency_id: initialRecord.currency_id ?? initialRecord.currency?.id ?? null,
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
@@ -56,7 +59,15 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
         })));
       }
     } else {
-      form.setFieldsValue({ quotation_no: '#DRAFT', quotation_date: dayjs(), exchange_rate: 1 });
+      form.setFieldsValue({
+        quotation_no: '#DRAFT',
+        quotation_date: dayjs(),
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
+      if (defaultCurrency?.id) {
+        setCurrencyDetail(defaultCurrency);
+      }
     }
   }, [initialRecord]);
 
@@ -88,6 +99,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
       currency_id: asId(v.currency_id),
       exchange_rate: toNumber(v.exchange_rate) || 1,
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       total: totals.grand_total,
       sub_total: totals.subtotal,
       discount_total: totals.discount_total,
@@ -184,10 +196,8 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
           <TransactionTotals items={items} currencySymbol={currencySymbol} />
         </FormSection>
 
-        <FormSection title="Notes">
-          <Form.Item name="notes">
-            <Input.TextArea rows={3} placeholder="Notes (appears on print)" />
-          </Form.Item>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
       </Form>
     </TransactionFormShell>

@@ -18,7 +18,7 @@ class SalesReturnController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'sales_return_date';
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency'];
+    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
     protected array $searchable = ['sales_return_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
@@ -96,6 +96,7 @@ class SalesReturnController extends BaseCrudApiController
         'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
         'reference' => ['nullable', 'string', 'max:120'],
         'notes' => ['nullable', 'string'],
+        'remarks' => ['nullable', 'string'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
     ];
@@ -111,6 +112,7 @@ class SalesReturnController extends BaseCrudApiController
             'currency_id' => ['sometimes', 'nullable', 'uuid', 'exists:currencies,id'],
             'reference' => ['sometimes', 'nullable', 'string', 'max:120'],
             'notes' => ['sometimes', 'nullable', 'string'],
+            'remarks' => ['sometimes', 'nullable', 'string'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
         ];

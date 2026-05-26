@@ -46,7 +46,7 @@ class BranchController extends BaseCrudApiController
     protected string $defaultSort = 'code';
 
     protected array $storeRules = [
-        'code' => ['required', 'string', 'max:30', 'unique:branches,code'],
+        'code' => ['nullable', 'string', 'max:30', 'unique:branches,code'],
         'name' => ['required', 'string', 'max:120'],
         'phone' => ['nullable', 'string', 'max:40'],
         'email' => ['nullable', 'email', 'max:120'],
@@ -88,5 +88,46 @@ class BranchController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
+    {
+        $code = isset($parentData['code']) ? trim((string) $parentData['code']) : '';
+
+        if ($code === '') {
+            $parentData['code'] = $this->generateBranchCode();
+        }
+
+        return $parentData;
+    }
+
+    /**
+     * Generate a BR-001 style branch code. Uses the current max numeric suffix
+     * on rows matching the BR-### shape and retries on the unlikely event of a
+     * race-condition collision (the code column has a unique index).
+     */
+    private function generateBranchCode(): string
+    {
+        $highest = Branch::query()
+            ->where('code', 'like', 'BR-%')
+            ->get(['code'])
+            ->map(function ($row) {
+                if (preg_match('/^BR-(\d+)$/', (string) $row->code, $m)) {
+                    return (int) $m[1];
+                }
+                return 0;
+            })
+            ->max();
+
+        $next = (int) ($highest ?? 0) + 1;
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $candidate = sprintf('BR-%03d', $next + $attempt);
+            if (!Branch::query()->where('code', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+
+        return 'BR-' . str_pad((string) ($next + 10), 3, '0', STR_PAD_LEFT);
     }
 }

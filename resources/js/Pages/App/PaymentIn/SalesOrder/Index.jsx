@@ -5,6 +5,7 @@ import { Head, router } from '@inertiajs/react';
 import { Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -15,6 +16,7 @@ const statusColor = (s) => ({ draft: 'default', confirmed: 'blue', fulfilled: 'g
 export default function SalesOrderIndex(props) {
     const columns = useMemo(() => [
         { title: 'SO No', dataIndex: 'sales_order_no', key: 'sales_order_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'sales_order_date', key: 'sales_order_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },

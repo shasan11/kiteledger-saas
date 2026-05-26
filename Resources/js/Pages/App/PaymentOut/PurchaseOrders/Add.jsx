@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
@@ -9,6 +9,7 @@ import TransactionTotals from '@/Components/Transactions/TransactionTotals.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -36,6 +37,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const currencySymbol = currencySymbolOf(currencyDetail);
+  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'purchase_order_no') : '#DRAFT';
 
@@ -51,12 +53,21 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || '',
+        remarks: initialRecord.remarks || '',
       });
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
       if (lines.length) setItems(mapLines(lines));
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
-      form.setFieldsValue({ purchase_order_no: '#DRAFT', purchase_order_date: dayjs(), exchange_rate: 1 });
+      form.setFieldsValue({
+        purchase_order_no: '#DRAFT',
+        purchase_order_date: dayjs(),
+        exchange_rate: 1,
+        currency_id: defaultCurrency?.id ?? null,
+      });
+      if (defaultCurrency?.id) {
+        setCurrencyDetail(defaultCurrency);
+      }
     }
   }, [initialRecord]);
 
@@ -79,6 +90,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
       exchange_rate: toNumber(v.exchange_rate) || 1,
       reference: nullIfEmpty(v.reference),
       notes: nullIfEmpty(v.notes),
+      remarks: nullIfEmpty(v.remarks),
       total: totals.grand_total,
       sub_total: totals.subtotal,
       discount_total: totals.discount_total,
@@ -143,7 +155,9 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
           <TransactionLineItems items={items} onChange={setItems} onDeleteExistingId={(id) => setDeletedItemIds((p) => [...p, id])} productSearchUrl="/api/products/search?transaction=purchase" priceField="purchase_price" currencySymbol={currencySymbol} />
         </FormSection>
         <FormSection title=""><TransactionTotals items={items} currencySymbol={currencySymbol} /></FormSection>
-        <FormSection title="Notes"><Form.Item name="notes"><Input.TextArea rows={3} placeholder="Notes" /></Form.Item></FormSection>
+        <FormSection title="Description &amp; Remarks">
+          <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
+        </FormSection>
       </Form>
     </TransactionFormShell>
   );

@@ -26,6 +26,7 @@ class WarehouseTransfer extends Model
         'from_warehouse_id',
         'to_warehouse_id',
         'notes',
+        'remarks',
         'status',
         'active',
         'approved',

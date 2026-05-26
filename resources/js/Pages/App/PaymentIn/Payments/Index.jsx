@@ -7,6 +7,7 @@ import { CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icon
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -96,6 +97,7 @@ export default function PaymentsIndex(props) {
 
     const columns = useMemo(() => [
         { title: 'Payment No', dataIndex: 'payment_no', key: 'payment_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Customer', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'payment_date', key: 'payment_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Method', dataIndex: 'payment_method', key: 'payment_method', width: 120, render: (v) => v || '-' },

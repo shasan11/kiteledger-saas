@@ -5,6 +5,7 @@ import { Head, router } from '@inertiajs/react';
 import { Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -15,6 +16,7 @@ const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red'
 export default function ExpensesIndex(props) {
     const columns = useMemo(() => [
         { title: 'Expense No', dataIndex: 'expense_no', key: 'expense_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Party', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-' },
         { title: 'Date', dataIndex: 'expense_date', key: 'expense_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Due Date', dataIndex: 'due_date', key: 'due_date', width: 120, render: displayDate },

@@ -5,6 +5,7 @@ import { Head, router } from '@inertiajs/react';
 import { Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { renderAmountWithDefaultCurrency } from '@/Pages/App/Shared/transactionDisplay';
+import { branchColumn } from '@/Components/Transactions';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -15,6 +16,7 @@ const statusColor = (s) => ({ draft: 'default', posted: 'blue', cancelled: 'red'
 export default function SupplierPaymentsIndex(props) {
     const columns = useMemo(() => [
         { title: 'Payment No', dataIndex: 'payment_no', key: 'payment_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        branchColumn(),
         { title: 'Supplier', dataIndex: 'contact', key: 'contact', render: (_, r) => r?.contact?.name || r?.contact_name || '-', backendFilter: { title: 'Supplier', type: 'autocomplete', paramName: 'contact_id', fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkLabelKey: 'name', fkValueKey: 'id' } },
         { title: 'Date', dataIndex: 'payment_date', key: 'payment_date', sorter: true, width: 120, render: displayDate, backendFilter: { title: 'Date', type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Method', dataIndex: 'method', key: 'method', width: 120, render: (v) => v || '-' },

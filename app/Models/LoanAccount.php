@@ -22,6 +22,7 @@ class LoanAccount extends Model
         'bank_name',
         'loan_number',
         'description',
+        'remarks',
         'opening_balance',
         'current_balance',
         'balance_as_of',

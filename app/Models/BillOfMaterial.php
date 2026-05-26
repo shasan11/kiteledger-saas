@@ -18,7 +18,7 @@ class BillOfMaterial extends Model
     protected $fillable = [
         'branch_id', 'fiscal_year_id', 'code', 'date', 'reference',
         'product_id', 'output_quantity', 'output_unit_code',
-        'manufacture_on_every_sale', 'notes', 'status', 'active',
+        'manufacture_on_every_sale', 'notes', 'remarks', 'status', 'active',
         'approved', 'approved_at', 'approved_by_id', 'user_add_id',
     ];
 

@@ -29,6 +29,7 @@ class Quotation extends Model
         'credit_term_id',
         'currency_id',
         'notes',
+        'remarks',
         'status',
         'active',
         'approved',
