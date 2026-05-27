@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\BankAccount;
 use App\Models\BankStatementLine;
+use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -235,6 +237,16 @@ class BankAccountController extends BaseCrudApiController
 
     public function importStatement(Request $request, BankAccount $bankAccount)
     {
+        $action = $request->string('action')->toString();
+
+        if ($action === 'create_journal_voucher') {
+            return $this->createJournalVoucherFromStatementLine($request, $bankAccount);
+        }
+
+        if ($action === 'ignore') {
+            return $this->ignoreStatementLine($request, $bankAccount);
+        }
+
         $validated = $request->validate([
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.date' => ['required', 'date'],
@@ -289,6 +301,151 @@ class BankAccountController extends BaseCrudApiController
         ], 201);
     }
 
+    private function createJournalVoucherFromStatementLine(Request $request, BankAccount $bankAccount)
+    {
+        $data = $request->validate([
+            'statement_line_id' => ['required', 'uuid', 'exists:bank_statement_lines,id'],
+            'offset_account_id' => ['required', 'uuid', 'exists:accounts,id'],
+            'reference' => ['nullable', 'string', 'max:120'],
+            'narration' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if (! $bankAccount->account_id) {
+            throw ValidationException::withMessages([
+                'bank_account' => 'This bank account is not linked with an actual account, so a journal voucher cannot be posted.',
+            ]);
+        }
+
+        if ((string) $bankAccount->account_id === (string) $data['offset_account_id']) {
+            throw ValidationException::withMessages([
+                'offset_account_id' => 'Counter account cannot be the same as the bank account.',
+            ]);
+        }
+
+        $posted = DB::transaction(function () use ($data, $bankAccount, $request) {
+            /** @var BankStatementLine $statementLine */
+            $statementLine = BankStatementLine::query()
+                ->lockForUpdate()
+                ->where('bank_account_id', $bankAccount->id)
+                ->findOrFail($data['statement_line_id']);
+
+            if ($statementLine->posted_journal_voucher_id) {
+                throw ValidationException::withMessages([
+                    'statement_line_id' => 'This statement line is already matched with a journal voucher.',
+                ]);
+            }
+
+            if ($statementLine->status === 'ignored') {
+                throw ValidationException::withMessages([
+                    'statement_line_id' => 'Ignored statement lines cannot be posted. Re-import or restore the line first.',
+                ]);
+            }
+
+            $debit = (float) ($statementLine->debit ?? 0);
+            $credit = (float) ($statementLine->credit ?? 0);
+            $amount = round(max($debit, $credit), 2);
+
+            if ($amount <= 0 || ($debit > 0 && $credit > 0)) {
+                throw ValidationException::withMessages([
+                    'statement_line_id' => 'Statement line must have either one deposit or one withdrawal amount.',
+                ]);
+            }
+
+            $isDeposit = $debit > 0;
+            $description = $statementLine->description ?: 'Bank statement transaction';
+            $reference = $data['reference'] ?? $statementLine->reference;
+            $narration = $data['narration'] ?? trim("Bank statement posting: {$description}");
+
+            $journalVoucher = JournalVoucher::create([
+                'branch_id' => $bankAccount->branch_id,
+                'voucher_date' => $statementLine->statement_date,
+                'currency_id' => $bankAccount->currency_id,
+                'reference' => $reference,
+                'narration' => $narration,
+                'remarks' => $statementLine->remarks,
+                'source_type' => BankStatementLine::class,
+                'source_id' => $statementLine->id,
+                'source_no' => $statementLine->reference,
+                'source_module' => 'bank_statement',
+                'is_auto_generated' => true,
+                'is_system_generated' => true,
+                'status' => 'draft',
+                'active' => true,
+                'approved' => false,
+                'void' => false,
+                'exchange_rate' => 1,
+                'total' => $amount,
+                'user_add_id' => $request->user()?->getAuthIdentifier(),
+            ]);
+
+            $bankLine = [
+                'journal_voucher_id' => $journalVoucher->id,
+                'account_id' => $bankAccount->account_id,
+                'description' => $description,
+                'debit' => $isDeposit ? $amount : 0,
+                'credit' => $isDeposit ? 0 : $amount,
+                'currency_id' => $bankAccount->currency_id,
+                'exchange_rate' => 1,
+            ];
+
+            $offsetLine = [
+                'journal_voucher_id' => $journalVoucher->id,
+                'account_id' => $data['offset_account_id'],
+                'description' => $description,
+                'debit' => $isDeposit ? 0 : $amount,
+                'credit' => $isDeposit ? $amount : 0,
+                'currency_id' => $bankAccount->currency_id,
+                'exchange_rate' => 1,
+            ];
+
+            JournalVoucherLine::create($bankLine);
+            JournalVoucherLine::create($offsetLine);
+
+            $postedVoucher = app(JournalVoucherService::class)->post(
+                $journalVoucher,
+                $request->user()?->getAuthIdentifier()
+            );
+
+            $statementLine->forceFill([
+                'status' => 'matched',
+                'posted_journal_voucher_id' => $postedVoucher->id,
+            ])->save();
+
+            return $postedVoucher->fresh(['journalVoucherLines', 'items']);
+        });
+
+        return response()->json([
+            'message' => 'Journal voucher created and posted from bank statement line.',
+            'journal_voucher' => $posted,
+        ], 201);
+    }
+
+    private function ignoreStatementLine(Request $request, BankAccount $bankAccount)
+    {
+        $data = $request->validate([
+            'statement_line_id' => ['required', 'uuid', 'exists:bank_statement_lines,id'],
+        ]);
+
+        $statementLine = BankStatementLine::query()
+            ->where('bank_account_id', $bankAccount->id)
+            ->findOrFail($data['statement_line_id']);
+
+        if ($statementLine->posted_journal_voucher_id) {
+            throw ValidationException::withMessages([
+                'statement_line_id' => 'Matched statement lines cannot be ignored.',
+            ]);
+        }
+
+        $statementLine->forceFill([
+            'status' => 'ignored',
+        ])->save();
+
+        return response()->json([
+            'message' => 'Bank statement line ignored.',
+            'statement_line' => $statementLine->fresh(),
+        ]);
+    }
+
     private function formatStatementLines($statementLines, float $openingBalance): array
     {
         $runningBalance = $openingBalance;
@@ -324,6 +481,7 @@ class BankAccountController extends BaseCrudApiController
                 'status' => $line->status,
                 'matching_status' => $matchingStatus,
                 'posted_journal_voucher_id' => $line->posted_journal_voucher_id,
+                'journal_voucher_id' => $line->posted_journal_voucher_id,
                 'matched_transaction' => $line->posted_journal_voucher_id,
                 'difference' => 0,
             ];
