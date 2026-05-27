@@ -11,6 +11,10 @@ import {
     DatePicker,
     Drawer,
     Empty,
+    Form,
+    Input,
+    Modal,
+    Select,
     Space,
     Table,
     Tag,
@@ -185,9 +189,13 @@ const getErrorMessage = (error, fallback) => {
     return error?.response?.data?.message || fallback;
 };
 
+const accountLabel = (row) =>
+    [row?.code, row?.name || row?.label].filter(Boolean).join(' - ') || row?.id || 'Account';
+
 export default function BankAccountShow({ id }) {
     const { message } = App.useApp();
     const { token } = theme.useToken();
+    const [postForm] = Form.useForm();
 
     const [record, setRecord] = useState(null);
     const [ledger, setLedger] = useState([]);
@@ -198,6 +206,43 @@ export default function BankAccountShow({ id }) {
     const [importOpen, setImportOpen] = useState(false);
     const [preview, setPreview] = useState([]);
     const [importing, setImporting] = useState(false);
+
+    const [accountOptions, setAccountOptions] = useState([]);
+    const [accountLoading, setAccountLoading] = useState(false);
+    const [postingOpen, setPostingOpen] = useState(false);
+    const [postingLine, setPostingLine] = useState(null);
+    const [posting, setPosting] = useState(false);
+
+    const loadAccounts = async (search = '') => {
+        setAccountLoading(true);
+
+        try {
+            const response = await axios.get(api('/api/accounts/'), {
+                headers: authHeaders(),
+                params: {
+                    search,
+                    active: true,
+                    page_size: 30,
+                    ordering: 'code',
+                },
+            });
+
+            const rows = response.data?.results || response.data?.data || (Array.isArray(response.data) ? response.data : []);
+
+            setAccountOptions(
+                rows
+                    .filter((row) => String(row.id) !== String(record?.account_id))
+                    .map((row) => ({
+                        value: row.id,
+                        label: accountLabel(row),
+                    })),
+            );
+        } catch (error) {
+            message.error('Failed to load accounts.');
+        } finally {
+            setAccountLoading(false);
+        }
+    };
 
     const load = async (params = {}) => {
         if (!id) return;
@@ -229,6 +274,12 @@ export default function BankAccountShow({ id }) {
     useEffect(() => {
         void load();
     }, [id]);
+
+    useEffect(() => {
+        if (record) {
+            void loadAccounts();
+        }
+    }, [record?.id, record?.account_id]);
 
     const parseFile = async (file) => {
         try {
@@ -333,6 +384,71 @@ export default function BankAccountShow({ id }) {
         XLSX.writeFile(workbook, 'bank-statement-template.xlsx');
     };
 
+    const openPostModal = (row) => {
+        setPostingLine(row);
+        postForm.setFieldsValue({
+            offset_account_id: undefined,
+            reference: row?.reference || '',
+            narration: `Bank statement posting: ${row?.description || row?.reference || 'transaction'}`,
+        });
+        setPostingOpen(true);
+    };
+
+    const createJournalVoucher = async () => {
+        const values = await postForm.validateFields();
+
+        setPosting(true);
+
+        try {
+            const response = await axios.post(
+                bankApi(id, '/statement-import'),
+                {
+                    action: 'create_journal_voucher',
+                    statement_line_id: postingLine?.id,
+                    offset_account_id: values.offset_account_id,
+                    reference: values.reference || postingLine?.reference || null,
+                    narration: values.narration || null,
+                },
+                { headers: authHeaders() },
+            );
+
+            message.success(response.data?.message || 'Journal voucher created and posted.');
+            setPostingOpen(false);
+            setPostingLine(null);
+            postForm.resetFields();
+            await load();
+        } catch (error) {
+            message.error(getErrorMessage(error, 'Failed to create journal voucher.'));
+        } finally {
+            setPosting(false);
+        }
+    };
+
+    const ignoreStatementLine = async (row) => {
+        Modal.confirm({
+            title: 'Ignore this bank statement line?',
+            content: 'Ignored lines will stay in the statement history but will not be posted to accounts.',
+            okText: 'Ignore',
+            onOk: async () => {
+                try {
+                    const response = await axios.post(
+                        bankApi(id, '/statement-import'),
+                        {
+                            action: 'ignore',
+                            statement_line_id: row.id,
+                        },
+                        { headers: authHeaders() },
+                    );
+
+                    message.success(response.data?.message || 'Statement line ignored.');
+                    await load();
+                } catch (error) {
+                    message.error(getErrorMessage(error, 'Failed to ignore statement line.'));
+                }
+            },
+        });
+    };
+
     const ledgerColumns = [
         {
             title: 'Date',
@@ -386,13 +502,13 @@ export default function BankAccountShow({ id }) {
         {
             title: 'Description',
             dataIndex: 'description',
-            width: 260,
+            width: 240,
             render: (value) => value || '-',
         },
         {
             title: 'Reference',
             dataIndex: 'reference',
-            width: 150,
+            width: 140,
             render: (value) => value || '-',
         },
         {
@@ -419,20 +535,50 @@ export default function BankAccountShow({ id }) {
         {
             title: 'Counterparty',
             dataIndex: 'counterparty',
-            width: 180,
+            width: 160,
             render: (value) => value || '-',
         },
         {
             title: 'Status',
             dataIndex: 'matching_status',
             width: 130,
-            render: (value) => <Tag>{String(value || 'unmatched').replace(/_/g, ' ')}</Tag>,
+            render: (value, row) => (
+                <Tag color={value === 'matched' ? 'green' : value === 'ignored' ? 'default' : 'orange'}>
+                    {String(value || row?.status || 'unmatched').replace(/_/g, ' ')}
+                </Tag>
+            ),
         },
         {
-            title: 'Remarks',
-            dataIndex: 'remarks',
-            width: 220,
-            render: (value) => value || '-',
+            title: 'JV',
+            dataIndex: 'journal_voucher_id',
+            width: 120,
+            render: (value) =>
+                value ? (
+                    <Link href={route('accounting.journal-vouchers.show', value)}>Open JV</Link>
+                ) : (
+                    '-'
+                ),
+        },
+        {
+            title: 'Actions',
+            fixed: 'right',
+            width: 210,
+            render: (_, row) => {
+                const locked = row?.matching_status === 'matched' || row?.matching_status === 'ignored';
+
+                if (locked) return '-';
+
+                return (
+                    <Space size={4}>
+                        <Button size="small" type="primary" onClick={() => openPostModal(row)}>
+                            Create JV
+                        </Button>
+                        <Button size="small" onClick={() => ignoreStatementLine(row)}>
+                            Ignore
+                        </Button>
+                    </Space>
+                );
+            },
         },
     ];
 
@@ -511,6 +657,8 @@ export default function BankAccountShow({ id }) {
     const chartRows = statementLines.length ? statementLines : ledger;
     const validPreviewCount = preview.filter((row) => !row.warning).length;
     const invalidPreviewCount = preview.length - validPreviewCount;
+    const postingAmount = Math.max(Number(postingLine?.debit || 0), Number(postingLine?.credit || 0));
+    const postingType = Number(postingLine?.debit || 0) > 0 ? 'Deposit' : 'Withdrawal';
 
     return (
         <AuthenticatedLayout
@@ -618,7 +766,7 @@ export default function BankAccountShow({ id }) {
                             columns={statementColumns}
                             dataSource={statementLines}
                             loading={loading}
-                            scroll={{ x: 1400 }}
+                            scroll={{ x: 1600 }}
                             locale={{ emptyText: <Empty description="No imported statement lines" /> }}
                         />
                     </Card>
@@ -661,7 +809,7 @@ export default function BankAccountShow({ id }) {
                     <Alert
                         type="info"
                         showIcon
-                        message="Imported statement lines are saved for review and reconciliation. They do not post journal vouchers automatically."
+                        message="Imported statement lines are saved for reconciliation. Use Create JV to post selected lines into actual accounts."
                     />
 
                     <Space wrap>
@@ -695,6 +843,59 @@ export default function BankAccountShow({ id }) {
                     />
                 </Space>
             </Drawer>
+
+            <Modal
+                title="Create Journal Voucher from Statement Line"
+                open={postingOpen}
+                onCancel={() => {
+                    setPostingOpen(false);
+                    setPostingLine(null);
+                    postForm.resetFields();
+                }}
+                onOk={createJournalVoucher}
+                confirmLoading={posting}
+                okText="Create & Post JV"
+                width={620}
+                destroyOnClose
+            >
+                <Alert
+                    showIcon
+                    type="warning"
+                    style={{ marginBottom: 12 }}
+                    message={`${postingType}: ${money(postingAmount)}`}
+                    description={
+                        postingType === 'Deposit'
+                            ? 'This will debit the bank account and credit the selected counter account.'
+                            : 'This will credit the bank account and debit the selected counter account.'
+                    }
+                />
+
+                <Form form={postForm} layout="vertical">
+                    <Form.Item
+                        name="offset_account_id"
+                        label="Counter Account"
+                        rules={[{ required: true, message: 'Counter account is required' }]}
+                    >
+                        <Select
+                            showSearch
+                            placeholder="Select account"
+                            loading={accountLoading}
+                            options={accountOptions}
+                            optionFilterProp="label"
+                            onSearch={(value) => loadAccounts(value)}
+                            filterOption={false}
+                        />
+                    </Form.Item>
+
+                    <Form.Item name="reference" label="Reference">
+                        <Input placeholder="Reference" />
+                    </Form.Item>
+
+                    <Form.Item name="narration" label="Narration">
+                        <Input.TextArea rows={3} placeholder="Narration" />
+                    </Form.Item>
+                </Form>
+            </Modal>
         </AuthenticatedLayout>
     );
 }
