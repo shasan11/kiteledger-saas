@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import { Badge, Card, Col, Row, Space, Tag, theme, Typography } from 'antd';
 import * as Yup from 'yup';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { api, fetchList } from './Shared/posHelpers';
 
@@ -111,16 +111,9 @@ export default function PosTerminalsPage() {
     });
 
     return (
-        <AuthenticatedLayout
-            header={(
-                <Space direction="vertical" size={0}>
-                    <Title level={4} style={{ margin: 0 }}>POS Terminals</Title>
-                    <Text type="secondary">Configure counters, branch warehouses, and payment clearing accounts for POS shifts.</Text>
-                </Space>
-            )}
-        >
+        <PosLayout>
             <Head title="POS Terminals" />
-            <div style={{ padding: 16, background: token.colorBgLayout }}>
+            <div style={{ padding: '18px 24px' }}>
                 <Space direction="vertical" size={14} style={{ width: '100%' }}>
                     <Row gutter={[12, 12]}>
                         {[
@@ -166,6 +159,6 @@ export default function PosTerminalsPage() {
             />
                 </Space>
             </div>
-        </AuthenticatedLayout>
+        </PosLayout>
     );
 }

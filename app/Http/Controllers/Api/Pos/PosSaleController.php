@@ -163,9 +163,16 @@ class PosSaleController extends Controller
         $warehouseId = $request->string('warehouse_id')->toString() ?: null;
         $q = trim((string) $request->input('q'));
         $barcode = trim((string) $request->input('barcode'));
+        $exactBarcode = filter_var($request->input('exact_barcode'), FILTER_VALIDATE_BOOLEAN);
 
         $branchId = $request->string('branch_id')->toString() ?: null;
         $this->assertBranchAccess($request, $branchId, 'You cannot sell products from another branch.');
+
+        // In exact_barcode mode (scanner), only search by barcode — never fuzzy-fall back.
+        // This prevents the wrong product from being silently added to the cart.
+        if ($exactBarcode && $barcode === '') {
+            return response()->json([]);
+        }
 
         $products = Product::query()
             ->with(['productUnit', 'taxClass'])
@@ -175,8 +182,19 @@ class PosSaleController extends Controller
             ->when($branchId && $this->tableHasColumn('products', 'branch_id'), fn ($query) => $query->where(function ($inner) use ($branchId) {
                 $inner->where('branch_id', $branchId)->orWhereNull('branch_id');
             }))
-            ->when($barcode !== '', fn ($query) => $query->where('barcode', $barcode))
-            ->when($q !== '', function ($query) use ($q) {
+            ->when($barcode !== '', function ($query) use ($barcode, $exactBarcode) {
+                if ($exactBarcode) {
+                    // Scanner mode: exact match on barcode, code, or SKU only — no fuzzy.
+                    $query->where(function ($inner) use ($barcode) {
+                        $inner->where('barcode', $barcode)
+                            ->orWhere('code', $barcode)
+                            ->orWhere('sku', $barcode);
+                    });
+                } else {
+                    $query->where('barcode', $barcode);
+                }
+            })
+            ->when(!$exactBarcode && $q !== '', function ($query) use ($q) {
                 $query->where(function ($inner) use ($q) {
                     $inner->where('name', 'like', "%{$q}%")
                         ->orWhere('code', 'like', "%{$q}%")
@@ -195,6 +213,7 @@ class PosSaleController extends Controller
 
             return [
                 'id' => $product->id,
+                'variant_id' => $product->product_type === 'variant' ? $product->id : null,
                 'name' => $product->name,
                 'code' => $product->code,
                 'sku' => $product->sku,

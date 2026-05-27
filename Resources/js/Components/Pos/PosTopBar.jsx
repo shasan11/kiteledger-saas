@@ -8,13 +8,13 @@ const { Text } = Typography;
 function Stat({ label, value, strong = false }) {
     return (
         <Space direction="vertical" size={0}>
-            <Text type="secondary">{label}</Text>
-            <Text strong={strong}>{value}</Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>{label}</Text>
+            <Text strong={strong} style={{ fontSize: 13 }}>{value}</Text>
         </Space>
     );
 }
 
-export default function PosTopBar({ terminal, shift, canCloseShift, onCloseShift }) {
+export default function PosTopBar({ terminal, shift, canCloseShift, onCloseShift, extraActions }) {
     const { token } = theme.useToken();
 
     return (
@@ -25,9 +25,9 @@ export default function PosTopBar({ terminal, shift, canCloseShift, onCloseShift
                 border: `1px solid ${token.colorBorderSecondary}`,
                 background: token.colorBgContainer,
             }}
-            bodyStyle={{ padding: token.paddingSM }}
+            styles={{ body: { padding: '10px 14px' } }}
         >
-            <Row gutter={[12, 12]} align="middle">
+            <Row gutter={[12, 10]} align="middle">
                 <Col xs={24} lg={8}>
                     <Space direction="vertical" size={2}>
                         <Space wrap>
@@ -35,9 +35,14 @@ export default function PosTopBar({ terminal, shift, canCloseShift, onCloseShift
                                 {terminal?.name || 'No Terminal'}
                             </Text>
                             <Text type="secondary">{terminal?.code || ''}</Text>
-                            <ShiftStatusTag status={shift ? 'open' : 'closed'} label={shift ? 'Open Shift' : 'No Shift'} />
+                            <ShiftStatusTag
+                                status={shift ? 'open' : 'closed'}
+                                label={shift ? 'Open Shift' : 'No Shift'}
+                            />
                         </Space>
-                        <Text type="secondary">{terminal?.branch?.name || '-'} / {terminal?.warehouse?.name || '-'}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            {terminal?.branch?.name || '-'} / {terminal?.warehouse?.name || '-'}
+                        </Text>
                     </Space>
                 </Col>
 
@@ -54,12 +59,15 @@ export default function PosTopBar({ terminal, shift, canCloseShift, onCloseShift
                     <Stat label="Expected Cash" value={`Rs. ${money(shift?.expected_cash)}`} />
                 </Col>
 
-                <Col xs={24} lg={4} style={{ textAlign: 'right' }}>
-                    {canCloseShift && shift ? (
-                        <Button danger icon={<PoweroffOutlined />} onClick={onCloseShift}>
-                            End Shift
-                        </Button>
-                    ) : null}
+                <Col xs={24} lg={4}>
+                    <Space wrap style={{ justifyContent: 'flex-end', width: '100%' }}>
+                        {extraActions}
+                        {canCloseShift && shift ? (
+                            <Button danger size="small" icon={<PoweroffOutlined />} onClick={onCloseShift}>
+                                End Shift
+                            </Button>
+                        ) : null}
+                    </Space>
                 </Col>
             </Row>
         </Card>

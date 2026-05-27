@@ -218,7 +218,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                     <Row gutter={16}>
                         <Col xs={24} sm={16}>
                             <Form.Item label="Party / Vendor" name="contact_id">
-                                <BackendSelect fkUrl="/api/contacts/" placeholder="Select party" />
+                                <BackendSelect fkUrl="/api/contacts/" placeholder="Select party" quickAddContact quickAddContactTitle="Contact" quickAddContactDefaults={{ contact_type: 'supplier' }} />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>

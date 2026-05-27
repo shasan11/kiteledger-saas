@@ -3,7 +3,7 @@ import { Head, usePage } from '@inertiajs/react';
 import { App, Button, Card, Descriptions, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
 import { api, fetchList, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 
 const { Text, Title } = Typography;
@@ -200,9 +200,9 @@ export default function PosReturnsPage() {
     ], [returnLines]);
 
     return (
-        <AuthenticatedLayout header={<Title level={4} style={{ margin: 0 }}>POS Returns</Title>}>
+        <PosLayout>
             <Head title="POS Returns" />
-            <div style={{ padding: 16 }}>
+            <div style={{ padding: '18px 24px' }}>
                 <Card bordered={false}>
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -291,6 +291,6 @@ export default function PosReturnsPage() {
                     )}
                 </Space>
             </Modal>
-        </AuthenticatedLayout>
+        </PosLayout>
     );
 }

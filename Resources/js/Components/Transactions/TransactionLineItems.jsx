@@ -28,7 +28,14 @@ export default function TransactionLineItems({
   showDiscount = true,
   showTax = true,
   minRow = 1,
+  quickAddProduct = true,
+  quickAddProductDefaults,
 }) {
+  const isPurchase = priceField === 'purchase_price';
+  const productDefaults = quickAddProductDefaults || {
+    allow_sale: !isPurchase,
+    allow_purchase: isPurchase,
+  };
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
 
   const rowKeyOf = (row) => row._key || row.id;
@@ -107,6 +114,8 @@ export default function TransactionLineItems({
           variant="borderless"
           style={{ width: '100%', ...cellInput }}
           onChange={(v, raw) => handleProductPick(idx, v, raw)}
+          quickAddProduct={quickAddProduct}
+          quickAddProductDefaults={productDefaults}
         />
       ),
     },

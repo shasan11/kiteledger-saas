@@ -150,7 +150,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" />
+                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>

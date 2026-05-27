@@ -198,6 +198,8 @@ export default function WarehouseTransferAdd({ initialRecord = null, isEdit = fa
                     style={{ width: '100%' }}
                     variant="borderless"
                     onChange={(v, raw) => updateLineProduct(idx, v, raw)}
+                    quickAddProduct
+                    quickAddProductDefaults={{ track_inventory: true }}
                 />
             ),
         },

@@ -131,7 +131,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" onChange={(v) => { setContactId(v); form.setFieldValue('contact_id', v); }} />
+                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} onChange={(v) => { setContactId(v); form.setFieldValue('contact_id', v); }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}><Form.Item label="Payment No" name="payment_no"><Input disabled /></Form.Item></Col>

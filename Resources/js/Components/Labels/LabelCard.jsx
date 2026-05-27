@@ -1,5 +1,5 @@
 import React from 'react';
-import QRCode from 'react-qr-code';
+import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 import Barcode from './Barcode';
 
@@ -210,7 +210,7 @@ export default function LabelCard({ label, settings, blank = false }) {
               flexShrink: 0,
             }}
           >
-            <QRCode
+            <QRCodeSVG
               value={qrValue || ' '}
               size={256}
               style={{ width: '100%', height: '100%' }}

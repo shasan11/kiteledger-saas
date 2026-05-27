@@ -16,7 +16,7 @@ import {
 import { ArrowLeftOutlined, PrinterOutlined, RollbackOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
 import { api, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 import PosReturnModal from './Shared/PosReturnModal';
 
@@ -76,33 +76,26 @@ export default function PosSaleShow({ id }) {
     const canReturn = can('pos.return.create') && ['completed', 'part_refunded'].includes(record?.status);
 
     return (
-        <AuthenticatedLayout
-            header={
-                <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+        <PosLayout>
+            <Head title={record?.sale_no || 'POS Sale'} />
+
+            <div style={{ padding: '18px 24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
                     <Space>
                         <Link href={route('pos.sales.index')}>
                             <Button icon={<ArrowLeftOutlined />}>Back to Sales</Button>
                         </Link>
-                        <Title level={4} style={{ margin: 0 }}>POS Sale</Title>
+                        <Text strong style={{ fontSize: 15 }}>POS Sale</Text>
                     </Space>
                     <Space>
                         {canReturn && (
-                            <Button
-                                icon={<RollbackOutlined />}
-                                onClick={openReturn}
-                                disabled={loading || !record}
-                            >
+                            <Button icon={<RollbackOutlined />} onClick={openReturn} disabled={loading || !record}>
                                 Return
                             </Button>
                         )}
                         <Button icon={<PrinterOutlined />} onClick={() => setPrintOpen(true)}>Print Preview</Button>
                     </Space>
-                </Space>
-            }
-        >
-            <Head title={record?.sale_no || 'POS Sale'} />
-
-            <div style={{ padding: 16 }}>
+                </div>
                 {!loading && !record ? (
                     <Empty description="Sale not found" />
                 ) : (
@@ -187,6 +180,6 @@ export default function PosSaleShow({ id }) {
                     />
                 ) : null}
             </Drawer>
-        </AuthenticatedLayout>
+        </PosLayout>
     );
 }

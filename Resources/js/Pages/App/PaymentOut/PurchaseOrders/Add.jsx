@@ -126,7 +126,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Supplier" name="contact_id" rules={[{ required: true, message: 'Supplier is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/?type=supplier" placeholder="Select supplier" />
+                <BackendSelect fkUrl="/api/contacts/?type=supplier" placeholder="Select supplier" quickAddContact quickAddContactTitle="Supplier" quickAddContactDefaults={{ contact_type: 'supplier' }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>

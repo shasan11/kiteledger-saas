@@ -18,11 +18,12 @@ const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
 const customerQuickAddFields = [
   { name: 'name', label: 'Customer Name', placeholder: 'Customer name', rules: [{ required: true, message: 'Customer name is required' }] },
-  { name: 'phone', label: 'Phone', placeholder: '+977 9800000000', col: 12 },
+  { name: 'code', label: 'Code', placeholder: 'Auto-generate if blank', col: 12 },
+  { name: 'phone', label: 'Phone', type: 'phone', placeholder: '9800000000', col: 12, defaultCountryCode: '+977' },
   { name: 'email', label: 'Email', placeholder: 'email@example.com', col: 12 },
   { name: 'address', label: 'Address', type: 'textarea', rows: 2, placeholder: 'Address' },
 ];
-const customerQuickAddInitialValues = { contact_type: 'customer', name: '', phone: '', email: '', address: '', active: true };
+const customerQuickAddInitialValues = { contact_type: 'customer', name: '', code: '', phone: '', email: '', address: '', active: true };
 const customerLabel = (row) => [row?.name, row?.code ? `(${row.code})` : null].filter(Boolean).join(' ');
 const trimOrNull = (value) => {
   if (value === undefined || value === null) return null;
@@ -32,6 +33,7 @@ const trimOrNull = (value) => {
 const customerCreatePayload = (values = {}) => ({
   contact_type: 'customer',
   name: trimOrNull(values.name),
+  code: trimOrNull(values.code),
   phone: trimOrNull(values.phone),
   email: trimOrNull(values.email),
   address: trimOrNull(values.address),

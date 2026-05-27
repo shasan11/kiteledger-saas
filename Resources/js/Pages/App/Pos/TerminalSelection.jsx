@@ -26,10 +26,9 @@ import {
 import axios from 'axios';
 import dayjs from 'dayjs';
 
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
 import AddTerminalModal from '@/Components/Pos/AddTerminalModal';
 import OpenShiftModal from '@/Components/Pos/OpenShiftModal';
-import PosSubNav from './Shared/PosSubNav';
 import { api, money, showApiError } from './Shared/posHelpers';
 
 const { Text, Title } = Typography;
@@ -416,92 +415,63 @@ export default function TerminalSelection() {
     }
   }
 
-  const headerNode = (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: token.marginSM,
-      }}
-    >
-      <Space size={10}>
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: token.borderRadiusLG,
-            display: 'grid',
-            placeItems: 'center',
-            background: token.colorPrimaryBg,
-            color: token.colorPrimary,
-          }}
-        >
-          <ShopOutlined />
-        </div>
-
-        <div>
-          <Title level={5} style={{ margin: 0 }}>
-            POS Control Center
-          </Title>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Select a terminal and start selling
-          </Text>
-        </div>
-      </Space>
-
-      <Space size={8}>
-        <Button
-          size="small"
-          icon={<ReloadOutlined />}
-          onClick={loadOverview}
-          loading={loading}
-        >
-          Refresh
-        </Button>
-
-        {canCreateTerminal && (
-          <Button
-            size="small"
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setAddTerminalOpen(true)}
-          >
-            Add Terminal
-          </Button>
-        )}
-      </Space>
-    </div>
-  );
-
   if (!canViewTerminals) {
     return (
-      <AuthenticatedLayout header={headerNode} user={props?.auth?.user}>
+      <PosLayout>
         <Head title="POS Control Center" />
-
-        <Result
-          status="403"
-          title="No terminal access"
-          subTitle="You do not have permission to view POS terminals."
-        />
-      </AuthenticatedLayout>
+        <div style={{ padding: '18px 24px' }}>
+          <Result
+            status="403"
+            title="No terminal access"
+            subTitle="You do not have permission to view POS terminals."
+          />
+        </div>
+      </PosLayout>
     );
   }
 
   return (
-    <AuthenticatedLayout header={headerNode} user={props?.auth?.user}>
+    <PosLayout>
       <Head title="POS Control Center" />
 
       <div
         style={{
-          minHeight: 'calc(100vh - 120px)',
-          padding: token.paddingSM,
+          minHeight: 'calc(100vh - 72px)',
+          padding: '18px 24px',
           background: token.colorBgLayout,
         }}
       >
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <PosSubNav />
+          {/* Action bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+            <Space size={8} align="center">
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: token.borderRadiusLG,
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: token.colorPrimaryBg,
+                  color: token.colorPrimary,
+                }}
+              >
+                <ShopOutlined />
+              </div>
+              <Text strong style={{ fontSize: 14 }}>POS Control Center</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>Select a terminal to start selling</Text>
+            </Space>
+            <Space size={8}>
+              <Button size="small" icon={<ReloadOutlined />} onClick={loadOverview} loading={loading}>
+                Refresh
+              </Button>
+              {canCreateTerminal && (
+                <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddTerminalOpen(true)}>
+                  Add Terminal
+                </Button>
+              )}
+            </Space>
+          </div>
 
           <Row gutter={[12, 12]}>
             <Col xs={24} sm={8}>
@@ -671,6 +641,6 @@ export default function TerminalSelection() {
         onCancel={() => setAddTerminalOpen(false)}
         onSubmit={submitAddTerminal}
       />
-    </AuthenticatedLayout>
+    </PosLayout>
   );
 }

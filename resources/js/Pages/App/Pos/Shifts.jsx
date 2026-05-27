@@ -20,7 +20,7 @@ import {
 } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
 import { api, defaultRangeForKey, fetchList, money, rangeParams, showApiError } from './Shared/posHelpers';
 
 const { Title, Text } = Typography;
@@ -361,10 +361,10 @@ export default function PosShiftsPage() {
     );
 
     return (
-        <AuthenticatedLayout header={<Title level={4} style={{ margin: 0 }}>POS Shifts</Title>}>
+        <PosLayout>
             <Head title="POS Shifts" />
 
-            <div style={{ padding: 16 }}>
+            <div style={{ padding: '18px 24px' }}>
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                     {openShift && (
                         <Card
@@ -705,6 +705,6 @@ export default function PosShiftsPage() {
                     </Form>
                 </Space>
             </Modal>
-        </AuthenticatedLayout>
+        </PosLayout>
     );
 }

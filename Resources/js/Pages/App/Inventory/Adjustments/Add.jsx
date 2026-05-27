@@ -295,6 +295,8 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                     style={{ width: '100%' }}
                     variant="borderless"
                     onChange={(v, raw) => updateLineProduct(idx, v, raw)}
+                    quickAddProduct
+                    quickAddProductDefaults={{ track_inventory: true }}
                 />
             ),
         },

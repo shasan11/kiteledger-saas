@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
-import { Button, Card, DatePicker, Row, Col, Select, Space, Table, Tag, Typography, App } from 'antd';
+import { Button, Card, DatePicker, Row, Col, Select, Space, Spin, Table, Tag, Typography, App } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import PosLayout from '@/Layouts/PosLayout.jsx';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import { api, defaultRangeForKey, fetchList, money, rangeParams, saleStatusColor, showApiError } from './Shared/posHelpers';
 import PosReturnModal from './Shared/PosReturnModal';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
+
+const resolveLogoUrl = (path) => {
+    if (!path) return null;
+    if (/^https?:\/\//i.test(path)) return path;
+    const base = (import.meta.env.VITE_APP_BACKEND_URL || '').replace(/\/+$/, '');
+    return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+};
 
 export default function PosSalesPage() {
     const { message } = App.useApp();
@@ -19,8 +27,9 @@ export default function PosSalesPage() {
     const [range, setRange] = useState(defaultRangeForKey('today'));
     const [rows, setRows] = useState([]);
     const [terminals, setTerminals] = useState([]);
-    const [filters, setFilters] = useState({ status: undefined, pos_terminal_id: undefined, cashier_id: undefined });
+    const [filters, setFilters] = useState({ status: undefined, pos_terminal_id: undefined });
     const [returnSaleId, setReturnSaleId] = useState(null);
+    const [company, setCompany] = useState(null);
 
     useEffect(() => {
         void bootstrap();
@@ -33,12 +42,14 @@ export default function PosSalesPage() {
     async function bootstrap() {
         setLoading(true);
         try {
-            const [salesPayload, terminalPayload] = await Promise.all([
+            const [salesPayload, terminalPayload, companyResponse] = await Promise.all([
                 fetchList('/api/pos-sales', { ...rangeParams(range), page_size: 100 }),
                 fetchList('/api/pos-terminals', { page_size: 100, active: true }),
+                axios.get(api('/api/app-settings/current')).catch(() => ({ data: null })),
             ]);
             setRows(salesPayload.results || []);
             setTerminals(terminalPayload.results || []);
+            setCompany(companyResponse.data?.data || companyResponse.data || null);
         } catch (error) {
             showApiError(message, error, 'Failed to load POS sales.');
         } finally {
@@ -68,6 +79,7 @@ export default function PosSalesPage() {
         { title: 'Date', dataIndex: 'sale_date', key: 'sale_date', render: (value) => dayjs(value).format('DD-MM-YYYY HH:mm') },
         { title: 'Terminal', key: 'terminal', render: (_, record) => record.pos_terminal?.name || '-' },
         { title: 'Customer', key: 'customer', render: (_, record) => record.customer_name || record.contact?.name || 'Walk-in' },
+        { title: 'Cashier', key: 'cashier', render: (_, record) => record.cashier?.display_name || record.cashier?.name || '-' },
         { title: 'Status', dataIndex: 'status', key: 'status', render: (value) => <Tag color={saleStatusColor(value)}>{value}</Tag> },
         { title: 'Grand Total', dataIndex: 'grand_total', key: 'grand_total', align: 'right', render: (value) => <Text strong>Rs. {money(value)}</Text> },
         {
@@ -84,78 +96,197 @@ export default function PosSalesPage() {
         },
     ], [permissions]);
 
+    const grandTotal = useMemo(() => rows.reduce((sum, r) => sum + Number(r.grand_total || 0), 0), [rows]);
+    const completedCount = useMemo(() => rows.filter((r) => ['completed', 'part_refunded', 'refunded'].includes(r.status)).length, [rows]);
+
+    const logoUrl = resolveLogoUrl(
+        company?.logo || company?.logo_url || company?.logo_path || company?.company_logo || null
+    );
+    const companyName = company?.company_name || company?.name || 'Company';
+    const companyAddress = [company?.address, company?.city, company?.country].filter(Boolean).join(', ');
+    const companyContact = [company?.phone, company?.email].filter(Boolean).join(' | ');
+    const companyPanVat = company?.pan_vat || company?.pan || company?.vat || null;
+
+    const selectedTerminalName = filters.pos_terminal_id
+        ? terminals.find((t) => t.id === filters.pos_terminal_id)?.name || '-'
+        : 'All Terminals';
+
+    const periodLabel = rangeKey === 'custom' && range?.[0] && range?.[1]
+        ? `${dayjs(range[0]).format('DD MMM YYYY')} – ${dayjs(range[1]).format('DD MMM YYYY')}`
+        : rangeKey === 'today' ? `Today (${dayjs().format('DD MMM YYYY')})`
+        : rangeKey === 'week' ? 'This Week'
+        : rangeKey === 'month' ? 'This Month'
+        : '';
+
+    const statusLabel = filters.status
+        ? String(filters.status).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+        : 'All Statuses';
+
     return (
-        <AuthenticatedLayout
-            header={<Title level={4} style={{ margin: 0 }}>POS Sales</Title>}
-        >
+        <PosLayout>
             <Head title="POS Sales" />
 
-            <div style={{ padding: 16 }}>
-                <Card bordered={false}>
-                    <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                        <Row gutter={12}>
-                            <Col xs={24} md={8}>
+            <div style={{ padding: '18px 24px' }}>
+                {/* Filter controls — outside printable area */}
+                <Card bordered={false} style={{ marginBottom: 16 }}>
+                    <Row gutter={12}>
+                        <Col xs={24} md={8}>
+                            <Select
+                                style={{ width: '100%' }}
+                                value={rangeKey}
+                                onChange={(value) => {
+                                    setRangeKey(value);
+                                    setRange(defaultRangeForKey(value));
+                                }}
+                                options={[
+                                    { value: 'today', label: 'Today' },
+                                    { value: 'week', label: 'This Week' },
+                                    { value: 'month', label: 'This Month' },
+                                    { value: 'custom', label: 'Custom Range' },
+                                ]}
+                            />
+                        </Col>
+                        <Col xs={24} md={8}>
+                            <DatePicker.RangePicker style={{ width: '100%' }} value={range} onChange={setRange} disabled={rangeKey !== 'custom'} />
+                        </Col>
+                        <Col xs={24} md={8}>
+                            <Space.Compact style={{ width: '100%' }}>
                                 <Select
-                                    style={{ width: '100%' }}
-                                    value={rangeKey}
-                                    onChange={(value) => {
-                                        setRangeKey(value);
-                                        setRange(defaultRangeForKey(value));
-                                    }}
+                                    allowClear
+                                    placeholder="Status"
+                                    style={{ width: '40%' }}
+                                    value={filters.status}
+                                    onChange={(value) => setFilters((current) => ({ ...current, status: value }))}
                                     options={[
-                                        { value: 'today', label: 'Today' },
-                                        { value: 'week', label: 'This Week' },
-                                        { value: 'month', label: 'This Month' },
-                                        { value: 'custom', label: 'Custom Range' },
+                                        { value: 'completed', label: 'Completed' },
+                                        { value: 'held', label: 'Held' },
+                                        { value: 'cancelled', label: 'Cancelled' },
+                                        { value: 'refunded', label: 'Refunded' },
+                                        { value: 'part_refunded', label: 'Part Refunded' },
                                     ]}
                                 />
-                            </Col>
-                            <Col xs={24} md={8}>
-                                <DatePicker.RangePicker style={{ width: '100%' }} value={range} onChange={setRange} disabled={rangeKey !== 'custom'} />
-                            </Col>
-                            <Col xs={24} md={8}>
-                                <Space.Compact style={{ width: '100%' }}>
-                                    <Select
-                                        allowClear
-                                        placeholder="Status"
-                                        style={{ width: '40%' }}
-                                        value={filters.status}
-                                        onChange={(value) => setFilters((current) => ({ ...current, status: value }))}
-                                        options={[
-                                            { value: 'completed', label: 'Completed' },
-                                            { value: 'held', label: 'Held' },
-                                            { value: 'cancelled', label: 'Cancelled' },
-                                            { value: 'refunded', label: 'Refunded' },
-                                            { value: 'part_refunded', label: 'Part Refunded' },
-                                        ]}
-                                    />
-                                    <Select
-                                        allowClear
-                                        placeholder="Terminal"
-                                        style={{ width: '60%' }}
-                                        value={filters.pos_terminal_id}
-                                        onChange={(value) => setFilters((current) => ({ ...current, pos_terminal_id: value }))}
-                                        options={terminals.map((terminal) => ({ value: terminal.id, label: terminal.name }))}
-                                    />
-                                </Space.Compact>
-                            </Col>
-                        </Row>
-
-                        <Table
-                            loading={loading}
-                            rowKey="id"
-                            columns={columns}
-                            dataSource={rows}
-                            onRow={(record) => ({
-                                onClick: (event) => {
-                                    if (event.target.closest('button')) return;
-                                    router.visit(route('pos.sales.show', record.id));
-                                },
-                                style: { cursor: 'pointer' },
-                            })}
-                        />
-                    </Space>
+                                <Select
+                                    allowClear
+                                    placeholder="Terminal"
+                                    style={{ width: '60%' }}
+                                    value={filters.pos_terminal_id}
+                                    onChange={(value) => setFilters((current) => ({ ...current, pos_terminal_id: value }))}
+                                    options={terminals.map((terminal) => ({ value: terminal.id, label: terminal.name }))}
+                                />
+                            </Space.Compact>
+                        </Col>
+                    </Row>
                 </Card>
+
+                {loading ? (
+                    <div style={{ minHeight: 300, display: 'grid', placeItems: 'center' }}>
+                        <Spin />
+                    </div>
+                ) : (
+                    <PrintablePdfEmailWrapper
+                        title="POS Sales Report"
+                        fileName={`pos-sales-report-${dayjs().format('YYYY-MM-DD')}.pdf`}
+                        allowEmail={false}
+                    >
+                        {/* ── Printable document body ── */}
+                        <div style={{ padding: '36px 44px', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 13, color: '#111', background: '#fff', minWidth: 720 }}>
+
+                            {/* Company header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, marginBottom: 20, borderBottom: '2px solid #1a1a1a' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                    {logoUrl && (
+                                        <img
+                                            src={logoUrl}
+                                            alt="Logo"
+                                            style={{ height: 60, width: 'auto', maxWidth: 150, objectFit: 'contain' }}
+                                            crossOrigin="anonymous"
+                                        />
+                                    )}
+                                    <div>
+                                        <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{companyName}</div>
+                                        {companyAddress && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{companyAddress}</div>}
+                                        {companyContact && <div style={{ fontSize: 12, color: '#666' }}>{companyContact}</div>}
+                                        {companyPanVat && <div style={{ fontSize: 12, color: '#666' }}>PAN/VAT: {companyPanVat}</div>}
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: 'right', minWidth: 180 }}>
+                                    <div style={{ fontSize: 17, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>POS Sales Report</div>
+                                    <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>Period: {periodLabel}</div>
+                                    <div style={{ fontSize: 12, color: '#555' }}>Terminal: {selectedTerminalName}</div>
+                                    <div style={{ fontSize: 12, color: '#555' }}>Status: {statusLabel}</div>
+                                    <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+                                        Printed: {dayjs().format('DD MMM YYYY, HH:mm')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Summary row */}
+                            <div style={{ display: 'flex', gap: 24, marginBottom: 24 }}>
+                                {[
+                                    { label: 'Total Transactions', value: rows.length },
+                                    { label: 'Completed / Refunded', value: completedCount },
+                                    { label: 'Grand Total', value: `Rs. ${money(grandTotal)}`, highlight: true },
+                                ].map(({ label, value, highlight }) => (
+                                    <div key={label} style={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 6, padding: '12px 16px', background: highlight ? '#f6ffed' : '#fafafa' }}>
+                                        <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{label}</div>
+                                        <div style={{ fontSize: 16, fontWeight: 700, color: highlight ? '#389e0d' : '#111' }}>{value}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Sales table */}
+                            <Table
+                                size="small"
+                                pagination={false}
+                                rowKey="id"
+                                dataSource={rows}
+                                columns={[
+                                    { title: 'Sale No', dataIndex: 'sale_no', key: 'sale_no' },
+                                    { title: 'Date', dataIndex: 'sale_date', key: 'sale_date', render: (v) => dayjs(v).format('DD-MM-YYYY HH:mm') },
+                                    { title: 'Terminal', key: 'terminal', render: (_, r) => r.pos_terminal?.name || '-' },
+                                    { title: 'Customer', key: 'customer', render: (_, r) => r.customer_name || r.contact?.name || 'Walk-in' },
+                                    { title: 'Cashier', key: 'cashier', render: (_, r) => r.cashier?.display_name || r.cashier?.name || '-' },
+                                    {
+                                        title: 'Status',
+                                        dataIndex: 'status',
+                                        key: 'status',
+                                        render: (value) => (
+                                            <Tag color={{ completed: 'green', refunded: 'red', part_refunded: 'orange', held: 'default', cancelled: 'default' }[value] || 'default'}>
+                                                {value}
+                                            </Tag>
+                                        ),
+                                    },
+                                    { title: 'Grand Total', dataIndex: 'grand_total', key: 'grand_total', align: 'right', render: (v) => `Rs. ${money(v)}` },
+                                ]}
+                                summary={() => (
+                                    <Table.Summary.Row>
+                                        <Table.Summary.Cell index={0} colSpan={6}>
+                                            <Text strong>Total ({rows.length} sales)</Text>
+                                        </Table.Summary.Cell>
+                                        <Table.Summary.Cell index={1} align="right">
+                                            <Text strong>Rs. {money(grandTotal)}</Text>
+                                        </Table.Summary.Cell>
+                                    </Table.Summary.Row>
+                                )}
+                            />
+
+                            {/* Signature row */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 48, gap: 32 }}>
+                                {['Prepared By', 'Verified By', 'Authorized By'].map((label) => (
+                                    <div key={label} style={{ flex: 1, textAlign: 'center' }}>
+                                        <div style={{ borderTop: '1px solid #333', paddingTop: 6, fontSize: 11, color: '#555' }}>{label}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Footer */}
+                            <div style={{ marginTop: 24, paddingTop: 10, borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#aaa' }}>
+                                <span>Generated on {dayjs().format('DD MMM YYYY, HH:mm')}</span>
+                                <span>{companyName} — POS Sales Report</span>
+                            </div>
+                        </div>
+                    </PrintablePdfEmailWrapper>
+                )}
             </div>
 
             <PosReturnModal
@@ -167,6 +298,6 @@ export default function PosSalesPage() {
                     await loadRows();
                 }}
             />
-        </AuthenticatedLayout>
+        </PosLayout>
     );
 }

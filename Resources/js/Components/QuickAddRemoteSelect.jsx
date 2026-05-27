@@ -18,6 +18,28 @@ import axios from 'axios';
 
 const EMPTY_ARRAY = [];
 
+const COUNTRY_CODE_OPTIONS = [
+  { value: '+977', label: '+977' },
+  { value: '+91', label: '+91' },
+  { value: '+1', label: '+1' },
+  { value: '+44', label: '+44' },
+  { value: '+61', label: '+61' },
+  { value: '+971', label: '+971' },
+  { value: '+974', label: '+974' },
+  { value: '+966', label: '+966' },
+];
+
+const splitPhone = (raw, defaultCode = '+977') => {
+  const text = String(raw || '').trim();
+  const match = text.match(/^(\+\d{1,4})\s*(.*)$/);
+  return { code: match?.[1] || defaultCode, number: match ? match[2] || '' : text };
+};
+
+const buildPhone = (code, number) => {
+  const clean = String(number || '').trim();
+  return clean ? `${code || '+977'} ${clean}` : '';
+};
+
 const normalizeRows = (payload) => {
   if (Array.isArray(payload?.results)) return payload.results;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -91,7 +113,26 @@ function CompactSelect({
   );
 }
 
-function QuickAddFormField({ field }) {
+function QuickAddFormField({ field, value, onChange }) {
+  if (field.type === 'phone') {
+    const defaultCode = field.defaultCountryCode || '+977';
+    const parts = splitPhone(value, defaultCode);
+    return (
+      <Space.Compact style={{ width: '100%' }}>
+        <Select
+          value={parts.code}
+          style={{ width: 92 }}
+          options={field.countryCodeOptions || COUNTRY_CODE_OPTIONS}
+          onChange={(code) => onChange?.(buildPhone(code, parts.number))}
+        />
+        <Input
+          value={parts.number}
+          placeholder={field.placeholder || `${defaultCode} 9800000000`}
+          onChange={(e) => onChange?.(buildPhone(parts.code, e.target.value))}
+        />
+      </Space.Compact>
+    );
+  }
   if (field.type === 'number') {
     return (
       <InputNumber
@@ -382,6 +423,7 @@ export default function QuickAddRemoteSelect({
               </Col>
             ))}
           </Row>
+
         </Form>
       </Modal>
     </>

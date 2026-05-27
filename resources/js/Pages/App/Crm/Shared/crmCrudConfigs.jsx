@@ -133,8 +133,9 @@ const quickContactConfig = {
   fields: [
     { name: 'contact_type', label: 'Contact Type', type: 'select', required: true, col: 12, options: [{ value: 'customer', label: 'Customer' }, { value: 'supplier', label: 'Supplier' }, { value: 'lead', label: 'Lead' }] },
     { name: 'name', label: 'Contact Name', type: 'text', required: true, col: 12, placeholder: 'Contact name' },
+    { name: 'code', label: 'Code', type: 'text', col: 12, placeholder: 'Auto-generate if blank' },
+    { name: 'phone', label: 'Phone', type: 'phone', col: 12, placeholder: '9800000000', defaultCountryCode: '+977' },
     { name: 'email', label: 'Email', type: 'text', col: 12, placeholder: 'email@example.com' },
-    { name: 'phone', label: 'Phone', type: 'phone', col: 12, placeholder: '+977 9800000000', defaultCountryCode: '+977' },
     {
       name: 'contact_group_id', label: 'Contact Group', type: 'fkSelect', col: 12, placeholder: 'Select group',
       fkUrl: api('/api/contact-groups/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name',
@@ -142,10 +143,11 @@ const quickContactConfig = {
     },
     { name: 'active', label: 'Active', type: 'switch', col: 12 },
   ],
-  initialValues: { contact_type: 'lead', name: '', email: '', phone: '', contact_group_id: null, active: true },
+  initialValues: { contact_type: 'lead', name: '', code: '', phone: '', email: '', contact_group_id: null, active: true },
   validationSchema: Yup.object({
     contact_type: Yup.string().required('Contact type is required'),
     name: Yup.string().required('Contact name is required').max(180),
+    code: Yup.string().nullable().max(60),
     email: Yup.string().nullable().email('Invalid email').max(120),
     phone: Yup.string().nullable().max(40),
     contact_group_id: Yup.string().nullable(),
@@ -154,6 +156,7 @@ const quickContactConfig = {
   transformPayload: (values = {}) => ({
     contact_type: values.contact_type || 'lead',
     name: values.name?.trim() || null,
+    code: values.code?.trim() || null,
     email: values.email?.trim() || null,
     phone: values.phone?.trim() || null,
     contact_group_id: values.contact_group_id || null,
