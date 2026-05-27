@@ -15,6 +15,8 @@ class CrmDealStageHistory extends Model
         'deal_id',
         'from_stage_id',
         'to_stage_id',
+        'event_type',
+        'to_status',
         'changed_by',
         'changed_at',
         'days_in_previous_stage',

@@ -90,6 +90,7 @@ class PosShiftController extends Controller
             'posTerminal',
             'cashier',
             'posSales.contact',
+            'posSales.posPayments',
             'posCashMovements.account',
         ]);
 

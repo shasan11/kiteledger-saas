@@ -19,6 +19,7 @@ use App\Models\Role;
 use App\Models\SalesConfiguration;
 use App\Models\TaxRate;
 use App\Models\Warehouse;
+use App\Services\Settings\DatabaseSettingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -30,6 +31,16 @@ class SettingsConfigurationController extends Controller
         'inventory' => InventoryConfiguration::class,
         'sales' => SalesConfiguration::class,
         'purchase' => PurchaseConfiguration::class,
+    ];
+
+    private array $posDefaults = [
+        'show_services_in_pos' => true,
+        'allow_zero_stock_sale' => false,
+        'allow_negative_stock_sale' => false,
+        'default_cash_account_id' => null,
+        'default_card_account_id' => null,
+        'default_online_account_id' => null,
+        'receipt_paper_size' => '80mm',
     ];
 
     public function dashboard()
@@ -62,12 +73,26 @@ class SettingsConfigurationController extends Controller
 
     public function show(string $area)
     {
+        if ($area === 'pos') {
+            return response()->json($this->posSettings());
+        }
+
         $class = $this->modelClass($area);
         return response()->json($class::query()->where('active', true)->oldest()->first());
     }
 
     public function update(Request $request, string $area)
     {
+        if ($area === 'pos') {
+            $settings = app(DatabaseSettingService::class);
+            foreach ($this->validated($request, $area, new GeneralSettingProxy) as $key => $value) {
+                $settings->set($key, $value === null ? '' : $value, 'pos');
+            }
+            $settings->forgetGroup('pos');
+
+            return response()->json($this->posSettings());
+        }
+
         $class = $this->modelClass($area);
         $record = $class::query()->where('active', true)->oldest()->first() ?? new $class(['active' => true]);
         $record->fill($this->validated($request, $area, $record));
@@ -78,7 +103,7 @@ class SettingsConfigurationController extends Controller
 
     private function modelClass(string $area): string
     {
-        abort_unless(isset($this->map[$area]), 404);
+        abort_unless($area === 'pos' || isset($this->map[$area]), 404);
         return $this->map[$area];
     }
 
@@ -150,8 +175,37 @@ class SettingsConfigurationController extends Controller
                 'overdue_reminders_enabled' => ['nullable', 'boolean'],
                 'active' => ['nullable', 'boolean'],
             ],
+            'pos' => [
+                'show_services_in_pos' => ['nullable', 'boolean'],
+                'allow_zero_stock_sale' => ['nullable', 'boolean'],
+                'allow_negative_stock_sale' => ['nullable', 'boolean'],
+                'default_cash_account_id' => $account,
+                'default_card_account_id' => $account,
+                'default_online_account_id' => $account,
+                'receipt_paper_size' => ['nullable', 'in:58mm,80mm,A4'],
+            ],
         };
 
         return $request->validate($rules);
     }
+
+    private function posSettings(): array
+    {
+        $values = app(DatabaseSettingService::class)->getGroup('pos');
+
+        return collect($this->posDefaults)
+            ->mapWithKeys(function ($default, $key) use ($values) {
+                $value = array_key_exists($key, $values) && $values[$key] !== '' ? $values[$key] : $default;
+                if (is_bool($default)) {
+                    $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+                }
+
+                return [$key => $value];
+            })
+            ->all();
+    }
+}
+
+class GeneralSettingProxy extends Model
+{
 }

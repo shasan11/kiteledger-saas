@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\TaxRate;
 use App\Services\Pos\PosInventoryService;
 use App\Services\Pos\PosSaleService;
+use App\Services\Settings\DatabaseSettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -174,11 +175,14 @@ class PosSaleController extends Controller
             return response()->json([]);
         }
 
+        $showServices = app(DatabaseSettingService::class)->bool('show_services_in_pos', true, 'pos');
+        $types = $showServices ? ['simple', 'variant', 'service'] : ['simple', 'variant'];
+
         $products = Product::query()
             ->with(['productUnit', 'taxClass'])
             ->where('active', true)
             ->where('allow_sale', true)
-            ->whereIn('product_type', ['simple', 'variant', 'service'])
+            ->whereIn('product_type', $types)
             ->when($branchId && $this->tableHasColumn('products', 'branch_id'), fn ($query) => $query->where(function ($inner) use ($branchId) {
                 $inner->where('branch_id', $branchId)->orWhereNull('branch_id');
             }))
@@ -224,6 +228,7 @@ class PosSaleController extends Controller
                 'available_stock' => $warehouseId ? $this->inventoryService->availableStock($product->id, $warehouseId) : null,
                 'allow_sale' => (bool) $product->allow_sale,
                 'track_inventory' => (bool) $product->track_inventory,
+                'product_type' => $product->product_type,
             ];
         })->values();
 

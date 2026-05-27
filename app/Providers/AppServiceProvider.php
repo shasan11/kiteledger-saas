@@ -41,6 +41,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->singleton(\App\Services\SmsService::class);
+        $this->app->alias(\App\Services\SmsService::class, 'sms');
     }
 
     public function boot(): void

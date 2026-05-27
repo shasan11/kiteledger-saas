@@ -17,6 +17,7 @@ use App\Models\PosShift;
 use App\Models\PosTerminal;
 use App\Models\Product;
 use App\Services\AppContextService;
+use App\Services\Settings\DatabaseSettingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -536,6 +537,18 @@ class PosSaleService
 
     private function fallbackAccountIdForMethod(string $method): ?string
     {
+        $settings = app(DatabaseSettingService::class);
+        $configured = match ($method) {
+            'cash' => $settings->string('default_cash_account_id', '', 'pos'),
+            'card' => $settings->string('default_card_account_id', '', 'pos'),
+            'online', 'wallet', 'bank_transfer' => $settings->string('default_online_account_id', '', 'pos'),
+            default => '',
+        };
+
+        if ($configured && Account::query()->whereKey($configured)->where('active', true)->exists()) {
+            return $configured;
+        }
+
         $preferredNatures = match ($method) {
             'cash' => ['cash'],
             'card', 'online', 'wallet', 'bank_transfer' => ['bank'],

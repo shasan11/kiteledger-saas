@@ -15,6 +15,7 @@ import {
   Modal,
   Progress,
   Row,
+  Select,
   Skeleton,
   Space,
   Table,
@@ -2374,6 +2375,7 @@ function RecordLayout({
   title,
   subtitle,
   icon,
+  avatarSrc = null,
   tags,
   backLabel,
   backUrl,
@@ -2426,15 +2428,16 @@ function RecordLayout({
             <div className="crm-show__entity">
               <Avatar
                 size={48}
-                icon={icon}
+                src={avatarSrc || undefined}
+                icon={avatarSrc ? undefined : icon}
                 style={{
-                  background: token.colorPrimaryBg,
+                  background: avatarSrc ? undefined : token.colorPrimaryBg,
                   color: token.colorPrimary,
                   fontWeight: 800,
                   flex: 'none',
                 }}
               >
-                {icon ? null : initials(title)}
+                {avatarSrc || icon ? null : initials(title)}
               </Avatar>
 
               <div style={{ minWidth: 0 }}>
@@ -2863,6 +2866,8 @@ function ContactEditDrawer({ contact, open, onClose, onSaved }) {
 
 export function ContactShow({ auth, id }) {
   const [editOpen, setEditOpen] = useState(false);
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
+  const [ticketsRefreshKey, setTicketsRefreshKey] = useState(0);
 
   return (
     <ShowShell
@@ -3007,39 +3012,28 @@ export function ContactShow({ auth, id }) {
             key: 'support_tickets',
             label: 'Support Tickets',
             children: (
-              <RelatedTable
-                title="Support Tickets"
-                endpoint="/api/support-tickets/"
-                params={{ contact_id: id }}
-                columns={supportTicketColumns}
-                rowUrl={(row) =>
-                  safeRoute('crm.tickets.show', row.id, `/crm/tickets/${row.id}`)
-                }
-              />
-            ),
-          },
-          {
-            key: 'invoices',
-            label: 'Invoices',
-            children: (
-              <RelatedTable
-                title="Invoices"
-                endpoint="/api/invoices/"
-                params={{ contact_id: id }}
-                columns={documentColumns('invoice_no', 'invoice_date', 'grand_total')}
-              />
-            ),
-          },
-          {
-            key: 'purchase_bills',
-            label: 'Purchase Bills',
-            children: (
-              <RelatedTable
-                title="Purchase Bills"
-                endpoint="/api/purchase-bills/"
-                params={{ contact_id: id }}
-                columns={documentColumns('bill_no', 'bill_date', 'grand_total')}
-              />
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => setTicketModalOpen(true)}
+                  >
+                    New Ticket
+                  </Button>
+                </div>
+                <RelatedTable
+                  key={`tickets-${ticketsRefreshKey}`}
+                  title="Support Tickets"
+                  endpoint="/api/support-tickets/"
+                  params={{ contact_id: id }}
+                  columns={supportTicketColumns}
+                  rowUrl={(row) =>
+                    safeRoute('crm.tickets.show', row.id, `/crm/tickets/${row.id}`)
+                  }
+                />
+              </div>
             ),
           },
         ];
@@ -3059,6 +3053,7 @@ export function ContactShow({ auth, id }) {
               }
               backLabel="Contacts"
               backUrl={safeRoute('crm.contacts.index', null, '/crm/contacts')}
+              avatarSrc={contact?.image_url || contact?.image || null}
               amountLabel="Account Balance"
               amount={formatMoney(acctSummary?.balance ?? 0)}
               amountIcon={<BankOutlined />}
@@ -3085,10 +3080,106 @@ export function ContactShow({ auth, id }) {
               onClose={() => setEditOpen(false)}
               onSaved={reload}
             />
+            <QuickTicketModal
+              open={ticketModalOpen}
+              onClose={() => setTicketModalOpen(false)}
+              contactId={id}
+              contactName={contact?.name}
+              onCreated={() => {
+                setTicketModalOpen(false);
+                setTicketsRefreshKey((k) => k + 1);
+              }}
+            />
           </>
         );
       }}
     </ShowShell>
+  );
+}
+
+function QuickTicketModal({ open, onClose, contactId, contactName, onCreated }) {
+  const [form] = Form.useForm();
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      form.resetFields();
+    }
+  }, [open, form]);
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      setSaving(true);
+      await axios.post(
+        api('/api/support-tickets/'),
+        {
+          ...values,
+          contact_id: contactId,
+          source: values.source || 'manual',
+          status: values.status || 'open',
+          priority: values.priority || 'medium',
+        },
+        { headers: authHeaders() }
+      );
+      message.success('Ticket created');
+      onCreated?.();
+    } catch (e) {
+      if (e?.errorFields) return;
+      message.error(e?.response?.data?.message || 'Failed to create ticket');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      title={contactName ? `New Ticket for ${contactName}` : 'New Ticket'}
+      onCancel={onClose}
+      onOk={handleSubmit}
+      okText="Create Ticket"
+      confirmLoading={saving}
+      destroyOnClose
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ priority: 'medium', status: 'open', source: 'manual' }}
+      >
+        <Form.Item
+          name="subject"
+          label="Subject"
+          rules={[{ required: true, message: 'Subject is required' }]}
+        >
+          <Input placeholder="Brief summary" maxLength={255} />
+        </Form.Item>
+
+        <Form.Item name="description" label="Description">
+          <Input.TextArea rows={4} placeholder="Describe the issue" />
+        </Form.Item>
+
+        <Row gutter={12}>
+          <Col span={12}>
+            <Form.Item name="priority" label="Priority">
+              <Select
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' },
+                  { value: 'urgent', label: 'Urgent' },
+                ]}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item name="category" label="Category">
+              <Input placeholder="e.g. billing, technical" maxLength={60} />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </Modal>
   );
 }
 
@@ -3589,10 +3680,26 @@ export function ActivityShow({ auth, id }) {
       mapRecord={(record) => ({ title: record?.subject || 'Activity' })}
     >
       {(activity, { setRecord }) => {
-        const comments =
+        const rawComments =
           activity?.crm_activity_comments ||
           activity?.crmActivityComments ||
           [];
+
+        // Defensive stable sort: oldest → newest by created_at, ties broken
+        // by commenter name then id. Matches backend ordering and keeps the
+        // order deterministic even if a different endpoint returns comments
+        // in a different shape.
+        const comments = [...rawComments].sort((a, b) => {
+          const ta = a?.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b?.created_at ? new Date(b.created_at).getTime() : 0;
+          if (ta !== tb) return ta - tb;
+
+          const na = String(a?.user?.name || a?.user?.email || '').toLowerCase();
+          const nb = String(b?.user?.name || b?.user?.email || '').toLowerCase();
+          if (na !== nb) return na < nb ? -1 : 1;
+
+          return String(a?.id || '').localeCompare(String(b?.id || ''));
+        });
 
         const overview = (
           <div className="crm-show__overview-grid crm-show__overview-grid--single">

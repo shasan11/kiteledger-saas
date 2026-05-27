@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import {
     App,
     Button,
@@ -346,15 +346,20 @@ export default function PosShiftsPage() {
                 width: 130,
                 fixed: 'right',
                 render: (_, record) =>
-                    record.status === 'open' && can('pos.shift.view') ? (
-                        <Button
-                            size="small"
-                            danger
-                            onClick={() => openCloseShiftModal(record)}
-                        >
-                            End Shift
+                    <Space>
+                        <Button size="small" onClick={() => router.visit(route('pos.shifts.show', record.id))}>
+                            View
                         </Button>
-                    ) : null,
+                        {record.status === 'open' && can('pos.shift.view') ? (
+                            <Button
+                                size="small"
+                                danger
+                                onClick={() => openCloseShiftModal(record)}
+                            >
+                                End Shift
+                            </Button>
+                        ) : null}
+                    </Space>,
             },
         ],
         [permissions],

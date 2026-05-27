@@ -276,9 +276,31 @@ class BankAccountController extends BaseCrudApiController
             }
         }
 
-        $created = DB::transaction(function () use ($validated, $bankAccount, $request) {
-            return collect($validated['lines'])->map(function (array $line) use ($bankAccount, $request) {
-                return BankStatementLine::create([
+        $result = DB::transaction(function () use ($validated, $bankAccount, $request) {
+            $created = 0;
+            $skipped = 0;
+            $createdLines = [];
+
+            foreach ($validated['lines'] as $line) {
+                $hash = $this->statementLineHash(
+                    $line['date'],
+                    $line['reference'] ?? null,
+                    (float) ($line['debit'] ?? 0),
+                    (float) ($line['credit'] ?? 0),
+                    $line['description'] ?? null
+                );
+
+                $existing = BankStatementLine::query()
+                    ->where('bank_account_id', $bankAccount->id)
+                    ->where('transaction_hash', $hash)
+                    ->exists();
+
+                if ($existing) {
+                    $skipped++;
+                    continue;
+                }
+
+                $createdLines[] = BankStatementLine::create([
                     'bank_account_id' => $bankAccount->id,
                     'account_id' => $bankAccount->account_id,
                     'statement_date' => $line['date'],
@@ -290,15 +312,31 @@ class BankAccountController extends BaseCrudApiController
                     'counterparty' => $line['counterparty'] ?? null,
                     'remarks' => $line['remarks'] ?? null,
                     'status' => 'imported',
+                    'transaction_hash' => $hash,
                     'imported_by_id' => $request->user()?->getAuthIdentifier(),
                 ]);
-            });
+                $created++;
+            }
+
+            return ['created' => $created, 'skipped' => $skipped, 'lines' => $createdLines];
         });
 
         return response()->json([
             'message' => 'Bank statement imported for review.',
-            'created' => $created->count(),
+            'created' => $result['created'],
+            'skipped_duplicates' => $result['skipped'],
         ], 201);
+    }
+
+    private function statementLineHash(string $date, ?string $reference, float $debit, float $credit, ?string $description): string
+    {
+        return hash('sha256', implode('|', [
+            $date,
+            strtolower(trim((string) $reference)),
+            number_format($debit, 2, '.', ''),
+            number_format($credit, 2, '.', ''),
+            strtolower(trim((string) $description)),
+        ]));
     }
 
     private function createJournalVoucherFromStatementLine(Request $request, BankAccount $bankAccount)
@@ -406,9 +444,19 @@ class BankAccountController extends BaseCrudApiController
                 $request->user()?->getAuthIdentifier()
             );
 
+            $bankLineRecord = JournalVoucherLine::query()
+                ->where('journal_voucher_id', $postedVoucher->id)
+                ->where('account_id', $bankAccount->account_id)
+                ->first();
+
             $statementLine->forceFill([
                 'status' => 'matched',
                 'posted_journal_voucher_id' => $postedVoucher->id,
+                'matched_journal_voucher_line_id' => $bankLineRecord?->id,
+                'match_type' => 'jv_created',
+                'match_confidence' => 'exact',
+                'matched_at' => now(),
+                'matched_by_id' => $request->user()?->getAuthIdentifier(),
             ])->save();
 
             return $postedVoucher->fresh(['journalVoucherLines', 'items']);
@@ -481,6 +529,10 @@ class BankAccountController extends BaseCrudApiController
                 'status' => $line->status,
                 'matching_status' => $matchingStatus,
                 'posted_journal_voucher_id' => $line->posted_journal_voucher_id,
+                'matched_journal_voucher_line_id' => $line->matched_journal_voucher_line_id,
+                'match_confidence' => $line->match_confidence,
+                'match_type' => $line->match_type,
+                'matched_at' => optional($line->matched_at)->toDateTimeString(),
                 'journal_voucher_id' => $line->posted_journal_voucher_id,
                 'matched_transaction' => $line->posted_journal_voucher_id,
                 'difference' => 0,

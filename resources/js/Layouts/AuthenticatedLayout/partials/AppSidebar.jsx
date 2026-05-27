@@ -177,7 +177,7 @@ export default function AppSidebar({
 
     const sidebarNode = (
         <Sider
-            width={212}
+            width={220}
             collapsedWidth={isMobile ? 0 : 84}
             collapsed={collapsed}
             trigger={null}

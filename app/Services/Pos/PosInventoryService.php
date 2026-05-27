@@ -2,11 +2,11 @@
 
 namespace App\Services\Pos;
 
-use App\Models\AppSetting;
 use App\Models\PosSale;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\WarehouseItem;
+use App\Services\Settings\DatabaseSettingService;
 use InvalidArgumentException;
 
 class PosInventoryService
@@ -36,9 +36,22 @@ class PosInventoryService
         }
 
         $available = $this->availableStock($productId, $warehouseId);
-        $policy = $this->negativeItemBalancePolicy();
+        $settings = app(DatabaseSettingService::class);
+        $allowZeroStock = $settings->bool('allow_zero_stock_sale', false, 'pos');
+        $allowNegativeStock = $settings->bool('allow_negative_stock_sale', false, 'pos');
 
-        if ($this->blocksNegativeStock($policy) && $available - $qty < -0.0001) {
+        if (!$allowZeroStock && $available <= 0) {
+            $warehouseName = Warehouse::query()->whereKey($warehouseId)->value('name') ?? $warehouseId;
+
+            throw new InvalidArgumentException($this->insufficientStockMessage(
+                $product->name,
+                $warehouseName,
+                $available,
+                $qty
+            ));
+        }
+
+        if (!$allowNegativeStock && $available - $qty < -0.0001) {
             $warehouseName = Warehouse::query()->whereKey($warehouseId)->value('name') ?? $warehouseId;
 
             throw new InvalidArgumentException($this->insufficientStockMessage(
@@ -55,7 +68,9 @@ class PosInventoryService
         $sale->loadMissing(['warehouse', 'posSaleLines.product']);
         $warehouseId = $sale->warehouse_id;
         $warehouseName = $sale->warehouse?->name ?? $warehouseId;
-        $policy = $this->negativeItemBalancePolicy();
+        $settings = app(DatabaseSettingService::class);
+        $allowZeroStock = $settings->bool('allow_zero_stock_sale', false, 'pos');
+        $allowNegativeStock = $settings->bool('allow_negative_stock_sale', false, 'pos');
 
         foreach ($sale->posSaleLines as $line) {
             if (!$line->product_id) {
@@ -81,7 +96,7 @@ class PosInventoryService
 
             $available = (float) ($warehouseItem?->qty_on_hand ?? 0);
 
-            if ($this->blocksNegativeStock($policy) && $available - $qty < -0.0001) {
+            if ((!$allowZeroStock && $available <= 0) || (!$allowNegativeStock && $available - $qty < -0.0001)) {
                 throw new InvalidArgumentException($this->insufficientStockMessage(
                     $product->name,
                     $warehouseName,
@@ -116,20 +131,6 @@ class PosInventoryService
             ]);
             $warehouseItem->save();
         }
-    }
-
-    private function negativeItemBalancePolicy(): string
-    {
-        return strtolower((string) (
-            AppSetting::query()->where('active', true)->oldest()->value('negative_item_balance')
-            ?: AppSetting::query()->oldest()->value('negative_item_balance')
-            ?: 'warn'
-        ));
-    }
-
-    private function blocksNegativeStock(string $policy): bool
-    {
-        return in_array($policy, ['block', 'reject'], true);
     }
 
     private function insufficientStockMessage(string $productName, ?string $warehouseName, float $available, float $requested): string

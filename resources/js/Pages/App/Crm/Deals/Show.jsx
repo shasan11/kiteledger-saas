@@ -27,7 +27,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   EditOutlined,
-  FileTextOutlined,
   PlusOutlined,
   ScheduleOutlined,
 } from '@ant-design/icons';
@@ -430,26 +429,64 @@ export default function DealShow({ auth, id }) {
         </>
       ),
     },
-    ...history.map((item) => ({
-      color: 'green',
-      children: (
-        <>
-          <Text strong>
-            Stage moved: {item.from_stage?.name || 'Start'} → {item.to_stage?.name || 'Unknown'}
-          </Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 11 }}>
-            {fmtDateTime(item.changed_at)} · {item.days_in_previous_stage ?? 0} days in previous stage
-          </Text>
-          {item.remarks ? (
+    ...history.map((item) => {
+      const isStatusChange = item.event_type === 'status_change';
+      const toStatus = item.to_status;
+      const changedBy = item.changed_by_user?.name || item.changed_by?.name;
+
+      if (isStatusChange || (toStatus && !item.from_stage && !item.to_stage)) {
+        const won = toStatus === 'won';
+        return {
+          color: won ? 'green' : 'red',
+          dot: won ? <CheckCircleOutlined /> : <CloseCircleOutlined />,
+          children: (
             <>
+              <Text strong>{won ? 'Deal marked Won' : 'Deal marked Lost'}</Text>
               <br />
-              <Text style={{ fontSize: 11 }}>{item.remarks}</Text>
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                {fmtDateTime(item.changed_at)}
+                {changedBy ? ` · by ${changedBy}` : ''}
+              </Text>
+              {item.remarks ? (
+                <>
+                  <br />
+                  <Text style={{ fontSize: 11 }}>{item.remarks}</Text>
+                </>
+              ) : null}
             </>
-          ) : null}
-        </>
-      ),
-    })),
+          ),
+        };
+      }
+
+      const wonLostBadge = toStatus
+        ? toStatus === 'won'
+          ? <Tag color="success" style={{ marginLeft: 6, fontSize: 10 }}>Won</Tag>
+          : <Tag color="error" style={{ marginLeft: 6, fontSize: 10 }}>Lost</Tag>
+        : null;
+
+      return {
+        color: toStatus === 'lost' ? 'red' : toStatus === 'won' ? 'green' : 'blue',
+        children: (
+          <>
+            <Text strong>
+              Stage moved: {item.from_stage?.name || 'Start'} → {item.to_stage?.name || 'Unknown'}
+            </Text>
+            {wonLostBadge}
+            <br />
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {fmtDateTime(item.changed_at)} · {item.days_in_previous_stage ?? 0} days in previous stage
+              {changedBy ? ` · by ${changedBy}` : ''}
+            </Text>
+            {item.remarks ? (
+              <>
+                <br />
+                <Text style={{ fontSize: 11 }}>{item.remarks}</Text>
+              </>
+            ) : null}
+          </>
+        ),
+      };
+    }),
     ...activities.map((activity) => ({
       color: activity.status === 'completed' ? 'green' : 'orange',
       dot: <ScheduleOutlined />,
@@ -475,7 +512,7 @@ export default function DealShow({ auth, id }) {
   ];
 
   const detailsTab = (
-    <Card size="small" title="Deal Details">
+    <Card size="small" bordered={false} bodyStyle={{ padding: 0 }}>
       <table
         style={{
           width: '100%',
@@ -508,25 +545,17 @@ export default function DealShow({ auth, id }) {
   );
 
   const timelineTab = (
-    <Card size="small" title="Timeline">
+    <div>
       {timelineItems.length ? (
         <Timeline items={timelineItems} />
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No timeline events" />
       )}
-    </Card>
+    </div>
   );
 
   const activitiesTab = (
-    <Card
-      size="small"
-      title="Activities"
-      extra={
-        <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityModal(true)}>
-          Add
-        </Button>
-      }
-    >
+    <div>
       <ReusableCrud
         title="Activities"
         apiUrl={api('/api/crm-activities/')}
@@ -580,7 +609,7 @@ export default function DealShow({ auth, id }) {
         anchorFilters={activityPriorityFilters}
         defaultAnchorKey="all"
       />
-    </Card>
+    </div>
   );
 
   const tabs = [
@@ -665,13 +694,6 @@ export default function DealShow({ auth, id }) {
                 </Button>
                 <Button size="small" icon={<PlusOutlined />} onClick={() => setActivityModal(true)}>
                   Activity
-                </Button>
-                <Button
-                  size="small"
-                  icon={<FileTextOutlined />}
-                  onClick={() => router.visit(`/payment-in/quotations/add?deal_id=${id}`)}
-                >
-                  Quotation
                 </Button>
                 {deal.status !== 'won' ? (
                   <Button

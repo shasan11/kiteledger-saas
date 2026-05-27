@@ -17,6 +17,7 @@ import { ArrowLeftOutlined, PrinterOutlined, RollbackOutlined } from '@ant-desig
 import axios from 'axios';
 import dayjs from 'dayjs';
 import PosLayout from '@/Layouts/PosLayout.jsx';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import { api, money, saleStatusColor, showApiError } from './Shared/posHelpers';
 import PosReturnModal from './Shared/PosReturnModal';
 
@@ -41,7 +42,7 @@ export default function PosSaleShow({ id }) {
         try {
             const response = await axios.get(api(`/api/pos-sales/${id}`));
             setRecord(response.data);
-        } catch {
+        } catch (error) {
             showApiError(message, error, 'Failed to load POS sale.');
         } finally {
             setLoading(false);
@@ -166,18 +167,32 @@ export default function PosSaleShow({ id }) {
 
             <Drawer open={printOpen} onClose={() => setPrintOpen(false)} title="Receipt Preview" width={480}>
                 {record ? (
-                    <List
-                        header={<Title level={4} style={{ margin: 0 }}>{record.sale_no}</Title>}
-                        dataSource={record.pos_sale_lines || []}
-                        renderItem={(line) => (
-                            <List.Item>
-                                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                                    <Text>{line.product_name}</Text>
-                                    <Text strong>Rs. {money(line.line_total)}</Text>
-                                </Space>
-                            </List.Item>
-                        )}
-                    />
+                    <PrintablePdfEmailWrapper
+                        title="POS Receipt"
+                        subTitle={record.sale_no}
+                        fileName={`pos-receipt-${record.sale_no || record.id}.pdf`}
+                        pageSize="80mm"
+                        allowDownload={false}
+                        allowEmail={false}
+                    >
+                        <div style={{ width: '80mm', padding: '4mm', fontFamily: 'Arial, sans-serif', fontSize: 12 }}>
+                            <div style={{ textAlign: 'center', fontWeight: 700 }}>{record.branch?.name || 'POS Receipt'}</div>
+                            <div style={{ textAlign: 'center', marginBottom: 8 }}>{record.sale_no}</div>
+                            <div>Date: {dayjs(record.sale_date).format('DD-MM-YYYY HH:mm')}</div>
+                            <div>Customer: {record.customer_name || record.contact?.name || 'Walk-in'}</div>
+                            <hr />
+                            {(record.pos_sale_lines || []).map((line) => (
+                                <div key={line.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                    <span>{line.product_name} x {Number(line.qty || 0)}</span>
+                                    <strong>Rs. {money(line.line_total)}</strong>
+                                </div>
+                            ))}
+                            <hr />
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>Total</strong><strong>Rs. {money(record.grand_total)}</strong></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Paid</span><span>Rs. {money(record.paid_total)}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Due/Change</span><span>Rs. {money(Number(record.balance_due || 0) || record.change_amount)}</span></div>
+                        </div>
+                    </PrintablePdfEmailWrapper>
                 ) : null}
             </Drawer>
         </PosLayout>

@@ -182,6 +182,7 @@ export default function Contacts(props) {
       label: 'Contact Type',
       type: 'custom',
       col: 24,
+      condition: (values) => !values?.id,
       render: ({ values, setFieldValue }) => (
         <Radio.Group
           block
@@ -222,6 +223,7 @@ export default function Contacts(props) {
         </Radio.Group>
       ),
     },
+   
     {
       name: 'name',
       label: 'Contact Name',
@@ -293,6 +295,14 @@ export default function Contacts(props) {
           label: 'None',
         },
       ],
+    },
+      {
+      name: 'image',
+      label: 'Profile Picture',
+      type: 'image',
+      col: 24,
+      maxSizeMB: 5,
+      accept: 'image/*',
     },
     {
       name: 'credit_term_id',
@@ -366,6 +376,7 @@ export default function Contacts(props) {
     contact_type: 'customer',
     accept_purchase: false,
     address: '',
+    image: null,
   };
 
   const transformPayload = (values) => {

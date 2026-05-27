@@ -179,6 +179,20 @@ Route::delete('bank-accounts/bulk', [BankAccountController::class, 'bulkDestroy'
 Route::get('bank-accounts/{bankAccount}/ledger', [BankAccountController::class, 'ledger']);
 Route::post('bank-accounts/{bankAccount}/statement-import', [BankAccountController::class, 'importStatement']);
 
+// Bank reconciliation + forex
+Route::get('bank-accounts/{bankAccount}/reconciliation', [\App\Http\Controllers\Api\BankReconciliationController::class, 'summary']);
+Route::get('bank-accounts/{bankAccount}/reconciliation/history', [\App\Http\Controllers\Api\BankReconciliationController::class, 'history']);
+Route::get('bank-accounts/{bankAccount}/reconciliation/report', [\App\Http\Controllers\Api\BankReconciliationController::class, 'report']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/auto-match', [\App\Http\Controllers\Api\BankReconciliationController::class, 'autoMatch']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/manual-match', [\App\Http\Controllers\Api\BankReconciliationController::class, 'manualMatch']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/unmatch', [\App\Http\Controllers\Api\BankReconciliationController::class, 'unmatch']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/mark-pending', [\App\Http\Controllers\Api\BankReconciliationController::class, 'markPending']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/restore', [\App\Http\Controllers\Api\BankReconciliationController::class, 'restore']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/finalize', [\App\Http\Controllers\Api\BankReconciliationController::class, 'finalize']);
+Route::post('bank-accounts/{bankAccount}/reconciliation/{reconciliation}/reopen', [\App\Http\Controllers\Api\BankReconciliationController::class, 'reopen']);
+Route::post('bank-accounts/{bankAccount}/forex-adjustment/preview', [\App\Http\Controllers\Api\BankReconciliationController::class, 'forexPreview']);
+Route::post('bank-accounts/{bankAccount}/forex-adjustment', [\App\Http\Controllers\Api\BankReconciliationController::class, 'forexPost']);
+
 Route::apiResource('bank-accounts', BankAccountController::class)
     ->parameters([
         'bank-accounts' => 'bankAccount',
@@ -891,8 +905,18 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
     Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
     Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
+    Route::get('crm-campaigns/{id}/audience/{channel}', [CrmCampaignController::class, 'audience']);
+    Route::get('crm-campaigns/{id}/send-logs', [CrmCampaignController::class, 'sendLogs']);
+    Route::post('crm-campaigns/{id}/preview-email', [CrmCampaignController::class, 'previewEmail']);
+    Route::post('crm-campaigns/{id}/preview-sms', [CrmCampaignController::class, 'previewSms']);
+    Route::post('crm-campaigns/{id}/send-bulk-email', [CrmCampaignController::class, 'sendBulkEmail']);
+    Route::post('crm-campaigns/{id}/send-bulk-sms', [CrmCampaignController::class, 'sendBulkSms']);
     Route::apiResource('crm-campaigns', CrmCampaignController::class)
         ->parameters(['crm-campaigns' => 'crmCampaign']);
+
+    Route::post('sms-configs/{id}/test-send', [\App\Http\Controllers\Api\SmsConfigController::class, 'testSend']);
+    Route::apiResource('sms-configs', \App\Http\Controllers\Api\SmsConfigController::class)
+        ->parameters(['sms-configs' => 'smsConfig']);
 });
 
 Route::post('crm-sequences/bulk', [CrmSequenceController::class, 'bulkStore']);

@@ -112,6 +112,29 @@ class MasterDataTypesSeeder extends Seeder
             ['type' => 'tds_type', 'name' => 'TDS Payable', 'key' => 'tds_payable'],
             ['type' => 'tds_type', 'name' => 'Withholding Tax', 'key' => 'withholding_tax'],
             ['type' => 'tds_type', 'name' => 'None', 'key' => 'none'],
+
+            // Campaign sources
+            ['type' => 'campaign_source', 'name' => 'Google', 'key' => 'google'],
+            ['type' => 'campaign_source', 'name' => 'Facebook', 'key' => 'facebook'],
+            ['type' => 'campaign_source', 'name' => 'Instagram', 'key' => 'instagram'],
+            ['type' => 'campaign_source', 'name' => 'LinkedIn', 'key' => 'linkedin'],
+            ['type' => 'campaign_source', 'name' => 'Email Newsletter', 'key' => 'newsletter'],
+            ['type' => 'campaign_source', 'name' => 'Referral Program', 'key' => 'referral'],
+            ['type' => 'campaign_source', 'name' => 'Trade Show', 'key' => 'trade_show'],
+            ['type' => 'campaign_source', 'name' => 'Direct', 'key' => 'direct'],
+            ['type' => 'campaign_source', 'name' => 'Other', 'key' => 'other'],
+
+            // Campaign mediums
+            ['type' => 'campaign_medium', 'name' => 'Email', 'key' => 'email'],
+            ['type' => 'campaign_medium', 'name' => 'SMS', 'key' => 'sms'],
+            ['type' => 'campaign_medium', 'name' => 'Social Media', 'key' => 'social'],
+            ['type' => 'campaign_medium', 'name' => 'Paid Ads (CPC)', 'key' => 'cpc'],
+            ['type' => 'campaign_medium', 'name' => 'Display', 'key' => 'display'],
+            ['type' => 'campaign_medium', 'name' => 'Organic', 'key' => 'organic'],
+            ['type' => 'campaign_medium', 'name' => 'Print', 'key' => 'print'],
+            ['type' => 'campaign_medium', 'name' => 'Radio / TV', 'key' => 'broadcast'],
+            ['type' => 'campaign_medium', 'name' => 'WhatsApp', 'key' => 'whatsapp'],
+            ['type' => 'campaign_medium', 'name' => 'Other', 'key' => 'other'],
         ];
 
         foreach ($masterData as $data) {

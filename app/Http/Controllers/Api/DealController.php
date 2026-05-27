@@ -201,6 +201,8 @@ class DealController extends BaseCrudApiController
                 'deal_id' => $record->getKey(),
                 'from_stage_id' => $fromStageId,
                 'to_stage_id' => $record->deal_stage_id,
+                'event_type' => 'stage_change',
+                'to_status' => in_array($record->status, ['won', 'lost'], true) ? $record->status : null,
                 'changed_by' => request()->user()?->id,
                 'changed_at' => now(),
                 'days_in_previous_stage' => $enteredAt ? $enteredAt->diffInDays(now()) : null,
@@ -273,10 +275,14 @@ class DealController extends BaseCrudApiController
                     'deal_id' => $deal->id,
                     'from_stage_id' => $fromStageId,
                     'to_stage_id' => $newStage->id,
+                    'event_type' => 'stage_change',
+                    'to_status' => $newStage->is_won_stage
+                        ? 'won'
+                        : ($newStage->is_lost_stage ? 'lost' : null),
                     'changed_by' => $request->user()?->id,
                     'changed_at' => now(),
                     'days_in_previous_stage' => $enteredAt ? $enteredAt->diffInDays(now()) : null,
-                    'remarks' => $data['remarks'] ?? null,
+                    'remarks' => $data['remarks'] ?? ($newStage->is_lost_stage ? ($data['lost_reason'] ?? null) : null),
                 ]);
             }
         });

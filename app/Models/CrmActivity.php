@@ -94,7 +94,16 @@ class CrmActivity extends Model
 
     public function crmActivityComments(): HasMany
     {
-        return $this->hasMany(CrmActivityComment::class)->with('user')->oldest();
+        // Stable ordering: chronological (oldest → newest) with commenter name
+        // as a deterministic secondary key so equally-timestamped comments
+        // don't shuffle between requests.
+        return $this->hasMany(CrmActivityComment::class)
+            ->with('user')
+            ->leftJoin('users as comment_user', 'comment_user.id', '=', 'crm_activity_comments.user_id')
+            ->orderBy('crm_activity_comments.created_at')
+            ->orderBy('comment_user.name')
+            ->orderBy('crm_activity_comments.id')
+            ->select('crm_activity_comments.*');
     }
 
     public function escalations(): HasMany

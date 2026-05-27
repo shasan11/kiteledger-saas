@@ -2,9 +2,10 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import { Col, Row, Tabs, Tag, Typography, theme } from 'antd';
-import { ApartmentOutlined, ContactsOutlined, FunnelPlotOutlined, SettingOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ContactsOutlined, FunnelPlotOutlined, SettingOutlined, MessageOutlined } from '@ant-design/icons';
 import { api } from '../Shared/crmApi';
-import { buildContactGroupCrud, buildPipelineCrud, buildStageCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+import { buildContactGroupCrud, buildPipelineCrud, buildStageCrud, buildSmsConfigCrud } from '@/Pages/App/Crm/Shared/crmCrudConfigs';
+import * as Yup from 'yup';
 
 const { Text } = Typography;
 
@@ -78,6 +79,27 @@ export default function Configuration({ auth, embedded = false }) {
     const pipelineCfg = buildPipelineCrud();
     const stageCfg = buildStageCrud();
     const contactGroupCfg = buildContactGroupCrud();
+    const smsCfg = buildSmsConfigCrud();
+
+    const smsConfigColumns = [
+        { title: 'Name', dataIndex: 'name', key: 'name' },
+        {
+            title: 'Provider', dataIndex: 'provider', key: 'provider', width: 110,
+            render: (v) => <Tag color={v === 'twilio' ? 'red' : 'blue'}>{(v || '').toUpperCase()}</Tag>,
+        },
+        {
+            title: 'From / Sender', key: 'from', width: 180,
+            render: (_, r) => r.from_number || r.sender_id || '-',
+        },
+        {
+            title: 'Default', dataIndex: 'is_default', key: 'is_default', width: 90,
+            render: (v) => v ? <Tag color="gold">Default</Tag> : null,
+        },
+        {
+            title: 'Active', dataIndex: 'active', key: 'active', width: 90,
+            render: (v) => <Tag color={v === false ? 'red' : 'green'}>{v === false ? 'Inactive' : 'Active'}</Tag>,
+        },
+    ];
 
     const tabs = [
         {
@@ -172,6 +194,34 @@ export default function Configuration({ auth, embedded = false }) {
                     hasActionColumns
                     backendFilter={{ active: 'active', parent: 'parent_id' }}
                     backendSort={{ name: 'name', active: 'active', created_at: 'created_at' }}
+                />
+            ),
+        },
+        {
+            key: 'sms-configs',
+            label: (
+                <span>
+                    <MessageOutlined /> SMS Configuration
+                </span>
+            ),
+            children: (
+                <ReusableCrud
+                    title="SMS Providers"
+                    apiUrl={api('/api/sms-configs/')}
+                    columns={smsConfigColumns}
+                    fields={smsCfg.fields}
+                    validationSchema={smsCfg.validationSchema}
+                    crudInitialValues={smsCfg.crudInitialValues}
+                    transformPayload={smsCfg.transformPayload}
+                    form_ui="modal"
+                    modalWidth={620}
+                    enableServerPagination
+                    showSearch
+                    canAdd
+                    canEdit
+                    canDelete
+                    hasActions
+                    hasActionColumns
                 />
             ),
         },

@@ -23,6 +23,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 class ContactController extends BaseCrudApiController
 {
@@ -152,6 +153,8 @@ class ContactController extends BaseCrudApiController
         'name' => ['required', 'string', 'max:180'],
         'code' => ['nullable', 'string', 'max:50'],
         'address' => ['nullable', 'string'],
+        'image' => ['nullable', 'file', 'image', 'max:5120'],
+        'remove_image' => ['nullable', 'boolean'],
         'pan' => ['nullable', 'string', 'max:80'],
         'tax_registration_no' => ['nullable', 'string', 'max:80'],
         'tax_registration_type' => ['nullable', 'in:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id,none'],
@@ -175,6 +178,8 @@ class ContactController extends BaseCrudApiController
             'name' => ['sometimes', 'required', 'string', 'max:180'],
             'code' => ['sometimes', 'nullable', 'string', 'max:50'],
             'address' => ['sometimes', 'nullable', 'string'],
+            'image' => ['sometimes', 'nullable', 'file', 'image', 'max:5120'],
+            'remove_image' => ['sometimes', 'nullable', 'boolean'],
             'pan' => ['sometimes', 'nullable', 'string', 'max:80'],
             'tax_registration_no' => ['sometimes', 'nullable', 'string', 'max:80'],
             'tax_registration_type' => ['sometimes', 'nullable', 'in:pan,vat,gstin,tan,ein,sales_tax_permit,state_tax_id,none'],
@@ -192,7 +197,7 @@ class ContactController extends BaseCrudApiController
         array $parentData,
         array $nestedData
     ): array {
-        return $parentData;
+        return $this->resolveImagePayload($parentData, null);
     }
 
     protected function mutateParentDataBeforeUpdate(
@@ -200,6 +205,35 @@ class ContactController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
+        return $this->resolveImagePayload($parentData, $record);
+    }
+
+    private function resolveImagePayload(array $parentData, ?Model $record): array
+    {
+        $request = request();
+        $removeImage = (bool) ($parentData['remove_image'] ?? false);
+        unset($parentData['remove_image']);
+
+        if ($request && $request->hasFile('image')) {
+            if ($record instanceof Contact && $record->image) {
+                Storage::disk('public')->delete($record->image);
+            }
+
+            $parentData['image'] = $request->file('image')->store('contacts/images', 'public');
+
+            return $parentData;
+        }
+
+        // No new file uploaded. Strip the field unless we are explicitly clearing.
+        unset($parentData['image']);
+
+        if ($removeImage && $record instanceof Contact) {
+            if ($record->image) {
+                Storage::disk('public')->delete($record->image);
+            }
+            $parentData['image'] = null;
+        }
+
         return $parentData;
     }
 
@@ -222,6 +256,11 @@ class ContactController extends BaseCrudApiController
         $data['account_summary'] = null;
         $data['payable_account_summary'] = null;
         $data['account_chart'] = [];
+        $imageUrl = ($record instanceof Contact && $record->image)
+            ? Storage::disk('public')->url($record->image)
+            : null;
+        $data['image_url'] = $imageUrl;
+        $data['image'] = $imageUrl;
 
         if (! $record->account_id) {
             return $data;
@@ -529,23 +568,9 @@ class ContactController extends BaseCrudApiController
             'message' => ['required', 'string', 'max:1600'],
         ]);
 
-        // SMS sending depends on configured provider. Log the attempt.
-        // If an SMS service is bound in the container, use it.
-        $sent = false;
-        $errorMessage = 'SMS provider is not configured.';
-
-        try {
-            if (app()->bound('sms') || app()->bound(SmsService::class)) {
-                $smsService = app()->bound('sms')
-                    ? app('sms')
-                    : app(SmsService::class);
-
-                $smsService->send($contact->phone, $validated['message']);
-                $sent = true;
-            }
-        } catch (\Throwable $e) {
-            $errorMessage = 'Failed to send SMS: '.$e->getMessage();
-        }
+        $smsResult = app(SmsService::class)->send($contact->phone, $validated['message']);
+        $sent = $smsResult->success;
+        $errorMessage = $smsResult->error ?? 'Failed to send SMS.';
 
         CrmCommunication::create([
             'contact_id' => $contact->id,

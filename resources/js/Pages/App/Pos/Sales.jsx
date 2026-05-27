@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
-import { Button, Card, DatePicker, Row, Col, Select, Space, Spin, Table, Tag, Typography, App } from 'antd';
+import { Button, Card, DatePicker, Drawer, Row, Col, Select, Space, Spin, Table, Tag, Typography, App } from 'antd';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import PosLayout from '@/Layouts/PosLayout.jsx';
@@ -29,6 +29,7 @@ export default function PosSalesPage() {
     const [terminals, setTerminals] = useState([]);
     const [filters, setFilters] = useState({ status: undefined, pos_terminal_id: undefined });
     const [returnSaleId, setReturnSaleId] = useState(null);
+    const [printSale, setPrintSale] = useState(null);
     const [company, setCompany] = useState(null);
 
     useEffect(() => {
@@ -77,17 +78,21 @@ export default function PosSalesPage() {
     const columns = useMemo(() => [
         { title: 'Sale No', dataIndex: 'sale_no', key: 'sale_no', render: (value) => <Text strong>{value}</Text> },
         { title: 'Date', dataIndex: 'sale_date', key: 'sale_date', render: (value) => dayjs(value).format('DD-MM-YYYY HH:mm') },
-        { title: 'Terminal', key: 'terminal', render: (_, record) => record.pos_terminal?.name || '-' },
         { title: 'Customer', key: 'customer', render: (_, record) => record.customer_name || record.contact?.name || 'Walk-in' },
-        { title: 'Cashier', key: 'cashier', render: (_, record) => record.cashier?.display_name || record.cashier?.name || '-' },
-        { title: 'Status', dataIndex: 'status', key: 'status', render: (value) => <Tag color={saleStatusColor(value)}>{value}</Tag> },
-        { title: 'Grand Total', dataIndex: 'grand_total', key: 'grand_total', align: 'right', render: (value) => <Text strong>Rs. {money(value)}</Text> },
+        { title: 'Terminal', key: 'terminal', render: (_, record) => record.pos_terminal?.name || '-' },
+        { title: 'Cashier', key: 'cashier', render: (_, record) => record.pos_shift?.cashier?.display_name || record.pos_shift?.cashier?.name || '-' },
+        { title: 'Payment', dataIndex: 'payment_status', key: 'payment_status', render: (value) => <Tag>{statusText(value)}</Tag> },
+        { title: 'Total', dataIndex: 'grand_total', key: 'grand_total', align: 'right', render: (value) => <Text strong>Rs. {money(value)}</Text> },
+        { title: 'Paid', dataIndex: 'paid_total', key: 'paid_total', align: 'right', render: (value) => `Rs. ${money(value)}` },
+        { title: 'Due / Change', key: 'due_change', align: 'right', render: (_, record) => Number(record.balance_due || 0) > 0 ? `Due Rs. ${money(record.balance_due)}` : `Change Rs. ${money(record.change_amount)}` },
+        { title: 'Status', dataIndex: 'status', key: 'status', render: (value) => <Tag color={saleStatusColor(value)}>{statusText(value)}</Tag> },
         {
             title: 'Action',
             key: 'action',
             render: (_, record) => (
                 <Space>
                     <Button size="small" onClick={() => router.visit(route('pos.sales.show', record.id))}>View</Button>
+                    <Button size="small" onClick={() => setPrintSale(record)}>Print</Button>
                     {canReturnSale(record) && (
                         <Button size="small" danger onClick={() => setReturnSaleId(record.id)}>Return</Button>
                     )}
@@ -121,6 +126,10 @@ export default function PosSalesPage() {
     const statusLabel = filters.status
         ? String(filters.status).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
         : 'All Statuses';
+
+    function statusText(value) {
+        return String(value || '-').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
 
     return (
         <PosLayout>
@@ -298,6 +307,37 @@ export default function PosSalesPage() {
                     await loadRows();
                 }}
             />
+
+            <Drawer open={!!printSale} onClose={() => setPrintSale(null)} title="Receipt / Bill" width={480}>
+                {printSale ? (
+                    <PrintablePdfEmailWrapper
+                        title="POS Receipt"
+                        subTitle={printSale.sale_no}
+                        fileName={`pos-receipt-${printSale.sale_no || printSale.id}.pdf`}
+                        pageSize="80mm"
+                        allowDownload={false}
+                        allowEmail={false}
+                    >
+                        <div style={{ width: '80mm', padding: '4mm', fontFamily: 'Arial, sans-serif', fontSize: 12 }}>
+                            <div style={{ textAlign: 'center', fontWeight: 700 }}>{companyName}</div>
+                            <div style={{ textAlign: 'center', marginBottom: 8 }}>{printSale.sale_no}</div>
+                            <div>Date: {dayjs(printSale.sale_date).format('DD-MM-YYYY HH:mm')}</div>
+                            <div>Customer: {printSale.customer_name || printSale.contact?.name || 'Walk-in'}</div>
+                            <hr />
+                            {(printSale.pos_sale_lines || []).map((line) => (
+                                <div key={line.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                    <span>{line.product_name} x {Number(line.qty || 0)}</span>
+                                    <strong>Rs. {money(line.line_total)}</strong>
+                                </div>
+                            ))}
+                            <hr />
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>Total</strong><strong>Rs. {money(printSale.grand_total)}</strong></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Paid</span><span>Rs. {money(printSale.paid_total)}</span></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Due/Change</span><span>Rs. {money(Number(printSale.balance_due || 0) || printSale.change_amount)}</span></div>
+                        </div>
+                    </PrintablePdfEmailWrapper>
+                ) : null}
+            </Drawer>
         </PosLayout>
     );
 }

@@ -7,12 +7,15 @@ import {
   Card,
   Col,
   Empty,
+  Form,
   Input,
+  Modal,
   Result,
   Row,
   Space,
   Spin,
   Statistic,
+  Tabs,
   Tag,
   theme,
   Typography,
@@ -225,6 +228,9 @@ export default function TerminalSelection() {
   const [terminals, setTerminals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [activeFloor, setActiveFloor] = useState('Main Floor');
+  const [addFloorOpen, setAddFloorOpen] = useState(false);
+  const [floorForm] = Form.useForm();
 
   const [openingTerminal, setOpeningTerminal] = useState(null);
   const [openShiftLoading, setOpenShiftLoading] = useState(false);
@@ -254,6 +260,8 @@ export default function TerminalSelection() {
         [];
 
       setTerminals(Array.isArray(list) ? list : []);
+      const firstFloor = (Array.isArray(list) ? list : [])[0]?.floor_name || 'Main Floor';
+      setActiveFloor((current) => current || firstFloor);
     } catch (error) {
       setTerminals([]);
       showApiError(message, error, 'Failed to load POS terminals.');
@@ -288,6 +296,20 @@ export default function TerminalSelection() {
         .some((value) => String(value).toLowerCase().includes(q))
     );
   }, [terminals, search]);
+
+  const floors = useMemo(() => {
+    const names = new Set(['Main Floor', activeFloor].filter(Boolean));
+    filteredTerminals.forEach((terminal) => names.add(terminal?.floor_name || 'Main Floor'));
+    return Array.from(names);
+  }, [activeFloor, filteredTerminals]);
+
+  const terminalsByFloor = useMemo(() => {
+    return filteredTerminals.reduce((groups, terminal) => {
+      const floor = terminal?.floor_name || 'Main Floor';
+      groups[floor] = [...(groups[floor] || []), terminal];
+      return groups;
+    }, {});
+  }, [filteredTerminals]);
 
   const stats = useMemo(() => {
     const active = terminals.filter((terminal) => terminal?.status === 'open');
@@ -338,6 +360,46 @@ export default function TerminalSelection() {
     }
 
     setOpeningTerminal(terminal);
+  }
+
+  async function saveTerminalPosition(terminal, event) {
+    const floorNode = event.currentTarget.parentElement;
+    const rect = floorNode.getBoundingClientRect();
+    const x = Math.max(0, Math.round(event.clientX - rect.left - 130));
+    const y = Math.max(0, Math.round(event.clientY - rect.top - 80));
+    const next = {
+      ...terminal,
+      floor_name: activeFloor,
+      x_position: x,
+      y_position: y,
+    };
+
+    setTerminals((rows) => rows.map((row) => (row.id === terminal.id ? next : row)));
+
+    try {
+      await axios.patch(
+        api(`/api/pos-terminals/${terminal.id}`),
+        {
+          floor_name: activeFloor,
+          x_position: x,
+          y_position: y,
+        },
+        { headers: getAuthHeaders() }
+      );
+    } catch (error) {
+      showApiError(message, error, 'Failed to save terminal position.');
+      await loadOverview();
+    }
+  }
+
+  function submitAddFloor() {
+    floorForm.validateFields().then((values) => {
+      const floorName = values.floor_name?.trim();
+      if (!floorName) return;
+      setActiveFloor(floorName);
+      setAddFloorOpen(false);
+      floorForm.resetFields();
+    });
   }
 
   async function submitOpenShift(values, form) {
@@ -398,6 +460,10 @@ export default function TerminalSelection() {
           card_account_id: values?.card_account_id || null,
           online_account_id: values?.online_account_id || null,
           default_customer_id: values?.default_customer_id || null,
+          floor_name: values?.floor_name || activeFloor || 'Main Floor',
+          x_position: values?.x_position ?? 24,
+          y_position: values?.y_position ?? 24,
+          sort_order: values?.sort_order ?? 0,
         },
         {
           headers: getAuthHeaders(),
@@ -465,11 +531,6 @@ export default function TerminalSelection() {
               <Button size="small" icon={<ReloadOutlined />} onClick={loadOverview} loading={loading}>
                 Refresh
               </Button>
-              {canCreateTerminal && (
-                <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setAddTerminalOpen(true)}>
-                  Add Terminal
-                </Button>
-              )}
             </Space>
           </div>
 
@@ -580,46 +641,91 @@ export default function TerminalSelection() {
             >
               <Spin />
             </div>
-          ) : filteredTerminals.length < 1 ? (
+          ) : (
             <Card
               style={{
                 border: `1px solid ${token.colorBorderSecondary}`,
                 borderRadius: token.borderRadiusLG,
                 background: token.colorBgContainer,
               }}
+              styles={{ body: { padding: 12 } }}
             >
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  search
-                    ? 'No terminals match your search.'
-                    : 'No active POS terminals found.'
+              <Tabs
+                activeKey={activeFloor}
+                onChange={setActiveFloor}
+                tabBarExtraContent={
+                  <Button size="small" icon={<PlusOutlined />} onClick={() => setAddFloorOpen(true)}>
+                    Add Floor
+                  </Button>
                 }
+                items={floors.map((floor) => ({
+                  key: floor,
+                  label: floor,
+                  children: (
+                    <div
+                      style={{
+                        position: 'relative',
+                        minHeight: 520,
+                        border: `1px dashed ${token.colorBorder}`,
+                        borderRadius: token.borderRadiusLG,
+                        background: token.colorFillQuaternary,
+                        overflow: 'hidden',
+                        padding: 12,
+                      }}
+                    >
+                      {canCreateTerminal && (
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={() => setAddTerminalOpen(true)}
+                          style={{ position: 'absolute', right: 16, top: 16, zIndex: 2 }}
+                        >
+                          Add Terminal
+                        </Button>
+                      )}
+
+                      {(terminalsByFloor[floor] || []).length < 1 ? (
+                        <div style={{ minHeight: 420, display: 'grid', placeItems: 'center' }}>
+                          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No terminals on this floor yet." />
+                        </div>
+                      ) : (
+                        (terminalsByFloor[floor] || []).map((terminal, index) => (
+                          <div
+                            key={terminal.id}
+                            draggable
+                            onDragEnd={(event) => saveTerminalPosition(terminal, event)}
+                            style={{
+                              position: 'absolute',
+                              left: Number(terminal.x_position ?? (24 + (index % 3) * 300)),
+                              top: Number(terminal.y_position ?? (70 + Math.floor(index / 3) * 250)),
+                              width: 280,
+                              cursor: 'grab',
+                            }}
+                          >
+                            <CompactTerminalCard
+                              terminal={terminal}
+                              locked={!canOpenShift}
+                              token={token}
+                              onClick={() => handleTerminalClick(terminal)}
+                              onOpenPos={() => handleTerminalClick(terminal)}
+                              onViewShifts={() =>
+                                router.visit(
+                                  safeRoute(
+                                    'pos.shifts.index',
+                                    { pos_terminal_id: terminal.id },
+                                    `/pos/shifts?pos_terminal_id=${terminal.id}`
+                                  )
+                                )
+                              }
+                            />
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  ),
+                }))}
               />
             </Card>
-          ) : (
-            <Row gutter={[12, 12]}>
-              {filteredTerminals.map((terminal) => (
-                <Col xs={24} sm={12} md={8} xl={6} key={terminal.id}>
-                  <CompactTerminalCard
-                    terminal={terminal}
-                    locked={!canOpenShift}
-                    token={token}
-                    onClick={() => handleTerminalClick(terminal)}
-                    onOpenPos={() => handleTerminalClick(terminal)}
-                    onViewShifts={() =>
-                      router.visit(
-                        safeRoute(
-                          'pos.shifts.index',
-                          { pos_terminal_id: terminal.id },
-                          `/pos/shifts?pos_terminal_id=${terminal.id}`
-                        )
-                      )
-                    }
-                  />
-                </Col>
-              ))}
-            </Row>
           )}
         </Space>
       </div>
@@ -637,10 +743,30 @@ export default function TerminalSelection() {
         loading={addTerminalLoading}
         messageApi={message}
         defaultBranchId={defaultBranchId}
+        defaultFloorName={activeFloor}
         canViewAllBranches={canViewAllBranches}
         onCancel={() => setAddTerminalOpen(false)}
         onSubmit={submitAddTerminal}
       />
+
+      <Modal
+        title="Add Floor"
+        open={addFloorOpen}
+        onCancel={() => setAddFloorOpen(false)}
+        onOk={submitAddFloor}
+        okText="Add Floor"
+        destroyOnClose
+      >
+        <Form form={floorForm} layout="vertical">
+          <Form.Item
+            name="floor_name"
+            label="Floor Name"
+            rules={[{ required: true, message: 'Floor name is required.' }]}
+          >
+            <Input placeholder="Ground Floor" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </PosLayout>
   );
 }

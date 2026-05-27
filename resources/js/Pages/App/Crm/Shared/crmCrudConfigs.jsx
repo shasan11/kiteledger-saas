@@ -631,3 +631,91 @@ export function buildActivityCrud({ locked = {} } = {}) {
 
   return { apiUrl: api('/api/crm-activities/'), fields, validationSchema, crudInitialValues, transformPayload };
 }
+
+export function buildSmsConfigCrud() {
+  const fields = [
+    { name: 'name', label: 'Config Name', type: 'text', col: 12, required: true, placeholder: 'e.g. Default Twilio' },
+    {
+      name: 'provider', label: 'Provider', type: 'select', col: 12, required: true,
+      options: [
+        { value: 'twilio', label: 'Twilio' },
+        { value: 'infobip', label: 'Infobip' },
+      ],
+    },
+
+    // Twilio fields — shown only when provider === 'twilio'
+    {
+      name: 'account_sid', label: 'Account SID', type: 'text', col: 12,
+      condition: (v) => v?.provider === 'twilio',
+    },
+    {
+      name: 'auth_token', label: 'Auth Token', type: 'password', col: 12,
+      condition: (v) => v?.provider === 'twilio',
+      placeholder: 'Leave blank to keep existing',
+    },
+    {
+      name: 'from_number', label: 'From Number', type: 'text', col: 12,
+      condition: (v) => v?.provider === 'twilio',
+      placeholder: '+1XXXXXXXXXX',
+    },
+
+    // Infobip fields — shown only when provider === 'infobip'
+    {
+      name: 'api_key', label: 'API Key', type: 'password', col: 12,
+      condition: (v) => v?.provider === 'infobip',
+      placeholder: 'Leave blank to keep existing',
+    },
+    {
+      name: 'base_url', label: 'Base URL', type: 'text', col: 12,
+      condition: (v) => v?.provider === 'infobip',
+      placeholder: 'https://xxxxx.api.infobip.com',
+    },
+    {
+      name: 'sender_id', label: 'Sender ID', type: 'text', col: 12,
+      condition: (v) => v?.provider === 'infobip',
+      placeholder: 'e.g. KITELEDGER',
+    },
+
+    { name: 'is_default', label: 'Default', type: 'switch', col: 12 },
+    { name: 'active', label: 'Active', type: 'switch', col: 12 },
+  ];
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required('Name is required').max(120),
+    provider: Yup.string().required().oneOf(['twilio', 'infobip']),
+    account_sid: Yup.string().nullable().max(255),
+    auth_token: Yup.string().nullable().max(255),
+    from_number: Yup.string().nullable().max(60),
+    api_key: Yup.string().nullable().max(255),
+    base_url: Yup.string().nullable().max(255),
+    sender_id: Yup.string().nullable().max(60),
+    active: Yup.boolean().nullable(),
+    is_default: Yup.boolean().nullable(),
+  });
+
+  const crudInitialValues = {
+    name: '',
+    provider: 'twilio',
+    account_sid: '',
+    auth_token: '',
+    from_number: '',
+    api_key: '',
+    base_url: '',
+    sender_id: '',
+    active: true,
+    is_default: false,
+  };
+
+  const transformPayload = (values) => {
+    const p = { ...values };
+    // The backend ignores empty-string secret fields on update so the user
+    // can resave a row without re-typing credentials. Don't force them to
+    // null on the client.
+    Object.keys(p).forEach((k) => {
+      if (p[k] === '' && !['auth_token', 'api_key'].includes(k)) p[k] = null;
+    });
+    return p;
+  };
+
+  return { apiUrl: api('/api/sms-configs/'), fields, validationSchema, crudInitialValues, transformPayload };
+}

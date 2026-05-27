@@ -18,6 +18,11 @@ class PosTerminal extends Model
         'name',
         'code',
         'location',
+        'floor_name',
+        'x_position',
+        'y_position',
+        'sort_order',
+        'status',
         'receipt_printer_name',
         'cash_account_id',
         'card_account_id',
@@ -36,6 +41,9 @@ class PosTerminal extends Model
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
+            'x_position' => 'integer',
+            'y_position' => 'integer',
+            'sort_order' => 'integer',
         ];
     }
 

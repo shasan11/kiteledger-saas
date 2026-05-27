@@ -28,6 +28,7 @@ class Contact extends Model
         'name',
         'code',
         'address',
+        'image',
         'pan',
         'phone',
         'email',

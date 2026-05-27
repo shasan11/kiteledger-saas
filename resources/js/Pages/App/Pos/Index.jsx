@@ -94,6 +94,12 @@ const resolveReceiptPaperSize = (template, terminal, settings) => {
   return "80mm auto";
 };
 
+const receiptWidthFromPaperSize = (paperSize) => {
+  if (String(paperSize).toLowerCase().startsWith("58mm")) return "58mm";
+  if (String(paperSize).toLowerCase().startsWith("a4")) return "210mm";
+  return "80mm";
+};
+
 const SCANNER_TIMEOUT_MS = 120;
 const MIN_BARCODE_LENGTH = 3;
 
@@ -392,6 +398,7 @@ export default function PosIndex() {
   const scannerBufferRef = useRef("");
   const scannerTimerRef = useRef(null);
   const printedSaleRef = useRef(null);
+  const receiptPrintRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [shiftLoading, setShiftLoading] = useState(false);
@@ -438,6 +445,7 @@ export default function PosIndex() {
   const [receiptTemplateLoading, setReceiptTemplateLoading] = useState(false);
   const [receiptTemplateError, setReceiptTemplateError] = useState("");
   const [companyInfo, setCompanyInfo] = useState(null);
+  const [posSettings, setPosSettings] = useState({});
   const [processing, setProcessing] = useState(false);
 
   const [shiftForm] = Form.useForm();
@@ -521,7 +529,7 @@ export default function PosIndex() {
     if (hasTrackedItem && !selectedTerminal?.warehouse_id)
       return "Warehouse is required for inventory-tracked products.";
 
-    const missingStock = cart.find(
+    const missingStock = !posSettings.allow_negative_stock_sale && cart.find(
       (item) =>
         item.track_inventory &&
         item.available_stock !== null &&
@@ -530,6 +538,15 @@ export default function PosIndex() {
     );
     if (missingStock)
       return `${missingStock.product_name} has only ${missingStock.available_stock} available.`;
+
+    const zeroStock = !posSettings.allow_zero_stock_sale && cart.find(
+      (item) =>
+        item.track_inventory &&
+        item.available_stock !== null &&
+        item.available_stock !== undefined &&
+        Number(item.available_stock || 0) <= 0,
+    );
+    if (zeroStock) return `${zeroStock.product_name} is out of stock.`;
 
     const moneyPayments = payments.filter(
       (payment) =>
@@ -561,6 +578,7 @@ export default function PosIndex() {
     summary,
     permissions,
     canBypassPermissions,
+    posSettings,
   ]);
 
   const pageStyle = {
@@ -754,7 +772,7 @@ export default function PosIndex() {
       setReceiptTemplateError("");
 
       try {
-        const [templateResponse, companyResponse] = await Promise.all([
+        const [templateResponse, companyResponse, posSettingsResponse] = await Promise.all([
           axios.get(api("/api/printing-templates/resolve"), {
             params: {
               document_type: "pos_sale",
@@ -763,6 +781,9 @@ export default function PosIndex() {
           axios
             .get(api("/api/app-settings/current"))
             .catch(() => ({ data: null })),
+          axios
+            .get(api("/api/settings/configurations/pos"))
+            .catch(() => ({ data: {} })),
         ]);
 
         if (!active) return;
@@ -773,10 +794,12 @@ export default function PosIndex() {
         setCompanyInfo(
           companyResponse.data?.data ?? companyResponse.data ?? null,
         );
+        setPosSettings(posSettingsResponse.data || {});
       } catch (error) {
         if (!active) return;
 
         setReceiptTemplate(null);
+        setPosSettings({});
         setReceiptTemplateError(
           error?.response?.data?.message ||
             "No active POS receipt template found. The fallback receipt will be used.",
@@ -797,7 +820,7 @@ export default function PosIndex() {
     if (receiptOpen && saleReceipt && !receiptTemplateLoading) {
       if (printedSaleRef.current !== saleReceipt.id) {
         printedSaleRef.current = saleReceipt.id;
-        setTimeout(() => window.print(), 300);
+        setTimeout(() => receiptPrintRef.current?.print?.(), 300);
       }
     }
   }, [receiptOpen, saleReceipt, receiptTemplateLoading]);
@@ -868,7 +891,7 @@ export default function PosIndex() {
     try {
       const resolvedBranchId = userDefaultBranchId;
 
-      const [contactPayload, dashboardPayload, branchPayload] =
+      const [contactPayload, dashboardPayload, branchPayload, posSettingsResponse] =
         await Promise.all([
           fetchList("/api/contacts", {
             page_size: 100,
@@ -878,6 +901,7 @@ export default function PosIndex() {
             page_size: 100,
             active: true,
           }),
+          axios.get(api("/api/settings/configurations/pos")).catch(() => ({ data: {} })),
         ]);
 
       const branchRows = canViewAllBranches
@@ -914,6 +938,7 @@ export default function PosIndex() {
       setActiveBranchId(fallbackBranchId);
       setContacts(contactRows);
       setDashboard(dashboardPayload.data || null);
+      setPosSettings(posSettingsResponse.data || {});
 
       await loadTerminalsForBranch(fallbackBranchId, {
         silent: true,
@@ -1229,6 +1254,7 @@ export default function PosIndex() {
     }
 
     if (
+      !posSettings.allow_zero_stock_sale &&
       product.track_inventory &&
       product.available_stock !== null &&
       product.available_stock !== undefined &&
@@ -1245,6 +1271,7 @@ export default function PosIndex() {
 
       if (existing) {
         if (
+          !posSettings.allow_negative_stock_sale &&
           product.track_inventory &&
           product.available_stock !== null &&
           product.available_stock !== undefined &&
@@ -2310,8 +2337,12 @@ export default function PosIndex() {
 
   const resolvedPaperSize = useMemo(
     () =>
-      resolveReceiptPaperSize(receiptTemplate, selectedTerminal, companyInfo),
-    [receiptTemplate, selectedTerminal, companyInfo],
+      resolveReceiptPaperSize(receiptTemplate, selectedTerminal, posSettings),
+    [receiptTemplate, selectedTerminal, posSettings],
+  );
+  const resolvedReceiptWidth = useMemo(
+    () => receiptWidthFromPaperSize(resolvedPaperSize),
+    [resolvedPaperSize],
   );
 
   const cartColumns = [
@@ -3409,10 +3440,11 @@ export default function PosIndex() {
               <div className="pos-receipt-print-area">
                 <style>{`@page { size: ${resolvedPaperSize}; margin: 0; }`}</style>
                 <PrintablePdfEmailWrapper
+                  imperativeRef={receiptPrintRef}
                   title="POS Sales Receipt"
                   subTitle={saleReceipt.sale_no}
                   fileName={`pos-receipt-${saleReceipt.sale_no || saleReceipt.id || "receipt"}.pdf`}
-                  pageSize="80mm"
+                  pageSize={resolvedReceiptWidth}
                   pageOrientation="portrait"
                   allowDownload={false}
                   allowEmail={false}
@@ -3421,8 +3453,8 @@ export default function PosIndex() {
                   printStyles={renderedReceipt.css}
                   contentClassName="pos-receipt-print-document"
                   contentStyle={{
-                    width: "80mm",
-                    maxWidth: "80mm",
+                    width: resolvedReceiptWidth,
+                    maxWidth: resolvedReceiptWidth,
                     padding: "3mm",
                   }}
                 >

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import {
-    App, Button, Card, Col, Descriptions, Empty, Row, Skeleton, Space, Statistic, Table, Tabs, Tag, Typography, theme,
+    App, Alert, Button, Card, Col, Descriptions, Divider, Empty, Input, Modal,
+    Row, Skeleton, Space, Statistic, Table, Tabs, Tag, Tooltip, Typography, theme,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons';
+import {
+    ArrowLeftOutlined, MailOutlined, MessageOutlined, SendOutlined, EyeOutlined,
+} from '@ant-design/icons';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
@@ -21,6 +24,11 @@ const labelize = (v) => v ? String(v).replace(/_/g, ' ').replace(/\b\w/g, (c) =>
 
 const statusColor = { draft: 'default', active: 'success', paused: 'warning', completed: 'blue', cancelled: 'error' };
 const dealStatusColor = { open: 'blue', won: 'green', lost: 'red', cancelled: 'default' };
+
+const PLACEHOLDERS = [
+    '{{contact_name}}', '{{contact_first_name}}', '{{contact_email}}', '{{contact_phone}}',
+    '{{campaign_name}}', '{{campaign_code}}', '{{company_name}}',
+];
 
 function RelatedList({ endpoint, params, columns, emptyText, onRowClick }) {
     const [rows, setRows] = useState([]);
@@ -59,6 +67,301 @@ function RelatedList({ endpoint, params, columns, emptyText, onRowClick }) {
     );
 }
 
+function PlaceholderHints({ onInsert }) {
+    return (
+        <Space wrap size={4} style={{ marginTop: 4 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>Insert:</Text>
+            {PLACEHOLDERS.map((p) => (
+                <Tag key={p} style={{ cursor: 'pointer' }} onClick={() => onInsert(p)}>{p}</Tag>
+            ))}
+        </Space>
+    );
+}
+
+function EmailTemplateEditor({ campaign, onSaved }) {
+    const { message } = App.useApp();
+    const [subject, setSubject] = useState(campaign.email_subject || '');
+    const [preview, setPreview] = useState(campaign.email_preview_text || '');
+    const [body, setBody] = useState(campaign.email_body || '');
+    const [saving, setSaving] = useState(false);
+    const [previewModal, setPreviewModal] = useState(null);
+
+    useEffect(() => {
+        setSubject(campaign.email_subject || '');
+        setPreview(campaign.email_preview_text || '');
+        setBody(campaign.email_body || '');
+    }, [campaign.id]);
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await axios.patch(
+                api(`/api/crm-campaigns/${campaign.id}`),
+                { email_subject: subject, email_preview_text: preview, email_body: body },
+                { headers: authHeaders() }
+            );
+            message.success('Email template saved');
+            onSaved?.();
+        } catch (e) {
+            message.error(e?.response?.data?.message || 'Failed to save template');
+        } finally { setSaving(false); }
+    };
+
+    const doPreview = async () => {
+        try {
+            const res = await axios.post(
+                api(`/api/crm-campaigns/${campaign.id}/preview-email`),
+                { subject, body },
+                { headers: authHeaders() }
+            );
+            setPreviewModal(res.data);
+        } catch (e) {
+            message.error(e?.response?.data?.message || 'Preview failed');
+        }
+    };
+
+    return (
+        <Card size="small" bordered={false} style={{ border: `1px solid #f0f0f0` }}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Input
+                    placeholder="Email subject"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    maxLength={255}
+                />
+                <Input
+                    placeholder="Preview text (optional)"
+                    value={preview}
+                    onChange={(e) => setPreview(e.target.value)}
+                    maxLength={255}
+                />
+                <Input.TextArea
+                    placeholder="Email HTML/body. Supports placeholders."
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    autoSize={{ minRows: 10, maxRows: 24 }}
+                />
+                <PlaceholderHints onInsert={(p) => setBody((b) => `${b}${p}`)} />
+                <Space>
+                    <Button type="primary" onClick={save} loading={saving}>Save Template</Button>
+                    <Button icon={<EyeOutlined />} onClick={doPreview}>Preview</Button>
+                </Space>
+            </Space>
+
+            <Modal
+                title="Email Preview"
+                open={!!previewModal}
+                onCancel={() => setPreviewModal(null)}
+                footer={null}
+                width={720}
+            >
+                {previewModal ? (
+                    <>
+                        <Text type="secondary">Subject</Text>
+                        <Title level={5} style={{ marginTop: 4 }}>{previewModal.subject || '-'}</Title>
+                        <Divider style={{ margin: '8px 0' }} />
+                        <div dangerouslySetInnerHTML={{ __html: previewModal.body || '' }} />
+                        {previewModal.sample_contact ? (
+                            <Text type="secondary" style={{ fontSize: 11, marginTop: 8, display: 'block' }}>
+                                Rendered using contact: {previewModal.sample_contact.name}
+                            </Text>
+                        ) : null}
+                    </>
+                ) : null}
+            </Modal>
+        </Card>
+    );
+}
+
+function SmsTemplateEditor({ campaign, onSaved }) {
+    const { message } = App.useApp();
+    const [body, setBody] = useState(campaign.sms_body || '');
+    const [saving, setSaving] = useState(false);
+    const [previewModal, setPreviewModal] = useState(null);
+
+    useEffect(() => { setBody(campaign.sms_body || ''); }, [campaign.id]);
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await axios.patch(
+                api(`/api/crm-campaigns/${campaign.id}`),
+                { sms_body: body },
+                { headers: authHeaders() }
+            );
+            message.success('SMS template saved');
+            onSaved?.();
+        } catch (e) {
+            message.error(e?.response?.data?.message || 'Failed to save template');
+        } finally { setSaving(false); }
+    };
+
+    const doPreview = async () => {
+        try {
+            const res = await axios.post(
+                api(`/api/crm-campaigns/${campaign.id}/preview-sms`),
+                { body },
+                { headers: authHeaders() }
+            );
+            setPreviewModal(res.data);
+        } catch (e) {
+            message.error(e?.response?.data?.message || 'Preview failed');
+        }
+    };
+
+    return (
+        <Card size="small" bordered={false} style={{ border: `1px solid #f0f0f0` }}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <Input.TextArea
+                    placeholder="SMS body. Supports placeholders."
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    maxLength={1600}
+                    autoSize={{ minRows: 4, maxRows: 10 }}
+                />
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                    {body.length} characters · ~{Math.ceil(Math.max(body.length, 1) / 160)} SMS segments
+                </Text>
+                <PlaceholderHints onInsert={(p) => setBody((b) => `${b}${p}`)} />
+                <Space>
+                    <Button type="primary" onClick={save} loading={saving}>Save Template</Button>
+                    <Button icon={<EyeOutlined />} onClick={doPreview}>Preview</Button>
+                </Space>
+            </Space>
+
+            <Modal
+                title="SMS Preview"
+                open={!!previewModal}
+                onCancel={() => setPreviewModal(null)}
+                footer={null}
+            >
+                {previewModal ? (
+                    <>
+                        <Paragraph style={{ background: '#f5f5f5', padding: 12, borderRadius: 8 }}>
+                            {previewModal.body || '-'}
+                        </Paragraph>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                            {previewModal.characters} characters
+                            {previewModal.sample_contact ? ` · contact: ${previewModal.sample_contact.name}` : ''}
+                        </Text>
+                    </>
+                ) : null}
+            </Modal>
+        </Card>
+    );
+}
+
+function BulkSendButton({ campaign, channel, label, icon, onSent }) {
+    const { message } = App.useApp();
+    const [open, setOpen] = useState(false);
+    const [summary, setSummary] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [result, setResult] = useState(null);
+
+    const openModal = async () => {
+        setOpen(true);
+        setSummary(null);
+        setResult(null);
+        setLoading(true);
+        try {
+            const res = await axios.get(
+                api(`/api/crm-campaigns/${campaign.id}/audience/${channel}`),
+                { headers: authHeaders() }
+            );
+            setSummary(res.data?.summary || null);
+        } catch (e) {
+            message.error(e?.response?.data?.message || 'Failed to load audience');
+        } finally { setLoading(false); }
+    };
+
+    const confirmSend = async () => {
+        setSending(true);
+        try {
+            const endpoint = channel === 'email' ? 'send-bulk-email' : 'send-bulk-sms';
+            const res = await axios.post(
+                api(`/api/crm-campaigns/${campaign.id}/${endpoint}`),
+                { confirm: true },
+                { headers: authHeaders() }
+            );
+            setResult(res.data);
+            message.success(`${labelize(channel)} send complete: ${res.data?.sent || 0} sent`);
+            onSent?.();
+        } catch (e) {
+            message.error(e?.response?.data?.message || `${labelize(channel)} send failed`);
+        } finally { setSending(false); }
+    };
+
+    return (
+        <>
+            <Button type="primary" icon={icon} onClick={openModal}>
+                {label}
+            </Button>
+
+            <Modal
+                title={`Send Bulk ${labelize(channel)}`}
+                open={open}
+                onCancel={() => setOpen(false)}
+                footer={
+                    result ? (
+                        <Button onClick={() => setOpen(false)}>Close</Button>
+                    ) : (
+                        <Space>
+                            <Button onClick={() => setOpen(false)}>Cancel</Button>
+                            <Button
+                                type="primary"
+                                danger
+                                loading={sending}
+                                disabled={!summary || !summary.will_send}
+                                onClick={confirmSend}
+                            >
+                                Send to {summary?.will_send ?? 0} contacts
+                            </Button>
+                        </Space>
+                    )
+                }
+                width={520}
+            >
+                {loading ? <Skeleton active /> : null}
+
+                {!loading && summary && !result ? (
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                        <Alert
+                            type="warning"
+                            showIcon
+                            message="Please review carefully before sending. Sends are not reversible."
+                        />
+                        <Descriptions size="small" column={1} bordered>
+                            <Descriptions.Item label="Target group total">{summary.total}</Descriptions.Item>
+                            <Descriptions.Item label={`Eligible (has ${channel === 'email' ? 'email' : 'phone'})`}>{summary.eligible}</Descriptions.Item>
+                            <Descriptions.Item label={`Missing ${channel === 'email' ? 'email' : 'phone'}`}>{summary.missing_contact_info}</Descriptions.Item>
+                            <Descriptions.Item label="Limit configured">{summary.limit ?? 'No limit'}</Descriptions.Item>
+                            <Descriptions.Item label="Will send to"><Text strong>{summary.will_send}</Text></Descriptions.Item>
+                        </Descriptions>
+                    </Space>
+                ) : null}
+
+                {result ? (
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                        <Alert
+                            type={result.failed > 0 ? 'warning' : 'success'}
+                            showIcon
+                            message={`${result.sent} sent, ${result.failed} failed, ${result.skipped} skipped`}
+                        />
+                        {result.sample_errors?.length ? (
+                            <Card size="small" title="Sample errors">
+                                {result.sample_errors.map((err, i) => (
+                                    <Paragraph key={i} type="danger" style={{ marginBottom: 4 }}>{err}</Paragraph>
+                                ))}
+                            </Card>
+                        ) : null}
+                    </Space>
+                ) : null}
+            </Modal>
+        </>
+    );
+}
+
 export default function CampaignShow({ auth }) {
     const { message } = App.useApp();
     const { token } = theme.useToken();
@@ -75,9 +378,7 @@ export default function CampaignShow({ auth }) {
             setCampaign(res.data?.data || res.data);
         } catch (err) {
             message.error(err?.response?.data?.message || 'Failed to load campaign');
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     }, [campaignId]);
 
     useEffect(() => { load(); }, [load]);
@@ -101,6 +402,7 @@ export default function CampaignShow({ auth }) {
     }
 
     const stats = campaign.stats || {};
+    const rules = Array.isArray(campaign.rules) ? campaign.rules : [];
 
     const headerNode = (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -113,8 +415,10 @@ export default function CampaignShow({ auth }) {
             </Space>
             <Space wrap>
                 <Tag color={statusColor[campaign.status]}>{labelize(campaign.status)}</Tag>
-                {campaign.source && <Tag>{campaign.source}</Tag>}
-                {campaign.medium && <Tag>{campaign.medium}</Tag>}
+                {campaign.source && <Tag>{labelize(campaign.source)}</Tag>}
+                {campaign.medium && <Tag>{labelize(campaign.medium)}</Tag>}
+                <BulkSendButton campaign={campaign} channel="email" label="Send Bulk Email" icon={<MailOutlined />} onSent={load} />
+                <BulkSendButton campaign={campaign} channel="sms" label="Send Bulk SMS" icon={<MessageOutlined />} onSent={load} />
             </Space>
         </div>
     );
@@ -127,10 +431,10 @@ export default function CampaignShow({ auth }) {
                     { title: 'Actual Cost', value: stats.actual_cost, prefix: 'Rs.' },
                     { title: 'Revenue', value: stats.revenue, prefix: 'Rs.', color: token.colorSuccess },
                     { title: 'ROI', value: stats.roi, suffix: '%', color: stats.roi > 0 ? token.colorSuccess : stats.roi < 0 ? token.colorError : undefined },
-                    { title: 'Leads', value: stats.leads_count },
+                    { title: 'Target', value: campaign.target_customers ?? '-' },
+                    { title: 'Email Qty', value: campaign.email_only_quantity ?? '-' },
+                    { title: 'SMS Qty', value: campaign.sms_only_quantity ?? '-' },
                     { title: 'Won Deals', value: stats.won_deals_count, color: token.colorSuccess },
-                    { title: 'Conversion', value: stats.conversion_rate, suffix: '%' },
-                    { title: 'Cost/Lead', value: stats.cost_per_lead, prefix: 'Rs.' },
                 ].map((s, i) => (
                     <Col xs={12} sm={8} md={6} key={i}>
                         <Card size="small" bordered={false} style={{ border: `1px solid ${token.colorBorderSecondary}` }} styles={{ body: { padding: '8px 12px' } }}>
@@ -152,15 +456,50 @@ export default function CampaignShow({ auth }) {
                     <Descriptions.Item label="Name">{campaign.name}</Descriptions.Item>
                     <Descriptions.Item label="Code">{campaign.code || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Status"><Tag color={statusColor[campaign.status]}>{labelize(campaign.status)}</Tag></Descriptions.Item>
-                    <Descriptions.Item label="Source">{campaign.source || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Medium">{campaign.medium || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="Source">{labelize(campaign.source) || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="Medium">{labelize(campaign.medium) || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Budget">{formatMoney(campaign.budget)}</Descriptions.Item>
                     <Descriptions.Item label="Start Date">{formatDate(campaign.start_date)}</Descriptions.Item>
                     <Descriptions.Item label="End Date">{formatDate(campaign.end_date)}</Descriptions.Item>
+                    <Descriptions.Item label="Contact Group">{campaign.contact_group?.name || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Branch">{campaign.branch?.name || '-'}</Descriptions.Item>
+                    {campaign.description ? <Descriptions.Item label="Description" span={2}>{campaign.description}</Descriptions.Item> : null}
                 </Descriptions>
             </Card>
+
+            {rules.length ? (
+                <Card size="small" title="Campaign Rules" bordered={false} style={{ border: `1px solid ${token.colorBorderSecondary}` }}>
+                    <Table
+                        size="small"
+                        dataSource={rules.map((r, i) => ({ ...r, _i: i }))}
+                        rowKey="_i"
+                        pagination={false}
+                        columns={[
+                            { title: 'Type', dataIndex: 'rule_type', render: labelize },
+                            { title: 'Condition', dataIndex: 'operator' },
+                            { title: 'Value', dataIndex: 'value' },
+                            { title: 'Action', dataIndex: 'action' },
+                            { title: 'Active', dataIndex: 'active', render: (v) => v === false ? <Tag>No</Tag> : <Tag color="green">Yes</Tag> },
+                        ]}
+                    />
+                </Card>
+            ) : null}
         </Space>
+    );
+
+    const templatesTab = (
+        <Row gutter={[12, 12]}>
+            <Col xs={24} lg={14}>
+                <Card size="small" title="Email Template" bordered={false} style={{ border: `1px solid ${token.colorBorderSecondary}` }}>
+                    <EmailTemplateEditor campaign={campaign} onSaved={load} />
+                </Card>
+            </Col>
+            <Col xs={24} lg={10}>
+                <Card size="small" title="SMS Template" bordered={false} style={{ border: `1px solid ${token.colorBorderSecondary}` }}>
+                    <SmsTemplateEditor campaign={campaign} onSaved={load} />
+                </Card>
+            </Col>
+        </Row>
     );
 
     const leadColumns = [
@@ -188,8 +527,17 @@ export default function CampaignShow({ auth }) {
         { title: 'Priority', dataIndex: 'priority', key: 'priority', width: 100, render: (v) => <Tag>{labelize(v)}</Tag> },
     ];
 
+    const sendLogColumns = [
+        { title: 'Channel', dataIndex: 'channel', key: 'channel', width: 80, render: (v) => <Tag>{labelize(v)}</Tag> },
+        { title: 'To', dataIndex: 'to_address', key: 'to_address' },
+        { title: 'Status', dataIndex: 'status', key: 'status', width: 100, render: (v) => <Tag color={v === 'sent' ? 'green' : v === 'failed' ? 'red' : 'default'}>{labelize(v)}</Tag> },
+        { title: 'Sent At', dataIndex: 'sent_at', key: 'sent_at', width: 160, render: (v) => v ? new Date(v).toLocaleString() : '-' },
+        { title: 'Error', dataIndex: 'error', key: 'error', ellipsis: true },
+    ];
+
     const tabItems = [
         { key: 'overview', label: 'Overview', children: overviewTab },
+        { key: 'templates', label: 'Email & SMS Templates', children: templatesTab },
         {
             key: 'leads', label: `Leads (${stats.leads_count || 0})`,
             children: (
@@ -197,7 +545,6 @@ export default function CampaignShow({ auth }) {
                     endpoint="/api/leads/"
                     params={{ campaign_id: campaignId }}
                     columns={leadColumns}
-                    emptyText="No leads linked"
                     onRowClick={(r) => router.visit(`/crm/leads/${r.id}`)}
                 />
             ),
@@ -209,19 +556,17 @@ export default function CampaignShow({ auth }) {
                     endpoint="/api/deals/"
                     params={{ campaign_id: campaignId }}
                     columns={dealColumns}
-                    emptyText="No deals linked"
                     onRowClick={(r) => router.visit(`/crm/deals/${r.id}`)}
                 />
             ),
         },
         {
-            key: 'costs', label: 'Costs',
+            key: 'costs', label: 'Purchase Bills',
             children: (
                 <RelatedList
                     endpoint="/api/purchase-bills/"
                     params={{ campaign_id: campaignId }}
                     columns={billColumns}
-                    emptyText="No purchase bills linked"
                     onRowClick={(r) => router.visit(`/payment-out/purchase-bills/${r.id}`)}
                 />
             ),
@@ -233,8 +578,17 @@ export default function CampaignShow({ auth }) {
                     endpoint="/api/support-tickets/"
                     params={{ campaign_id: campaignId }}
                     columns={ticketColumns}
-                    emptyText="No tickets linked"
                     onRowClick={(r) => router.visit(`/crm/tickets/${r.id}`)}
+                />
+            ),
+        },
+        {
+            key: 'send_logs', label: 'Send Logs',
+            children: (
+                <RelatedList
+                    endpoint={`/api/crm-campaigns/${campaignId}/send-logs`}
+                    params={{}}
+                    columns={sendLogColumns}
                 />
             ),
         },

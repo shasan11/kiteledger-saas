@@ -17,6 +17,8 @@ const resolveLogoUrl = (path) => {
     return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 
+const humanize = (value) => String(value || '-').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+
 export default function ShiftClosingSummary({ id }) {
     const { message } = App.useApp();
     const [shift, setShift] = useState(null);
@@ -59,6 +61,14 @@ export default function ShiftClosingSummary({ id }) {
             .filter((m) => ['cash_out', 'drop', 'expense'].includes(m.type) && !m.is_system_generated)
             .reduce((sum, m) => sum + Number(m.amount || 0), 0);
         return cashIn - cashOut;
+    }, [shift]);
+
+    const paymentSummary = useMemo(() => {
+        return (shift?.pos_sales || []).flatMap((sale) => sale.pos_payments || []).reduce((totals, payment) => {
+            const method = payment.payment_method || 'cash';
+            totals[method] = (totals[method] || 0) + Number(payment.amount || 0);
+            return totals;
+        }, {});
     }, [shift]);
 
     if (loading) {
@@ -120,14 +130,14 @@ export default function ShiftClosingSummary({ id }) {
                         {/* Company header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, marginBottom: 20, borderBottom: '2px solid #1a1a1a' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                {logoUrl && (
-                                    <img
-                                        src={logoUrl}
-                                        alt="Logo"
-                                        style={{ height: 60, width: 'auto', maxWidth: 150, objectFit: 'contain' }}
-                                        crossOrigin="anonymous"
-                                    />
-                                )}
+                                    {logoUrl ? (
+                                        <img
+                                            src={logoUrl}
+                                            alt="Logo"
+                                            style={{ height: 60, width: 'auto', maxWidth: 150, objectFit: 'contain' }}
+                                            crossOrigin="anonymous"
+                                        />
+                                    ) : null}
                                 <div>
                                     <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{companyName}</div>
                                     {branchName && <div style={{ fontSize: 13, fontWeight: 600, color: '#444', marginTop: 2 }}>{branchName}</div>}
@@ -151,7 +161,7 @@ export default function ShiftClosingSummary({ id }) {
                                         border: `1px solid ${shift.status === 'closed' ? '#d9d9d9' : '#b7eb8f'}`,
                                         textTransform: 'uppercase',
                                     }}>
-                                        {shift.status}
+                                        {humanize(shift.status)}
                                     </span>
                                 </div>
                                 <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
@@ -168,6 +178,7 @@ export default function ShiftClosingSummary({ id }) {
                             style={{ marginBottom: 24 }}
                             items={[
                                 { key: 'terminal', label: 'Terminal', children: shift.pos_terminal?.name || '-' },
+                                { key: 'shift_no', label: 'Shift No', children: shiftNo },
                                 { key: 'branch', label: 'Branch', children: shift.branch?.name || shift.pos_terminal?.branch?.name || '-' },
                                 { key: 'cashier', label: 'Cashier', children: shift.cashier?.display_name || shift.cashier?.name || '-' },
                                 { key: 'closed_by', label: 'Closed By', children: shift.closed_by?.name || shift.closedBy?.name || '-' },
@@ -199,7 +210,9 @@ export default function ShiftClosingSummary({ id }) {
                                 },
                                 { key: 'total', label: 'Total Sales', children: <Text strong>Rs. {money(shift.total_sales)}</Text> },
                                 { key: 'transactions', label: 'Transactions', children: transactionCount },
+                                { key: 'status', label: 'Status', children: humanize(shift.status), span: 1 },
                                 { key: 'notes', label: 'Notes', children: shift.notes || '-', span: 2 },
+                                { key: 'closing_notes', label: 'Closing Notes', children: shift.closing_notes || '-', span: 2 },
                             ]}
                         />
 
@@ -229,8 +242,8 @@ export default function ShiftClosingSummary({ id }) {
                                             dataIndex: 'status',
                                             key: 'status',
                                             render: (value) => (
-                                                <Tag color={{ completed: 'green', refunded: 'red', part_refunded: 'orange', held: 'default' }[value] || 'default'}>
-                                                    {value}
+                                                    <Tag color={{ completed: 'green', refunded: 'red', part_refunded: 'orange', held: 'default' }[value] || 'default'}>
+                                                    {humanize(value)}
                                                 </Tag>
                                             ),
                                         },
@@ -259,6 +272,22 @@ export default function ShiftClosingSummary({ id }) {
                             )}
                         </div>
 
+                        <div style={{ marginBottom: 24 }}>
+                            <div style={{ fontWeight: 700, fontSize: 14, borderBottom: '1px solid #d0d0d0', paddingBottom: 6, marginBottom: 10 }}>
+                                Payment Summary
+                            </div>
+                            <Table
+                                size="small"
+                                pagination={false}
+                                rowKey="method"
+                                dataSource={Object.entries(paymentSummary).map(([method, amount]) => ({ method, amount }))}
+                                columns={[
+                                    { title: 'Method', dataIndex: 'method', key: 'method', render: humanize },
+                                    { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', render: (value) => `Rs. ${money(value)}` },
+                                ]}
+                            />
+                        </div>
+
                         {/* Cash movements */}
                         <div style={{ marginBottom: 28 }}>
                             <div style={{ fontWeight: 700, fontSize: 14, borderBottom: '1px solid #d0d0d0', paddingBottom: 6, marginBottom: 10 }}>
@@ -273,7 +302,7 @@ export default function ShiftClosingSummary({ id }) {
                                     rowKey="id"
                                     dataSource={shift.pos_cash_movements || []}
                                     columns={[
-                                        { title: 'Type', dataIndex: 'type', key: 'type' },
+                                        { title: 'Type', dataIndex: 'type', key: 'type', render: humanize },
                                         { title: 'Reason', dataIndex: 'reason', key: 'reason' },
                                         {
                                             title: 'System',

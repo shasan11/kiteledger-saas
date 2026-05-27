@@ -369,6 +369,7 @@ export default function AddTerminalModal({
   open,
   loading = false,
   defaultBranchId = null,
+  defaultFloorName = 'Main Floor',
   canViewAllBranches = false,
   onCancel,
   onSubmit,
@@ -655,6 +656,10 @@ export default function AddTerminalModal({
           default_customer_id: values.default_customer_id || null,
           code: safeTrim(values.code),
           location: safeTrim(values.location),
+          floor_name: safeTrim(values.floor_name) || 'Main Floor',
+          x_position: Number(values.x_position || 24),
+          y_position: Number(values.y_position || 24),
+          sort_order: Number(values.sort_order || 0),
           receipt_printer_name: safeTrim(values.receipt_printer_name),
           is_default: Boolean(values.is_default),
           active: values.active !== false,
@@ -714,6 +719,10 @@ export default function AddTerminalModal({
         layout="vertical"
         initialValues={{
           branch_id: canViewAllBranches ? undefined : defaultBranchId,
+          floor_name: defaultFloorName || 'Main Floor',
+          x_position: 24,
+          y_position: 24,
+          sort_order: 0,
           is_default: false,
           active: true,
         }}
@@ -796,6 +805,12 @@ export default function AddTerminalModal({
               <Col xs={24} md={12}>
                 <Form.Item name="location" label="Location">
                   <Input placeholder="Main counter / front desk" />
+                </Form.Item>
+              </Col>
+
+              <Col xs={24} md={12}>
+                <Form.Item name="floor_name" label="Floor">
+                  <Input placeholder="Main Floor" />
                 </Form.Item>
               </Col>
 

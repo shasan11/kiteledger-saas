@@ -24,6 +24,7 @@ class PosTerminalController extends Controller
         $query = PosTerminal::query()
             ->with(['branch', 'warehouse', 'cashAccount', 'cardAccount', 'onlineAccount', 'defaultCustomer'])
             ->when($request->filled('active'), fn ($q) => $q->where('active', filter_var($request->input('active'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true))
+            ->when($request->filled('floor_name'), fn ($q) => $q->where('floor_name', $request->string('floor_name')))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $search = trim((string) $request->input('search'));
                 $q->where(function ($inner) use ($search) {
@@ -33,6 +34,8 @@ class PosTerminalController extends Controller
                 });
             })
             ->orderByDesc('is_default')
+            ->orderBy('floor_name')
+            ->orderBy('sort_order')
             ->orderBy('name');
 
         $this->applyBranchScope($query, $request);
@@ -126,6 +129,11 @@ class PosTerminalController extends Controller
                     'code' => $terminal->warehouse->code ?? null,
                 ] : null,
                 'location' => $terminal->location,
+                'floor_name' => $terminal->floor_name ?: 'Main Floor',
+                'x_position' => (int) ($terminal->x_position ?? 24),
+                'y_position' => (int) ($terminal->y_position ?? 24),
+                'sort_order' => (int) ($terminal->sort_order ?? 0),
+                'status' => $terminal->status ?: $status,
                 'active' => (bool) $terminal->active,
                 'is_default' => (bool) $terminal->is_default,
                 'today_sales' => round((float) ($sales?->total_sales ?? 0), 2),

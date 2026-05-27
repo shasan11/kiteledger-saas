@@ -9,6 +9,7 @@ const titles = {
   accounting: 'Accounting Configuration',
   hrm: 'HRM Configuration',
   inventory: 'Inventory Configuration',
+  pos: 'POS Configuration',
   sales: 'Sales Configuration',
   purchase: 'Purchase Configuration',
 };
@@ -27,7 +28,7 @@ export default function ConfigurationForm({ auth, area }) {
   useEffect(() => {
     Promise.all([
       axios.get(api(`/api/settings/configurations/${area}`)),
-      fetchList('/api/chart-of-accounts', { page_size: 100 }),
+      fetchList(area === 'pos' ? '/api/accounts' : '/api/chart-of-accounts', { page_size: 100 }),
       fetchList('/api/warehouses', { page_size: 100 }),
       fetchList('/api/tax-rates', { page_size: 100 }),
     ]).then(([config, accountRows, warehouseRows, taxRows]) => {
@@ -98,6 +99,20 @@ export default function ConfigurationForm({ auth, area }) {
           <Col xs={24} md={8}><Form.Item name="negative_stock_allowed" label="Allow Negative Stock" valuePropName="checked"><Switch /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="low_stock_alert_enabled" label="Low Stock Alerts" valuePropName="checked"><Switch /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="auto_generate_product_code" label="Auto Product Codes" valuePropName="checked"><Switch /></Form.Item></Col>
+        </Row>
+      );
+    }
+
+    if (area === 'pos') {
+      return (
+        <Row gutter={12}>
+          <Col xs={24} md={8}><Form.Item name="show_services_in_pos" label="Show Services in POS" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="allow_zero_stock_sale" label="Allow Zero Stock Sale" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="allow_negative_stock_sale" label="Allow Negative Stock Sale" valuePropName="checked"><Switch /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="default_cash_account_id" label="Default Cash Account"><Select allowClear showSearch options={accounts} optionFilterProp="label" /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="default_card_account_id" label="Default Card Account"><Select allowClear showSearch options={accounts} optionFilterProp="label" /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="default_online_account_id" label="Default Online Account"><Select allowClear showSearch options={accounts} optionFilterProp="label" /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="receipt_paper_size" label="Receipt Paper Size"><Select options={[{ value: '80mm', label: '80mm' }, { value: '58mm', label: '58mm' }, { value: 'A4', label: 'A4' }]} /></Form.Item></Col>
         </Row>
       );
     }

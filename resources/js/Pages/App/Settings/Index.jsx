@@ -194,6 +194,14 @@ const SETTINGS_TABS = [
     props: { area: 'inventory' },
   },
   {
+    key: 'pos-configuration',
+    label: 'POS Config',
+    description: 'POS stock, service, print, and payment defaults.',
+    icon: <CreditCardOutlined />,
+    component: ConfigurationForm,
+    props: { area: 'pos' },
+  },
+  {
     key: 'hrm-configuration',
     label: 'HRM Defaults',
     description: 'Attendance, payroll and HR defaults.',
