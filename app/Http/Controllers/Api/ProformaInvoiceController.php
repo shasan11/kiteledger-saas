@@ -18,7 +18,7 @@ class ProformaInvoiceController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'proforma_date';
 
-    protected array $relations = ['branch', 'contact', 'currency'];
+    protected array $relations = ['branch', 'contact', 'currency', 'userAdd', 'approvedBy'];
     protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'currency' => 'currency_id'];
     protected array $searchable = ['proforma_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'currency_id', 'status'];

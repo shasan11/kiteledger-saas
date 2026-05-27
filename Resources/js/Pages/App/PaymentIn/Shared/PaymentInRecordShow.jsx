@@ -185,6 +185,12 @@ const formatPercent = (value) => {
 
 const isShort = (value) => typeof value === 'string' && value.trim() && value.trim().length <= 160;
 
+const approvalMetaRows = (record) => [
+    { label: 'Branch', value: getRelationName(record?.branch) },
+    { label: 'Approved By', value: getRelationName(record?.approvedBy || record?.approved_by) },
+    { label: 'Approved At', value: formatDate(record?.approved_at) },
+];
+
 export const cleanStatusTag = (status) => {
     const normalized = String(status || 'draft').toLowerCase();
 
@@ -1236,6 +1242,7 @@ function buildRailRows(record, documentType) {
         },
         { label: 'Status', value: cleanStatusTag(record?.status) },
         { label: 'Approval', value: approvalTag(record) },
+        ...approvalMetaRows(record),
         isShort(record?.notes) ? { label: 'Notes', value: record.notes } : null,
     ];
 }
@@ -1273,6 +1280,7 @@ function buildOverviewRows(record, documentType) {
         },
         { label: 'Status', value: cleanStatusTag(record?.status) },
         { label: 'Approval Status', value: approvalTag(record) },
+        ...approvalMetaRows(record),
         normalizedDocumentType === 'customer_payment'
             ? { label: 'Payment Account', value: getRelationName(record?.account) }
             : null,

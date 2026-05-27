@@ -126,6 +126,12 @@ export const approvalTag = (record) => {
   return <Tag>Draft</Tag>;
 };
 
+const approvalMetaRows = (record) => [
+  { label: 'Branch', value: relationLabel(record?.branch) },
+  { label: 'Approved By', value: relationLabel(record?.approvedBy || record?.approved_by) },
+  { label: 'Approved At', value: formatDate(record?.approved_at, true) },
+];
+
 export const lineCost = (row = {}) => {
   const amount = Number(firstPresent(row.line_total, row.total, row.amount, row.line_value));
   if (Number.isFinite(amount) && amount !== 0) return amount;
@@ -406,6 +412,7 @@ function overviewRows(record, documentType) {
       { label: 'To Warehouse', value: warehouseLabel(record?.toWarehouse || record?.to_warehouse) },
       { label: 'Status', value: statusTag(record?.status) },
       { label: 'Approval Status', value: approvalTag(record) },
+      ...approvalMetaRows(record),
       { label: 'Total Qty', value: formatQty(lines.reduce((sum, row) => sum + Number(row?.qty || 0), 0)) },
       { label: 'Total', value: <strong>{formatQty(record?.total)}</strong> },
       { label: 'Notes', value: record?.notes || '-' },
@@ -428,6 +435,7 @@ function overviewRows(record, documentType) {
       { label: 'Reason', value: record?.reason || '-' },
       { label: 'Status', value: statusTag(record?.status) },
       { label: 'Approval Status', value: approvalTag(record) },
+      ...approvalMetaRows(record),
       { label: 'Total Qty Increased', value: formatQty(increased) },
       { label: 'Total Qty Decreased', value: formatQty(decreased) },
       { label: 'Total Cost', value: <strong>{formatMoney(record?.total)}</strong> },
@@ -445,6 +453,7 @@ function overviewRows(record, documentType) {
       { label: 'Unit', value: firstPresent(record?.output_unit_code, relationLabel(record?.unit)) || '-' },
       { label: 'Status', value: statusTag(firstPresent(record?.status, record?.active ? 'approved' : 'draft')) },
       { label: 'Approval Status', value: approvalTag(record) },
+      ...approvalMetaRows(record),
       { label: 'Effective From', value: formatDate(record?.effective_from) },
       { label: 'Effective To', value: formatDate(record?.effective_to) },
       { label: 'Total Material Cost', value: <strong>{formatMoney(firstPresent(record?.total_material_cost, getCostTotal(lines)))}</strong> },
@@ -471,6 +480,7 @@ function overviewRows(record, documentType) {
       { label: 'Remaining Qty', value: formatQty(Math.max(plannedQty - producedQty, 0)) },
       { label: 'Status', value: statusTag(record?.status) },
       { label: 'Approval Status', value: approvalTag(record) },
+      ...approvalMetaRows(record),
       { label: 'Total Cost', value: <strong>{formatMoney(firstPresent(record?.total_cost, getCostTotal(materialLines)))}</strong> },
       { label: 'Notes', value: record?.notes || '-' },
     ];
@@ -488,6 +498,7 @@ function overviewRows(record, documentType) {
     { label: 'Wastage Qty', value: formatQty(record?.wastage_qty) },
     { label: 'Status', value: statusTag(record?.status) },
     { label: 'Approval Status', value: approvalTag(record) },
+    ...approvalMetaRows(record),
     { label: 'Total Material Cost', value: <strong>{formatMoney(firstPresent(record?.total_material_cost, record?.raw_material_cost, getCostTotal(materialLines)))}</strong> },
     { label: 'Total Labor Cost', value: <strong>{formatMoney(record?.total_labor_cost)}</strong> },
     { label: 'Total Overhead Cost', value: <strong>{formatMoney(firstPresent(record?.total_overhead_cost, record?.production_expense_amount))}</strong> },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Table, Button, Input, InputNumber } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -29,6 +29,10 @@ export default function TransactionLineItems({
   showTax = true,
   minRow = 1,
 }) {
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+
+  const rowKeyOf = (row) => row._key || row.id;
+
   const update = (idx, patch) => {
     const next = items.map((r, i) => (i === idx ? { ...r, ...patch } : r));
     const recalced = next.map((r) => {
@@ -53,6 +57,7 @@ export default function TransactionLineItems({
   const removeRow = (idx) => {
     const row = items[idx];
     if (row?.id && typeof onDeleteExistingId === 'function') onDeleteExistingId(row.id);
+    const removedKey = rowKeyOf(row);
     const next = items.filter((_, i) => i !== idx);
     if (next.length < minRow) {
       next.push({
@@ -62,6 +67,7 @@ export default function TransactionLineItems({
         tax_rate_id: null, tax_amount: 0, line_total: 0,
       });
     }
+    setExpandedRowKeys((keys) => keys.filter((key) => key !== removedKey));
     onChange?.(next);
   };
 
@@ -107,9 +113,26 @@ export default function TransactionLineItems({
     {
       title: 'Description',
       dataIndex: 'description',
-      render: (val, _, idx) => (
-        <Input variant="borderless" value={val || ''} placeholder="Description" onChange={(e) => update(idx, { description: e.target.value })} />
-      ),
+      width: 130,
+      render: (val, row) => {
+        const rowKey = rowKeyOf(row);
+        const expanded = expandedRowKeys.includes(rowKey);
+        const hasDescription = String(val || '').trim().length > 0;
+
+        return (
+          <Button
+            type={hasDescription ? 'link' : 'text'}
+            size="small"
+            onClick={() =>
+              setExpandedRowKeys((keys) =>
+                expanded ? keys.filter((key) => key !== rowKey) : [...keys, rowKey]
+              )
+            }
+          >
+            {expanded ? 'Hide' : hasDescription ? 'View/Edit' : 'Add'}
+          </Button>
+        );
+      },
     },
     {
       title: 'Qty',
@@ -234,12 +257,31 @@ export default function TransactionLineItems({
         }
       `}</style>
       <Table
-        rowKey={(r) => r._key || r.id}
+        rowKey={rowKeyOf}
         size="small"
         bordered={false}
         pagination={false}
         columns={columns}
         dataSource={items}
+        expandable={{
+          expandedRowKeys,
+          onExpandedRowsChange: setExpandedRowKeys,
+          expandedRowRender: (row, _index, _indent, expanded) => {
+            if (!expanded) return null;
+            const idx = items.findIndex((item) => rowKeyOf(item) === rowKeyOf(row));
+            if (idx < 0) return null;
+
+            return (
+              <Input.TextArea
+                value={row.description || ''}
+                rows={2}
+                placeholder="Line description"
+                onChange={(e) => update(idx, { description: e.target.value })}
+              />
+            );
+          },
+          rowExpandable: () => true,
+        }}
         footer={() => (
           <Button icon={<PlusOutlined />} type="dashed" size="small" onClick={addRow}>
             Add Row

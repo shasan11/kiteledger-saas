@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { router, usePage } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import dayjs from 'dayjs';
@@ -41,7 +41,6 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
-  const { defaultCurrency } = usePage().props;
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'sales_order_no') : '#DRAFT';
 

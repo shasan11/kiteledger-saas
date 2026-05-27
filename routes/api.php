@@ -218,6 +218,8 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('reports/{category}/{report_key}/export', [ReportController::class, 'export']);
 });
 
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+
 /*
 |--------------------------------------------------------------------------
 | Cash Transfers
@@ -1068,6 +1070,8 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
     Route::post('actions/{uuid}/reject',                [AiActionController::class, 'reject']);
     Route::post('risk-review',                          [AiRiskReviewController::class, 'review']);
     Route::post('reports/ask',                          [AiReportController::class, 'ask']);
+});
+
 });
 
 /*

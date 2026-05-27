@@ -312,6 +312,8 @@ function SummaryRail({ module, record, recordTitle, subtitle, title, formatMoney
           rows={[
             { label: 'Status', value: <StatusTag record={record} /> },
             { label: 'Branch', value: relationLabel(record?.branch) },
+            { label: 'Approved By', value: relationLabel(record?.approvedBy || record?.approved_by) },
+            { label: 'Approved At', value: formatDate(record?.approved_at, true) },
             { label: 'Created', value: formatDate(record?.created_at, true) },
             { label: 'Updated', value: formatDate(record?.updated_at, true) },
           ]}

@@ -103,7 +103,7 @@ class AdministrativeAccessAuthorizationTest extends TestCase
             }
         };
 
-        $payload = $controller->fillBranch([], $request);
+        $payload = $controller->fillBranch(['branch_id' => 'all'], $request);
 
         $this->assertSame($branchId, $payload['branch_id'] ?? null);
     }

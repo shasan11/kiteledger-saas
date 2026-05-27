@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { router, usePage } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Select, Row, Col, message, Alert, Table, Button, Switch, Space, Typography } from 'antd';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -23,7 +23,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
   const [tdsApplicable, setTdsApplicable] = useState(false);
   const [topError, setTopError] = useState(null);
   const [contactId, setContactId] = useState(null);
-  const { defaultCurrency } = usePage().props;
+  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'payment_no') : '#DRAFT';
 

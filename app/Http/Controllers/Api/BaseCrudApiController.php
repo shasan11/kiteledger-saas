@@ -1002,6 +1002,11 @@ abstract class BaseCrudApiController extends Controller
 
         $providedBranchId = $data[$this->branchColumn] ?? null;
 
+        if ($this->isAllBranchValue($providedBranchId)) {
+            unset($data[$this->branchColumn]);
+            $providedBranchId = null;
+        }
+
         if (!empty($providedBranchId)) {
             $scope->assertCanAccessBranch($user, (string) $providedBranchId);
             $data[$this->branchColumn] = (string) $providedBranchId;
@@ -1050,6 +1055,12 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
+        if ($this->isAllBranchValue($data[$this->branchColumn] ?? null)) {
+            unset($data[$this->branchColumn]);
+
+            return $data;
+        }
+
         if (!empty($data[$this->branchColumn])) {
             $scope->assertCanAccessBranch($user, (string) $data[$this->branchColumn]);
             $data[$this->branchColumn] = (string) $data[$this->branchColumn];
@@ -1081,6 +1092,15 @@ abstract class BaseCrudApiController extends Controller
         $value = app(BranchScopeService::class)->normalizeRequestedBranch($request);
 
         return $value === 'all' ? null : $value;
+    }
+
+    protected function isAllBranchValue(mixed $value): bool
+    {
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        return in_array(strtolower((string) $value), ['all', '*'], true);
     }
 
     protected function defaultWriteBranchId(Request $request, bool $allowRequestedBranch = true): ?string

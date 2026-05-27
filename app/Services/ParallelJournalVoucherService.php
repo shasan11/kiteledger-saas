@@ -563,20 +563,47 @@ class ParallelJournalVoucherService
         }
 
         $totalDebit = round(array_sum(array_column($debitLines, 'debit')), 2);
+        $foreignTotal = (float) $return->salesReturnLines->sum('line_total');
 
-        $lines = array_merge(
-            [
-                [
-                    'account_id' => $this->resolvePostingAccountId($arAccount->id),
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'foreign_debit' => 0,
-                    'foreign_credit' => (float) $return->salesReturnLines->sum('line_total'),
-                    'description' => "Sales Return {$return->sales_return_no}",
-                ],
-            ],
-            $debitLines
-        );
+        $creditLines = [];
+
+        $hasRefund = (bool) ($return->has_refund ?? false);
+        $refundForeign = $hasRefund ? min((float) ($return->refund_amount ?? 0), $foreignTotal) : 0.0;
+        $refundBase = $hasRefund ? round($this->convertToBase($refundForeign, $rate), 2) : 0.0;
+        $refundBase = min($refundBase, $totalDebit);
+
+        if ($hasRefund && $refundBase > 0 && $return->refund_account_id) {
+            $refundAccount = $this->resolveChartAccount($return->refund_account_id);
+            $refundDescription = "Refund for Sales Return {$return->sales_return_no}";
+            if (! empty($return->refund_reference)) {
+                $refundDescription .= " (Ref: {$return->refund_reference})";
+            }
+
+            $creditLines[] = [
+                'account_id' => $this->resolvePostingAccountId($refundAccount->id),
+                'debit' => 0,
+                'credit' => $refundBase,
+                'foreign_debit' => 0,
+                'foreign_credit' => $refundForeign,
+                'description' => $refundDescription,
+            ];
+        }
+
+        $arForeignCredit = max($foreignTotal - $refundForeign, 0);
+        $arBaseCredit = round($totalDebit - $refundBase, 2);
+
+        if ($arBaseCredit > 0 || $arForeignCredit > 0) {
+            $creditLines[] = [
+                'account_id' => $this->resolvePostingAccountId($arAccount->id),
+                'debit' => 0,
+                'credit' => $arBaseCredit,
+                'foreign_debit' => 0,
+                'foreign_credit' => $arForeignCredit,
+                'description' => "Sales Return {$return->sales_return_no}",
+            ];
+        }
+
+        $lines = array_merge($creditLines, $debitLines);
 
         $lines = $this->balanceRoundingDifference($lines);
         $this->validationService->validateBalanced($lines);

@@ -18,8 +18,8 @@ class SalesReturnController extends BaseCrudApiController
     protected bool $fiscalYearScoped = true;
     protected ?string $businessDateColumn = 'sales_return_date';
 
-    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'userAdd', 'approvedBy'];
-    protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id'];
+    protected array $relations = ['branch', 'contact', 'warehouse', 'currency', 'refundAccount', 'userAdd', 'approvedBy'];
+    protected array $relationDetails = ['branch' => 'branch_id', 'contact' => 'contact_id', 'warehouse' => 'warehouse_id', 'currency' => 'currency_id', 'refundAccount' => 'refund_account_id'];
     protected array $searchable = ['sales_return_no', 'reference', 'notes', 'status'];
     protected array $filterable = ['branch_id', 'contact_id', 'warehouse_id', 'currency_id', 'status'];
     protected array $booleanFilters = ['active', 'approved', 'void'];
@@ -84,6 +84,14 @@ class SalesReturnController extends BaseCrudApiController
             $input['sales_return_date'] = $input['date'];
         }
 
+        $hasRefund = filter_var($input['has_refund'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $input['has_refund'] = $hasRefund;
+        if (! $hasRefund) {
+            $input['refund_account_id'] = null;
+            $input['refund_reference'] = null;
+            $input['refund_amount'] = null;
+        }
+
         return $input;
     }
 
@@ -99,6 +107,10 @@ class SalesReturnController extends BaseCrudApiController
         'remarks' => ['nullable', 'string'],
         'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
         'status' => ['nullable', 'in:draft,posted,cancelled'],
+        'has_refund' => ['nullable', 'boolean'],
+        'refund_account_id' => ['nullable', 'required_if:has_refund,1,true', 'uuid', 'exists:accounts,id'],
+        'refund_reference' => ['nullable', 'string', 'max:120'],
+        'refund_amount' => ['nullable', 'required_if:has_refund,1,true', 'numeric', 'gt:0'],
     ];
 
     protected function updateRules(Request $request, Model $record): array
@@ -115,6 +127,10 @@ class SalesReturnController extends BaseCrudApiController
             'remarks' => ['sometimes', 'nullable', 'string'],
             'exchange_rate' => ['sometimes', 'nullable', 'numeric', 'gt:0'],
             'status' => ['sometimes', 'nullable', 'in:draft,posted,cancelled'],
+            'has_refund' => ['sometimes', 'nullable', 'boolean'],
+            'refund_account_id' => ['sometimes', 'nullable', 'required_if:has_refund,1,true', 'uuid', 'exists:accounts,id'],
+            'refund_reference' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'refund_amount' => ['sometimes', 'nullable', 'required_if:has_refund,1,true', 'numeric', 'gt:0'],
         ];
     }
 
@@ -148,6 +164,19 @@ class SalesReturnController extends BaseCrudApiController
         }
 
         $record->forceFill(['total' => round($total, 2)])->save();
+
+        if ((bool) $record->has_refund) {
+            $refundAmount = (float) ($record->refund_amount ?? 0);
+            if ($refundAmount <= 0) {
+                $this->throwValidation(['refund_amount' => ['Refund amount is required when refund is enabled.']]);
+            }
+            if (round($refundAmount, 2) > round((float) $record->total, 2)) {
+                $this->throwValidation(['refund_amount' => ['Refund amount cannot exceed the credit note total.']]);
+            }
+            if (empty($record->refund_account_id)) {
+                $this->throwValidation(['refund_account_id' => ['Refund account is required when refund is enabled.']]);
+            }
+        }
 
         return $record;
     }

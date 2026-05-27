@@ -24,7 +24,12 @@ const authHeaders = () => {
 const fmtDate = (v) => (v && dayjs(v).isValid() ? dayjs(v).format('DD MMM YYYY') : '-');
 const fmtNum = (v, d = 2) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtQty = (v) => fmtNum(v, 4).replace(/\.?0+$/, '').replace(/^-?0$/, '0');
-const label = (obj) => obj?.name || obj?.label || obj?.display_name || obj?.code || '-';
+const label = (obj) => {
+  if (!obj) return '-';
+  if (typeof obj === 'string' || typeof obj === 'number') return String(obj);
+
+  return obj?.name || obj?.label || obj?.display_name || obj?.code || '-';
+};
 
 const STATUS_COLOR = {
   draft: 'default', approved: 'success', released: 'processing',
@@ -32,6 +37,12 @@ const STATUS_COLOR = {
   cancelled: 'error', posted: 'success',
 };
 const statusTag = (s) => <Tag color={STATUS_COLOR[s] || 'default'}>{String(s || 'draft').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</Tag>;
+
+const approvalMetaItems = (record) => [
+  { label: 'Branch', value: label(record?.branch) },
+  { label: 'Approved By', value: label(record?.approvedBy || record?.approved_by) },
+  { label: 'Approved At', value: fmtDate(record?.approved_at) },
+];
 
 const CONFIG = {
   bom: {
@@ -388,6 +399,7 @@ function getOverviewItems(record, documentType, isApproved, isPosted, isVoid) {
       { label: 'Output Quantity', value: `${fmtQty(record?.output_quantity)} ${record?.output_unit_code || ''}`.trim() },
       ...base,
       { label: 'Status', value: <>{statusTag(record?.status)}{isApproved && <Tag color="success" style={{ marginLeft: 4 }}>Approved</Tag>}</> },
+      ...approvalMetaItems(record),
       { label: 'Auto-manufacture', value: record?.manufacture_on_every_sale ? 'Yes' : 'No' },
     ];
   }
@@ -400,8 +412,7 @@ function getOverviewItems(record, documentType, isApproved, isPosted, isVoid) {
       { label: 'Planned Qty', value: `${fmtQty(record?.output_quantity)} ${record?.productUnit?.name || ''}`.trim() },
       ...base,
       { label: 'Status', value: <>{statusTag(record?.status)}{isApproved && <Tag color="success" style={{ marginLeft: 4 }}>Approved</Tag>}</> },
-      record?.approvedBy && { label: 'Approved By', value: record.approvedBy?.name || '-' },
-      record?.approved_at && { label: 'Approved At', value: fmtDate(record.approved_at) },
+      ...approvalMetaItems(record),
     ].filter(Boolean);
   }
 
@@ -413,8 +424,7 @@ function getOverviewItems(record, documentType, isApproved, isPosted, isVoid) {
       { label: 'Output Qty', value: `${fmtQty(record?.output_quantity)} ${record?.output_unit_code || ''}`.trim() },
       ...base,
       { label: 'Status', value: <>{statusTag(record?.status)}{isPosted && <Tag color="success" style={{ marginLeft: 4 }}>Posted</Tag>}</> },
-      record?.approvedBy && { label: 'Posted By', value: record.approvedBy?.name || '-' },
-      record?.approved_at && { label: 'Posted At', value: fmtDate(record.approved_at) },
+      ...approvalMetaItems(record),
     ].filter(Boolean);
   }
 

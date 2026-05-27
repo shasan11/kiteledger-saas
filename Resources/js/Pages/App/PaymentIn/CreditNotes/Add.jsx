@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { router, usePage } from '@inertiajs/react';
-import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
+import { router } from '@inertiajs/react';
+import { Form, Input, InputNumber, DatePicker, Row, Col, Switch, message, Alert } from 'antd';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
@@ -15,9 +15,9 @@ import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transacti
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
-const mapLines = (lines = []) => (lines || []).map((l) => ({
+const mapLines = (lines = [], options = {}) => (lines || []).map((l) => ({
   _key: newKey(),
-  ...(l.id ? { id: l.id } : {}),
+  ...(options.keepIds && l.id ? { id: l.id } : {}),
   product_id: l.product_id ?? l.product?.id ?? null,
   product_detail: l.product || l.product_id_detail || null,
   product_name: l.product_name || l.product?.name || '',
@@ -39,9 +39,10 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
   const [topError, setTopError] = useState(null);
   const [invoiceId, setInvoiceId] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
+  const [hasRefund, setHasRefund] = useState(false);
+  const [refundAmountTouched, setRefundAmountTouched] = useState(false);
   const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
   const currencySymbol = currencySymbolOf(currencyDetail);
-  const { defaultCurrency } = usePage().props;
 
   // Backend uses sales_return_no / sales_return_date; preserve that.
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, initialRecord.credit_note_no ? 'credit_note_no' : 'sales_return_no') : '#DRAFT';
@@ -57,9 +58,15 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
         reference: initialRecord.reference || '',
         notes: initialRecord.notes || initialRecord.reason || '',
         remarks: initialRecord.remarks || '',
+        has_refund: !!initialRecord.has_refund,
+        refund_account_id: initialRecord.refund_account_id ?? initialRecord.refundAccount?.id ?? null,
+        refund_reference: initialRecord.refund_reference || '',
+        refund_amount: toNumber(initialRecord.refund_amount) || 0,
       });
+      setHasRefund(!!initialRecord.has_refund);
+      setRefundAmountTouched(!!initialRecord.has_refund && toNumber(initialRecord.refund_amount) > 0);
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
-      if (lines.length) setItems(mapLines(lines));
+      if (lines.length) setItems(mapLines(lines, { keepIds: true }));
       setInvoiceId(initialRecord.invoice_id || null);
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
@@ -79,6 +86,26 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
     if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
   }, [defaultCurrency, form, initialRecord]);
 
+  const totals = calculateTotals(items);
+
+  useEffect(() => {
+    if (!hasRefund) return;
+    if (refundAmountTouched) return;
+    form.setFieldValue('refund_amount', totals.grand_total || 0);
+  }, [hasRefund, refundAmountTouched, totals.grand_total, form]);
+
+  const onToggleRefund = (checked) => {
+    setHasRefund(checked);
+    form.setFieldValue('has_refund', checked);
+    if (checked) {
+      setRefundAmountTouched(false);
+      form.setFieldValue('refund_amount', totals.grand_total || 0);
+    } else {
+      form.setFieldsValue({ refund_account_id: null, refund_reference: '', refund_amount: 0 });
+      setRefundAmountTouched(false);
+    }
+  };
+
   const onPickInvoice = (rec) => {
     if (!rec) return;
     form.setFieldsValue({
@@ -87,7 +114,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
       exchange_rate: toNumber(rec.exchange_rate) || 1,
     });
     setInvoiceId(rec.id);
-    setItems(mapLines(rec.items || []));
+    setItems(mapLines(rec.items || [], { keepIds: false }));
   };
 
   const onSubmit = async () => {
@@ -99,7 +126,18 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
       return;
     }
     const normalized = items.map((l) => normalizeLine(l)).filter((l) => !!asId(l.product_id) || !!(l.product_name || '').trim());
-    const totals = calculateTotals(items);
+    const submitTotals = calculateTotals(items);
+    if (hasRefund) {
+      const refundAmt = toNumber(v.refund_amount);
+      if (!refundAmt || refundAmt <= 0) {
+        setTopError('Refund amount must be greater than 0.');
+        return;
+      }
+      if (refundAmt > Number(submitTotals.grand_total || 0) + 0.001) {
+        setTopError('Refund amount cannot exceed the credit note total.');
+        return;
+      }
+    }
     const payload = {
       sales_return_no: null,
       sales_return_date: formatDate(v.credit_note_date),
@@ -110,10 +148,14 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
       notes: nullIfEmpty(v.notes),
       remarks: nullIfEmpty(v.remarks),
       invoice_id: invoiceId || null,
-      total: totals.grand_total,
-      sub_total: totals.subtotal,
-      discount_total: totals.discount_total,
-      tax_total: totals.tax_total,
+      total: submitTotals.grand_total,
+      sub_total: submitTotals.subtotal,
+      discount_total: submitTotals.discount_total,
+      tax_total: submitTotals.tax_total,
+      has_refund: !!hasRefund,
+      refund_account_id: hasRefund ? asId(v.refund_account_id) : null,
+      refund_reference: hasRefund ? nullIfEmpty(v.refund_reference) : null,
+      refund_amount: hasRefund ? toNumber(v.refund_amount) : null,
       items: normalized,
       deleted_item_ids: deletedItemIds,
     };
@@ -195,6 +237,40 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
         </FormSection>
 
         <FormSection title=""><TransactionTotals items={items} currencySymbol={currencySymbol} /></FormSection>
+
+        <FormSection title="Refund">
+          <Row gutter={16}>
+            <Col xs={24}>
+              <Form.Item label="Refund" name="has_refund" valuePropName="checked" tooltip="Enable to create a refund entry alongside the credit note">
+                <Switch checked={hasRefund} onChange={onToggleRefund} />
+              </Form.Item>
+            </Col>
+            {hasRefund && (
+              <>
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Refund Account" name="refund_account_id" rules={[{ required: true, message: 'Refund account is required' }]}>
+                    <BackendSelect fkUrl="/api/accounts/?active=true" placeholder="Select refund account" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Refund Reference" name="refund_reference">
+                    <Input placeholder="Reference" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Refund Amount" name="refund_amount" rules={[{ required: true, message: 'Refund amount is required' }]}>
+                    <InputNumber
+                      min={0}
+                      step={0.01}
+                      style={{ width: '100%' }}
+                      onChange={() => setRefundAmountTouched(true)}
+                    />
+                  </Form.Item>
+                </Col>
+              </>
+            )}
+          </Row>
+        </FormSection>
 
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
