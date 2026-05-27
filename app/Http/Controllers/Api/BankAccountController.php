@@ -7,7 +7,8 @@ use App\Models\BankStatementLine;
 use App\Models\JournalVoucherLine;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class BankAccountController extends BaseCrudApiController
 {
@@ -82,8 +83,6 @@ class BankAccountController extends BaseCrudApiController
 
         'type' => ['required', 'in:bank,cash'],
         'display_name' => ['required', 'string', 'max:150'],
-         
-
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
 
         'description' => ['nullable', 'string'],
@@ -107,8 +106,6 @@ class BankAccountController extends BaseCrudApiController
 
             'type' => ['sometimes', 'required', 'in:bank,cash'],
             'display_name' => ['sometimes', 'required', 'string', 'max:150'],
-
-             
             'currency_id' => ['sometimes', 'required', 'uuid', 'exists:currencies,id'],
 
             'description' => ['sometimes', 'nullable', 'string'],
@@ -125,22 +122,40 @@ class BankAccountController extends BaseCrudApiController
 
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
+        /** @var BankAccount $record */
         $openingBalance = (float) ($record->opening_balance ?? 0);
         $ledgerBalance = (float) (optional($record->account)->balance ?? 0);
-        $statementBalance = $openingBalance;
         $softwareBalance = $openingBalance + $ledgerBalance;
-        $difference = round($statementBalance - $softwareBalance, 2);
 
-        $data['statement_balance'] = $statementBalance;
-        $data['software_ledger_balance'] = $softwareBalance;
-        $data['current_balance'] = $softwareBalance;
+        $statementLines = BankStatementLine::query()
+            ->where('bank_account_id', $record->id)
+            ->orderBy('statement_date')
+            ->orderBy('created_at')
+            ->get();
+
+        $statementRows = $this->formatStatementLines($statementLines, $openingBalance);
+        $lastStatement = collect($statementRows)->last();
+        $statementBalance = $lastStatement['balance'] ?? $openingBalance;
+        $difference = round(((float) $statementBalance) - $softwareBalance, 2);
+
+        $data['statement_balance'] = round((float) $statementBalance, 2);
+        $data['software_ledger_balance'] = round($softwareBalance, 2);
+        $data['current_balance'] = round($softwareBalance, 2);
         $data['reconciliation_difference'] = abs($difference);
         $data['reconciliation_status'] = abs($difference) < 0.01 ? 'reconciled' : 'needs_review';
-        $data['last_statement_date'] = null;
+        $data['last_statement_date'] = $lastStatement['date'] ?? null;
         $data['last_software_transaction_date'] = null;
-        $data['balance_history'] = [];
-        $data['deposit_withdrawal_summary'] = [];
-        $data['bank_transactions'] = [];
+        $data['balance_history'] = collect($statementRows)
+            ->map(fn (array $row) => [
+                'date' => $row['date'],
+                'bank_statement_balance' => $row['balance'],
+                'software_ledger_balance' => null,
+            ])
+            ->values()
+            ->all();
+        $data['deposit_withdrawal_summary'] = $this->depositWithdrawalSummary($statementLines);
+        $data['bank_transactions'] = $statementRows;
+        $data['statement_line_count'] = $statementLines->count();
 
         return $data;
     }
@@ -164,12 +179,12 @@ class BankAccountController extends BaseCrudApiController
             ->select('journal_voucher_lines.*')
             ->get();
 
-        $balance = (float) ($bankAccount->opening_balance ?? 0);
+        $softwareBalance = (float) ($bankAccount->opening_balance ?? 0);
 
-        $rows = $query->map(function (JournalVoucherLine $line) use (&$balance) {
+        $rows = $query->map(function (JournalVoucherLine $line) use (&$softwareBalance) {
             $debit = (float) $line->debit;
             $credit = (float) $line->credit;
-            $balance += $debit - $credit;
+            $softwareBalance += $debit - $credit;
             $voucher = $line->journalVoucher;
 
             return [
@@ -181,21 +196,40 @@ class BankAccountController extends BaseCrudApiController
                 'branch' => $voucher?->branch?->name,
                 'debit' => round($debit, 2),
                 'credit' => round($credit, 2),
-                'balance' => round($balance, 2),
+                'balance' => round($softwareBalance, 2),
             ];
         })->values();
 
-        $statementBalance = BankStatementLine::query()
+        $statementLines = BankStatementLine::query()
             ->where('bank_account_id', $bankAccount->id)
-            ->latest('statement_date')
-            ->value('balance');
+            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('statement_date', '>=', $request->date('date_from')))
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('statement_date', '<=', $request->date('date_to')))
+            ->orderBy('statement_date')
+            ->orderBy('created_at')
+            ->get();
+
+        $allStatementLines = BankStatementLine::query()
+            ->where('bank_account_id', $bankAccount->id)
+            ->orderBy('statement_date')
+            ->orderBy('created_at')
+            ->get();
+
+        $statementRows = $this->formatStatementLines($statementLines, (float) ($bankAccount->opening_balance ?? 0));
+        $allStatementRows = $this->formatStatementLines($allStatementLines, (float) ($bankAccount->opening_balance ?? 0));
+        $lastStatement = collect($allStatementRows)->last();
+        $statementBalance = $lastStatement['balance'] ?? (float) ($bankAccount->opening_balance ?? 0);
 
         return response()->json([
             'bank_account' => $bankAccount->load(['branch', 'currency', 'account']),
-            'statement_balance' => $statementBalance !== null ? (float) $statementBalance : (float) ($bankAccount->opening_balance ?? 0),
-            'software_balance' => round($balance, 2),
+            'statement_balance' => round((float) $statementBalance, 2),
+            'software_balance' => round($softwareBalance, 2),
+            'reconciliation_difference' => abs(round(((float) $statementBalance) - $softwareBalance, 2)),
             'last_transaction_date' => $rows->last()['date'] ?? null,
+            'last_statement_date' => $lastStatement['date'] ?? null,
+            'statement_line_count' => $allStatementLines->count(),
             'rows' => $rows,
+            'statement_lines' => $statementRows,
+            'deposit_withdrawal_summary' => $this->depositWithdrawalSummary($statementLines),
         ]);
     }
 
@@ -213,26 +247,101 @@ class BankAccountController extends BaseCrudApiController
             'lines.*.remarks' => ['nullable', 'string'],
         ]);
 
-        $created = collect($validated['lines'])->map(function (array $line) use ($bankAccount) {
-            return BankStatementLine::create([
-                'bank_account_id' => $bankAccount->id,
-                'account_id' => $bankAccount->account_id,
-                'statement_date' => $line['date'],
-                'description' => $line['description'] ?? null,
-                'reference' => $line['reference'] ?? null,
-                'debit' => $line['debit'] ?? 0,
-                'credit' => $line['credit'] ?? 0,
-                'balance' => $line['balance'] ?? null,
-                'counterparty' => $line['counterparty'] ?? null,
-                'remarks' => $line['remarks'] ?? null,
-                'status' => 'imported',
-                'imported_by_id' => $request->user()?->getAuthIdentifier(),
-            ]);
+        foreach ($validated['lines'] as $index => $line) {
+            $debit = (float) ($line['debit'] ?? 0);
+            $credit = (float) ($line['credit'] ?? 0);
+
+            if ($debit <= 0 && $credit <= 0) {
+                throw ValidationException::withMessages([
+                    "lines.$index.debit" => 'Either debit/deposit or credit/withdrawal amount is required.',
+                ]);
+            }
+
+            if ($debit > 0 && $credit > 0) {
+                throw ValidationException::withMessages([
+                    "lines.$index.debit" => 'Debit/deposit and credit/withdrawal cannot both have values.',
+                ]);
+            }
+        }
+
+        $created = DB::transaction(function () use ($validated, $bankAccount, $request) {
+            return collect($validated['lines'])->map(function (array $line) use ($bankAccount, $request) {
+                return BankStatementLine::create([
+                    'bank_account_id' => $bankAccount->id,
+                    'account_id' => $bankAccount->account_id,
+                    'statement_date' => $line['date'],
+                    'description' => $line['description'] ?? null,
+                    'reference' => $line['reference'] ?? null,
+                    'debit' => $line['debit'] ?? 0,
+                    'credit' => $line['credit'] ?? 0,
+                    'balance' => $line['balance'] ?? null,
+                    'counterparty' => $line['counterparty'] ?? null,
+                    'remarks' => $line['remarks'] ?? null,
+                    'status' => 'imported',
+                    'imported_by_id' => $request->user()?->getAuthIdentifier(),
+                ]);
+            });
         });
 
         return response()->json([
             'message' => 'Bank statement imported for review.',
             'created' => $created->count(),
         ], 201);
+    }
+
+    private function formatStatementLines($statementLines, float $openingBalance): array
+    {
+        $runningBalance = $openingBalance;
+
+        return $statementLines->map(function (BankStatementLine $line) use (&$runningBalance) {
+            $debit = (float) ($line->debit ?? 0);
+            $credit = (float) ($line->credit ?? 0);
+            $runningBalance += $debit - $credit;
+
+            if ($line->balance !== null) {
+                $runningBalance = (float) $line->balance;
+            }
+
+            $matchingStatus = $line->posted_journal_voucher_id
+                ? 'matched'
+                : ($line->status === 'ignored' ? 'ignored' : 'unmatched');
+
+            return [
+                'id' => $line->id,
+                'date' => optional($line->statement_date)->toDateString(),
+                'transaction_date' => optional($line->statement_date)->toDateString(),
+                'description' => $line->description,
+                'reference' => $line->reference,
+                'reference_no' => $line->reference,
+                'debit' => round($debit, 2),
+                'credit' => round($credit, 2),
+                'deposit' => round($debit, 2),
+                'withdrawal' => round($credit, 2),
+                'balance' => round($runningBalance, 2),
+                'running_balance' => round($runningBalance, 2),
+                'counterparty' => $line->counterparty,
+                'remarks' => $line->remarks,
+                'status' => $line->status,
+                'matching_status' => $matchingStatus,
+                'posted_journal_voucher_id' => $line->posted_journal_voucher_id,
+                'matched_transaction' => $line->posted_journal_voucher_id,
+                'difference' => 0,
+            ];
+        })->values()->all();
+    }
+
+    private function depositWithdrawalSummary($statementLines): array
+    {
+        return $statementLines
+            ->groupBy(fn (BankStatementLine $line) => optional($line->statement_date)->toDateString())
+            ->map(function ($rows, $date) {
+                return [
+                    'date' => $date,
+                    'deposits' => round((float) $rows->sum('debit'), 2),
+                    'withdrawals' => round((float) $rows->sum('credit'), 2),
+                ];
+            })
+            ->values()
+            ->all();
     }
 }
