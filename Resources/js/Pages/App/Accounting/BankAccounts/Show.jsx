@@ -39,9 +39,17 @@ const { Text, Title } = Typography;
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
-
-// If your backend route is /api/accounting/bank-accounts, change this line only.
 const bankApi = (id, path = '') => api(`/api/bank-accounts/${id}${path}`);
+
+const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+
+    return {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+};
 
 const templateColumns = [
     'date',
@@ -84,76 +92,6 @@ const demoStatementRows = [
         balance: 3485,
         counterparty: 'Himalayan Traders',
         remarks: 'Payment received against invoice',
-    },
-    {
-        date: '2026-05-22',
-        description: 'Supplier Payment',
-        reference: 'BILL-204',
-        debit: 0,
-        credit: 1200,
-        balance: 2285,
-        counterparty: 'ABC Suppliers',
-        remarks: 'Payment made against purchase bill',
-    },
-    {
-        date: '2026-05-23',
-        description: 'Cash Deposit',
-        reference: 'CD-003',
-        debit: 1800,
-        credit: 0,
-        balance: 4085,
-        counterparty: 'Walk-in Customer',
-        remarks: 'Daily cash sales deposited',
-    },
-    {
-        date: '2026-05-23',
-        description: 'Rent Payment',
-        reference: 'RENT-MAY',
-        debit: 0,
-        credit: 700,
-        balance: 3385,
-        counterparty: 'Landlord',
-        remarks: 'Office rent payment',
-    },
-    {
-        date: '2026-05-24',
-        description: 'Customer Refund',
-        reference: 'CN-009',
-        debit: 0,
-        credit: 250,
-        balance: 3135,
-        counterparty: 'Customer',
-        remarks: 'Refund issued for returned item',
-    },
-    {
-        date: '2026-05-24',
-        description: 'Online Order Settlement',
-        reference: 'SETT-051',
-        debit: 960,
-        credit: 0,
-        balance: 4095,
-        counterparty: 'Uber Eats',
-        remarks: 'Platform settlement received',
-    },
-    {
-        date: '2026-05-25',
-        description: 'Utility Payment',
-        reference: 'ELEC-778',
-        debit: 0,
-        credit: 180,
-        balance: 3915,
-        counterparty: 'Electricity Office',
-        remarks: 'Electricity bill payment',
-    },
-    {
-        date: '2026-05-25',
-        description: 'Bank Interest',
-        reference: 'INT-MAY',
-        debit: 35,
-        credit: 0,
-        balance: 3950,
-        counterparty: 'Bank',
-        remarks: 'Interest credited by bank',
     },
 ];
 
@@ -236,12 +174,24 @@ const getValue = (row, key) => {
     return matchedKey ? row[matchedKey] : '';
 };
 
+const getErrorMessage = (error, fallback) => {
+    const errors = error?.response?.data?.errors;
+
+    if (errors && typeof errors === 'object') {
+        const first = Object.values(errors).flat()[0];
+        if (first) return first;
+    }
+
+    return error?.response?.data?.message || fallback;
+};
+
 export default function BankAccountShow({ id }) {
     const { message } = App.useApp();
     const { token } = theme.useToken();
 
     const [record, setRecord] = useState(null);
     const [ledger, setLedger] = useState([]);
+    const [statementLines, setStatementLines] = useState([]);
     const [summary, setSummary] = useState({});
     const [loading, setLoading] = useState(true);
 
@@ -256,18 +206,21 @@ export default function BankAccountShow({ id }) {
 
         try {
             const [recordResponse, ledgerResponse] = await Promise.all([
-                axios.get(bankApi(id)),
-                axios.get(bankApi(id, '/ledger'), { params }),
+                axios.get(bankApi(id), { headers: authHeaders() }),
+                axios.get(bankApi(id, '/ledger'), {
+                    params,
+                    headers: authHeaders(),
+                }),
             ]);
 
+            const ledgerPayload = ledgerResponse.data || {};
+
             setRecord(recordResponse.data?.data || recordResponse.data);
-            setLedger(ledgerResponse.data?.rows || []);
-            setSummary(ledgerResponse.data || {});
+            setLedger(ledgerPayload.rows || []);
+            setStatementLines(ledgerPayload.statement_lines || []);
+            setSummary(ledgerPayload);
         } catch (error) {
-            message.error(
-                error?.response?.data?.message ||
-                    'Failed to load bank account ledger.',
-            );
+            message.error(getErrorMessage(error, 'Failed to load bank account ledger.'));
         } finally {
             setLoading(false);
         }
@@ -350,23 +303,20 @@ export default function BankAccountShow({ id }) {
         setImporting(true);
 
         try {
-            await axios.post(bankApi(id, '/statement-import'), {
-                lines: payload,
-            });
-
-            message.success(
-                'Statement imported for review. No journal vouchers were posted.',
+            const response = await axios.post(
+                bankApi(id, '/statement-import'),
+                { lines: payload },
+                { headers: authHeaders() },
             );
+
+            message.success(response.data?.message || 'Statement imported for review.');
 
             setImportOpen(false);
             setPreview([]);
 
             await load();
         } catch (error) {
-            message.error(
-                error?.response?.data?.message ||
-                    'Failed to import statement.',
-            );
+            message.error(getErrorMessage(error, 'Failed to import statement.'));
         } finally {
             setImporting(false);
         }
@@ -383,7 +333,7 @@ export default function BankAccountShow({ id }) {
         XLSX.writeFile(workbook, 'bank-statement-template.xlsx');
     };
 
-    const columns = [
+    const ledgerColumns = [
         {
             title: 'Date',
             dataIndex: 'date',
@@ -395,12 +345,7 @@ export default function BankAccountShow({ id }) {
             width: 150,
             render: (value, row) =>
                 row.journal_voucher_id ? (
-                    <Link
-                        href={route(
-                            'accounting.journal-vouchers.show',
-                            row.journal_voucher_id,
-                        )}
-                    >
+                    <Link href={route('accounting.journal-vouchers.show', row.journal_voucher_id)}>
                         {value || '-'}
                     </Link>
                 ) : (
@@ -410,6 +355,7 @@ export default function BankAccountShow({ id }) {
         {
             title: 'Description',
             dataIndex: 'description',
+            width: 260,
         },
         {
             title: 'Debit',
@@ -424,10 +370,69 @@ export default function BankAccountShow({ id }) {
             render: money,
         },
         {
-            title: 'Balance',
+            title: 'Software Balance',
             dataIndex: 'balance',
             align: 'right',
             render: money,
+        },
+    ];
+
+    const statementColumns = [
+        {
+            title: 'Date',
+            dataIndex: 'date',
+            width: 120,
+        },
+        {
+            title: 'Description',
+            dataIndex: 'description',
+            width: 260,
+            render: (value) => value || '-',
+        },
+        {
+            title: 'Reference',
+            dataIndex: 'reference',
+            width: 150,
+            render: (value) => value || '-',
+        },
+        {
+            title: 'Deposit',
+            dataIndex: 'debit',
+            align: 'right',
+            width: 120,
+            render: (value) => (Number(value) ? money(value) : '-'),
+        },
+        {
+            title: 'Withdrawal',
+            dataIndex: 'credit',
+            align: 'right',
+            width: 130,
+            render: (value) => (Number(value) ? money(value) : '-'),
+        },
+        {
+            title: 'Bank Balance',
+            dataIndex: 'balance',
+            align: 'right',
+            width: 140,
+            render: money,
+        },
+        {
+            title: 'Counterparty',
+            dataIndex: 'counterparty',
+            width: 180,
+            render: (value) => value || '-',
+        },
+        {
+            title: 'Status',
+            dataIndex: 'matching_status',
+            width: 130,
+            render: (value) => <Tag>{String(value || 'unmatched').replace(/_/g, ' ')}</Tag>,
+        },
+        {
+            title: 'Remarks',
+            dataIndex: 'remarks',
+            width: 220,
+            render: (value) => value || '-',
         },
     ];
 
@@ -483,36 +488,27 @@ export default function BankAccountShow({ id }) {
             dataIndex: 'warning',
             width: 220,
             render: (value) =>
-                value ? (
-                    <Tag color="red">{value}</Tag>
-                ) : (
-                    <Tag color="green">Valid</Tag>
-                ),
+                value ? <Tag color="red">{value}</Tag> : <Tag color="green">Valid</Tag>,
         },
     ];
 
     const keyCards = useMemo(
         () => [
-            [
-                'Balance in bank account',
-                summary.statement_balance ?? record?.statement_balance,
-            ],
-            [
-                'Balance in software',
-                summary.software_balance ?? record?.software_ledger_balance,
-            ],
+            ['Balance in bank account', summary.statement_balance ?? record?.statement_balance],
+            ['Balance in software', summary.software_balance ?? record?.software_ledger_balance],
             [
                 'Reconciliation difference',
-                Math.abs(
-                    Number(summary.statement_balance || 0) -
-                        Number(summary.software_balance || 0),
-                ),
+                summary.reconciliation_difference ??
+                    Math.abs(Number(summary.statement_balance || 0) - Number(summary.software_balance || 0)),
             ],
-            ['Last transaction date', summary.last_transaction_date || '-'],
+            ['Imported statement lines', summary.statement_line_count ?? record?.statement_line_count ?? 0],
+            ['Last statement date', summary.last_statement_date || record?.last_statement_date || '-'],
+            ['Last software transaction', summary.last_transaction_date || '-'],
         ],
         [record, summary],
     );
 
+    const chartRows = statementLines.length ? statementLines : ledger;
     const validPreviewCount = preview.filter((row) => !row.warning).length;
     const invalidPreviewCount = preview.length - validPreviewCount;
 
@@ -539,19 +535,11 @@ export default function BankAccountShow({ id }) {
                     minHeight: 'calc(100vh - 120px)',
                 }}
             >
-                <Space
-                    direction="vertical"
-                    size={token.margin}
-                    style={{ width: '100%' }}
-                >
+                <Space direction="vertical" size={token.margin} style={{ width: '100%' }}>
                     <Space wrap>
                         <Button
                             icon={<ArrowLeftOutlined />}
-                            onClick={() =>
-                                router.visit(
-                                    route('accounting.bank-accounts.index'),
-                                )
-                            }
+                            onClick={() => router.visit(route('accounting.bank-accounts.index'))}
                         >
                             Back
                         </Button>
@@ -577,38 +565,26 @@ export default function BankAccountShow({ id }) {
                     <div
                         style={{
                             display: 'grid',
-                            gridTemplateColumns:
-                                'repeat(auto-fit, minmax(220px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                             gap: token.marginSM,
                         }}
                     >
                         {keyCards.map(([label, value]) => (
-                            <Card key={label} bordered={false}>
+                            <Card key={label} bordered={false} loading={loading}>
                                 <Text type="secondary">{label}</Text>
 
-                                <div
-                                    style={{
-                                        fontWeight: 700,
-                                        fontSize: 18,
-                                    }}
-                                >
-                                    {typeof value === 'number'
-                                        ? money(value)
-                                        : value || '-'}
+                                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                                    {typeof value === 'number' ? money(value) : value || '-'}
                                 </div>
                             </Card>
                         ))}
                     </div>
 
-                    <Card
-                        title="Bank Balance Movement"
-                        loading={loading}
-                        bordered={false}
-                    >
-                        {ledger.length ? (
+                    <Card title="Bank Statement Balance Movement" loading={loading} bordered={false}>
+                        {chartRows.length ? (
                             <div style={{ height: 300 }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={ledger}>
+                                    <LineChart data={chartRows}>
                                         <CartesianGrid
                                             stroke={token.colorBorderSecondary}
                                             strokeDasharray="3 3"
@@ -616,10 +592,7 @@ export default function BankAccountShow({ id }) {
 
                                         <XAxis dataKey="date" />
 
-                                        <YAxis
-                                            tickFormatter={money}
-                                            width={90}
-                                        />
+                                        <YAxis tickFormatter={money} width={90} />
 
                                         <Tooltip formatter={money} />
 
@@ -634,20 +607,31 @@ export default function BankAccountShow({ id }) {
                                 </ResponsiveContainer>
                             </div>
                         ) : (
-                            <Empty description="No bank ledger movement found" />
+                            <Empty description="No bank statement movement found" />
                         )}
                     </Card>
 
-                    <Card title="Ledger" bordered={false}>
+                    <Card title="Imported Bank Statement Lines" bordered={false}>
                         <Table
                             size="small"
-                            rowKey={(row, index) =>
-                                row.id || row.reference || index
-                            }
-                            columns={columns}
+                            rowKey={(row, index) => row.id || row.reference || index}
+                            columns={statementColumns}
+                            dataSource={statementLines}
+                            loading={loading}
+                            scroll={{ x: 1400 }}
+                            locale={{ emptyText: <Empty description="No imported statement lines" /> }}
+                        />
+                    </Card>
+
+                    <Card title="Software Ledger" bordered={false}>
+                        <Table
+                            size="small"
+                            rowKey={(row, index) => row.id || row.reference || index}
+                            columns={ledgerColumns}
                             dataSource={ledger}
                             loading={loading}
                             scroll={{ x: 900 }}
+                            locale={{ emptyText: <Empty description="No software ledger movement found" /> }}
                         />
                     </Card>
                 </Space>
@@ -659,15 +643,8 @@ export default function BankAccountShow({ id }) {
                 onClose={() => setImportOpen(false)}
                 width="min(960px, 100vw)"
                 footer={
-                    <Space
-                        style={{
-                            justifyContent: 'flex-end',
-                            width: '100%',
-                        }}
-                    >
-                        <Button onClick={() => setImportOpen(false)}>
-                            Cancel
-                        </Button>
+                    <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+                        <Button onClick={() => setImportOpen(false)}>Cancel</Button>
 
                         <Button
                             type="primary"
@@ -680,11 +657,7 @@ export default function BankAccountShow({ id }) {
                     </Space>
                 }
             >
-                <Space
-                    direction="vertical"
-                    style={{ width: '100%' }}
-                    size={token.margin}
-                >
+                <Space direction="vertical" style={{ width: '100%' }} size={token.margin}>
                     <Alert
                         type="info"
                         showIcon
@@ -692,26 +665,19 @@ export default function BankAccountShow({ id }) {
                     />
 
                     <Space wrap>
-                        <Button onClick={downloadTemplate}>
-                            Download Demo Template
-                        </Button>
+                        <Button onClick={downloadTemplate}>Download Demo Template</Button>
 
                         <Upload
                             accept=".csv,.xlsx,.xls,.tsv,.txt"
                             beforeUpload={parseFile}
                             showUploadList={false}
                         >
-                            <Button icon={<UploadOutlined />}>
-                                Upload CSV or Excel
-                            </Button>
+                            <Button icon={<UploadOutlined />}>Upload CSV or Excel</Button>
                         </Upload>
 
                         {preview.length ? (
                             <Space>
-                                <Tag color="green">
-                                    Valid: {validPreviewCount}
-                                </Tag>
-
+                                <Tag color="green">Valid: {validPreviewCount}</Tag>
                                 <Tag color={invalidPreviewCount ? 'red' : 'blue'}>
                                     Invalid: {invalidPreviewCount}
                                 </Tag>
