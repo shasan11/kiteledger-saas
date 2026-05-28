@@ -98,8 +98,6 @@ class AiSettingsService
     public function timeoutSeconds(): int
     {
         $raw = max(15, min(600, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
-        // Local Ollama models often need 30–90s on cold start (model load into VRAM).
-        // Enforce a higher floor so first-request timeouts don't surprise users.
         if ($this->provider() === 'ollama') {
             return max(60, $raw);
         }
@@ -198,7 +196,7 @@ class AiSettingsService
     {
         return match ($provider) {
             'groq' => 'llama-3.1-8b-instant',
-            'gemini' => 'gemini-1.5-flash',
+            'gemini' => 'gemini-2.5-flash',
             'ollama' => 'llama3.1:8b',
             default => 'gpt-4o-mini',
         };
