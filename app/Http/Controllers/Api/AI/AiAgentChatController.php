@@ -7,6 +7,7 @@ use App\Models\AiConversation;
 use App\Models\AiMessage;
 use App\Services\AI\Agent\AiActionProposalService;
 use App\Services\AI\Agent\AiAgentIntentService;
+use App\Services\AI\Agent\AiDeterministicAnswerService;
 use App\Services\AI\Agent\AiRecordSearchService;
 use App\Services\AI\Agent\AiReportResolver;
 use App\Services\AI\AiAssistantContext;
@@ -35,6 +36,7 @@ class AiAgentChatController extends Controller
         protected AiRecordSearchService $recordSearch,
         protected AiReportResolver $reportResolver,
         protected AiActionProposalService $proposalService,
+        protected AiDeterministicAnswerService $deterministicAnswers,
     ) {}
 
     public function chat(Request $request): JsonResponse
@@ -78,6 +80,18 @@ class AiAgentChatController extends Controller
             'content' => $message,
             'context' => ['type' => $contextType, 'intent' => $intent],
         ]);
+
+        if ($deterministic = $this->deterministicAnswers->answer($request, $message)) {
+            return $this->storeAndRespond(
+                $conversation,
+                $deterministic['reply'],
+                array_merge($intent, ['name' => 'deterministic_database_answer', 'source' => 'database']),
+                $contextType,
+                $branchScope,
+                [],
+                [$deterministic['result']],
+            );
+        }
 
         if (($intent['name'] ?? null) === 'search_records') {
             $result = $this->recordSearch->search($request, $intent['module'] ?? 'records', $message);
