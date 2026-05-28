@@ -16,14 +16,14 @@ class AiSettingsService
         'ai_model' => 'gpt-4o-mini',
         'ai_base_url' => 'https://api.openai.com/v1',
         'ai_temperature' => 0.2,
-        'ai_max_tokens' => 900,
-        'ai_timeout_seconds' => 25,
-        'ai_connect_timeout_seconds' => 5,
+        'ai_max_tokens' => 700,
+        'ai_timeout_seconds' => 75,
+        'ai_connect_timeout_seconds' => 10,
         'ai_stream_enabled' => true,
         'ai_cache_enabled' => true,
         'ai_cache_ttl' => 600,
-        'ai_context_max_rows' => 30,
-        'ai_context_max_chars' => 12000,
+        'ai_context_max_rows' => 20,
+        'ai_context_max_chars' => 8000,
         'ai_fast_mode' => true,
     ];
 
@@ -51,12 +51,11 @@ class AiSettingsService
     {
         $raw = $this->db->string('ai_api_key', '', self::GROUP);
         if (!$raw) {
-            // env fallback only
             $provider = $this->provider();
             $cfg = config("ai.providers.{$provider}.api_key");
             return $cfg ?: null;
         }
-        // Try decrypt; if it fails treat as plain (legacy).
+
         try {
             return Crypt::decryptString($raw);
         } catch (Throwable) {
@@ -93,17 +92,17 @@ class AiSettingsService
 
     public function maxTokens(): int
     {
-        return $this->db->int('ai_max_tokens', (int) self::DEFAULTS['ai_max_tokens'], self::GROUP);
+        return max(50, min(32000, $this->db->int('ai_max_tokens', (int) self::DEFAULTS['ai_max_tokens'], self::GROUP)));
     }
 
     public function timeoutSeconds(): int
     {
-        return max(5, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP));
+        return max(15, min(300, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
     }
 
     public function connectTimeoutSeconds(): int
     {
-        return max(2, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP));
+        return max(2, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
     }
 
     public function streamEnabled(): bool
@@ -123,12 +122,12 @@ class AiSettingsService
 
     public function contextMaxRows(): int
     {
-        return $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP);
+        return max(1, min(500, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
     }
 
     public function contextMaxChars(): int
     {
-        return $this->db->int('ai_context_max_chars', (int) self::DEFAULTS['ai_context_max_chars'], self::GROUP);
+        return max(500, min(200000, $this->db->int('ai_context_max_chars', (int) self::DEFAULTS['ai_context_max_chars'], self::GROUP)));
     }
 
     public function fastMode(): bool
