@@ -17,6 +17,11 @@ class AiPermissionService
         'ai.conversations.delete',
         'ai.settings.view',
         'ai.settings.update',
+        'ai.actions.view',
+        'ai.actions.approve',
+        'ai.actions.reject',
+        'ai.records.search',
+        'ai.records.show',
         'ai.manage',
     ];
 
@@ -108,18 +113,11 @@ class AiPermissionService
 
     public function summary(?User $user): array
     {
-        return [
-            'ai.view' => $this->has($user, 'ai.view'),
-            'ai.use' => $this->has($user, 'ai.use'),
-            'ai.chat' => $this->has($user, 'ai.chat'),
-            'ai.report_summary' => $this->has($user, 'ai.report_summary'),
-            'ai.business_insight' => $this->has($user, 'ai.business_insight'),
-            'ai.conversations.view' => $this->has($user, 'ai.conversations.view'),
-            'ai.conversations.delete' => $this->has($user, 'ai.conversations.delete'),
-            'ai.settings.view' => $this->has($user, 'ai.settings.view'),
-            'ai.settings.update' => $this->has($user, 'ai.settings.update'),
-            'ai.manage' => $this->has($user, 'ai.manage'),
-        ];
+        $out = [];
+        foreach (self::ALL as $permission) {
+            $out[$permission] = $this->has($user, $permission);
+        }
+        return $out;
     }
 
     private function hasDirect(User $user, string $permission): bool
