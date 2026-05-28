@@ -11,6 +11,25 @@ import KiteAiTypingIndicator from './KiteAiTypingIndicator';
 
 const { Title, Text } = Typography;
 
+const resolveContextType = (page) => {
+    const explicit = page.props?.module || page.props?.context_type;
+
+    if (explicit) {
+        return explicit;
+    }
+
+    const url = String(page.url || '').toLowerCase();
+
+    if (url.includes('/payment-in') || url.includes('/sales')) return 'sales';
+    if (url.includes('/payment-out') || url.includes('/purchase')) return 'purchase';
+    if (url.includes('/inventory') || url.includes('/warehouse')) return 'inventory';
+    if (url.includes('/accounting')) return 'accounting';
+    if (url.includes('/reports')) return 'report';
+    if (url.includes('/crm')) return 'sales';
+
+    return 'general';
+};
+
 export default function KiteAiDrawer({ open, onClose }) {
     const { token } = theme.useToken();
     const page = usePage();
@@ -18,6 +37,7 @@ export default function KiteAiDrawer({ open, onClose }) {
     const [conversationId, setConversationId] = useState(null);
     const [loading, setLoading] = useState(false);
     const scrollRef = useRef(null);
+    const abortRef = useRef(null);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -25,35 +45,60 @@ export default function KiteAiDrawer({ open, onClose }) {
         }
     }, [messages, loading]);
 
+    useEffect(() => () => abortRef.current?.abort(), []);
+
     const send = async (text) => {
-        setMessages((prev) => [...prev, { role: 'user', content: text }]);
+        const cleanText = String(text || '').trim();
+        if (!cleanText || loading) return;
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        setMessages((prev) => [...prev, { role: 'user', content: cleanText }]);
         setLoading(true);
+
         try {
             const { data } = await axios.post('/api/ai/chat', {
-                message: text,
+                message: cleanText,
                 conversation_id: conversationId,
-                page_context: {
+                context_type: resolveContextType(page),
+                context_payload: {
                     url: page.url,
-                    module: page.props?.module,
-                    record_id: page.props?.record_id,
+                    record_id: page.props?.record_id || page.props?.id || null,
+                    module: page.props?.module || null,
                 },
+                cache: true,
+            }, {
+                signal: controller.signal,
+                timeout: 90000,
             });
-            setConversationId(data.conversation_id);
+
+            setConversationId(data.conversation_id || conversationId);
             setMessages((prev) => [
                 ...prev,
                 {
                     role: 'assistant',
-                    content: data.message?.content || '',
+                    content: data.message?.content || data.message || '',
                     actions: data.actions || [],
                     sources: data.sources || [],
-                    intent: data.intent,
+                    provider: data.provider,
+                    model: data.model,
+                    cached: data.cached,
                 },
             ]);
         } catch (e) {
-            const msg = e?.response?.data?.message || e?.message || 'Kite AI is unavailable.';
-            setMessages((prev) => [...prev, { role: 'assistant', content: msg, error: true }]);
+            if (axios.isCancel(e) || e.name === 'CanceledError') {
+                setMessages((prev) => [...prev, { role: 'assistant', content: 'Request stopped.', error: true }]);
+                return;
+            }
+
+            const data = e?.response?.data || {};
+            const msg = data.message || e?.message || 'Kite AI is unavailable.';
+            const code = data.code ? ` (${data.code})` : '';
+            setMessages((prev) => [...prev, { role: 'assistant', content: `${msg}${code}`, error: true }]);
         } finally {
             setLoading(false);
+            abortRef.current = null;
         }
     };
 
@@ -72,7 +117,6 @@ export default function KiteAiDrawer({ open, onClose }) {
             }}
             rootClassName="kite-ai-drawer"
         >
-            {/* Premium dark header */}
             <div
                 style={{
                     background: '#0f1419',
@@ -87,7 +131,6 @@ export default function KiteAiDrawer({ open, onClose }) {
                 </Text>
             </div>
 
-            {/* Scroll area */}
             <div
                 ref={scrollRef}
                 style={{
@@ -104,7 +147,7 @@ export default function KiteAiDrawer({ open, onClose }) {
                 ) : (
                     <KiteAiMessageList
                         messages={messages}
-                        onActionUpdated={() => { /* could refresh audit timeline */ }}
+                        onActionUpdated={() => {}}
                     />
                 )}
 
@@ -115,7 +158,6 @@ export default function KiteAiDrawer({ open, onClose }) {
                 )}
             </div>
 
-            {/* Sticky input */}
             <KiteAiCommandInput onSubmit={send} loading={loading} />
         </Drawer>
     );
