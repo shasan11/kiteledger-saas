@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { Form, Input, InputNumber, DatePicker, Row, Col, message, Alert } from 'antd';
-import { DescriptionRemarksCollapse } from '@/Components/Transactions';
+import { DescriptionRemarksCollapse, RichTextEditor } from '@/Components/Transactions';
 import dayjs from 'dayjs';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
@@ -10,7 +10,7 @@ import TransactionTotals from '@/Components/Transactions/TransactionTotals.jsx';
 import { api, postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -22,7 +22,8 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
   const [deletedItemIds, setDeletedItemIds] = useState([]);
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const defaultCurrency = useDefaultCurrency(true);
+  const baseCurrency = useBaseCurrency(true);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'quotation_no') : '#DRAFT';
@@ -39,6 +40,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
         exchange_rate: toNumber(initialRecord.exchange_rate) || 1,
         notes: initialRecord.notes || '',
         remarks: initialRecord.remarks || '',
+        terms_and_conditions: initialRecord.terms_and_conditions || '',
       });
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
@@ -105,6 +107,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
       exchange_rate: toNumber(v.exchange_rate) || 1,
       notes: nullIfEmpty(v.notes),
       remarks: nullIfEmpty(v.remarks),
+      terms_and_conditions: nullIfEmpty(v.terms_and_conditions),
       total: totals.grand_total,
       sub_total: totals.subtotal,
       discount_total: totals.discount_total,
@@ -150,7 +153,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} />
+                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'customer' }} placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
@@ -179,7 +182,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
+              <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
                 <InputNumber min={0} step={0.0001} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
@@ -203,6 +206,12 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
 
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
+        </FormSection>
+
+        <FormSection title="Terms &amp; Conditions">
+          <Form.Item name="terms_and_conditions" valuePropName="value" getValueFromEvent={(value) => value}>
+            <RichTextEditor placeholder="Terms and conditions" />
+          </Form.Item>
         </FormSection>
       </Form>
     </TransactionFormShell>

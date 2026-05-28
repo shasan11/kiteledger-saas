@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { exchangeRateLabel, useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -45,6 +46,7 @@ export default function CashTransferAdd({ initialRecord = null, isEdit = false, 
     const [items, setItems] = useState([emptyLine()]);
     const [fromAccountId, setFromAccountId] = useState(null);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const baseCurrency = useBaseCurrency(true);
 
     useEffect(() => {
         if (initialRecord) {
@@ -229,7 +231,7 @@ export default function CashTransferAdd({ initialRecord = null, isEdit = false, 
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={8}>
-                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                            <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate">
                                 <InputNumber min={0} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>

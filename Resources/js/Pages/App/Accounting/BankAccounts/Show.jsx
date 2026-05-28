@@ -33,11 +33,13 @@ import {
 import {
     ArrowLeftOutlined,
     CheckOutlined,
+    DownloadOutlined,
     ImportOutlined,
     LinkOutlined,
     LockOutlined,
     PrinterOutlined,
     ReloadOutlined,
+    SearchOutlined,
     StopOutlined,
     UploadOutlined,
 } from '@ant-design/icons';
@@ -81,6 +83,26 @@ const money = (value) =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
+const moneyForCurrency = (value, currency) => {
+    const decimals = Number(currency?.decimal_places ?? 2);
+    const prefix = currency?.symbol || currency?.code || '';
+    return `${prefix ? `${prefix} ` : ''}${Number(value || 0).toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    })}`;
+};
+const cleanParams = (params = {}) =>
+    Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+const downloadBlob = (content, type, filename) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+};
 
 const cleanString = (v) => (v === null || v === undefined ? '' : String(v).trim());
 
@@ -162,6 +184,10 @@ export default function BankAccountShow({ id }) {
     const [summary, setSummary] = useState({});
     const [statementLines, setStatementLines] = useState([]);
     const [ledgerLines, setLedgerLines] = useState([]);
+    const [accountLedgerRows, setAccountLedgerRows] = useState([]);
+    const [accountLedgerLoading, setAccountLedgerLoading] = useState(false);
+    const [accountLedgerFilters, setAccountLedgerFilters] = useState({ search: '', date_from: '', date_to: '' });
+    const [accountLedgerPagination, setAccountLedgerPagination] = useState({ current: 1, pageSize: 15, total: 0 });
     const [history, setHistory] = useState([]);
     const [report, setReport] = useState(null);
     const [dateRange, setDateRange] = useState([null, null]);
@@ -196,6 +222,11 @@ export default function BankAccountShow({ id }) {
             date_to: to?.format ? to.format('YYYY-MM-DD') : undefined,
         };
     }, [dateRange]);
+
+    const bankMoney = useCallback(
+        (value) => moneyForCurrency(value, record?.currency),
+        [record?.currency],
+    );
 
     const loadAccounts = useCallback(
         async (search = '') => {
@@ -242,7 +273,36 @@ export default function BankAccountShow({ id }) {
         }
     }, [id, params, message]);
 
+    const loadAccountLedger = useCallback(async (overrides = {}) => {
+        if (!id) return;
+        setAccountLedgerLoading(true);
+        try {
+            const merged = cleanParams({
+                ...accountLedgerFilters,
+                page: accountLedgerPagination.current,
+                page_size: accountLedgerPagination.pageSize,
+                ...overrides,
+            });
+            const res = await axios.get(bankApi(id, '/ledger'), {
+                headers: authHeaders(),
+                params: merged,
+            });
+            setAccountLedgerRows(res.data?.results || res.data?.rows || []);
+            setAccountLedgerPagination((prev) => ({
+                ...prev,
+                current: Number(res.data?.page || merged.page || 1),
+                pageSize: Number(res.data?.page_size || merged.page_size || prev.pageSize),
+                total: Number(res.data?.count || 0),
+            }));
+        } catch (error) {
+            message.error(getErrorMessage(error, 'Failed to load account ledger.')); 
+        } finally {
+            setAccountLedgerLoading(false);
+        }
+    }, [id, accountLedgerFilters, accountLedgerPagination.current, accountLedgerPagination.pageSize, message]);
+
     useEffect(() => { void loadAll(); }, [loadAll]);
+    useEffect(() => { void loadAccountLedger({ page: 1 }); }, [id]);
     useEffect(() => { if (record) void loadAccounts(); }, [record?.id, loadAccounts]);
 
     // -- Import flow (preserved + dedupe) ----------------------------
@@ -548,6 +608,37 @@ export default function BankAccountShow({ id }) {
         }
     };
 
+    const loadAccountLedgerExportRows = async () => {
+        const res = await axios.get(bankApi(id, '/ledger'), {
+            headers: authHeaders(),
+            params: cleanParams({ ...accountLedgerFilters, page: 1, page_size: 500 }),
+        });
+        return res.data?.results || res.data?.rows || [];
+    };
+
+    const exportAccountLedgerCsv = async () => {
+        const exportRows = await loadAccountLedgerExportRows();
+        const csv = [
+            ['Date', 'Description / Particulars', 'Debit', 'Credit', 'Balance'],
+            ...exportRows.map((row) => [row.date, row.description, row.debit, row.credit, row.balance]),
+        ].map((line) => line.map(csvEscape).join(',')).join('\n');
+        downloadBlob(csv, 'text/csv;charset=utf-8;', `${record?.code || 'bank-account'}-ledger.csv`);
+    };
+
+    const exportAccountLedgerXlsx = async () => {
+        const exportRows = await loadAccountLedgerExportRows();
+        const worksheet = XLSX.utils.json_to_sheet(exportRows.map((row) => ({
+            Date: row.date,
+            'Description / Particulars': row.description,
+            Debit: row.debit,
+            Credit: row.credit,
+            Balance: row.balance,
+        })));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Ledger');
+        XLSX.writeFile(workbook, `${record?.code || 'bank-account'}-ledger.xlsx`);
+    };
+
     // -- Columns -------------------------------------------------------
     const statementColumns = [
         { title: 'Date', dataIndex: 'date', width: 110 },
@@ -597,22 +688,10 @@ export default function BankAccountShow({ id }) {
 
     const ledgerColumns = [
         { title: 'Date', dataIndex: 'date', width: 110 },
-        {
-            title: 'Voucher', dataIndex: 'voucher_no', width: 130,
-            render: (v, row) =>
-                row.journal_voucher_id ? (
-                    <Link href={route('accounting.journal-vouchers.show', row.journal_voucher_id)}>{v || '-'}</Link>
-                ) : (v || '-'),
-        },
-        { title: 'Description', dataIndex: 'description', render: (v) => v || '-' },
-        { title: 'Reference', dataIndex: 'reference', width: 130, render: (v) => v || '-' },
-        { title: 'Debit', dataIndex: 'debit', align: 'right', width: 110, render: money },
-        { title: 'Credit', dataIndex: 'credit', align: 'right', width: 110, render: money },
-        { title: 'Balance', dataIndex: 'balance', align: 'right', width: 130, render: money },
-        {
-            title: 'Status', dataIndex: 'matching_status', width: 110,
-            render: (v) => <Tag color={matchingColor(v)}>{v}</Tag>,
-        },
+        { title: 'Description / Particulars', dataIndex: 'description', render: (v) => v || '-' },
+        { title: 'Debit', dataIndex: 'debit', align: 'right', width: 120, render: bankMoney },
+        { title: 'Credit', dataIndex: 'credit', align: 'right', width: 120, render: bankMoney },
+        { title: 'Balance', dataIndex: 'balance', align: 'right', width: 140, render: bankMoney },
     ];
 
     const previewColumns = [
@@ -730,7 +809,13 @@ export default function BankAccountShow({ id }) {
                                                 <Descriptions.Item label="Account No">{record?.account_number || '-'}</Descriptions.Item>
                                                 <Descriptions.Item label="Currency">{record?.currency?.code || '-'}</Descriptions.Item>
                                                 <Descriptions.Item label="Branch">{record?.branch?.name || '-'}</Descriptions.Item>
-                                                <Descriptions.Item label="Linked Account">{record?.account ? accountLabel(record.account) : '-'}</Descriptions.Item>
+                                                <Descriptions.Item label="Linked Accounting Account">
+                                                    {record?.account ? (
+                                                        <Link href={route('accounting.accounts.index')}>
+                                                            {accountLabel(record.account)}
+                                                        </Link>
+                                                    ) : '-'}
+                                                </Descriptions.Item>
                                                 <Descriptions.Item label="Last Reconciled">{summary.last_reconciled_date || 'Never'}</Descriptions.Item>
                                             </Descriptions>
 
@@ -771,18 +856,49 @@ export default function BankAccountShow({ id }) {
                                 },
                                 {
                                     key: 'ledger',
-                                    label: 'Software Ledger',
+                                    label: 'Account Ledger',
                                     children: (
                                         <div style={{ padding: token.padding }}>
+                                            <Space wrap style={{ marginBottom: token.marginSM }}>
+                                                <Input
+                                                    allowClear
+                                                    prefix={<SearchOutlined />}
+                                                    placeholder="Search particulars..."
+                                                    value={accountLedgerFilters.search}
+                                                    onChange={(event) => setAccountLedgerFilters((current) => ({ ...current, search: event.target.value }))}
+                                                    onPressEnter={() => loadAccountLedger({ page: 1 })}
+                                                    style={{ width: 260 }}
+                                                />
+                                                <RangePicker
+                                                    onChange={(dates) => {
+                                                        const next = {
+                                                            date_from: dates?.[0]?.format('YYYY-MM-DD') || '',
+                                                            date_to: dates?.[1]?.format('YYYY-MM-DD') || '',
+                                                        };
+                                                        setAccountLedgerFilters((current) => ({ ...current, ...next }));
+                                                        loadAccountLedger({ ...next, page: 1 });
+                                                    }}
+                                                />
+                                                <Button type="primary" icon={<SearchOutlined />} onClick={() => loadAccountLedger({ page: 1 })}>Apply</Button>
+                                                <Button icon={<ReloadOutlined />} onClick={() => loadAccountLedger()}>Refresh</Button>
+                                                <Button icon={<DownloadOutlined />} onClick={exportAccountLedgerCsv}>Export CSV</Button>
+                                                <Button icon={<DownloadOutlined />} onClick={exportAccountLedgerXlsx}>Export XLSX</Button>
+                                            </Space>
                                             <Table
                                                 size="small"
                                                 rowKey="id"
                                                 columns={ledgerColumns}
-                                                dataSource={ledgerLines}
-                                                loading={loading}
-                                                scroll={{ x: 1100 }}
-                                                pagination={{ pageSize: 20 }}
-                                                locale={{ emptyText: <Empty description="No software ledger entries." /> }}
+                                                dataSource={accountLedgerRows}
+                                                loading={accountLedgerLoading}
+                                                scroll={{ x: 760 }}
+                                                pagination={{
+                                                    current: accountLedgerPagination.current,
+                                                    pageSize: accountLedgerPagination.pageSize,
+                                                    total: accountLedgerPagination.total,
+                                                    showSizeChanger: true,
+                                                }}
+                                                onChange={(next) => loadAccountLedger({ page: next.current, page_size: next.pageSize })}
+                                                locale={{ emptyText: <Empty description="No account ledger entries." /> }}
                                             />
                                         </div>
                                     ),

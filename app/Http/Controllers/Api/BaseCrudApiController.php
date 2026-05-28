@@ -206,6 +206,8 @@ abstract class BaseCrudApiController extends Controller
 
             $record = $this->afterSave($record, $parentData, $nestedData, true);
 
+            $this->syncAccountingImpactAfterUpdate($record);
+
             return $record->fresh($this->validEagerLoadRelations($record));
         });
 
@@ -769,6 +771,19 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyFilters(Builder $query, Request $request): void
     {
+        if (
+            $this->tableHasColumn('active')
+            && $request->has('active')
+            && ! in_array('active', $this->filterable, true)
+            && ! in_array('active', $this->booleanFilters, true)
+        ) {
+            $active = $this->toBool($this->requestParam($request, 'active'));
+
+            if ($active !== null) {
+                $query->where($this->qualifiedColumn('active'), $active);
+            }
+        }
+
         foreach ($this->filterable as $field) {
             if (!$this->tableHasColumn($field)) {
                 continue;
@@ -1836,9 +1851,59 @@ abstract class BaseCrudApiController extends Controller
             $this->throwValidation(['status' => ['Voided records cannot be edited.']]);
         }
 
-        if ($this->isTransactionApproved($record)) {
-            $this->throwValidation(['status' => ['Approved records cannot be edited.']]);
+        if ($this->isTransactionApproved($record) && ! $this->canEditApprovedTransaction($record)) {
+            $this->throwValidation(['status' => ['Approved records require edit-approved permission before they can be changed.']]);
         }
+    }
+
+    protected function canEditApprovedTransaction(Model $record): bool
+    {
+        $user = request()?->user();
+
+        if ($this->userHasAdministrativeBypass($user)) {
+            return true;
+        }
+
+        if (! $user || ! method_exists($user, 'can')) {
+            return false;
+        }
+
+        $modelKey = Str::of(class_basename($record))->snake('-')->value();
+        $permissionCandidates = array_filter([
+            'transactions.edit-approved',
+            'transactions.update-approved',
+            "{$modelKey}.edit-approved",
+            "{$modelKey}.update-approved",
+            $this->permissionPrefix ? "{$this->permissionPrefix}.edit-approved" : null,
+            $this->permissionPrefix ? "{$this->permissionPrefix}.update-approved" : null,
+        ]);
+
+        foreach ($permissionCandidates as $permission) {
+            if ($user->can($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function syncAccountingImpactAfterUpdate(Model $record): void
+    {
+        if (! $this->isTransactionApproved($record) || $this->isTransactionVoided($record)) {
+            return;
+        }
+
+        if (class_basename($record) === 'JournalVoucher') {
+            return;
+        }
+
+        $approvalService = app(TransactionApprovalService::class);
+
+        if (! $approvalService->isAccountingImpacting($record)) {
+            return;
+        }
+
+        app(\App\Services\ParallelJournalVoucherService::class)->createForApprovedSource($record->refresh());
     }
 
     protected function assertTransactionDestroyable(Model $record): void

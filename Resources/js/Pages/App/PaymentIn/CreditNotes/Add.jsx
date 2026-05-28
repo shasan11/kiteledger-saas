@@ -11,7 +11,7 @@ import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomple
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -41,7 +41,8 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const [hasRefund, setHasRefund] = useState(false);
   const [refundAmountTouched, setRefundAmountTouched] = useState(false);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const defaultCurrency = useDefaultCurrency(true);
+  const baseCurrency = useBaseCurrency(true);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   // Backend uses sales_return_no / sales_return_date; preserve that.
@@ -192,7 +193,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} />
+                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'customer' }} placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
@@ -209,7 +210,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
+              <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
                 <InputNumber min={0} step={0.0001} style={{ width: '100%' }} />
               </Form.Item>
             </Col>

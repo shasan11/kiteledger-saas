@@ -67,6 +67,7 @@ use App\Http\Controllers\Api\TaxDashboardController;
 use App\Http\Controllers\Api\CashTransferLineController;
 use App\Http\Controllers\Api\ChartOfAccountController;
 use App\Http\Controllers\Api\ChequeRegisterController;
+use App\Http\Controllers\Api\ChequeFormatConfigurationController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ContactGroupController;
 use App\Http\Controllers\Api\CustomerPaymentController;
@@ -333,6 +334,11 @@ Route::delete('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkDe
 Route::apiResource('cheque-registers', ChequeRegisterController::class)
     ->parameters([
         'cheque-registers' => 'chequeRegister',
+    ]);
+
+Route::apiResource('cheque-format-configurations', ChequeFormatConfigurationController::class)
+    ->parameters([
+        'cheque-format-configurations' => 'chequeFormatConfiguration',
     ]);
 
 
@@ -685,6 +691,7 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
     Route::apiResource('awards', AwardController::class);
     Route::apiResource('award-histories', AwardHistoryController::class);
     Route::apiResource('public-holidays', PublicHolidayController::class);
+    Route::post('email-configs/test-connection', [EmailConfigController::class, 'testConnection']);
     Route::apiResource('email-configs', EmailConfigController::class);
     Route::apiResource('emails', EmailController::class);
 

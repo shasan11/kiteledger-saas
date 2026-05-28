@@ -32,6 +32,7 @@ import {
     Typography,
 } from 'antd';
 import { useMoneyFormatter } from '@/Pages/App/Accounting/Shared/currency';
+import { useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text, Title } = Typography;
 
@@ -137,6 +138,7 @@ const copyText = async (text) => {
 export default function BankAccounts() {
     const apiUrl = api('/api/bank-accounts/');
     const { formatMoney } = useMoneyFormatter();
+    const defaultCurrency = useDefaultCurrency(true);
 
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -531,9 +533,9 @@ export default function BankAccounts() {
     const crudInitialValues = {
         type: 'bank',
         display_name: '',
-        currency_id: null,
-        currency_id_detail: null,
-        currency_name: '',
+        currency_id: defaultCurrency?.id ?? null,
+        currency_id_detail: defaultCurrency ?? null,
+        currency_name: defaultCurrency ? [defaultCurrency.code, defaultCurrency.name].filter(Boolean).join(' - ') : '',
         description: '',
         bank_name: '',
         account_name: companyName,

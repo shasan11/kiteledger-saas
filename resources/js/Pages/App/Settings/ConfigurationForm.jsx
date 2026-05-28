@@ -65,6 +65,8 @@ export default function ConfigurationForm({ auth, area }) {
           {accountField('tax_receivable_account_id', 'Tax Receivable Account', accounts)}
           {accountField('payroll_expense_account_id', 'Payroll Expense Account', accounts)}
           {accountField('inventory_account_id', 'Inventory Account', accounts)}
+          {accountField('loan_processing_fee_expense_account_id', 'Loan Processing Fee Expense', accounts)}
+          {accountField('loan_charge_expense_account_id', 'Loan Charge Expense', accounts)}
         </Row>
       );
     }

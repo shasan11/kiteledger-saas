@@ -120,6 +120,8 @@ class SettingsConfigurationController extends Controller
                 'discount_allowed_account_id' => $account, 'discount_received_account_id' => $account,
                 'rounding_account_id' => $account, 'payroll_expense_account_id' => $account,
                 'salary_payable_account_id' => $account, 'inventory_account_id' => $account,
+                'loan_processing_fee_expense_account_id' => $account,
+                'loan_charge_expense_account_id' => $account,
                 'active' => ['nullable', 'boolean'],
             ],
             'hrm' => [

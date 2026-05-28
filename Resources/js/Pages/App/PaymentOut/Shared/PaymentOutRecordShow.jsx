@@ -907,7 +907,7 @@ function HeaderBlock({
                             </Button>
                         </Tooltip>
                     )}
-                    {editRoute && recordId && !isVoided && !isApproved && (
+                    {editRoute && recordId && !isVoided && (
                         <Link href={route(editRoute, recordId)}>
                             <Button icon={<EditOutlined />} disabled={loading || !record}>
                                 Edit

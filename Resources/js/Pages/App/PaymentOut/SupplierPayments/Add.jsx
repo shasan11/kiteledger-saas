@@ -8,7 +8,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -35,7 +35,9 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
     const [bankChargesEnabled, setBankChargesEnabled] = useState(false);
     const [tdsEnabled, setTdsEnabled] = useState(false);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
-    const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+    const defaultCurrency = useDefaultCurrency(true);
+    const baseCurrency = useBaseCurrency(true);
+    const selectedSupplierId = Form.useWatch('contact_id', form);
 
     useEffect(() => {
         if (initialRecord) {
@@ -175,9 +177,16 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                     fkUrl="/api/purchase-bills/"
                     labelKey="bill_no"
                     placeholder="Select bill"
+                    extraParams={selectedSupplierId ? { contact_id: selectedSupplierId } : {}}
                     style={{ width: '100%' }}
                     variant="borderless"
-                    onChange={(v, raw) => updateItem(idx, { purchase_bill_id: v, purchase_bill_detail: raw })}
+                    onChange={(v, raw) => {
+                        const balance = toNumber(raw?.balance_due ?? raw?.total);
+                        if (!toNumber(form.getFieldValue('amount')) && balance > 0) {
+                            form.setFieldValue('amount', balance);
+                        }
+                        updateItem(idx, { purchase_bill_id: v, purchase_bill_detail: raw, allocated_amount: balance || row.allocated_amount || 0 });
+                    }}
                 />
             ),
         },
@@ -211,7 +220,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                     <Row gutter={16}>
                         <Col xs={24} sm={16}>
                             <Form.Item label="Supplier" name="contact_id" rules={[{ required: true, message: 'Supplier is required' }]}>
-                                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'supplier' }} placeholder="Select supplier" quickAddContact quickAddContactTitle="Supplier" quickAddContactDefaults={{ contact_type: 'supplier' }} />
+                                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'supplier', accept_purchase: true }} placeholder="Select supplier" quickAddContact quickAddContactTitle="Supplier" quickAddContactDefaults={{ contact_type: 'supplier', accept_purchase: true }} />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
@@ -245,7 +254,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
-                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                            <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate">
                                 <InputNumber min={0} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>

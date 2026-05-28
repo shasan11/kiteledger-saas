@@ -50,6 +50,7 @@ import {
   TeamOutlined,
   WalletOutlined,
 } from '@ant-design/icons';
+import { exchangeRateLabel, useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text, Title } = Typography;
 
@@ -723,6 +724,7 @@ function PayrollSettingsCrud() {
 function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod }) {
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  const baseCurrency = useBaseCurrency(true);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -960,7 +962,7 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
           <Col xs={24} md={6}>
             <Form.Item
               name="exchange_rate"
-              label="Exchange Rate"
+              label={exchangeRateLabel(baseCurrency)}
               rules={[
                 {
                   required: true,
@@ -1279,6 +1281,7 @@ function AdjustmentTable({ title, rows, editable, onAdd, onDelete }) {
 export default function Payroll({ auth }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
+  const baseCurrency = useBaseCurrency(true);
 
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1894,7 +1897,7 @@ export default function Payroll({ auth }) {
               <Descriptions.Item label="Payroll Period">{periodLabel(selectedPayroll.payroll_period)}</Descriptions.Item>
               <Descriptions.Item label="Branch">{selectedPayroll.branch?.name || '-'}</Descriptions.Item>
               <Descriptions.Item label="Currency">{selectedPayroll.currency?.code || selectedPayroll.currency?.name || '-'}</Descriptions.Item>
-              <Descriptions.Item label="Exchange Rate">{selectedPayroll.exchange_rate || '-'}</Descriptions.Item>
+              <Descriptions.Item label={exchangeRateLabel(baseCurrency)}>{selectedPayroll.exchange_rate || '-'}</Descriptions.Item>
               <Descriptions.Item label="Journal Voucher">{selectedPayroll.journal_voucher?.voucher_no || '-'}</Descriptions.Item>
               <Descriptions.Item label="Status"><StatusTag status={selectedPayroll.status} /></Descriptions.Item>
             </Descriptions>

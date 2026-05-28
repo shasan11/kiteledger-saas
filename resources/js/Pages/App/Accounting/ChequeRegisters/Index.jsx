@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import {
     Tabs, Row, Col, Typography, Tag, Space, Button, Select, Table, Spin, Divider, Dropdown, theme,
+    message,
 } from 'antd';
 import { PlusOutlined, CaretDownOutlined, ArrowRightOutlined } from '@ant-design/icons';
 
@@ -27,13 +28,74 @@ const formatDate = (v) => {
     return d.isValid() ? d.format('YYYY-MM-DD') : null;
 };
 
-const STATUS_COLORS = { pending: 'gold', cleared: 'green', bounced: 'red', cancelled: 'default' };
 const STATUS_OPTIONS = [
     { value: 'pending', label: 'Pending' },
     { value: 'cleared', label: 'Cleared' },
     { value: 'bounced', label: 'Bounced' },
     { value: 'cancelled', label: 'Cancelled' },
 ];
+const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+function InlineChequeStatus({ record }) {
+    const [value, setValue] = useState(record?.status || 'pending');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        setValue(record?.status || 'pending');
+    }, [record?.id, record?.status]);
+
+    const updateStatus = async (nextStatus) => {
+        const previous = value;
+        setValue(nextStatus);
+        setSaving(true);
+        try {
+            await fetch(`${BACKEND_BASE}/api/cheque-registers/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders(),
+                },
+                body: JSON.stringify({ status: nextStatus }),
+            }).then(async (response) => {
+                if (!response.ok) {
+                    const data = await response.json().catch(() => ({}));
+                    throw new Error(data?.message || 'Failed to update cheque status.');
+                }
+                return response.json();
+            });
+
+            const refreshed = await fetch(`${BACKEND_BASE}/api/cheque-registers/${record.id}`, {
+                headers: { Accept: 'application/json', ...getAuthHeaders() },
+            }).then((response) => response.json()).catch(() => null);
+
+            if (refreshed) {
+                record.status = refreshed?.data?.status || refreshed?.status || nextStatus;
+                setValue(record.status);
+            }
+            message.success('Cheque status updated.');
+        } catch (error) {
+            setValue(previous);
+            message.error(error?.message || 'Failed to update cheque status.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Select
+            size="small"
+            value={value}
+            loading={saving}
+            style={{ width: 118 }}
+            options={STATUS_OPTIONS}
+            onChange={updateStatus}
+        />
+    );
+}
 const PERIOD_OPTIONS = [
     { value: 'today', label: 'Today' },
     { value: 'week', label: 'This Week' },
@@ -402,12 +464,8 @@ function ReceivedTab() {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
-            width: 100,
-            render: (v) => (
-                <Tag color={STATUS_COLORS[v] || 'default'} style={{ marginInlineEnd: 0 }}>
-                    {String(v || 'pending').toUpperCase()}
-                </Tag>
-            ),
+            width: 130,
+            render: (_, record) => <InlineChequeStatus record={record} />,
         },
     ], [token]);
 
@@ -568,12 +626,8 @@ function IssuedTab() {
             title: 'Status',
             dataIndex: 'status',
             key: 'status',
-            width: 100,
-            render: (v) => (
-                <Tag color={STATUS_COLORS[v] || 'default'} style={{ marginInlineEnd: 0 }}>
-                    {String(v || 'pending').toUpperCase()}
-                </Tag>
-            ),
+            width: 130,
+            render: (_, record) => <InlineChequeStatus record={record} />,
         },
     ], [token]);
 

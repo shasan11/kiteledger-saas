@@ -175,6 +175,7 @@ export default function Index() {
                 fkExtraParams: {
                     active: true,
                     type: 'supplier',
+                    accept_purchase: true,
                 },
                 fkLabel: (row) =>
                     row?.display_name ||
@@ -235,7 +236,7 @@ export default function Index() {
             },
             {
                 name: 'exchange_rate_to_npr',
-                label: 'Exchange Rate To NPR',
+                label: 'Exchange Rate',
                 type: 'number',
                 required: true,
                 col: 8,

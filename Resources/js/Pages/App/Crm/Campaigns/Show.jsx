@@ -255,6 +255,7 @@ function BulkSendButton({ campaign, channel, label, icon, onSent }) {
     const { message } = App.useApp();
     const [open, setOpen] = useState(false);
     const [summary, setSummary] = useState(null);
+    const [diagnostics, setDiagnostics] = useState(null);
     const [loading, setLoading] = useState(false);
     const [sending, setSending] = useState(false);
     const [result, setResult] = useState(null);
@@ -262,6 +263,7 @@ function BulkSendButton({ campaign, channel, label, icon, onSent }) {
     const openModal = async () => {
         setOpen(true);
         setSummary(null);
+        setDiagnostics(null);
         setResult(null);
         setLoading(true);
         try {
@@ -270,6 +272,7 @@ function BulkSendButton({ campaign, channel, label, icon, onSent }) {
                 { headers: authHeaders() }
             );
             setSummary(res.data?.summary || null);
+            setDiagnostics(res.data?.diagnostics || null);
         } catch (e) {
             message.error(e?.response?.data?.message || 'Failed to load audience');
         } finally { setLoading(false); }
@@ -326,11 +329,40 @@ function BulkSendButton({ campaign, channel, label, icon, onSent }) {
 
                 {!loading && summary && !result ? (
                     <Space direction="vertical" style={{ width: '100%' }}>
-                        <Alert
-                            type="warning"
-                            showIcon
-                            message="Please review carefully before sending. Sends are not reversible."
-                        />
+                        {summary.will_send === 0 && diagnostics ? (
+                            <Alert
+                                type="error"
+                                showIcon
+                                message="No contacts will receive this message."
+                                description={
+                                    <div>
+                                        <div>Filter breakdown:</div>
+                                        <ul style={{ marginTop: 6, marginBottom: 0, paddingLeft: 18 }}>
+                                            <li>Total contacts in system: <b>{diagnostics.contacts_total}</b></li>
+                                            <li>Non-supplier contacts: <b>{diagnostics.contacts_non_supplier}</b></li>
+                                            <li>
+                                                {diagnostics.contact_group_id
+                                                    ? <>In selected contact group: <b>{diagnostics.contacts_in_group}</b> (group is set on the campaign — clear it to broadcast wider)</>
+                                                    : <>No contact group filter on campaign</>}
+                                            </li>
+                                            <li>
+                                                With {channel === 'email' ? 'email address' : 'phone number'}:&nbsp;
+                                                <b>{channel === 'email' ? diagnostics.contacts_with_email : diagnostics.contacts_with_phone}</b>
+                                            </li>
+                                        </ul>
+                                        <div style={{ marginTop: 6 }}>
+                                            Fix whichever count above is zero, then reopen this dialog.
+                                        </div>
+                                    </div>
+                                }
+                            />
+                        ) : (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="Please review carefully before sending. Sends are not reversible."
+                            />
+                        )}
                         <Descriptions size="small" column={1} bordered>
                             <Descriptions.Item label="Target group total">{summary.total}</Descriptions.Item>
                             <Descriptions.Item label={`Eligible (has ${channel === 'email' ? 'email' : 'phone'})`}>{summary.eligible}</Descriptions.Item>

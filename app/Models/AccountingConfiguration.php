@@ -17,7 +17,8 @@ class AccountingConfiguration extends Model
         'tax_receivable_account_id', 'discount_allowed_account_id',
         'discount_received_account_id', 'rounding_account_id',
         'payroll_expense_account_id', 'salary_payable_account_id',
-        'inventory_account_id', 'active', 'is_system_generated', 'user_add_id',
+        'inventory_account_id', 'loan_processing_fee_expense_account_id',
+        'loan_charge_expense_account_id', 'active', 'is_system_generated', 'user_add_id',
     ];
 
     protected function casts(): array

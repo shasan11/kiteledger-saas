@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\EmailConfig;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
+use Symfony\Component\Mime\Email;
 
 class EmailConfigController extends BaseCrudApiController
 {
@@ -126,5 +130,101 @@ class EmailConfigController extends BaseCrudApiController
             ->orderByDesc('active')
             ->orderBy('created_at')
             ->first();
+    }
+
+    /**
+     * Test SMTP credentials by attempting to send a real test message.
+     *
+     * Accepts either:
+     *   - the full form payload (so the user can validate before saving), or
+     *   - blank password fields, in which case we fall back to the stored
+     *     password from the active EmailConfig row (useful for re-testing
+     *     after a partial edit).
+     *
+     * The test always uses a freshly-built Symfony EsmtpTransport so it
+     * never depends on Laravel's cached mailer instance, and never mutates
+     * runtime config.
+     */
+    public function testConnection(Request $request): JsonResponse
+    {
+        $this->checkAccess($request, 'store');
+
+        $validated = $request->validate([
+            'email_host'   => ['nullable', 'string', 'max:180'],
+            'email_port'   => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'encryption'   => ['nullable', 'string', 'max:20'],
+            'email_user'   => ['nullable', 'string', 'max:180'],
+            'email_pass'   => ['nullable', 'string', 'max:255'],
+            'from_name'    => ['nullable', 'string', 'max:120'],
+            'from_address' => ['nullable', 'email', 'max:180'],
+            'to'           => ['nullable', 'email', 'max:180'],
+        ]);
+
+        // Pull a stored config to backfill anything the user didn't type in
+        // (commonly: an unchanged password during edit-and-test flow).
+        $stored = $this->singleConfig();
+
+        $host       = $validated['email_host']   ?? $stored?->email_host;
+        $port       = (int) ($validated['email_port'] ?? $stored?->email_port ?? 0);
+        $encryption = $validated['encryption']   ?? $stored?->encryption;
+        $username   = $validated['email_user']   ?? $stored?->email_user;
+        $password   = !empty($validated['email_pass']) ? $validated['email_pass'] : $stored?->email_pass;
+        $fromName   = $validated['from_name']    ?? $stored?->from_name;
+        $fromAddr   = $validated['from_address'] ?? $stored?->from_address ?? $username;
+        $to         = $validated['to']           ?? $request->user()?->email ?? $fromAddr;
+
+        if (!$host || !$port || !$username || !$password || !$fromAddr || !$to) {
+            return response()->json([
+                'success' => false,
+                'stage'   => 'validation',
+                'message' => 'Host, port, username, password, from-address and recipient are all required to run a test.',
+            ], 422);
+        }
+
+        // Map Laravel-style encryption hints onto the Symfony transport
+        // options. 'ssl' implies an implicit-TLS connection, 'tls' (or 'starttls')
+        // upgrades after EHLO, anything else (or 'none') stays plaintext.
+        $useImplicitTls = strtolower((string) $encryption) === 'ssl';
+
+        try {
+            $transport = new EsmtpTransport($host, $port, $useImplicitTls);
+            $transport->setUsername($username);
+            $transport->setPassword($password);
+
+            // Open the SMTP connection eagerly so authentication failures
+            // surface here (rather than only on first send).
+            $transport->start();
+
+            $message = (new Email())
+                ->from($fromName ? "{$fromName} <{$fromAddr}>" : $fromAddr)
+                ->to($to)
+                ->subject('KiteLedger SMTP connection test')
+                ->text("This is a test message from KiteLedger confirming your SMTP credentials work.\n\nIf you received this, your email configuration is valid.");
+
+            (new Mailer($transport))->send($message);
+
+            return response()->json([
+                'success' => true,
+                'stage'   => 'sent',
+                'message' => "Test email sent to {$to}. Check the inbox to confirm delivery.",
+                'host'    => $host,
+                'port'    => $port,
+                'to'      => $to,
+            ]);
+        } catch (\Symfony\Component\Mailer\Exception\TransportExceptionInterface $e) {
+            // Authentication / connection failures land here with the
+            // provider's actual error message — most useful for the user.
+            return response()->json([
+                'success' => false,
+                'stage'   => 'transport',
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'stage'   => 'unknown',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 }

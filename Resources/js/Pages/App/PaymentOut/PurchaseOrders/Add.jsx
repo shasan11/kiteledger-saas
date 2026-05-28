@@ -10,7 +10,7 @@ import { postJson, patchJson, applyServerErrors } from '@/Components/Transaction
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -37,7 +37,8 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
   const [deletedItemIds, setDeletedItemIds] = useState([]);
   const [topError, setTopError] = useState(null);
   const [currencyDetail, setCurrencyDetail] = useState(null);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const defaultCurrency = useDefaultCurrency(true);
+  const baseCurrency = useBaseCurrency(true);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'purchase_order_no') : '#DRAFT';
@@ -126,7 +127,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Supplier" name="contact_id" rules={[{ required: true, message: 'Supplier is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/?type=supplier" placeholder="Select supplier" quickAddContact quickAddContactTitle="Supplier" quickAddContactDefaults={{ contact_type: 'supplier' }} />
+                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'supplier', accept_purchase: true }} placeholder="Select supplier" quickAddContact quickAddContactTitle="Supplier" quickAddContactDefaults={{ contact_type: 'supplier', accept_purchase: true }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
@@ -147,7 +148,7 @@ export default function PurchaseOrderAdd({ initialRecord = null, isEdit = false,
               <Form.Item label="Currency" name="currency_id"><BackendSelect fkUrl="/api/currencies/" placeholder="Currency" labelFn={(r) => r?.name || r?.code || ''} allowClear onChange={(v, raw) => { form.setFieldValue('currency_id', v); setCurrencyDetail(raw); }} /></Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
+              <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
                 <InputNumber min={0} step={0.0001} style={{ width: '100%' }} />
               </Form.Item>
             </Col>

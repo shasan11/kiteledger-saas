@@ -85,15 +85,47 @@ class ChartOfAccountController extends BaseCrudApiController
 
     public function ledger(Request $request, ChartOfAccount $chartOfAccount)
     {
+        $validated = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'branch_id' => ['nullable', 'uuid'],
+            'fiscal_year_id' => ['nullable', 'uuid'],
+        ]);
+
+        $page = max((int) ($validated['page'] ?? 1), 1);
+        $pageSize = min(max((int) ($validated['page_size'] ?? 15), 1), 500);
+        $search = trim((string) ($validated['search'] ?? ''));
+
         $query = JournalVoucherLine::query()
             ->with(['journalVoucher.branch'])
-            ->where('chart_of_account_id', $chartOfAccount->getKey())
+            ->where(function ($lineQuery) use ($chartOfAccount) {
+                $lineQuery->where('chart_of_account_id', $chartOfAccount->getKey());
+
+                if ($chartOfAccount->account_id) {
+                    $lineQuery->orWhere('account_id', $chartOfAccount->account_id);
+                }
+            })
             ->whereHas('journalVoucher', function ($voucherQuery) use ($request) {
                 $voucherQuery
                     ->when($request->filled('date_from'), fn ($q) => $q->whereDate('voucher_date', '>=', $request->date('date_from')))
                     ->when($request->filled('date_to'), fn ($q) => $q->whereDate('voucher_date', '<=', $request->date('date_to')))
                     ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->string('branch_id')))
                     ->when($request->filled('fiscal_year_id'), fn ($q) => $q->where('fiscal_year_id', $request->string('fiscal_year_id')));
+            })
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('journal_voucher_lines.description', 'like', "%{$search}%")
+                        ->orWhereHas('journalVoucher', function ($voucherQuery) use ($search) {
+                            $voucherQuery
+                                ->where('voucher_no', 'like', "%{$search}%")
+                                ->orWhere('reference', 'like', "%{$search}%")
+                                ->orWhere('narration', 'like', "%{$search}%");
+                        });
+                });
             })
             ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
             ->orderBy('journal_vouchers.voucher_date')
@@ -103,7 +135,7 @@ class ChartOfAccountController extends BaseCrudApiController
 
         $balance = 0;
 
-        $rows = $query->map(function (JournalVoucherLine $line) use (&$balance) {
+        $allRows = $query->map(function (JournalVoucherLine $line) use (&$balance) {
             $debit = (float) $line->debit;
             $credit = (float) $line->credit;
             $balance += $debit - $credit;
@@ -122,8 +154,15 @@ class ChartOfAccountController extends BaseCrudApiController
             ];
         })->values();
 
+        $count = $allRows->count();
+        $rows = $allRows->slice(($page - 1) * $pageSize, $pageSize)->values();
+
         return response()->json([
             'account' => $chartOfAccount->load(['branch', 'parent', 'account']),
+            'count' => $count,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'results' => $rows,
             'rows' => $rows,
         ]);
     }

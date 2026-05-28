@@ -3,6 +3,8 @@
 namespace App\Domain\Accounting\Services;
 
 use App\Models\LoanAccount;
+use App\Models\AccountingConfiguration;
+use App\Models\ChartOfAccount;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -42,13 +44,10 @@ class LoanAccountService
         $processingFee = (float) $loanAccount->processing_fee;
 
         if ($processingFee > 0) {
-            $expenseAccountId = config('accounting.loan_processing_fee_expense_account_id');
-
-            if (! $expenseAccountId) {
-                throw ValidationException::withMessages([
-                    'processing_fee' => 'Set accounting.loan_processing_fee_expense_account_id before posting loan processing fee.',
-                ]);
-            }
+            $expenseAccountId = $this->resolveConfiguredAccountId(
+                key: 'loan_processing_fee_expense_account_id',
+                label: 'Loan Processing Fee Expense Account'
+            );
 
             $this->postingService->addDebit(
                 effect: $effect,
@@ -166,7 +165,10 @@ class LoanAccountService
 
         if ($processingFee > 0) {
             $entries[] = [
-                'account_id' => config('accounting.loan_processing_fee_expense_account_id'),
+                'account_id' => $this->resolveConfiguredAccountId(
+                    key: 'loan_processing_fee_expense_account_id',
+                    label: 'Loan Processing Fee Expense Account'
+                ),
                 'debit' => $processingFee,
                 'credit' => 0,
                 'description' => 'Loan processing fee',
@@ -202,5 +204,39 @@ class LoanAccountService
         return (bool) ($loanAccount->active ?? true)
             && in_array($loanAccount->status, ['active', 'settled', 'closed'], true)
             && $loanAccount->status !== 'cancelled';
+    }
+
+    protected function resolveConfiguredAccountId(string $key, string $label): string
+    {
+        $configured = config("accounting.{$key}");
+
+        if (! $configured) {
+            $configured = AccountingConfiguration::query()
+                ->where('active', true)
+                ->oldest()
+                ->value($key);
+        }
+
+        if (! $configured) {
+            throw ValidationException::withMessages([
+                $key => "{$label} is missing in Accounting Configuration.",
+            ]);
+        }
+
+        $accountId = ChartOfAccount::query()
+            ->whereKey($configured)
+            ->value('account_id');
+
+        if ($accountId) {
+            return $accountId;
+        }
+
+        if (\App\Models\Account::query()->whereKey($configured)->exists()) {
+            return $configured;
+        }
+
+        throw ValidationException::withMessages([
+            $key => "{$label} is not linked to a valid ledger account.",
+        ]);
     }
 }

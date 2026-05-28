@@ -30,6 +30,7 @@ class Quotation extends Model
         'currency_id',
         'notes',
         'remarks',
+        'terms_and_conditions',
         'status',
         'active',
         'approved',

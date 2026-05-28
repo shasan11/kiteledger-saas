@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Quotation;
 use App\Models\QuotationLine;
+use App\Support\SafeHtml;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -282,6 +283,10 @@ class QuotationController extends BaseCrudApiController
             'nullable',
             'string',
         ],
+        'terms_and_conditions' => [
+            'nullable',
+            'string',
+        ],
         'status' => [
             'nullable',
             'in:draft,sent,accepted,rejected,expired,cancelled',
@@ -354,6 +359,11 @@ class QuotationController extends BaseCrudApiController
                 'nullable',
                 'string',
             ],
+            'terms_and_conditions' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
             'status' => [
                 'sometimes',
                 'nullable',
@@ -421,5 +431,30 @@ class QuotationController extends BaseCrudApiController
             'quotationLines.taxRate',
             'quotationLines.taxJurisdiction',
         ]);
+    }
+
+    protected function mutateParentDataBeforeCreate(
+        array $parentData,
+        array $nestedData
+    ): array {
+        $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
+        if (array_key_exists('terms_and_conditions', $parentData)) {
+            $parentData['terms_and_conditions'] = SafeHtml::clean($parentData['terms_and_conditions']);
+        }
+
+        return $parentData;
+    }
+
+    protected function mutateParentDataBeforeUpdate(
+        array $parentData,
+        array $nestedData,
+        Model $record
+    ): array {
+        $parentData = parent::mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
+        if (array_key_exists('terms_and_conditions', $parentData)) {
+            $parentData['terms_and_conditions'] = SafeHtml::clean($parentData['terms_and_conditions']);
+        }
+
+        return $parentData;
     }
 }

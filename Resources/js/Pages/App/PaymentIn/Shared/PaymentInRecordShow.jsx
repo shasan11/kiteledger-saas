@@ -533,7 +533,7 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
             reference: firstPresent(record?.reference, record?.reference_no, '-'),
             status: humanize(record?.status || 'draft'),
             notes: record?.notes || '',
-            terms: firstPresent(record?.terms, record?.payment_terms, ''),
+            terms: firstPresent(record?.terms_and_conditions, record?.terms, record?.payment_terms, ''),
             void: isVoid,
             voided: isVoid,
             is_draft: isDraft,
@@ -578,7 +578,7 @@ const buildPrintContext = (record, documentType, title, companyInfo = null) => {
         amount_paid: formatMoney(paid, currency),
         balance_due: formatMoney(balance, currency),
         notes: record?.notes || '',
-        terms: firstPresent(record?.terms, record?.payment_terms, ''),
+        terms: firstPresent(record?.terms_and_conditions, record?.terms, record?.payment_terms, ''),
 
         totals: {
             subtotal: formatMoney(subtotal, currency),
@@ -727,6 +727,9 @@ const renderPrintTemplate = (templateHtml, context) => {
 
                 return render(block, typeof value === 'object' ? { ...context, ...value } : scope);
             })
+            .replace(/{{{\s*([^}]+)\s*}}}/g, (_, path) => {
+                return resolve(scope, path.trim(), '');
+            })
             .replace(/{{\s*([^}]+)\s*}}/g, (_, path) => {
                 const cleanPath = path.trim();
                 if (cleanPath === '@index') return escapeHtml(resolve(scope, cleanPath, ''));
@@ -798,6 +801,13 @@ const defaultPrintTemplateHtml = `
         <strong>Notes:</strong>
         <p>{{document.notes}}</p>
     </div>
+
+    {{#document.terms}}
+    <div class="notes">
+        <strong>Terms & Conditions:</strong>
+        <div>{{{document.terms}}}</div>
+    </div>
+    {{/document.terms}}
 </div>
 `.trim();
 
@@ -1205,7 +1215,7 @@ function HeaderBlock({
                         </Tooltip>
                     )}
 
-                    {editRoute && recordId && !isVoided && !isApproved && (
+                    {editRoute && recordId && !isVoided && (
                         <Link href={route(editRoute, recordId)}>
                             <Button icon={<EditOutlined />} disabled={loading || !record}>
                                 Edit
@@ -1409,6 +1419,16 @@ function lineTable(title, columns, dataSource, emptyText, summary) {
     );
 }
 
+function HtmlContentCard({ title, html }) {
+    if (!html) return null;
+
+    return (
+        <Card title={title} className="payment-record-show__card">
+            <div className="payment-record-show__rich-text" dangerouslySetInnerHTML={{ __html: html }} />
+        </Card>
+    );
+}
+
 function buildMainCards(record, documentType) {
     const normalizedDocumentType = normalizeDocumentType(documentType);
     const currency = record?.currency;
@@ -1524,6 +1544,12 @@ function buildMainCards(record, documentType) {
                 )
             )
         );
+
+        if (normalizedDocumentType === 'quotation') {
+            const termsHtml = firstPresent(record?.terms_and_conditions, record?.terms, record?.payment_terms, '');
+            const termsCard = <HtmlContentCard key="terms-and-conditions" title="Terms & Conditions" html={termsHtml} />;
+            if (termsCard) cards.push(termsCard);
+        }
     }
 
     if (normalizedDocumentType === 'invoice') {
@@ -2494,6 +2520,22 @@ export default function PaymentInRecordShow({
                 .payment-record-show .ant-table-wrapper .ant-table-summary > tr > td {
                     background: var(--payment-record-show-surface-soft);
                     font-weight: 700;
+                }
+
+                .payment-record-show__rich-text {
+                    font-size: var(--payment-record-show-font-size-sm);
+                    line-height: 1.55;
+                    color: var(--payment-record-show-text);
+                }
+
+                .payment-record-show__rich-text p {
+                    margin: 0 0 8px;
+                }
+
+                .payment-record-show__rich-text ul,
+                .payment-record-show__rich-text ol {
+                    margin: 0 0 8px 18px;
+                    padding: 0;
                 }
 
                 .payment-record-show__state {

@@ -9,14 +9,16 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Row,
   Select,
+  Space,
   Switch,
   Typography,
   message,
   theme,
 } from 'antd';
-import { MailOutlined, SaveOutlined } from '@ant-design/icons';
+import { MailOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -41,6 +43,10 @@ function EmailConfigContent() {
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [testTo, setTestTo] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +78,38 @@ function EmailConfigContent() {
     };
   }, [form]);
 
+  const openTest = () => {
+    const values = form.getFieldsValue();
+    setTestTo(values.from_address || record?.from_address || '');
+    setTestResult(null);
+    setTestOpen(true);
+  };
+
+  const runTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const values = form.getFieldsValue();
+      const payload = { ...values, to: testTo };
+      // Empty password means "use the saved one" — drop the key so the
+      // backend falls back to the stored credential instead of validating
+      // an empty string.
+      if (!payload.email_pass) delete payload.email_pass;
+      Object.keys(payload).forEach((k) => payload[k] === '' && (payload[k] = null));
+
+      const { data } = await axios.post(api('/api/hrm/email-configs/test-connection'), payload);
+      setTestResult({ success: true, message: data?.message || 'Test email sent.' });
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: getErrorMessage(error, 'Test failed'),
+        stage: error?.response?.data?.stage,
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -101,7 +139,16 @@ function EmailConfigContent() {
       <Card
         size="small"
         title={<><MailOutlined /> Email Configuration</>}
-        extra={<Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button>}
+        extra={
+          <Space>
+            <Button icon={<ThunderboltOutlined />} onClick={openTest}>
+              Test Connection
+            </Button>
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+              Save
+            </Button>
+          </Space>
+        }
         loading={loading}
         styles={{ body: { padding: token.paddingLG } }}
       >
@@ -141,6 +188,48 @@ function EmailConfigContent() {
           </Row>
         </Form>
       </Card>
+
+      <Modal
+        title="Test Email Connection"
+        open={testOpen}
+        onCancel={() => setTestOpen(false)}
+        onOk={runTest}
+        okText={testing ? 'Sending…' : 'Send Test Email'}
+        confirmLoading={testing}
+        okButtonProps={{ disabled: !testTo || testing }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: token.margin }}
+          message="This sends a real email using the current form values."
+          description="Authentication or connection failures will surface here without saving. Leave the password blank in the form to test against the currently saved password."
+        />
+
+        <Form layout="vertical">
+          <Form.Item
+            label="Send test email to"
+            help="Defaults to the From Email above; change it if you want the test to land somewhere else."
+            required
+          >
+            <Input
+              type="email"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </Form.Item>
+        </Form>
+
+        {testResult ? (
+          <Alert
+            type={testResult.success ? 'success' : 'error'}
+            showIcon
+            message={testResult.success ? 'Connection successful' : 'Connection failed'}
+            description={testResult.message}
+          />
+        ) : null}
+      </Modal>
     </div>
   );
 }

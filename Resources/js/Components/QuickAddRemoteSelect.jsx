@@ -195,6 +195,7 @@ export default function QuickAddRemoteSelect({
   placeholder,
   apiUrl,
   params = {},
+  activeOnly = true,
   valueKey = 'id',
   labelBuilder = defaultLabelBuilder,
   quickAddTitle,
@@ -229,7 +230,7 @@ export default function QuickAddRemoteSelect({
       setLoading(true);
       try {
         const response = await axios.get(apiUrl, {
-          params: { page: 1, page_size: 30, search, ...(params || {}) },
+          params: { page: 1, page_size: 30, search, ...(activeOnly ? { active: true } : {}), ...(params || {}) },
         });
         const rows = normalizeRows(response.data);
         setOptions(
@@ -248,7 +249,7 @@ export default function QuickAddRemoteSelect({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [apiUrl, paramsKey, valueKey, labelBuilder],
+    [apiUrl, paramsKey, valueKey, labelBuilder, activeOnly],
   );
 
   useEffect(() => {

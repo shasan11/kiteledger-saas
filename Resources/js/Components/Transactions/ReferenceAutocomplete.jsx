@@ -28,6 +28,13 @@ const money = (v) => {
   return n.toLocaleString('en-NP', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const formatDate = (v) => {
+  if (!v) return '';
+  const parsed = new Date(v);
+  if (Number.isNaN(parsed.getTime())) return String(v);
+  return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
 /**
  * Reference autocomplete supporting one or more backend sources.
  *
@@ -75,6 +82,7 @@ export default function ReferenceAutocomplete({
               [src.searchParam || 'search']: search,
               page: 1,
               page_size: src.pageSize || 10,
+              active: true,
               ...(src.extraParams || {}),
             });
             const res = await axios.get(url, { headers: getAuthHeaders() });
@@ -101,7 +109,7 @@ export default function ReferenceAutocomplete({
           const contact = src.contactField
             ? (row[src.contactField]?.name || row[`${src.contactField}_name`] || '')
             : '';
-          const date = src.dateField ? (row[src.dateField] || '') : '';
+          const date = src.dateField ? formatDate(row[src.dateField] || '') : '';
           const total = src.totalField ? row[src.totalField] : null;
           const parts = [`${src.label}: ${docNo}`];
           if (contact) parts.push(contact);

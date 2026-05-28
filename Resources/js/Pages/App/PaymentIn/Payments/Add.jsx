@@ -9,7 +9,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs, money } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const newKey = () => Math.random().toString(36).slice(2);
@@ -23,7 +23,8 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
   const [tdsApplicable, setTdsApplicable] = useState(false);
   const [topError, setTopError] = useState(null);
   const [contactId, setContactId] = useState(null);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const defaultCurrency = useDefaultCurrency(true);
+  const baseCurrency = useBaseCurrency(true);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'payment_no') : '#DRAFT';
 
@@ -58,6 +59,34 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
         allocated_amount: toNumber(l.allocated_amount),
       })));
     } else {
+      try {
+        const raw = sessionStorage.getItem('kiteledger_payment_prefill');
+        if (raw) {
+          const p = JSON.parse(raw);
+          const amount = toNumber(p.amount);
+          form.setFieldsValue({
+            payment_no: '#DRAFT',
+            payment_date: dayjs(),
+            contact_id: p.contact_id || null,
+            payment_method: 'cash',
+            currency_id: p.currency_id || null,
+            exchange_rate: toNumber(p.exchange_rate) || 1,
+            amount,
+            reference: p._source_no || '',
+          });
+          setContactId(p.contact_id || null);
+          if (Array.isArray(p.items)) {
+            setAllocations(p.items.map((line) => ({
+              _key: newKey(),
+              invoice_id: line.invoice_id ?? line.invoice?.id ?? null,
+              invoice_detail: line.invoice || line.invoice_id_detail || null,
+              allocated_amount: toNumber(line.allocated_amount) || amount,
+            })));
+          }
+          sessionStorage.removeItem('kiteledger_payment_prefill');
+          return;
+        }
+      } catch {}
       form.setFieldsValue({
         payment_no: '#DRAFT',
         payment_date: dayjs(),
@@ -131,7 +160,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item label="Customer" name="contact_id" rules={[{ required: true, message: 'Customer is required' }]}>
-                <BackendSelect fkUrl="/api/contacts/" placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} onChange={(v) => { setContactId(v); form.setFieldValue('contact_id', v); }} />
+                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'customer' }} placeholder="Select customer" quickAddContact quickAddContactTitle="Customer" quickAddContactDefaults={{ contact_type: 'customer' }} onChange={(v) => { setContactId(v); form.setFieldValue('contact_id', v); }} />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}><Form.Item label="Payment No" name="payment_no"><Input disabled /></Form.Item></Col>
@@ -147,7 +176,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Currency" name="currency_id"><BackendSelect fkUrl="/api/currencies/" placeholder="Currency" labelFn={(r) => r?.name || r?.code || ''} allowClear /></Form.Item></Col>
-            <Col xs={24} sm={12} md={8}><Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}><InputNumber min={0} step={0.0001} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col xs={24} sm={12} md={8}><Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate" rules={[{ required: true, message: 'Required' }]}><InputNumber min={0} step={0.0001} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Amount" name="amount" rules={[{ required: true, message: 'Amount required' }]}><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
             <Col xs={24} sm={12} md={8}><Form.Item label="Reference" name="reference"><Input placeholder="Reference" /></Form.Item></Col>
           </Row>
@@ -188,7 +217,13 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
                   <BackendSelect value={val} detailValue={row.invoice_detail} fkUrl="/api/invoices/" labelKey="invoice_no" placeholder="Select invoice"
                     extraParams={contactId ? { contact_id: contactId } : {}}
                     variant="borderless" style={{ width: '100%' }}
-                    onChange={(v, raw) => updateAlloc(idx, { invoice_id: v, invoice_detail: raw })}
+                    onChange={(v, raw) => {
+                      const balance = toNumber(raw?.balance_due ?? raw?.total);
+                      if (!toNumber(form.getFieldValue('amount')) && balance > 0) {
+                        form.setFieldValue('amount', balance);
+                      }
+                      updateAlloc(idx, { invoice_id: v, invoice_detail: raw, allocated_amount: balance || row.allocated_amount || 0 });
+                    }}
                   />
                 ),
               },

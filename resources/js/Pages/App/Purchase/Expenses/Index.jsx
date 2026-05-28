@@ -45,7 +45,7 @@ export default function Expenses({ auth }) {
       ],
     },
     { name: 'approved', label: 'Approved', type: 'switch', col: 6 },
-    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+    { name: 'contact_id', label: 'Contact', type: 'fkSelect', col: 10, fkUrl: api('/api/contacts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkExtraParams: { contact_type: 'supplier', accept_purchase: true } },
     { name: 'currency_id', label: 'Currency', type: 'fkSelect', col: 6, fkUrl: api('/api/currencies/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
     { name: 'reference', label: 'Reference', type: 'text', col: 8 },
     { name: 'tds_type', label: 'TDS Type', type: 'text', col: 8 },
@@ -58,7 +58,7 @@ export default function Expenses({ auth }) {
       headerBg: '#1a3c5e', headerColor: '#ffffff', addButtonLabel: 'Add Line',
       defaultItem: { ...emptyExpenseLine },
       columns: [
-        { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', required: true, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
+        { key: 'chart_of_account_id', name: 'chart_of_account_id', label: 'Account', type: 'fkSelect', width: '3fr', required: true, fkUrl: api('/api/chart-of-accounts/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name', fkExtraParams: { type: 'expense' } },
         { key: 'description', name: 'description', label: 'Description', type: 'text', width: '2fr' },
         { key: 'tax_rate_id', name: 'tax_rate_id', label: 'Tax Rate', type: 'fkSelect', width: '150px', fkUrl: api('/api/tax-rates/'), fkSearchParam: 'search', fkPageSize: 20, fkValueKey: 'id', fkLabelKey: 'name' },
         { key: 'amount', name: 'amount', label: 'Amount', type: 'number', width: '130px', min: 0, required: true },

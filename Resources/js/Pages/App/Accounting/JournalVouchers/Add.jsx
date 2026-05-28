@@ -19,6 +19,7 @@ import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -58,6 +59,9 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine(), emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
+    const [currencyDetail, setCurrencyDetail] = useState(null);
+    const defaultCurrency = useDefaultCurrency(true);
+    const baseCurrency = useBaseCurrency(true);
 
     useEffect(() => {
         if (initialRecord) {
@@ -70,6 +74,7 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                 narration: initialRecord.narration || '',
                 remarks: initialRecord.remarks || '',
             });
+            setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
             const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
             if (lines.length) {
                 setItems(lines.map((l) => ({
@@ -86,6 +91,10 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
             form.setFieldsValue({ voucher_date: dayjs(), exchange_rate: 1 });
         }
     }, [initialRecord, form]);
+
+    useEffect(() => {
+        if (!initialRecord) applyDefaultCurrency(form, defaultCurrency, setCurrencyDetail);
+    }, [defaultCurrency, form, initialRecord]);
 
     const updateLine = (index, patch) => {
         setItems((prev) => {
@@ -251,11 +260,20 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                         </Col>
                         <Col xs={24} sm={12} md={8}>
                             <Form.Item label="Currency" name="currency_id">
-                                <BackendSelect fkUrl="/api/currencies/" labelFn={(r) => r?.name || r?.code || ''} placeholder="Select currency" />
+                                <BackendSelect
+                                    fkUrl="/api/currencies/"
+                                    labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')}
+                                    placeholder="Select currency"
+                                    detailValue={currencyDetail}
+                                    onChange={(v, raw) => {
+                                        form.setFieldValue('currency_id', v);
+                                        setCurrencyDetail(raw);
+                                    }}
+                                />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={12} md={8}>
-                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                            <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate">
                                 <InputNumber min={0} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>

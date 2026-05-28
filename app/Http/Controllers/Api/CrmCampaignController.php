@@ -162,13 +162,46 @@ class CrmCampaignController extends BaseCrudApiController
     {
         $campaign = CrmCampaign::query()->findOrFail($id);
 
+        // Run the channel-filtered query and build the summary the UI shows.
         $contacts = $this->audienceQuery($campaign, $channel)->get();
         $summary = $this->summarizeAudience($contacts, $channel, $campaign);
+
+        // Diagnostics — exposed so the UI can explain "why is this zero?".
+        // We re-run successively-narrower queries so each layer's drop is
+        // visible. Cheap on small datasets; capped on large ones below.
+        $diag = [];
+        $baseQuery = Contact::query()->where(function ($q) {
+            $q->whereNull('active')->orWhere('active', '!=', false);
+        });
+
+        $diag['contacts_total'] = $baseQuery->count();
+        $diag['contacts_non_supplier'] = (clone $baseQuery)
+            ->where(function ($q) {
+                $q->whereNull('contact_type')->orWhere('contact_type', '!=', 'supplier');
+            })->count();
+
+        if ($campaign->contact_group_id) {
+            $groupIds = $this->descendantGroupIds($campaign->contact_group_id);
+            $diag['contact_group_id'] = $campaign->contact_group_id;
+            $diag['contacts_in_group'] = Contact::query()->whereIn('contact_group_id', $groupIds)->count();
+        } else {
+            $diag['contact_group_id'] = null;
+            $diag['contacts_in_group'] = $diag['contacts_non_supplier'];
+        }
+
+        if ($channel === 'email') {
+            $diag['contacts_with_email'] = Contact::query()
+                ->whereNotNull('email')->where('email', '!=', '')->count();
+        } elseif ($channel === 'sms') {
+            $diag['contacts_with_phone'] = Contact::query()
+                ->whereNotNull('phone')->where('phone', '!=', '')->count();
+        }
 
         return response()->json([
             'channel' => $channel,
             'campaign_id' => $campaign->id,
             'summary' => $summary,
+            'diagnostics' => $diag,
         ]);
     }
 
@@ -354,9 +387,17 @@ class CrmCampaignController extends BaseCrudApiController
 
     private function audienceQuery(CrmCampaign $campaign, string $channel): Builder
     {
+        // Treat NULL active/contact_type as "include" — only exclude on an
+        // explicit false / 'supplier' value. Otherwise pre-existing rows
+        // (where these columns were never populated) silently disappear
+        // from every campaign send.
         $query = Contact::query()
-            ->where('active', true)
-            ->where('contact_type', '!=', 'supplier');
+            ->where(function ($q) {
+                $q->whereNull('active')->orWhere('active', '!=', false);
+            })
+            ->where(function ($q) {
+                $q->whereNull('contact_type')->orWhere('contact_type', '!=', 'supplier');
+            });
 
         if ($campaign->contact_group_id) {
             $groupIds = $this->descendantGroupIds($campaign->contact_group_id);

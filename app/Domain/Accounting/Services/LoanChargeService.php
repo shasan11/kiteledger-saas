@@ -3,6 +3,8 @@
 namespace App\Domain\Accounting\Services;
 
 use App\Models\LoanCharge;
+use App\Models\AccountingConfiguration;
+use App\Models\ChartOfAccount;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -75,7 +77,7 @@ class LoanChargeService
 
         if (! $this->resolveExpenseAccountId()) {
             throw ValidationException::withMessages([
-                'loan_charge_expense_account_id' => 'Set accounting.loan_charge_expense_account_id before posting loan charges.',
+                'loan_charge_expense_account_id' => 'Loan Charge Expense Account is missing in Accounting Configuration.',
             ]);
         }
     }
@@ -115,6 +117,33 @@ class LoanChargeService
 
     protected function resolveExpenseAccountId(): ?string
     {
-        return config('accounting.loan_charge_expense_account_id');
+        $configured = config('accounting.loan_charge_expense_account_id');
+
+        if (! $configured) {
+            $configured = AccountingConfiguration::query()
+                ->where('active', true)
+                ->oldest()
+                ->value('loan_charge_expense_account_id');
+        }
+
+        if (! $configured) {
+            return null;
+        }
+
+        $accountId = ChartOfAccount::query()
+            ->whereKey($configured)
+            ->value('account_id');
+
+        if ($accountId) {
+            return $accountId;
+        }
+
+        if (\App\Models\Account::query()->whereKey($configured)->exists()) {
+            return $configured;
+        }
+
+        throw ValidationException::withMessages([
+            'loan_charge_expense_account_id' => 'Loan Charge Expense Account is not linked to a valid ledger account.',
+        ]);
     }
 }

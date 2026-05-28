@@ -46,6 +46,7 @@ export default function BackendAutocomplete({
         [field.fkPageParam ?? "page"]: 1,
         [field.fkPageSizeParam ?? "page_size"]: field.fkPageSize ?? 20,
         ...(field.fkSearchParam ? { [field.fkSearchParam]: search } : { search }),
+        ...(field?.activeOnly === false ? EMPTY_OBJECT : { active: true }),
         ...(resolvedExtraParams || EMPTY_OBJECT),
       });
 
@@ -142,4 +143,3 @@ export default function BackendAutocomplete({
     />
   );
 }
-

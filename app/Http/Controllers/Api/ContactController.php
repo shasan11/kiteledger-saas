@@ -104,6 +104,10 @@ class ContactController extends BaseCrudApiController
     {
         $query = parent::baseQuery();
 
+        if (request()->filled('type') && ! request()->filled('contact_type')) {
+            $query->where('contact_type', request()->query('type'));
+        }
+
         return request()->boolean('assigned_only')
             ? $this->applyAssignedUserScope($query)
             : $query;

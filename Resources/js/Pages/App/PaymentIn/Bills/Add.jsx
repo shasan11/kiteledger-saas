@@ -277,7 +277,7 @@ export default function BillAdd(props) {
       storeFullObject: true, fkLabel: (r) => [r?.code, r?.symbol, r?.name].filter(Boolean).join(' - '),
       onSelectRecord: (r, v) => ({ ...v, currency_id: r, exchange_rate: toNumber(r?.exchange_rate) || toNumber(v?.exchange_rate) || 1 }),
     },
-    { name: 'exchange_rate', label: 'Exchange Rate To NPR', type: 'number', required: true, col: 8, min: 0 },
+    { name: 'exchange_rate', label: 'Exchange Rate', type: 'number', required: true, col: 8, min: 0 },
     { name: 'reference', label: 'Reference', type: 'text', col: 8, placeholder: 'Reference' },
     {
       name: 'items', label: '', type: 'objectArray', col: 24,

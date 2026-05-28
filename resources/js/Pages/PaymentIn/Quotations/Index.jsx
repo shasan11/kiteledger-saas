@@ -279,7 +279,7 @@ export default function Index() {
             },
             {
                 name: 'exchange_rate_to_npr',
-                label: 'Exchange Rate To NPR',
+                label: 'Exchange Rate',
                 type: 'number',
                 required: true,
                 col: 8,

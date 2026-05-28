@@ -253,6 +253,7 @@ export default function PurchaseOrders({ auth }) {
         fkPageSize: 20,
         fkValueKey: 'id',
         fkLabelKey: 'name',
+        fkExtraParams: { contact_type: 'supplier', accept_purchase: true },
       },
       {
         name: 'reference_no',
@@ -306,7 +307,7 @@ export default function PurchaseOrders({ auth }) {
       },
       {
         name: 'exchange_rate',
-        label: 'Exchange Rate To NPR',
+        label: 'Exchange Rate',
         type: 'number',
         required: true,
         col: 8,

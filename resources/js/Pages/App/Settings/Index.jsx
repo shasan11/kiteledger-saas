@@ -60,6 +60,7 @@ const AlertTypes = lazy(() => import('./AlertTypes/Index'));
 const ReportingTags = lazy(() => import('./ReportingTags/Index'));
 const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
 const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
+const ChequeFormatConfigurations = lazy(() => import('./ChequeFormatConfigurations/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
 const AiSettings = lazy(() => import('./AiSettings'));
 const PaymentGatewaySettings = lazy(() => import('./PaymentGatewaySettings'));
@@ -161,6 +162,14 @@ const SETTINGS_TABS = [
     description: 'Prefixes and automatic numbering.',
     icon: <NumberOutlined />,
     component: DocumentNumberings,
+    props: {},
+  },
+  {
+    key: 'cheque-format-configurations',
+    label: 'Cheque Formats',
+    description: 'Country-wise cheque print layouts.',
+    icon: <FileTextOutlined />,
+    component: ChequeFormatConfigurations,
     props: {},
   },
 

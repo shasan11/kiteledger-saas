@@ -12,10 +12,11 @@ const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 const displayDate = (v) => { if (!v) return '-'; const d = dayjs(v); return d.isValid() ? d.format('DD-MM-YYYY') : '-'; };
 const statusColor = (s) => ({ draft: 'default', posted: 'green', approved: 'green', cancelled: 'red', voided: 'red' }[s] || 'default');
+const displayDocumentNo = (value, record) => (record?.approved ? (value || '-') : '#DRAFT');
 
 export default function JournalVouchersIndex(props) {
     const columns = useMemo(() => [
-        { title: 'Voucher No', dataIndex: 'voucher_no', key: 'voucher_no', sorter: true, width: 140, render: (v) => <Text strong>{v || 'DRAFT'}</Text> },
+        { title: 'Voucher No', dataIndex: 'voucher_no', key: 'voucher_no', sorter: true, width: 140, render: (v, record) => <Text strong>{displayDocumentNo(v, record)}</Text> },
         branchColumn(),
         { title: 'Date', dataIndex: 'voucher_date', key: 'voucher_date', sorter: true, width: 120, render: displayDate, backendFilter: { type: 'date_range', fromParam: 'date_from', toParam: 'date_to' } },
         { title: 'Reference', dataIndex: 'reference', key: 'reference', render: (v) => v || '-' },

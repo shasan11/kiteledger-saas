@@ -57,6 +57,7 @@ import BackendAutocomplete from "./components/BackendAutocomplete";
 import CrudTransfer from "./components/CrudTransfer";
 import CrudFormInner from "./components/CrudFormInner";
 import QuickAddModal from "./components/QuickAddModal";
+import { exchangeRateLabel, useBaseCurrency } from "@/Components/Transactions/defaultCurrency.js";
 
 import { buildFormData } from "./utils/formData";
 import { parseBackendErrors, showGlobalErrorsNotification } from "./utils/errors";
@@ -184,6 +185,21 @@ export default function ReusableCrud({
   updateMethod = "patch",
 }) {
   const { token } = theme.useToken();
+  const baseCurrency = useBaseCurrency(true);
+
+  const resolveExchangeRateLabel = useCallback(
+    (label, config = EMPTY_OBJECT) => {
+      const key = String(config?.name ?? config?.dataIndex ?? config?.key ?? "").toLowerCase();
+      const text = typeof label === "string" ? label : "";
+
+      if (key === "exchange_rate" || /^exchange rate(?:\s+to\s+.+)?$/i.test(text.trim())) {
+        return exchangeRateLabel(baseCurrency);
+      }
+
+      return label;
+    },
+    [baseCurrency]
+  );
 
   const ui = useMemo(
     () => ({
@@ -787,6 +803,7 @@ export default function ReusableCrud({
           [fkPageParam]: 1,
           [fkPageSizeParam]: fkPageSize,
           ...(fkSearchParam ? { [fkSearchParam]: search } : EMPTY_OBJECT),
+          ...(field?.activeOnly === false ? EMPTY_OBJECT : { active: true }),
           ...(resolvedExtraParams || EMPTY_OBJECT),
         });
 
@@ -871,6 +888,7 @@ export default function ReusableCrud({
           [fkPageParam]: 1,
           [fkPageSizeParam]: fkPageSize,
           ...(fkSearchParam ? { [fkSearchParam]: search } : EMPTY_OBJECT),
+          ...(cfg?.activeOnly === false ? EMPTY_OBJECT : { active: true }),
           ...(resolvedExtraParams || EMPTY_OBJECT),
         });
 
@@ -1772,6 +1790,7 @@ export default function ReusableCrud({
             [fkPageParam]: 1,
             [fkPageSizeParam]: fkPageSize,
             ...(fkSearchParam ? { [fkSearchParam]: search } : EMPTY_OBJECT),
+            ...(field?.activeOnly === false ? EMPTY_OBJECT : { active: true }),
             ...(fkExtraParams || EMPTY_OBJECT),
           });
 
@@ -2406,7 +2425,7 @@ export default function ReusableCrud({
 
   const processedColumns = useMemo(() => {
     return (columns || EMPTY_ARRAY).map((col) => {
-      let next = { ...col };
+      let next = { ...col, title: resolveExchangeRateLabel(col.title, col) };
 
       const autoTextFilter =
         !col?.backendFilter &&
@@ -2433,7 +2452,7 @@ export default function ReusableCrud({
 
       return next;
     });
-  }, [columns, buildBackendColumnFilter, sortState]);
+  }, [columns, buildBackendColumnFilter, sortState, resolveExchangeRateLabel]);
 
   const canRowActionsExist =
     !isTransactionalCrud && showRowActionMenu && (canEdit || canDelete || (singleactions && singleactions.length > 0));
@@ -2596,7 +2615,7 @@ export default function ReusableCrud({
 
       const colSpan = field.col ?? 24;
       const readOnly = !!field.readOnly;
-      const label = field.label;
+      const label = resolveExchangeRateLabel(field.label, field);
       const name = field.name;
 
       const fieldKey =
@@ -2643,13 +2662,13 @@ export default function ReusableCrud({
                       : EMPTY_ARRAY
                 }
               >
-                <Panel header={field.label} key={fieldKey}>
+                <Panel header={resolveExchangeRateLabel(field.label, field)} key={fieldKey}>
                   {groupInner}
                 </Panel>
               </Collapse>
             ) : (
               <div style={ui.formGroup}>
-                {field.label && <div style={ui.formGroupTitle}>{field.label}</div>}
+                {field.label && <div style={ui.formGroupTitle}>{resolveExchangeRateLabel(field.label, field)}</div>}
                 {groupInner}
               </div>
             )}
@@ -2974,7 +2993,7 @@ export default function ReusableCrud({
                       disabled={readOnly}
                       onChange={(e) => setFieldValue(name, e.target.checked)}
                     >
-                      {field.inlineLabel || field.label}
+                      {resolveExchangeRateLabel(field.inlineLabel || field.label, field)}
                     </Checkbox>
                   );
 
@@ -3761,7 +3780,7 @@ export default function ReusableCrud({
                                   rowApplyPatch({ [colKey]: e.target.checked });
                                 }}
                               >
-                                {c.inlineLabel || c.label}
+                                {resolveExchangeRateLabel(c.inlineLabel || c.label, c)}
                               </Checkbox>
                             );
                           }
@@ -3839,7 +3858,7 @@ export default function ReusableCrud({
                             >
                               {cols.map((c) => {
                                 const colKey = c.key ?? c.name ?? c.label;
-                                return <div key={String(colKey)}>{c.label}</div>;
+                                      return <div key={String(colKey)}>{resolveExchangeRateLabel(c.label, c)}</div>;
                               })}
 
                               {showActions ? <div style={{ textAlign: "right" }}>Actions</div> : null}
@@ -3928,7 +3947,7 @@ export default function ReusableCrud({
                                           >
                                             <Form.Item
                                               layout="vertical"
-                                              label={c.label}
+                                              label={resolveExchangeRateLabel(c.label, c)}
                                               required={c.required}
                                             >
                                               {renderObjectArrayCell(c, rowValue, idx, colIdx, true)}

@@ -164,6 +164,19 @@ class BankAccountController extends BaseCrudApiController
 
     public function ledger(Request $request, BankAccount $bankAccount)
     {
+        $validated = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'search' => ['nullable', 'string', 'max:120'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'branch_id' => ['nullable', 'uuid'],
+            'fiscal_year_id' => ['nullable', 'uuid'],
+        ]);
+
+        $page = max((int) ($validated['page'] ?? 1), 1);
+        $pageSize = min(max((int) ($validated['page_size'] ?? 15), 1), 500);
+        $search = trim((string) ($validated['search'] ?? ''));
         $accountId = $bankAccount->account_id;
         $query = JournalVoucherLine::query()
             ->with(['journalVoucher.branch'])
@@ -175,6 +188,18 @@ class BankAccountController extends BaseCrudApiController
                     ->when($request->filled('branch_id'), fn ($q) => $q->where('branch_id', $request->string('branch_id')))
                     ->when($request->filled('fiscal_year_id'), fn ($q) => $q->where('fiscal_year_id', $request->string('fiscal_year_id')));
             })
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('journal_voucher_lines.description', 'like', "%{$search}%")
+                        ->orWhereHas('journalVoucher', function ($voucherQuery) use ($search) {
+                            $voucherQuery
+                                ->where('voucher_no', 'like', "%{$search}%")
+                                ->orWhere('reference', 'like', "%{$search}%")
+                                ->orWhere('narration', 'like', "%{$search}%");
+                        });
+                });
+            })
             ->join('journal_vouchers', 'journal_voucher_lines.journal_voucher_id', '=', 'journal_vouchers.id')
             ->orderBy('journal_vouchers.voucher_date')
             ->orderBy('journal_voucher_lines.created_at')
@@ -183,7 +208,7 @@ class BankAccountController extends BaseCrudApiController
 
         $softwareBalance = (float) ($bankAccount->opening_balance ?? 0);
 
-        $rows = $query->map(function (JournalVoucherLine $line) use (&$softwareBalance) {
+        $allRows = $query->map(function (JournalVoucherLine $line) use (&$softwareBalance) {
             $debit = (float) $line->debit;
             $credit = (float) $line->credit;
             $softwareBalance += $debit - $credit;
@@ -201,6 +226,9 @@ class BankAccountController extends BaseCrudApiController
                 'balance' => round($softwareBalance, 2),
             ];
         })->values();
+
+        $count = $allRows->count();
+        $rows = $allRows->slice(($page - 1) * $pageSize, $pageSize)->values();
 
         $statementLines = BankStatementLine::query()
             ->where('bank_account_id', $bankAccount->id)
@@ -226,9 +254,13 @@ class BankAccountController extends BaseCrudApiController
             'statement_balance' => round((float) $statementBalance, 2),
             'software_balance' => round($softwareBalance, 2),
             'reconciliation_difference' => abs(round(((float) $statementBalance) - $softwareBalance, 2)),
-            'last_transaction_date' => $rows->last()['date'] ?? null,
+            'last_transaction_date' => $allRows->last()['date'] ?? null,
             'last_statement_date' => $lastStatement['date'] ?? null,
             'statement_line_count' => $allStatementLines->count(),
+            'count' => $count,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'results' => $rows,
             'rows' => $rows,
             'statement_lines' => $statementRows,
             'deposit_withdrawal_summary' => $this->depositWithdrawalSummary($statementLines),

@@ -1597,16 +1597,25 @@ export default function AccountingRecordShow({
     };
   }, [printOpen, record, printDocumentType]);
 
-  const recordTitle = useMemo(
-    () =>
+  const recordTitle = useMemo(() => {
+    if (
+      record &&
+      ['journal', 'cash'].includes(module) &&
+      Object.prototype.hasOwnProperty.call(record, 'approved') &&
+      record.approved !== true
+    ) {
+      return '#DRAFT';
+    }
+
+    return (
       record?.[titleField] ||
       record?.display_name ||
       record?.voucher_no ||
       record?.transfer_no ||
       record?.code ||
-      title,
-    [record, title, titleField]
-  );
+      title
+    );
+  }, [module, record, title, titleField]);
 
   const subtitle =
     subtitleField && record?.[subtitleField]

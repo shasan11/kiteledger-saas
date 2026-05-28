@@ -269,7 +269,7 @@ export default function Quotations(props) {
       },
       {
         name: 'exchange_rate',
-        label: 'Exchange Rate To NPR',
+        label: 'Exchange Rate',
         type: 'number',
         required: true,
         col: 8,

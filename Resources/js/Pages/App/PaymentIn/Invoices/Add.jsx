@@ -12,7 +12,7 @@ import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomple
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
@@ -40,9 +40,9 @@ const customerCreatePayload = (values = {}) => ({
   active: true,
 });
 
-const mapLines = (lines = []) => (lines || []).map((l) => ({
+const mapLines = (lines = [], options = {}) => (lines || []).map((l) => ({
   _key: newKey(),
-  ...(l.id ? { id: l.id } : {}),
+  ...(options.keepIds && l.id ? { id: l.id } : {}),
   product_id: l.product_id ?? l.product?.id ?? null,
   product_detail: l.product || l.product_id_detail || null,
   product_name: l.product_name || l.product?.name || '',
@@ -64,7 +64,8 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
   const [topError, setTopError] = useState(null);
   const [sourceIds, setSourceIds] = useState({ quotation_id: null, sales_order_id: null });
   const [currencyDetail, setCurrencyDetail] = useState(null);
-  const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+  const defaultCurrency = useDefaultCurrency(true);
+  const baseCurrency = useBaseCurrency(true);
   const currencySymbol = currencySymbolOf(currencyDetail);
 
   const docNumber = isEdit && initialRecord ? displayDocumentNumber(initialRecord, 'invoice_no') : '#DRAFT';
@@ -85,7 +86,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
         remarks: initialRecord.remarks || '',
       });
       const lines = Array.isArray(initialRecord.items) ? initialRecord.items : [];
-      if (lines.length) setItems(mapLines(lines));
+      if (lines.length) setItems(mapLines(lines, { keepIds: true }));
       setSourceIds({ quotation_id: initialRecord.quotation_id || null, sales_order_id: initialRecord.sales_order_id || null });
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
     } else {
@@ -109,7 +110,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
             sales_order_id: p._source === 'sales_order' ? p._source_id || null : p.sales_order_id || null,
           });
           setCurrencyDetail(p.currency_id_detail || null);
-          if (Array.isArray(p.items) && p.items.length) setItems(mapLines(p.items));
+          if (Array.isArray(p.items) && p.items.length) setItems(mapLines(p.items, { keepIds: false }));
           sessionStorage.removeItem('kiteledger_invoice_prefill');
           sessionStorage.removeItem('invoice_prefill');
           return;
@@ -140,7 +141,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
       currency_id: rec.currency_id ?? rec.currency?.id ?? null,
       exchange_rate: toNumber(rec.exchange_rate) || 1,
     });
-    setItems(mapLines(rec.items || []));
+    setItems(mapLines(rec.items || [], { keepIds: false }));
     setSourceIds({
       quotation_id: source.key === 'quotation' ? rec.id : (rec.quotation_id || null),
       sales_order_id: source.key === 'sales_order' ? rec.id : null,
@@ -251,7 +252,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="Exchange Rate" name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
+              <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate" rules={[{ required: true, message: 'Required' }]}>
                 <InputNumber min={0} step={0.0001} style={{ width: '100%' }} />
               </Form.Item>
             </Col>

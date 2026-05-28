@@ -38,6 +38,7 @@ class DebitNoteController extends BaseCrudApiController
             'required' => true,
             'min' => 1,
             'replace_on_update' => false,
+            'id_rules' => ['nullable', 'uuid'],
             'relations' => ['product', 'taxRate'],
             'relation_details' => ['product' => 'product_id', 'taxRate' => 'tax_rate_id'],
             'rules' => [

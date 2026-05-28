@@ -96,12 +96,22 @@ class MailConfigServiceProvider extends ServiceProvider
                 Config::set("{$base}.password", $config->email_pass);
             }
             if ($config->encryption) {
-                // Laravel 11 prefers 'scheme' over the older 'encryption'
-                // key, but accepts either. Set both for compatibility with
-                // any custom transports that still read encryption.
-                Config::set("{$base}.scheme", $config->encryption);
+                // Laravel/Symfony mailer schemes are smtp/smtps. Keep the
+                // stored UI value for legacy readers, but normalize SSL to
+                // smtps for the transport Laravel actually builds.
+                Config::set("{$base}.scheme", $this->normalizeScheme($config->encryption));
                 Config::set("{$base}.encryption", $config->encryption);
             }
         }
+    }
+
+    private function normalizeScheme(string $encryption): ?string
+    {
+        return match (strtolower(trim($encryption))) {
+            'ssl', 'smtps' => 'smtps',
+            'tls', 'starttls', 'smtp' => 'smtp',
+            'none', 'null', '' => null,
+            default => $encryption,
+        };
     }
 }

@@ -8,7 +8,7 @@ import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
-import { applyDefaultCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -37,7 +37,8 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
-    const defaultCurrency = useDefaultCurrency(!isEdit && !initialRecord);
+    const defaultCurrency = useDefaultCurrency(true);
+    const baseCurrency = useBaseCurrency(true);
 
     useEffect(() => {
         if (initialRecord) {
@@ -156,6 +157,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                     value={val}
                     detailValue={row.account_detail}
                     fkUrl="/api/chart-of-accounts/"
+                    extraParams={{ type: 'expense' }}
                     labelFn={(r) => [r?.code, r?.name].filter(Boolean).join(' - ')}
                     placeholder="Select account"
                     style={{ width: '100%' }}
@@ -218,7 +220,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                     <Row gutter={16}>
                         <Col xs={24} sm={16}>
                             <Form.Item label="Party / Vendor" name="contact_id">
-                                <BackendSelect fkUrl="/api/contacts/" placeholder="Select party" quickAddContact quickAddContactTitle="Contact" quickAddContactDefaults={{ contact_type: 'supplier' }} />
+                                <BackendSelect fkUrl="/api/contacts/" extraParams={{ contact_type: 'supplier', accept_purchase: true }} placeholder="Select party" quickAddContact quickAddContactTitle="Contact" quickAddContactDefaults={{ contact_type: 'supplier', accept_purchase: true }} />
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
@@ -242,7 +244,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                             </Form.Item>
                         </Col>
                         <Col xs={24} sm={8}>
-                            <Form.Item label="Exchange Rate" name="exchange_rate">
+                            <Form.Item label={exchangeRateLabel(baseCurrency)} name="exchange_rate">
                                 <InputNumber min={0} style={{ width: '100%' }} />
                             </Form.Item>
                         </Col>

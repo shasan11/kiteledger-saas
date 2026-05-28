@@ -10,6 +10,7 @@ import { theme } from 'antd';
 import { router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import axios from 'axios';
+import { exchangeRateLabel, useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -25,6 +26,7 @@ const STATUS_COLORS = {
 
 export default function OnlinePaymentShow({ id }) {
     const { token } = theme.useToken();
+    const baseCurrency = useBaseCurrency(true);
     const [payment, setPayment] = useState(null);
     const [webhookLogs, setWebhookLogs] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -171,7 +173,7 @@ export default function OnlinePaymentShow({ id }) {
                                 <Descriptions.Item label="Provider Order ID">
                                     <Text code style={{ fontSize: 12 }}>{payment.provider_order_id || '—'}</Text>
                                 </Descriptions.Item>
-                                <Descriptions.Item label="Exchange Rate">
+                                <Descriptions.Item label={exchangeRateLabel(baseCurrency)}>
                                     {payment.exchange_rate || '1'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Gateway Fee">

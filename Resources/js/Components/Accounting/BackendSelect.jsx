@@ -53,6 +53,7 @@ export default function BackendSelect({
     labelKey = 'name',
     labelFn,
     extraParams = {},
+    activeOnly = true,
     placeholder = 'Search and select…',
     disabled = false,
     allowClear = true,
@@ -108,6 +109,7 @@ export default function BackendSelect({
                 [pageParam]: 1,
                 [pageSizeParam]: pageSize,
                 [searchParam]: search,
+                ...(activeOnly ? { active: true } : {}),
                 ...extraParams,
             });
             const res = await axios.get(url, { headers: getAuthHeaders() });

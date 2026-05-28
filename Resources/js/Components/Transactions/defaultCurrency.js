@@ -19,6 +19,35 @@ export const getCurrencyId = (currency) => {
 
 export const getDefaultCurrencyRate = () => 1;
 
+export const exchangeRateLabel = (currency) => `Exchange Rate to ${currency?.code || 'Base Currency'}`;
+
+export function useBaseCurrency(enabled = true) {
+  const [currency, setCurrency] = useState(null);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await axios.get(api('/api/currencies/'), {
+          params: { is_base: true, active: true, page_size: 1 },
+        });
+        const baseCurrency = firstRow(response.data);
+        if (!cancelled && baseCurrency) setCurrency(baseCurrency);
+      } catch {
+        // Leave currency empty if configuration cannot be loaded.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  return currency;
+}
+
 export function useDefaultCurrency(enabled = true) {
   const [currency, setCurrency] = useState(null);
 
