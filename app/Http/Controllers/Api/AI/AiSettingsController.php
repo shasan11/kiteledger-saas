@@ -31,7 +31,7 @@ class AiSettingsController extends Controller
             'model_suggestions' => [
                 'openai' => ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'],
                 'groq' => ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
-                'gemini' => ['gemini-1.5-flash', 'gemini-1.5-pro'],
+                'gemini' => ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
                 'ollama' => ['llama3.1:8b', 'mistral', 'qwen2.5'],
             ],
             'default_base_urls' => [
@@ -68,7 +68,6 @@ class AiSettingsController extends Controller
             'ai_fast_mode' => 'nullable|boolean',
         ]);
 
-        // API key: only update if a real value provided. Reject masked values.
         if (isset($validated['ai_api_key'])) {
             $key = trim((string) $validated['ai_api_key']);
             if ($key === '' || str_contains($key, '...')) {
@@ -99,7 +98,6 @@ class AiSettingsController extends Controller
         return response()->json($result, ($result['success'] ?? false) ? 200 : 422);
     }
 
-    // Backward compatibility: old route is /ai/settings/test-connection
     public function testConnection(Request $request): JsonResponse
     {
         return $this->test($request);
