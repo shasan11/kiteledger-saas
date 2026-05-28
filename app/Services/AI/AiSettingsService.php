@@ -97,16 +97,17 @@ class AiSettingsService
 
     public function timeoutSeconds(): int
     {
-        $raw = max(15, min(600, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
-        if ($this->provider() === 'ollama') {
-            return max(60, $raw);
-        }
-        return $raw;
+        $saved = $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP);
+
+        // Never allow the provider call to run with 15s. Gemini/OpenAI/Groq can
+        // legitimately take longer on first request, congested networks, or with
+        // business context. A bad saved DB setting should not break AI globally.
+        return max(60, min(600, $saved));
     }
 
     public function connectTimeoutSeconds(): int
     {
-        return max(2, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
+        return max(5, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
     }
 
     public function streamEnabled(): bool
