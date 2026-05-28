@@ -95,19 +95,28 @@ class AiSettingsService
         return max(50, min(32000, $this->db->int('ai_max_tokens', (int) self::DEFAULTS['ai_max_tokens'], self::GROUP)));
     }
 
+    public function savedTimeoutSeconds(): int
+    {
+        return max(5, min(600, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
+    }
+
     public function timeoutSeconds(): int
     {
-        $saved = $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP);
+        $saved = $this->savedTimeoutSeconds();
 
-        // Never allow the provider call to run with 15s. Gemini/OpenAI/Groq can
-        // legitimately take longer on first request, congested networks, or with
-        // business context. A bad saved DB setting should not break AI globally.
-        return max(60, min(600, $saved));
+        // Runtime safety only. Do not use this method for the settings form,
+        // otherwise the CRUD form appears to overwrite a user's saved value.
+        return max(60, $saved);
+    }
+
+    public function savedConnectTimeoutSeconds(): int
+    {
+        return max(2, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
     }
 
     public function connectTimeoutSeconds(): int
     {
-        return max(5, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
+        return max(5, $this->savedConnectTimeoutSeconds());
     }
 
     public function streamEnabled(): bool
@@ -168,6 +177,8 @@ class AiSettingsService
             'stream_enabled' => $this->streamEnabled(),
             'cache_enabled' => $this->cacheEnabled(),
             'fast_mode' => $this->fastMode(),
+            'runtime_timeout_seconds' => $this->timeoutSeconds(),
+            'runtime_connect_timeout_seconds' => $this->connectTimeoutSeconds(),
         ];
     }
 
@@ -182,8 +193,10 @@ class AiSettingsService
             'ai_base_url' => $this->baseUrl(),
             'ai_temperature' => $this->temperature(),
             'ai_max_tokens' => $this->maxTokens(),
-            'ai_timeout_seconds' => $this->timeoutSeconds(),
-            'ai_connect_timeout_seconds' => $this->connectTimeoutSeconds(),
+            'ai_timeout_seconds' => $this->savedTimeoutSeconds(),
+            'ai_connect_timeout_seconds' => $this->savedConnectTimeoutSeconds(),
+            'ai_effective_timeout_seconds' => $this->timeoutSeconds(),
+            'ai_effective_connect_timeout_seconds' => $this->connectTimeoutSeconds(),
             'ai_stream_enabled' => $this->streamEnabled(),
             'ai_cache_enabled' => $this->cacheEnabled(),
             'ai_cache_ttl' => $this->cacheTtl(),
