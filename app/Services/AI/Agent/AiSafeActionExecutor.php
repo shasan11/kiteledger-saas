@@ -5,6 +5,7 @@ namespace App\Services\AI\Agent;
 use App\Models\AiPendingAction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AiSafeActionExecutor
@@ -45,11 +46,9 @@ class AiSafeActionExecutor
                 throw ValidationException::withMessages(['module' => 'Unsupported AI module/action: ' . $module]);
             }
 
-            if (str_starts_with($action->action_type, 'update_')) {
-                $result = $this->executeUpdate($action, $config);
-            } else {
-                $result = $this->executeCreateDraft($action, $config);
-            }
+            $result = str_starts_with($action->action_type, 'update_')
+                ? $this->executeUpdate($action, $config)
+                : $this->executeCreateDraft($action, $config);
 
             $action->forceFill([
                 'status' => 'executed',
@@ -80,8 +79,12 @@ class AiSafeActionExecutor
     {
         $table = $config['table'];
         $payload = $action->payload ?? [];
+        $id = (string) Str::uuid();
         $data = [];
 
+        if (Schema::hasColumn($table, 'id')) {
+            $data['id'] = $id;
+        }
         if (Schema::hasColumn($table, 'branch_id') && $action->branch_id) {
             $data['branch_id'] = $action->branch_id;
         }
@@ -106,6 +109,12 @@ class AiSafeActionExecutor
         if (Schema::hasColumn($table, 'user_add_id') && $action->user_id) {
             $data['user_add_id'] = $action->user_id;
         }
+        if (Schema::hasColumn($table, 'created_at')) {
+            $data['created_at'] = now();
+        }
+        if (Schema::hasColumn($table, 'updated_at')) {
+            $data['updated_at'] = now();
+        }
 
         $dateColumn = $this->dateColumn($table);
         if ($dateColumn) {
@@ -122,12 +131,12 @@ class AiSafeActionExecutor
             throw ValidationException::withMessages(['payload' => 'AI could not build safe draft payload for this module.']);
         }
 
-        $id = DB::table($table)->insertGetId($data);
+        DB::table($table)->insert($data);
 
         return [
-            'id' => $id,
+            'id' => $data['id'] ?? $id,
             'status' => 'draft',
-            'open_url' => $config['url'] . '/' . $id,
+            'open_url' => $config['url'] . '/' . ($data['id'] ?? $id),
             'message' => 'Draft record created. Please review and complete required fields.',
         ];
     }
@@ -158,6 +167,9 @@ class AiSafeActionExecutor
             if ($this->isSafeUpdateColumn($table, $key) && is_scalar($value)) {
                 $safe[$key] = $value;
             }
+        }
+        if (Schema::hasColumn($table, 'updated_at')) {
+            $safe['updated_at'] = now();
         }
 
         if (empty($safe)) {
