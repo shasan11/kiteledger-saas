@@ -1,10 +1,8 @@
 import { Typography, theme } from 'antd';
-import KiteAiActionPreview from './KiteAiActionPreview';
-import KiteAiSourceList from './KiteAiSourceList';
 
 const { Text } = Typography;
 
-export default function KiteAiMessageList({ messages = [], onActionUpdated }) {
+export default function KiteAiMessageList({ messages = [] }) {
     const { token } = theme.useToken();
 
     return (
@@ -29,12 +27,11 @@ export default function KiteAiMessageList({ messages = [], onActionUpdated }) {
                         }}
                     >
                         <Text style={{ color: 'inherit', fontSize: 13 }}>{m.content}</Text>
-
-                        {m.actions?.map((a) => (
-                            <KiteAiActionPreview key={a.id} action={a} onUpdated={onActionUpdated} />
-                        ))}
-
-                        {m.sources?.length > 0 && <KiteAiSourceList sources={m.sources} />}
+                        {m.provider && (
+                            <div style={{ marginTop: 4, fontSize: 10, opacity: 0.7 }}>
+                                {m.provider}{m.model ? ` · ${m.model}` : ''}{m.cached ? ' · cached' : ''}
+                            </div>
+                        )}
                     </div>
                 </div>
             ))}

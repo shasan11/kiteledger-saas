@@ -19,7 +19,7 @@ class AiSettingsService
         'ai_max_tokens' => 700,
         'ai_timeout_seconds' => 75,
         'ai_connect_timeout_seconds' => 10,
-        'ai_stream_enabled' => true,
+        'ai_stream_enabled' => false,
         'ai_cache_enabled' => true,
         'ai_cache_ttl' => 600,
         'ai_context_max_rows' => 20,
@@ -97,7 +97,13 @@ class AiSettingsService
 
     public function timeoutSeconds(): int
     {
-        return max(15, min(300, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
+        $raw = max(15, min(600, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
+        // Local Ollama models often need 30–90s on cold start (model load into VRAM).
+        // Enforce a higher floor so first-request timeouts don't surprise users.
+        if ($this->provider() === 'ollama') {
+            return max(60, $raw);
+        }
+        return $raw;
     }
 
     public function connectTimeoutSeconds(): int

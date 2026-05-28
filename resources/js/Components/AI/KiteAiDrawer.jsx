@@ -36,6 +36,7 @@ export default function KiteAiDrawer({ open, onClose }) {
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [lastMessage, setLastMessage] = useState('');
     const scrollRef = useRef(null);
     const abortRef = useRef(null);
 
@@ -54,6 +55,7 @@ export default function KiteAiDrawer({ open, onClose }) {
         const controller = new AbortController();
         abortRef.current = controller;
 
+        setLastMessage(cleanText);
         setMessages((prev) => [...prev, { role: 'user', content: cleanText }]);
         setLoading(true);
 
@@ -93,7 +95,11 @@ export default function KiteAiDrawer({ open, onClose }) {
             }
 
             const data = e?.response?.data || {};
-            const msg = data.message || e?.message || 'Kite AI is unavailable.';
+            const isTimeout = e?.code === 'ECONNABORTED' || data?.code === 'AI_TIMEOUT';
+            let msg = data.message || e?.message || 'Kite AI is unavailable.';
+            if (isTimeout) {
+                msg = 'AI request timed out. Try a shorter message, reduce context, or pick a faster model in AI Settings.';
+            }
             const code = data.code ? ` (${data.code})` : '';
             setMessages((prev) => [...prev, { role: 'assistant', content: `${msg}${code}`, error: true }]);
         } finally {
@@ -158,7 +164,13 @@ export default function KiteAiDrawer({ open, onClose }) {
                 )}
             </div>
 
-            <KiteAiCommandInput onSubmit={send} loading={loading} />
+            <KiteAiCommandInput
+                onSubmit={send}
+                loading={loading}
+                onStop={() => abortRef.current?.abort()}
+                onRetry={() => lastMessage && send(lastMessage)}
+                canRetry={!!lastMessage}
+            />
         </Drawer>
     );
 }

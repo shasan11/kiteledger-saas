@@ -2,8 +2,6 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 import BranchToggle from '@/Components/BranchToggle';
 import FiscalYearToggle from '@/Components/FiscalYearToggle';
 import GlobalSearch from '@/Components/GlobalSearch';
-import AiCommandModal from '@/Components/AI/AiCommandModal';
-import { useAiAvailability } from '@/hooks/useAiAvailability';
 import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
 import { Link } from '@inertiajs/react';
 import {
@@ -12,7 +10,6 @@ import {
     MoonOutlined,
     PlusOutlined,
     ProfileOutlined,
-    RobotOutlined,
     SunOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -80,15 +77,6 @@ export default function AppNavbar({
 
     const [brandSettings, setBrandSettings] = useState(null);
     const [themeMode, setThemeMode] = useState(() => getStoredThemeMode());
-    const [aiCommandOpen, setAiCommandOpen] = useState(false);
-
-    const { aiEnabled, canUseAiModule, hasPermission } = useAiAvailability();
-
-    const showAiCommand =
-        aiEnabled &&
-        canUseAiModule('global_command') &&
-        hasPermission('ai.global_command.use');
-
     const isMobile = !screens.md;
     const isTablet = screens.md && !screens.lg;
     const isLaptop = screens.lg && !screens.xl;
@@ -148,22 +136,6 @@ export default function AppNavbar({
             window.removeEventListener('storage', handleStorage);
         };
     }, []);
-
-    useEffect(() => {
-        const handler = (event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === 'j') {
-                event.preventDefault();
-
-                if (showAiCommand) {
-                    setAiCommandOpen(true);
-                }
-            }
-        };
-
-        window.addEventListener('keydown', handler);
-
-        return () => window.removeEventListener('keydown', handler);
-    }, [showAiCommand]);
 
     const dark = useMemo(() => {
         const primary = isHexColor(brandSettings?.brand_primary_color)
@@ -322,16 +294,6 @@ export default function AppNavbar({
                             />
                         )}
 
-                        {showAiCommand && (
-                            <Button
-                                type="text"
-                                icon={<RobotOutlined />}
-                                className="app-navbar__icon-button app-navbar__ai-button"
-                                onClick={() => setAiCommandOpen(true)}
-                                title="AI Command (Ctrl+J)"
-                            />
-                        )}
-
                         {quickAddItems.length > 0 && (
                             <Dropdown
                                 menu={{ items: quickAddItems }}
@@ -398,14 +360,6 @@ export default function AppNavbar({
                     </div>
                 </div>
             </Header>
-
-            {showAiCommand && (
-                <AiCommandModal
-                    open={aiCommandOpen}
-                    onClose={() => setAiCommandOpen(false)}
-                    branchId={branchContext?.selectedBranchId}
-                />
-            )}
 
             <style>
                 {`

@@ -2,10 +2,33 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, usePage, router } from '@inertiajs/react';
 import {
-    Alert, Button, Card, Empty, Input, List, Select, Space, Spin, Tag, Typography, message as antMessage, theme,
+    Alert,
+    Button,
+    Card,
+    Empty,
+    Grid,
+    Input,
+    List,
+    Select,
+    Space,
+    Spin,
+    Tag,
+    Tooltip,
+    Typography,
+    message as antMessage,
+    theme,
 } from 'antd';
 import {
-    RobotOutlined, SendOutlined, StopOutlined, ReloadOutlined, CopyOutlined, DeleteOutlined,
+    RobotOutlined,
+    SendOutlined,
+    StopOutlined,
+    ReloadOutlined,
+    CopyOutlined,
+    DeleteOutlined,
+    SettingOutlined,
+    ThunderboltOutlined,
+    CheckCircleOutlined,
+    ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -32,18 +55,197 @@ const CONTEXT_OPTIONS = [
     { value: 'accounting', label: 'Accounting' },
 ];
 
+const CONTEXT_LABELS = CONTEXT_OPTIONS.reduce((acc, item) => {
+    acc[item.value] = item.label;
+    return acc;
+}, {});
+
 function hasAnyPermission(perms = [], required = []) {
     if (!Array.isArray(perms)) return false;
     return required.some((r) => perms.includes(r));
 }
 
+function HeaderTitle({ token }) {
+    return (
+        <Space size={10} align="center">
+            <div
+                style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: token.borderRadiusLG,
+                    background: token.colorPrimaryBg,
+                    border: `1px solid ${token.colorPrimaryBorder}`,
+                    color: token.colorPrimary,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}
+            >
+                <RobotOutlined />
+            </div>
+
+            <div>
+                <Title level={5} style={{ margin: 0, lineHeight: 1.1 }}>
+                    AI Assistant
+                </Title>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                    Business insights, reports and operational help
+                </Text>
+            </div>
+        </Space>
+    );
+}
+
+function StatusBadge({ health, healthLoading, healthError, aiReady }) {
+    if (healthLoading) {
+        return (
+            <Tag icon={<Spin size="small" />} bordered={false}>
+                Checking
+            </Tag>
+        );
+    }
+
+    if (healthError) {
+        return (
+            <Tag color="error" icon={<ExclamationCircleOutlined />} bordered={false}>
+                Error
+            </Tag>
+        );
+    }
+
+    if (aiReady) {
+        return (
+            <Tag color="success" icon={<CheckCircleOutlined />} bordered={false}>
+                Ready
+            </Tag>
+        );
+    }
+
+    return (
+        <Tag color="warning" icon={<ExclamationCircleOutlined />} bordered={false}>
+            Not ready
+        </Tag>
+    );
+}
+
+function MessageBubble({ message, token, onCopy }) {
+    const isUser = message.role === 'user';
+    const isAssistant = message.role === 'assistant';
+    const isSystem = message.role === 'system';
+
+    const bubbleStyle = {
+        maxWidth: 'min(760px, 86%)',
+        borderRadius: isUser
+            ? `${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px ${token.borderRadiusXL}px`
+            : `${token.borderRadiusXL}px ${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px`,
+        padding: '12px 14px',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        lineHeight: 1.65,
+        fontSize: 14,
+        boxShadow: token.boxShadowTertiary,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        background: token.colorBgContainer,
+        color: token.colorText,
+    };
+
+    if (isUser) {
+        bubbleStyle.background = token.colorPrimary;
+        bubbleStyle.color = token.colorTextLightSolid;
+        bubbleStyle.border = `1px solid ${token.colorPrimary}`;
+    }
+
+    if (isSystem) {
+        bubbleStyle.background = token.colorWarningBg;
+        bubbleStyle.border = `1px solid ${token.colorWarningBorder}`;
+        bubbleStyle.color = token.colorText;
+    }
+
+    return (
+        <List.Item
+            style={{
+                border: 'none',
+                padding: '8px 0',
+                display: 'flex',
+                justifyContent: isUser ? 'flex-end' : 'flex-start',
+            }}
+        >
+            <div style={bubbleStyle}>
+                {!isUser && (
+                    <Space size={6} style={{ marginBottom: 6 }}>
+                        <Tag
+                            bordered={false}
+                            color={isAssistant ? 'blue' : 'warning'}
+                            style={{ marginInlineEnd: 0 }}
+                        >
+                            {isAssistant ? 'Assistant' : 'System'}
+                        </Tag>
+                    </Space>
+                )}
+
+                <div>{message.content}</div>
+
+                {isAssistant && (
+                    <div
+                        style={{
+                            marginTop: 10,
+                            paddingTop: 8,
+                            borderTop: `1px solid ${token.colorBorderSecondary}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                        }}
+                    >
+                        <Space size={4} wrap>
+                            {message.cached && (
+                                <Tag color="green" bordered={false} style={{ marginInlineEnd: 0 }}>
+                                    cached
+                                </Tag>
+                            )}
+
+                            {message.provider && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {message.provider}
+                                </Text>
+                            )}
+
+                            {message.model && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    / {message.model}
+                                </Text>
+                            )}
+                        </Space>
+
+                        <Tooltip title="Copy reply">
+                            <Button
+                                size="small"
+                                type="text"
+                                icon={<CopyOutlined />}
+                                onClick={() => onCopy(message.content)}
+                            />
+                        </Tooltip>
+                    </div>
+                )}
+            </div>
+        </List.Item>
+    );
+}
+
 export default function Assistant() {
     const { token } = theme.useToken();
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.md;
+
     const page = usePage();
     const permissions = page.props?.auth?.permissions || [];
     const canBypass = !!page.props?.auth?.canBypassPermissions;
-    const canUseAi = canBypass || hasAnyPermission(permissions, ['ai.view', 'ai.use', 'ai.chat', 'ai.manage']);
-    const canManage = canBypass || hasAnyPermission(permissions, ['ai.manage', 'ai.settings.update']);
+
+    const canUseAi =
+        canBypass || hasAnyPermission(permissions, ['ai.view', 'ai.use', 'ai.chat', 'ai.manage']);
+
+    const canManage =
+        canBypass || hasAnyPermission(permissions, ['ai.manage', 'ai.settings.update']);
 
     const [health, setHealth] = useState(null);
     const [healthError, setHealthError] = useState(null);
@@ -55,28 +257,112 @@ export default function Assistant() {
     const [sending, setSending] = useState(false);
     const [conversationId, setConversationId] = useState(null);
     const [error, setError] = useState(null);
+
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
+
+    const aiReady = useMemo(() => {
+        if (!health) return false;
+        return health.ok && health.ai_enabled && health.provider_configured;
+    }, [health]);
+
+    const styles = useMemo(() => {
+        return {
+            page: {
+                padding: isMobile ? 12 : 16,
+                background: token.colorBgLayout,
+                minHeight: 'calc(100vh - 64px)',
+            },
+            shell: {
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : '280px minmax(0, 1fr)',
+                gap: 16,
+                alignItems: 'stretch',
+            },
+            sideCard: {
+                height: '100%',
+                borderRadius: token.borderRadiusLG,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                boxShadow: token.boxShadowTertiary,
+            },
+            mainCard: {
+                borderRadius: token.borderRadiusLG,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                boxShadow: token.boxShadowTertiary,
+                overflow: 'hidden',
+            },
+            chatArea: {
+                minHeight: isMobile ? 420 : 520,
+                maxHeight: isMobile ? 'calc(100vh - 330px)' : 'calc(100vh - 260px)',
+                overflowY: 'auto',
+                padding: isMobile ? 12 : 18,
+                background: `linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorFillQuaternary} 100%)`,
+            },
+            composer: {
+                padding: isMobile ? 10 : 12,
+                borderTop: `1px solid ${token.colorBorderSecondary}`,
+                background: token.colorBgContainer,
+            },
+            composerBox: {
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'stretch' : 'flex-end',
+                gap: 8,
+            },
+            promptButton: {
+                width: '100%',
+                textAlign: 'left',
+                justifyContent: 'flex-start',
+                height: 34,
+                borderRadius: token.borderRadius,
+            },
+            statBox: {
+                padding: 12,
+                borderRadius: token.borderRadiusLG,
+                background: token.colorFillQuaternary,
+                border: `1px solid ${token.colorBorderSecondary}`,
+            },
+        };
+    }, [token, isMobile]);
 
     useEffect(() => {
         if (!canUseAi) {
             setHealthLoading(false);
             return;
         }
+
         let cancelled = false;
+
         setHealthLoading(true);
-        axios.get('/api/ai/health')
-            .then((res) => { if (!cancelled) setHealth(res.data); })
+        setHealthError(null);
+
+        axios
+            .get('/api/ai/health')
+            .then((res) => {
+                if (!cancelled) {
+                    setHealth(res.data);
+                }
+            })
             .catch((err) => {
                 if (cancelled) return;
+
                 if (err.response?.status === 403) {
                     setHealthError(err.response.data || { message: 'Permission denied.' });
                 } else {
-                    setHealthError({ message: err.response?.data?.message || 'Failed to load AI health.' });
+                    setHealthError({
+                        message: err.response?.data?.message || 'Failed to load AI health.',
+                    });
                 }
             })
-            .finally(() => { if (!cancelled) setHealthLoading(false); });
-        return () => { cancelled = true; };
+            .finally(() => {
+                if (!cancelled) {
+                    setHealthLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [canUseAi]);
 
     useEffect(() => {
@@ -85,17 +371,19 @@ export default function Assistant() {
         }
     }, [messages, sending]);
 
-    const aiReady = useMemo(() => {
-        if (!health) return false;
-        return health.ok && health.ai_enabled && health.provider_configured;
-    }, [health]);
-
     const send = async (textOverride) => {
         const text = (textOverride ?? input).trim();
+
         if (!text || sending) return;
+
         setError(null);
 
-        const userMsg = { role: 'user', content: text, id: Date.now() };
+        const userMsg = {
+            role: 'user',
+            content: text,
+            id: `${Date.now()}-user`,
+        };
+
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
         setSending(true);
@@ -104,28 +392,64 @@ export default function Assistant() {
         abortRef.current = controller;
 
         try {
-            const res = await axios.post('/api/ai/chat', {
-                message: text,
-                conversation_id: conversationId,
-                context_type: contextType,
-            }, { signal: controller.signal });
+            const res = await axios.post(
+                '/api/ai/chat',
+                {
+                    message: text,
+                    conversation_id: conversationId,
+                    context_type: contextType,
+                    context_payload: {
+                        url: page.url,
+                        module: page.props?.module || null,
+                    },
+                    cache: true,
+                },
+                {
+                    signal: controller.signal,
+                    timeout: 90000,
+                }
+            );
 
             const reply = res.data?.message?.content || '(no reply)';
+
             setConversationId(res.data?.conversation_id || conversationId);
-            setMessages((prev) => [...prev, {
-                role: 'assistant', content: reply, id: Date.now() + 1,
-                provider: res.data?.provider, model: res.data?.model, cached: res.data?.cached,
-            }]);
+
+            setMessages((prev) => [
+                ...prev,
+                {
+                    role: 'assistant',
+                    content: reply,
+                    id: `${Date.now()}-assistant`,
+                    provider: res.data?.provider,
+                    model: res.data?.model,
+                    cached: res.data?.cached,
+                },
+            ]);
         } catch (err) {
             if (axios.isCancel(err) || err.name === 'CanceledError') {
-                setMessages((prev) => [...prev, { role: 'system', content: 'Request stopped.', id: Date.now() + 2 }]);
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        role: 'system',
+                        content: 'Request stopped.',
+                        id: `${Date.now()}-system`,
+                    },
+                ]);
             } else {
                 const data = err.response?.data;
-                const code = data?.code;
+                const code = data?.code || (err.code === 'ECONNABORTED' ? 'AI_TIMEOUT' : null);
+
                 let msg = data?.message || err.message || 'AI request failed.';
-                if (code === 'AI_PERMISSION_DENIED') {
+
+                if (code === 'AI_TIMEOUT') {
+                    msg =
+                        'AI request timed out. Try a shorter prompt, reduce context size, or pick a faster model in AI Settings.';
+                }
+
+                if (code === 'AI_PERMISSION_DENIED' && data?.required_permission) {
                     msg = `${data.message} Required permission: ${data.required_permission}`;
                 }
+
                 setError({ message: msg, code });
             }
         } finally {
@@ -134,15 +458,22 @@ export default function Assistant() {
         }
     };
 
-    const stop = () => abortRef.current?.abort();
+    const stop = () => {
+        abortRef.current?.abort();
+    };
 
     const retry = () => {
         const lastUser = [...messages].reverse().find((m) => m.role === 'user');
         if (lastUser) send(lastUser.content);
     };
 
-    const copy = (text) => {
-        navigator.clipboard?.writeText(text).then(() => antMessage.success('Copied'));
+    const copy = async (text) => {
+        try {
+            await navigator.clipboard?.writeText(text);
+            antMessage.success('Copied');
+        } catch {
+            antMessage.error('Copy failed');
+        }
     };
 
     const clearConversation = () => {
@@ -153,9 +484,10 @@ export default function Assistant() {
 
     if (!canUseAi) {
         return (
-            <AuthenticatedLayout header={<Space><RobotOutlined /><Title level={5} style={{ margin: 0 }}>AI Assistant</Title></Space>}>
+            <AuthenticatedLayout header={<HeaderTitle token={token} />}>
                 <Head title="AI Assistant" />
-                <div style={{ padding: 24 }}>
+
+                <div style={styles.page}>
                     <Alert
                         type="warning"
                         showIcon
@@ -168,185 +500,371 @@ export default function Assistant() {
     }
 
     return (
-        <AuthenticatedLayout
-            header={
-                <Space>
-                    <RobotOutlined style={{ color: token.colorPrimary }} />
-                    <Title level={5} style={{ margin: 0 }}>AI Assistant</Title>
-                </Space>
-            }
-        >
+        <AuthenticatedLayout header={<HeaderTitle token={token} />}>
             <Head title="AI Assistant" />
 
-            <div style={{ padding: 16 }}>
-                {healthLoading && <Spin />}
-
-                {!healthLoading && healthError && (
-                    <Alert
-                        type="error"
-                        showIcon
-                        style={{ marginBottom: 12 }}
-                        message={healthError.message}
-                        description={healthError.required_permission ? `Required permission: ${healthError.required_permission}` : null}
-                    />
-                )}
-
-                {!healthLoading && health && !health.ai_enabled && (
-                    <Alert
-                        type="warning"
-                        showIcon
-                        style={{ marginBottom: 12 }}
-                        message="AI Assistant is disabled in AI Settings."
-                        action={canManage && (
-                            <Button size="small" onClick={() => router.visit('/settings/ai')}>Open Settings</Button>
-                        )}
-                    />
-                )}
-
-                {!healthLoading && health?.ai_enabled && !health.provider_configured && (
-                    <Alert
-                        type="warning"
-                        showIcon
-                        style={{ marginBottom: 12 }}
-                        message="AI provider is not configured. Add API key in AI Settings."
-                        action={canManage && (
-                            <Button size="small" onClick={() => router.visit('/settings/ai')}>Open Settings</Button>
-                        )}
-                    />
-                )}
-
-                {error && (
-                    <Alert
-                        type="error"
-                        showIcon
-                        closable
-                        style={{ marginBottom: 12 }}
-                        message={error.message}
-                        description={error.code ? `Code: ${error.code}` : null}
-                        onClose={() => setError(null)}
-                    />
-                )}
-
-                <Card
-                    size="small"
-                    bodyStyle={{ padding: 0 }}
-                    title={
-                        <Space wrap>
-                            <Text strong>Context:</Text>
-                            <Select
-                                size="small"
-                                value={contextType}
-                                onChange={setContextType}
-                                options={CONTEXT_OPTIONS}
-                                style={{ minWidth: 160 }}
+            <div style={styles.page}>
+                {(healthError || error || (!healthLoading && health && !aiReady)) && (
+                    <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 12 }}>
+                        {healthError && (
+                            <Alert
+                                type="error"
+                                showIcon
+                                message={healthError.message}
+                                description={
+                                    healthError.required_permission
+                                        ? `Required permission: ${healthError.required_permission}`
+                                        : null
+                                }
                             />
-                            {health?.provider && <Tag color="blue">{health.provider}</Tag>}
-                            {health?.model && <Tag>{health.model}</Tag>}
-                        </Space>
-                    }
-                    extra={
-                        <Space>
-                            <Button size="small" icon={<DeleteOutlined />} onClick={clearConversation} disabled={!messages.length}>
-                                Clear
-                            </Button>
-                        </Space>
-                    }
-                >
-                    <div
-                        ref={scrollRef}
-                        style={{
-                            minHeight: 360,
-                            maxHeight: 'calc(100vh - 360px)',
-                            overflowY: 'auto',
-                            padding: 16,
-                            background: token.colorBgLayout,
-                        }}
-                    >
-                        {messages.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: 24 }}>
-                                <Empty description="Ask anything about your business" />
-                                <div style={{ marginTop: 16 }}>
-                                    <Space wrap>
-                                        {SUGGESTED_PROMPTS.map((p) => (
-                                            <Button key={p} size="small" onClick={() => send(p)} disabled={!aiReady}>
-                                                {p}
-                                            </Button>
-                                        ))}
-                                    </Space>
-                                </div>
-                            </div>
-                        ) : (
-                            <List
-                                dataSource={messages}
-                                renderItem={(m) => (
-                                    <List.Item
-                                        style={{
-                                            border: 'none',
-                                            padding: '6px 0',
-                                            justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
-                                        }}
-                                    >
-                                        <div
-                                            style={{
-                                                maxWidth: '80%',
-                                                background: m.role === 'user' ? token.colorPrimary : token.colorBgContainer,
-                                                color: m.role === 'user' ? '#fff' : token.colorText,
-                                                padding: '10px 14px',
-                                                borderRadius: 12,
-                                                whiteSpace: 'pre-wrap',
-                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                                            }}
+                        )}
+
+                        {!healthLoading && health && !health.ai_enabled && (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="AI Assistant is disabled in AI Settings."
+                                action={
+                                    canManage && (
+                                        <Button
+                                            size="small"
+                                            icon={<SettingOutlined />}
+                                            onClick={() => router.visit('/settings/ai')}
                                         >
-                                            <div>{m.content}</div>
-                                            {m.role === 'assistant' && (
-                                                <div style={{ marginTop: 6, opacity: 0.7, fontSize: 11 }}>
-                                                    <Space size={4}>
-                                                        {m.cached && <Tag color="green">cached</Tag>}
-                                                        {m.provider && <Text type="secondary">{m.provider}</Text>}
-                                                        {m.model && <Text type="secondary">/ {m.model}</Text>}
-                                                        <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => copy(m.content)} />
-                                                    </Space>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </List.Item>
-                                )}
+                                            Open Settings
+                                        </Button>
+                                    )
+                                }
                             />
                         )}
 
-                        {sending && (
-                            <div style={{ padding: 8 }}>
-                                <Spin size="small" /> <Text type="secondary">Thinking…</Text>
+                        {!healthLoading && health?.ai_enabled && !health.provider_configured && (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="AI provider is not configured. Add API key in AI Settings."
+                                action={
+                                    canManage && (
+                                        <Button
+                                            size="small"
+                                            icon={<SettingOutlined />}
+                                            onClick={() => router.visit('/settings/ai')}
+                                        >
+                                            Open Settings
+                                        </Button>
+                                    )
+                                }
+                            />
+                        )}
+
+                        {error && (
+                            <Alert
+                                type="error"
+                                showIcon
+                                closable
+                                message={error.message}
+                                description={error.code ? `Code: ${error.code}` : null}
+                                onClose={() => setError(null)}
+                            />
+                        )}
+                    </Space>
+                )}
+
+                <div style={styles.shell}>
+                    <Card
+                        size="small"
+                        style={styles.sideCard}
+                        title={
+                            <Space>
+                                <ThunderboltOutlined style={{ color: token.colorPrimary }} />
+                                <Text strong>Assistant Setup</Text>
+                            </Space>
+                        }
+                        extra={
+                            <StatusBadge
+                                health={health}
+                                healthLoading={healthLoading}
+                                healthError={healthError}
+                                aiReady={aiReady}
+                            />
+                        }
+                    >
+                        <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                            <div>
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Context
+                                </Text>
+
+                                <Select
+                                    value={contextType}
+                                    onChange={setContextType}
+                                    options={CONTEXT_OPTIONS}
+                                    style={{ width: '100%', marginTop: 6 }}
+                                />
                             </div>
-                        )}
-                    </div>
 
-                    <div style={{ padding: 12, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
-                        <Space.Compact style={{ width: '100%' }}>
-                            <Input.TextArea
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder="Ask the AI assistant…"
-                                autoSize={{ minRows: 1, maxRows: 4 }}
-                                onPressEnter={(e) => {
-                                    if (!e.shiftKey) {
-                                        e.preventDefault();
-                                        send();
-                                    }
-                                }}
-                                disabled={!aiReady || sending}
-                            />
-                            {sending ? (
-                                <Button type="primary" danger icon={<StopOutlined />} onClick={stop}>Stop</Button>
-                            ) : (
-                                <Button type="primary" icon={<SendOutlined />} onClick={() => send()} disabled={!aiReady || !input.trim()}>
-                                    Send
+                            <div style={styles.statBox}>
+                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Provider
+                                    </Text>
+
+                                    <Space wrap>
+                                        {healthLoading ? (
+                                            <Spin size="small" />
+                                        ) : (
+                                            <>
+                                                <Tag color={health?.provider ? 'blue' : 'default'} bordered={false}>
+                                                    {health?.provider || 'Not configured'}
+                                                </Tag>
+
+                                                {health?.model && (
+                                                    <Tag bordered={false}>{health.model}</Tag>
+                                                )}
+                                            </>
+                                        )}
+                                    </Space>
+                                </Space>
+                            </div>
+
+                            <div style={styles.statBox}>
+                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Current Mode
+                                    </Text>
+
+                                    <Text strong>{CONTEXT_LABELS[contextType] || 'General'}</Text>
+
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        The assistant will answer with this business context.
+                                    </Text>
+                                </Space>
+                            </div>
+
+                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Quick prompts
+                                </Text>
+
+                                {SUGGESTED_PROMPTS.slice(0, isMobile ? 4 : SUGGESTED_PROMPTS.length).map((prompt) => (
+                                    <Button
+                                        key={prompt}
+                                        size="small"
+                                        style={styles.promptButton}
+                                        onClick={() => send(prompt)}
+                                        disabled={!aiReady || sending}
+                                    >
+                                        {prompt}
+                                    </Button>
+                                ))}
+                            </Space>
+
+                            {canManage && (
+                                <Button
+                                    block
+                                    icon={<SettingOutlined />}
+                                    onClick={() => router.visit('/settings/ai')}
+                                >
+                                    AI Settings
                                 </Button>
                             )}
-                            <Button icon={<ReloadOutlined />} onClick={retry} disabled={sending || !messages.length}>Retry</Button>
-                        </Space.Compact>
-                    </div>
-                </Card>
+                        </Space>
+                    </Card>
+
+                    <Card
+                        size="small"
+                        style={styles.mainCard}
+                        styles={{ body: { padding: 0 } }}
+                        title={
+                            <Space size={8} wrap>
+                                <RobotOutlined style={{ color: token.colorPrimary }} />
+                                <Text strong>Conversation</Text>
+                                <Tag bordered={false}>{messages.length} messages</Tag>
+                            </Space>
+                        }
+                        extra={
+                            <Space>
+                                <Button
+                                    size="small"
+                                    icon={<ReloadOutlined />}
+                                    onClick={retry}
+                                    disabled={sending || !messages.length}
+                                >
+                                    Retry
+                                </Button>
+
+                                <Button
+                                    size="small"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={clearConversation}
+                                    disabled={!messages.length}
+                                >
+                                    Clear
+                                </Button>
+                            </Space>
+                        }
+                    >
+                        <div ref={scrollRef} style={styles.chatArea}>
+                            {messages.length === 0 ? (
+                                <div
+                                    style={{
+                                        minHeight: 360,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    <div style={{ maxWidth: 560 }}>
+                                        <Empty
+                                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                            description={
+                                                <Space direction="vertical" size={4}>
+                                                    <Title level={4} style={{ margin: 0 }}>
+                                                        Ask about your business
+                                                    </Title>
+                                                    <Paragraph
+                                                        type="secondary"
+                                                        style={{
+                                                            margin: 0,
+                                                            maxWidth: 460,
+                                                        }}
+                                                    >
+                                                        Use it for sales summaries, receivables, inventory risks,
+                                                        profit and loss, branch performance and daily checks.
+                                                    </Paragraph>
+                                                </Space>
+                                            }
+                                        />
+
+                                        <Space wrap size={[8, 8]} style={{ justifyContent: 'center' }}>
+                                            {SUGGESTED_PROMPTS.slice(0, 6).map((prompt) => (
+                                                <Button
+                                                    key={prompt}
+                                                    size="small"
+                                                    onClick={() => send(prompt)}
+                                                    disabled={!aiReady || sending}
+                                                >
+                                                    {prompt}
+                                                </Button>
+                                            ))}
+                                        </Space>
+                                    </div>
+                                </div>
+                            ) : (
+                                <List
+                                    dataSource={messages}
+                                    split={false}
+                                    renderItem={(item) => (
+                                        <MessageBubble
+                                            key={item.id}
+                                            message={item}
+                                            token={token}
+                                            onCopy={copy}
+                                        />
+                                    )}
+                                />
+                            )}
+
+                            {sending && (
+                                <div style={{ padding: '8px 0' }}>
+                                    <Space>
+                                        <Spin size="small" />
+                                        <Text type="secondary">Thinking...</Text>
+                                    </Space>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={styles.composer}>
+                            <div style={styles.composerBox}>
+                                <Input.TextArea
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    placeholder={
+                                        aiReady
+                                            ? 'Ask the AI assistant...'
+                                            : 'AI assistant is not ready.'
+                                    }
+                                    autoSize={{ minRows: 1, maxRows: 5 }}
+                                    disabled={!aiReady || sending}
+                                    onPressEnter={(e) => {
+                                        if (!e.shiftKey) {
+                                            e.preventDefault();
+                                            send();
+                                        }
+                                    }}
+                                    style={{
+                                        borderRadius: token.borderRadiusLG,
+                                        resize: 'none',
+                                    }}
+                                />
+
+                                <Space.Compact
+                                    style={{
+                                        width: isMobile ? '100%' : 'auto',
+                                    }}
+                                >
+                                    {sending ? (
+                                        <Button
+                                            danger
+                                            type="primary"
+                                            icon={<StopOutlined />}
+                                            onClick={stop}
+                                            style={{
+                                                width: isMobile ? '50%' : undefined,
+                                            }}
+                                        >
+                                            Stop
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            type="primary"
+                                            icon={<SendOutlined />}
+                                            onClick={() => send()}
+                                            disabled={!aiReady || !input.trim()}
+                                            style={{
+                                                width: isMobile ? '50%' : undefined,
+                                            }}
+                                        >
+                                            Send
+                                        </Button>
+                                    )}
+
+                                    <Button
+                                        icon={<ReloadOutlined />}
+                                        onClick={retry}
+                                        disabled={sending || !messages.length}
+                                        style={{
+                                            width: isMobile ? '50%' : undefined,
+                                        }}
+                                    >
+                                        Retry
+                                    </Button>
+                                </Space.Compact>
+                            </div>
+
+                            <div
+                                style={{
+                                    marginTop: 8,
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                }}
+                            >
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Press Enter to send, Shift + Enter for new line.
+                                </Text>
+
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Context: {CONTEXT_LABELS[contextType] || 'General'}
+                                </Text>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
             </div>
         </AuthenticatedLayout>
     );

@@ -5,7 +5,7 @@ import {
     Alert, AutoComplete, Button, Card, Col, Divider, Form, Input, InputNumber, Row, Select,
     Space, Spin, Switch, Tag, Typography, message as antMessage, theme,
 } from 'antd';
-import { ApiOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { ApiOutlined, ReloadOutlined, SaveOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const { Title, Text } = Typography;
@@ -75,6 +75,29 @@ export default function AiSettings() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const resetDefaults = () => {
+        const provider = form.getFieldValue('ai_provider') || 'openai';
+        const baseUrl = data?.default_base_urls?.[provider] || 'https://api.openai.com/v1';
+        const model = (data?.model_suggestions?.[provider] || [])[0] || 'gpt-4o-mini';
+        form.setFieldsValue({
+            ai_enabled: true,
+            ai_provider: provider,
+            ai_model: model,
+            ai_base_url: baseUrl,
+            ai_temperature: 0.2,
+            ai_max_tokens: 700,
+            ai_timeout_seconds: 75,
+            ai_connect_timeout_seconds: 10,
+            ai_stream_enabled: false,
+            ai_cache_enabled: true,
+            ai_cache_ttl: 600,
+            ai_context_max_rows: 20,
+            ai_context_max_chars: 8000,
+            ai_fast_mode: true,
+        });
+        antMessage.info('Recommended defaults loaded. Click Save to apply.');
     };
 
     const test = async () => {
@@ -202,8 +225,12 @@ export default function AiSettings() {
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={6}>
-                                    <Form.Item name="ai_timeout_seconds" label="Timeout (s)">
-                                        <InputNumber min={5} max={300} style={{ width: '100%' }} />
+                                    <Form.Item
+                                        name="ai_timeout_seconds"
+                                        label="Timeout (s)"
+                                        extra="Local Ollama models often need 90–180s on cold start."
+                                    >
+                                        <InputNumber min={5} max={600} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={6}>
@@ -243,6 +270,9 @@ export default function AiSettings() {
                                 </Button>
                                 <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canManage}>
                                     Test Connection
+                                </Button>
+                                <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canManage}>
+                                    Reset Recommended Defaults
                                 </Button>
                                 {!canManage && (
                                     <Text type="secondary">You do not have permission to edit AI settings.</Text>

@@ -29,15 +29,38 @@ class AiProviderManager
         $timeout = $opts['timeout'] ?? $this->settings->timeoutSeconds();
         $connectTimeout = $this->settings->connectTimeoutSeconds();
 
+        // Give PHP some headroom over the HTTP timeout so we surface a clean
+        // AI_TIMEOUT rather than a fatal max_execution_time error.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($timeout + 20);
+        }
+
+        $startedAt = microtime(true);
+
         try {
-            return match ($provider) {
+            $result = match ($provider) {
                 'openai', 'groq' => $this->callOpenAiCompatible($model, $messages, $temperature, $maxTokens, $timeout, $connectTimeout),
                 'ollama' => $this->callOllama($model, $messages, $temperature, $maxTokens, $timeout, $connectTimeout),
                 'gemini' => $this->callGemini($model, $messages, $temperature, $maxTokens, $timeout, $connectTimeout),
                 default => $this->throwError('AI_PROVIDER_UNSUPPORTED', "Unsupported AI provider: {$provider}"),
             };
+
+            $duration = (int) round((microtime(true) - $startedAt) * 1000);
+            Log::info('AI provider call', [
+                'provider' => $provider,
+                'model' => $model,
+                'timeout' => $timeout,
+                'duration_ms' => $duration,
+                'status' => 'ok',
+                'usage' => $result['usage'] ?? null,
+            ]);
+            if (($result['text'] ?? '') === '') {
+                $result['text'] = '(no response)';
+            }
+            return $result;
         } catch (ConnectionException $e) {
-            $this->throwError('AI_TIMEOUT', 'AI request timed out. Try a smaller question or reduce report data.');
+            Log::warning('AI provider timeout', ['provider' => $provider, 'model' => $model, 'timeout' => $timeout]);
+            $this->throwError('AI_TIMEOUT', "AI request timed out after {$timeout}s. Reduce context size, reduce max tokens, or use a faster model.");
         } catch (RequestException $e) {
             $status = $e->response?->status();
             if ($status === 401 || $status === 403) {
@@ -46,23 +69,45 @@ class AiProviderManager
             if ($status === 429) {
                 $this->throwError('AI_RATE_LIMIT', 'AI provider rate limit reached. Please try again shortly.');
             }
-            Log::warning('AI provider error', ['status' => $status, 'body' => $e->response?->body()]);
-            $this->throwError('AI_PROVIDER_ERROR', 'AI request failed. Please check AI Settings.');
+            Log::warning('AI provider error', [
+                'provider' => $provider,
+                'model' => $model,
+                'status' => $status,
+                'body' => $this->truncateBody($e->response?->body()),
+            ]);
+            $this->throwError('AI_PROVIDER_ERROR', "AI request failed (HTTP {$status}). Please check AI Settings.");
         } catch (AiProviderException $e) {
             throw $e;
         } catch (Throwable $e) {
-            Log::error('AI provider exception', ['message' => $e->getMessage()]);
+            Log::error('AI provider exception', [
+                'provider' => $provider,
+                'model' => $model,
+                'message' => $e->getMessage(),
+            ]);
             $this->throwError('AI_PROVIDER_ERROR', 'AI request failed: ' . $e->getMessage());
         }
     }
 
+    private function truncateBody(?string $body, int $max = 500): ?string
+    {
+        if (!$body) return null;
+        return mb_strlen($body) > $max ? mb_substr($body, 0, $max) . '…' : $body;
+    }
+
     public function testConnection(): array
     {
+        // Local providers (ollama) often need 30-90s on first request because
+        // the model has to load into VRAM. Use the configured timeout — not a
+        // tight hardcoded 10s — so Test Connection matches real usage.
+        $timeout = $this->settings->provider() === 'ollama'
+            ? max(60, $this->settings->timeoutSeconds())
+            : $this->settings->timeoutSeconds();
+
         try {
             $res = $this->chat([
                 ['role' => 'system', 'content' => 'Reply with exactly: OK'],
                 ['role' => 'user', 'content' => 'Reply with OK'],
-            ], ['max_tokens' => 10, 'timeout' => 10]);
+            ], ['max_tokens' => 16, 'timeout' => $timeout]);
 
             return [
                 'success' => true,

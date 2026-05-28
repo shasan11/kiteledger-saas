@@ -58,7 +58,7 @@ class AiSettingsController extends Controller
             'ai_base_url' => 'nullable|string|max:500',
             'ai_temperature' => 'nullable|numeric|min:0|max:2',
             'ai_max_tokens' => 'nullable|integer|min:50|max:32000',
-            'ai_timeout_seconds' => 'nullable|integer|min:5|max:300',
+            'ai_timeout_seconds' => 'nullable|integer|min:5|max:600',
             'ai_connect_timeout_seconds' => 'nullable|integer|min:2|max:60',
             'ai_stream_enabled' => 'nullable|boolean',
             'ai_cache_enabled' => 'nullable|boolean',

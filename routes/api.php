@@ -6,21 +6,9 @@ use App\Http\Controllers\Api\OnlinePaymentSettingController;
 use App\Http\Controllers\Api\PaymentGatewaySettingController;
 use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\PublicInvoicePaymentController;
-use App\Http\Controllers\Api\AI\AiSettingsController;
-use App\Http\Controllers\Api\AI\AiCommandController;
-use App\Http\Controllers\Api\AI\AiTransactionReviewController;
-use App\Http\Controllers\Api\AI\AiInvoiceAssistantController;
-use App\Http\Controllers\Api\AI\AiReportInsightController;
-use App\Http\Controllers\Api\AI\AiAccountingCopilotController;
-use App\Http\Controllers\Api\AI\AiCrmAssistantController;
-use App\Http\Controllers\Api\AI\AiPaymentCollectionController;
-use App\Http\Controllers\Api\AI\AiInventoryInsightController;
-use App\Http\Controllers\Api\AI\AiUsageLogController;
-use App\Http\Controllers\Api\AI\AiChatController;
-use App\Http\Controllers\Api\AI\AiActionController;
-use App\Http\Controllers\Api\AI\AiRiskReviewController;
-use App\Http\Controllers\Api\AI\AiReportController;
 use App\Http\Controllers\Api\AI\AiAssistantController;
+use App\Http\Controllers\Api\AI\AiSettingsController;
+use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -1066,41 +1054,6 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
 
     // Usage logs
     Route::get('usage-logs',                            [AiUsageLogController::class, 'index']);
-
-    // Global command center
-    Route::post('command',                              [AiCommandController::class, 'handle']);
-
-    // Transaction review
-    Route::post('transaction-review/{module}/{id}',     [AiTransactionReviewController::class, 'review']);
-
-    // Invoice assistant
-    Route::post('invoice-assistant/draft-lines',        [AiInvoiceAssistantController::class, 'draftLines']);
-    Route::post('invoice-assistant/explain/{id}',       [AiInvoiceAssistantController::class, 'explain']);
-
-    // Reports
-    Route::post('reports/explain',                      [AiReportInsightController::class, 'explain']);
-
-    // Accounting copilot
-    Route::post('accounting/explain-journal/{id}',      [AiAccountingCopilotController::class, 'explainJournal']);
-    Route::post('accounting/suggest-account',           [AiAccountingCopilotController::class, 'suggestAccount']);
-
-    // CRM assistant
-    Route::post('crm/follow-up',                        [AiCrmAssistantController::class, 'followUp']);
-
-    // Payment collection
-    Route::post('payments/collection-plan',             [AiPaymentCollectionController::class, 'collectionPlan']);
-
-    // Inventory insights
-    Route::post('inventory/insights',                   [AiInventoryInsightController::class, 'insights']);
-
-    // -----------------------------------------------------------------
-    // Kite AI Command Center — approval-safe chat + action pipeline (legacy)
-    // -----------------------------------------------------------------
-    Route::post('command-center/chat',                  [AiChatController::class, 'chat']);
-    Route::post('actions/{uuid}/approve',               [AiActionController::class, 'approve']);
-    Route::post('actions/{uuid}/reject',                [AiActionController::class, 'reject']);
-    Route::post('risk-review',                          [AiRiskReviewController::class, 'review']);
-    Route::post('reports/ask',                          [AiReportController::class, 'ask']);
 });
 
 });

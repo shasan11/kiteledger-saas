@@ -12,6 +12,7 @@ use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
+use App\Services\AI\AiUsageLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -25,6 +26,7 @@ class AiAssistantController extends Controller
         protected AiAssistantContext $contextBuilder,
         protected AiPromptBuilder $prompts,
         protected AiResponseCacheService $cache,
+        protected AiUsageLogger $usage,
     ) {}
 
     public function health(Request $request): JsonResponse
@@ -59,7 +61,6 @@ class AiAssistantController extends Controller
             'conversation_id' => 'nullable|string',
             'context_type' => 'nullable|string|max:60',
             'context_payload' => 'nullable|array',
-            'branch_id' => 'nullable|string',
             'cache' => 'nullable|boolean',
         ]);
 
@@ -78,7 +79,13 @@ class AiAssistantController extends Controller
             }
         }
 
-        $conversation = $this->resolveConversation($data['conversation_id'] ?? null, $user, $contextType);
+        $conversation = $this->resolveConversation(
+            $data['conversation_id'] ?? null,
+            $user,
+            $contextType,
+            $branchScope['branch_id'] ?? null,
+            $data['message'],
+        );
 
         $history = $conversation->messages()
             ->orderBy('created_at')
@@ -96,23 +103,55 @@ class AiAssistantController extends Controller
 
         $messages = $this->prompts->build($data['message'], $context, $history);
 
+        $startedAt = microtime(true);
         try {
             $result = $this->provider->chat($messages);
         } catch (AiProviderException $e) {
+            $this->usage->log([
+                'user_id' => $user?->id,
+                'branch_id' => $branchScope['branch_id'] ?? null,
+                'module' => $contextType,
+                'provider' => $this->settings->provider(),
+                'model' => $this->settings->model(),
+                'status' => $e->getErrorCode() === 'AI_TIMEOUT' ? 'error' : 'error',
+                'error_message' => $e->getErrorCode() . ': ' . $e->getMessage(),
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+            $status = in_array($e->getErrorCode(), [
+                'AI_PROVIDER_AUTH_FAILED', 'AI_API_KEY_MISSING',
+                'AI_PROVIDER_MISSING', 'AI_MODEL_MISSING',
+            ], true) ? 422 : 422;
             return response()->json([
+                'ok' => false,
                 'message' => $e->getMessage(),
                 'code' => $e->getErrorCode(),
                 'conversation_id' => $conversation->id,
-            ], 422);
+            ], $status);
         } catch (Throwable $e) {
+            \Log::error('AI chat unexpected error', ['error' => $e->getMessage()]);
             return response()->json([
-                'message' => 'AI request failed: ' . $e->getMessage(),
+                'ok' => false,
+                'message' => 'AI request failed unexpectedly. Please try again.',
                 'code' => 'AI_PROVIDER_ERROR',
                 'conversation_id' => $conversation->id,
             ], 500);
         }
 
         $reply = $result['text'] ?? '';
+
+        $this->usage->log([
+            'user_id' => $user?->id,
+            'branch_id' => $branchScope['branch_id'] ?? null,
+            'module' => $contextType,
+            'provider' => $result['provider'] ?? null,
+            'model' => $result['model'] ?? null,
+            'prompt_tokens' => (int) ($result['usage']['prompt'] ?? 0),
+            'completion_tokens' => (int) ($result['usage']['completion'] ?? 0),
+            'total_tokens' => (int) ($result['usage']['total'] ?? 0),
+            'status' => 'success',
+            'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            'request_hash' => $cacheKey ?? null,
+        ]);
 
         AiMessage::create([
             'ai_conversation_id' => $conversation->id,
@@ -255,10 +294,19 @@ class AiAssistantController extends Controller
             return $this->denied('ai.business_insight');
         }
 
-        $sales = $this->contextBuilder->build($request, 'sales');
-        $receivable = $this->contextBuilder->build($request, 'receivable');
-        $payable = $this->contextBuilder->build($request, 'payable');
-        $inventory = $this->contextBuilder->build($request, 'inventory');
+        $safeBuild = function (string $type) use ($request) {
+            try {
+                return $this->contextBuilder->build($request, $type);
+            } catch (Throwable $e) {
+                \Log::warning("AI businessInsight: {$type} context failed", ['error' => $e->getMessage()]);
+                return ['data' => ['note' => "{$type} context unavailable"], 'branch_scope' => []];
+            }
+        };
+
+        $sales = $safeBuild('sales');
+        $receivable = $safeBuild('receivable');
+        $payable = $safeBuild('payable');
+        $inventory = $safeBuild('inventory');
 
         $snapshot = [
             'sales' => $sales['data'] ?? [],
@@ -292,15 +340,28 @@ class AiAssistantController extends Controller
         ]);
     }
 
-    private function resolveConversation(?string $id, $user, ?string $module): AiConversation
-    {
+    private function resolveConversation(
+        ?string $id,
+        $user,
+        ?string $module,
+        ?string $branchId = null,
+        ?string $firstMessage = null,
+    ): AiConversation {
         if ($id) {
             $existing = AiConversation::query()->where('id', $id)->where('user_id', $user->id)->first();
             if ($existing) return $existing;
         }
+
+        $title = null;
+        if ($firstMessage) {
+            $title = mb_substr(trim(preg_replace('/\s+/', ' ', $firstMessage)), 0, 80);
+        }
+
         return AiConversation::create([
             'user_id' => $user->id,
+            'branch_id' => $branchId,
             'module' => $module,
+            'title' => $title,
             'status' => 'active',
         ]);
     }

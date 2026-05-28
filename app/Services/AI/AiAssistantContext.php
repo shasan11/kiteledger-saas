@@ -79,10 +79,10 @@ class AiAssistantContext
                     $context['data'] = $this->inventorySnapshot($branch, $maxRows);
                     break;
                 case 'receivable':
-                    $context['data'] = $this->receivableSnapshot($branch);
+                    $context['data'] = $this->receivableSnapshot($branch, $maxRows);
                     break;
                 case 'payable':
-                    $context['data'] = $this->payableSnapshot($branch);
+                    $context['data'] = $this->payableSnapshot($branch, $maxRows);
                     break;
                 case 'accounting':
                     $context['data'] = $this->accountingSnapshot($branch);
@@ -200,12 +200,18 @@ class AiAssistantContext
             $q->where('branch_id', $branch['branch_id']);
         }
 
-        $quantityColumn = Schema::hasColumn('warehouse_items', 'qty_on_hand') ? 'qty_on_hand' : 'quantity';
+        $quantityColumn = Schema::hasColumn('warehouse_items', 'qty_on_hand')
+            ? 'qty_on_hand'
+            : (Schema::hasColumn('warehouse_items', 'quantity') ? 'quantity' : null);
+        if (!$quantityColumn) return ['note' => 'warehouse_items has no quantity column'];
         $costColumn = Schema::hasColumn('warehouse_items', 'cost') ? 'cost' : (Schema::hasColumn('warehouse_items', 'average_cost') ? 'average_cost' : null);
         $costExpr = $costColumn ? "COALESCE({$costColumn},0)" : '0';
 
         $value = (clone $q)->selectRaw("COALESCE(SUM({$quantityColumn} * {$costExpr}),0) as v, COUNT(*) as c")->first();
-        $low = (clone $q)->where($quantityColumn, '<=', 5)->limit(min(20, $maxRows))->get(['id', 'product_id', $quantityColumn]);
+
+        $lowCols = ['id', $quantityColumn];
+        if (Schema::hasColumn('warehouse_items', 'product_id')) $lowCols[] = 'product_id';
+        $low = (clone $q)->where($quantityColumn, '<=', 5)->limit(min(20, $maxRows))->get($lowCols);
 
         return [
             'inventory_lines' => (int) ($value->c ?? 0),
@@ -214,43 +220,58 @@ class AiAssistantContext
         ];
     }
 
-    private function receivableSnapshot(array $branch): array
+    private function dueExpression(string $table): string
+    {
+        if (Schema::hasColumn($table, 'balance_due')) {
+            return 'COALESCE(balance_due,0)';
+        }
+        if (Schema::hasColumn($table, 'paid_total')) {
+            return 'COALESCE(total,0) - COALESCE(paid_total,0)';
+        }
+        return 'COALESCE(total,0)';
+    }
+
+    private function receivableSnapshot(array $branch, int $maxRows): array
     {
         if (!Schema::hasTable('invoices')) return ['note' => 'No invoices table'];
 
-        $dueExpression = Schema::hasColumn('invoices', 'balance_due')
-            ? 'COALESCE(balance_due,0)'
-            : 'COALESCE(total,0) - COALESCE(paid_total,0)';
-
+        $dueExpression = $this->dueExpression('invoices');
         $q = DB::table('invoices')->whereRaw("{$dueExpression} > 0");
         $this->applyBranch($q, $branch);
 
+        $columns = ['id'];
+        foreach (['invoice_no', 'contact_id', 'invoice_date'] as $c) {
+            if (Schema::hasColumn('invoices', $c)) $columns[] = $c;
+        }
+
         $total = (clone $q)->selectRaw("SUM({$dueExpression}) as v")->value('v');
         $top = (clone $q)
-            ->select(['id', 'invoice_no', 'contact_id', DB::raw("{$dueExpression} as due"), 'invoice_date'])
+            ->select(array_merge($columns, [DB::raw("{$dueExpression} as due")]))
             ->orderByDesc('due')
-            ->limit(20)
+            ->limit(min(20, $maxRows))
             ->get();
 
         return ['total_receivable' => (float) ($total ?? 0), 'top_overdue' => $top];
     }
 
-    private function payableSnapshot(array $branch): array
+    private function payableSnapshot(array $branch, int $maxRows): array
     {
         if (!Schema::hasTable('purchase_bills')) return ['note' => 'No purchase_bills table'];
 
-        $dueExpression = Schema::hasColumn('purchase_bills', 'balance_due')
-            ? 'COALESCE(balance_due,0)'
-            : 'COALESCE(total,0) - COALESCE(paid_total,0)';
-
+        $dueExpression = $this->dueExpression('purchase_bills');
         $q = DB::table('purchase_bills')->whereRaw("{$dueExpression} > 0");
         $this->applyBranch($q, $branch);
 
+        $columns = ['id'];
+        foreach (['bill_no', 'contact_id', 'bill_date'] as $c) {
+            if (Schema::hasColumn('purchase_bills', $c)) $columns[] = $c;
+        }
+
         $total = (clone $q)->selectRaw("SUM({$dueExpression}) as v")->value('v');
         $top = (clone $q)
-            ->select(['id', 'bill_no', 'contact_id', DB::raw("{$dueExpression} as due"), 'bill_date'])
+            ->select(array_merge($columns, [DB::raw("{$dueExpression} as due")]))
             ->orderByDesc('due')
-            ->limit(20)
+            ->limit(min(20, $maxRows))
             ->get();
 
         return ['total_payable' => (float) ($total ?? 0), 'top_overdue' => $top];

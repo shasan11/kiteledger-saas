@@ -1,8 +1,14 @@
 import { useState } from 'react';
-import { Button, Input, Space, theme } from 'antd';
-import { SendOutlined } from '@ant-design/icons';
+import { Button, Input, Space, Tooltip, theme } from 'antd';
+import { ReloadOutlined, SendOutlined, StopOutlined } from '@ant-design/icons';
 
-export default function KiteAiCommandInput({ onSubmit, loading = false }) {
+export default function KiteAiCommandInput({
+    onSubmit,
+    onStop,
+    onRetry,
+    loading = false,
+    canRetry = false,
+}) {
     const { token } = theme.useToken();
     const [value, setValue] = useState('');
 
@@ -25,7 +31,7 @@ export default function KiteAiCommandInput({ onSubmit, loading = false }) {
                 <Input.TextArea
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
-                    placeholder="Ask Kite AI… e.g. Create invoice for ABC Traders for 5 laptops"
+                    placeholder="Ask Kite AI… e.g. Summarize today's sales"
                     autoSize={{ minRows: 1, maxRows: 4 }}
                     onPressEnter={(e) => {
                         if (!e.shiftKey) {
@@ -35,13 +41,24 @@ export default function KiteAiCommandInput({ onSubmit, loading = false }) {
                     }}
                     disabled={loading}
                 />
-                <Button
-                    type="primary"
-                    icon={<SendOutlined />}
-                    onClick={submit}
-                    loading={loading}
-                    style={{ height: 'auto' }}
-                />
+                {loading && onStop ? (
+                    <Tooltip title="Stop generating">
+                        <Button danger icon={<StopOutlined />} onClick={onStop} style={{ height: 'auto' }} />
+                    </Tooltip>
+                ) : (
+                    <Button
+                        type="primary"
+                        icon={<SendOutlined />}
+                        onClick={submit}
+                        loading={loading}
+                        style={{ height: 'auto' }}
+                    />
+                )}
+                {canRetry && !loading && onRetry && (
+                    <Tooltip title="Retry last message">
+                        <Button icon={<ReloadOutlined />} onClick={onRetry} style={{ height: 'auto' }} />
+                    </Tooltip>
+                )}
             </Space.Compact>
         </div>
     );
