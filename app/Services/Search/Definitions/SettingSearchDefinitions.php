@@ -16,6 +16,7 @@ class SettingSearchDefinitions
             ['Taxes', 'taxes', ['vat', 'tax rate']],
             ['Approval Workflows', 'approval-workflows', ['workflow', 'approval']],
             ['Email Configuration', 'email-configuration', ['smtp', 'mail']],
+            ['SMS Configuration', 'sms-configuration', ['sms', 'text message', 'provider']],
             ['Email Templates', 'email-templates', ['mail templates']],
             ['Accounting Configuration', 'accounting-configuration', ['ledger', 'accounts']],
             ['HRM Configuration', 'hrm-configuration', ['employee defaults']],

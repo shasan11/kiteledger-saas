@@ -14,6 +14,7 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/taxes', fn () => redirect()->route('settings.index', ['tab' => 'taxes']))->name('taxes.index');
     Route::get('/approval-workflows', fn () => redirect()->route('settings.index', ['tab' => 'approval-workflows']))->name('approval-workflows.index');
     Route::get('/email-configuration', fn () => redirect()->route('settings.index', ['tab' => 'email-configuration']))->name('email-configuration.index');
+    Route::get('/sms-configuration', fn () => redirect()->route('settings.index', ['tab' => 'sms-configuration']))->name('sms-configuration.index');
     Route::get('/email-templates', fn () => redirect()->route('settings.index', ['tab' => 'email-templates']))->name('email-templates.index');
 
     Route::get('/accounting-configuration', fn () => redirect()->route('settings.index', ['tab' => 'accounting-configuration']))->name('accounting-configuration');
@@ -33,6 +34,6 @@ Route::prefix('settings')->name('settings.')->group(function () {
     Route::get('/application-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('application-settings.index');
     Route::get('/general-settings', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('general-settings.index');
     Route::get('/master-data', fn () => redirect()->route('settings.index', ['tab' => 'master-data']))->name('master-data.index');
-    Route::get('/ai', fn () => Inertia::render('App/Settings/AiSettings'))->name('ai');
-    Route::get('/ai/legacy-index', fn () => redirect()->route('settings.ai'))->name('ai.index');
+    Route::get('/ai', fn () => redirect()->route('settings.index', ['tab' => 'ai-settings']))->name('ai');
+    Route::get('/ai/legacy-index', fn () => redirect()->route('settings.index', ['tab' => 'ai-settings']))->name('ai.index');
 });

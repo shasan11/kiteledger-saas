@@ -16,9 +16,14 @@ class CrmCampaign extends Model
         'branch_id',
         'name',
         'code',
+        'type',
         'source',
         'medium',
         'description',
+        'default_sender_name',
+        'default_sender_email',
+        'default_reply_to_email',
+        'default_sms_sender_id',
         'budget',
         'target_customers',
         'email_only_quantity',
@@ -32,6 +37,14 @@ class CrmCampaign extends Model
         'start_date',
         'end_date',
         'status',
+        'priority',
+        'tags',
+        'internal_remarks',
+        'created_by',
+        'updated_by',
+        'sent_at',
+        'completed_at',
+        'cancelled_at',
     ];
 
     protected function casts(): array
@@ -42,9 +55,23 @@ class CrmCampaign extends Model
             'email_only_quantity' => 'integer',
             'sms_only_quantity' => 'integer',
             'rules' => 'array',
+            'tags' => 'array',
             'start_date' => 'date',
             'end_date' => 'date',
+            'sent_at' => 'datetime',
+            'completed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
+    }
+
+    public function getTitleAttribute(): string
+    {
+        return (string) ($this->attributes['name'] ?? '');
+    }
+
+    public function setTitleAttribute(?string $value): void
+    {
+        $this->attributes['name'] = $value;
     }
 
     public function contactGroup(): BelongsTo
@@ -55,6 +82,41 @@ class CrmCampaign extends Model
     public function sendLogs(): HasMany
     {
         return $this->hasMany(CampaignSendLog::class, 'campaign_id');
+    }
+
+    public function emailMessages(): HasMany
+    {
+        return $this->hasMany(CampaignEmailMessage::class, 'campaign_id');
+    }
+
+    public function smsMessages(): HasMany
+    {
+        return $this->hasMany(CampaignSmsMessage::class, 'campaign_id');
+    }
+
+    public function emailRecipients(): HasMany
+    {
+        return $this->hasMany(CampaignEmailRecipient::class, 'campaign_id');
+    }
+
+    public function smsRecipients(): HasMany
+    {
+        return $this->hasMany(CampaignSmsRecipient::class, 'campaign_id');
+    }
+
+    public function emailAttachments(): HasMany
+    {
+        return $this->hasMany(CampaignEmailAttachment::class, 'campaign_id');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
     }
 
     public function attributions(): HasMany

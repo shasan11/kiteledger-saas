@@ -496,13 +496,6 @@ export default function BankAccounts() {
                 rows: 1,
                 placeholder: 'Description',
             },
-            {
-                name: 'opening_balance',
-                label: 'Opening Balance',
-                type: 'number',
-                col: 12,
-                placeholder: '0.00',
-            },
         ],
         [],
     );
@@ -525,7 +518,6 @@ export default function BankAccounts() {
         account_type: Yup.string().nullable().max(50),
         swift_code: Yup.string().nullable().max(50),
         description: Yup.string().nullable(),
-        opening_balance: Yup.number().nullable().min(0),
         active: Yup.boolean().nullable(),
         is_system_generated: Yup.boolean().nullable(),
     });
@@ -544,7 +536,6 @@ export default function BankAccounts() {
         swift_code: '',
         active: true,
         is_system_generated: false,
-        opening_balance: 0,
     };
 
     const transformPayload = (values) => {
@@ -563,7 +554,6 @@ export default function BankAccounts() {
             swift_code: isBank ? values.swift_code?.trim() || null : null,
             active: values.active !== false,
             is_system_generated: !!values.is_system_generated,
-            opening_balance: Number(values.opening_balance || 0),
         };
 
         Object.keys(payload).forEach((key) => {
@@ -869,7 +859,6 @@ export default function BankAccounts() {
                             const amount = formatMoney(
                                 record?.current_balance ??
                                     record?.software_ledger_balance ??
-                                    record?.opening_balance ??
                                     0,
                             );
 

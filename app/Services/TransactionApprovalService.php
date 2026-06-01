@@ -14,6 +14,8 @@ use App\Models\ProductionJournal;
 use App\Services\Inventory\WarehouseStockService;
 use App\Services\Inventory\InvoiceStockPostingService;
 use App\Services\Inventory\PurchaseBillStockPostingService;
+use App\Services\BusinessRules\TransactionRuleValidator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class TransactionApprovalService
 {
@@ -41,6 +43,7 @@ class TransactionApprovalService
         protected WarehouseStockService $warehouseStockService,
         protected InvoiceStockPostingService $invoiceStockService,
         protected PurchaseBillStockPostingService $purchaseBillStockService,
+        protected TransactionRuleValidator $businessRuleValidator,
     ) {
     }
 
@@ -54,6 +57,14 @@ class TransactionApprovalService
 
             if ($this->validationService->hasApprovedField($fresh) && $fresh->approved && !$this->needsStockPosting($fresh)) {
                 return $fresh->refresh();
+            }
+
+            $businessRules = $this->businessRuleValidator->validateForApproval(class_basename($fresh), $fresh);
+            if ($businessRules['has_errors'] ?? false) {
+                throw new HttpResponseException(response()->json([
+                    'message' => 'Transaction blocked by business rules.',
+                    'business_rules' => $businessRules,
+                ], 422));
             }
 
             $this->validationService->validateCanApprove($fresh);

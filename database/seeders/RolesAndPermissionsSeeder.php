@@ -29,6 +29,10 @@ class RolesAndPermissionsSeeder extends Seeder
         'download',
         'print',
         'email',
+        'send',
+        'schedule',
+        'retry',
+        'upload',
         'import',
         'open',
         'close',
@@ -39,6 +43,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'reset_password',
         'change_status',
         'set_current',
+        'set_default',
+        'test',
         'statement',
         'view_all',
         'switch',
@@ -169,6 +175,32 @@ class RolesAndPermissionsSeeder extends Seeder
                     'create',
                     'update',
                     'delete',
+                ],
+
+                'sms_config' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                    'test',
+                    'set_default',
+                ],
+
+                'sms_template' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
+                ],
+
+                'sms_log' => [
+                    'view',
+                    'retry',
+                    'export',
+                ],
+
+                'sms' => [
+                    'send',
                 ],
 
                 'printing_template' => [
@@ -980,6 +1012,11 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
 
             'tax' => [
+                'tax_setting' => [
+                    'view',
+                    'update',
+                ],
+
                 'tax_class' => [
                     'view',
                     'create',
@@ -1122,6 +1159,18 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         $permissions = array_merge($permissions, [
+            'campaign.view',
+            'campaign.create',
+            'campaign.update',
+            'campaign.delete',
+            'campaign.send',
+            'campaign.schedule',
+            'campaign.cancel',
+            'campaign.retry',
+            'campaign.export',
+            'campaign.attachment.upload',
+            'campaign.attachment.delete',
+            'campaign.log.view',
             'hrm.roles.view',
             'hrm.roles.create',
             'hrm.roles.update',

@@ -17,6 +17,9 @@ use App\Models\InventoryConfiguration;
 use App\Models\PurchaseConfiguration;
 use App\Models\Role;
 use App\Models\SalesConfiguration;
+use App\Models\SmsConfig;
+use App\Models\SmsLog;
+use App\Models\SmsTemplate;
 use App\Models\TaxRate;
 use App\Models\Warehouse;
 use App\Services\Settings\DatabaseSettingService;
@@ -56,6 +59,9 @@ class SettingsConfigurationController extends Controller
                 'approval_workflows' => ApprovalWorkflow::query()->count(),
                 'email_configs' => EmailConfig::query()->count(),
                 'email_templates' => EmailTemplate::query()->count(),
+                'sms_configs' => SmsConfig::query()->count(),
+                'sms_templates' => SmsTemplate::query()->count(),
+                'failed_sms' => SmsLog::query()->where('status', 'failed')->count(),
                 'roles' => Role::query()->count(),
                 'warehouses' => Warehouse::query()->count(),
             ],
@@ -67,6 +73,17 @@ class SettingsConfigurationController extends Controller
                 'inventory' => InventoryConfiguration::query()->where('active', true)->exists(),
                 'sales' => SalesConfiguration::query()->where('active', true)->exists(),
                 'purchase' => PurchaseConfiguration::query()->where('active', true)->exists(),
+                'sms' => SmsConfig::query()->where(function ($query) {
+                    $query->where('is_active', true)->orWhere('active', true);
+                })->exists(),
+            ],
+            'sms' => [
+                'active_provider' => SmsConfig::query()->where(function ($query) {
+                    $query->where('is_active', true)->orWhere('active', true);
+                })->orderByDesc('is_default')->value('provider'),
+                'default_provider' => SmsConfig::query()->where('is_default', true)->value('provider'),
+                'last_status' => SmsLog::query()->latest()->value('status'),
+                'failed_today' => SmsLog::query()->where('status', 'failed')->whereDate('created_at', today())->count(),
             ],
         ]);
     }

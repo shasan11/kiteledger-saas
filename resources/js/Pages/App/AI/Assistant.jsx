@@ -260,8 +260,7 @@ export default function Assistant() {
             },
             shell: {
                 display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : '280px minmax(0, 1fr)',
-                gap: 16,
+                 gap: 16,
                 alignItems: 'stretch',
             },
             sideCard: {
@@ -560,92 +559,7 @@ export default function Assistant() {
                 )}
 
                 <div style={styles.shell}>
-                    <Card
-                        size="small"
-                        style={styles.sideCard}
-                        title={
-                            <Space>
-                                <ThunderboltOutlined style={{ color: token.colorPrimary }} />
-                                <Text strong>Assistant Setup</Text>
-                            </Space>
-                        }
-                        extra={
-                            <StatusBadge
-                                health={health}
-                                healthLoading={healthLoading}
-                                healthError={healthError}
-                                aiReady={aiReady}
-                            />
-                        }
-                    >
-                        <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                            <div style={styles.statBox}>
-                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        Provider
-                                    </Text>
-
-                                    <Space wrap>
-                                        {healthLoading ? (
-                                            <Spin size="small" />
-                                        ) : (
-                                            <>
-                                                <Tag color={health?.provider ? 'blue' : 'default'} bordered={false}>
-                                                    {health?.provider || 'Not configured'}
-                                                </Tag>
-
-                                                {health?.model && (
-                                                    <Tag bordered={false}>{health.model}</Tag>
-                                                )}
-                                            </>
-                                        )}
-                                    </Space>
-                                </Space>
-                            </div>
-
-                            <div style={styles.statBox}>
-                                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        Context
-                                    </Text>
-
-                                    <Text strong>Auto</Text>
-
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        The assistant infers the business area from your question and current page.
-                                    </Text>
-                                </Space>
-                            </div>
-
-                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Quick prompts
-                                </Text>
-
-                                {SUGGESTED_PROMPTS.slice(0, isMobile ? 4 : SUGGESTED_PROMPTS.length).map((prompt) => (
-                                    <Button
-                                        key={prompt}
-                                        size="small"
-                                        style={styles.promptButton}
-                                        onClick={() => send(prompt)}
-                                        disabled={!aiReady || sending}
-                                    >
-                                        {prompt}
-                                    </Button>
-                                ))}
-                            </Space>
-
-                            {canManage && (
-                                <Button
-                                    block
-                                    icon={<SettingOutlined />}
-                                    onClick={() => router.visit('/settings/ai')}
-                                >
-                                    AI Settings
-                                </Button>
-                            )}
-                        </Space>
-                    </Card>
+                     
 
                     <Card
                         size="small"

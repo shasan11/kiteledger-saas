@@ -60,31 +60,62 @@ class AiProviderManager
             return $result;
         } catch (ConnectionException $e) {
             Log::warning('AI provider timeout', ['provider' => $provider, 'model' => $model, 'timeout' => $timeout]);
-            $this->throwError('AI_TIMEOUT', "AI request timed out after {$timeout}s. Reduce context size, reduce max tokens, or use a faster model.");
+            $this->throwError('AI_TIMEOUT', "AI request timed out after {$timeout}s. Try reducing context size or max tokens, or use a faster model.");
         } catch (RequestException $e) {
             $status = $e->response?->status();
+            $body   = (string) ($e->response?->body() ?? '');
+
             if ($status === 401 || $status === 403) {
-                $this->throwError('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed. Check the API key in AI Settings.');
+                $this->throwError('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed. Please verify your API key in AI Settings.');
             }
+
+            // Gemini returns HTTP 400 for invalid / expired API keys
+            if ($status === 400 && $provider === 'gemini') {
+                $lowerBody = strtolower($body);
+                if (str_contains($lowerBody, 'api key') || str_contains($lowerBody, 'api_key') || str_contains($lowerBody, 'invalid argument')) {
+                    $this->throwError('AI_PROVIDER_AUTH_FAILED', 'Gemini API key is invalid or expired. Please update it in AI Settings.');
+                }
+                if (str_contains($lowerBody, 'not found') || str_contains($lowerBody, 'model')) {
+                    $this->throwError('AI_MODEL_INVALID', "Gemini model '{$model}' was not found. Please choose a valid model in AI Settings.");
+                }
+            }
+
+            // OpenAI / Groq 400 often means bad model name or malformed request
+            if ($status === 400 && in_array($provider, ['openai', 'groq'], true)) {
+                $lowerBody = strtolower($body);
+                if (str_contains($lowerBody, 'model') && str_contains($lowerBody, 'not')) {
+                    $this->throwError('AI_MODEL_INVALID', "Model '{$model}' was not found for provider '{$provider}'. Please choose a valid model in AI Settings.");
+                }
+            }
+
+            if ($status === 404 && in_array($provider, ['openai', 'groq'], true)) {
+                $this->throwError('AI_MODEL_INVALID', "Model '{$model}' does not exist or you do not have access. Please check your model name in AI Settings.");
+            }
+
             if ($status === 429) {
-                $this->throwError('AI_RATE_LIMIT', 'AI provider rate limit reached. Please try again shortly.');
+                $this->throwError('AI_RATE_LIMIT', 'AI provider rate limit reached. Please wait a moment and try again.');
             }
+
+            if ($status === 503 || $status === 502) {
+                $this->throwError('AI_PROVIDER_ERROR', 'AI provider is temporarily unavailable. Please try again in a few seconds.');
+            }
+
             Log::warning('AI provider error', [
                 'provider' => $provider,
-                'model' => $model,
-                'status' => $status,
-                'body' => $this->truncateBody($e->response?->body()),
+                'model'    => $model,
+                'status'   => $status,
+                'body'     => $this->truncateBody($body),
             ]);
-            $this->throwError('AI_PROVIDER_ERROR', "AI request failed (HTTP {$status}). Please check AI Settings.");
+            $this->throwError('AI_PROVIDER_ERROR', "AI request failed (HTTP {$status}). Please check your AI Settings configuration.");
         } catch (AiProviderException $e) {
             throw $e;
         } catch (Throwable $e) {
             Log::error('AI provider exception', [
                 'provider' => $provider,
-                'model' => $model,
-                'message' => $e->getMessage(),
+                'model'    => $model,
+                'message'  => $e->getMessage(),
             ]);
-            $this->throwError('AI_PROVIDER_ERROR', 'AI request failed: ' . $e->getMessage());
+            $this->throwError('AI_PROVIDER_ERROR', 'AI request failed unexpectedly. Please check your AI Settings and try again.');
         }
     }
 

@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table, Button, Input, InputNumber } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { calculateLine, toNumber, getTaxJurisdictionId, moneyWithSymbol } from './transactionCalculations.js';
+import TaxLineSelector from '@/Components/Tax/TaxLineSelector.jsx';
+import axios from 'axios';
 
 /**
  * Reusable line-items table for sales/purchase-style transactions.
@@ -30,13 +32,34 @@ export default function TransactionLineItems({
   minRow = 1,
   quickAddProduct = true,
   quickAddProductDefaults,
+  transactionType,
 }) {
   const isPurchase = priceField === 'purchase_price';
+  const documentType = transactionType || (isPurchase ? 'purchase' : 'sales');
   const productDefaults = quickAddProductDefaults || {
     allow_sale: !isPurchase,
     allow_purchase: isPurchase,
   };
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+  const [taxDefaults, setTaxDefaults] = useState(null);
+
+  useEffect(() => {
+    axios
+      .get('/api/tax-settings')
+      .then(({ data }) => setTaxDefaults(data?.data || null))
+      .catch(() => setTaxDefaults(null));
+  }, []);
+
+  const defaultTax = useMemo(() => {
+    if (!taxDefaults?.enable_tax) return null;
+    return documentType === 'purchase'
+      ? taxDefaults.default_purchase_tax_rate || taxDefaults.default_sales_tax_rate || null
+      : taxDefaults.default_sales_tax_rate || taxDefaults.default_purchase_tax_rate || null;
+  }, [documentType, taxDefaults]);
+
+  const taxOverrideAllowed = documentType === 'purchase'
+    ? taxDefaults?.allow_purchase_tax_override !== false
+    : taxDefaults?.allow_sales_tax_override !== false;
 
   const rowKeyOf = (row) => row._key || row.id;
 
@@ -56,7 +79,7 @@ export default function TransactionLineItems({
         _key: Math.random().toString(36).slice(2),
         product_id: null, product_detail: null, product_name: '', description: '',
         qty: 1, unit_price: 0, discount_percent: 0, discount_amount: 0,
-        tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0,
+        tax_rate_id: defaultTax, tax_jurisdiction_id: getTaxJurisdictionId(defaultTax), tax_amount: 0, line_total: 0,
       },
     ]);
   };
@@ -71,7 +94,7 @@ export default function TransactionLineItems({
         _key: Math.random().toString(36).slice(2),
         product_id: null, product_detail: null, product_name: '', description: '',
         qty: 1, unit_price: 0, discount_percent: 0,
-        tax_rate_id: null, tax_amount: 0, line_total: 0,
+        tax_rate_id: defaultTax, tax_jurisdiction_id: getTaxJurisdictionId(defaultTax), tax_amount: 0, line_total: 0,
       });
     }
     setExpandedRowKeys((keys) => keys.filter((key) => key !== removedKey));
@@ -84,17 +107,37 @@ export default function TransactionLineItems({
       return;
     }
     const price = toNumber(raw?.[priceField] ?? raw?.selling_price ?? raw?.sale_price ?? raw?.purchase_price ?? raw?.price ?? items[idx]?.unit_price);
-    const defaultTax = raw?.default_tax_rate ?? null;
+    const productTax = raw?.default_tax_rate ?? null;
+    const selectedTax = productTax || items[idx]?.tax_rate_id || defaultTax;
     update(idx, {
       product_id: val,
       product_detail: raw,
       product_name: raw?.name || raw?.label || '',
       description: items[idx]?.description || raw?.description || '',
       unit_price: price,
-      tax_rate_id: defaultTax || items[idx]?.tax_rate_id || null,
-      tax_jurisdiction_id: defaultTax ? getTaxJurisdictionId(defaultTax) : (items[idx]?.tax_jurisdiction_id || null),
+      tax_rate_id: selectedTax,
+      tax_jurisdiction_id: selectedTax ? getTaxJurisdictionId(selectedTax) : (items[idx]?.tax_jurisdiction_id || null),
     });
   };
+
+  useEffect(() => {
+    if (!defaultTax || !items.length) return;
+    const needsDefault = items.some((item) => !item.tax_rate_id);
+    if (!needsDefault) return;
+
+    onChange?.(items.map((item) => {
+      if (item.tax_rate_id) return item;
+      const c = calculateLine({ ...item, tax_rate_id: defaultTax });
+      return {
+        ...item,
+        tax_rate_id: defaultTax,
+        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
+        tax_amount: c.tax_amount,
+        line_total: c.line_total,
+        discount_amount: c.discount_amount,
+      };
+    }));
+  }, [defaultTax]);
 
   const cellInput = { background: 'transparent' };
   const numericStyle = { fontVariantNumeric: 'tabular-nums' };
@@ -187,17 +230,12 @@ export default function TransactionLineItems({
           render: (val, row, idx) => {
             const id = val && typeof val === 'object' ? val.id : val;
             return (
-              <BackendSelect
+              <TaxLineSelector
                 value={id ?? null}
                 detailValue={typeof val === 'object' ? val : null}
-                fkUrl="/api/tax-rates/"
-                labelKey="name"
-                labelFn={(r) => [r?.name, r?.rate_percent ? `${Number(r.rate_percent)}%` : null].filter(Boolean).join(' - ')}
-                placeholder="No VAT"
-                variant="borderless"
-                allowClear
+                disabled={!taxOverrideAllowed}
                 style={{ width: '100%', ...cellInput }}
-                onChange={(_v, raw) => update(idx, { tax_rate_id: raw, tax_jurisdiction_id: getTaxJurisdictionId(raw) })}
+                onChange={(raw, taxJurisdictionId) => update(idx, { tax_rate_id: raw, tax_jurisdiction_id: taxJurisdictionId })}
               />
             );
           },

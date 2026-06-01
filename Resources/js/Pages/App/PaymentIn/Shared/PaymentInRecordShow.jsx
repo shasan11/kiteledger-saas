@@ -45,6 +45,7 @@ import {
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import { RecordMetaPanel } from '@/Components/Transactions';
+import BusinessRuleApprovalModal from '@/Components/BusinessRules/BusinessRuleApprovalModal';
 import { QRCodeSVG } from 'qrcode.react';
 
 const { Text, Title } = Typography;
@@ -1982,12 +1983,17 @@ export default function PaymentInRecordShow({
         setApproveLoading(true);
         try {
             const baseEndpoint = endpoint.replace(/\/+$/, '');
-            await axios.post(api(`${baseEndpoint}/${record.id}/approve`));
+            const approveResponse = await axios.post(api(`${baseEndpoint}/${record.id}/approve`));
+            if (approveResponse.data?.business_rules?.has_warnings) {
+                antMessage.warning('Transaction approved with warnings.');
+            } else {
+                antMessage.success('Transaction approved.');
+            }
             const response = await axios.get(api(`${baseEndpoint}/${record.id}`));
             setRecord(response.data?.data ?? response.data);
             setApproveModalOpen(false);
-        } catch {
-            //
+        } catch (error) {
+            antMessage.error(error?.response?.data?.message || 'Approval failed.');
         } finally {
             setApproveLoading(false);
         }
@@ -2692,18 +2698,14 @@ export default function PaymentInRecordShow({
                 </div>
             </div>
 
-            <Modal
-                title="Approve Transaction"
+            <BusinessRuleApprovalModal
                 open={approveModalOpen}
-                onOk={handleApprove}
+                module={normalizedDocumentType}
+                transactionId={record?.id}
+                onApprove={handleApprove}
                 confirmLoading={approveLoading}
                 onCancel={() => setApproveModalOpen(false)}
-                okText="Confirm Approve"
-                okButtonProps={{ type: 'primary' }}
-            >
-                <p>Are you sure you want to approve this transaction?</p>
-                <p>The final document number will be assigned after approval and the transaction will be finalized.</p>
-            </Modal>
+            />
 
             {/* ── Payment Link Drawer ──────────────────────────────────── */}
             {normalizedDocumentType === 'invoice' && (

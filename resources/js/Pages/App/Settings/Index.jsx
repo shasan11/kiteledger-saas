@@ -27,6 +27,7 @@ import {
   FileTextOutlined,
   InboxOutlined,
   MailOutlined,
+  MessageOutlined,
   NumberOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
@@ -47,6 +48,7 @@ const Taxes = lazy(() => import('../Tax/TaxRates/Index'));
 
 const ApprovalWorkflows = lazy(() => import('./ApprovalWorkflows'));
 const EmailConfiguration = lazy(() => import('../Hrm/EmailConfigs/Index'));
+const SmsConfiguration = lazy(() => import('./SmsConfig/Index'));
 const EmailTemplates = lazy(() => import('./EmailTemplates'));
 
 const ConfigurationForm = lazy(() => import('./ConfigurationForm'));
@@ -270,6 +272,14 @@ const SETTINGS_TABS = [
     description: 'SMTP and sender setup.',
     icon: <MailOutlined />,
     component: EmailConfiguration,
+    props: {},
+  },
+  {
+    key: 'sms-configuration',
+    label: 'SMS Config',
+    description: 'SMS providers, templates and logs.',
+    icon: <MessageOutlined />,
+    component: SmsConfiguration,
     props: {},
   },
   {

@@ -1,780 +1,625 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
-    Alert,
-    Button,
-    Card,
-    Col,
-    Descriptions,
-    Divider,
-    Form,
-    InputNumber,
-    message,
-    Radio,
-    Row,
-    Select,
-    Space,
-    Steps,
-    Switch,
-    Tag,
-    Typography,
+  Alert,
+  Button,
+  Card,
+  Col,
+  Form,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Row,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+  message,
 } from 'antd';
-import {
-    ApartmentOutlined,
-    ArrowLeftOutlined,
-    ArrowRightOutlined,
-    CheckCircleOutlined,
-    GlobalOutlined,
-    PercentageOutlined,
-    SaveOutlined,
-    SettingOutlined,
-    ShoppingCartOutlined,
-    ShoppingOutlined,
-} from '@ant-design/icons';
+import { CloseOutlined, EditOutlined, PlusOutlined, SaveOutlined, SettingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Title } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
 
-// Presets that are generic (not country-specific).
-// Country-specific presets are injected based on the selected country.
-const BASE_PRESETS = [
-    {
-        key: 'no_tax',
-        label: 'No Tax',
-        description: 'Your business does not charge or pay tax.',
-        color: 'default',
-    },
-    {
-        key: 'custom',
-        label: 'Custom Tax',
-        description: 'Set up your own rates manually using the wizard below.',
-        color: 'orange',
-    },
-];
-
-const COUNTRY_PRESETS = {
-    standard_vat:       { label: 'Standard VAT',          description: 'Single VAT rate on both sales and purchases.',        color: 'green'  },
-    sales_tax_only:     { label: 'Sales Tax Only',         description: 'You charge tax on sales only — no purchase recovery.', color: 'blue'   },
-    purchase_sales_vat: { label: 'Purchase + Sales VAT',   description: 'Separate rates for sales and purchases, both recoverable.', color: 'purple' },
+const defaultSettings = {
+  enable_tax: true,
+  tax_label: 'VAT',
+  custom_tax_label: '',
+  sales_tax_rate_percent: 13,
+  purchase_tax_rate_percent: 13,
+  tax_calculation_type: 'exclusive',
+  tax_rounding_method: 'document',
+  show_tax_on_invoice: true,
+  company_tax_number: '',
+  default_tax_rate_id: null,
+  default_sales_tax_id: null,
+  default_purchase_tax_id: null,
+  sales_tax_calculation_type: 'global',
+  purchase_tax_calculation_type: 'global',
+  allow_sales_tax_override: true,
+  allow_purchase_tax_override: true,
+  show_tax_summary_on_bill: true,
+  advanced_mode: false,
+  country_code: 'NP',
+  default_currency: 'NPR',
+  preset: 'custom',
+  wizard_completed: true,
 };
 
-const REGISTRATION_TYPE_OPTIONS = [
-    { value: 'vat',   label: 'VAT Number' },
-    { value: 'pan',   label: 'PAN Number' },
-    { value: 'gstin', label: 'GSTIN (India)' },
-    { value: 'ein',   label: 'EIN (US)' },
-    { value: 'sales_tax_permit', label: 'Sales Tax Permit' },
-    { value: 'tan',   label: 'TAN' },
+const usedForOptions = [
+  { value: 'sale', label: 'Sales' },
+  { value: 'purchase', label: 'Purchase' },
+  { value: 'both', label: 'Both' },
 ];
 
-const PRODUCT_BEHAVIOR_OPTIONS = [
-    { value: 'all_same',        label: 'Same tax applies to all products/services' },
-    { value: 'some_exempt',     label: 'Some products/services are tax free' },
-    { value: 'some_different',  label: 'Some products/services have different rates' },
-];
+const rateLabel = (rate) => `${Number(rate || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}%`;
 
-const STEPS = [
-    { title: 'Registration',  icon: <GlobalOutlined /> },
-    { title: 'Sales Tax',     icon: <ShoppingOutlined /> },
-    { title: 'Purchase Tax',  icon: <ShoppingCartOutlined /> },
-    { title: 'Products',      icon: <ApartmentOutlined /> },
-    { title: 'Review',        icon: <CheckCircleOutlined /> },
-];
-
-const yesNo = (v) => (v ? 'Yes' : 'No');
-const rateLabel = (v) => (v != null ? `${v}%` : '—');
+const rateName = (rate) => {
+  if (!rate) return 'No tax';
+  return `${rate.name || 'Tax'} (${rateLabel(rate.rate_percent)})`;
+};
 
 export default function TaxSettings({ auth }) {
-    const [form]         = Form.useForm();
-    const [loading, setLoading]   = useState(true);
-    const [saving, setSaving]     = useState(false);
-    const [step, setStep]         = useState(0);
-    const [countryOptions, setCountryOptions] = useState([]);
-    const [values, setValues]     = useState({
-        is_tax_registered:           false,
-        registration_type:           'vat',
-        tax_number:                  '',
-        tax_registered_name:         '',
-        country_code:                'NP',
-        default_currency:            'NPR',
-        registration_effective_date: null,
-        sales_tax_enabled:           false,
-        sales_tax_name:              'VAT',
-        sales_tax_rate_percent:      13,
-        sales_tax_account_id:        null,
-        sales_tax_payable_account_id: null,
-        purchase_tax_enabled:        false,
-        purchase_tax_name:           'VAT',
-        purchase_tax_rate_percent:   13,
-        purchase_tax_recoverable:    true,
-        purchase_tax_account_id:     null,
-        product_tax_behavior:        'all_same',
-        advanced_mode:               false,
-        preset:                      'none',
-        wizard_completed:            false,
+  const [settingsForm] = Form.useForm();
+  const [rateForm] = Form.useForm();
+  const [settings, setSettings] = useState(defaultSettings);
+  const [rates, setRates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [rateEditorOpen, setRateEditorOpen] = useState(false);
+  const [editingRate, setEditingRate] = useState(null);
+  const [msgApi, contextHolder] = message.useMessage();
+
+  const activeRateOptions = useMemo(
+    () => rates
+      .filter((rate) => rate.active !== false)
+      .map((rate) => ({ value: rate.id, label: rateName(rate) })),
+    [rates]
+  );
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [settingsRes, ratesRes] = await Promise.all([
+        axios.get(api('/api/tax-settings')),
+        axios.get(api('/api/tax-rates/'), { params: { page_size: 100, ordering: '-is_default,name' } }),
+      ]);
+      const nextSettings = { ...defaultSettings, ...(settingsRes.data?.data || {}) };
+      const nextRates = ratesRes.data?.results || [];
+      setSettings(nextSettings);
+      setRates(nextRates);
+      settingsForm.setFieldsValue(nextSettings);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData().catch(() => msgApi.error('Could not load tax settings.'));
+  }, []);
+
+  const saveSettings = async () => {
+    const values = await settingsForm.validateFields().catch(() => null);
+    if (!values) return;
+
+    const label = values.tax_label === 'Custom' ? values.custom_tax_label || 'Tax' : values.tax_label;
+    const defaultRate = rates.find((rate) => rate.id === values.default_tax_rate_id);
+    const defaultRatePercent = defaultRate ? Number(defaultRate.rate_percent || 0) : values.sales_tax_rate_percent;
+    const payload = {
+      ...settings,
+      ...values,
+      sales_tax_enabled: !!values.enable_tax,
+      purchase_tax_enabled: !!values.enable_tax,
+      sales_tax_name: label,
+      purchase_tax_name: label,
+      sales_tax_rate_percent: defaultRatePercent ?? 0,
+      purchase_tax_rate_percent: defaultRatePercent ?? 0,
+      default_sales_tax_id: values.default_sales_tax_id || values.default_tax_rate_id || null,
+      default_purchase_tax_id: values.default_purchase_tax_id || values.default_tax_rate_id || null,
+      advanced_mode: !!values.advanced_mode,
+      preset: 'custom',
+      wizard_completed: true,
+    };
+
+    setSaving(true);
+    try {
+      const { data } = await axios.put(api('/api/tax-settings'), payload);
+      const saved = { ...defaultSettings, ...(data?.data || {}) };
+      setSettings(saved);
+      settingsForm.setFieldsValue(saved);
+      msgApi.success('Tax settings saved.');
+      if (!rates.length) msgApi.warning('Add at least one tax rate to apply tax automatically.');
+    } catch (error) {
+      msgApi.error(error?.response?.data?.message || 'Failed to save tax settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openRateEditor = (rate = null) => {
+    setEditingRate(rate);
+    rateForm.setFieldsValue({
+      name: rate?.name || '',
+      rate_percent: Number(rate?.rate_percent || 0),
+      applies_on: rate?.applies_on || 'both',
+      description: rate?.description || '',
+      active: rate?.active !== false,
+      is_default: !!rate?.is_default,
     });
-    const [advancedMode, setAdvancedMode] = useState(false);
-    const [msgApi, contextHolder]         = message.useMessage();
+    setRateEditorOpen(true);
+  };
 
-    // Derived: presets to show for currently selected country
-    const selectedCountry = values.country_code || 'NP';
-    const selectedCountryMeta = countryOptions.find((c) => c.value === selectedCountry);
-    const hasPreset = selectedCountryMeta?.has_preset;
+  const closeRateEditor = () => {
+    setEditingRate(null);
+    rateForm.resetFields();
+    setRateEditorOpen(false);
+  };
 
-    const availablePresets = [
-        ...BASE_PRESETS,
-        ...(hasPreset
-            ? Object.entries(COUNTRY_PRESETS).map(([key, p]) => ({ key, ...p }))
-            : []),
-    ];
+  const saveRate = async () => {
+    const values = await rateForm.validateFields().catch(() => null);
+    if (!values) return;
 
-    // Load settings + country options
-    useEffect(() => {
-        Promise.all([
-            axios.get(api('/api/tax-settings')),
-            axios.get(api('/api/tax-country-options')),
-        ])
-            .then(([settingsRes, countriesRes]) => {
-                const s = settingsRes.data?.data;
-                if (s) {
-                    setValues((prev) => ({ ...prev, ...s }));
-                    setAdvancedMode(!!s.advanced_mode);
-                    form.setFieldsValue(s);
-                }
-                setCountryOptions(countriesRes.data || []);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
-    }, []);
-
-    // When country changes, auto-fill currency and reset tax name/rate from preset
-    const handleCountryChange = (code) => {
-        const meta = countryOptions.find((c) => c.value === code);
-        const updates = {
-            country_code: code,
-        };
-        if (meta?.currency) updates.default_currency = meta.currency;
-        if (meta?.tax_name)  updates.sales_tax_name   = meta.tax_name;
-        if (meta?.tax_name)  updates.purchase_tax_name = meta.tax_name;
-        if (meta?.default_rate != null) {
-            updates.sales_tax_rate_percent    = meta.default_rate;
-            updates.purchase_tax_rate_percent = meta.default_rate;
-        }
-        const next = { ...values, ...updates };
-        setValues(next);
-        form.setFieldsValue(next);
+    const payload = {
+      country_code: settings.country_code || 'NP',
+      tax_type: settings.tax_label === 'GST' ? 'gst' : 'vat',
+      calculation_method: 'single',
+      inclusive: settings.tax_calculation_type === 'inclusive',
+      name: values.name,
+      code: values.name.replace(/\s+/g, '_').toUpperCase().slice(0, 50),
+      rate_percent: values.rate_percent || 0,
+      applies_on: values.applies_on,
+      description: values.description || null,
+      active: values.active !== false,
+      is_default: !!values.is_default,
     };
 
-    const applyPreset = (key) => {
-        const meta = countryOptions.find((c) => c.value === selectedCountry);
-        const updates = { preset: key };
+    setSaving(true);
+    try {
+      if (editingRate?.id) {
+        await axios.put(api(`/api/tax-rates/${editingRate.id}`), payload);
+      } else {
+        await axios.post(api('/api/tax-rates/'), payload);
+      }
+      closeRateEditor();
+      msgApi.success(editingRate ? 'Tax rate updated.' : 'Tax rate added.');
+      await loadData();
+    } catch (error) {
+      msgApi.error(error?.response?.data?.message || 'Could not save tax rate.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
-        if (key === 'no_tax') {
-            Object.assign(updates, { sales_tax_enabled: false, purchase_tax_enabled: false });
-        } else if (key === 'standard_vat') {
-            Object.assign(updates, {
-                sales_tax_enabled: true, purchase_tax_enabled: true,
-                sales_tax_name: meta?.tax_name || 'VAT',
-                purchase_tax_name: meta?.tax_name || 'VAT',
-                sales_tax_rate_percent: meta?.default_rate ?? 13,
-                purchase_tax_rate_percent: meta?.default_rate ?? 13,
-            });
-        } else if (key === 'sales_tax_only') {
-            Object.assign(updates, {
-                sales_tax_enabled: true, purchase_tax_enabled: false,
-                sales_tax_name: meta?.tax_name || 'VAT',
-                sales_tax_rate_percent: meta?.default_rate ?? 13,
-            });
-        } else if (key === 'purchase_sales_vat') {
-            Object.assign(updates, {
-                sales_tax_enabled: true, purchase_tax_enabled: true,
-                sales_tax_name: meta?.tax_name || 'VAT',
-                purchase_tax_name: meta?.tax_name || 'VAT',
-                sales_tax_rate_percent: meta?.default_rate ?? 13,
-                purchase_tax_rate_percent: meta?.default_rate ?? 13,
-                purchase_tax_recoverable: true,
-            });
-        }
+  const deleteRate = async (rate) => {
+    setSaving(true);
+    try {
+      await axios.delete(api(`/api/tax-rates/${rate.id}`));
+      msgApi.success('Tax rate deleted.');
+      await loadData();
+    } catch (error) {
+      msgApi.error(error?.response?.data?.message || 'Could not delete tax rate.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
-        const next = { ...values, ...updates };
-        setValues(next);
-        form.setFieldsValue(next);
-    };
+  return (
+    <AuthenticatedLayout auth={auth}>
+      {contextHolder}
+      <Head title="Tax Settings" />
+      <div className="tax-settings-page" style={{ padding: 20, maxWidth: 1180, margin: '0 auto' }}>
+        <style>{`
+          .tax-settings-page .ant-card {
+            border-radius: 8px;
+            border-color: #e5e7eb;
+            box-shadow: none;
+          }
+          .tax-settings-page .ant-card-head {
+            min-height: 42px;
+            padding: 0 14px;
+          }
+          .tax-settings-page .ant-card-body {
+            padding: 14px;
+          }
+          .tax-settings-page .ant-tabs-nav {
+            margin-bottom: 10px;
+          }
+          .tax-settings-page .ant-tabs-tab {
+            padding: 8px 0;
+          }
+          .tax-settings-page .ant-form-item {
+            margin-bottom: 10px;
+          }
+          .tax-settings-page .ant-form-item-label {
+            padding-bottom: 3px;
+          }
+          .tax-settings-page .ant-form-item-label > label {
+            height: auto;
+            font-size: 12px;
+            font-weight: 650;
+            color: #374151;
+          }
+          .tax-settings-page .ant-input,
+          .tax-settings-page .ant-input-number,
+          .tax-settings-page .ant-select-selector {
+            min-height: 32px;
+            border-radius: 6px !important;
+          }
+          .tax-settings-page .ant-table-thead > tr > th {
+            background: #f8fafc !important;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 650;
+            padding: 8px 10px !important;
+          }
+          .tax-settings-page .ant-table-tbody > tr > td {
+            padding: 7px 10px !important;
+          }
+          .tax-inline-editor {
+            background: #f8fafc;
+            border: 1px solid #dbe3ef;
+          }
+        `}</style>
+        <Space align="start" style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <Title level={4} style={{ margin: 0 }}>Tax Settings</Title>
+            <Text type="secondary">Simple defaults first. Advanced rules stay optional.</Text>
+          </div>
+          <Button type="primary" icon={<SaveOutlined />} onClick={saveSettings} loading={saving}>
+            Save
+          </Button>
+        </Space>
 
-    const validateStep = () => {
-        if (step === 0) {
-            const v = form.getFieldsValue();
-            if (v.is_tax_registered && !v.tax_number) {
-                msgApi.warning('Please enter your tax/VAT/PAN number.');
-                return false;
-            }
-        }
-        if (step === 1) {
-            const v = form.getFieldsValue();
-            if (v.sales_tax_enabled && (v.sales_tax_rate_percent == null || v.sales_tax_rate_percent === '')) {
-                msgApi.warning('Please enter the default sales tax rate.');
-                return false;
-            }
-        }
-        if (step === 2) {
-            const v = form.getFieldsValue();
-            if (v.purchase_tax_enabled && (v.purchase_tax_rate_percent == null || v.purchase_tax_rate_percent === '')) {
-                msgApi.warning('Please enter the default purchase tax rate.');
-                return false;
-            }
-        }
-        return true;
-    };
+        {!loading && !rates.length && (
+          <Alert
+            showIcon
+            type="warning"
+            message="Add at least one tax rate to apply tax automatically."
+            style={{ marginBottom: 12 }}
+          />
+        )}
 
-    const next = () => {
-        const current = form.getFieldsValue();
-        setValues((prev) => ({ ...prev, ...current }));
-        if (!validateStep()) return;
-        setStep((s) => Math.min(s + 1, STEPS.length - 1));
-    };
-
-    const prev = () => setStep((s) => Math.max(s - 1, 0));
-
-    const save = async () => {
-        const current = form.getFieldsValue();
-        const payload  = { ...values, ...current, wizard_completed: true };
-
-        setSaving(true);
-        try {
-            await axios.put(api('/api/tax-settings'), payload);
-            msgApi.success('Tax settings saved successfully.');
-        } catch (err) {
-            const msg = err?.response?.data?.message || 'Failed to save tax settings.';
-            msgApi.error(msg);
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const toggleAdvanced = async () => {
-        setSaving(true);
-        try {
-            const { data } = await axios.post(api('/api/tax-settings/toggle-advanced'));
-            setAdvancedMode(!!data.advanced_mode);
-            msgApi.success(data.advanced_mode ? 'Advanced mode enabled.' : 'Advanced mode disabled.');
-        } catch {
-            msgApi.error('Could not toggle advanced mode.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const renderStep = () => {
-        switch (step) {
-            case 0: return (
-                <StepRegistration
-                    form={form}
-                    values={values}
-                    countryOptions={countryOptions}
-                    onCountryChange={handleCountryChange}
-                />
-            );
-            case 1: return <StepSalesTax     form={form} values={values} />;
-            case 2: return <StepPurchaseTax  form={form} values={values} />;
-            case 3: return <StepProducts     form={form} values={values} />;
-            case 4: return <StepReview       values={{ ...values, ...form.getFieldsValue() }} />;
-            default: return null;
-        }
-    };
-
-    return (
-        <AuthenticatedLayout auth={auth}>
-            {contextHolder}
-            <Head title="Tax Settings" />
-
-            <div style={{ padding: '24px 24px 48px', maxWidth: 860, margin: '0 auto' }}>
-
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-                    <div>
-                        <Title level={4} style={{ margin: 0 }}>Tax Settings</Title>
-                        <Text type="secondary">Configure how tax works in your business.</Text>
-                    </div>
-                    <Space>
-                        <Button
-                            size="small"
-                            icon={<SettingOutlined />}
-                            onClick={toggleAdvanced}
-                            loading={saving}
-                        >
-                            {advancedMode ? 'Disable Advanced Mode' : 'Enable Advanced Mode'}
-                        </Button>
-                        {advancedMode && (
-                            <Button
-                                size="small"
-                                onClick={() => router.visit('/tax/advanced')}
-                            >
-                                Advanced Setup
-                            </Button>
-                        )}
-                    </Space>
-                </div>
-
-                {/* Country hint */}
-                {selectedCountryMeta && (
-                    <Alert
-                        type="info"
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                        message={
-                            <span>
-                                Country: <strong>{selectedCountryMeta.label}</strong>
-                                {selectedCountryMeta.tax_name && (
-                                    <> — default tax: <strong>{selectedCountryMeta.tax_name} {selectedCountryMeta.default_rate}%</strong></>
-                                )}
-                                {!selectedCountryMeta.has_preset && (
-                                    <> — <Text type="warning">No preset available. Rates will be set manually.</Text></>
-                                )}
-                            </span>
-                        }
-                    />
-                )}
-
-                {/* Preset picker */}
-                <Card
-                    title={<Text strong>Quick Start: Choose a preset</Text>}
-                    size="small"
-                    style={{ marginBottom: 24 }}
-                >
-                    <Row gutter={[10, 10]}>
-                        {availablePresets.map((p) => {
-                            const selected = values.preset === p.key;
-                            return (
-                                <Col key={p.key} xs={24} sm={12} md={8}>
-                                    <Card
-                                        size="small"
-                                        hoverable
-                                        onClick={() => applyPreset(p.key)}
-                                        style={{
-                                            borderColor: selected ? '#0369a1' : undefined,
-                                            background: selected ? '#f0f9ff' : undefined,
-                                            cursor: 'pointer',
-                                            height: '100%',
-                                        }}
-                                    >
-                                        <Space direction="vertical" size={2}>
-                                            <Space>
-                                                <Tag color={selected ? 'blue' : p.color}>{p.label}</Tag>
-                                                {selected && <CheckCircleOutlined style={{ color: '#0369a1' }} />}
-                                            </Space>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>{p.description}</Text>
-                                        </Space>
-                                    </Card>
-                                </Col>
-                            );
-                        })}
-                    </Row>
-                </Card>
-
-                {/* Wizard */}
-                <Card size="small">
-                    <Steps
-                        current={step}
-                        size="small"
-                        items={STEPS}
-                        style={{ marginBottom: 28, padding: '8px 0' }}
-                    />
-
-                    <Form
-                        form={form}
-                        layout="vertical"
-                        initialValues={values}
-                        size="middle"
-                    >
-                        {renderStep()}
-                    </Form>
-
-                    <Divider style={{ margin: '20px 0 16px' }} />
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Button
-                            icon={<ArrowLeftOutlined />}
-                            onClick={prev}
-                            disabled={step === 0}
-                        >
-                            Back
-                        </Button>
-
-                        <Space>
-                            {step < STEPS.length - 1 ? (
-                                <Button type="primary" onClick={next} icon={<ArrowRightOutlined />} iconPosition="end">
-                                    Next
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="primary"
-                                    icon={<SaveOutlined />}
-                                    loading={saving}
-                                    onClick={save}
-                                >
-                                    Save Tax Settings
-                                </Button>
-                            )}
-                        </Space>
-                    </div>
-                </Card>
-            </div>
-        </AuthenticatedLayout>
-    );
+        <Form form={settingsForm} layout="vertical" initialValues={defaultSettings}>
+          <Tabs
+            defaultActiveKey="basic"
+            size="small"
+            items={[
+              {
+                key: 'basic',
+                label: 'Basic Setup',
+                children: (
+                  <TaxBasicSetupCard
+                    form={settingsForm}
+                    rateOptions={activeRateOptions}
+                    loading={loading}
+                  />
+                ),
+              },
+              {
+                key: 'rates',
+                label: 'Tax Rates',
+                children: (
+                  <TaxRateTable
+                    form={rateForm}
+                    rates={rates}
+                    loading={loading}
+                    saving={saving}
+                    editorOpen={rateEditorOpen}
+                    editingRate={editingRate}
+                    onAdd={() => openRateEditor()}
+                    onEdit={openRateEditor}
+                    onCancel={closeRateEditor}
+                    onSave={saveRate}
+                    onDelete={deleteRate}
+                  />
+                ),
+              },
+              {
+                key: 'defaults',
+                label: 'Sales & Purchase Defaults',
+                children: (
+                  <SalesPurchaseTaxDefaults rateOptions={activeRateOptions} />
+                ),
+              },
+              {
+                key: 'advanced',
+                label: 'Advanced Rules',
+                children: <AdvancedTaxRulesPanel />,
+              },
+            ]}
+          />
+        </Form>
+      </div>
+    </AuthenticatedLayout>
+  );
 }
 
-// ── Step 1: Business Registration ─────────────────────────────────────────────
-function StepRegistration({ form, values, countryOptions, onCountryChange }) {
-    const isRegistered = Form.useWatch('is_tax_registered', form);
-    const selectedCountry = Form.useWatch('country_code', form) || values.country_code;
+function TaxBasicSetupCard({ form, rateOptions, loading }) {
+  const taxLabel = Form.useWatch('tax_label', form);
+  const taxEnabled = Form.useWatch('enable_tax', form);
 
-    // Derive currency options from loaded country list
-    const currencyOptions = countryOptions
-        .filter((c) => c.currency)
-        .reduce((acc, c) => {
-            if (!acc.find((o) => o.value === c.currency)) {
-                acc.push({ value: c.currency, label: `${c.currency} — ${c.label}` });
-            }
-            return acc;
-        }, []);
-
-    return (
-        <div>
-            <Title level={5} style={{ marginBottom: 2 }}>Is your business tax registered?</Title>
-            <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 13 }}>
-                A tax-registered business collects tax from customers on behalf of the government.
-            </Paragraph>
-
-            <Form.Item name="is_tax_registered" valuePropName="checked">
-                <Switch
-                    checkedChildren="Yes — we are tax registered"
-                    unCheckedChildren="No — we are not registered"
-                />
+  return (
+    <Card size="small" loading={loading}>
+      <Row gutter={16}>
+        <Col xs={24} md={8}>
+          <Form.Item name="enable_tax" label="Enable Tax" valuePropName="checked">
+            <Switch checkedChildren="On" unCheckedChildren="Off" />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="tax_label" label="Tax Label">
+            <Select options={['VAT', 'GST', 'Tax', 'Custom'].map((value) => ({ value, label: value }))} disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        {taxLabel === 'Custom' && (
+          <Col xs={24} md={8}>
+            <Form.Item name="custom_tax_label" label="Custom Tax Label" rules={[{ required: true, message: 'Enter a label' }]}>
+              <Input placeholder="e.g. Service Tax" disabled={!taxEnabled} />
             </Form.Item>
-
-            {isRegistered && (
-                <Row gutter={16}>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="registration_type"
-                            label="Registration Type"
-                            rules={[{ required: true, message: 'Required' }]}
-                        >
-                            <Select options={REGISTRATION_TYPE_OPTIONS} placeholder="Select type" />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="tax_number"
-                            label="Tax / VAT / PAN Number"
-                            rules={[{ required: true, message: 'Tax number is required when registered' }]}
-                        >
-                            <input
-                                className="ant-input"
-                                placeholder="e.g. 123456789"
-                                style={{ width: '100%' }}
-                            />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} sm={12}>
-                        <Form.Item name="tax_registered_name" label="Tax Registered Business Name">
-                            <input className="ant-input" placeholder="Legal name on tax certificate" style={{ width: '100%' }} />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} sm={12}>
-                        <Form.Item name="registration_effective_date" label="Effective Date">
-                            <input type="date" className="ant-input" style={{ width: '100%' }} />
-                        </Form.Item>
-                    </Col>
-                </Row>
-            )}
-
-            <Row gutter={16}>
-                <Col xs={24} sm={12}>
-                    <Form.Item name="country_code" label="Country">
-                        <Select
-                            options={countryOptions.map((c) => ({
-                                value: c.value,
-                                label: `${c.label} (${c.value})`,
-                            }))}
-                            showSearch
-                            filterOption={(input, option) =>
-                                option.label.toLowerCase().includes(input.toLowerCase())
-                            }
-                            onChange={onCountryChange}
-                        />
-                    </Form.Item>
-                </Col>
-                <Col xs={24} sm={12}>
-                    <Form.Item name="default_currency" label="Default Tax Currency">
-                        <Select
-                            options={currencyOptions}
-                            showSearch
-                            filterOption={(input, option) =>
-                                option.label.toLowerCase().includes(input.toLowerCase())
-                            }
-                        />
-                    </Form.Item>
-                </Col>
-            </Row>
-        </div>
-    );
-}
-
-// ── Step 2: Default Sales Tax ──────────────────────────────────────────────────
-function StepSalesTax({ form }) {
-    const enabled = Form.useWatch('sales_tax_enabled', form);
-
-    return (
-        <div>
-            <Title level={5} style={{ marginBottom: 2 }}>Do you charge tax on sales?</Title>
-            <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 13 }}>
-                When enabled, tax will automatically appear on invoices, sales orders, and quotations.
-            </Paragraph>
-
-            <Form.Item name="sales_tax_enabled" valuePropName="checked">
-                <Switch
-                    checkedChildren="Yes — charge tax on sales"
-                    unCheckedChildren="No — no tax on sales"
-                />
-            </Form.Item>
-
-            {enabled && (
-                <Row gutter={16}>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="sales_tax_name"
-                            label="Tax Name"
-                            tooltip="Short name shown on invoices, e.g. VAT, GST"
-                            rules={[{ required: true, message: 'Required' }]}
-                        >
-                            <input className="ant-input" placeholder="e.g. VAT" style={{ width: '100%' }} />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="sales_tax_rate_percent"
-                            label="Default Sales Tax Rate (%)"
-                            rules={[
-                                { required: true, message: 'Required' },
-                                { type: 'number', min: 0, max: 100, message: 'Rate must be 0–100' },
-                            ]}
-                        >
-                            <InputNumber
-                                min={0}
-                                max={100}
-                                step={0.5}
-                                suffix="%"
-                                style={{ width: '100%' }}
-                                placeholder="13"
-                            />
-                        </Form.Item>
-                    </Col>
-
-                    <Col xs={24}>
-                        <Alert
-                            type="info"
-                            showIcon
-                            style={{ marginBottom: 16 }}
-                            message="Tax accounts are optional at setup time. You can link them later in Advanced Setup."
-                        />
-                    </Col>
-                </Row>
-            )}
-        </div>
-    );
-}
-
-// ── Step 3: Default Purchase Tax ──────────────────────────────────────────────
-function StepPurchaseTax({ form }) {
-    const enabled = Form.useWatch('purchase_tax_enabled', form);
-
-    return (
-        <div>
-            <Title level={5} style={{ marginBottom: 2 }}>Do you pay tax on purchases?</Title>
-            <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 13 }}>
-                When enabled, tax on purchase bills can be tracked and reclaimed if your business is VAT/GST registered.
-            </Paragraph>
-
-            <Form.Item name="purchase_tax_enabled" valuePropName="checked">
-                <Switch
-                    checkedChildren="Yes — track tax on purchases"
-                    unCheckedChildren="No — no purchase tax tracking"
-                />
-            </Form.Item>
-
-            {enabled && (
-                <Row gutter={16}>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="purchase_tax_name"
-                            label="Purchase Tax Name"
-                            rules={[{ required: true, message: 'Required' }]}
-                        >
-                            <input className="ant-input" placeholder="e.g. VAT" style={{ width: '100%' }} />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="purchase_tax_rate_percent"
-                            label="Default Purchase Tax Rate (%)"
-                            rules={[
-                                { required: true, message: 'Required' },
-                                { type: 'number', min: 0, max: 100, message: 'Rate must be 0–100' },
-                            ]}
-                        >
-                            <InputNumber
-                                min={0}
-                                max={100}
-                                step={0.5}
-                                suffix="%"
-                                style={{ width: '100%' }}
-                                placeholder="13"
-                            />
-                        </Form.Item>
-                    </Col>
-
-                    <Col xs={24} sm={12}>
-                        <Form.Item
-                            name="purchase_tax_recoverable"
-                            label="Is purchase tax recoverable?"
-                            tooltip="Recoverable means you can claim it back from the tax authority."
-                            valuePropName="checked"
-                        >
-                            <Switch
-                                checkedChildren="Yes — recoverable"
-                                unCheckedChildren="No — not recoverable"
-                            />
-                        </Form.Item>
-                    </Col>
-                </Row>
-            )}
-        </div>
-    );
-}
-
-// ── Step 4: Product Tax Behavior ──────────────────────────────────────────────
-function StepProducts() {
-    return (
-        <div>
-            <Title level={5} style={{ marginBottom: 2 }}>How does tax apply to your products and services?</Title>
-            <Paragraph type="secondary" style={{ marginBottom: 20, fontSize: 13 }}>
-                This helps us know whether to apply the same tax to everything or let you set exceptions per product.
-            </Paragraph>
-
-            <Form.Item name="product_tax_behavior">
-                <Radio.Group style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {PRODUCT_BEHAVIOR_OPTIONS.map((o) => (
-                        <Radio key={o.value} value={o.value}>
-                            <Text>{o.label}</Text>
-                        </Radio>
-                    ))}
-                </Radio.Group>
-            </Form.Item>
-
-            <Alert
-                type="info"
-                showIcon
-                message='If you choose "Some products have different rates", you can set a tax type per product on the product form.'
-                style={{ marginTop: 12 }}
+          </Col>
+        )}
+        <Col xs={24} md={8}>
+          <Form.Item name="sales_tax_rate_percent" label="Default Tax Rate">
+            <InputNumber min={0} max={100} suffix="%" style={{ width: '100%' }} disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="default_tax_rate_id" label="Default Tax">
+            <Select options={rateOptions} allowClear placeholder="Choose a tax rate" disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="tax_calculation_type" label="Tax Calculation">
+            <Select
+              disabled={!taxEnabled}
+              options={[
+                { value: 'exclusive', label: 'Exclusive Tax' },
+                { value: 'inclusive', label: 'Inclusive Tax' },
+              ]}
             />
-        </div>
-    );
+          </Form.Item>
+          <Text type="secondary">Exclusive: tax is added on top of price. Inclusive: price already includes tax.</Text>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="tax_rounding_method" label="Tax Rounding">
+            <Select
+              disabled={!taxEnabled}
+              options={[
+                { value: 'document', label: 'Round per document' },
+                { value: 'line', label: 'Round per line' },
+              ]}
+            />
+          </Form.Item>
+          <Text type="secondary">Round per document is easiest for most users. Round per line is useful when each item needs separate rounding.</Text>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="show_tax_on_invoice" label="Show tax on invoice" valuePropName="checked">
+            <Switch disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="company_tax_number" label="Company Tax/VAT/GST Number">
+            <Input placeholder="Optional" disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="default_sales_tax_id" label="Default tax for sales">
+            <Select options={rateOptions} allowClear placeholder="Use global default" disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item name="default_purchase_tax_id" label="Default tax for purchase">
+            <Select options={rateOptions} allowClear placeholder="Use global default" disabled={!taxEnabled} />
+          </Form.Item>
+        </Col>
+      </Row>
+    </Card>
+  );
 }
 
-// ── Step 5: Review ─────────────────────────────────────────────────────────────
-function StepReview({ values: v }) {
-    const preset    = [...BASE_PRESETS, ...Object.entries(COUNTRY_PRESETS).map(([key, p]) => ({ key, ...p }))].find((p) => p.key === v.preset);
-    const behavior  = PRODUCT_BEHAVIOR_OPTIONS.find((o) => o.value === v.product_tax_behavior);
+function TaxRateTable({
+  form,
+  rates,
+  loading,
+  saving,
+  editorOpen,
+  editingRate,
+  onAdd,
+  onEdit,
+  onCancel,
+  onSave,
+  onDelete,
+}) {
+  const columns = [
+    {
+      title: 'Tax Name',
+      dataIndex: 'name',
+      render: (value, rate) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{value || 'Tax'}</Text>
+          {rate.description && <Text type="secondary" style={{ fontSize: 12 }}>{rate.description}</Text>}
+        </Space>
+      ),
+    },
+    { title: 'Rate', dataIndex: 'rate_percent', width: 110, render: (value) => <Tag color={Number(value) > 0 ? 'green' : 'default'}>{rateLabel(value)}</Tag> },
+    { title: 'Used For', dataIndex: 'applies_on', width: 130, render: (value) => <Tag>{usedForOptions.find((o) => o.value === value)?.label || 'Both'}</Tag> },
+    { title: 'Active', dataIndex: 'active', width: 100, render: (value) => <Tag color={value !== false ? 'green' : 'default'}>{value !== false ? 'Active' : 'Off'}</Tag> },
+    { title: 'Default', dataIndex: 'is_default', width: 100, render: (value) => value ? <Tag color="blue">Default</Tag> : '-' },
+    {
+      title: 'Action',
+      width: 120,
+      render: (_, rate) => (
+        <Space>
+          <Tooltip title="Edit tax rate"><Button size="small" icon={<EditOutlined />} onClick={() => onEdit(rate)} /></Tooltip>
+          <Popconfirm title="Delete this tax rate?" onConfirm={() => onDelete(rate)}>
+            <Button size="small" danger>Delete</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
-    return (
-        <div>
-            <Title level={5} style={{ marginBottom: 16 }}>Review your tax setup</Title>
+  return (
+    <Card
+      size="small"
+      title="Tax Rates"
+      extra={
+        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={onAdd}>
+          Add Rate
+        </Button>
+      }
+    >
+      {editorOpen && (
+        <InlineTaxRateEditor
+          form={form}
+          editingRate={editingRate}
+          saving={saving}
+          onCancel={onCancel}
+          onSave={onSave}
+        />
+      )}
+      <Table rowKey="id" size="small" loading={loading} columns={columns} dataSource={rates} pagination={{ pageSize: 8 }} />
+    </Card>
+  );
+}
 
-            <Row gutter={[16, 16]}>
-                <Col xs={24} md={12}>
-                    <Card size="small" title="Business Registration">
-                        <Descriptions column={1} size="small">
-                            <Descriptions.Item label="Tax Registered">
-                                <Tag color={v.is_tax_registered ? 'green' : 'default'}>
-                                    {yesNo(v.is_tax_registered)}
-                                </Tag>
-                            </Descriptions.Item>
-                            {v.is_tax_registered && (
-                                <>
-                                    <Descriptions.Item label="Tax Number">{v.tax_number || '—'}</Descriptions.Item>
-                                    <Descriptions.Item label="Registered Name">{v.tax_registered_name || '—'}</Descriptions.Item>
-                                </>
-                            )}
-                            <Descriptions.Item label="Country">{v.country_code}</Descriptions.Item>
-                            <Descriptions.Item label="Currency">{v.default_currency}</Descriptions.Item>
-                        </Descriptions>
-                    </Card>
-                </Col>
+function InlineTaxRateEditor({ form, editingRate, saving, onCancel, onSave }) {
+  return (
+    <div className="tax-inline-editor" style={{ marginBottom: 12, padding: 12, borderRadius: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 10 }}>
+        <Text strong>{editingRate ? 'Edit rate' : 'New rate'}</Text>
+        <Space>
+          <Button size="small" icon={<CloseOutlined />} onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button size="small" type="primary" icon={<SaveOutlined />} loading={saving} onClick={onSave}>
+            Save Rate
+          </Button>
+        </Space>
+      </div>
+      <Form form={form} layout="vertical" size="small">
+        <Row gutter={12} align="bottom">
+          <Col xs={24} md={7}>
+            <Form.Item name="name" label="Tax Name" rules={[{ required: true, message: 'Enter tax name' }]}>
+              <Input placeholder="VAT 13%" />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={4}>
+            <Form.Item name="rate_percent" label="Rate %" rules={[{ required: true, message: 'Enter rate' }]}>
+              <InputNumber min={0} max={100} style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={5}>
+            <Form.Item name="applies_on" label="Used For">
+              <Select options={usedForOptions} />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={3}>
+            <Form.Item name="active" label="Active" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={3}>
+            <Form.Item name="is_default" label="Default" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </Col>
+          <Col xs={24} md={24}>
+            <Form.Item name="description" label="Description">
+              <Input placeholder="Optional note" />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+    </div>
+  );
+}
 
-                <Col xs={24} md={12}>
-                    <Card size="small" title="Sales Tax">
-                        <Descriptions column={1} size="small">
-                            <Descriptions.Item label="Charge Tax on Sales">
-                                <Tag color={v.sales_tax_enabled ? 'green' : 'default'}>
-                                    {yesNo(v.sales_tax_enabled)}
-                                </Tag>
-                            </Descriptions.Item>
-                            {v.sales_tax_enabled && (
-                                <>
-                                    <Descriptions.Item label="Tax Name">{v.sales_tax_name}</Descriptions.Item>
-                                    <Descriptions.Item label="Default Rate">{rateLabel(v.sales_tax_rate_percent)}</Descriptions.Item>
-                                </>
-                            )}
-                        </Descriptions>
-                    </Card>
-                </Col>
+function SalesPurchaseTaxDefaults({ rateOptions }) {
+  return (
+    <Card size="small">
+      <Row gutter={20}>
+        <Col xs={24} md={12}>
+          <Title level={5}>Sales</Title>
+          <Form.Item name="default_sales_tax_id" label="Default Sales Tax">
+            <Select options={rateOptions} allowClear placeholder="Use global default" />
+          </Form.Item>
+          <Form.Item name="sales_tax_calculation_type" label="Sales Tax Calculation">
+            <Select options={[
+              { value: 'global', label: 'Use global setting' },
+              { value: 'inclusive', label: 'Inclusive' },
+              { value: 'exclusive', label: 'Exclusive' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="allow_sales_tax_override" label="Allow user to change tax on sales documents" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="show_tax_on_invoice" label="Show tax summary on invoice" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={12}>
+          <Title level={5}>Purchase</Title>
+          <Form.Item name="default_purchase_tax_id" label="Default Purchase Tax">
+            <Select options={rateOptions} allowClear placeholder="Use global default" />
+          </Form.Item>
+          <Form.Item name="purchase_tax_calculation_type" label="Purchase Tax Calculation">
+            <Select options={[
+              { value: 'global', label: 'Use global setting' },
+              { value: 'inclusive', label: 'Inclusive' },
+              { value: 'exclusive', label: 'Exclusive' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="allow_purchase_tax_override" label="Allow user to change tax on purchase documents" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="show_tax_summary_on_bill" label="Show tax summary on bill" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Col>
+      </Row>
+    </Card>
+  );
+}
 
-                <Col xs={24} md={12}>
-                    <Card size="small" title="Purchase Tax">
-                        <Descriptions column={1} size="small">
-                            <Descriptions.Item label="Track Tax on Purchases">
-                                <Tag color={v.purchase_tax_enabled ? 'green' : 'default'}>
-                                    {yesNo(v.purchase_tax_enabled)}
-                                </Tag>
-                            </Descriptions.Item>
-                            {v.purchase_tax_enabled && (
-                                <>
-                                    <Descriptions.Item label="Tax Name">{v.purchase_tax_name}</Descriptions.Item>
-                                    <Descriptions.Item label="Default Rate">{rateLabel(v.purchase_tax_rate_percent)}</Descriptions.Item>
-                                    <Descriptions.Item label="Recoverable">
-                                        <Tag color={v.purchase_tax_recoverable ? 'green' : 'orange'}>
-                                            {yesNo(v.purchase_tax_recoverable)}
-                                        </Tag>
-                                    </Descriptions.Item>
-                                </>
-                            )}
-                        </Descriptions>
-                    </Card>
-                </Col>
+function AdvancedTaxRulesPanel() {
+  const optionalRules = [
+    'Product-wise tax',
+    'Customer-wise tax',
+    'Supplier-wise tax',
+    'Branch-wise tax',
+    'Tax exemption rules',
+    'Tax groups',
+    'Multiple taxes per line',
+    'Reverse charge',
+    'Withholding tax / TDS',
+    'Import tax',
+    'Export / zero-rated tax',
+  ];
 
-                <Col xs={24} md={12}>
-                    <Card size="small" title="Product Tax Behavior">
-                        <Descriptions column={1} size="small">
-                            <Descriptions.Item label="Behavior">{behavior?.label || '—'}</Descriptions.Item>
-                        </Descriptions>
-                    </Card>
-                </Col>
-
-                {preset && preset.key !== 'none' && (
-                    <Col xs={24}>
-                        <Alert
-                            type="success"
-                            showIcon
-                            message={`Preset: ${preset.label}`}
-                            description={`Saving will automatically create the underlying tax records for "${preset.label}".`}
-                        />
-                    </Col>
-                )}
-            </Row>
-        </div>
-    );
+  return (
+    <Card size="small">
+      <Alert
+        showIcon
+        type="info"
+        message="Advanced rules are optional. Most businesses do not need to configure this."
+        style={{ marginBottom: 16 }}
+      />
+      <Form.Item name="advanced_mode" label="Enable advanced rules" valuePropName="checked">
+        <Switch checkedChildren="Enabled" unCheckedChildren="Disabled" />
+      </Form.Item>
+      <Space wrap>
+        {optionalRules.map((rule) => (
+          <Tag key={rule} icon={<SettingOutlined />}>{rule}</Tag>
+        ))}
+      </Space>
+    </Card>
+  );
 }

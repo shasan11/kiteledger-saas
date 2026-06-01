@@ -85,21 +85,32 @@ class DocumentAiClient
         } catch (AiProviderException $e) {
             throw $e;
         } catch (ConnectionException $e) {
-            $this->fail('AI_TIMEOUT', "Document scan timed out after {$timeout}s.");
+            $this->fail('AI_TIMEOUT', "Document scan timed out after {$timeout}s. Try a smaller document or increase the scan timeout in AI Settings.");
         } catch (RequestException $e) {
             $status = $e->response?->status();
-            $body = $e->response?->body();
-            Log::warning('Document AI provider error', ['status' => $status, 'body' => mb_substr((string) $body, 0, 500)]);
+            $body   = (string) ($e->response?->body() ?? '');
+            Log::warning('Document AI provider error', ['provider' => $this->provider(), 'status' => $status, 'body' => mb_substr($body, 0, 500)]);
+
             if ($status === 401 || $status === 403) {
-                $this->fail('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed.');
+                $this->fail('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed. Please verify your API key in AI Settings.');
+            }
+            // Gemini returns 400 for invalid API keys
+            if ($status === 400 && $this->provider() === 'gemini') {
+                $lower = strtolower($body);
+                if (str_contains($lower, 'api key') || str_contains($lower, 'api_key') || str_contains($lower, 'invalid argument')) {
+                    $this->fail('AI_PROVIDER_AUTH_FAILED', 'Gemini API key is invalid or expired. Please update it in AI Settings.');
+                }
+            }
+            if ($status === 404) {
+                $this->fail('AI_MODEL_INVALID', 'AI model not found. Please check your model name in AI Settings.');
             }
             if ($status === 429) {
-                $this->fail('AI_RATE_LIMIT', 'AI provider rate limit reached.');
+                $this->fail('AI_RATE_LIMIT', 'AI provider rate limit reached. Please try again shortly.');
             }
-            $this->fail('AI_PROVIDER_ERROR', "Document scan failed (HTTP {$status}).");
+            $this->fail('AI_PROVIDER_ERROR', "Document scan failed (HTTP {$status}). Please check your AI Settings.");
         } catch (Throwable $e) {
-            Log::error('Document AI exception', ['msg' => $e->getMessage()]);
-            $this->fail('AI_PROVIDER_ERROR', 'Document scan failed: ' . $e->getMessage());
+            Log::error('Document AI exception', ['provider' => $this->provider(), 'msg' => $e->getMessage()]);
+            $this->fail('AI_PROVIDER_ERROR', 'Document scan failed unexpectedly. Please check your AI Settings and try again.');
         }
     }
 

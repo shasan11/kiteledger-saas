@@ -25,6 +25,7 @@ class TaxRate extends Model
         'name',
         'code',
         'rate_percent',
+        'description',
         'inclusive',
         'calculation_method',
         'applies_on',
@@ -32,6 +33,7 @@ class TaxRate extends Model
         'effective_to',
         'report_code',
         'active',
+        'is_default',
         'is_system_generated',
         'user_add_id',
     ];
@@ -49,6 +51,7 @@ class TaxRate extends Model
             'effective_from' => 'date',
             'effective_to' => 'date',
             'active' => 'boolean',
+            'is_default' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];

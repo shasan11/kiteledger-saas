@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\ApplicationSettingController;
 use App\Http\Controllers\Api\ApprovalWorkflowController;
 use App\Http\Controllers\Api\BankAccountController;
 use App\Http\Controllers\Api\BranchController;
+use App\Http\Controllers\Api\BusinessRuleValidationController;
 use App\Http\Controllers\Api\CashTransferController;
 use App\Http\Controllers\Api\CreditTermController;
 use App\Http\Controllers\Api\CrmActivityController;
@@ -121,6 +122,10 @@ use App\Http\Controllers\Api\PublicHolidayController;
 use App\Http\Controllers\Api\EmailConfigController;
 use App\Http\Controllers\Api\EmailTemplateController;
 use App\Http\Controllers\Api\EmailController;
+use App\Http\Controllers\Api\SmsConfigController;
+use App\Http\Controllers\Api\SmsLogController;
+use App\Http\Controllers\Api\SmsTemplateController;
+use App\Http\Controllers\Api\SmsUtilityController;
 use App\Http\Controllers\Api\FiscalYearController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\MilestoneController;
@@ -149,6 +154,9 @@ use App\Http\Controllers\Api\Payroll\TaxSlabController;
 
 Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearchController::class)
     ->name('api.global-search');
+
+Route::middleware(['web', 'auth', 'verified'])->post('business-rules/validate', BusinessRuleValidationController::class)
+    ->name('api.business-rules.validate');
 
 Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api.app.context.')->group(function () {
     Route::get('/', [AppContextController::class, 'show'])->name('show');
@@ -220,6 +228,22 @@ Route::apiResource('fiscal-years', FiscalYearController::class);
 
 Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
 Route::apiResource('email-templates', EmailTemplateController::class);
+Route::post('sms/send-test', [SmsUtilityController::class, 'sendTest']);
+Route::post('sms/preview-template', [SmsUtilityController::class, 'previewTemplate']);
+Route::post('sms/validate-phone', [SmsUtilityController::class, 'validatePhone']);
+Route::get('sms-configs/summary', [SmsConfigController::class, 'summary']);
+Route::post('sms-configs/{id}/set-default', [SmsConfigController::class, 'setDefault']);
+Route::post('sms-configs/{id}/test', [SmsConfigController::class, 'testSend']);
+Route::post('sms-configs/{id}/test-send', [SmsConfigController::class, 'testSend']);
+Route::post('sms-configs/{id}/activate', [SmsConfigController::class, 'activate']);
+Route::post('sms-configs/{id}/deactivate', [SmsConfigController::class, 'deactivate']);
+Route::apiResource('sms-configs', SmsConfigController::class)->parameters(['sms-configs' => 'smsConfig']);
+Route::post('sms-templates/preview', [SmsTemplateController::class, 'preview']);
+Route::apiResource('sms-templates', SmsTemplateController::class);
+Route::get('sms-logs/export', [SmsLogController::class, 'export']);
+Route::post('sms-logs/bulk-retry', [SmsLogController::class, 'bulkRetry']);
+Route::post('sms-logs/{id}/retry', [SmsLogController::class, 'retry']);
+Route::apiResource('sms-logs', SmsLogController::class)->only(['index', 'show']);
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('reports/registry', [ReportRegistryController::class, 'registry']);
@@ -850,6 +874,13 @@ Route::patch('loan-accounts/bulk', [LoanAccountController::class, 'bulkUpdate'])
 Route::delete('loan-accounts/bulk', [LoanAccountController::class, 'bulkDestroy']);
 Route::apiResource('loan-accounts', LoanAccountController::class)
     ->parameters(['loan-accounts' => 'loanAccount']);
+// Loan payback sub-resource
+Route::get('loan-accounts/{loanAccount}/paybacks', [LoanAccountController::class, 'paybacks'])
+    ->name('loan-accounts.paybacks.index');
+Route::post('loan-accounts/{loanAccount}/paybacks', [LoanAccountController::class, 'storePayback'])
+    ->name('loan-accounts.paybacks.store');
+Route::delete('loan-accounts/{loanAccount}/paybacks/{payback}', [LoanAccountController::class, 'destroyPayback'])
+    ->name('loan-accounts.paybacks.destroy');
 Route::apiResource('loan-top-ups', LoanTopUpController::class)
     ->parameters(['loan-top-ups' => 'loanTopUp']);
 Route::apiResource('loan-charges', LoanChargeController::class)
@@ -906,15 +937,60 @@ Route::apiResource('crm-communications', CrmCommunicationController::class)
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('crm-campaigns/summary', [CrmCampaignController::class, 'summary']);
+    Route::get('crm-campaigns/{id}/statistics', [CrmCampaignController::class, 'statistics']);
+    Route::post('crm-campaigns/{id}/duplicate', [CrmCampaignController::class, 'duplicate']);
+    Route::post('crm-campaigns/{id}/send', [CrmCampaignController::class, 'sendCampaign']);
+    Route::post('crm-campaigns/{id}/cancel', [CrmCampaignController::class, 'cancelCampaign']);
+    Route::get('crm-campaigns/{id}/recipients', [CrmCampaignController::class, 'campaignRecipients']);
+    Route::get('crm-campaigns/{id}/recipients/export', [CrmCampaignController::class, 'exportRecipients']);
+
+    Route::get('crm-campaigns/{id}/email-messages', [CrmCampaignController::class, 'emailMessages']);
+    Route::post('crm-campaigns/{id}/email-messages', [CrmCampaignController::class, 'storeEmailMessage']);
+    Route::patch('crm-campaigns/{id}/email-messages/{messageId}', [CrmCampaignController::class, 'updateEmailMessage']);
+    Route::delete('crm-campaigns/{id}/email-messages/{messageId}', [CrmCampaignController::class, 'deleteEmailMessage']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/duplicate', [CrmCampaignController::class, 'duplicateEmailMessage']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/preview', [CrmCampaignController::class, 'previewEmailMessage']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/send-test', [CrmCampaignController::class, 'sendTestEmail']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/send-now', [CrmCampaignController::class, 'sendEmailNow']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/schedule', [CrmCampaignController::class, 'scheduleEmail']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/cancel-schedule', [CrmCampaignController::class, 'cancelEmailSchedule']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/attachments', [CrmCampaignController::class, 'uploadAttachment']);
+    Route::get('crm-campaigns/{id}/email-messages/{messageId}/recipients', [CrmCampaignController::class, 'emailRecipients']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/recipients', [CrmCampaignController::class, 'addEmailRecipients']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/recipients/contact-group', [CrmCampaignController::class, 'addEmailRecipientsFromGroup']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/recipients/contacts', [CrmCampaignController::class, 'addEmailContacts']);
+    Route::post('crm-campaigns/{id}/email-messages/{messageId}/recipients/copy', [CrmCampaignController::class, 'copyEmailRecipients']);
+    Route::delete('crm-campaigns/{id}/email-messages/{messageId}/recipients/{recipientId}', [CrmCampaignController::class, 'removeEmailRecipient']);
+
+    Route::get('crm-campaigns/{id}/sms-messages', [CrmCampaignController::class, 'smsMessages']);
+    Route::post('crm-campaigns/{id}/sms-messages', [CrmCampaignController::class, 'storeSmsMessage']);
+    Route::patch('crm-campaigns/{id}/sms-messages/{messageId}', [CrmCampaignController::class, 'updateSmsMessage']);
+    Route::delete('crm-campaigns/{id}/sms-messages/{messageId}', [CrmCampaignController::class, 'deleteSmsMessage']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/duplicate', [CrmCampaignController::class, 'duplicateSmsMessage']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/preview', [CrmCampaignController::class, 'previewSmsMessage']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/send-test', [CrmCampaignController::class, 'sendTestSms']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/send-now', [CrmCampaignController::class, 'sendSmsNow']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/schedule', [CrmCampaignController::class, 'scheduleSms']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/cancel-schedule', [CrmCampaignController::class, 'cancelSmsSchedule']);
+    Route::get('crm-campaigns/{id}/sms-messages/{messageId}/recipients', [CrmCampaignController::class, 'smsRecipients']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/recipients', [CrmCampaignController::class, 'addSmsRecipients']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/recipients/contact-group', [CrmCampaignController::class, 'addSmsRecipientsFromGroup']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/recipients/contacts', [CrmCampaignController::class, 'addSmsContacts']);
+    Route::post('crm-campaigns/{id}/sms-messages/{messageId}/recipients/copy', [CrmCampaignController::class, 'copySmsRecipients']);
+    Route::delete('crm-campaigns/{id}/sms-messages/{messageId}/recipients/{recipientId}', [CrmCampaignController::class, 'removeSmsRecipient']);
+
+    Route::get('crm-campaigns/{id}/attachments', [CrmCampaignController::class, 'attachments']);
+    Route::get('crm-campaigns/{id}/attachments/{attachmentId}/download', [CrmCampaignController::class, 'downloadAttachment']);
+    Route::delete('crm-campaigns/{id}/attachments/{attachmentId}', [CrmCampaignController::class, 'deleteAttachment']);
+    Route::get('crm-campaigns/{id}/send-logs/export', [CrmCampaignController::class, 'exportLogs']);
+    Route::get('crm-campaigns/{id}/send-logs/{logId}', [CrmCampaignController::class, 'showLog']);
+    Route::post('crm-campaigns/{id}/send-logs/{logId}/retry', [CrmCampaignController::class, 'retryLog']);
+    Route::post('crm-campaigns/{id}/send-logs/{logId}/resolve', [CrmCampaignController::class, 'markLogResolved']);
+    Route::post('crm-campaigns/{id}/send-logs/retry-failed', [CrmCampaignController::class, 'retryFailedLogs']);
     Route::post('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkStore']);
     Route::patch('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkUpdate']);
     Route::delete('crm-campaigns/bulk', [CrmCampaignController::class, 'bulkDestroy']);
-    Route::get('crm-campaigns/{id}/audience/{channel}', [CrmCampaignController::class, 'audience']);
     Route::get('crm-campaigns/{id}/send-logs', [CrmCampaignController::class, 'sendLogs']);
-    Route::post('crm-campaigns/{id}/preview-email', [CrmCampaignController::class, 'previewEmail']);
-    Route::post('crm-campaigns/{id}/preview-sms', [CrmCampaignController::class, 'previewSms']);
-    Route::post('crm-campaigns/{id}/send-bulk-email', [CrmCampaignController::class, 'sendBulkEmail']);
-    Route::post('crm-campaigns/{id}/send-bulk-sms', [CrmCampaignController::class, 'sendBulkSms']);
     Route::apiResource('crm-campaigns', CrmCampaignController::class)
         ->parameters(['crm-campaigns' => 'crmCampaign']);
 

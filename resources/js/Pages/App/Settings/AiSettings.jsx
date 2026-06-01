@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, usePage } from '@inertiajs/react';
 import {
     Alert, AutoComplete, Button, Card, Col, Divider, Form, Input, InputNumber, Row, Select,
@@ -31,6 +30,8 @@ export default function AiSettings() {
     const [data, setData] = useState(null);
     const [error, setError] = useState(null);
     const [form] = Form.useForm();
+    // Reactive provider value so model AutoComplete options update immediately
+    const currentProvider = Form.useWatch('ai_provider', form);
 
     useEffect(() => {
         if (!canView) {
@@ -118,29 +119,20 @@ export default function AiSettings() {
 
     if (!canView) {
         return (
-            <AuthenticatedLayout header={<Title level={5} style={{ margin: 0 }}>AI Settings</Title>}>
+            <div style={{ padding: 24 }}>
                 <Head title="AI Settings" />
-                <div style={{ padding: 24 }}>
-                    <Alert
-                        type="warning"
-                        showIcon
-                        message="You do not have permission to view AI Settings."
-                        description="Required permission: ai.settings.view or ai.manage."
-                    />
-                </div>
-            </AuthenticatedLayout>
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="You do not have permission to view AI Settings."
+                    description="Required permission: ai.settings.view or ai.manage."
+                />
+            </div>
         );
     }
 
     return (
-        <AuthenticatedLayout
-            header={
-                <Space>
-                    <ThunderboltOutlined style={{ color: token.colorPrimary }} />
-                    <Title level={5} style={{ margin: 0 }}>AI Settings</Title>
-                </Space>
-            }
-        >
+        <div>
             <Head title="AI Settings" />
 
             <div style={{ padding: 16 }}>
@@ -185,7 +177,7 @@ export default function AiSettings() {
                                         <AutoComplete
                                             allowClear
                                             placeholder="gpt-4o-mini"
-                                            options={(data?.model_suggestions?.[form.getFieldValue('ai_provider')] || []).map((m) => ({ value: m, label: m }))}
+                                            options={(data?.model_suggestions?.[currentProvider] || []).map((m) => ({ value: m, label: m }))}
                                             filterOption={(input, option) => (option?.value || '').toLowerCase().includes(input.toLowerCase())}
                                         />
                                     </Form.Item>
@@ -275,13 +267,13 @@ export default function AiSettings() {
                                     Reset Recommended Defaults
                                 </Button>
                                 {!canManage && (
-                                    <Text type="secondary">You do not have permission to edit AI settings.</Text>
+                                    <Text type="secondary">Read-only — you do not have permission to edit AI settings.</Text>
                                 )}
                             </Space>
                         </Form>
                     </Card>
                 )}
             </div>
-        </AuthenticatedLayout>
+        </div>
     );
 }

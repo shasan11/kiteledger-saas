@@ -10,6 +10,12 @@ class ChequeRegisterController extends BaseCrudApiController
 {
     protected string $modelClass = ChequeRegister::class;
 
+    protected ?string $businessRuleModule = 'cheque_register';
+
+    protected bool $validateBusinessRulesOnSave = true;
+
+    protected bool $validateBusinessRulesOnEdit = true;
+
     protected ?string $permissionPrefix = null;
 
     protected bool $usePolicyAuthorization = false;

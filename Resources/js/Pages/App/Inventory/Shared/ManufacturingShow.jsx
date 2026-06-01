@@ -12,6 +12,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { RecordMetaPanel } from '@/Components/Transactions';
+import BusinessRuleApprovalModal from '@/Components/BusinessRules/BusinessRuleApprovalModal';
 
 const { Title, Text } = Typography;
 
@@ -107,6 +108,7 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
   const [actioning, setActioning] = useState(false);
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState('');
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [voidForm] = Form.useForm();
 
   const load = async () => {
@@ -122,37 +124,29 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
 
   useEffect(() => { load(); }, [id]);
 
-  const handleApprove = () => {
-    const msg = documentType === 'production_journal'
-      ? 'Post this Production Journal? This will consume raw materials from stock and add finished goods. This action cannot be undone.'
-      : cfg.approveConfirm;
-
-    Modal.confirm({
-      title: cfg.approveLabel,
-      content: msg,
-      okText: cfg.approveLabel,
-      okType: 'primary',
-      cancelText: 'Cancel',
-      onOk: async () => {
-        setActioning(true);
-        try {
-          let res;
-          if (documentType === 'bom') {
-            res = await axios.patch(api(`${cfg.apiBase}/${id}/`), { approved: true, status: 'approved' }, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
-          } else {
-            res = await axios.post(api(cfg.approveEndpoint(id)), {}, { headers: authHeaders() });
-          }
-          message.success(documentType === 'production_journal' ? 'Journal posted successfully' : `${cfg.title} approved`);
-          setRecord(res.data);
-        } catch (e) {
-          const data = e?.response?.data;
-          const first = data && typeof data === 'object' ? Object.values(data).flat().filter(Boolean)[0] : null;
-          message.error(first || data?.message || 'Action failed');
-        } finally {
-          setActioning(false);
-        }
-      },
-    });
+  const handleApprove = async () => {
+    setActioning(true);
+    try {
+      let res;
+      if (documentType === 'bom') {
+        res = await axios.patch(api(`${cfg.apiBase}/${id}/`), { approved: true, status: 'approved' }, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+      } else {
+        res = await axios.post(api(cfg.approveEndpoint(id)), {}, { headers: authHeaders() });
+      }
+      setApproveModalOpen(false);
+      if (res.data?.business_rules?.has_warnings) {
+        message.warning(`${cfg.title} approved with warnings`);
+      } else {
+        message.success(documentType === 'production_journal' ? 'Journal posted successfully' : `${cfg.title} approved`);
+      }
+      setRecord(res.data);
+    } catch (e) {
+      const data = e?.response?.data;
+      const first = data && typeof data === 'object' ? Object.values(data).flat().filter(Boolean)[0] : null;
+      message.error(first || data?.message || 'Action failed');
+    } finally {
+      setActioning(false);
+    }
   };
 
   const handleVoid = async () => {
@@ -234,12 +228,12 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
             </Button>
           )}
           {cfg.canApprove(record) && (
-            <Button type="primary" icon={cfg.approveIcon} loading={actioning} onClick={handleApprove}>
+            <Button type="primary" icon={cfg.approveIcon} loading={actioning} onClick={() => setApproveModalOpen(true)}>
               {cfg.approveLabel}
             </Button>
           )}
           {cfg.canPost(record) && (
-            <Button type="primary" icon={<CheckCircleOutlined />} loading={actioning} onClick={handleApprove}>
+            <Button type="primary" icon={<CheckCircleOutlined />} loading={actioning} onClick={() => setApproveModalOpen(true)}>
               Post Journal
             </Button>
           )}
@@ -382,6 +376,15 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
           </Form.Item>
         </Form>
       </Modal>
+
+      <BusinessRuleApprovalModal
+        open={approveModalOpen}
+        module={documentType === 'bom' ? 'bill_of_material' : documentType}
+        transactionId={record?.id}
+        onApprove={handleApprove}
+        confirmLoading={actioning}
+        onCancel={() => setApproveModalOpen(false)}
+      />
     </AuthenticatedLayout>
   );
 }

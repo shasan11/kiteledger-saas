@@ -1,7 +1,12 @@
-import { LogoutOutlined, ProfileOutlined, UserOutlined,MenuFoldOutlined,MenuUnfoldOutlined } from '@ant-design/icons';
+import {
+    LogoutOutlined,
+    ProfileOutlined,
+    UserOutlined,
+    MenuFoldOutlined,
+    MenuUnfoldOutlined,
+} from '@ant-design/icons';
 import { Avatar, Button, Dropdown, Empty, Layout, Menu, Tooltip, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 
 import { useAppContext } from '@/Contexts/AppContext';
 
@@ -140,15 +145,9 @@ export default function AppSidebar({
         };
     }, [setCollapsed]);
 
-    const parentKeyMap = useMemo(
-        () => buildParentKeyMap(menuItems),
-        [menuItems],
-    );
+    const parentKeyMap = useMemo(() => buildParentKeyMap(menuItems), [menuItems]);
 
-    const rootSubmenuKeys = useMemo(
-        () => getRootSubmenuKeys(menuItems),
-        [menuItems],
-    );
+    const rootSubmenuKeys = useMemo(() => getRootSubmenuKeys(menuItems), [menuItems]);
 
     const coloredMenuItems = useMemo(
         () => colorizeMenuItems(menuItems, token.colorPrimary),
@@ -592,17 +591,54 @@ export default function AppSidebar({
                         color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
                     }
 
-                    .app-sidebar .ant-menu-sub .ant-menu-item .ant-menu-item-icon {
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-title {
+                        height: 36px !important;
+                        line-height: 36px !important;
+                        margin: ${token.marginXXS}px 0 !important;
+                        padding-left: 50px !important;
+                        padding-right: 34px !important;
+                        font-size: ${token.fontSizeSM}px;
+                        font-weight: ${token.fontWeightStrong};
+                        border-radius: var(--sidebar-radius-sm) !important;
+                        color: var(--sidebar-text-soft) !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-title:hover {
+                        background: var(--sidebar-item-hover-bg, var(--sidebar-bg-hover)) !important;
+                        color: var(--sidebar-item-color, var(--sidebar-text)) !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-selected > .ant-menu-submenu-title,
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-open > .ant-menu-submenu-title {
+                        background: var(--sidebar-item-active-bg, var(--sidebar-bg-active)) !important;
+                        color: var(--sidebar-item-color, ${token.colorPrimary}) !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-item .ant-menu-item-icon,
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-title .ant-menu-item-icon {
                         width: 18px !important;
                         height: 18px !important;
                         min-width: 18px !important;
                         margin-inline-end: ${token.marginXS}px !important;
                     }
 
-                    .app-sidebar .ant-menu-sub .ant-menu-item svg {
+                    .app-sidebar .ant-menu-sub .ant-menu-item svg,
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-title svg {
                         width: 14px;
                         height: 14px;
                         font-size: ${token.fontSize}px;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-submenu-title .ant-menu-submenu-arrow {
+                        inset-inline-end: ${token.paddingSM}px !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-sub .ant-menu-item {
+                        padding-left: 64px !important;
+                    }
+
+                    .app-sidebar .ant-menu-sub .ant-menu-sub .ant-menu-submenu-title {
+                        padding-left: 64px !important;
                     }
 
                     .app-sidebar .ant-menu-submenu-arrow {
@@ -770,9 +806,9 @@ export default function AppSidebar({
                             className="app-sidebar-toggle"
                             icon={
                                 isCollapsed ? (
-                                    <MenuUnfoldOutlined/>
+                                    <MenuUnfoldOutlined />
                                 ) : (
-                                    <MenuFoldOutlined/>
+                                    <MenuFoldOutlined />
                                 )
                             }
                             onClick={() => setCollapsed(!isCollapsed)}

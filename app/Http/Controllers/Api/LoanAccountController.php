@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\Accounting\Services\LoanAccountService;
 use App\Models\LoanAccount;
 use App\Models\LoanCharge;
+use App\Models\LoanPayback;
 use App\Models\LoanTopUp;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class LoanAccountController extends BaseCrudApiController
 {
@@ -172,5 +175,107 @@ class LoanAccountController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    // -----------------------------------------------------------------------
+    // Principal Payback
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all paybacks for a given loan account.
+     */
+    public function paybacks(LoanAccount $loanAccount)
+    {
+        $paybacks = LoanPayback::query()
+            ->where('loan_account_id', $loanAccount->id)
+            ->with(['paidFromAccount', 'journalVoucher', 'userAdd'])
+            ->orderByDesc('payback_date')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (LoanPayback $p) => [
+                'id'                    => $p->id,
+                'payback_date'          => $p->payback_date?->toDateString(),
+                'amount'                => (float) $p->amount,
+                'paid_from_account_id'  => $p->paid_from_account_id,
+                'paid_from_account'     => $p->paidFromAccount ? [
+                    'id'   => $p->paidFromAccount->id,
+                    'code' => $p->paidFromAccount->code,
+                    'name' => $p->paidFromAccount->name,
+                ] : null,
+                'reference'             => $p->reference,
+                'notes'                 => $p->notes,
+                'active'                => $p->active,
+                'journal_voucher_id'    => $p->journal_voucher_id,
+                'created_at'            => $p->created_at?->toDateTimeString(),
+            ]);
+
+        return response()->json([
+            'data'  => $paybacks,
+            'count' => $paybacks->count(),
+        ]);
+    }
+
+    /**
+     * Record a principal repayment.
+     */
+    public function storePayback(Request $request, LoanAccount $loanAccount)
+    {
+        $validated = $request->validate([
+            'payback_date'         => ['required', 'date'],
+            'amount'               => ['required', 'numeric', 'min:0.01'],
+            'paid_from_account_id' => ['required', 'uuid', 'exists:accounts,id'],
+            'reference'            => ['nullable', 'string', 'max:120'],
+            'notes'                => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ((float) ($loanAccount->current_balance ?? 0) <= 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'This loan account has no outstanding principal balance to repay.',
+            ]);
+        }
+
+        $service  = app(LoanAccountService::class);
+        $payback  = $service->recordPayback(
+            $loanAccount,
+            $validated,
+            $request->user()?->getAuthIdentifier()
+        );
+
+        // Refresh the loan account so the response reflects the new balance
+        $loanAccount->refresh();
+
+        return response()->json([
+            'message'      => 'Principal repayment recorded successfully.',
+            'payback'      => $payback,
+            'loan_account' => [
+                'id'              => $loanAccount->id,
+                'current_balance' => (float) $loanAccount->current_balance,
+            ],
+        ], 201);
+    }
+
+    /**
+     * Void / deactivate a payback (soft delete).
+     */
+    public function destroyPayback(Request $request, LoanAccount $loanAccount, LoanPayback $payback)
+    {
+        if ((string) $payback->loan_account_id !== (string) $loanAccount->id) {
+            abort(404);
+        }
+
+        $payback->forceFill(['active' => false])->save();
+
+        // Recalculate balance without this payback
+        app(LoanAccountService::class)->recalculateCurrentBalance(
+            $loanAccount->fresh(['loanTopUps', 'loanPaybacks'])
+        );
+
+        return response()->json([
+            'message' => 'Payback record voided.',
+            'loan_account' => [
+                'id'              => $loanAccount->id,
+                'current_balance' => (float) $loanAccount->fresh()->current_balance,
+            ],
+        ]);
     }
 }

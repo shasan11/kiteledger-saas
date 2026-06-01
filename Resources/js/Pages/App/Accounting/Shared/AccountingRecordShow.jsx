@@ -43,6 +43,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { relationLabel, toNumber, useMoneyFormatter } from './currency';
 import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 import { RecordMetaPanel } from '@/Components/Transactions';
+import BusinessRuleApprovalModal from '@/Components/BusinessRules/BusinessRuleApprovalModal';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -1488,6 +1489,7 @@ export default function AccountingRecordShow({
   const [printTemplateLoading, setPrintTemplateLoading] = useState(false);
   const [printTemplateError, setPrintTemplateError] = useState('');
   const [companyInfo, setCompanyInfo] = useState(null);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [form] = Form.useForm();
 
   const module = moduleFromTitle(title);
@@ -1789,6 +1791,7 @@ export default function AccountingRecordShow({
       });
 
       message.success(`${title} approved`);
+      setApproveModalOpen(false);
       await loadRecord();
     } catch (err) {
       message.error(err?.response?.data?.message || 'Approval failed');
@@ -2310,7 +2313,7 @@ export default function AccountingRecordShow({
                       }
 
                       if (key === 'approve') {
-                        approveRecord();
+                        setApproveModalOpen(true);
                       }
                     },
                   }}
@@ -2593,6 +2596,15 @@ export default function AccountingRecordShow({
           ) : null}
         </Form>
       </Modal>
+
+      <BusinessRuleApprovalModal
+        open={approveModalOpen}
+        module={printDocumentType || module}
+        transactionId={record?.id}
+        onApprove={approveRecord}
+        confirmLoading={saving}
+        onCancel={() => setApproveModalOpen(false)}
+      />
     </AuthenticatedLayout>
   );
 }

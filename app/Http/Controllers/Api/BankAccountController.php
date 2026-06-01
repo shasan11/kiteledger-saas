@@ -93,7 +93,6 @@ class BankAccountController extends BaseCrudApiController
         'account_number' => ['nullable', 'string', 'max:80'],
         'account_type' => ['nullable', 'string', 'max:50'],
         'swift_code' => ['nullable', 'string', 'max:50'],
-        'opening_balance' => ['nullable', 'numeric'],
 
         'active' => ['nullable', 'boolean'],
     ];
@@ -116,7 +115,6 @@ class BankAccountController extends BaseCrudApiController
             'account_number' => ['sometimes', 'nullable', 'string', 'max:80'],
             'account_type' => ['sometimes', 'nullable', 'string', 'max:50'],
             'swift_code' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'opening_balance' => ['sometimes', 'nullable', 'numeric'],
 
             'active' => ['sometimes', 'nullable', 'boolean'],
         ];
@@ -125,9 +123,8 @@ class BankAccountController extends BaseCrudApiController
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         /** @var BankAccount $record */
-        $openingBalance = (float) ($record->opening_balance ?? 0);
         $ledgerBalance = (float) (optional($record->account)->balance ?? 0);
-        $softwareBalance = $openingBalance + $ledgerBalance;
+        $softwareBalance = $ledgerBalance;
 
         $statementLines = BankStatementLine::query()
             ->where('bank_account_id', $record->id)
@@ -135,9 +132,9 @@ class BankAccountController extends BaseCrudApiController
             ->orderBy('created_at')
             ->get();
 
-        $statementRows = $this->formatStatementLines($statementLines, $openingBalance);
+        $statementRows = $this->formatStatementLines($statementLines, 0.0);
         $lastStatement = collect($statementRows)->last();
-        $statementBalance = $lastStatement['balance'] ?? $openingBalance;
+        $statementBalance = $lastStatement['balance'] ?? 0.0;
         $difference = round(((float) $statementBalance) - $softwareBalance, 2);
 
         $data['statement_balance'] = round((float) $statementBalance, 2);
@@ -206,7 +203,7 @@ class BankAccountController extends BaseCrudApiController
             ->select('journal_voucher_lines.*')
             ->get();
 
-        $softwareBalance = (float) ($bankAccount->opening_balance ?? 0);
+        $softwareBalance = 0.0;
 
         $allRows = $query->map(function (JournalVoucherLine $line) use (&$softwareBalance) {
             $debit = (float) $line->debit;
@@ -244,10 +241,10 @@ class BankAccountController extends BaseCrudApiController
             ->orderBy('created_at')
             ->get();
 
-        $statementRows = $this->formatStatementLines($statementLines, (float) ($bankAccount->opening_balance ?? 0));
-        $allStatementRows = $this->formatStatementLines($allStatementLines, (float) ($bankAccount->opening_balance ?? 0));
+        $statementRows = $this->formatStatementLines($statementLines, 0.0);
+        $allStatementRows = $this->formatStatementLines($allStatementLines, 0.0);
         $lastStatement = collect($allStatementRows)->last();
-        $statementBalance = $lastStatement['balance'] ?? (float) ($bankAccount->opening_balance ?? 0);
+        $statementBalance = $lastStatement['balance'] ?? 0.0;
 
         return response()->json([
             'bank_account' => $bankAccount->load(['branch', 'currency', 'account']),

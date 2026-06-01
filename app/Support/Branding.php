@@ -7,17 +7,22 @@ use Illuminate\Support\Facades\Storage;
 
 class Branding
 {
-    public static function faviconUrl(): ?string
+    /**
+     * Returns the active favicon URL.
+     * Falls back to /favicon.ico (the default file shipped in public/) when no
+     * custom favicon has been uploaded in App Settings.
+     */
+    public static function faviconUrl(): string
     {
         try {
             $favicon = AppSetting::query()
                 ->orderBy('created_at')
                 ->value('favicon');
         } catch (\Throwable) {
-            return null;
+            return asset('favicon.ico');
         }
 
-        return self::publicFileUrl($favicon);
+        return self::publicFileUrl($favicon) ?? asset('favicon.ico');
     }
 
     public static function publicFileUrl(?string $path): ?string

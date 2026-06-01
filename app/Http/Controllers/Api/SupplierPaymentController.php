@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Models\Account;
-use App\Models\AppSetting;
 use App\Models\SupplierPayment;
 use App\Models\SupplierPaymentLine;
 use App\Models\PurchaseBill;
@@ -137,7 +135,6 @@ class SupplierPaymentController extends BaseCrudApiController
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
-        $this->checkNegativeCashBalance($parentData);
         $this->validatePaymentAllocations($parentData, $nestedData);
 
         return $parentData;
@@ -148,7 +145,6 @@ class SupplierPaymentController extends BaseCrudApiController
         array $nestedData,
         Model $record
     ): array {
-        $this->checkNegativeCashBalance($parentData, $record);
         $this->validatePaymentAllocations($parentData, $nestedData, $record);
 
         return $parentData;
@@ -169,6 +165,9 @@ class SupplierPaymentController extends BaseCrudApiController
         $this->checkAccess($request, 'update', $record);
         $this->assertRecordBranchAccess($request, $record);
 
+        $businessRules = $this->validateBusinessRulesForApproval($this->businessRuleModule(), $record);
+        $this->blockIfBusinessRuleErrors($businessRules);
+
         $approved = app(TransactionApprovalService::class)->approve(
             $record,
             $request->user()?->getAuthIdentifier()
@@ -176,7 +175,7 @@ class SupplierPaymentController extends BaseCrudApiController
 
         PurchaseBill::recalculatePaymentTotalsForContact($approved->contact_id);
 
-        return response()->json($this->serializeRecord($approved->refresh()));
+        return $this->respondWithBusinessRuleWarnings($this->serializeRecord($approved->refresh()));
     }
 
     public function transactionVoid(Request $request, mixed $id)
@@ -243,53 +242,6 @@ class SupplierPaymentController extends BaseCrudApiController
         $contactIds->each(fn ($contactId) => PurchaseBill::recalculatePaymentTotalsForContact($contactId));
 
         return $response;
-    }
-
-    private function checkNegativeCashBalance(array $parentData, ?Model $record = null): void
-    {
-        $config = AppSetting::query()->where('active', true)->oldest()->first();
-        $mode = $config?->negative_cash_balance ?? 'warn';
-        if ($mode === 'allow') return;
-        if ($this->isValidationOverrideConfirmed('negative_cash_balance')) return;
-
-        $accountId = $parentData['account_id'] ?? $record?->account_id;
-        if (!$accountId) return;
-
-        $account = Account::find($accountId);
-        if (!$account) return;
-
-        $outgoingAmount = (float) ($parentData['amount'] ?? $record?->amount ?? 0)
-            + (float) ($parentData['bank_charges'] ?? $record?->bank_charges ?? 0);
-
-        if ($outgoingAmount <= 0) return;
-
-        $currentBalance = (float) ($account->balance ?? 0);
-        $projectedBalance = $currentBalance - $outgoingAmount;
-
-        if ($projectedBalance >= 0) return;
-
-        $warningData = [
-            'account_name' => $account->name,
-            'current_balance' => $currentBalance,
-            'outgoing_amount' => $outgoingAmount,
-            'projected_balance' => $projectedBalance,
-            'negative_amount' => abs($projectedBalance),
-        ];
-
-        if (in_array($mode, ['block', 'reject'], true)) {
-            $this->throwValidation([
-                'account_id' => [
-                    sprintf(
-                        'Insufficient balance in account "%s". Available: %.2f, Required: %.2f.',
-                        $account->name,
-                        $currentBalance,
-                        $outgoingAmount
-                    ),
-                ],
-            ]);
-        } else {
-            $this->throwValidationWarning(['negative_cash_balance' => $warningData]);
-        }
     }
 
     private function validatePaymentAllocations(array $parentData, array $nestedData, ?Model $record = null): void

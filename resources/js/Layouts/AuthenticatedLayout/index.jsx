@@ -34,8 +34,9 @@ export default function AuthenticatedLayout({ header, children }) {
     const page = usePage();
     const user = page.props.auth.user;
     const permissions = page.props.auth?.permissions || [];
+    const canBypass = !!page.props?.auth?.canBypassPermissions;
     const branchContext = page.props.branchContext || {};
-    const can = (permission) => permissions.includes(permission);
+    const can = (permission) => canBypass || permissions.includes(permission);
     const screens = useBreakpoint();
     const isMobile = !screens.md;
 
@@ -100,6 +101,16 @@ export default function AuthenticatedLayout({ header, children }) {
                       },
                   ]
                 : []),
+            ...(can('document_upload.view')
+                ? [
+                      {
+                          key: 'ai-document-upload',
+                          icon: <InboxOutlined />,
+                          label: 'AI Document Upload',
+                          onClick: () => visit('documents.upload.index', '/documents/upload'),
+                      },
+                  ]
+                : []),
             ...([
                 'pos.sale.create',
                 'pos.sale.view',
@@ -155,8 +166,38 @@ export default function AuthenticatedLayout({ header, children }) {
                     {
                         key: 'campaigns',
                         label: 'Campaigns',
-                        onClick: () =>
-                            visit('crm.campaigns.index', '/crm/campaigns'),
+                        children: [
+                            {
+                                key: 'campaigns-all',
+                                label: 'All Campaigns',
+                                onClick: () =>
+                                    visit('crm.campaigns.index', '/crm/campaigns'),
+                            },
+                            {
+                                key: 'campaigns-email',
+                                label: 'Email Messages',
+                                onClick: () =>
+                                    visit('crm.campaigns.index', '/crm/campaigns?tab=email'),
+                            },
+                            {
+                                key: 'campaigns-sms',
+                                label: 'SMS Messages',
+                                onClick: () =>
+                                    visit('crm.campaigns.index', '/crm/campaigns?tab=sms'),
+                            },
+                            {
+                                key: 'campaigns-logs',
+                                label: 'Send Logs',
+                                onClick: () =>
+                                    visit('crm.campaigns.index', '/crm/campaigns?tab=logs'),
+                            },
+                            {
+                                key: 'campaigns-templates',
+                                label: 'Templates',
+                                onClick: () =>
+                                    visit('crm.campaigns.index', '/crm/campaigns?tab=templates'),
+                            },
+                        ],
                     },
                     {
                         key: 'crm-tickets',
@@ -578,11 +619,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         onClick: () => visit('hrm.payroll.index', '/hrm/payroll'),
                     },
                     {
-                        key: 'hrm-payslips',
-                        label: 'Payslips',
-                        onClick: () => visit('hrm.payslips.index', '/hrm/payslips'),
-                    },
-                    {
                         key: 'hrm-emp-docs',
                         label: 'Employee Documents',
                         onClick: () =>
@@ -671,6 +707,9 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
 
+        if (isActive('/ai/assistant')) return ['ai-assistant'];
+        if (isActive('/documents/upload')) return ['ai-document-upload'];
+
         if (isActive('/pos')) return ['pos'];
 
         if (page.url === '/crm') return ['leads'];
@@ -679,6 +718,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/crm/deals')) return ['deals'];
         if (isActive('/crm/activity-inbox')) return ['activity-inbox'];
         if (isActive('/crm/activities')) return ['activities'];
+        if (isActive('/crm/campaigns')) return ['campaigns-all'];
         if (isActive('/crm/tickets') || isActive('/support/tickets')) return ['crm-tickets'];
 
         if (isActive('/workflow')) return ['workflow'];
@@ -754,7 +794,6 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/hrm/attendance')) return ['hrm-attendance'];
         if (isActive('/hrm/leave-applications')) return ['hrm-leaves'];
         if (isActive('/hrm/payroll')) return ['hrm-payroll'];
-        if (isActive('/hrm/payslips')) return ['hrm-payslips'];
         if (isActive('/hrm/employee-documents')) return ['hrm-emp-docs'];
         if (isActive('/hrm/onboarding')) return ['hrm-onboarding'];
         if (isActive('/hrm/departments')) return ['settings-hrm-setup'];
@@ -818,6 +857,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/settings/hrm-configuration')) return ['settings-hrm-config'];
         if (isActive('/settings/inventory-configuration')) return ['settings-inventory-config'];
         if (isActive('/settings/email-configuration')) return ['settings-email-config'];
+        if (isActive('/settings/sms-configuration')) return ['settings-sms-config'];
         if (isActive('/settings/email-templates')) return ['settings-email-templates'];
         if (isActive('/settings/application-settings')) return ['settings-application-settings'];
         if (isActive('/settings/general-settings')) return ['settings-general-settings'];

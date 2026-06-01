@@ -6,11 +6,14 @@
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
-        @if (!empty($faviconUrl))
-            <link rel="icon" href="{{ $faviconUrl }}" @if (!empty($faviconMimeType)) type="{{ $faviconMimeType }}" @endif>
-            <link rel="shortcut icon" href="{{ $faviconUrl }}" @if (!empty($faviconMimeType)) type="{{ $faviconMimeType }}" @endif>
-            <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
-        @endif
+        @php
+            // faviconUrl is always set (custom upload or default /favicon.ico)
+            $resolvedFavicon  = $faviconUrl ?? asset('favicon.ico');
+            $resolvedMimeType = $faviconMimeType ?? 'image/x-icon';
+        @endphp
+        <link rel="icon" href="{{ $resolvedFavicon }}" type="{{ $resolvedMimeType }}">
+        <link rel="shortcut icon" href="{{ $resolvedFavicon }}" type="{{ $resolvedMimeType }}">
+        <link rel="apple-touch-icon" href="{{ $resolvedFavicon }}">
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

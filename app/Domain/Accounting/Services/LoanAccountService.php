@@ -3,6 +3,9 @@
 namespace App\Domain\Accounting\Services;
 
 use App\Models\LoanAccount;
+use App\Models\LoanPayback;
+use App\Models\JournalVoucher;
+use App\Models\JournalVoucherLine;
 use App\Models\AccountingConfiguration;
 use App\Models\ChartOfAccount;
 use Illuminate\Support\Facades\DB;
@@ -128,15 +131,124 @@ class LoanAccountService
 
     public function recalculateCurrentBalance(LoanAccount $loanAccount): void
     {
-        $loanAccount->loadMissing('loanTopUps');
+        $loanAccount->loadMissing(['loanTopUps', 'loanPaybacks']);
 
         $topupTotal = $loanAccount->loanTopUps
             ->where('active', true)
             ->sum(fn ($topup) => (float) $topup->amount);
 
+        $paybackTotal = $loanAccount->loanPaybacks
+            ->where('active', true)
+            ->sum(fn ($payback) => (float) $payback->amount);
+
+        $balance = round(
+            (float) $loanAccount->opening_balance + $topupTotal - $paybackTotal,
+            6
+        );
+
         $loanAccount->forceFill([
-            'current_balance' => round((float) $loanAccount->opening_balance + $topupTotal, 6),
+            'current_balance' => max(0, $balance),
         ])->saveQuietly();
+    }
+
+    /**
+     * Record a principal repayment for a loan account.
+     *
+     * Accounting entry:
+     *   Dr  Loan Liability Account (related_account_id)   — reduces liability
+     *   Cr  Bank / Cash Account (paid_from_account_id)    — cash paid out
+     *
+     * @param  LoanAccount  $loanAccount
+     * @param  array{
+     *   payback_date: string,
+     *   amount: float,
+     *   paid_from_account_id: string,
+     *   reference: string|null,
+     *   notes: string|null,
+     * }  $data
+     * @param  int|null  $userId
+     * @return LoanPayback
+     */
+    public function recordPayback(LoanAccount $loanAccount, array $data, ?int $userId = null): LoanPayback
+    {
+        $amount = round((float) $data['amount'], 6);
+
+        if ($amount <= 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'Payback amount must be greater than zero.',
+            ]);
+        }
+
+        if (!$loanAccount->related_account_id) {
+            throw ValidationException::withMessages([
+                'related_account_id' => 'Loan liability account is not configured. Please set it on the loan account before recording a payback.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($loanAccount, $data, $amount, $userId) {
+            // Create the payback record
+            $payback = LoanPayback::create([
+                'loan_account_id'       => $loanAccount->id,
+                'payback_date'          => $data['payback_date'],
+                'amount'                => $amount,
+                'paid_from_account_id'  => $data['paid_from_account_id'],
+                'reference'             => $data['reference'] ?? null,
+                'notes'                 => $data['notes'] ?? null,
+                'active'                => true,
+                'is_system_generated'   => false,
+                'user_add_id'           => $userId,
+            ]);
+
+            // Post journal voucher
+            //   Dr  Loan Liability (related_account_id)
+            //   Cr  Bank/Cash      (paid_from_account_id)
+            $jv = JournalVoucher::create([
+                'voucher_date'         => $data['payback_date'],
+                'reference'            => $data['reference'] ?? null,
+                'narration'            => 'Principal repayment — ' . $loanAccount->name,
+                'remarks'              => $data['notes'] ?? null,
+                'source_type'          => LoanPayback::class,
+                'source_id'            => $payback->id,
+                'source_module'        => 'loan_payback',
+                'is_auto_generated'    => true,
+                'is_system_generated'  => true,
+                'status'               => 'posted',
+                'active'               => true,
+                'approved'             => true,
+                'void'                 => false,
+                'exchange_rate'        => 1,
+                'total'                => $amount,
+                'user_add_id'          => $userId,
+            ]);
+
+            // Debit: Loan liability account (reduces the liability)
+            JournalVoucherLine::create([
+                'journal_voucher_id' => $jv->id,
+                'account_id'         => $loanAccount->related_account_id,
+                'description'        => 'Principal repayment — ' . $loanAccount->name,
+                'debit'              => $amount,
+                'credit'             => 0,
+                'exchange_rate'      => 1,
+            ]);
+
+            // Credit: Bank/Cash account (cash paid out)
+            JournalVoucherLine::create([
+                'journal_voucher_id' => $jv->id,
+                'account_id'         => $data['paid_from_account_id'],
+                'description'        => 'Principal repayment — ' . $loanAccount->name,
+                'debit'              => 0,
+                'credit'             => $amount,
+                'exchange_rate'      => 1,
+            ]);
+
+            // Link JV to the payback record
+            $payback->forceFill(['journal_voucher_id' => $jv->id])->saveQuietly();
+
+            // Recalculate the running balance on the loan account
+            $this->recalculateCurrentBalance($loanAccount->fresh(['loanTopUps', 'loanPaybacks']));
+
+            return $payback->load(['paidFromAccount', 'journalVoucher']);
+        });
     }
 
     protected function syncGeneratedJournalVoucher(LoanAccount $loanAccount): void

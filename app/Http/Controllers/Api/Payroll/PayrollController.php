@@ -8,6 +8,7 @@ use App\Models\Payroll;
 use App\Models\PayrollPeriod;
 use App\Models\PayrollSetting;
 use App\Models\User;
+use App\Services\BusinessRules\TransactionRuleValidator;
 use App\Services\Payroll\PayrollAccountSyncService;
 use App\Services\Payroll\PayrollService;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +18,9 @@ use Illuminate\Validation\Rule;
 class PayrollController extends BaseCrudApiController
 {
     protected string $modelClass = Payroll::class;
+    protected ?string $businessRuleModule = 'payroll';
+    protected bool $validateBusinessRulesOnSave = true;
+    protected bool $validateBusinessRulesOnEdit = true;
     protected ?string $permissionPrefix = 'hrm.payroll';
     protected bool $branchScoped = true;
     protected bool $autoFillBranchOnCreate = true;
@@ -178,12 +182,18 @@ class PayrollController extends BaseCrudApiController
     {
         $this->requirePermission($request, 'approve');
 
-        return response()->json($service->transition(
-            Payroll::query()->findOrFail($id),
+        $payroll = Payroll::query()->with($this->relations)->findOrFail($id);
+        $businessRules = app(TransactionRuleValidator::class)->validateForApproval('payroll', $payroll);
+        $this->blockIfBusinessRuleErrors($businessRules);
+
+        $approved = $service->transition(
+            $payroll,
             'approved',
             'approve',
             $request->user()
-        ));
+        );
+
+        return response()->json($this->withBusinessRules($approved, $businessRules));
     }
 
     public function review(Request $request, string $id)
@@ -223,12 +233,18 @@ class PayrollController extends BaseCrudApiController
             ])->save();
         }
 
-        return response()->json($service->transition(
+        $payroll->load($this->relations);
+        $businessRules = app(TransactionRuleValidator::class)->validateForApproval('payroll', $payroll);
+        $this->blockIfBusinessRuleErrors($businessRules);
+
+        $paid = $service->transition(
             $payroll,
             'paid',
             'pay',
             $request->user()
-        ));
+        );
+
+        return response()->json($this->withBusinessRules($paid, $businessRules));
     }
 
     public function lock(Request $request, string $id, PayrollService $service)
@@ -411,6 +427,18 @@ class PayrollController extends BaseCrudApiController
             'selected_employee_ids.*' => ['integer', 'exists:users,id'],
             'remarks' => ['nullable', 'string', 'max:1000'],
         ]);
+    }
+
+    protected function withBusinessRules(Model $record, array $businessRules): array
+    {
+        $payload = $record->toArray();
+        $payload['business_rules'] = $businessRules;
+
+        if ($businessRules['has_warnings'] ?? false) {
+            $payload['message'] = 'Saved with warnings.';
+        }
+
+        return $payload;
     }
 
     protected function requirePermission(Request $request, string $permission): void

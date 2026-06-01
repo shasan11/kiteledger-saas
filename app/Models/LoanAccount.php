@@ -87,4 +87,9 @@ class LoanAccount extends Model
     {
         return $this->hasMany(LoanCharge::class);
     }
+
+    public function loanPaybacks(): HasMany
+    {
+        return $this->hasMany(LoanPayback::class);
+    }
 }

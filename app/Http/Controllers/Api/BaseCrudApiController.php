@@ -10,6 +10,7 @@ use App\Services\DocumentNumberingService;
 use App\Services\AppContextService;
 use App\Services\TransactionApprovalService;
 use App\Services\TransactionVoidService;
+use App\Traits\ValidatesBusinessRules;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -25,6 +26,7 @@ use Throwable;
 abstract class BaseCrudApiController extends Controller
 {
     use AuthorizesRequests;
+    use ValidatesBusinessRules;
 
     protected string $modelClass;
 
@@ -92,6 +94,12 @@ abstract class BaseCrudApiController extends Controller
 
     protected array $nested = [];
 
+    protected ?string $businessRuleModule = null;
+
+    protected bool $validateBusinessRulesOnSave = false;
+
+    protected bool $validateBusinessRulesOnEdit = false;
+
     public function index(Request $request)
     {
         $this->checkAccess($request, 'index');
@@ -144,6 +152,14 @@ abstract class BaseCrudApiController extends Controller
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
+        if ($this->validateBusinessRulesOnSave && $this->businessRuleModule()) {
+            $result = $this->validateBusinessRulesForSave(
+                $this->businessRuleModule(),
+                $this->businessRulePayload($parentData, $nestedData)
+            );
+            $this->blockIfBusinessRuleErrors($result);
+        }
+
         $record = DB::transaction(function () use ($parentData, $nestedData, $deletedIds) {
             $parentData = $this->mutateParentDataBeforeCreate($parentData, $nestedData);
 
@@ -156,7 +172,7 @@ abstract class BaseCrudApiController extends Controller
             return $record->fresh($this->validEagerLoadRelations($record));
         });
 
-        return response()->json(
+        return $this->respondWithBusinessRuleWarnings(
             $this->serializeRecord($record),
             201
         );
@@ -195,6 +211,22 @@ abstract class BaseCrudApiController extends Controller
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
+        if ($this->validateBusinessRulesOnEdit && $this->businessRuleModule()) {
+            $result = $this->validateBusinessRulesForEdit(
+                $this->businessRuleModule(),
+                $this->businessRulePayload(array_merge($record->toArray(), $parentData), $nestedData, $record)
+            );
+            $this->blockIfBusinessRuleErrors($result);
+        }
+
+        if (($parentData['approved'] ?? null) && !(bool) ($record->approved ?? false)) {
+            $result = $this->validateBusinessRulesForApproval(
+                $this->businessRuleModule(),
+                $this->businessRulePayload(array_merge($record->toArray(), $parentData), $nestedData, $record)
+            );
+            $this->blockIfBusinessRuleErrors($result);
+        }
+
         $record = DB::transaction(function () use ($record, $parentData, $nestedData, $deletedIds) {
             $parentData = $this->mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
 
@@ -211,7 +243,7 @@ abstract class BaseCrudApiController extends Controller
             return $record->fresh($this->validEagerLoadRelations($record));
         });
 
-        return response()->json(
+        return $this->respondWithBusinessRuleWarnings(
             $this->serializeRecord($record)
         );
     }
@@ -482,12 +514,15 @@ abstract class BaseCrudApiController extends Controller
         $this->assertRecordBranchAccess($request, $record);
         $this->assertFiscalYearWriteAllowed($record, $request, $record);
 
+        $businessRules = $this->validateBusinessRulesForApproval($this->businessRuleModule(), $record);
+        $this->blockIfBusinessRuleErrors($businessRules);
+
         $approved = app(TransactionApprovalService::class)->approve(
             $record,
             $request->user()?->getAuthIdentifier()
         );
 
-        return response()->json($this->serializeRecord($approved));
+        return $this->respondWithBusinessRuleWarnings($this->serializeRecord($approved));
     }
 
     public function bulkApprove(Request $request)
@@ -2200,6 +2235,44 @@ abstract class BaseCrudApiController extends Controller
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
         return $data;
+    }
+
+    protected function businessRuleModule(): string
+    {
+        return $this->businessRuleModule ?: Str::snake(class_basename($this->modelClass));
+    }
+
+    protected function businessRulePayload(array $parentData, array $nestedData, ?Model $record = null): array
+    {
+        $payload = $parentData;
+
+        foreach ($nestedData as $field => $rows) {
+            $payload[$field] = $rows;
+
+            $relation = $this->nested[$field]['relation'] ?? null;
+            if ($relation) {
+                $payload[$relation] = $rows;
+                $payload[Str::snake($relation)] = $rows;
+            }
+        }
+
+        if ($record) {
+            foreach ($this->nested as $field => $config) {
+                if (array_key_exists($field, $payload)) {
+                    continue;
+                }
+
+                $relation = $config['relation'] ?? $field;
+                if (method_exists($record, $relation)) {
+                    $rows = $record->{$relation}()->get()->toArray();
+                    $payload[$field] = $rows;
+                    $payload[$relation] = $rows;
+                    $payload[Str::snake($relation)] = $rows;
+                }
+            }
+        }
+
+        return $payload;
     }
 
     protected function eagerLoadRelations(): array

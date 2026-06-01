@@ -14,7 +14,6 @@ import {
   Table,
   Tag,
   Typography,
-  Modal,
   message,
   theme,
 } from 'antd';
@@ -23,6 +22,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
 import { RecordMetaPanel } from '@/Components/Transactions';
 import LabelPrintDrawer, { isLabelPrintableAdjustmentLine } from '@/Components/Labels/LabelPrintDrawer';
+import BusinessRuleApprovalModal from '@/Components/BusinessRules/BusinessRuleApprovalModal';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -812,6 +812,7 @@ export default function InventoryRecordShow({
   const [labelDrawerOpen, setLabelDrawerOpen] = useState(false);
   const [labelInitialLineIds, setLabelInitialLineIds] = useState([]);
   const [approving, setApproving] = useState(false);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -853,31 +854,29 @@ export default function InventoryRecordShow({
     setRecord(data);
   };
 
-  const approveRecord = () => {
-    Modal.confirm({
-      title: documentType === 'warehouse_transfer' ? 'Post warehouse transfer?' : 'Post inventory adjustment?',
-      content: 'This will update warehouse stock and lock the document from normal editing.',
-      okText: 'Approve / Post',
-      onOk: async () => {
-        setApproving(true);
-        try {
-          const cleanEndpoint = endpoint.replace(/\/$/, '');
-          await axios.post(api(`${cleanEndpoint}/${id}/approve`), {}, { headers: authHeaders() });
-          await reloadRecord();
-          message.success('Document approved and posted.');
-        } catch (err) {
-          const data = err?.response?.data;
-          const errors = data?.errors || data || {};
-          const firstError = typeof errors === 'object'
-            ? Object.values(errors).flat().filter(Boolean)[0]
-            : null;
-          message.error(firstError || data?.message || 'Approval failed.');
-          throw err;
-        } finally {
-          setApproving(false);
-        }
-      },
-    });
+  const approveRecord = async () => {
+    setApproving(true);
+    try {
+      const cleanEndpoint = endpoint.replace(/\/$/, '');
+      const response = await axios.post(api(`${cleanEndpoint}/${id}/approve`), {}, { headers: authHeaders() });
+      await reloadRecord();
+      setApproveModalOpen(false);
+      if (response.data?.business_rules?.has_warnings) {
+        message.warning('Document approved with warnings.');
+      } else {
+        message.success('Document approved and posted.');
+      }
+    } catch (err) {
+      const data = err?.response?.data;
+      const errors = data?.errors || data || {};
+      const firstError = typeof errors === 'object'
+        ? Object.values(errors).flat().filter(Boolean)[0]
+        : null;
+      message.error(firstError || data?.message || 'Approval failed.');
+      throw err;
+    } finally {
+      setApproving(false);
+    }
   };
 
   const documentCode = getDocumentCode(record, documentType);
@@ -1107,7 +1106,7 @@ export default function InventoryRecordShow({
               </Link>
             )}
             {!isApproved(record) && ['warehouse_transfer', 'inventory_adjustment'].includes(documentType) ? (
-              <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={approving} disabled={loading || !record} onClick={approveRecord}>
+              <Button size="small" type="primary" icon={<CheckCircleOutlined />} loading={approving} disabled={loading || !record} onClick={() => setApproveModalOpen(true)}>
                 Approve / Post
               </Button>
             ) : null}
@@ -1260,6 +1259,15 @@ export default function InventoryRecordShow({
           documentType={documentType}
         />
       ) : null}
+
+      <BusinessRuleApprovalModal
+        open={approveModalOpen}
+        module={documentType}
+        transactionId={record?.id}
+        onApprove={approveRecord}
+        confirmLoading={approving}
+        onCancel={() => setApproveModalOpen(false)}
+      />
     </AuthenticatedLayout>
   );
 }

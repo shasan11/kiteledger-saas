@@ -136,6 +136,8 @@ function QuickAddFormField({ field, value, onChange }) {
   if (field.type === 'number') {
     return (
       <InputNumber
+        value={value}
+        onChange={onChange}
         min={field.min}
         max={field.max}
         precision={field.precision}
@@ -144,20 +146,29 @@ function QuickAddFormField({ field, value, onChange }) {
       />
     );
   }
-  if (field.type === 'switch') return <Switch />;
+  if (field.type === 'switch') return <Switch checked={value} onChange={onChange} />;
   if (field.type === 'textarea') {
-    return <Input.TextArea rows={field.rows || 3} placeholder={field.placeholder} />;
+    return (
+      <Input.TextArea
+        value={value}
+        onChange={onChange}
+        rows={field.rows || 3}
+        placeholder={field.placeholder}
+      />
+    );
   }
   if (field.type === 'select') {
     return (
       <Select
+        value={value}
+        onChange={onChange}
         allowClear={field.allowClear !== false}
         placeholder={field.placeholder}
         options={field.options || EMPTY_ARRAY}
       />
     );
   }
-  return <Input placeholder={field.placeholder} />;
+  return <Input value={value} onChange={onChange} placeholder={field.placeholder} />;
 }
 
 /**
@@ -348,11 +359,15 @@ export default function QuickAddRemoteSelect({
       quickForm.resetFields();
       messageApi.success(`${quickAddTitle || label} added.`);
     } catch (error) {
+      // Ant Design validateFields rejects with { errorFields } – those are shown
+      // inline; don't also show a toast for them.
+      if (error?.errorFields) return;
       const errData = error?.response?.data || {};
+      const msgs = errData.errors ? Object.values(errData.errors).flat() : [];
       const msg =
+        msgs[0] ||
         errData.message ||
-        Object.values(errData.errors || {})[0]?.[0] ||
-        `Failed to add ${String(quickAddTitle || label).toLowerCase()}.`;
+        `Failed to add ${String(quickAddTitle || label).toLowerCase()}. Please check all required fields.`;
       messageApi.error(msg);
     } finally {
       setQuickSaving(false);
