@@ -137,7 +137,7 @@ const productTypeTag = (type) => {
   return <Tag color={meta[1]}>{meta[0]}</Tag>;
 };
 
-export default function Products({ auth }) {
+export default function Products({ auth, embedded = false, catalogMode = 'all' }) {
   const { token } = theme.useToken();
 
   const [form] = Form.useForm();
@@ -187,6 +187,12 @@ export default function Products({ auth }) {
   const watchedSellingPrice = Form.useWatch('selling_price', form);
 
   const isVariantParent = selectedProductType === 'variant_parent';
+  const isSimpleCatalog = catalogMode === 'simple';
+  const isVariantCatalog = catalogMode === 'variant';
+  const pageTitle = isVariantCatalog ? 'Variant Products' : 'Products';
+  const pageDescription = isVariantCatalog
+    ? 'Create and maintain parent products, variant combinations, prices, stock settings, and barcodes.'
+    : 'Manage standard products, prices, stock settings, and barcodes.';
 
   const variantLineMap = useMemo(() => {
     const map = {};
@@ -286,8 +292,12 @@ export default function Products({ auth }) {
         ordering: 'name',
       };
 
-      if (activeTab === 'catalog') params.catalog = true;
-      if (activeTab === 'variants') params.product_type = 'variant';
+      if (isSimpleCatalog) params.product_type = 'simple';
+      else if (isVariantCatalog) params.product_type = 'variant_parent';
+      else {
+        if (activeTab === 'catalog') params.catalog = true;
+        if (activeTab === 'variants') params.product_type = 'variant';
+      }
 
       const { data } = await axios.get(api('/api/products/'), { params });
 
@@ -310,14 +320,17 @@ export default function Products({ auth }) {
 
   useEffect(() => {
     loadRows(1);
-  }, [activeTab]);
+  }, [activeTab, catalogMode]);
 
   const resetBuilder = () => {
     setEditing(null);
     setStep(0);
     setVariantGroups([]);
     setVariantChildren([]);
-    form.setFieldsValue(emptyProduct);
+    form.setFieldsValue({
+      ...emptyProduct,
+      product_type: isVariantCatalog ? 'variant_parent' : 'simple',
+    });
   };
 
   const openCreate = () => {
@@ -999,17 +1012,14 @@ export default function Products({ auth }) {
     </Form.Item>
   );
 
-  return (
-    <AuthenticatedLayout auth={auth}>
-      <Head title="Products" />
-
-      <div
-        style={{
-          background: token.colorBgLayout,
-          minHeight: '100vh',
-          padding: 16,
-        }}
-      >
+  const content = (
+    <div
+      style={{
+        background: token.colorBgLayout,
+        minHeight: embedded ? undefined : '100vh',
+        padding: embedded ? 0 : 16,
+      }}
+    >
         <Card
           bordered={false}
           style={{
@@ -1024,11 +1034,11 @@ export default function Products({ auth }) {
                 <Space>
                   <AppstoreOutlined />
                   <Title level={4} style={{ margin: 0 }}>
-                    Products
+                    {pageTitle}
                   </Title>
                 </Space>
                 <Text type="secondary">
-                  Manage simple products, variant products, prices, stock settings, and barcodes.
+                  {pageDescription}
                 </Text>
               </Space>
             </Col>
@@ -1059,7 +1069,7 @@ export default function Products({ auth }) {
 
             <Col>
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                New Product
+                {isVariantCatalog ? 'New Variant Product' : 'New Product'}
               </Button>
             </Col>
           </Row>
@@ -1070,24 +1080,26 @@ export default function Products({ auth }) {
           style={{ borderRadius: token.borderRadiusLG }}
           bodyStyle={{ padding: 16 }}
         >
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={[
-              {
-                key: 'catalog',
-                label: 'Catalog',
-              },
-              {
-                key: 'variants',
-                label: 'Child Variants',
-              },
-              {
-                key: 'all',
-                label: 'All Products',
-              },
-            ]}
-          />
+          {catalogMode === 'all' ? (
+            <Tabs
+              activeKey={activeTab}
+              onChange={setActiveTab}
+              items={[
+                {
+                  key: 'catalog',
+                  label: 'Catalog',
+                },
+                {
+                  key: 'variants',
+                  label: 'Child Variants',
+                },
+                {
+                  key: 'all',
+                  label: 'All Products',
+                },
+              ]}
+            />
+          ) : null}
 
           <Table
             rowKey="id"
@@ -1277,6 +1289,7 @@ export default function Products({ auth }) {
                             rules={[{ required: true, message: 'Product type is required.' }]}
                           >
                             <Select
+                              disabled={isVariantCatalog || isSimpleCatalog}
                               options={[
                                 {
                                   value: 'simple',
@@ -1800,6 +1813,21 @@ export default function Products({ auth }) {
           </Form>
         </Modal>
       </div>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <Head title={pageTitle} />
+        {content}
+      </>
+    );
+  }
+
+  return (
+    <AuthenticatedLayout auth={auth}>
+      <Head title={pageTitle} />
+      {content}
     </AuthenticatedLayout>
   );
 }

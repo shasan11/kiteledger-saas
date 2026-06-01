@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Documents\DocumentUploadPageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +37,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // AI module — canonical assistant page (legacy pages removed)
     Route::get('/ai/assistant', fn () => Inertia::render('App/AI/Assistant'))->name('ai.assistant');
+
+    // Document Upload module
+    Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');
 });
 
 Route::middleware('auth')->group(function () {

@@ -91,7 +91,7 @@ const shortNameFromName = (value = '') =>
     .replace(/[^A-Z0-9]+/g, '')
     .slice(0, 12);
 
-export default function Services({ auth }) {
+export default function Services({ auth, embedded = false }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
   const [form] = Form.useForm();
@@ -345,11 +345,9 @@ export default function Services({ auth }) {
     },
   ];
 
-  return (
-    <AuthenticatedLayout auth={auth}>
-      <Head title="Services" />
-
-      <div style={{ padding: 24 }}>
+  const content = (
+    <>
+      <div style={{ padding: embedded ? 0 : 24 }}>
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Card bordered={false} style={{ borderRadius: token.borderRadiusLG }}>
             <Row gutter={[16, 16]} align="middle">
@@ -531,6 +529,22 @@ export default function Services({ auth }) {
           </Form.Item>
         </Form>
       </Modal>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <Head title="Services" />
+        {content}
+      </>
+    );
+  }
+
+  return (
+    <AuthenticatedLayout auth={auth}>
+      <Head title="Services" />
+      {content}
     </AuthenticatedLayout>
   );
 }

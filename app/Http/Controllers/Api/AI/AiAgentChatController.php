@@ -17,6 +17,7 @@ use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
+use App\Services\AI\Tools\AiToolRouter;
 use App\Services\AI\AiUsageLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ class AiAgentChatController extends Controller
         protected AiReportResolver $reportResolver,
         protected AiActionProposalService $proposalService,
         protected AiDeterministicAnswerService $deterministicAnswers,
+        protected AiToolRouter $toolRouter,
     ) {}
 
     public function chat(Request $request): JsonResponse
@@ -56,7 +58,10 @@ class AiAgentChatController extends Controller
 
         $message = trim($data['message']);
         $payload = $data['context_payload'] ?? [];
-        $intent = $this->intentResolver->resolve($message, $payload);
+        $toolClassification = $this->toolRouter->classify($message, $payload);
+        $intent = in_array($toolClassification['type'] ?? '', ['query', 'report', 'action'], true)
+            ? $toolClassification
+            : $this->intentResolver->resolve($message, $payload);
         $contextType = ($data['context_type'] ?? 'auto') === 'auto'
             ? $this->contextTypeForIntent($intent)
             : ($data['context_type'] ?? 'general');
@@ -80,6 +85,27 @@ class AiAgentChatController extends Controller
             'content' => $message,
             'context' => ['type' => $contextType, 'intent' => $intent],
         ]);
+
+        if (($toolClassification['type'] ?? null) === 'query') {
+            $toolRequest = $request->merge(['message' => $message]);
+            $result = $this->toolRouter->runQuery($toolRequest, $toolClassification);
+            $reply = $this->toolRouter->explainToolResult($result);
+
+            return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
+        }
+
+        if (($toolClassification['type'] ?? null) === 'report') {
+            $result = $this->toolRouter->runReport($request, $toolClassification, $message);
+            $reply = $this->toolRouter->explainToolResult($result);
+
+            return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
+        }
+
+        if (($toolClassification['type'] ?? null) === 'action') {
+            $action = $this->toolRouter->proposeAction($request, $conversation, $toolClassification, $message, $payload);
+
+            return $this->storeAndRespond($conversation, 'I prepared an action for your approval.', $toolClassification, $contextType, $branchScope, [$this->formatAction($action)], []);
+        }
 
         if ($deterministic = $this->deterministicAnswers->answer($request, $message)) {
             return $this->storeAndRespond(
@@ -207,10 +233,22 @@ class AiAgentChatController extends Controller
 
     private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = []): array
     {
+        $mode = 'chat';
+        if (!empty($actions)) {
+            $mode = 'pending_action';
+        } elseif (!empty($results)) {
+            $mode = ($results[0]['type'] ?? null) === 'report' ? 'report' : 'tool_query';
+        }
+
         return array_merge([
             'ok' => true,
+            'mode' => $mode,
             'conversation_id' => $conversation->id,
             'message' => ['role' => 'assistant', 'content' => $reply],
+            'tool' => !empty($results) || !empty($actions) ? [
+                'name' => $intent['tool'] ?? $intent['name'] ?? null,
+                'source' => $results[0]['source'] ?? (!empty($actions) ? 'action' : null),
+            ] : null,
             'intent' => $intent,
             'context' => ['type' => $contextType, 'packs' => [$contextType]],
             'actions' => $actions,
@@ -265,7 +303,7 @@ class AiAgentChatController extends Controller
         ]);
     }
 
-    private function denied(string $perm): JsonResponse
+    protected function denied(string $perm): JsonResponse
     {
         return response()->json([
             'ok' => false,

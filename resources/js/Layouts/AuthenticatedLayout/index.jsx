@@ -26,7 +26,6 @@ import { useEffect, useMemo, useState } from 'react';
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
 import { AppContextProvider } from '@/Contexts/AppContext';
-import KiteAiFloatingButton from '@/Components/AI/KiteAiFloatingButton';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -474,7 +473,7 @@ export default function AuthenticatedLayout({ header, children }) {
             {
                 key: 'products-services',
                 icon: <ShopOutlined />,
-                label: 'Products and Services',
+                label: 'Products',
                 children: [
                     {
                         key: 'inventory-product-categories',
@@ -492,24 +491,6 @@ export default function AuthenticatedLayout({ header, children }) {
                             visit(
                                 'inventory.products.index',
                                 '/inventory/products',
-                            ),
-                    },
-                    {
-                        key: 'inventory-services',
-                        label: 'Services',
-                        onClick: () =>
-                            visit(
-                                'inventory.services.index',
-                                '/inventory/services',
-                            ),
-                    },
-                    {
-                        key: 'inventory-variant-products',
-                        label: 'Variant Products',
-                        onClick: () =>
-                            visit(
-                                'inventory.variant-products.index',
-                                '/inventory/variant-products',
                             ),
                     },
                     {
@@ -751,8 +732,8 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/inventory/adjustments')) return ['inventory-adjustment'];
 
         if (isActive('/inventory/product-categories')) return ['inventory-product-categories'];
-        if (isActive('/inventory/services')) return ['inventory-services'];
-        if (isActive('/inventory/variant-products')) return ['inventory-variant-products'];
+        if (isActive('/inventory/services')) return ['inventory-products'];
+        if (isActive('/inventory/variant-products')) return ['inventory-products'];
         if (isActive('/inventory/products')) return ['inventory-products'];
         if (isActive('/inventory/variant-attributes')) return ['inventory-variant-attributes'];
         if (isActive('/inventory/unit-of-measurements')) return ['inventory-unit-of-measurement'];
@@ -936,10 +917,8 @@ export default function AuthenticatedLayout({ header, children }) {
         <AppContextProvider initialContext={branchContext}>
         <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
             <AppNavbar
-                user={user}
                 branchContext={branchContext}
                 quickAddItems={quickAddItems}
-                profileItems={profileItems}
                 getUrl={getUrl}
                 onSidebarToggle={() => setCollapsed((current) => !current)}
                 colorBgContainer={colorBgContainer}
@@ -952,6 +931,8 @@ export default function AuthenticatedLayout({ header, children }) {
                     setCollapsed={setCollapsed}
                     selectedKeys={selectedKeys}
                     menuItems={menuItems}
+                    user={user}
+                    profileItems={profileItems}
                     colorBgContainer={colorBgContainer}
                     colorBorderSecondary={colorBorderSecondary}
                 />
@@ -985,8 +966,6 @@ export default function AuthenticatedLayout({ header, children }) {
                     </Content>
                 </Layout>
             </Layout>
-
-            <KiteAiFloatingButton />
 
             {quickAddItems.length > 0 && (
                 <Dropdown

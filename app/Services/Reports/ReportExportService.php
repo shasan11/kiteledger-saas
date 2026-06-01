@@ -84,13 +84,44 @@ class ReportExportService
         $headers = $this->headers($report);
         $rowIndex = 1;
 
-        $sheet->setCellValue("A{$rowIndex}", $report['company_name'] ?? config('app.name'));
+        $company = $report['company'] ?? [];
+
+        if (!empty($company['name'])) {
+            $sheet->setCellValue("A{$rowIndex}", $company['name']);
+            $sheet->getStyle("A{$rowIndex}")->getFont()->setBold(true)->setSize(14);
+            $rowIndex++;
+        }
+        foreach (['address', 'phone', 'email', 'website'] as $field) {
+            if (!empty($company[$field])) {
+                $label = $field === 'address' ? '' : ucfirst($field) . ': ';
+                $sheet->setCellValue("A{$rowIndex}", $label . $company[$field]);
+                $rowIndex++;
+            }
+        }
+        $taxBits = array_filter([
+            !empty($company['tax_number']) ? 'Tax: ' . $company['tax_number'] : null,
+            !empty($company['vat_number']) ? 'VAT: ' . $company['vat_number'] : null,
+            !empty($company['registration_number']) ? 'Reg: ' . $company['registration_number'] : null,
+        ]);
+        if ($taxBits) {
+            $sheet->setCellValue("A{$rowIndex}", implode('   ', $taxBits));
+            $rowIndex++;
+        }
         $rowIndex++;
+
         $sheet->setCellValue("A{$rowIndex}", $report['title'] ?? 'Report');
+        $sheet->getStyle("A{$rowIndex}")->getFont()->setBold(true)->setSize(12);
         $rowIndex++;
         $sheet->setCellValue("A{$rowIndex}", 'Generated At');
         $sheet->setCellValue("B{$rowIndex}", $report['generated_at'] ?? now()->format('Y-m-d H:i:s'));
-        $rowIndex += 2;
+        $rowIndex++;
+        $period = $report['period'] ?? [];
+        if (!empty($period['from']) || !empty($period['to'])) {
+            $sheet->setCellValue("A{$rowIndex}", 'Period');
+            $sheet->setCellValue("B{$rowIndex}", trim(($period['from'] ?? '-') . ' to ' . ($period['to'] ?? '-')));
+            $rowIndex++;
+        }
+        $rowIndex++;
 
         foreach ($headers as $index => $header) {
             $sheet->setCellValue($this->cellReference($index + 1, $rowIndex), $header);

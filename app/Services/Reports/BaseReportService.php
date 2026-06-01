@@ -2,7 +2,7 @@
 
 namespace App\Services\Reports;
 
-use App\Models\GeneralSetting;
+use App\Models\AppSetting;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -20,6 +20,8 @@ abstract class BaseReportService
         array $totals = [],
         array $extra = []
     ): array {
+        $company = $this->companyInfo();
+
         return [
             'title' => $title,
             'category' => $categoryLabel,
@@ -34,15 +36,58 @@ abstract class BaseReportService
             'rows' => $rows,
             'totals' => $totals,
             'generated_at' => Carbon::now()->format('Y-m-d H:i:s'),
-            'company_name' => $this->companyName(),
+            'company' => $company,
+            'company_name' => $company['name'] ?? '',
             ...$extra,
+        ];
+    }
+
+    /**
+     * Pull company branding from the singleton AppSetting row. Returns
+     * empty strings when not configured — we never fall back to the
+     * application code name (e.g. "KiteLedger") on customer-facing
+     * report output.
+     */
+    protected function companyInfo(): array
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        try {
+            $row = AppSetting::query()->first();
+        } catch (\Throwable) {
+            $row = null;
+        }
+
+        $addressParts = array_filter([
+            $row?->address_line_1 ?: null,
+            $row?->address_line_2 ?: null,
+            $row?->city ?: null,
+            $row?->state ?: null,
+            $row?->postal_code ?: null,
+            $row?->country ?: null,
+        ]);
+
+        return $cached = [
+            'name' => trim((string) ($row?->company_name ?? '')),
+            'legal_name' => trim((string) ($row?->legal_name ?? '')),
+            'tag_line' => trim((string) ($row?->tag_line ?? '')),
+            'address' => trim((string) ($row?->address ?? implode(', ', $addressParts))),
+            'phone' => trim((string) ($row?->phone ?? '')),
+            'email' => trim((string) ($row?->email ?? '')),
+            'website' => trim((string) ($row?->website ?? '')),
+            'tax_number' => trim((string) ($row?->tax_number ?? '')),
+            'vat_number' => trim((string) ($row?->vat_number ?? '')),
+            'registration_number' => trim((string) ($row?->registration_number ?? '')),
+            'logo' => $row?->logo ?: null,
         ];
     }
 
     protected function companyName(): string
     {
-        return GeneralSetting::query()->value('company_name')
-            ?? config('app.name', 'ERP');
+        return $this->companyInfo()['name'] ?? '';
     }
 
     protected function applyBranchFilter(Builder $query, array $filters, ?string $column = 'branch_id'): Builder

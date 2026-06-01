@@ -9,7 +9,6 @@ import {
     Grid,
     Input,
     List,
-    Select,
     Space,
     Spin,
     Tag,
@@ -31,6 +30,7 @@ import {
     ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
+import AiToolBlocks from '@/Components/AI/AiToolBlocks';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -44,21 +44,6 @@ const SUGGESTED_PROMPTS = [
     'Summarize this branch performance',
     'Show business risks',
 ];
-
-const CONTEXT_OPTIONS = [
-    { value: 'general', label: 'General' },
-    { value: 'sales', label: 'Sales' },
-    { value: 'purchase', label: 'Purchase' },
-    { value: 'inventory', label: 'Inventory' },
-    { value: 'receivable', label: 'Receivables' },
-    { value: 'payable', label: 'Payables' },
-    { value: 'accounting', label: 'Accounting' },
-];
-
-const CONTEXT_LABELS = CONTEXT_OPTIONS.reduce((acc, item) => {
-    acc[item.value] = item.label;
-    return acc;
-}, {});
 
 function hasAnyPermission(perms = [], required = []) {
     if (!Array.isArray(perms)) return false;
@@ -184,6 +169,7 @@ function MessageBubble({ message, token, onCopy }) {
                 )}
 
                 <div>{message.content}</div>
+                <AiToolBlocks message={message} />
 
                 {isAssistant && (
                     <div
@@ -253,7 +239,6 @@ export default function Assistant() {
 
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
-    const [contextType, setContextType] = useState('general');
     const [sending, setSending] = useState(false);
     const [conversationId, setConversationId] = useState(null);
     const [error, setError] = useState(null);
@@ -397,7 +382,7 @@ export default function Assistant() {
                 {
                     message: text,
                     conversation_id: conversationId,
-                    context_type: contextType,
+                    context_type: 'auto',
                     context_payload: {
                         url: page.url,
                         module: page.props?.module || null,
@@ -423,6 +408,10 @@ export default function Assistant() {
                     provider: res.data?.provider,
                     model: res.data?.model,
                     cached: res.data?.cached,
+                    actions: res.data?.actions || [],
+                    results: res.data?.results || [],
+                    mode: res.data?.mode,
+                    tool: res.data?.tool,
                 },
             ]);
         } catch (err) {
@@ -590,19 +579,6 @@ export default function Assistant() {
                         }
                     >
                         <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Context
-                                </Text>
-
-                                <Select
-                                    value={contextType}
-                                    onChange={setContextType}
-                                    options={CONTEXT_OPTIONS}
-                                    style={{ width: '100%', marginTop: 6 }}
-                                />
-                            </div>
-
                             <div style={styles.statBox}>
                                 <Space direction="vertical" size={4} style={{ width: '100%' }}>
                                     <Text type="secondary" style={{ fontSize: 12 }}>
@@ -630,13 +606,13 @@ export default function Assistant() {
                             <div style={styles.statBox}>
                                 <Space direction="vertical" size={4} style={{ width: '100%' }}>
                                     <Text type="secondary" style={{ fontSize: 12 }}>
-                                        Current Mode
+                                        Context
                                     </Text>
 
-                                    <Text strong>{CONTEXT_LABELS[contextType] || 'General'}</Text>
+                                    <Text strong>Auto</Text>
 
                                     <Text type="secondary" style={{ fontSize: 12 }}>
-                                        The assistant will answer with this business context.
+                                        The assistant infers the business area from your question and current page.
                                     </Text>
                                 </Space>
                             </div>
@@ -859,7 +835,7 @@ export default function Assistant() {
                                 </Text>
 
                                 <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Context: {CONTEXT_LABELS[contextType] || 'General'}
+                                    Context: Auto
                                 </Text>
                             </div>
                         </div>

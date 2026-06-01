@@ -3,6 +3,9 @@
 namespace App\Services\AI\Agent;
 
 use App\Models\AiPendingAction;
+use App\Services\AI\AiPermissionService;
+use App\Services\AppContextService;
+use App\Services\BranchScopeService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -10,6 +13,13 @@ use Illuminate\Validation\ValidationException;
 
 class AiSafeActionExecutor
 {
+    public function __construct(
+        protected AiPermissionService $permissions,
+        protected BranchScopeService $branchScope,
+        protected AppContextService $appContext,
+    ) {
+    }
+
     protected array $moduleTables = [
         'quotations' => ['table' => 'quotations', 'url' => '/payment-in/quotations'],
         'sales_orders' => ['table' => 'sales_orders', 'url' => '/payment-in/sales-orders'],
@@ -31,6 +41,19 @@ class AiSafeActionExecutor
     {
         if (!$action->isPending()) {
             throw ValidationException::withMessages(['action' => 'AI action is not pending.']);
+        }
+
+        if (!empty($action->metadata['missing_fields'])) {
+            throw ValidationException::withMessages(['action' => 'AI action is incomplete and cannot be executed.']);
+        }
+
+        $user = $approvedBy ? \App\Models\User::query()->find($approvedBy) : null;
+        if (!$this->permissions->hasAny($user, ['ai.actions.approve', 'ai.manage'])) {
+            throw ValidationException::withMessages(['permission' => 'You do not have permission to approve AI actions.']);
+        }
+
+        if ($action->branch_id) {
+            $this->branchScope->assertCanAccessBranch($user, (string) $action->branch_id);
         }
 
         return DB::transaction(function () use ($action, $approvedBy) {
@@ -88,6 +111,9 @@ class AiSafeActionExecutor
         if (Schema::hasColumn($table, 'branch_id') && $action->branch_id) {
             $data['branch_id'] = $action->branch_id;
         }
+        if (Schema::hasColumn($table, 'fiscal_year_id')) {
+            $data['fiscal_year_id'] = $this->safeFiscalYearId();
+        }
         if (Schema::hasColumn($table, 'active')) {
             $data['active'] = true;
         }
@@ -106,6 +132,9 @@ class AiSafeActionExecutor
         if (Schema::hasColumn($table, 'reference')) {
             $data['reference'] = 'AI-' . substr((string) $action->id, 0, 8);
         }
+        if ($numberColumn = $this->numberColumn($table)) {
+            $data[$numberColumn] = $this->draftNumber($table, $action);
+        }
         if (Schema::hasColumn($table, 'user_add_id') && $action->user_id) {
             $data['user_add_id'] = $action->user_id;
         }
@@ -118,11 +147,17 @@ class AiSafeActionExecutor
 
         $dateColumn = $this->dateColumn($table);
         if ($dateColumn) {
-            $data[$dateColumn] = now()->toDateString();
+            $data[$dateColumn] = $payload[$dateColumn] ?? now()->toDateString();
+        }
+
+        foreach ($payload as $key => $value) {
+            if ($value !== null && is_scalar($value) && $this->isSafeCreateColumn($table, $key) && !array_key_exists($key, $data)) {
+                $data[$key] = $value;
+            }
         }
 
         foreach (($payload['context_payload'] ?? []) as $key => $value) {
-            if ($value !== null && is_scalar($value) && Schema::hasColumn($table, $key) && !array_key_exists($key, $data)) {
+            if ($value !== null && is_scalar($value) && $this->isSafeCreateColumn($table, $key) && !array_key_exists($key, $data)) {
                 $data[$key] = $value;
             }
         }
@@ -160,8 +195,14 @@ class AiSafeActionExecutor
         if (Schema::hasColumn($table, 'approved') && (bool) ($record->approved ?? false)) {
             throw ValidationException::withMessages(['record' => 'AI cannot update approved records directly. Edit through normal workflow.']);
         }
+        if (Schema::hasColumn($table, 'fiscal_year_id') && !empty($record->fiscal_year_id)) {
+            $fiscalYear = \App\Models\FiscalYear::query()->whereKey($record->fiscal_year_id)->first();
+            if ($fiscalYear && $this->appContext->isFiscalYearLocked($fiscalYear)) {
+                throw ValidationException::withMessages(['record' => 'AI cannot update records in a closed or locked fiscal year.']);
+            }
+        }
 
-        $changes = $action->payload['context_payload']['changes'] ?? [];
+        $changes = $action->payload['context_payload']['changes'] ?? $action->payload['requested_changes'] ?? [];
         $safe = [];
         foreach ($changes as $key => $value) {
             if ($this->isSafeUpdateColumn($table, $key) && is_scalar($value)) {
@@ -196,7 +237,62 @@ class AiSafeActionExecutor
 
     private function isSafeUpdateColumn(string $table, string $column): bool
     {
-        $blocked = ['id', 'approved', 'approved_at', 'approved_by_id', 'void', 'voided_at', 'voided_by_id', 'journal_voucher_id', 'created_at', 'updated_at'];
+        $blocked = ['id', 'approved', 'approved_at', 'approved_by', 'approved_by_id', 'void', 'voided_at', 'voided_by', 'voided_by_id', 'journal_voucher_id', 'created_at', 'updated_at'];
         return !in_array($column, $blocked, true) && Schema::hasColumn($table, $column);
+    }
+
+    private function isSafeCreateColumn(string $table, string $column): bool
+    {
+        $blocked = ['id', 'approved', 'approved_at', 'approved_by', 'approved_by_id', 'void', 'voided_at', 'voided_by', 'voided_by_id', 'journal_voucher_id', 'created_at', 'updated_at', 'status'];
+        return !in_array($column, $blocked, true) && Schema::hasColumn($table, $column);
+    }
+
+    private function numberColumn(string $table): ?string
+    {
+        foreach (['invoice_no', 'quotation_no', 'sales_order_no', 'purchase_order_no', 'bill_no', 'payment_no', 'expense_no', 'voucher_no', 'transfer_no'] as $column) {
+            if (Schema::hasColumn($table, $column)) {
+                return $column;
+            }
+        }
+
+        return null;
+    }
+
+    private function draftNumber(string $table, AiPendingAction $action): string
+    {
+        $prefix = match ($table) {
+            'invoices' => 'AI-INV',
+            'quotations' => 'AI-QTN',
+            'sales_orders' => 'AI-SO',
+            'purchase_orders' => 'AI-PO',
+            'purchase_bills' => 'AI-PB',
+            'customer_payments', 'supplier_payments' => 'AI-PAY',
+            'expenses' => 'AI-EXP',
+            'journal_vouchers' => 'AI-JV',
+            'cash_transfers' => 'AI-CT',
+            default => 'AI',
+        };
+
+        return $prefix . '-' . now()->format('ymdHis') . '-' . substr((string) $action->id, 0, 6);
+    }
+
+    private function safeFiscalYearId(): ?string
+    {
+        try {
+            $fiscalYear = $this->appContext->resolveFiscalYearForRequest(request());
+            if (!$fiscalYear) {
+                return null;
+            }
+
+            if ($this->appContext->isFiscalYearLocked($fiscalYear) && !$this->appContext->canOverrideFiscalYearLock(request()->user())) {
+                throw ValidationException::withMessages(['fiscal_year_id' => 'AI cannot create records in a closed or locked fiscal year.']);
+            }
+
+            return (string) $fiscalYear->id;
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

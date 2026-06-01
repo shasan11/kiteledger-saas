@@ -6,6 +6,10 @@ use App\Http\Controllers\Api\OnlinePaymentSettingController;
 use App\Http\Controllers\Api\PaymentGatewaySettingController;
 use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\PublicInvoicePaymentController;
+use App\Http\Controllers\Api\Documents\DocumentEntityMatchController;
+use App\Http\Controllers\Api\Documents\DocumentExtractionController;
+use App\Http\Controllers\Api\Documents\DocumentProposalController;
+use App\Http\Controllers\Api\Documents\DocumentUploadController;
 use App\Http\Controllers\Api\AI\AiAssistantController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
 use App\Http\Controllers\Api\AI\AiUsageLogController;
@@ -125,6 +129,7 @@ use App\Http\Controllers\Api\TaskStatusController;
 use App\Http\Controllers\Api\TaskController as HrmTaskController;
 use App\Http\Controllers\Api\AssignedTaskController;
 use App\Http\Controllers\Api\Reports\ReportController;
+use App\Http\Controllers\Api\Reports\ReportRegistryController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
 use App\Http\Controllers\Api\SettingsConfigurationController;
@@ -217,6 +222,10 @@ Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
 Route::apiResource('email-templates', EmailTemplateController::class);
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::get('reports/registry', [ReportRegistryController::class, 'registry']);
+    Route::post('reports/soft-query', [ReportRegistryController::class, 'softQueryEndpoint']);
+    Route::get('reports/options/{type}', [ReportRegistryController::class, 'options'])
+        ->where('type', '[a-z0-9\-]+');
     Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
     Route::get('reports/{category}/{report_key}/export', [ReportController::class, 'export']);
 });
@@ -1098,4 +1107,34 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('online-payments/{id}/webhook-logs', [OnlinePaymentController::class, 'webhookLogs'])->name('api.online-payments.webhook-logs');
     Route::post('online-payments/{id}/refund', [OnlinePaymentController::class, 'refund'])->name('api.online-payments.refund');
     Route::apiResource('online-payments', OnlinePaymentController::class)->only(['index', 'show']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Document Upload Module
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['web', 'auth', 'verified'])->prefix('document-uploads')->name('api.document-uploads.')->group(function () {
+    Route::get('/', [DocumentUploadController::class, 'index'])->name('index');
+    Route::post('/', [DocumentUploadController::class, 'store'])->name('store');
+    Route::get('{id}', [DocumentUploadController::class, 'show'])->name('show');
+    Route::patch('{id}', [DocumentUploadController::class, 'update'])->name('update');
+    Route::delete('{id}', [DocumentUploadController::class, 'destroy'])->name('destroy');
+    Route::get('{id}/preview', [DocumentUploadController::class, 'preview'])->name('preview');
+    Route::post('{id}/archive', [DocumentUploadController::class, 'archive'])->name('archive');
+
+    // Extraction / AI
+    Route::post('{id}/scan-ai', [DocumentExtractionController::class, 'scan'])->name('scan');
+    Route::get('{id}/extraction', [DocumentExtractionController::class, 'show'])->name('extraction.show');
+
+    // Entity matching
+    Route::post('{id}/match-entities', [DocumentEntityMatchController::class, 'match'])->name('match');
+    Route::post('matches/{matchId}/choose', [DocumentEntityMatchController::class, 'chooseMatch'])->name('match.choose');
+    Route::post('{id}/create-missing-fk', [DocumentEntityMatchController::class, 'createFk'])->name('fk.create');
+
+    // Proposals
+    Route::get('{id}/proposals', [DocumentProposalController::class, 'index'])->name('proposals.index');
+    Route::post('{id}/proposals', [DocumentProposalController::class, 'store'])->name('proposals.store');
+    Route::patch('{id}/proposals/{proposalId}', [DocumentProposalController::class, 'update'])->name('proposals.update');
+    Route::post('{id}/proposals/{proposalId}/convert', [DocumentProposalController::class, 'convert'])->name('proposals.convert');
 });

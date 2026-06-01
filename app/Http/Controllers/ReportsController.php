@@ -2,16 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Branch;
-use App\Models\ChartOfAccount;
-use App\Models\Contact;
-use App\Models\Currency;
-use App\Models\Department;
-use App\Models\EmployeeProfile;
-use App\Models\Product;
-use App\Models\ProductCategory;
-use App\Models\User;
-use App\Models\Warehouse;
 use App\Services\Reports\ReportRegistry;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,38 +11,44 @@ class ReportsController extends Controller
 {
     public function index(Request $request): Response
     {
-        return Inertia::render('App/Reports/Index', $this->sharedProps());
+        return Inertia::render('App/Reports/Index', $this->sharedProps($request));
     }
 
     public function showReport(Request $request, string $category, string $slug): Response
     {
-        abort_unless(ReportRegistry::resolve($category, $slug), 404);
+        $meta = ReportRegistry::resolve($category, $slug);
+        abort_unless($meta, 404);
 
         return Inertia::render('App/Reports/Shared/ReportPage', array_merge(
-            $this->sharedProps(),
+            $this->sharedProps($request),
             [
                 'reportCategory' => $category,
                 'reportKey' => $slug,
+                'reportConfig' => [
+                    'category' => $category,
+                    'category_label' => $meta['category_label'],
+                    'report_key' => $slug,
+                    'title' => $meta['title'],
+                    'description' => $meta['description'] ?? '',
+                    'permission' => $meta['permission'],
+                    'route_path' => $meta['route_path'],
+                    'default_date_mode' => $meta['default_date_mode'] ?? ReportRegistry::DATE_MODE_PERIOD,
+                    'filter_schema' => $meta['filter_schema'] ?? [],
+                    'exportable' => $meta['exportable'] ?? true,
+                ],
             ]
         ));
     }
 
-    protected function sharedProps(): array
+    protected function sharedProps(Request $request): array
     {
+        $user = $request->user();
+        $permissions = $user
+            ? $user->getAllPermissions()->pluck('name')->all()
+            : [];
+
         return [
-            'reportOptions' => [
-                'branches' => Branch::query()->orderBy('name')->get(['id', 'name', 'code']),
-                'currencies' => Currency::query()->orderBy('code')->get(['id', 'name', 'code', 'symbol']),
-                'customers' => Contact::query()->where('contact_type', 'customer')->orderBy('name')->get(['id', 'name', 'code', 'pan', 'tax_registration_no']),
-                'suppliers' => Contact::query()->where('contact_type', 'supplier')->orderBy('name')->get(['id', 'name', 'code', 'pan', 'tax_registration_no']),
-                'products' => Product::query()->orderBy('name')->get(['id', 'name', 'code', 'sku', 'barcode']),
-                'productCategories' => ProductCategory::query()->orderBy('name')->get(['id', 'name']),
-                'warehouses' => Warehouse::query()->orderBy('name')->get(['id', 'name', 'code']),
-                'chartOfAccounts' => ChartOfAccount::query()->orderBy('code')->get(['id', 'name', 'code', 'type']),
-                'departments' => Department::query()->orderBy('name')->get(['id', 'name']),
-                'users' => User::query()->orderBy('name')->get(['id', 'name', 'branch_id', 'department_id']),
-                'employees' => EmployeeProfile::query()->with('user:id,name')->get(['id', 'user_id', 'employee_id', 'branch_id', 'department_id']),
-            ],
+            'reportRegistry' => ReportRegistry::publicRegistry($permissions),
         ];
     }
 }

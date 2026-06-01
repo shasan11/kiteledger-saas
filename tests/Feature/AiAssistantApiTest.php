@@ -158,7 +158,6 @@ class AiAssistantApiTest extends TestCase
             '/api/ai/command',
             '/api/ai/risk-review',
             '/api/ai/reports/ask',
-            '/api/ai/actions/abc-123/approve',
         ] as $url) {
             $this->actingAs($user)
                 ->postJson($url, ['message' => 'x'])

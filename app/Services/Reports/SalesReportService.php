@@ -80,18 +80,18 @@ class SalesReportService extends BaseReportService
             ->whereBetween('invoices.invoice_date', [$filters['date_from'], $filters['date_to']])
             ->when(!empty($filters['product_id']), fn ($query) => $query->where('invoice_lines.product_id', $filters['product_id']))
             ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('invoices.branch_id', $filters['branch_id']))
-            ->groupBy('invoice_lines.product_id', 'products.code', 'products.name', 'invoice_lines.custom_product_name')
+            ->groupBy('invoice_lines.product_id', 'products.code', 'products.name', 'invoice_lines.product_name')
             ->get([
                 'products.code as product_code',
                 'products.name as product_name',
-                'invoice_lines.custom_product_name',
+                'invoice_lines.product_name as line_product_name',
                 DB::raw('SUM(invoice_lines.qty) as qty_sold'),
                 DB::raw('SUM(invoice_lines.qty * invoice_lines.unit_price) as gross_sales'),
                 DB::raw('SUM(invoice_lines.tax_amount) as tax'),
                 DB::raw('SUM(invoice_lines.line_total) as net_sales'),
             ])->map(fn ($row) => [
                 'product_code' => $row->product_code,
-                'product_name' => $row->product_name ?: $row->custom_product_name,
+                'product_name' => $row->product_name ?: $row->line_product_name,
                 'qty_sold' => round((float) $row->qty_sold, 4),
                 'gross_sales' => round((float) $row->gross_sales, 2),
                 'discount' => round((float) $row->gross_sales - ((float) $row->net_sales - (float) $row->tax), 2),
@@ -139,7 +139,7 @@ class SalesReportService extends BaseReportService
                 return $row->contact?->name ?: 'Unknown';
             }
 
-            return $row->product?->name ?? $row->product_name ?? $row->custom_product_name ?? 'Unknown';
+            return $row->product?->name ?? $row->product_name ?? 'Unknown';
         })->map(function ($items, $label) use ($mode) {
             $row = ['label' => $label];
             $total = 0;

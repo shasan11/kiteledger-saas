@@ -5,21 +5,16 @@ import GlobalSearch from '@/Components/GlobalSearch';
 import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
 import { Link } from '@inertiajs/react';
 import {
-    LogoutOutlined,
     MenuOutlined,
     MoonOutlined,
     PlusOutlined,
-    ProfileOutlined,
     SunOutlined,
-    UserOutlined,
 } from '@ant-design/icons';
 import {
-    Avatar,
     Button,
     Dropdown,
     Grid,
     Layout,
-    Space,
     Switch,
     theme,
 } from 'antd';
@@ -65,10 +60,8 @@ const getStoredThemeMode = () => {
 };
 
 export default function AppNavbar({
-    user,
     branchContext,
     quickAddItems = [],
-    profileItems = [],
     getUrl,
     onSidebarToggle,
 }) {
@@ -80,8 +73,6 @@ export default function AppNavbar({
     const isMobile = !screens.md;
     const isTablet = screens.md && !screens.lg;
     const isLaptop = screens.lg && !screens.xl;
-    const isWide = screens.xl;
-
     const isDarkMode = themeMode === 'dark';
 
     const controlHeight = isMobile ? 40 : 38;
@@ -91,14 +82,6 @@ export default function AppNavbar({
 
     const branchToggleWidth = isTablet ? 150 : isLaptop ? 170 : 190;
     const fiscalYearToggleWidth = isTablet ? 128 : isLaptop ? 138 : 150;
-
-    const initials = (user?.display_name || user?.name || user?.email || 'User')
-        .split(' ')
-        .map((part) => part?.[0])
-        .filter(Boolean)
-        .slice(0, 2)
-        .join('')
-        .toUpperCase();
 
     useEffect(() => {
         let mounted = true;
@@ -155,49 +138,6 @@ export default function AppNavbar({
             primaryBorder: rgba(primary, 0.35),
         };
     }, [brandSettings?.brand_primary_color, token.colorPrimary]);
-
-    const enhancedProfileItems = [
-        {
-            key: 'profile-summary',
-            disabled: true,
-            label: (
-                <div className="app-navbar__dropdown-user">
-                    <Avatar
-                        size={42}
-                        src={user?.image_url}
-                        icon={!user?.image_url ? <UserOutlined /> : null}
-                        className="app-navbar__avatar"
-                    >
-                        {!user?.image_url ? initials : null}
-                    </Avatar>
-
-                    <div className="app-navbar__dropdown-user-copy">
-                        <strong>{user?.display_name || user?.name || 'User'}</strong>
-                        <span>{user?.email || 'No email available'}</span>
-                    </div>
-                </div>
-            ),
-        },
-        { type: 'divider' },
-        ...profileItems.map((item) => {
-            if (item?.key === 'profile') {
-                return {
-                    ...item,
-                    icon: item.icon || <ProfileOutlined />,
-                    label: 'View Profile',
-                };
-            }
-
-            if (item?.key === 'logout') {
-                return {
-                    ...item,
-                    icon: <LogoutOutlined />,
-                };
-            }
-
-            return item;
-        }),
-    ];
 
     const toggleThemeMode = (checked) => {
         const nextMode = checked ? 'dark' : 'light';
@@ -323,38 +263,6 @@ export default function AppNavbar({
                                     className="app-navbar__theme-switch"
                                 />
 
-                                <Dropdown
-                                    menu={{ items: enhancedProfileItems }}
-                                    placement="bottomRight"
-                                    trigger={['click']}
-                                    overlayClassName="app-navbar-dropdown"
-                                >
-                                    <Button
-                                        type="text"
-                                        className="app-navbar__profile-button"
-                                    >
-                                        <Space size={8} wrap={false}>
-                                            <Avatar
-                                                size={32}
-                                                src={user?.image_url}
-                                                icon={
-                                                    !user?.image_url ? (
-                                                        <UserOutlined />
-                                                    ) : null
-                                                }
-                                                className="app-navbar__avatar"
-                                            >
-                                                {!user?.image_url ? initials : null}
-                                            </Avatar>
-
-                                            {isWide && (
-                                                <span className="app-navbar__user-name">
-                                                    {user?.name || 'User'}
-                                                </span>
-                                            )}
-                                        </Space>
-                                    </Button>
-                                </Dropdown>
                             </>
                         )}
                     </div>
@@ -429,8 +337,7 @@ export default function AppNavbar({
                     }
 
                     .app-navbar__icon-button,
-                    .app-navbar__quick-add,
-                    .app-navbar__profile-button {
+                    .app-navbar__quick-add {
                         height: var(--app-control-height);
                         border-radius: var(--app-radius);
                         display: inline-flex;
@@ -464,72 +371,9 @@ export default function AppNavbar({
                         box-shadow: none;
                     }
 
-                    .app-navbar__profile-button {
-                        padding: 0 7px;
-                        color: var(--app-text-secondary) !important;
-                        background: transparent !important;
-                        border: 1px solid transparent !important;
-                    }
-
-                    .app-navbar__profile-button:hover {
-                        color: var(--app-text) !important;
-                        background: var(--app-nav-elevated) !important;
-                        border-color: var(--app-border-strong) !important;
-                    }
-
                     .app-navbar__theme-switch {
                         flex: 0 0 auto;
                         transform: scale(0.94);
-                    }
-
-                    .app-navbar__avatar {
-                        background: var(--app-primary-soft) !important;
-                        color: var(--app-primary) !important;
-                        border: 1px solid var(--app-primary-border) !important;
-                    }
-
-                    .app-navbar__user-name {
-                        display: inline-block;
-                        max-width: 140px;
-                        overflow: hidden;
-                        white-space: nowrap;
-                        text-overflow: ellipsis;
-                        font-weight: 700;
-                        color: var(--app-text);
-                        line-height: 1;
-                    }
-
-                    .app-navbar__dropdown-user {
-                        display: flex;
-                        align-items: center;
-                        gap: 10px;
-                        min-width: 230px;
-                        padding: 4px 2px;
-                    }
-
-                    .app-navbar__dropdown-user-copy {
-                        min-width: 0;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 2px;
-                    }
-
-                    .app-navbar__dropdown-user-copy strong,
-                    .app-navbar__dropdown-user-copy span {
-                        max-width: 170px;
-                        overflow: hidden;
-                        white-space: nowrap;
-                        text-overflow: ellipsis;
-                    }
-
-                    .app-navbar__dropdown-user-copy strong {
-                        color: var(--app-text);
-                        font-size: 13px;
-                    }
-
-                    .app-navbar__dropdown-user-copy span {
-                        color: var(--app-text-muted);
-                        font-size: 12px;
                     }
 
                     .app-dark-select {

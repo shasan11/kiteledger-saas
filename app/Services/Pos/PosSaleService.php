@@ -382,7 +382,7 @@ class PosSaleService
             InvoiceLine::create([
                 'invoice_id' => $invoice->id,
                 'product_id' => $line->product_id,
-                'custom_product_name' => $line->product_id ? null : $line->product_name,
+                'product_name' => $line->product_id ? null : $line->product_name,
                 'description' => $line->remarks,
                 'qty' => $line->qty,
                 'unit_price' => $line->unit_price,

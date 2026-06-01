@@ -15,7 +15,7 @@ return new class extends Migration
 
         Schema::create('master_data', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->enum('type', ["custom_status","lead_source","deal_stage","task_type","credit_term","cost_term","payment_mode","tds_type","industry","activity_type","lost_reason"]);
+            $table->enum('type', ["custom_status","lead_source","deal_stage","task_type","credit_term","cost_term","payment_mode","tds_type","industry","activity_type","lost_reason","campaign_source","campaign_medium"]);
             $table->string('group', 80);
             $table->string('key', 120);
             $table->string('value', 180);
