@@ -277,6 +277,10 @@ class AiProviderManager
             $this->throwError('AI_SSL_CERTIFICATE_ERROR', 'PHP cannot verify the provider SSL certificate. Set AI_CA_BUNDLE to a valid cacert.pem path, or configure curl.cainfo and openssl.cafile in php.ini.');
         }
 
+        if (str_contains($lower, 'overloaded') || str_contains($lower, 'service unavailable') || str_contains($lower, '503') || str_contains($lower, 'temporarily unavailable') || str_contains($lower, 'unavailable')) {
+            $this->throwError('AI_PROVIDER_OVERLOADED', "{$provider} is overloaded right now. Switch to OpenRouter or Groq, or try again later.");
+        }
+
         if (str_contains($lower, 'timed out') || str_contains($lower, 'timeout')) {
             $this->throwError('AI_TIMEOUT', "AI request timed out. Check internet/DNS/firewall/proxy or use a faster model for {$provider}.");
         }
