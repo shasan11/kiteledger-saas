@@ -96,7 +96,7 @@ export default function AuthenticatedLayout({ header, children }) {
                       {
                           key: 'ai-assistant',
                           icon: <RobotOutlined />,
-                          label: 'AI Assistant',
+                          label: 'Assistant',
                           onClick: () => visit('ai.assistant', '/ai/assistant'),
                       },
                   ]
@@ -106,7 +106,7 @@ export default function AuthenticatedLayout({ header, children }) {
                       {
                           key: 'ai-document-upload',
                           icon: <InboxOutlined />,
-                          label: 'AI Document Upload',
+                          label: 'Documents',
                           onClick: () => visit('documents.upload.index', '/documents/upload'),
                       },
                   ]
