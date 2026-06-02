@@ -16,14 +16,14 @@ class AiSettingsService
         'ai_model' => 'gpt-4o-mini',
         'ai_base_url' => 'https://api.openai.com/v1',
         'ai_temperature' => 0.2,
-        'ai_max_tokens' => 700,
-        'ai_timeout_seconds' => 75,
-        'ai_connect_timeout_seconds' => 10,
+        'ai_max_tokens' => 500,
+        'ai_timeout_seconds' => 180,
+        'ai_connect_timeout_seconds' => 15,
         'ai_stream_enabled' => false,
         'ai_cache_enabled' => true,
         'ai_cache_ttl' => 600,
-        'ai_context_max_rows' => 20,
-        'ai_context_max_chars' => 8000,
+        'ai_context_max_rows' => 15,
+        'ai_context_max_chars' => 5000,
         'ai_fast_mode' => true,
     ];
 
@@ -104,9 +104,9 @@ class AiSettingsService
     {
         $saved = $this->savedTimeoutSeconds();
 
-        // Runtime safety only. Do not use this method for the settings form,
-        // otherwise the CRUD form appears to overwrite a user's saved value.
-        return max(60, $saved);
+        // Runtime safety only. If an old saved value is too low, use a safer
+        // provider-specific minimum so cloud LLM requests do not fail at 60s.
+        return max($this->minimumRuntimeTimeoutForProvider($this->provider()), $saved);
     }
 
     public function savedConnectTimeoutSeconds(): int
@@ -116,7 +116,7 @@ class AiSettingsService
 
     public function connectTimeoutSeconds(): int
     {
-        return max(5, $this->savedConnectTimeoutSeconds());
+        return max(10, $this->savedConnectTimeoutSeconds());
     }
 
     public function streamEnabled(): bool
@@ -210,7 +210,7 @@ class AiSettingsService
     {
         return match ($provider) {
             'groq' => 'llama-3.1-8b-instant',
-            'gemini' => 'gemini-2.5-flash',
+            'gemini' => 'gemini-2.0-flash',
             'ollama' => 'llama3.1:8b',
             default => 'gpt-4o-mini',
         };
@@ -223,6 +223,15 @@ class AiSettingsService
             'ollama' => 'http://localhost:11434',
             'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
             default => 'https://api.openai.com/v1',
+        };
+    }
+
+    private function minimumRuntimeTimeoutForProvider(string $provider): int
+    {
+        return match ($provider) {
+            'ollama' => 180,
+            'gemini' => 180,
+            default => 120,
         };
     }
 }
