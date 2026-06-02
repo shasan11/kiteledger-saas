@@ -27,17 +27,19 @@ class AiSettingsController extends Controller
 
         return response()->json([
             'settings' => $this->settings->all(),
-            'supported_providers' => ['openai', 'groq', 'gemini', 'ollama'],
+            'supported_providers' => ['openai', 'groq', 'gemini', 'openrouter', 'ollama'],
             'model_suggestions' => [
                 'openai' => ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'],
                 'groq' => ['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'],
-                'gemini' => ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+                'gemini' => ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
+                'openrouter' => ['google/gemini-2.0-flash-001', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct'],
                 'ollama' => ['llama3.1:8b', 'mistral', 'qwen2.5'],
             ],
             'default_base_urls' => [
                 'openai' => 'https://api.openai.com/v1',
                 'groq' => 'https://api.groq.com/openai/v1',
-                'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
+                'gemini' => 'https://generativelanguage.googleapis.com/v1beta/models',
+                'openrouter' => 'https://openrouter.ai/api/v1',
                 'ollama' => 'http://localhost:11434',
             ],
         ]);
@@ -52,9 +54,9 @@ class AiSettingsController extends Controller
 
         $validated = $request->validate([
             'ai_enabled' => 'nullable|boolean',
-            'ai_provider' => ['nullable', Rule::in(['openai', 'groq', 'gemini', 'ollama'])],
-            'ai_model' => 'nullable|string|max:120',
-            'ai_api_key' => 'nullable|string|max:500',
+            'ai_provider' => ['nullable', Rule::in(['openai', 'groq', 'gemini', 'openrouter', 'ollama'])],
+            'ai_model' => 'nullable|string|max:160',
+            'ai_api_key' => 'nullable|string|max:800',
             'ai_base_url' => 'nullable|string|max:500',
             'ai_temperature' => 'nullable|numeric|min:0|max:2',
             'ai_max_tokens' => 'nullable|integer|min:50|max:32000',
