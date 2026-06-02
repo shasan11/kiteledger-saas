@@ -36,7 +36,7 @@ class AiSettingsService
 
     public function provider(): string
     {
-        $p = $this->db->string('ai_provider', self::DEFAULTS['ai_provider'], self::GROUP);
+        $p = strtolower($this->db->string('ai_provider', self::DEFAULTS['ai_provider'], self::GROUP));
         return $p ?: self::DEFAULTS['ai_provider'];
     }
 
@@ -52,7 +52,7 @@ class AiSettingsService
         $raw = $this->db->string('ai_api_key', '', self::GROUP);
         if (!$raw) {
             $provider = $this->provider();
-            $cfg = config("ai.providers.{$provider}.api_key");
+            $cfg = config("ai.providers.{$provider}.api_key") ?: config("prism.providers.{$provider}.api_key");
             return $cfg ?: null;
         }
 
@@ -103,9 +103,6 @@ class AiSettingsService
     public function timeoutSeconds(): int
     {
         $saved = $this->savedTimeoutSeconds();
-
-        // Runtime safety only. If an old saved value is too low, use a safer
-        // provider-specific minimum so cloud LLM requests do not fail at 60s.
         return max($this->minimumRuntimeTimeoutForProvider($this->provider()), $saved);
     }
 
@@ -212,6 +209,7 @@ class AiSettingsService
             'groq' => 'llama-3.1-8b-instant',
             'gemini' => 'gemini-2.0-flash',
             'ollama' => 'llama3.1:8b',
+            'openrouter' => 'google/gemini-2.0-flash-001',
             default => 'gpt-4o-mini',
         };
     }
@@ -221,7 +219,8 @@ class AiSettingsService
         return match ($provider) {
             'groq' => 'https://api.groq.com/openai/v1',
             'ollama' => 'http://localhost:11434',
-            'gemini' => 'https://generativelanguage.googleapis.com/v1beta',
+            'gemini' => 'https://generativelanguage.googleapis.com/v1beta/models',
+            'openrouter' => 'https://openrouter.ai/api/v1',
             default => 'https://api.openai.com/v1',
         };
     }
@@ -231,6 +230,7 @@ class AiSettingsService
         return match ($provider) {
             'ollama' => 180,
             'gemini' => 180,
+            'openrouter' => 120,
             default => 120,
         };
     }
