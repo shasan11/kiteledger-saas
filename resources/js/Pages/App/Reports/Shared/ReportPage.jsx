@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -29,6 +29,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import { REPORT_CONFIG } from '../reportRegistry';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -95,84 +96,29 @@ function persistQuery(filters) {
   window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
 
-function AsyncOptionSelect({
-  source, value, label, placeholder, onChange,
-}) {
-  const [options, setOptions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const debounceRef = useRef(null);
-
-  const load = useCallback(async (search) => {
-    setLoading(true);
-    try {
-      const { data } = await axios.get(api(`/api/reports/options/${source}`), {
-        params: {
-          search: search || undefined,
-          selected_id: value || undefined,
-          limit: 30,
-        },
-      });
-      setOptions((data?.items || []).map((item) => ({
-        value: item.id,
-        label: item.label || item.name || String(item.id),
-      })));
-    } catch {
-      setOptions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [source, value]);
-
-  useEffect(() => {
-    load('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
-
-  const handleSearch = (search) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => load(search), 250);
-  };
-
-  return (
-    <Select
-      allowClear
-      showSearch
-      filterOption={false}
-      loading={loading}
-      style={{ width: '100%' }}
-      placeholder={placeholder || `Select ${label}`}
-      value={value || undefined}
-      onChange={(v) => onChange(v ?? null)}
-      onSearch={handleSearch}
-      options={options}
-    />
-  );
-}
-
 export default function ReportPage() {
   const { token } = theme.useToken();
   const page = usePage();
   const permissions = page.props.auth?.permissions || [];
   const branchContext = page.props.branchContext || {};
+  const reportOptions = page.props.reportOptions || {};
 
   const pageCategory = page.props.reportCategory;
   const pageReportKey = page.props.reportKey;
-  const config = page.props.reportConfig || {};
+  const config = REPORT_CONFIG[`${pageCategory}/${pageReportKey}`] || {};
 
   const {
-    title = pageReportKey || 'Report',
-    category_label: categoryTitle = pageCategory,
+    title = 'Report',
+    category = pageCategory,
+    categoryTitle = pageCategory,
+    reportKey = pageReportKey,
     description,
-    filter_schema: filterSchema = [],
+    filterSchema = [],
     permission,
-    default_date_mode: defaultDateMode = 'period',
   } = config;
 
-  const category = pageCategory;
-  const reportKey = pageReportKey;
-
   const canView = permissions.includes('reports.view') || (permission && permissions.includes(permission));
-  const canExport = permissions.includes('reports.export') || permissions.includes('reports.view');
+  const canExport = permissions.includes('reports.export');
   const defaultBranchId = branchContext.selectedBranchId || page.props.auth?.currentBranchId;
 
   const baseDefaults = useMemo(() => ({
@@ -190,6 +136,7 @@ export default function ReportPage() {
   const [filters, setFilters] = useState(() => ({
     ...baseDefaults,
     ...readQueryFilters(),
+    ...(defaultBranchId ? {} : {}),
   }));
 
   const [state, setState] = useState({ loading: false, error: null, data: null });
@@ -197,43 +144,19 @@ export default function ReportPage() {
   const [generatedFilters, setGeneratedFilters] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [filtersDirty, setFiltersDirty] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef(null);
 
+  // On mount: only persist query from URL — do NOT fetch
   useEffect(() => {
     persistQuery(filters);
-    if (new URLSearchParams(window.location.search).get('auto_generate') === '1') {
-      // honoured opt-in only
-      // eslint-disable-next-line no-use-before-define
-      setTimeout(() => handleGenerate(), 0);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const before = () => setIsPrinting(true);
-    const after = () => setIsPrinting(false);
-    window.addEventListener('beforeprint', before);
-    window.addEventListener('afterprint', after);
-    return () => {
-      window.removeEventListener('beforeprint', before);
-      window.removeEventListener('afterprint', after);
-    };
-  }, []);
-
-  const handlePrint = () => {
-    setIsPrinting(true);
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setIsPrinting(false), 200);
-    }, 80);
-  };
-
   const currentBranchLabel = useMemo(() => {
     if (!filters.branch_id || filters.branch_id === 'all') return 'All Branches';
-    const branches = branchContext.branches || [];
+    const branches = reportOptions.branches || branchContext.branches || [];
     return branches.find((b) => String(b.id) === String(filters.branch_id))?.name || 'Current Branch';
-  }, [branchContext.branches, filters.branch_id]);
+  }, [branchContext.branches, filters.branch_id, reportOptions.branches]);
 
   const updateFilter = (updates) => {
     setFilters((prev) => {
@@ -249,11 +172,7 @@ export default function ReportPage() {
     setFiltersDirty(false);
     try {
       const { data } = await axios.get(api(`/api/reports/${category}/${reportKey}`), { params: filters });
-      setState({
-        loading: false,
-        error: data.error ? (data.error === true ? data.message : data.error) : null,
-        data: data.error ? null : data,
-      });
+      setState({ loading: false, error: data.error ? (data.error === true ? data.message : data.error) : null, data: data.error ? null : data });
       if (!data.error) {
         setHasGenerated(true);
         setGeneratedFilters({ ...filters });
@@ -309,8 +228,14 @@ export default function ReportPage() {
     [state.data?.columns],
   );
 
-  const canPrintNow = hasGenerated && !state.loading;
+  const branchOptions = useMemo(() => [
+    ...(branchContext.canViewAllBranches ? [{ value: 'all', label: 'All Branches' }] : []),
+    ...((reportOptions.branches || branchContext.branches || []).map((b) => ({ value: b.id, label: b.name }))),
+  ], [branchContext, reportOptions.branches]);
+
+  const canGenerate = !state.loading;
   const canExportNow = canExport && hasGenerated && !state.loading;
+  const canPrintNow = hasGenerated && !state.loading;
 
   if (!canView) {
     return (
@@ -328,266 +253,32 @@ export default function ReportPage() {
     );
   }
 
-  const renderFilter = (filter) => {
-    const labelEl = (
-      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
-        {filter.label}
-      </Text>
-    );
-
-    if (filter.type === 'dateRange') {
-      return (
-        <Col xs={24} md={12} lg={8} key={filter.key}>
-          {labelEl}
-          <RangePicker
-            style={{ width: '100%' }}
-            value={
-              filters.date_from && filters.date_to
-                ? [dayjs(filters.date_from), dayjs(filters.date_to)]
-                : null
-            }
-            onChange={(value) =>
-              updateFilter({
-                date_from: value?.[0]?.format('YYYY-MM-DD') ?? null,
-                date_to: value?.[1]?.format('YYYY-MM-DD') ?? null,
-              })
-            }
-          />
-        </Col>
-      );
-    }
-
-    if (filter.type === 'date') {
-      return (
-        <Col xs={24} md={8} lg={6} key={filter.key}>
-          {labelEl}
-          <DatePicker
-            style={{ width: '100%' }}
-            value={filters[filter.key] ? dayjs(filters[filter.key]) : null}
-            onChange={(value) => updateFilter({ [filter.key]: value?.format('YYYY-MM-DD') ?? null })}
-          />
-        </Col>
-      );
-    }
-
-    if (filter.type === 'branch') {
-      return (
-        <Col xs={24} md={8} lg={6} key={filter.key}>
-          {labelEl}
-          <AsyncOptionSelect
-            source="branches"
-            label={filter.label}
-            value={filters.branch_id}
-            onChange={(v) => updateFilter({ branch_id: v })}
-          />
-        </Col>
-      );
-    }
-
-    if (filter.type === 'checkbox') {
-      return (
-        <Col xs={24} md={8} lg={6} key={filter.key} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
-          <Checkbox
-            checked={Boolean(filters[filter.key])}
-            onChange={(e) => updateFilter({ [filter.key]: e.target.checked })}
-          >
-            {filter.label}
-          </Checkbox>
-        </Col>
-      );
-    }
-
-    if (filter.type === 'status') {
-      const options = ['draft', 'posted', 'part_paid', 'paid', 'void', 'cancelled'].map((v) => ({
-        value: v,
-        label: v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-      }));
-      return (
-        <Col xs={24} md={8} lg={6} key={filter.key}>
-          {labelEl}
-          <Select
-            allowClear
-            style={{ width: '100%' }}
-            placeholder={`Select ${filter.label}`}
-            value={filters[filter.key] || undefined}
-            onChange={(v) => updateFilter({ [filter.key]: v ?? null })}
-            options={options}
-          />
-        </Col>
-      );
-    }
-
-    if (filter.type === 'groupBy') {
-      const groupByOpts = {
-        sales: ['day', 'week', 'month', 'customer', 'branch'],
-        purchase: ['day', 'week', 'month', 'supplier', 'branch'],
-      };
-      const options = (groupByOpts[category] || ['day', 'week', 'month', 'branch']).map((v) => ({
-        value: v,
-        label: v.charAt(0).toUpperCase() + v.slice(1),
-      }));
-      return (
-        <Col xs={24} md={8} lg={6} key={filter.key}>
-          {labelEl}
-          <Select
-            allowClear
-            style={{ width: '100%' }}
-            placeholder={`Select ${filter.label}`}
-            value={filters[filter.key] || undefined}
-            onChange={(v) => updateFilter({ [filter.key]: v ?? null })}
-            options={options}
-          />
-        </Col>
-      );
-    }
-
-    // Default: async select from /api/reports/options/{source}
-    return (
-      <Col xs={24} md={8} lg={6} key={filter.key}>
-        {labelEl}
-        <AsyncOptionSelect
-          source={filter.source}
-          label={filter.label}
-          value={filters[filter.key]}
-          onChange={(v) => updateFilter({ [filter.key]: v })}
-        />
-      </Col>
-    );
-  };
-
   return (
     <AuthenticatedLayout header={<h2 className="text-xl font-semibold leading-tight">{title}</h2>}>
       <Head title={title} />
 
       <style>{`
-        .print-only { display: none; }
-
         @media print {
-          /* Zero @page margin so the browser has no room for its default
-             header/footer (URL, page numbers, date). Real margins live on
-             .report-print-area below. Users can re-enable browser headers
-             from the print dialog if they want. */
-          @page { size: A4 landscape; margin: 0; }
-
-          html, body {
-            background: #fff !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color: #000 !important;
-            font-size: 10px !important;
-            line-height: 1.25 !important;
-          }
-
-          /* Hide everything except the print area */
           body * { visibility: hidden !important; }
           .report-print-area, .report-print-area * { visibility: visible !important; }
-          .report-print-area {
-            position: absolute !important;
-            inset: 0 !important;
-            width: 100% !important;
-            padding: 8mm 8mm 10mm !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-          }
-
-          /* Hide chrome */
+          .report-print-area { position: absolute; left: 0; top: 0; width: 100%; }
           .report-toolbar, .ant-layout-sider, .ant-layout-header,
-          .ant-breadcrumb, .report-no-print,
-          .ant-pagination, .ant-table-pagination,
-          .ant-back-top, .ant-float-btn-group, .ant-float-btn {
-            display: none !important;
-          }
-
+          .ant-breadcrumb, .report-no-print { display: none !important; }
           .print-only { display: block !important; }
-
-          /* Strip down card/container shells */
-          .report-print-area .ant-card,
-          .report-print-area .ant-card-bordered { background: #fff !important; border: 0 !important; box-shadow: none !important; }
-          .report-print-area .ant-card-body { padding: 0 !important; }
-
-          /* Tight print header */
-          .report-print-header { border-bottom: 1.5px solid #000 !important; padding-bottom: 6px !important; margin-bottom: 8px !important; }
-          .report-print-header h1 { font-size: 16px !important; margin: 0 0 2px !important; font-weight: 700 !important; }
-          .report-print-header .meta { font-size: 10px !important; color: #333 !important; margin: 1px 0 !important; }
-          .report-print-header .filters-line { font-size: 9.5px !important; color: #555 !important; margin-top: 2px !important; }
-
-          /* Summary cards → inline compact strip */
-          .report-summary-row { display: flex !important; flex-wrap: wrap !important; gap: 0 !important;
-            border: 1px solid #999 !important; border-radius: 0 !important; margin: 0 0 6px !important; }
-          .report-summary-row .ant-col { flex: 1 1 0 !important; max-width: none !important; padding: 0 !important; }
-          .report-summary-row .ant-card { border-right: 1px solid #ddd !important; border-radius: 0 !important; }
-          .report-summary-row .ant-col:last-child .ant-card { border-right: 0 !important; }
-          .report-summary-row .ant-card-body { padding: 4px 8px !important; }
-          .report-summary-row .ant-statistic-title { font-size: 9px !important; color: #444 !important; margin: 0 !important; }
-          .report-summary-row .ant-statistic-content { font-size: 11px !important; line-height: 1.2 !important; }
-          .report-summary-row .ant-statistic-content-value { font-weight: 600 !important; }
-
-          /* Table density */
-          .report-print-area .ant-table,
-          .report-print-area .ant-table-content,
-          .report-print-area .ant-table-container,
-          .report-print-area .ant-table-cell { background: #fff !important; color: #000 !important; }
-          .report-print-area .ant-table { font-size: 9px !important; }
-          .report-print-area .ant-table-thead > tr > th {
-            background: #f0f0f0 !important;
-            color: #000 !important;
-            font-weight: 700 !important;
-            padding: 3px 5px !important;
-            border-bottom: 1px solid #000 !important;
-            border-right: 1px solid #ddd !important;
-            line-height: 1.2 !important;
-            white-space: nowrap !important;
-          }
-          .report-print-area .ant-table-tbody > tr > td {
-            padding: 2px 5px !important;
-            border-bottom: 1px solid #e5e5e5 !important;
-            border-right: 1px solid #f0f0f0 !important;
-            line-height: 1.2 !important;
-          }
-          .report-print-area .ant-table-tbody > tr:nth-child(even) > td { background: #fafafa !important; }
-          .report-print-area .ant-table-summary > tr > td {
-            font-weight: 700 !important;
-            border-top: 1.5px solid #000 !important;
-            border-bottom: 1.5px solid #000 !important;
-            padding: 3px 5px !important;
-            background: #fff !important;
-          }
-
-          /* Tag rendering — plain text-ish */
-          .report-print-area .ant-tag {
-            background: transparent !important;
-            border: 1px solid #888 !important;
-            color: #000 !important;
-            padding: 0 4px !important;
-            font-size: 9px !important;
-            line-height: 1.3 !important;
-            margin: 0 !important;
-          }
-
-          /* Strip scroll wrappers so the whole table flows */
-          .report-print-area .ant-table-body,
-          .report-print-area .ant-table-content,
-          .report-print-area .ant-table-container { overflow: visible !important; }
-          .report-print-area .ant-table-sticky-holder,
-          .report-print-area .ant-table-sticky-scroll { position: static !important; display: none !important; }
-
-          /* Page break behaviour */
-          .report-print-area table { page-break-inside: auto !important; border-collapse: collapse !important; width: 100% !important; }
-          .report-print-area tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-          .report-print-area thead { display: table-header-group !important; }
-          .report-print-area tfoot { display: table-footer-group !important; }
-          .report-print-area .ant-alert { display: none !important; }
-          .report-print-area .ant-empty { padding: 16px 0 !important; }
-
-          /* Right-align numerics (use tabular-nums for clean column alignment) */
-          .report-print-area .ant-table-cell { font-variant-numeric: tabular-nums !important; }
+          .ant-card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+          .ant-table-sticky-holder { position: static !important; }
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          @page { size: A4 landscape; margin: 12mm; }
         }
+        .print-only { display: none; }
       `}</style>
 
       <div style={{ padding: 20, background: token.colorBgLayout, minHeight: 'calc(100vh - 96px)' }}>
 
+        {/* Report header */}
         <Card bordered={false} style={{ marginBottom: 16, background: token.colorBgContainer }} className="report-no-print">
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Space align="center" wrap>
@@ -596,15 +287,126 @@ export default function ReportPage() {
               {hasGenerated && generatedAt && (
                 <Tag color="green">Generated {generatedAt}</Tag>
               )}
-              <Tag>{defaultDateMode === 'as_of' ? 'As-of report' : defaultDateMode === 'ageing' ? 'Ageing report' : defaultDateMode === 'none' ? 'Master list' : 'Period report'}</Tag>
             </Space>
             {description && <Text type="secondary">{description}</Text>}
           </Space>
         </Card>
 
+        {/* Filter panel */}
         <Card bordered={false} className="report-toolbar" style={{ marginBottom: 16, background: token.colorBgContainer }}>
           <Row gutter={[12, 16]}>
-            {filterSchema.map(renderFilter)}
+            {filterSchema.map((filter) => {
+              if (filter.type === 'dateRange') {
+                return (
+                  <Col xs={24} md={12} lg={8} key={filter.key}>
+                    <div>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{filter.label}</Text>
+                      <RangePicker
+                        style={{ width: '100%' }}
+                        value={
+                          filters.date_from && filters.date_to
+                            ? [dayjs(filters.date_from), dayjs(filters.date_to)]
+                            : null
+                        }
+                        onChange={(value) =>
+                          updateFilter({
+                            date_from: value?.[0]?.format('YYYY-MM-DD') ?? null,
+                            date_to: value?.[1]?.format('YYYY-MM-DD') ?? null,
+                          })
+                        }
+                      />
+                    </div>
+                  </Col>
+                );
+              }
+
+              if (filter.type === 'date') {
+                return (
+                  <Col xs={24} md={8} lg={6} key={filter.key}>
+                    <div>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{filter.label}</Text>
+                      <DatePicker
+                        style={{ width: '100%' }}
+                        value={filters[filter.key] ? dayjs(filters[filter.key]) : null}
+                        onChange={(value) => updateFilter({ [filter.key]: value?.format('YYYY-MM-DD') ?? null })}
+                      />
+                    </div>
+                  </Col>
+                );
+              }
+
+              if (filter.type === 'branch') {
+                return (
+                  <Col xs={24} md={8} lg={6} key={filter.key}>
+                    <div>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{filter.label}</Text>
+                      <Select
+                        style={{ width: '100%' }}
+                        placeholder="Select Branch"
+                        value={filters.branch_id || undefined}
+                        onChange={(value) => updateFilter({ branch_id: value })}
+                        options={branchOptions}
+                      />
+                    </div>
+                  </Col>
+                );
+              }
+
+              if (filter.type === 'checkbox') {
+                return (
+                  <Col xs={24} md={8} lg={6} key={filter.key} style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 4 }}>
+                    <Checkbox
+                      checked={Boolean(filters[filter.key])}
+                      onChange={(e) => updateFilter({ [filter.key]: e.target.checked })}
+                    >
+                      {filter.label}
+                    </Checkbox>
+                  </Col>
+                );
+              }
+
+              let options = [];
+              if (filter.type === 'status') {
+                options = ['draft', 'posted', 'part_paid', 'paid', 'void', 'cancelled'].map((v) => ({
+                  value: v,
+                  label: v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                }));
+              } else if (filter.type === 'groupBy') {
+                const groupByOpts = {
+                  sales: ['day', 'week', 'month', 'customer', 'branch'],
+                  purchase: ['day', 'week', 'month', 'supplier', 'branch'],
+                };
+                options = (groupByOpts[category] || ['day', 'week', 'month', 'branch']).map((v) => ({
+                  value: v,
+                  label: v.charAt(0).toUpperCase() + v.slice(1),
+                }));
+              } else {
+                options = (reportOptions[filter.source] || []).map((item) => ({
+                  value: item.id,
+                  label: item.code
+                    ? `${item.code} - ${item.name || item.user?.name || ''}`
+                    : (item.name || item.user?.name || item.employee_id || String(item.id)),
+                }));
+              }
+
+              return (
+                <Col xs={24} md={8} lg={6} key={filter.key}>
+                  <div>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>{filter.label}</Text>
+                    <Select
+                      allowClear
+                      showSearch
+                      optionFilterProp="label"
+                      style={{ width: '100%' }}
+                      placeholder={`Select ${filter.label}`}
+                      value={filters[filter.key] || undefined}
+                      onChange={(value) => updateFilter({ [filter.key]: value ?? null })}
+                      options={options}
+                    />
+                  </div>
+                </Col>
+              );
+            })}
 
             <Col xs={24}>
               <Space wrap>
@@ -613,6 +415,7 @@ export default function ReportPage() {
                   icon={<PlayCircleOutlined />}
                   onClick={handleGenerate}
                   loading={state.loading}
+                  disabled={!canGenerate}
                 >
                   Generate Report
                 </Button>
@@ -643,7 +446,7 @@ export default function ReportPage() {
                 <Button
                   icon={<PrinterOutlined />}
                   disabled={!canPrintNow}
-                  onClick={handlePrint}
+                  onClick={() => window.print()}
                 >
                   Print
                 </Button>
@@ -652,6 +455,7 @@ export default function ReportPage() {
           </Row>
         </Card>
 
+        {/* Filters changed warning */}
         {filtersDirty && hasGenerated && (
           <Alert
             type="warning"
@@ -664,65 +468,25 @@ export default function ReportPage() {
           />
         )}
 
+        {/* Result area */}
         <div ref={printRef} className="report-print-area">
-          <div className="print-only report-print-header">
-            {(() => {
-              const company = state.data?.company || {};
-              const contactBits = [
-                company.phone && `Phone: ${company.phone}`,
-                company.email && `Email: ${company.email}`,
-                company.website,
-              ].filter(Boolean);
-              const taxBits = [
-                company.tax_number && `Tax No: ${company.tax_number}`,
-                company.vat_number && `VAT No: ${company.vat_number}`,
-                company.registration_number && `Reg No: ${company.registration_number}`,
-              ].filter(Boolean);
-              return (
-                <>
-                  {company.name && <h1>{company.name}</h1>}
-                  {company.tag_line && <p className="meta">{company.tag_line}</p>}
-                  {company.address && <p className="meta">{company.address}</p>}
-                  {contactBits.length > 0 && (
-                    <p className="meta">{contactBits.join('  ·  ')}</p>
-                  )}
-                  {taxBits.length > 0 && (
-                    <p className="meta">{taxBits.join('  ·  ')}</p>
-                  )}
-                </>
-              );
-            })()}
 
-            <p className="report-title" style={{ fontSize: 13, fontWeight: 700, margin: '6px 0 2px' }}>
-              {title}
+          {/* Print-only header (hidden on screen) */}
+          <div className="print-only" style={{ marginBottom: 16, borderBottom: '2px solid #111', paddingBottom: 12 }}>
+            <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>{title}</h1>
+            {state.data?.company_name && <p style={{ margin: '2px 0', fontSize: 13 }}>{state.data.company_name}</p>}
+            <p style={{ margin: '2px 0', fontSize: 12, color: '#555' }}>
+              Branch: {currentBranchLabel}
+              {generatedAt && ` | Generated: ${generatedAt}`}
             </p>
-            <p className="meta">
-              <strong>{categoryTitle}</strong>
-              {` · Branch: ${currentBranchLabel}`}
-              {generatedAt && ` · Generated: ${generatedAt}`}
-            </p>
-            {(state.data?.period?.from || generatedFilters?.as_of_date || generatedFilters?.ageing_as_of_date) && (
-              <p className="meta">
-                {state.data?.period?.from
-                  ? `Period: ${state.data.period.from} to ${state.data.period.to}`
-                  : generatedFilters?.as_of_date
-                    ? `As of: ${generatedFilters.as_of_date}`
-                    : `Ageing as of: ${generatedFilters.ageing_as_of_date}`}
-              </p>
-            )}
-            {generatedFilters && (
-              <p className="filters-line">
-                {Object.entries(generatedFilters)
-                  .filter(([k, v]) =>
-                    v !== null && v !== '' && v !== false
-                    && !['date_from', 'date_to', 'as_of_date', 'ageing_as_of_date', 'branch_id', 'group_by'].includes(k))
-                  .slice(0, 8)
-                  .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
-                  .join('  ·  ')}
+            {state.data?.period?.from && (
+              <p style={{ margin: '2px 0', fontSize: 12, color: '#555' }}>
+                Period: {state.data.period.from} to {state.data.period.to}
               </p>
             )}
           </div>
 
+          {/* Empty state before generation */}
           {!hasGenerated && !state.loading && !state.error && (
             <Card bordered={false} style={{ background: token.colorBgContainer }}>
               <Empty
@@ -741,6 +505,7 @@ export default function ReportPage() {
             </Card>
           )}
 
+          {/* Loading */}
           {state.loading && (
             <Card bordered={false} style={{ background: token.colorBgContainer }}>
               <div style={{ padding: 48, textAlign: 'center' }}>
@@ -752,6 +517,7 @@ export default function ReportPage() {
             </Card>
           )}
 
+          {/* Error */}
           {!state.loading && state.error && (
             <Alert
               type="error"
@@ -762,10 +528,12 @@ export default function ReportPage() {
             />
           )}
 
+          {/* Results */}
           {!state.loading && !state.error && hasGenerated && state.data && (
             <>
+              {/* Summary cards */}
               {(state.data.summary || []).length > 0 && (
-                <Row gutter={[12, 12]} className="report-summary-row" style={{ marginBottom: 16 }}>
+                <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
                   {state.data.summary.map((item) => (
                     <Col xs={24} sm={12} md={8} lg={6} key={item.label}>
                       <Card bordered={false} size="small" style={{ background: token.colorBgContainer }}>
@@ -780,23 +548,24 @@ export default function ReportPage() {
                 </Row>
               )}
 
+              {/* Table */}
               <Card bordered={false} style={{ background: token.colorBgContainer }}>
                 {(state.data.rows || []).length === 0 ? (
                   <Empty description="No records found for the selected filters." />
                 ) : (
                   <Table
                     size="small"
-                    sticky={!isPrinting}
+                    sticky
                     rowKey={(_, index) => `row-${index}`}
                     columns={columns}
                     dataSource={state.data.rows || []}
-                    pagination={isPrinting ? false : {
+                    pagination={{
                       pageSize: 100,
                       showSizeChanger: true,
                       pageSizeOptions: [50, 100, 250, 500],
                       showTotal: (total) => `${total.toLocaleString()} records`,
                     }}
-                    scroll={isPrinting ? undefined : { x: 'max-content' }}
+                    scroll={{ x: 'max-content' }}
                     summary={() => {
                       const totalEntries = Object.entries(state.data.totals || {});
                       if (!totalEntries.length) return null;
@@ -809,12 +578,16 @@ export default function ReportPage() {
                                 colSpan={Math.max(columns.length - 1, 1)}
                               >
                                 <Text strong>
-                                  {key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                  {key
+                                    .replace(/_/g, ' ')
+                                    .replace(/\b\w/g, (c) => c.toUpperCase())}
                                 </Text>
                               </Table.Summary.Cell>
                               <Table.Summary.Cell index={1} align="right">
                                 <Text strong>
-                                  {typeof value === 'number' ? formatNumber(value) : String(value ?? '')}
+                                  {typeof value === 'number'
+                                    ? formatNumber(value)
+                                    : String(value ?? '')}
                                 </Text>
                               </Table.Summary.Cell>
                             </Table.Summary.Row>
