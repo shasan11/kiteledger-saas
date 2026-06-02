@@ -2,13 +2,11 @@
 
 namespace App\Services\AI;
 
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Exceptions\PrismException;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
-use Prism\Prism\ValueObjects\Messages\SystemMessage;
 use Prism\Prism\ValueObjects\Messages\UserMessage;
 use Throwable;
 
@@ -124,11 +122,7 @@ class AiProviderManager
         $request = Prism::text()
             ->using($this->providerEnum($provider), $model)
             ->usingProviderConfig($this->providerConfig($provider))
-            ->withClientOptions([
-                'timeout' => $timeout,
-                'connect_timeout' => $connectTimeout,
-                'force_ip_resolve' => 'v4',
-            ])
+            ->withClientOptions($this->clientOptions($timeout, $connectTimeout))
             ->withMaxTokens($maxTokens)
             ->usingTemperature($temperature);
 
@@ -141,6 +135,26 @@ class AiProviderManager
         }
 
         return $request->withPrompt('Reply with OK.');
+    }
+
+    private function clientOptions(int $timeout, int $connectTimeout): array
+    {
+        $options = [
+            'timeout' => $timeout,
+            'connect_timeout' => $connectTimeout,
+            'force_ip_resolve' => 'v4',
+        ];
+
+        $caBundle = trim((string) env('AI_CA_BUNDLE', ''));
+        if ($caBundle !== '') {
+            $options['verify'] = $caBundle;
+        }
+
+        if (filter_var(env('AI_SSL_VERIFY', true), FILTER_VALIDATE_BOOLEAN) === false) {
+            $options['verify'] = false;
+        }
+
+        return $options;
     }
 
     private function prepareMessages(array $messages): array
@@ -258,6 +272,10 @@ class AiProviderManager
     {
         $message = $e->getMessage();
         $lower = strtolower($message);
+
+        if (str_contains($lower, 'curl error 60') || str_contains($lower, 'unable to get local issuer certificate')) {
+            $this->throwError('AI_SSL_CERTIFICATE_ERROR', 'PHP cannot verify the provider SSL certificate. Set AI_CA_BUNDLE to a valid cacert.pem path, or configure curl.cainfo and openssl.cafile in php.ini.');
+        }
 
         if (str_contains($lower, 'timed out') || str_contains($lower, 'timeout')) {
             $this->throwError('AI_TIMEOUT', "AI request timed out. Check internet/DNS/firewall/proxy or use a faster model for {$provider}.");
