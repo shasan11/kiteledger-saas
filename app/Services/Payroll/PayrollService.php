@@ -31,7 +31,8 @@ class PayrollService
 {
     public function __construct(
         private readonly PayrollCalculationService $calculator,
-        private readonly PayrollAccountSyncService $accountSync
+        private readonly PayrollAccountSyncService $accountSync,
+        private readonly AttendanceSummaryService $attendanceSummaryService,
     )
     {
     }
@@ -82,10 +83,21 @@ class PayrollService
                 'employee_code' => $employee->employee_id,
                 'employee_name' => $employee->display_name,
                 'branch' => $employee->branch?->name,
+                'salary' => (float) ($prepared['structure']?->basic_salary ?? 0),
+                'total_working_days' => (float) ($calculation['total_working_days'] ?? 0),
+                'present_days' => (float) ($calculation['attendance']['present_days'] ?? 0),
+                'paid_leave' => (float) ($calculation['attendance']['paid_leave_days'] ?? 0),
+                'unpaid_leave' => (float) ($calculation['attendance']['unpaid_leave_days'] ?? 0),
+                'payable_days' => (float) ($calculation['payable_days'] ?? 0),
+                'overtime_hours' => (float) ($calculation['overtime_hours'] ?? 0),
+                'salary_payable' => (float) ($calculation['salary_payable'] ?? 0),
                 'gross_earnings' => (float) $calculation['gross_earnings'],
                 'total_deductions' => (float) $calculation['total_deductions'],
                 'employer_contributions' => (float) $calculation['employer_contributions'],
                 'net_payable' => (float) $calculation['net_payable'],
+                'lines' => $calculation['lines'] ?? [],
+                'calculation_snapshot' => $calculation['snapshot'] ?? [],
+                'warnings' => $prepared['warnings'] ?? [],
             ];
         }
 
@@ -211,16 +223,16 @@ class PayrollService
                     'salary_month' => $period->month,
                     'salary_year' => $period->year,
                     'salary' => $structure->basic_salary,
-                    'paid_leave' => (int) $attendance->paid_leave_days,
-                    'unpaid_leave' => (int) $attendance->unpaid_leave_days,
-                    'monthly_holiday' => 0,
-                    'public_holiday' => 0,
+                    'paid_leave' => (float) $attendance->paid_leave_days,
+                    'unpaid_leave' => (float) $attendance->unpaid_leave_days,
+                    'monthly_holiday' => (float) ($calculation['attendance']['weekly_holiday'] ?? 0),
+                    'public_holiday' => (float) ($calculation['attendance']['public_holiday'] ?? 0),
                     'work_day' => (int) $attendance->present_days,
-                    'shift_wise_work_hour' => 0,
-                    'monthly_work_hour' => 0,
-                    'hourly_salary' => 0,
-                    'working_hour' => 0,
-                    'salary_payable' => $calculation['gross_earnings'],
+                    'shift_wise_work_hour' => (float) ($calculation['attendance']['shift_hours'] ?? 0),
+                    'monthly_work_hour' => (float) ($calculation['attendance']['monthly_work_hour'] ?? 0),
+                    'hourly_salary' => (float) ($calculation['hourly_salary'] ?? 0),
+                    'working_hour' => (float) ($calculation['attendance']['working_hour'] ?? 0),
+                    'salary_payable' => $calculation['salary_payable'] ?? $calculation['gross_earnings'],
                     'bonus' => 0,
                     'deduction' => $calculation['total_deductions'],
                     'total_payable' => $calculation['net_payable'],
@@ -365,19 +377,22 @@ class PayrollService
     public function transition(Payroll $payroll, string $toStatus, string $action, User $actor, ?string $reason = null): Payroll
     {
         $allowed = [
-            'generated' => ['approved', 'void'],
-            'approved' => ['processed', 'void'],
-            'processed' => ['paid', 'void'],
+            'draft' => ['generated', 'voided'],
+            'generated' => ['approved', 'reopened', 'voided'],
+            'approved' => ['processed', 'reopened', 'voided'],
+            'processed' => ['paid', 'reopened', 'voided'],
             'paid' => ['locked'],
             'locked' => [],
             'void' => [],
+            'voided' => [],
+            'reopened' => ['generated', 'voided'],
         ];
 
         if (! in_array($toStatus, $allowed[$payroll->status] ?? [], true)) {
             abort(422, "Cannot move payroll from {$payroll->status} to {$toStatus}.");
         }
 
-        if ($toStatus === 'void' && ! $reason) {
+        if (in_array($toStatus, ['void', 'voided', 'reopened'], true) && ! $reason) {
             abort(422, 'Void reason is required.');
         }
 
@@ -397,12 +412,19 @@ class PayrollService
             } elseif ($toStatus === 'locked') {
                 $payroll->update(['status' => 'locked', 'locked_by' => $actor->id, 'locked_at' => now()]);
                 $payroll->payslips()->update(['status' => 'locked']);
-            } elseif ($toStatus === 'void') {
-                if (in_array($from, ['processed', 'paid', 'locked'], true)) {
-                    abort(422, 'Processed or paid payroll cannot be voided until reversal posting is implemented.');
+            } elseif ($toStatus === 'reopened') {
+                if (in_array($from, ['paid', 'locked'], true)) {
+                    abort(422, 'Paid or locked payroll must be reversed before reopening.');
                 }
-                $payroll->update(['status' => 'void', 'voided_by' => $actor->id, 'voided_at' => now(), 'void_reason' => $reason]);
-                $payroll->payslips()->update(['status' => 'void']);
+                $payroll->update(['status' => 'reopened', 'reopened_by' => $actor->id, 'reopened_at' => now(), 'void_reason' => $reason]);
+                $payroll->payslips()->update(['status' => 'draft']);
+                $this->unlockAttendance($payroll, $actor);
+            } elseif (in_array($toStatus, ['void', 'voided'], true)) {
+                if (in_array($from, ['paid', 'locked'], true) && ! $payroll->reversal_journal_voucher_id && ! $payroll->payment_reversal_journal_voucher_id) {
+                    abort(422, 'Paid payroll must be reversed before voiding.');
+                }
+                $payroll->update(['status' => 'voided', 'voided_by' => $actor->id, 'voided_at' => now(), 'void_reason' => $reason]);
+                $payroll->payslips()->update(['status' => 'voided']);
                 $this->unlockAttendance($payroll, $actor);
             }
 
@@ -658,6 +680,93 @@ class PayrollService
         });
     }
 
+    public function reverse(Payroll $payroll, User $actor, string $reason): Payroll
+    {
+        if (! $reason) {
+            abort(422, 'Reversal reason is required.');
+        }
+
+        return DB::transaction(function () use ($payroll, $actor, $reason) {
+            $payroll = Payroll::query()
+                ->with(['journalVoucher.items', 'paymentJournalVoucher.items'])
+                ->lockForUpdate()
+                ->findOrFail($payroll->id);
+
+            if (! in_array($payroll->status, ['processed', 'paid', 'locked'], true)) {
+                abort(422, 'Only processed, paid, or locked payroll can be reversed.');
+            }
+
+            if ($payroll->journal_voucher_id && ! $payroll->reversal_journal_voucher_id) {
+                $reversal = $this->reverseVoucher($payroll->journalVoucher, $payroll, $actor, $reason, 'payroll_reversal');
+                $payroll->update(['reversal_journal_voucher_id' => $reversal->id]);
+            }
+
+            if ($payroll->payment_journal_voucher_id && ! $payroll->payment_reversal_journal_voucher_id) {
+                $paymentReversal = $this->reverseVoucher($payroll->paymentJournalVoucher, $payroll, $actor, $reason, 'payroll_payment_reversal');
+                $payroll->update(['payment_reversal_journal_voucher_id' => $paymentReversal->id]);
+            }
+
+            $from = $payroll->status;
+            $payroll->update([
+                'status' => 'reopened',
+                'reopened_by' => $actor->id,
+                'reopened_at' => now(),
+                'void_reason' => $reason,
+            ]);
+            $payroll->payslips()->update(['status' => 'draft', 'payment_status' => 'UNPAID']);
+            $this->unlockAttendance($payroll, $actor);
+            $this->log($payroll, $from, 'reopened', 'payroll.reversed', $reason, $actor);
+
+            return $this->loadPayroll($payroll);
+        });
+    }
+
+    protected function reverseVoucher(?JournalVoucher $voucher, Payroll $payroll, User $actor, string $reason, string $module): JournalVoucher
+    {
+        if (! $voucher) {
+            abort(422, 'Original journal voucher was not found.');
+        }
+
+        $reversal = JournalVoucher::query()->create([
+            'branch_id' => $voucher->branch_id,
+            'voucher_no' => 'REV-' . $voucher->voucher_no,
+            'voucher_date' => now()->toDateString(),
+            'currency_id' => $voucher->currency_id,
+            'exchange_rate' => $voucher->exchange_rate ?: 1,
+            'reference' => $payroll->payroll_number,
+            'narration' => "Reversal for {$voucher->voucher_no}: {$reason}",
+            'source_type' => Payroll::class,
+            'source_id' => $payroll->id,
+            'source_no' => $payroll->payroll_number,
+            'source_module' => $module,
+            'is_auto_generated' => true,
+            'is_system_generated' => true,
+            'reversed_journal_voucher_id' => $voucher->id,
+            'reversal_reason' => $reason,
+            'reversed_at' => now(),
+            'status' => 'posted',
+            'active' => true,
+            'approved' => true,
+            'approved_at' => now(),
+            'approved_by_id' => $actor->id,
+            'total' => $voucher->total,
+        ]);
+
+        $reversal->items()->createMany($voucher->items->map(fn ($line) => [
+            'account_id' => $line->account_id,
+            'chart_of_account_id' => $line->chart_of_account_id,
+            'description' => 'Reversal: ' . $line->description,
+            'debit' => $line->credit,
+            'credit' => $line->debit,
+            'foreign_debit' => $line->foreign_credit,
+            'foreign_credit' => $line->foreign_debit,
+            'currency_id' => $line->currency_id,
+            'exchange_rate' => $line->exchange_rate,
+        ])->all());
+
+        return $reversal->fresh('items');
+    }
+
     public function recalculatePayslip(Payslip $payslip): void
     {
         $payslip = $payslip->fresh('lines');
@@ -818,32 +927,17 @@ class PayrollService
 
     protected function ensureAttendanceSummary(User $employee, PayrollPeriod $period): void
     {
-        $exists = AttendanceSummary::query()
+        $existing = AttendanceSummary::query()
             ->where('employee_id', $employee->id)
             ->where('payroll_period_id', $period->id)
-            ->exists();
+            ->first();
 
-        if ($exists) {
+        if ($existing?->locked) {
             return;
         }
 
-        $workingDays = max(1, (int) $period->start_date->diffInDays($period->end_date) + 1);
-
-        AttendanceSummary::query()->create([
-            'employee_id' => $employee->id,
-            'payroll_period_id' => $period->id,
-            'branch_id' => $employee->branch_id ?: $period->branch_id,
-            'total_working_days' => $workingDays,
-            'present_days' => $workingDays,
-            'absent_days' => 0,
-            'paid_leave_days' => 0,
-            'unpaid_leave_days' => 0,
-            'half_days' => 0,
-            'late_days' => 0,
-            'overtime_hours' => 0,
-            'payable_days' => $workingDays,
-            'locked' => false,
-        ]);
+        $employee->loadMissing('shift', 'weeklyHoliday');
+        $this->attendanceSummaryService->calculate($employee, $period, null, true);
     }
 
     protected function employeeBaseSalary(User $employee, PayrollPeriod $period): float
@@ -1059,13 +1153,13 @@ class PayrollService
     protected function assertEditable(?Payroll $payroll): void
     {
         if (! $payroll || ! $this->isEditable($payroll)) {
-            abort(422, 'Cannot edit approved, processed, paid, locked, or void payroll unless it is reopened.');
+            abort(422, 'Cannot edit approved, processed, paid, locked, or voided payroll unless it is reopened.');
         }
     }
 
     protected function isEditable(Payroll $payroll): bool
     {
-        return in_array($payroll->status, ['draft', 'generated'], true);
+        return in_array($payroll->status, ['draft', 'previewed', 'generated', 'reopened'], true);
     }
 
     protected function accountLine(Account $account, string $description, float $debit, float $credit, float|string|null $exchangeRate = 1): array
@@ -1300,7 +1394,3 @@ class PayrollService
         ]);
     }
 }
-
-
-
-

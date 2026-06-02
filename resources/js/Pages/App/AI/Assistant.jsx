@@ -31,6 +31,8 @@ import {
 } from '@ant-design/icons';
 import axios from 'axios';
 import AiToolBlocks from '@/Components/AI/AiToolBlocks';
+import AiMessageRenderer from '@/Components/AI/AiMessageRenderer';
+import AiSuggestedQuestions from '@/Components/AI/AiSuggestedQuestions';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -39,7 +41,7 @@ const SUGGESTED_PROMPTS = [
     'Explain this report',
     'What receivables should I follow up?',
     'Find inventory risks',
-    'Explain profit and loss',
+    'What is my profit this month?',
     'What should I check today?',
     'Summarize this branch performance',
     'Show business risks',
@@ -74,7 +76,7 @@ function HeaderTitle({ token }) {
                     AI Assistant
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                    Business insights, reports and operational help
+                    Ask questions about sales, purchases, accounts, cash flow, receivables, payables, and documents.
                 </Text>
             </div>
         </Space>
@@ -113,7 +115,7 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
     );
 }
 
-function MessageBubble({ message, token, onCopy }) {
+function MessageBubble({ message, token, onCopy, onFollowup }) {
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
     const isSystem = message.role === 'system';
@@ -168,7 +170,7 @@ function MessageBubble({ message, token, onCopy }) {
                     </Space>
                 )}
 
-                <div>{message.content}</div>
+                <AiMessageRenderer message={message} onFollowup={onFollowup} />
                 <AiToolBlocks message={message} />
 
                 {isAssistant && (
@@ -398,6 +400,8 @@ export default function Assistant() {
 
             setConversationId(res.data?.conversation_id || conversationId);
 
+            const hasDisplay = Boolean((res.data?.cards || []).length || (res.data?.tables || []).length);
+
             setMessages((prev) => [
                 ...prev,
                 {
@@ -408,9 +412,15 @@ export default function Assistant() {
                     model: res.data?.model,
                     cached: res.data?.cached,
                     actions: res.data?.actions || [],
-                    results: res.data?.results || [],
+                    results: hasDisplay ? [] : (res.data?.results || []),
                     mode: res.data?.mode,
                     tool: res.data?.tool,
+                    cards: res.data?.cards || [],
+                    tables: res.data?.tables || [],
+                    warnings: res.data?.warnings || [],
+                    source_note: res.data?.source_note || null,
+                    followups: res.data?.followups || [],
+                    answer_type: res.data?.answer_type || null,
                 },
             ]);
         } catch (err) {
@@ -640,6 +650,9 @@ export default function Assistant() {
                                                 </Button>
                                             ))}
                                         </Space>
+                                        <div style={{ marginTop: 14 }}>
+                                            <AiSuggestedQuestions disabled={!aiReady || sending} onSelect={send} />
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
@@ -652,6 +665,7 @@ export default function Assistant() {
                                             message={item}
                                             token={token}
                                             onCopy={copy}
+                                            onFollowup={send}
                                         />
                                     )}
                                 />

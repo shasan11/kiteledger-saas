@@ -5,6 +5,7 @@ namespace App\Services\AI\Tools;
 use App\Models\AiConversation;
 use App\Models\AiPendingAction;
 use App\Services\AI\AiUsageLogger;
+use App\Services\AI\AiSettingsService;
 use App\Services\AI\Tools\Actions\CreateCashTransferDraftAction;
 use App\Services\AI\Tools\Actions\CreateContactDraftAction;
 use App\Services\AI\Tools\Actions\CreateCustomerPaymentDraftAction;
@@ -120,7 +121,7 @@ class AiToolRouter
         'action.create_contact_draft' => [CreateContactDraftAction::class, 'contacts'],
     ];
 
-    public function __construct(private AiUsageLogger $usage)
+    public function __construct(private AiUsageLogger $usage, private AiSettingsService $settings)
     {
     }
 
@@ -133,6 +134,9 @@ class AiToolRouter
         }
 
         if ($tool = $this->actionTool($m, $payload)) {
+            if (! $this->settings->writeActionsEnabled()) {
+                return $this->classification('action', 'action.blocked', 0.98, true, 'blocked', 'AI write actions are disabled in settings.');
+            }
             return $this->classification('action', $tool, 0.88, true, $this->actionTools[$tool][1], 'User asked for a create/update action.');
         }
 

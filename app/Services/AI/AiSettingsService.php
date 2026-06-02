@@ -25,6 +25,12 @@ class AiSettingsService
         'ai_context_max_rows' => 15,
         'ai_context_max_chars' => 5000,
         'ai_fast_mode' => true,
+        'ai_default_financial_date_scope' => 'current_fiscal_year',
+        'ai_allow_developer_details' => false,
+        'ai_financial_assistant_enabled' => true,
+        'ai_document_assistant_enabled' => true,
+        'ai_write_actions_enabled' => true,
+        'ai_fallback_provider' => '',
     ];
 
     public function __construct(protected DatabaseSettingService $db) {}
@@ -146,6 +152,16 @@ class AiSettingsService
         return $this->db->bool('ai_fast_mode', (bool) self::DEFAULTS['ai_fast_mode'], self::GROUP);
     }
 
+    public function financialAssistantEnabled(): bool
+    {
+        return $this->db->bool('ai_financial_assistant_enabled', (bool) self::DEFAULTS['ai_financial_assistant_enabled'], self::GROUP);
+    }
+
+    public function writeActionsEnabled(): bool
+    {
+        return $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP);
+    }
+
     public function setApiKey(string $key): void
     {
         $encrypted = Crypt::encryptString($key);
@@ -200,6 +216,12 @@ class AiSettingsService
             'ai_context_max_rows' => $this->contextMaxRows(),
             'ai_context_max_chars' => $this->contextMaxChars(),
             'ai_fast_mode' => $this->fastMode(),
+            'ai_default_financial_date_scope' => $this->db->string('ai_default_financial_date_scope', self::DEFAULTS['ai_default_financial_date_scope'], self::GROUP),
+            'ai_allow_developer_details' => $this->db->bool('ai_allow_developer_details', (bool) self::DEFAULTS['ai_allow_developer_details'], self::GROUP),
+            'ai_financial_assistant_enabled' => $this->financialAssistantEnabled(),
+            'ai_document_assistant_enabled' => $this->db->bool('ai_document_assistant_enabled', (bool) self::DEFAULTS['ai_document_assistant_enabled'], self::GROUP),
+            'ai_write_actions_enabled' => $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP),
+            'ai_fallback_provider' => $this->db->string('ai_fallback_provider', self::DEFAULTS['ai_fallback_provider'], self::GROUP),
         ];
     }
 

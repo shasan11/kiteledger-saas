@@ -10,7 +10,13 @@ Route::prefix('hrm')->name('hrm.')->group(function () {
     Route::get('/attendance',         fn () => Inertia::render('App/Hrm/Attendance/Index'))->name('attendance.index');
     Route::get('/leave-applications', fn () => Inertia::render('App/Hrm/LeaveApplications/Index'))->name('leave-applications.index');
     Route::get('/payroll',            fn () => Inertia::render('App/Hrm/Payroll/Index'))->name('payroll.index');
+    Route::get('/payroll/preview',    fn () => Inertia::render('App/Hrm/Payroll/Preview'))->name('payroll.preview');
+    Route::get('/payroll/{id}',       fn ($id) => Inertia::render('App/Hrm/Payroll/Show', ['id' => $id]))->name('payroll.show');
+    Route::get('/payroll-periods',    fn () => Inertia::render('App/Hrm/PayrollPeriods/Index'))->name('payroll-periods.index');
+    Route::get('/payroll-components', fn () => Inertia::render('App/Hrm/PayrollComponents/Index'))->name('payroll-components.index');
+    Route::get('/employee-payroll-components', fn () => Inertia::render('App/Hrm/EmployeePayrollComponents/Index'))->name('employee-payroll-components.index');
     Route::get('/payslips',           fn () => Inertia::render('App/Hrm/Payslips/Index'))->name('payslips.index');
+    Route::get('/payslips/{id}',      fn ($id) => Inertia::render('App/Hrm/Payslips/Show', ['id' => $id]))->name('payslips.show');
     Route::get('/employee-documents', fn () => Inertia::render('App/Hrm/EmployeeDocuments/Index'))->name('employee-documents.index');
     Route::get('/onboarding',         fn () => Inertia::render('App/Hrm/Onboarding/Index'))->name('onboarding.index');
 

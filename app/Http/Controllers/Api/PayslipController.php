@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Payslip;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -130,5 +131,48 @@ class PayslipController extends BaseCrudApiController
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function checkAccess(Request $request, string $action, mixed $record = null): void
+    {
+        $user = $request->user();
+        abort_unless($user, 401, 'Unauthenticated.');
+
+        if ($this->userHasAdministrativeBypass($user)) {
+            return;
+        }
+
+        $permission = match ($action) {
+            'index', 'show' => 'view',
+            'update', 'bulkUpdate' => 'update',
+            'pdf' => 'download',
+            default => $action,
+        };
+
+        $aliases = [
+            "hrm.payslips.{$permission}",
+            "payslip.{$permission}",
+        ];
+
+        abort_unless(
+            collect($aliases)->contains(fn ($name) => $user->can($name)),
+            403,
+            'You do not have permission to perform this action.'
+        );
+    }
+
+    public function pdf(Request $request, string $id)
+    {
+        $this->checkAccess($request, 'pdf');
+
+        $payslip = Payslip::query()
+            ->with(['employee', 'user', 'branch', 'payroll.payrollPeriod', 'lines.component'])
+            ->findOrFail($id);
+
+        $html = view('pdf.payslip', ['payslip' => $payslip])->render();
+
+        return Pdf::loadHTML($html)
+            ->setPaper('a4')
+            ->download(($payslip->payslip_number ?: 'payslip') . '.pdf');
     }
 }

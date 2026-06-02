@@ -57,6 +57,12 @@ const SAFE_DEFAULTS = {
     ai_context_max_rows: 15,
     ai_context_max_chars: 5000,
     ai_fast_mode: true,
+    ai_default_financial_date_scope: 'current_fiscal_year',
+    ai_allow_developer_details: false,
+    ai_financial_assistant_enabled: true,
+    ai_document_assistant_enabled: true,
+    ai_write_actions_enabled: true,
+    ai_fallback_provider: '',
 };
 
 function hasAnyPermission(perms = [], required = []) {
@@ -362,13 +368,60 @@ export default function AiSettings() {
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={6}>
-                                    <Form.Item name="ai_context_max_rows" label="Context Max Rows">
+                                    <Form.Item name="ai_context_max_rows" label="Maximum rows used in answers">
                                         <InputNumber min={1} max={500} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={6}>
-                                    <Form.Item name="ai_context_max_chars" label="Context Max Chars">
+                                    <Form.Item name="ai_context_max_chars" label="Maximum answer context size">
                                         <InputNumber min={500} max={200000} step={500} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+
+                            <Divider>Assistant Safety</Divider>
+                            <Row gutter={16}>
+                                <Col xs={24} md={6}>
+                                    <Form.Item name="ai_financial_assistant_enabled" label="Financial assistant" valuePropName="checked">
+                                        <Switch />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={6}>
+                                    <Form.Item name="ai_document_assistant_enabled" label="Document assistant" valuePropName="checked">
+                                        <Switch />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={6}>
+                                    <Form.Item name="ai_write_actions_enabled" label="Prepare write actions" valuePropName="checked">
+                                        <Switch />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={6}>
+                                    <Form.Item name="ai_allow_developer_details" label="Show developer details" valuePropName="checked">
+                                        <Switch />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                            <Row gutter={16}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="ai_default_financial_date_scope" label="Default financial date range">
+                                        <Select
+                                            options={[
+                                                { value: 'current_fiscal_year', label: 'Current fiscal year' },
+                                                { value: 'this_month', label: 'This month' },
+                                                { value: 'last_30_days', label: 'Last 30 days' },
+                                            ]}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item name="ai_fallback_provider" label="Fallback provider">
+                                        <Select
+                                            options={[
+                                                { value: '', label: 'None' },
+                                                ...providerOptions,
+                                            ]}
+                                        />
                                     </Form.Item>
                                 </Col>
                             </Row>

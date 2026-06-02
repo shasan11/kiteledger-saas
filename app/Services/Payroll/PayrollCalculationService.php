@@ -38,6 +38,10 @@ class PayrollCalculationService
         );
 
         $dailyRate = $this->round($this->div($basicSalary, $totalWorkingDays, 8), $precision, $settings->rounding_method);
+        $monthlyWorkHour = $this->mul($totalWorkingDays, '8', 2);
+        $hourlySalary = $this->compare($monthlyWorkHour, '0') > 0
+            ? $this->round($this->div($basicSalary, $monthlyWorkHour, 8), $precision, $settings->rounding_method)
+            : '0';
         $unpaidLeaveDeduction = $this->round(
             $this->mul($dailyRate, (string) $attendance->unpaid_leave_days, 6),
             $precision,
@@ -132,17 +136,43 @@ class PayrollCalculationService
             'total_deductions' => $totalDeductions,
             'employer_contributions' => $employerContributions,
             'net_payable' => $net,
+            'salary_payable' => $proratedBasic,
+            'hourly_salary' => $hourlySalary,
             'base_currency_amount' => $this->base($net, $exchangeRate, $precision, $settings->rounding_method),
             'payable_days' => (string) $attendance->payable_days,
             'total_working_days' => (string) $attendance->total_working_days,
             'unpaid_leave_days' => (string) $attendance->unpaid_leave_days,
             'overtime_hours' => (string) $attendance->overtime_hours,
             'lines' => $lines,
+            'attendance' => [
+                'present_days' => (float) $attendance->present_days,
+                'absent_days' => (float) $attendance->absent_days,
+                'paid_leave_days' => (float) $attendance->paid_leave_days,
+                'unpaid_leave_days' => (float) $attendance->unpaid_leave_days,
+                'half_days' => (float) $attendance->half_days,
+                'late_days' => (int) $attendance->late_days,
+                'shift_hours' => 8,
+                'monthly_work_hour' => (float) $monthlyWorkHour,
+                'working_hour' => max(0, ((float) $attendance->present_days) * 8),
+                'weekly_holiday' => null,
+                'public_holiday' => null,
+            ],
             'snapshot' => [
                 'tax' => $taxBreakdown,
                 'daily_rate_basis' => $settings->daily_rate_basis,
                 'rounding_method' => $settings->rounding_method,
                 'currency_precision' => $precision,
+                'salary' => (float) $basicSalary,
+                'attendance_summary_id' => $attendance->id,
+                'attendance' => [
+                    'total_working_days' => (float) $attendance->total_working_days,
+                    'present_days' => (float) $attendance->present_days,
+                    'absent_days' => (float) $attendance->absent_days,
+                    'paid_leave_days' => (float) $attendance->paid_leave_days,
+                    'unpaid_leave_days' => (float) $attendance->unpaid_leave_days,
+                    'payable_days' => (float) $attendance->payable_days,
+                    'overtime_hours' => (float) $attendance->overtime_hours,
+                ],
             ],
         ];
     }

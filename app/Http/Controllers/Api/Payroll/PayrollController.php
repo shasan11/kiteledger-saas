@@ -33,6 +33,9 @@ class PayrollController extends BaseCrudApiController
         'currency',
         'sourceAccount',
         'journalVoucher',
+        'paymentJournalVoucher',
+        'reversalJournalVoucher',
+        'paymentReversalJournalVoucher',
         'additions.component',
         'deductions.component',
         'payslips.employee.payrollAccount.chartOfAccounts',
@@ -45,6 +48,9 @@ class PayrollController extends BaseCrudApiController
         'currency' => 'currency_id',
         'sourceAccount' => 'source_account_id',
         'journalVoucher' => 'journal_voucher_id',
+        'paymentJournalVoucher' => 'payment_journal_voucher_id',
+        'reversalJournalVoucher' => 'reversal_journal_voucher_id',
+        'paymentReversalJournalVoucher' => 'payment_reversal_journal_voucher_id',
     ];
 
     protected array $searchable = ['payroll_number', 'run_number', 'status'];
@@ -55,7 +61,7 @@ class PayrollController extends BaseCrudApiController
         'payroll_period_id' => ['required', 'uuid', 'exists:payroll_periods,id'],
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'payroll_number' => ['nullable', 'string', 'max:40'],
-        'status' => ['nullable', 'in:draft,generated,approved,processed,paid,locked,void'],
+        'status' => ['nullable', 'in:draft,previewed,generated,approved,processed,paid,locked,void,voided,reopened'],
         'currency_id' => ['required', 'uuid', 'exists:currencies,id'],
         'exchange_rate' => ['required', 'numeric', 'gt:0'],
         'source_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
@@ -108,7 +114,8 @@ class PayrollController extends BaseCrudApiController
             'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
             'currency_id' => ['nullable', 'uuid', 'exists:currencies,id'],
             'exchange_rate' => ['nullable', 'numeric', 'gt:0'],
-            'source_account_id' => ['nullable', 'uuid', 'exists:accounts,id'],
+            'source_account_id' => ['required', 'uuid', 'exists:accounts,id'],
+            'payment_reference' => ['nullable', 'string', 'max:120'],
             'employee_scope' => ['nullable', 'in:all,branch,department,selected'],
             'department_id' => ['nullable', 'uuid', 'exists:departments,id'],
             'employee_ids' => ['nullable', 'array'],
@@ -237,12 +244,22 @@ class PayrollController extends BaseCrudApiController
         $businessRules = app(TransactionRuleValidator::class)->validateForApproval('payroll', $payroll);
         $this->blockIfBusinessRuleErrors($businessRules);
 
+        if ($payroll->status === 'approved') {
+            $service->transition($payroll, 'processed', 'process', $request->user());
+            $payroll = Payroll::query()->findOrFail($id);
+        }
+
         $paid = $service->transition(
             $payroll,
             'paid',
             'pay',
             $request->user()
         );
+
+        if (! empty($data['payment_reference'])) {
+            $paid->payslips()->update(['payment_reference' => $data['payment_reference']]);
+            $paid->refresh();
+        }
 
         return response()->json($this->withBusinessRules($paid, $businessRules));
     }
@@ -269,11 +286,79 @@ class PayrollController extends BaseCrudApiController
 
         return response()->json($service->transition(
             Payroll::query()->findOrFail($id),
-            'void',
+            'voided',
             'void',
             $request->user(),
             $data['reason']
         ));
+    }
+
+    public function reopen(Request $request, string $id, PayrollService $service)
+    {
+        $this->requirePermission($request, 'reopen');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        return response()->json($service->transition(
+            Payroll::query()->findOrFail($id),
+            'reopened',
+            'reopen',
+            $request->user(),
+            $data['reason']
+        ));
+    }
+
+    public function reverse(Request $request, string $id, PayrollService $service)
+    {
+        $this->requirePermission($request, 'reverse');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        return response()->json($service->reverse(
+            Payroll::query()->findOrFail($id),
+            $request->user(),
+            $data['reason']
+        ));
+    }
+
+    public function payslips(Request $request, string $id)
+    {
+        $this->requirePermission($request, 'view');
+
+        return response()->json([
+            'results' => Payroll::query()
+                ->findOrFail($id)
+                ->payslips()
+                ->with(['employee', 'lines.component', 'currency'])
+                ->orderBy('payslip_number')
+                ->get(),
+        ]);
+    }
+
+    public function summaryReport(Request $request)
+    {
+        $this->requirePermission($request, 'report');
+
+        $rows = Payroll::query()
+            ->with(['payrollPeriod', 'branch'])
+            ->when($request->query('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
+            ->when($request->query('status'), fn ($query, $status) => $query->where('status', $status))
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'results' => $rows,
+            'totals' => [
+                'total_employees' => (int) $rows->sum('total_employees'),
+                'gross' => (float) $rows->sum('total_gross'),
+                'deductions' => (float) $rows->sum('total_deductions'),
+                'net_payable' => (float) $rows->sum('total_net_payable'),
+            ],
+        ]);
     }
 
     public function journalVoucher(Request $request, string $id, PayrollService $service)
@@ -345,7 +430,7 @@ class PayrollController extends BaseCrudApiController
                 'uuid',
                 Rule::exists('accounts', 'id')->where(fn ($query) => $query->where('active', true)),
             ],
-            'status' => ['sometimes', 'in:draft,generated,approved,processed,paid,locked,void'],
+            'status' => ['sometimes', 'in:draft,previewed,generated,approved,processed,paid,locked,void,voided,reopened'],
         ];
     }
 
@@ -443,8 +528,14 @@ class PayrollController extends BaseCrudApiController
 
     protected function requirePermission(Request $request, string $permission): void
     {
+        $user = $request->user();
+        $aliases = [
+            "hrm.payroll.{$permission}",
+            "payroll.{$permission}",
+        ];
+
         abort_unless(
-            $request->user()?->can("hrm.payroll.{$permission}"),
+            $user && collect($aliases)->contains(fn ($name) => $user->can($name)),
             403,
             'You do not have permission to perform this action.'
         );

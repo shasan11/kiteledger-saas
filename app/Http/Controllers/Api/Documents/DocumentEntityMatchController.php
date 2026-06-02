@@ -46,7 +46,7 @@ class DocumentEntityMatchController extends Controller
         $match->update([
             'matched_id' => $data['matched_id'],
             'matched_model' => $data['matched_model'] ?? $match->matched_model,
-            'match_status' => 'matched',
+            'match_status' => 'user_selected',
         ]);
 
         $this->refreshOpenProposals($match->document_upload_id);
@@ -79,7 +79,7 @@ class DocumentEntityMatchController extends Controller
                 'email' => $fields['email'] ?? null,
                 'phone' => $fields['phone'] ?? null,
                 'address' => $fields['address'] ?? null,
-                'tax_registration_no' => $fields['tax_registration_no'] ?? null,
+                'tax_registration_no' => $fields['tax_registration_no'] ?? $fields['tax_number'] ?? null,
                 'active' => true,
                 'is_system_generated' => true,
                 'user_add_id' => auth()->id(),
@@ -90,7 +90,7 @@ class DocumentEntityMatchController extends Controller
                 'email' => $fields['email'] ?? null,
                 'phone' => $fields['phone'] ?? null,
                 'address' => $fields['address'] ?? null,
-                'tax_registration_no' => $fields['tax_registration_no'] ?? null,
+                'tax_registration_no' => $fields['tax_registration_no'] ?? $fields['tax_number'] ?? null,
                 'accept_purchase' => true,
                 'active' => true,
                 'is_system_generated' => true,
@@ -101,6 +101,8 @@ class DocumentEntityMatchController extends Controller
                 'sku' => $fields['sku'] ?? null,
                 'description' => $fields['description'] ?? null,
                 'active' => true,
+                'is_system_generated' => true,
+                'user_add_id' => auth()->id(),
             ]),
             'currency' => Currency::create([
                 'code' => strtoupper($fields['code'] ?? $match->extracted_name),

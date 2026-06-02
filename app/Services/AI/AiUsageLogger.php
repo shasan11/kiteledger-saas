@@ -25,6 +25,13 @@ class AiUsageLogger
             'error_message'     => $data['error_message']     ?? null,
             'duration_ms'       => $data['duration_ms']       ?? null,
             'request_hash'      => $data['request_hash']      ?? null,
+            'question'          => $data['question']          ?? null,
+            'intent'            => $data['intent']            ?? null,
+            'selected_tool'     => $data['selected_tool']     ?? null,
+            'filters'           => $data['filters']           ?? null,
+            'date_range'        => $data['date_range']        ?? null,
+            'row_count'         => $data['row_count']         ?? null,
+            'token_estimate'    => $data['token_estimate']    ?? null,
         ]);
     }
 

@@ -3,7 +3,7 @@
 namespace App\Services\Documents;
 
 use App\Models\BankAccount;
-use App\Models\ChartOfAccount;
+use App\Models\Account;
 use App\Models\Contact;
 use App\Models\Currency;
 use App\Models\DocumentEntityMatch;
@@ -41,7 +41,7 @@ class DocumentEntityMatcher
             $name = $line['account_name'] ?? null;
             if (!$name) continue;
             $match = $this->matchAccount($name);
-            $matches[] = $this->saveMatch($doc, 'chart_of_account', $name, $match, ['journal_line_index' => $idx]);
+            $matches[] = $this->saveMatch($doc, 'account', $name, $match, ['journal_line_index' => $idx]);
         }
 
         if (!empty($normalized['payment']['bank_name'])) {
@@ -146,16 +146,16 @@ class DocumentEntityMatcher
 
     private function matchAccount(string $name): array
     {
-        $exact = ChartOfAccount::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
-        if ($exact) return $this->matched($exact, ChartOfAccount::class, 0.95);
-        $suggestions = ChartOfAccount::query()
+        $exact = Account::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
+        if ($exact) return $this->matched($exact, Account::class, 0.95);
+        $suggestions = Account::query()
             ->where('name', 'like', '%' . Str::limit($name, 20, '') . '%')
             ->limit(5)
             ->get(['id', 'name'])
             ->toArray();
         return $suggestions
-            ? ['status' => 'suggested', 'suggestions' => $suggestions, 'model' => ChartOfAccount::class]
-            : ['status' => 'unmatched', 'model' => ChartOfAccount::class];
+            ? ['status' => 'suggested', 'suggestions' => $suggestions, 'model' => Account::class]
+            : ['status' => 'unmatched', 'model' => Account::class];
     }
 
     private function matchBank(string $name): array

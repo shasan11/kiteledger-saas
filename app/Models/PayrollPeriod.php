@@ -13,6 +13,7 @@ class PayrollPeriod extends Model
     use HasFactory, HasUuids;
 
     protected $fillable = ['month', 'year', 'start_date', 'end_date', 'branch_id', 'status', 'locked_at', 'locked_by'];
+    protected $appends = ['name', 'salary_month', 'salary_year', 'locked', 'active'];
 
     protected function casts(): array
     {
@@ -43,5 +44,32 @@ class PayrollPeriod extends Model
     public function lockedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'locked_by');
+    }
+
+    public function getNameAttribute(): string
+    {
+        $month = $this->month ? now()->month((int) $this->month)->format('F') : 'Payroll';
+
+        return trim($month . ' ' . ($this->year ?: ''));
+    }
+
+    public function getSalaryMonthAttribute(): ?int
+    {
+        return $this->month;
+    }
+
+    public function getSalaryYearAttribute(): ?int
+    {
+        return $this->year;
+    }
+
+    public function getLockedAttribute(): bool
+    {
+        return $this->status === 'locked' || (bool) $this->locked_at;
+    }
+
+    public function getActiveAttribute(): bool
+    {
+        return ! in_array($this->status, ['closed', 'locked'], true);
     }
 }

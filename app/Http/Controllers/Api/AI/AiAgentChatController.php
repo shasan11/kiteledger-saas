@@ -19,6 +19,7 @@ use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
 use App\Services\AI\Tools\AiToolRouter;
 use App\Services\AI\AiUsageLogger;
+use App\Services\AI\Assistant\AiFinancialAnswerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -39,6 +40,7 @@ class AiAgentChatController extends Controller
         protected AiActionProposalService $proposalService,
         protected AiDeterministicAnswerService $deterministicAnswers,
         protected AiToolRouter $toolRouter,
+        protected AiFinancialAnswerService $financialAnswers,
     ) {}
 
     public function chat(Request $request): JsonResponse
@@ -85,6 +87,44 @@ class AiAgentChatController extends Controller
             'content' => $message,
             'context' => ['type' => $contextType, 'intent' => $intent],
         ]);
+
+        if (! in_array($toolClassification['type'] ?? null, ['report', 'query'], true) && $displayAnswer = $this->financialAnswers->answer($request, $message, $payload)) {
+            $financialIntent = [
+                'type' => 'controlled_business_answer',
+                'tool' => $this->compatToolName($displayAnswer['intent'] ?? null, $displayAnswer['selected_tool'] ?? null),
+                'name' => $displayAnswer['intent'] ?? 'financial_summary',
+                'module' => 'accounting',
+                'source' => 'journal_entries',
+            ];
+
+            $this->usage->log([
+                'user_id' => $user?->id,
+                'branch_id' => $branchScope['branch_id'] ?? null,
+                'module' => 'accounting',
+                'status' => 'success',
+                'question' => $message,
+                'intent' => $financialIntent['name'],
+                'selected_tool' => $financialIntent['tool'],
+                'filters' => $displayAnswer['filters'] ?? [],
+                'date_range' => array_filter([
+                    'from' => $displayAnswer['filters']['date_from'] ?? null,
+                    'to' => $displayAnswer['filters']['date_to'] ?? null,
+                ]),
+                'row_count' => collect($displayAnswer['tables'] ?? [])->sum(fn ($table) => count($table['rows'] ?? [])),
+                'token_estimate' => mb_strlen(json_encode($displayAnswer)) / 4,
+            ]);
+
+            return $this->storeAndRespond(
+                $conversation,
+                (string) ($displayAnswer['message'] ?? 'I prepared the requested answer.'),
+                $financialIntent,
+                'accounting',
+                $branchScope,
+                [],
+                [$this->compatResult($displayAnswer, $financialIntent)],
+                $displayAnswer,
+            );
+        }
 
         if (($toolClassification['type'] ?? null) === 'query') {
             $toolRequest = $request->merge(['message' => $message]);
@@ -219,19 +259,19 @@ class AiAgentChatController extends Controller
         return response()->json($response);
     }
 
-    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results): JsonResponse
+    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = []): JsonResponse
     {
         AiMessage::create([
             'ai_conversation_id' => $conversation->id,
             'role' => 'assistant',
             'content' => $reply,
-            'context' => ['type' => $contextType, 'intent' => $intent, 'actions' => count($actions), 'results' => count($results)],
+            'context' => ['type' => $contextType, 'intent' => $intent, 'actions' => count($actions), 'results' => count($results), 'display' => $display],
         ]);
 
-        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results)));
+        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results), [], $display));
     }
 
-    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = []): array
+    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = [], array $display = []): array
     {
         $mode = 'chat';
         if (!empty($actions)) {
@@ -253,9 +293,56 @@ class AiAgentChatController extends Controller
             'context' => ['type' => $contextType, 'packs' => [$contextType]],
             'actions' => $actions,
             'results' => $results,
+            'display' => $display,
+            'answer_type' => $display['answer_type'] ?? null,
+            'cards' => $display['cards'] ?? [],
+            'tables' => $display['tables'] ?? [],
+            'warnings' => $display['warnings'] ?? [],
+            'source_note' => $display['source_note'] ?? null,
+            'followups' => $display['followups'] ?? [],
             'branch_scope' => $branchScope,
             'cached' => false,
         ], $extra);
+    }
+
+    private function compatToolName(?string $intent, ?string $tool): ?string
+    {
+        return match ($intent) {
+            'cash_bank_summary' => 'journal_voucher.cash_balance',
+            'profit_and_loss' => 'profit_loss_tool',
+            'receivable_summary' => 'receivable.total',
+            'payable_summary' => 'payable.total',
+            default => $tool,
+        };
+    }
+
+    private function compatResult(array $display, array $intent): array
+    {
+        $records = [];
+        if (($display['intent'] ?? null) === 'cash_bank_summary') {
+            $cash = collect($display['cards'] ?? [])->firstWhere('label', 'Cash Balance');
+            $bank = collect($display['cards'] ?? [])->firstWhere('label', 'Bank Balance');
+            $records[] = [
+                'account' => 'Cash and Bank',
+                'cash_balance' => $cash['value'] ?? 0,
+                'bank_balance' => $bank['value'] ?? 0,
+                'balance' => $cash['value'] ?? 0,
+            ];
+        } elseif (! empty($display['tables'][0]['rows'])) {
+            $records = array_slice($display['tables'][0]['rows'], 0, 20);
+        } elseif (! empty($display['cards'])) {
+            $records[] = collect($display['cards'])->mapWithKeys(fn ($card) => [strtolower(str_replace(' ', '_', $card['label'])) => $card['value']])->all();
+        }
+
+        return [
+            'type' => 'query_result',
+            'tool' => $intent['tool'] ?? null,
+            'title' => $display['answer_type'] ?? 'AI Assistant Answer',
+            'summary' => $display['message'] ?? null,
+            'records' => $records,
+            'filters' => $display['filters'] ?? [],
+            'source' => 'journal_entries',
+        ];
     }
 
     private function formatAction($action): array

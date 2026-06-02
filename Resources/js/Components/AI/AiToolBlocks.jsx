@@ -33,14 +33,14 @@ function ToolResultCard({ result }) {
     const records = Array.isArray(result.records) ? result.records : [];
     const columns = records[0]
         ? Object.keys(records[0])
-            .filter((key) => key !== 'open_url')
+            .filter((key) => key !== 'open_url' && !key.endsWith('_id') && key !== 'id')
             .slice(0, 6)
             .map((key) => ({
-                title: key.replaceAll('_', ' '),
+                title: businessLabel(key),
                 dataIndex: key,
                 key,
                 ellipsis: true,
-                render: (value) => String(value ?? ''),
+                render: (value) => renderBusinessValue(key, value),
             }))
         : [];
 
@@ -60,20 +60,12 @@ function ToolResultCard({ result }) {
             <Space direction="vertical" size={8} style={{ width: '100%' }}>
                 <Space wrap size={6}>
                     <Tag icon={isReport ? <FileTextOutlined /> : <DatabaseOutlined />} color={isReport ? 'purple' : 'blue'} bordered={false}>
-                        {result.source || (isReport ? 'report' : 'database')}
+                        {isReport ? 'Report' : 'Business data'}
                     </Tag>
                     <Text strong>{result.title || result.report_key || result.tool}</Text>
                 </Space>
 
                 {result.summary && <Text type="secondary" style={{ fontSize: 12 }}>{result.summary}</Text>}
-
-                {result.filters && Object.keys(result.filters).length > 0 && (
-                    <Space size={[4, 4]} wrap>
-                        {Object.entries(result.filters).map(([key, value]) => (
-                            <Tag key={key} bordered={false}>{key}: {String(value)}</Tag>
-                        ))}
-                    </Space>
-                )}
 
                 {isReport ? (
                     <Button size="small" icon={<FileTextOutlined />} onClick={() => openUrl(result.open_url)}>
@@ -94,6 +86,35 @@ function ToolResultCard({ result }) {
             </Space>
         </Card>
     );
+}
+
+function businessLabel(key) {
+    const labels = {
+        voucher_no: 'Voucher',
+        voucher_date: 'Date',
+        invoice_no: 'Invoice',
+        bill_no: 'Bill',
+        account_name: 'Account',
+        contact_name: 'Contact',
+        customer_name: 'Customer',
+        supplier_name: 'Supplier',
+        debit_total: 'Debit',
+        credit_total: 'Credit',
+        net_movement: 'Net Movement',
+        total: 'Amount',
+        balance: 'Balance',
+        outstanding: 'Outstanding',
+    };
+
+    return labels[key] || key.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function renderBusinessValue(key, value) {
+    if (value === null || value === undefined) return '';
+    if (['total', 'amount', 'balance', 'outstanding', 'debit', 'credit', 'debit_total', 'credit_total', 'net_movement'].includes(key)) {
+        return `NPR ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return String(value);
 }
 
 function PendingActionCard({ action, onActionUpdated }) {

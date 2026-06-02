@@ -13,6 +13,7 @@ class AiUsageLog extends Model
         'user_id', 'branch_id', 'module', 'provider', 'model',
         'prompt_tokens', 'completion_tokens', 'total_tokens',
         'estimated_cost', 'status', 'error_message', 'duration_ms', 'request_hash',
+        'question', 'intent', 'selected_tool', 'filters', 'date_range', 'row_count', 'token_estimate',
     ];
 
     protected $casts = [
@@ -21,5 +22,9 @@ class AiUsageLog extends Model
         'total_tokens'       => 'integer',
         'estimated_cost'     => 'float',
         'duration_ms'        => 'integer',
+        'filters'            => 'array',
+        'date_range'         => 'array',
+        'row_count'          => 'integer',
+        'token_estimate'     => 'integer',
     ];
 }

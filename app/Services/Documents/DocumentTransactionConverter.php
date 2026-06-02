@@ -28,7 +28,10 @@ use RuntimeException;
 
 class DocumentTransactionConverter
 {
-    public function __construct(protected DocumentAuditService $audit) {}
+    public function __construct(
+        protected DocumentAuditService $audit,
+        protected DocumentTransactionPayloadValidator $validator,
+    ) {}
 
     /**
      * Convert a proposal into a draft transaction record.
@@ -44,6 +47,10 @@ class DocumentTransactionConverter
         }
 
         $payload = $proposal->payload ?? [];
+        $validation = $this->validator->validateForConversion($proposal->transaction_type, $payload);
+        if (!$validation['ok']) {
+            throw new RuntimeException('Proposal has missing required fields: ' . implode(', ', $validation['missing_fields']));
+        }
 
         $result = DB::transaction(function () use ($proposal, $payload) {
             return match ($proposal->transaction_type) {
@@ -169,7 +176,7 @@ class DocumentTransactionConverter
             if (!$accountId) continue; // expense lines require an account; user picks it during review
             ExpenseLine::create([
                 'expense_id' => $expense->id,
-                'chart_of_account_id' => $accountId,
+                'account_id' => $accountId,
                 'description' => $line['description'] ?? $line['product_name'] ?? null,
                 'tax_rate_id' => $line['tax_rate_id'] ?? null,
                 'amount' => $line['line_total'] ?? round(($line['qty'] ?? 1) * ($line['unit_price'] ?? 0), 2),

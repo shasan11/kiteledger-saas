@@ -738,7 +738,10 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
         Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);
         Route::post('payrolls/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
         Route::post('payrolls/{id}/lock', [PayrollRunController::class, 'lock']);
+        Route::post('payrolls/{id}/reopen', [PayrollRunController::class, 'reopen']);
         Route::post('payrolls/{id}/void', [PayrollRunController::class, 'void']);
+        Route::post('payrolls/{id}/reverse', [PayrollRunController::class, 'reverse']);
+        Route::get('payrolls/{id}/payslips', [PayrollRunController::class, 'payslips']);
         Route::post('payrolls/{id}/journal-voucher', [PayrollRunController::class, 'journalVoucher']);
 
         Route::post('payrolls/{id}/{kind}', [PayrollRunController::class, 'storeAdjustment'])
@@ -754,7 +757,9 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
         Route::post('runs/{id}/process', [PayrollRunController::class, 'process']);
         Route::post('runs/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
         Route::post('runs/{id}/lock', [PayrollRunController::class, 'lock']);
+        Route::post('runs/{id}/reopen', [PayrollRunController::class, 'reopen']);
         Route::post('runs/{id}/void', [PayrollRunController::class, 'void']);
+        Route::post('runs/{id}/reverse', [PayrollRunController::class, 'reverse']);
         Route::post('runs/{id}/journal-voucher', [PayrollRunController::class, 'journalVoucher']);
 
         Route::apiResource('salary-components', SalaryComponentController::class);
@@ -772,6 +777,26 @@ Route::middleware(['web', 'auth'])->prefix('hrm')->group(function () {
         Route::apiResource('payments', PayrollPaymentController::class);
         Route::apiResource('reimbursements', EmployeeReimbursementController::class);
     });
+
+    Route::match(['get', 'post'], 'payrolls/preview', [PayrollRunController::class, 'preview']);
+    Route::post('payrolls/generate', [PayrollRunController::class, 'generate']);
+    Route::post('payrolls/{id}/approve', [PayrollRunController::class, 'approve']);
+    Route::post('payrolls/{id}/process', [PayrollRunController::class, 'process']);
+    Route::post('payrolls/{id}/mark-paid', [PayrollRunController::class, 'markPaid']);
+    Route::post('payrolls/{id}/lock', [PayrollRunController::class, 'lock']);
+    Route::post('payrolls/{id}/reopen', [PayrollRunController::class, 'reopen']);
+    Route::post('payrolls/{id}/void', [PayrollRunController::class, 'void']);
+    Route::post('payrolls/{id}/reverse', [PayrollRunController::class, 'reverse']);
+    Route::get('payrolls/{id}/payslips', [PayrollRunController::class, 'payslips']);
+    Route::apiResource('payrolls', PayrollRunController::class);
+    Route::apiResource('payroll-periods', PayrollPeriodController::class);
+    Route::apiResource('payroll-components', SalaryComponentController::class);
+    Route::apiResource('employee-payroll-components', EmployeeAdditionController::class);
+    Route::get('payslips/{id}/pdf', [PayslipController::class, 'pdf']);
+    Route::get('payroll-reports/summary', [PayrollRunController::class, 'summaryReport']);
+    Route::get('payroll-reports/employee', [PayrollRunController::class, 'summaryReport']);
+    Route::get('payroll-reports/payment', [PayrollRunController::class, 'summaryReport']);
+    Route::get('payroll-reports/accounting', [PayrollRunController::class, 'summaryReport']);
 
     Route::post('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkStore']);
     Route::patch('employee-profiles/bulk', [EmployeeProfileController::class, 'bulkUpdate']);
@@ -1211,6 +1236,9 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('document-uploads')->name
     // Proposals
     Route::get('{id}/proposals', [DocumentProposalController::class, 'index'])->name('proposals.index');
     Route::post('{id}/proposals', [DocumentProposalController::class, 'store'])->name('proposals.store');
+    Route::get('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'review'])->name('proposals.review');
+    Route::put('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.save');
+    Route::patch('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.patch');
     Route::patch('{id}/proposals/{proposalId}', [DocumentProposalController::class, 'update'])->name('proposals.update');
     Route::post('{id}/proposals/{proposalId}/convert', [DocumentProposalController::class, 'convert'])->name('proposals.convert');
 });
