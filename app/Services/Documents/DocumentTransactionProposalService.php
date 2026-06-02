@@ -2,6 +2,7 @@
 
 namespace App\Services\Documents;
 
+use App\Models\Contact;
 use App\Models\DocumentEntityMatch;
 use App\Models\DocumentTransactionProposal;
 use App\Models\DocumentUpload;
@@ -17,7 +18,7 @@ class DocumentTransactionProposalService
     public function buildPayload(DocumentUpload $doc, string $transactionType, array $normalized): array
     {
         $matches = $this->matchMap($doc);
-        $contactId = $matches['contact'] ?? null;
+        $contactId = $matches['contact'] ?? $this->resolveContactId($doc, $transactionType, $normalized);
         $currencyId = $matches['currency'] ?? null;
         $warehouseId = $matches['warehouse_default'] ?? null;
 
@@ -27,7 +28,7 @@ class DocumentTransactionProposalService
             $lines[] = [
                 'product_id' => $matches[$lineKey] ?? null,
                 'product_name' => $line['product_name'] ?? $line['description'] ?? null,
-                'description' => $line['description'],
+                'description' => $line['description'] ?? $line['product_name'] ?? null,
                 'qty' => $line['quantity'] ?? 1,
                 'unit_price' => $line['rate'] ?? 0,
                 'discount_type' => null,
@@ -40,6 +41,7 @@ class DocumentTransactionProposalService
 
         $totals = $normalized['totals'] ?? [];
         $grand = $totals['grand_total'] ?? null;
+        $party = $normalized['party'] ?? [];
 
         $common = [
             'contact_id' => $contactId,
@@ -49,9 +51,17 @@ class DocumentTransactionProposalService
             'exchange_rate' => 1,
             'total' => $grand,
             'lines' => $lines,
+            'extracted_party' => [
+                'role' => $party['role'] ?? null,
+                'name' => $party['name'] ?? null,
+                'tax_number' => $party['tax_number'] ?? null,
+                'email' => $party['email'] ?? null,
+                'phone' => $party['phone'] ?? null,
+                'address' => $party['address'] ?? null,
+            ],
         ];
 
-        $payload = match ($transactionType) {
+        return match ($transactionType) {
             'purchase_bill' => $common + [
                 'bill_date' => $normalized['document_date'] ?? null,
                 'due_date' => $normalized['due_date'] ?? null,
@@ -76,6 +86,7 @@ class DocumentTransactionProposalService
                 'payment_method' => $normalized['payment']['method'] ?? null,
                 'reference' => $normalized['payment']['reference_no'] ?? $normalized['document_number'] ?? null,
                 'exchange_rate' => 1,
+                'extracted_party' => $common['extracted_party'],
             ],
             'credit_note' => $common + [
                 'sales_return_date' => $normalized['document_date'] ?? null,
@@ -100,8 +111,6 @@ class DocumentTransactionProposalService
             ],
             default => $common,
         };
-
-        return $payload;
     }
 
     public function detectMissingFields(string $type, array $payload): array
@@ -165,11 +174,40 @@ class DocumentTransactionProposalService
         return $proposal->refresh();
     }
 
+    public function refreshProposalMatches(DocumentTransactionProposal $proposal): DocumentTransactionProposal
+    {
+        $payload = $proposal->payload ?? [];
+        $matches = $this->matchMap($proposal->documentUpload);
+
+        if (!empty($matches['contact']) && empty($payload['contact_id'])) {
+            $payload['contact_id'] = $matches['contact'];
+        }
+        if (!empty($matches['currency']) && empty($payload['currency_id'])) {
+            $payload['currency_id'] = $matches['currency'];
+        }
+        if (!empty($matches['bank_account']) && empty($payload['account_id'])) {
+            $payload['account_id'] = $matches['bank_account'];
+        }
+        if (!empty($matches['warehouse_default']) && empty($payload['warehouse_id'])) {
+            $payload['warehouse_id'] = $matches['warehouse_default'];
+        }
+
+        foreach (($payload['lines'] ?? []) as $idx => $line) {
+            $key = 'product_' . $idx;
+            if (!empty($matches[$key]) && empty($payload['lines'][$idx]['product_id'])) {
+                $payload['lines'][$idx]['product_id'] = $matches[$key];
+            }
+        }
+
+        return $this->update($proposal, $payload, $proposal->warnings ?? []);
+    }
+
     private function matchMap(DocumentUpload $doc): array
     {
         $matches = DocumentEntityMatch::query()
             ->where('document_upload_id', $doc->id)
-            ->where('match_status', 'matched')
+            ->whereIn('match_status', ['matched', 'created'])
+            ->whereNotNull('matched_id')
             ->get();
 
         $map = [];
@@ -195,5 +233,85 @@ class DocumentTransactionProposalService
             }
         }
         return $map;
+    }
+
+    private function resolveContactId(DocumentUpload $doc, string $transactionType, array $normalized): ?string
+    {
+        $party = $normalized['party'] ?? [];
+        $name = trim((string) ($party['name'] ?? ''));
+        if ($name === '') {
+            return null;
+        }
+
+        $entityType = $this->contactEntityType($transactionType, strtolower((string) ($party['role'] ?? '')));
+        $existing = $this->findExistingContact($name, $party);
+        if ($existing) {
+            $this->upsertContactMatch($doc, $entityType, $name, $existing, 'matched', 0.95, $party);
+            return $existing->id;
+        }
+
+        $contact = Contact::create([
+            'name' => $name,
+            'contact_type' => $entityType === 'supplier' ? 'Supplier' : 'Customer',
+            'email' => $party['email'] ?? null,
+            'phone' => $party['phone'] ?? null,
+            'address' => $party['address'] ?? null,
+            'tax_registration_no' => $party['tax_number'] ?? null,
+            'accept_purchase' => $entityType === 'supplier',
+            'active' => true,
+            'is_system_generated' => true,
+            'user_add_id' => auth()->id(),
+        ]);
+
+        $this->upsertContactMatch($doc, $entityType, $name, $contact, 'created', 0.90, $party);
+        return $contact->id;
+    }
+
+    private function contactEntityType(string $transactionType, string $partyRole): string
+    {
+        if (in_array($transactionType, ['purchase_bill', 'purchase_order', 'supplier_payment', 'debit_note'], true)) {
+            return 'supplier';
+        }
+        if (in_array($transactionType, ['invoice', 'sales_order', 'quotation', 'customer_payment', 'credit_note'], true)) {
+            return 'customer';
+        }
+        return in_array($partyRole, ['supplier', 'vendor'], true) ? 'supplier' : 'customer';
+    }
+
+    private function findExistingContact(string $name, array $party): ?Contact
+    {
+        if (!empty($party['tax_number'])) {
+            $contact = Contact::query()->where('tax_registration_no', $party['tax_number'])->first();
+            if ($contact) return $contact;
+        }
+
+        if (!empty($party['email'])) {
+            $contact = Contact::query()->whereRaw('LOWER(email) = ?', [strtolower($party['email'])])->first();
+            if ($contact) return $contact;
+        }
+
+        return Contact::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
+    }
+
+    private function upsertContactMatch(DocumentUpload $doc, string $entityType, string $name, Contact $contact, string $status, float $confidence, array $party): void
+    {
+        DocumentEntityMatch::updateOrCreate([
+            'document_upload_id' => $doc->id,
+            'entity_type' => $entityType,
+            'extracted_name' => $name,
+        ], [
+            'matched_model' => Contact::class,
+            'matched_id' => $contact->id,
+            'match_status' => $status,
+            'confidence_score' => $confidence,
+            'created_record_id' => $status === 'created' ? $contact->id : null,
+            'options' => [
+                'suggestions' => [],
+                'extra' => [
+                    'source' => 'document_extraction',
+                    'party' => $party,
+                ],
+            ],
+        ]);
     }
 }
