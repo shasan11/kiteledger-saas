@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import {
     Alert,
@@ -24,20 +24,39 @@ import axios from 'axios';
 
 const { Text } = Typography;
 
-const PROVIDERS = ['openai', 'groq', 'gemini', 'ollama'];
+const FALLBACK_PROVIDERS = ['openai', 'groq', 'gemini', 'openrouter', 'ollama'];
 
 const PROVIDER_LABELS = {
     openai: 'OpenAI',
     groq: 'Groq',
     gemini: 'Gemini',
+    openrouter: 'OpenRouter',
     ollama: 'Ollama',
 };
 
 const PROVIDER_KEY_PLACEHOLDERS = {
-    openai: 'OpenAI key',
-    groq: 'Groq key',
-    gemini: 'Gemini key',
+    openai: 'Paste OpenAI provider key',
+    groq: 'Paste Groq provider key',
+    gemini: 'Paste Gemini provider key',
+    openrouter: 'Paste OpenRouter provider key',
     ollama: 'Not required for local Ollama',
+};
+
+const SAFE_DEFAULTS = {
+    ai_enabled: true,
+    ai_provider: 'openai',
+    ai_model: 'gpt-4o-mini',
+    ai_base_url: 'https://api.openai.com/v1',
+    ai_temperature: 0.2,
+    ai_max_tokens: 500,
+    ai_timeout_seconds: 180,
+    ai_connect_timeout_seconds: 15,
+    ai_stream_enabled: false,
+    ai_cache_enabled: true,
+    ai_cache_ttl: 600,
+    ai_context_max_rows: 15,
+    ai_context_max_chars: 5000,
+    ai_fast_mode: true,
 };
 
 function hasAnyPermission(perms = [], required = []) {
@@ -71,7 +90,22 @@ export default function AiSettings() {
     const [error, setError] = useState(null);
     const [testResult, setTestResult] = useState(null);
     const [form] = Form.useForm();
-    const currentProvider = Form.useWatch('ai_provider', form);
+    const currentProvider = Form.useWatch('ai_provider', form) || data?.settings?.ai_provider || 'openai';
+
+    const providers = useMemo(() => {
+        const list = data?.supported_providers;
+        return Array.isArray(list) && list.length ? list : FALLBACK_PROVIDERS;
+    }, [data?.supported_providers]);
+
+    const providerOptions = useMemo(() => providers.map((provider) => ({
+        value: provider,
+        label: PROVIDER_LABELS[provider] || provider,
+    })), [providers]);
+
+    const modelOptions = useMemo(() => {
+        const models = data?.model_suggestions?.[currentProvider] || [];
+        return models.map((model) => ({ value: model, label: model }));
+    }, [currentProvider, data?.model_suggestions]);
 
     useEffect(() => {
         if (!canView) {
@@ -79,19 +113,33 @@ export default function AiSettings() {
             return;
         }
 
+        let mounted = true;
+        setLoading(true);
+
         axios.get('/api/ai/settings')
             .then((res) => {
+                if (!mounted) return;
                 setData(res.data);
                 form.setFieldsValue({
+                    ...SAFE_DEFAULTS,
                     ...res.data.settings,
                     ai_api_key: '',
                 });
             })
-            .catch((err) => setError(extractApiError(err, 'Failed to load AI settings.')))
-            .finally(() => setLoading(false));
+            .catch((err) => {
+                if (!mounted) return;
+                setError(extractApiError(err, 'Failed to load AI settings.'));
+            })
+            .finally(() => {
+                if (mounted) setLoading(false);
+            });
+
+        return () => {
+            mounted = false;
+        };
     }, [canView, form]);
 
-    const onProviderChange = (provider) => {
+    const patchProviderDefaults = (provider) => {
         const base = data?.default_base_urls?.[provider];
         const models = data?.model_suggestions?.[provider] || [];
         const patch = {};
@@ -105,22 +153,40 @@ export default function AiSettings() {
 
     const cleanPayload = (values) => {
         const payload = { ...values };
-        if (!payload.ai_api_key) delete payload.ai_api_key;
+
+        if (!payload.ai_api_key || String(payload.ai_api_key).trim() === '') {
+            delete payload.ai_api_key;
+        }
+
         return payload;
+    };
+
+    const saveCurrentValues = async ({ showMessage = true } = {}) => {
+        const values = await form.validateFields();
+        const res = await axios.put('/api/ai/settings', cleanPayload(values));
+
+        setData((prev) => ({
+            ...(prev || {}),
+            settings: res.data.settings,
+        }));
+
+        form.setFieldsValue({
+            ...SAFE_DEFAULTS,
+            ...res.data.settings,
+            ai_api_key: '',
+        });
+
+        if (showMessage) antMessage.success('AI settings saved.');
+        return res.data.settings;
     };
 
     const save = async () => {
         if (!canManage) return;
 
         try {
-            const values = await form.validateFields();
             setSaving(true);
             setTestResult(null);
-
-            const res = await axios.put('/api/ai/settings', cleanPayload(values));
-            setData((prev) => ({ ...prev, settings: res.data.settings }));
-            form.setFieldsValue({ ...res.data.settings, ai_api_key: '' });
-            antMessage.success('AI settings saved.');
+            await saveCurrentValues();
         } catch (err) {
             if (err?.errorFields) return;
             antMessage.error(extractApiError(err, 'Failed to save AI settings.'));
@@ -130,25 +196,16 @@ export default function AiSettings() {
     };
 
     const resetDefaults = () => {
-        const provider = form.getFieldValue('ai_provider') || 'openai';
-        const baseUrl = data?.default_base_urls?.[provider] || 'https://api.openai.com/v1';
-        const model = (data?.model_suggestions?.[provider] || [])[0] || 'gpt-4o-mini';
+        const provider = form.getFieldValue('ai_provider') || data?.settings?.ai_provider || 'openai';
+        const model = data?.model_suggestions?.[provider]?.[0] || SAFE_DEFAULTS.ai_model;
+        const baseUrl = data?.default_base_urls?.[provider] || SAFE_DEFAULTS.ai_base_url;
 
         form.setFieldsValue({
-            ai_enabled: true,
+            ...SAFE_DEFAULTS,
             ai_provider: provider,
             ai_model: model,
             ai_base_url: baseUrl,
-            ai_temperature: 0.2,
-            ai_max_tokens: 700,
-            ai_timeout_seconds: 75,
-            ai_connect_timeout_seconds: 10,
-            ai_stream_enabled: false,
-            ai_cache_enabled: true,
-            ai_cache_ttl: 600,
-            ai_context_max_rows: 20,
-            ai_context_max_chars: 8000,
-            ai_fast_mode: true,
+            ai_api_key: '',
         });
 
         setTestResult(null);
@@ -159,11 +216,13 @@ export default function AiSettings() {
         if (!canManage) return;
 
         try {
-            const values = await form.validateFields();
             setTesting(true);
+            setSaving(true);
             setTestResult(null);
 
-            const res = await axios.post('/api/ai/settings/test', cleanPayload(values));
+            await saveCurrentValues({ showMessage: false });
+            const res = await axios.post('/api/ai/settings/test');
+
             setTestResult(res.data);
             antMessage.success(`Connection OK. Reply: ${res.data.response || 'OK'}`);
         } catch (err) {
@@ -173,6 +232,7 @@ export default function AiSettings() {
             antMessage.error(extractApiError(err, 'Connection failed.'));
         } finally {
             setTesting(false);
+            setSaving(false);
         }
     };
 
@@ -204,7 +264,7 @@ export default function AiSettings() {
                             layout="vertical"
                             disabled={!canManage}
                             onValuesChange={(changed) => {
-                                if (changed.ai_provider) onProviderChange(changed.ai_provider);
+                                if (changed.ai_provider) patchProviderDefaults(changed.ai_provider);
                                 if (!changed.ai_provider) setTestResult(null);
                             }}
                         >
@@ -229,15 +289,15 @@ export default function AiSettings() {
                             <Row gutter={16}>
                                 <Col xs={24} md={8}>
                                     <Form.Item name="ai_provider" label="Provider" rules={[{ required: true, message: 'Provider is required' }]}>
-                                        <Select options={PROVIDERS.map((p) => ({ value: p, label: PROVIDER_LABELS[p] || p }))} />
+                                        <Select options={providerOptions} />
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={8}>
                                     <Form.Item name="ai_model" label="Model" rules={[{ required: true, message: 'Model is required' }]}>
                                         <AutoComplete
                                             allowClear
-                                            placeholder="gpt-4o-mini"
-                                            options={(data?.model_suggestions?.[currentProvider] || []).map((m) => ({ value: m, label: m }))}
+                                            placeholder="Select or type model name"
+                                            options={modelOptions}
                                             filterOption={(input, option) => (option?.value || '').toLowerCase().includes(input.toLowerCase())}
                                         />
                                     </Form.Item>
@@ -251,7 +311,7 @@ export default function AiSettings() {
 
                             <Form.Item
                                 label={
-                                    <Space>
+                                    <Space wrap>
                                         API Key
                                         {data?.settings?.ai_has_api_key && (
                                             <Tag color="green">Saved: {data.settings.ai_api_key_masked}</Tag>
@@ -260,7 +320,7 @@ export default function AiSettings() {
                                     </Space>
                                 }
                                 name="ai_api_key"
-                                extra="Leave blank to keep the existing key. Test Connection uses the key typed here before saving."
+                                extra="Leave blank to keep the existing saved key. Save & Test will save the current form first, then test the saved settings."
                             >
                                 <Input.Password placeholder={PROVIDER_KEY_PLACEHOLDERS[currentProvider] || 'Provider key'} autoComplete="new-password" />
                             </Form.Item>
@@ -278,7 +338,7 @@ export default function AiSettings() {
                                     </Form.Item>
                                 </Col>
                                 <Col xs={24} md={6}>
-                                    <Form.Item name="ai_timeout_seconds" label="Timeout (s)" extra="Use 75–120s for cloud providers; local Ollama may need longer.">
+                                    <Form.Item name="ai_timeout_seconds" label="Timeout (s)" extra="Use 120–180s for cloud providers; local Ollama may need longer.">
                                         <InputNumber min={5} max={600} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
@@ -326,11 +386,11 @@ export default function AiSettings() {
                             )}
 
                             <Space wrap>
-                                <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save} disabled={!canManage}>
+                                <Button type="primary" icon={<SaveOutlined />} loading={saving && !testing} onClick={save} disabled={!canManage}>
                                     Save
                                 </Button>
                                 <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canManage}>
-                                    Test Connection
+                                    Save & Test Connection
                                 </Button>
                                 <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canManage}>
                                     Reset Recommended Defaults
