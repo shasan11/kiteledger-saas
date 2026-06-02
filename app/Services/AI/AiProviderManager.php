@@ -59,21 +59,26 @@ class AiProviderManager
             }
             return $result;
         } catch (ConnectionException $e) {
-            Log::warning('AI provider timeout', ['provider' => $provider, 'model' => $model, 'timeout' => $timeout]);
-            $this->throwError('AI_TIMEOUT', "AI request timed out after {$timeout}s. Try reducing context size or max tokens, or use a faster model.");
+            Log::warning('AI provider timeout', [
+                'provider' => $provider,
+                'model' => $model,
+                'timeout' => $timeout,
+                'message' => $e->getMessage(),
+            ]);
+            $this->throwError('AI_TIMEOUT', "AI request timed out after {$timeout}s. Your machine could not reach the AI provider. Check internet/DNS/firewall/proxy or try again.");
         } catch (RequestException $e) {
             $status = $e->response?->status();
             $body   = (string) ($e->response?->body() ?? '');
 
             if ($status === 401 || $status === 403) {
-                $this->throwError('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed. Please verify your API key in AI Settings.');
+                $this->throwError('AI_PROVIDER_AUTH_FAILED', 'AI provider authentication failed. Please verify your provider key in AI Settings.');
             }
 
-            // Gemini returns HTTP 400 for invalid / expired API keys
+            // Gemini returns HTTP 400 for invalid / expired provider keys.
             if ($status === 400 && $provider === 'gemini') {
                 $lowerBody = strtolower($body);
                 if (str_contains($lowerBody, 'api key') || str_contains($lowerBody, 'api_key') || str_contains($lowerBody, 'invalid argument')) {
-                    $this->throwError('AI_PROVIDER_AUTH_FAILED', 'Gemini API key is invalid or expired. Please update it in AI Settings.');
+                    $this->throwError('AI_PROVIDER_AUTH_FAILED', 'Gemini provider key is invalid or expired. Please update it in AI Settings.');
                 }
                 if (str_contains($lowerBody, 'not found') || str_contains($lowerBody, 'model')) {
                     $this->throwError('AI_MODEL_INVALID', "Gemini model '{$model}' was not found. Please choose a valid model in AI Settings.");
@@ -125,14 +130,21 @@ class AiProviderManager
         return mb_strlen($body) > $max ? mb_substr($body, 0, $max) . '…' : $body;
     }
 
+    private function httpClient(int $timeout, int $connectTimeout)
+    {
+        return Http::timeout($timeout)
+            ->connectTimeout($connectTimeout)
+            ->withOptions([
+                'force_ip_resolve' => 'v4',
+            ]);
+    }
+
     public function testConnection(): array
     {
-        // Local providers (ollama) often need 30-90s on first request because
-        // the model has to load into VRAM. Use the configured timeout — not a
-        // tight hardcoded 10s — so Test Connection matches real usage.
+        // Connection test should fail quickly. Real chat can use the longer saved timeout.
         $timeout = $this->settings->provider() === 'ollama'
             ? max(60, $this->settings->timeoutSeconds())
-            : $this->settings->timeoutSeconds();
+            : 25;
 
         try {
             $res = $this->chat([
@@ -173,7 +185,7 @@ class AiProviderManager
             $this->throwError('AI_MODEL_MISSING', 'AI model is missing. Please configure it in AI Settings.');
         }
         if ($this->settings->provider() !== 'ollama' && !$this->settings->hasApiKey()) {
-            $this->throwError('AI_API_KEY_MISSING', 'AI API key is missing. Please configure it in AI Settings.');
+            $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
         }
     }
 
@@ -181,8 +193,7 @@ class AiProviderManager
     {
         $url = rtrim($this->settings->baseUrl(), '/') . '/chat/completions';
 
-        $response = Http::timeout($timeout)
-            ->connectTimeout($connectTimeout)
+        $response = $this->httpClient($timeout, $connectTimeout)
             ->withHeaders([
                 'Authorization' => 'Bearer ' . $this->settings->apiKey(),
                 'Content-Type' => 'application/json',
@@ -216,8 +227,7 @@ class AiProviderManager
     {
         $url = rtrim($this->settings->baseUrl(), '/') . '/api/chat';
 
-        $response = Http::timeout($timeout)
-            ->connectTimeout($connectTimeout)
+        $response = $this->httpClient($timeout, $connectTimeout)
             ->post($url, [
                 'model' => $model,
                 'messages' => $messages,
@@ -261,7 +271,7 @@ class AiProviderManager
             ];
         }
 
-        $url = rtrim($this->settings->baseUrl(), '/') . "/models/{$model}:generateContent?key=" . urlencode($this->settings->apiKey() ?? '');
+        $url = $this->geminiUrl($model);
 
         $body = [
             'contents' => $contents,
@@ -274,8 +284,7 @@ class AiProviderManager
             $body['systemInstruction'] = ['parts' => [['text' => $systemText]]];
         }
 
-        $response = Http::timeout($timeout)
-            ->connectTimeout($connectTimeout)
+        $response = $this->httpClient($timeout, $connectTimeout)
             ->post($url, $body)
             ->throw();
 
@@ -293,6 +302,18 @@ class AiProviderManager
                 'total' => $data['usageMetadata']['totalTokenCount'] ?? null,
             ],
         ];
+    }
+
+    private function geminiUrl(string $model): string
+    {
+        $base = rtrim($this->settings->baseUrl(), '/');
+        $model = preg_replace('#^models/#', '', trim($model));
+
+        if (!str_ends_with($base, '/models')) {
+            $base .= '/models';
+        }
+
+        return $base . '/' . rawurlencode($model) . ':generateContent?key=' . urlencode($this->settings->apiKey() ?? '');
     }
 
     private function throwError(string $code, string $message): never
