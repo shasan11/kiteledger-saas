@@ -12,6 +12,7 @@ use App\Models\Warehouse;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentEntityMatcher;
 use App\Services\Documents\DocumentPermissionService;
+use App\Services\Documents\DocumentTransactionProposalService;
 use Illuminate\Http\Request;
 
 class DocumentEntityMatchController extends Controller
@@ -20,6 +21,7 @@ class DocumentEntityMatchController extends Controller
         protected DocumentPermissionService $perms,
         protected DocumentEntityMatcher $matcher,
         protected DocumentAuditService $audit,
+        protected DocumentTransactionProposalService $proposalService,
     ) {}
 
     public function match(Request $request, string $id)
@@ -46,6 +48,9 @@ class DocumentEntityMatchController extends Controller
             'matched_model' => $data['matched_model'] ?? $match->matched_model,
             'match_status' => 'matched',
         ]);
+
+        $this->refreshOpenProposals($match->document_upload_id);
+
         return response()->json(['ok' => true, 'match' => $match->fresh()]);
     }
 
@@ -76,6 +81,8 @@ class DocumentEntityMatchController extends Controller
                 'address' => $fields['address'] ?? null,
                 'tax_registration_no' => $fields['tax_registration_no'] ?? null,
                 'active' => true,
+                'is_system_generated' => true,
+                'user_add_id' => auth()->id(),
             ]),
             'supplier' => Contact::create([
                 'name' => $fields['name'] ?? $match->extracted_name,
@@ -86,6 +93,8 @@ class DocumentEntityMatchController extends Controller
                 'tax_registration_no' => $fields['tax_registration_no'] ?? null,
                 'accept_purchase' => true,
                 'active' => true,
+                'is_system_generated' => true,
+                'user_add_id' => auth()->id(),
             ]),
             'product' => Product::create([
                 'name' => $fields['name'] ?? $match->extracted_name,
@@ -111,6 +120,8 @@ class DocumentEntityMatchController extends Controller
             'created_record_id' => $created->id,
         ]);
 
+        $this->refreshOpenProposals($doc->id);
+
         $this->audit->log('fk.created', [
             'document_upload_id' => $doc->id,
             'entity_type' => $match->entity_type,
@@ -118,5 +129,16 @@ class DocumentEntityMatchController extends Controller
         ]);
 
         return response()->json(['ok' => true, 'match' => $match->fresh(), 'record' => $created]);
+    }
+
+    private function refreshOpenProposals(string $documentUploadId): void
+    {
+        $doc = DocumentUpload::with('proposals')->find($documentUploadId);
+        if (!$doc) return;
+
+        foreach ($doc->proposals as $proposal) {
+            if ($proposal->status === 'converted') continue;
+            $this->proposalService->refreshProposalMatches($proposal);
+        }
     }
 }
