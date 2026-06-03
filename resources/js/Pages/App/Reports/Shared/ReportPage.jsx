@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -29,7 +29,6 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import ReportSummaryButton from '@/Components/Reports/ReportSummaryButton.jsx';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -154,7 +153,6 @@ export default function ReportPage() {
   const { token } = theme.useToken();
   const page = usePage();
   const permissions = page.props.auth?.permissions || [];
-  const canBypass = !!page.props.auth?.canBypassPermissions;
   const branchContext = page.props.branchContext || {};
 
   const pageCategory = page.props.reportCategory;
@@ -175,10 +173,6 @@ export default function ReportPage() {
 
   const canView = permissions.includes('reports.view') || (permission && permissions.includes(permission));
   const canExport = permissions.includes('reports.export') || permissions.includes('reports.view');
-  const canSummarizeReport = canBypass
-    || permissions.includes('reports.ai_summary')
-    || permissions.includes('ai.report_summary')
-    || permissions.includes('ai.manage');
   const defaultBranchId = branchContext.selectedBranchId || page.props.auth?.currentBranchId;
 
   const baseDefaults = useMemo(() => ({
@@ -653,20 +647,6 @@ export default function ReportPage() {
                 >
                   Print
                 </Button>
-                <ReportSummaryButton
-                  category={category}
-                  reportKey={reportKey}
-                  title={title}
-                  filters={generatedFilters || filters}
-                  columns={state.data?.columns || []}
-                  rows={state.data?.rows || []}
-                  totals={state.data?.totals || {}}
-                  summaryBlocks={state.data?.summary || []}
-                  chartData={state.data?.chart_data || state.data?.chartData || []}
-                  generatedAt={generatedAt}
-                  disabled={!hasGenerated || state.loading || !state.data}
-                  canSummarize={canSummarizeReport}
-                />
               </Space>
             </Col>
           </Row>
