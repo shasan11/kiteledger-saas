@@ -24,17 +24,17 @@ import {
   theme,
 } from 'antd';
 import {
-  CheckCircleOutlined,
   EyeOutlined,
   MessageOutlined,
   PlusOutlined,
   ReloadOutlined,
   SaveOutlined,
   SendOutlined,
-  StarOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import { api, cleanPayload } from '../settingsApi.jsx';
+import ActionDropdown from '@/Components/ActionDropdown';
+import { humanizeLabel } from '@/utils/humanizeLabel';
 
 const { Text } = Typography;
 
@@ -51,7 +51,11 @@ const providerOptions = [
 
 const moduleOptions = ['system', 'crm', 'sales', 'purchase', 'accounting', 'hrm', 'payroll', 'inventory', 'campaign'].map((value) => ({ value, label: value.toUpperCase() }));
 const variables = ['contact_name', 'customer_name', 'supplier_name', 'company_name', 'invoice_no', 'bill_no', 'amount', 'due_date', 'payment_date', 'campaign_title', 'otp_code', 'employee_name', 'payroll_month'];
-const getError = (error, fallback) => error?.response?.data?.message || error?.response?.data?.error || Object.values(error?.response?.data || {})?.[0]?.[0] || fallback;
+const getError = (error, fallback) => {
+  if (error?.response?.status === 401) return 'Your session has expired. Please login again.';
+  if (error?.response?.status === 403) return 'You do not have permission to manage SMS Configuration.';
+  return error?.response?.data?.message || error?.response?.data?.error || Object.values(error?.response?.data || {})?.[0]?.[0] || fallback;
+};
 const listFrom = (data) => (Array.isArray(data) ? data : data?.results || data?.data || []);
 const segments = (text) => Math.max(1, Math.ceil(Math.max((text || '').length, 1) / 160));
 
@@ -92,8 +96,8 @@ function ConfigsTab() {
     setEditing(record);
     form.resetFields();
     form.setFieldsValue({
-      name: record?.name || '',
-      provider: record?.provider || 'custom_http',
+      name: record?.name || 'Twilio',
+      provider: 'twilio',
       sender_id: record?.sender_id || '',
       api_base_url: record?.api_base_url || record?.base_url || '',
       api_key: '',
@@ -111,7 +115,7 @@ function ConfigsTab() {
       test_phone: record?.test_phone || '',
       test_message: record?.test_message || 'KiteLedger SMS test message.',
       is_active: record?.is_active !== false,
-      is_default: !!record?.is_default,
+      is_default: true,
       method: record?.metadata?.method || (record?.provider === 'custom_get' ? 'GET' : 'POST'),
       headers: JSON.stringify(record?.metadata?.headers || {}, null, 2),
       payload: JSON.stringify(record?.metadata?.payload || {}, null, 2),
@@ -149,8 +153,8 @@ function ConfigsTab() {
         await axios.patch(api(`/api/sms-configs/${editing.id}`), payload);
         message.success('SMS config updated');
       } else {
-        await axios.post(api('/api/sms-configs'), payload);
-        message.success('SMS config created');
+        message.error('Default Twilio configuration is still loading. Please refresh and try again.');
+        return;
       }
       setOpen(false);
       await load();
@@ -158,16 +162,6 @@ function ConfigsTab() {
       if (!error?.errorFields) message.error(getError(error, 'Failed to save SMS config'));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const action = async (record, path, success) => {
-    try {
-      await axios.post(api(`/api/sms-configs/${record.id}/${path}`));
-      message.success(success);
-      await load();
-    } catch (error) {
-      message.error(getError(error, 'Action failed'));
     }
   };
 
@@ -186,7 +180,7 @@ function ConfigsTab() {
 
   const columns = [
     { title: 'Name', dataIndex: 'name', render: (value) => <Text strong>{value}</Text> },
-    { title: 'Provider', dataIndex: 'provider', render: (value) => <Tag>{value}</Tag> },
+    { title: 'Provider', dataIndex: 'provider', render: (value) => <Tag>{humanizeLabel(value)}</Tag> },
     { title: 'Sender ID', dataIndex: 'sender_id', render: (value, row) => value || row.from_number || '-' },
     { title: 'Default', dataIndex: 'is_default', width: 90, render: (value) => <Tag color={value ? 'gold' : 'default'}>{value ? 'Default' : 'No'}</Tag> },
     { title: 'Active', dataIndex: 'is_active', width: 90, render: (value, row) => <Tag color={(value ?? row.active) ? 'green' : 'default'}>{(value ?? row.active) ? 'Active' : 'Inactive'}</Tag> },
@@ -196,15 +190,13 @@ function ConfigsTab() {
       title: 'Actions',
       key: 'actions',
       fixed: 'right',
-      width: 320,
+      width: 80,
       render: (_, record) => (
-        <Space size={4}>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => setViewing(record)}>View</Button>
-          <Button size="small" onClick={() => openForm(record)}>Edit</Button>
-          <Button size="small" icon={<SendOutlined />} onClick={() => { setTestConfig(record); testForm.setFieldsValue({ phone: record.test_phone, message: record.test_message || 'KiteLedger SMS test message.' }); setTestResult(null); }}>Test</Button>
-          {!record.is_default ? <Button size="small" icon={<StarOutlined />} onClick={() => action(record, 'set-default', 'Default SMS provider updated')} /> : null}
-          {(record.is_active ?? record.active) ? <Button size="small" onClick={() => action(record, 'deactivate', 'SMS provider deactivated')}>Off</Button> : <Button size="small" icon={<CheckCircleOutlined />} onClick={() => action(record, 'activate', 'SMS provider activated')}>On</Button>}
-        </Space>
+        <ActionDropdown items={[
+          { label: 'View', icon: <EyeOutlined />, onClick: () => setViewing(record) },
+          { label: 'Edit', onClick: () => openForm(record) },
+          { label: 'Test', icon: <SendOutlined />, onClick: () => { setTestConfig(record); testForm.setFieldsValue({ phone: record.test_phone, message: record.test_message || 'KiteLedger SMS test message.' }); setTestResult(null); } },
+        ]} />
       ),
     },
   ];
@@ -214,20 +206,20 @@ function ConfigsTab() {
       <Row gutter={12} style={{ marginBottom: token.margin }}>
         <Col xs={12} md={6}><Card size="small"><Statistic title="Total configs" value={summary.total_configs || 0} /></Card></Col>
         <Col xs={12} md={6}><Card size="small"><Statistic title="Active configs" value={summary.active_configs || 0} /></Card></Col>
-        <Col xs={12} md={6}><Card size="small"><Statistic title="Default provider" value={summary.default_provider || '-'} /></Card></Col>
+        <Col xs={12} md={6}><Card size="small"><Statistic title="Default provider" value={humanizeLabel(summary.default_provider || '-')} /></Card></Col>
         <Col xs={12} md={6}><Card size="small"><Statistic title="Failed SMS today" value={summary.failed_sms_today || 0} /></Card></Col>
       </Row>
 
-      <Card size="small" title={<><MessageOutlined /> SMS Config</>} extra={<Space><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => openForm()}>Add Provider</Button></Space>}>
+      <Card size="small" title={<><MessageOutlined /> SMS Config</>} extra={<Space><Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button></Space>}>
         <Table rowKey="id" loading={loading} size="small" columns={columns} dataSource={rows} scroll={{ x: 1200 }} />
       </Card>
 
-      <Drawer title={editing ? 'Edit SMS Provider' : 'New SMS Provider'} width="calc(100vw - 48px)" open={open} onClose={() => setOpen(false)} extra={<Space><Button onClick={() => setOpen(false)}>Cancel</Button><Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button></Space>} destroyOnHidden>
+      <Drawer title="Edit Twilio SMS Provider" width="calc(100vw - 48px)" open={open} onClose={() => setOpen(false)} extra={<Space><Button onClick={() => setOpen(false)}>Cancel</Button><Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>Save</Button></Space>} destroyOnHidden>
         <Alert type="info" showIcon style={{ marginBottom: token.margin }} message="Sensitive credentials are masked after save. Leave secret fields blank to keep the existing value." />
         <Form form={form} layout="vertical">
           <Row gutter={12}>
             <Col xs={24} md={8}><Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item></Col>
-            <Col xs={24} md={8}><Form.Item name="provider" label="Provider" rules={[{ required: true }]}><Select options={providerOptions} /></Form.Item></Col>
+            <Col xs={24} md={8}><Form.Item name="provider" label="Provider" rules={[{ required: true }]}><Select options={providerOptions} disabled /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item name="sender_id" label="Sender ID"><Input /></Form.Item></Col>
             <Col xs={24} md={12}><Form.Item name="api_base_url" label="API Base URL" rules={['custom_http', 'custom_post', 'custom_get'].includes(provider) ? [{ required: true }] : []}><Input /></Form.Item></Col>
             <Col xs={24} md={6}><Form.Item name="from_number" label="From Number"><Input /></Form.Item></Col>
@@ -255,7 +247,7 @@ function ConfigsTab() {
             <Col xs={24} md={8}><Form.Item name="test_phone" label="Test Phone"><Input /></Form.Item></Col>
             <Col xs={24} md={16}><Form.Item name="test_message" label="Test Message"><Input.TextArea rows={2} maxLength={1600} showCount /></Form.Item></Col>
             <Col xs={12} md={4}><Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col xs={12} md={4}><Form.Item name="is_default" label="Default" valuePropName="checked"><Switch /></Form.Item></Col>
+            <Col xs={12} md={4}><Form.Item name="is_default" label="Default" valuePropName="checked"><Switch disabled /></Form.Item></Col>
           </Row>
         </Form>
       </Drawer>
@@ -263,7 +255,7 @@ function ConfigsTab() {
       <Drawer title="SMS Provider" width={620} open={!!viewing} onClose={() => setViewing(null)}>
         <Descriptions bordered size="small" column={1}>
           {viewing ? Object.entries(viewing).filter(([key]) => !key.includes('masked') && !key.startsWith('has_')).map(([key, value]) => (
-            <Descriptions.Item key={key} label={key}>{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '-')}</Descriptions.Item>
+            <Descriptions.Item key={key} label={humanizeLabel(key)}>{typeof value === 'object' ? JSON.stringify(value) : String(value ?? '-')}</Descriptions.Item>
           )) : null}
         </Descriptions>
       </Drawer>
@@ -438,7 +430,7 @@ function LogsTab() {
             <Descriptions.Item label="Normalized phone">{viewing.normalized_phone || '-'}</Descriptions.Item>
             <Descriptions.Item label="Message">{viewing.message}</Descriptions.Item>
             <Descriptions.Item label="Segments">{viewing.segment_count}</Descriptions.Item>
-            <Descriptions.Item label="Provider">{viewing.provider}</Descriptions.Item>
+            <Descriptions.Item label="Provider">{humanizeLabel(viewing.provider)}</Descriptions.Item>
             <Descriptions.Item label="Provider message ID">{viewing.provider_message_id || '-'}</Descriptions.Item>
             <Descriptions.Item label="Error code">{viewing.error_code || '-'}</Descriptions.Item>
             <Descriptions.Item label="Error message">{viewing.error_message || '-'}</Descriptions.Item>

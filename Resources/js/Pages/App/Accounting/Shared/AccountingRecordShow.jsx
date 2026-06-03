@@ -946,7 +946,11 @@ function JournalVoucherDetails({ record, formatMoney }) {
         columns={[
           {
             title: 'Chart of Account',
-            render: (_, row) => relationLabel(row?.chart_of_account || row?.chartOfAccount),
+            render: (_, row) => {
+              const chart = row?.chart_of_account || row?.chartOfAccount || row?.account?.chart_of_account || row?.account?.chartOfAccount;
+              const account = row?.account || row?.account_id_detail;
+              return relationLabel(chart || account) || '-';
+            },
           },
           {
             title: 'Description',

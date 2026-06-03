@@ -36,7 +36,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__.'/menu/settings.php';
 
     // AI module — canonical assistant page (legacy pages removed)
-    Route::get('/ai/assistant', fn () => Inertia::render('App/AI/Assistant'))->name('ai.assistant');
 
     // Document Upload module
     Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');

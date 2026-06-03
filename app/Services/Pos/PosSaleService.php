@@ -176,7 +176,7 @@ class PosSaleService
                     throw new InvalidArgumentException("Warehouse is required for inventory-tracked product {$product->name}.");
                 }
 
-                $this->inventoryService->validateStock($product->id, (float) $line->qty, $draft->warehouse_id);
+                // POS checkout allows selling through zero stock; stock is deducted below.
             }
 
             $this->inventoryService->deductStockForSale($draft);

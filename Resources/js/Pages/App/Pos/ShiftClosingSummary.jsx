@@ -12,9 +12,13 @@ const { Text } = Typography;
 
 const resolveLogoUrl = (path) => {
     if (!path) return null;
-    if (/^https?:\/\//i.test(path)) return path;
+    const value = String(path).trim();
+    if (/^(https?:|data:|blob:)/i.test(value)) return value;
     const base = (import.meta.env.VITE_APP_BACKEND_URL || '').replace(/\/+$/, '');
-    return `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+    let normalized = value.replace(/^\/+/, '');
+    if (normalized.startsWith('public/')) normalized = normalized.slice(7);
+    if (!normalized.startsWith('storage/') && !normalized.startsWith('images/')) normalized = `storage/${normalized}`;
+    return `${base}/${normalized}`;
 };
 
 const humanize = (value) => String(value || '-').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());

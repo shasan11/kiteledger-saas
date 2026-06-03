@@ -8,6 +8,7 @@ use App\Services\Payroll\PayrollAccountSyncService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -21,7 +22,7 @@ class UserController extends BaseCrudApiController
 
     protected bool $branchScoped = true;
 
-    protected bool $autoFillBranchOnCreate = true;
+    protected bool $autoFillBranchOnCreate = false;
 
     protected bool $preventBranchChangeOnUpdate = true;
 
@@ -55,7 +56,6 @@ class UserController extends BaseCrudApiController
         'username',
         'email',
         'phone',
-        'employee_id',
         'city',
         'country',
         'employmentStatus.name',
@@ -101,7 +101,6 @@ class UserController extends BaseCrudApiController
         'username',
         'email',
         'phone',
-        'employee_id',
         'join_date',
         'leave_date',
         'branch_id',
@@ -115,7 +114,7 @@ class UserController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
+        'branch_id' => ['required', 'uuid', 'exists:branches,id'],
 
         'name' => ['nullable', 'string', 'max:190'],
         'first_name' => ['required', 'string', 'max:80'],
@@ -135,7 +134,6 @@ class UserController extends BaseCrudApiController
         'join_date' => ['nullable', 'date'],
         'leave_date' => ['nullable', 'date', 'after_or_equal:join_date'],
 
-        'employee_id' => ['nullable', 'string', 'max:60'],
         'blood_group' => ['nullable', 'string', 'max:10'],
         'image' => ['nullable', 'string', 'max:255'],
 
@@ -154,7 +152,7 @@ class UserController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return [
-            'branch_id' => ['sometimes', 'nullable', 'uuid', 'exists:branches,id'],
+            'branch_id' => ['sometimes', 'required', 'uuid', 'exists:branches,id'],
 
             'name' => ['sometimes', 'nullable', 'string', 'max:190'],
             'first_name' => ['sometimes', 'required', 'string', 'max:80'],
@@ -188,7 +186,6 @@ class UserController extends BaseCrudApiController
             'join_date' => ['sometimes', 'nullable', 'date'],
             'leave_date' => ['sometimes', 'nullable', 'date', 'after_or_equal:join_date'],
 
-            'employee_id' => ['sometimes', 'nullable', 'string', 'max:60'],
             'blood_group' => ['sometimes', 'nullable', 'string', 'max:10'],
             'image' => ['sometimes', 'nullable', 'string', 'max:255'],
 
@@ -208,17 +205,27 @@ class UserController extends BaseCrudApiController
     protected function mutateParentDataBeforeCreate(array $parentData, array $nestedData): array
     {
         $this->pendingRoleId = $parentData['role_id'] ?? null;
+        $parentData['username'] = $this->usernameFromPayload($parentData);
         $parentData['name'] = $this->makeName($parentData);
 
-        if (!empty($parentData['password'])) {
-            $parentData['password'] = Hash::make($parentData['password']);
-        }
+        $parentData['password'] = Hash::make($parentData['password']);
 
         if (!array_key_exists('active', $parentData)) {
             $parentData['active'] = true;
         }
 
         return $parentData;
+    }
+
+    protected function prepareIncomingPayload(array $data): array
+    {
+        $data = parent::prepareIncomingPayload($data);
+
+        if (empty($data['username']) && !empty($data['email'])) {
+            $data['username'] = $this->usernameFromEmail((string) $data['email']);
+        }
+
+        return $data;
     }
 
     protected function mutateParentDataBeforeUpdate(
@@ -296,6 +303,23 @@ class UserController extends BaseCrudApiController
         return trim(
             ((string) ($data['first_name'] ?? '')) . ' ' . ((string) ($data['last_name'] ?? ''))
         );
+    }
+
+    private function usernameFromPayload(array $data): string
+    {
+        $username = trim((string) ($data['username'] ?? ''));
+
+        return $username !== ''
+            ? $username
+            : $this->usernameFromEmail((string) ($data['email'] ?? ''));
+    }
+
+    private function usernameFromEmail(string $email): string
+    {
+        $localPart = Str::before(trim($email), '@');
+        $username = Str::of($localPart)->lower()->replaceMatches('/[^a-z0-9._-]+/', '.')->trim('.-_')->toString();
+
+        return $username !== '' ? $username : 'user';
     }
 
     private mixed $pendingRoleId = false;

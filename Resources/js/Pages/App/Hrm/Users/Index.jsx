@@ -123,13 +123,22 @@ const getShiftName = (record) => {
   return record?.shift?.name || record?.shift_id_detail?.label || record?.shift_id_detail?.name || '-';
 };
 
-const renderEmailInput = ({ field, value, setFieldValue, readOnly }) => (
+const renderEmailInput = ({ field, value, values, setFieldValue, readOnly }) => (
   <Input
     type="email"
     value={value || ''}
     disabled={readOnly}
     placeholder={field.placeholder || ''}
-    onChange={(event) => setFieldValue(field.name, event.target.value)}
+    onChange={(event) => {
+      const nextEmail = event.target.value;
+      setFieldValue(field.name, nextEmail);
+
+      const currentUsername = String(values?.username || '').trim();
+      const localPart = String(nextEmail || '').split('@')[0]?.trim();
+      if (!currentUsername && localPart) {
+        setFieldValue('username', localPart);
+      }
+    }}
   />
 );
 
@@ -564,15 +573,6 @@ export default function Users(props) {
       },
     },
     {
-      title: 'Emp ID',
-      dataIndex: 'employee_id',
-      key: 'employee_id',
-      sorter: true,
-      backendSort: true,
-      width: 110,
-      render: (value) => (value ? <code style={{ fontSize: 11 }}>{value}</code> : '-'),
-    },
-    {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
@@ -727,8 +727,9 @@ export default function Users(props) {
           name: 'password',
           label: 'Password',
           type: 'custom',
+          required: true,
           col: 12,
-          placeholder: 'Leave blank while editing',
+          placeholder: 'Required for new users',
           render: renderPasswordInput,
         },
         fkField({
@@ -754,12 +755,6 @@ export default function Users(props) {
       accordion: false,
       children: [
         {
-          name: 'employee_id',
-          label: 'Employee ID',
-          type: 'text',
-          col: 12,
-        },
-        {
           name: 'join_date',
           label: 'Join Date',
           type: 'date',
@@ -775,7 +770,7 @@ export default function Users(props) {
           name: 'branch_id',
           label: 'Branch',
           url: '/api/branches',
-          required: false,
+          required: true,
         }),
         fkField({
           name: 'department_id',
@@ -824,9 +819,9 @@ export default function Users(props) {
     state: nullableString().max(80),
     zip_code: nullableString().max(40),
     country: nullableString().max(80),
-    employee_id: nullableString().max(60),
     join_date: nullableString(),
     leave_date: nullableString(),
+    branch_id: Yup.mixed().required('Branch is required'),
     employment_status_id: Yup.mixed().nullable(),
     department_id: Yup.mixed().nullable(),
     role_id: Yup.mixed().nullable(),
@@ -856,9 +851,9 @@ export default function Users(props) {
     role_id: null,
     active: true,
 
-    employee_id: '',
     join_date: '',
     leave_date: '',
+    branch_id: null,
     employment_status_id: null,
     department_id: null,
     shift_id: null,
@@ -878,7 +873,7 @@ export default function Users(props) {
     active: record?.active ?? true,
   });
 
-  const transformPayload = (values) => {
+  const transformPayload = (values, meta = {}) => {
     const payload = { ...values };
 
     Object.keys(payload).forEach((key) => {
@@ -893,7 +888,6 @@ export default function Users(props) {
       'username',
       'email',
       'phone',
-      'employee_id',
       'street',
       'city',
       'state',
@@ -905,9 +899,11 @@ export default function Users(props) {
       }
     });
 
-    if (!payload.password) {
+    if (meta?.isEditMode && !payload.password) {
       delete payload.password;
     }
+
+    delete payload.employee_id;
 
     payload.active = Boolean(payload.active);
 

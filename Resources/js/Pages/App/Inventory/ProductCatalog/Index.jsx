@@ -44,7 +44,7 @@ export default function ProductCatalog({ auth, initialTab = 'products' }) {
         label: (
           <Space size={6}>
             <BranchesOutlined />
-            <span>Variant Product</span>
+            <span>Variant Products</span>
           </Space>
         ),
       },
@@ -56,7 +56,7 @@ export default function ProductCatalog({ auth, initialTab = 'products' }) {
     setActiveTab(key);
 
     const url = new URL(window.location.href);
-    url.pathname = '/inventory/products';
+    url.pathname = key === 'services' ? '/inventory/services' : key === 'variant-products' ? '/inventory/variant-products' : '/inventory/products';
     url.searchParams.set('tab', key);
     window.history.replaceState({}, '', url.toString());
   };

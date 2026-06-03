@@ -11,7 +11,7 @@ class PrintingTemplateController extends BaseCrudApiController
 {
     protected string $modelClass = PrintingTemplate::class;
 
-    protected ?string $permissionPrefix = null;
+    protected ?string $permissionPrefix = 'printing_template';
 
     protected bool $usePolicyAuthorization = false;
 
@@ -55,6 +55,16 @@ class PrintingTemplateController extends BaseCrudApiController
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
+
+    public function store(Request $request)
+    {
+        abort(403, 'Printing templates are system-defined. Please edit an existing template.');
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        abort(403, 'System printing templates cannot be deleted.');
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {

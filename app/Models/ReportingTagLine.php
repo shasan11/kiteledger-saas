@@ -19,6 +19,7 @@ class ReportingTagLine extends Model
     protected $fillable = [
         'reporting_tag_id',
         'name',
+        'value',
         'color',
         'sort_order',
         'active',

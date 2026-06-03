@@ -56,7 +56,7 @@ class AiPermissionSeeder extends Seeder
 
         // Normal user roles get baseline AI use permissions
         $userBaseline = [
-            'ai.view', 'ai.use', 'ai.chat', 'ai.conversations.view',
+            'ai.view',
         ];
         foreach (['User', 'Standard User', 'Branch User', 'Staff'] as $roleName) {
             $role = Role::where('name', $roleName)->first();

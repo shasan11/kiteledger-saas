@@ -8,7 +8,6 @@ import {
     CreditCardOutlined,
     FileTextOutlined,
     HomeOutlined,
-    RobotOutlined,
     InboxOutlined,
     ProfileOutlined,
     ProjectOutlined,
@@ -91,16 +90,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
-            ...(['ai.view', 'ai.use', 'ai.chat', 'ai.manage'].some((p) => can(p))
-                ? [
-                      {
-                          key: 'ai-assistant',
-                          icon: <RobotOutlined />,
-                          label: 'Assistant',
-                          onClick: () => visit('ai.assistant', '/ai/assistant'),
-                      },
-                  ]
-                : []),
             ...(can('document_upload.view')
                 ? [
                       {
@@ -535,6 +524,24 @@ export default function AuthenticatedLayout({ header, children }) {
                             ),
                     },
                     {
+                        key: 'inventory-services',
+                        label: 'Services',
+                        onClick: () =>
+                            visit(
+                                'inventory.services.index',
+                                '/inventory/services',
+                            ),
+                    },
+                    {
+                        key: 'inventory-variant-products',
+                        label: 'Variant Products',
+                        onClick: () =>
+                            visit(
+                                'inventory.variant-products.index',
+                                '/inventory/variant-products',
+                            ),
+                    },
+                    {
                         key: 'inventory-variant-attributes',
                         label: 'Variant Attributes',
                         onClick: () =>
@@ -707,7 +714,6 @@ export default function AuthenticatedLayout({ header, children }) {
     const selectedKeys = useMemo(() => {
         if (isActive('/dashboard')) return ['home'];
 
-        if (isActive('/ai/assistant')) return ['ai-assistant'];
         if (isActive('/documents/upload')) return ['ai-document-upload'];
 
         if (isActive('/pos')) return ['pos'];

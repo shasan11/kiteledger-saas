@@ -4,7 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Email;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class EmailController extends BaseCrudApiController
 {
@@ -68,5 +73,100 @@ class EmailController extends BaseCrudApiController
             'active'         => ['sometimes', 'nullable', 'boolean'],
             'user_add_id'    => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    public function sendDocumentEmail(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'to' => ['required', 'string', 'max:2000'],
+            'cc' => ['nullable', 'string', 'max:2000'],
+            'bcc' => ['nullable', 'string', 'max:2000'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['required', 'string', 'max:10000'],
+            'attachment' => ['required', 'file', 'mimes:pdf', 'max:10240'],
+        ]);
+
+        $to = $this->parseEmailList($validated['to']);
+        $cc = $this->parseEmailList($validated['cc'] ?? '');
+        $bcc = $this->parseEmailList($validated['bcc'] ?? '');
+
+        if ($to === []) {
+            throw ValidationException::withMessages([
+                'to' => ['At least one valid recipient email is required.'],
+            ]);
+        }
+
+        $attachment = $request->file('attachment');
+        $attachmentName = Str::of($attachment->getClientOriginalName() ?: 'document.pdf')
+            ->replaceMatches('/[^\w.\- ]+/', '_')
+            ->trim()
+            ->toString();
+
+        $attachmentName = $attachmentName !== '' ? $attachmentName : 'document.pdf';
+        $body = nl2br(e($validated['body']));
+
+        Mail::html($body, function ($message) use ($to, $cc, $bcc, $validated, $attachment, $attachmentName) {
+            $message->to($to)->subject($validated['subject']);
+
+            if ($cc !== []) {
+                $message->cc($cc);
+            }
+
+            if ($bcc !== []) {
+                $message->bcc($bcc);
+            }
+
+            $message->attach($attachment->getRealPath(), [
+                'as' => $attachmentName,
+                'mime' => 'application/pdf',
+            ]);
+        });
+
+        foreach (array_keys($to) as $recipient) {
+            Email::query()->create([
+                'sender_email' => config('mail.from.address') ?: 'system@localhost',
+                'receiver_email' => $recipient,
+                'subject' => $validated['subject'],
+                'body' => $validated['body'],
+                'email_status' => 'SENT',
+                'active' => true,
+                'user_add_id' => auth()->id(),
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Email sent successfully.',
+            'recipients' => count($to),
+        ]);
+    }
+
+    private function parseEmailList(?string $value): array
+    {
+        return collect(preg_split('/[,;]+/', (string) $value) ?: [])
+            ->map(fn ($item) => trim($item))
+            ->filter()
+            ->map(function (string $item) {
+                if (preg_match('/^(.*?)<([^>]+)>$/', $item, $matches)) {
+                    return [
+                        'name' => trim($matches[1], " \t\n\r\0\x0B\"'"),
+                        'address' => trim($matches[2]),
+                    ];
+                }
+
+                return ['address' => $item];
+            })
+            ->filter(function (array $recipient) {
+                return Validator::make(
+                    ['email' => $recipient['address'] ?? null],
+                    ['email' => ['required', 'email']]
+                )->passes();
+            })
+            ->mapWithKeys(function (array $recipient) {
+                $address = $recipient['address'];
+                $name = $recipient['name'] ?? null;
+
+                return [$address => $name ?: null];
+            })
+            ->all();
     }
 }

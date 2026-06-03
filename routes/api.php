@@ -10,9 +10,9 @@ use App\Http\Controllers\Api\Documents\DocumentEntityMatchController;
 use App\Http\Controllers\Api\Documents\DocumentExtractionController;
 use App\Http\Controllers\Api\Documents\DocumentProposalController;
 use App\Http\Controllers\Api\Documents\DocumentUploadController;
-use App\Http\Controllers\Api\AI\AiAssistantController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
 use App\Http\Controllers\Api\AI\AiUsageLogController;
+use App\Http\Controllers\Api\Reports\ReportAiSummaryController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -158,6 +158,9 @@ Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearc
 Route::middleware(['web', 'auth', 'verified'])->post('business-rules/validate', BusinessRuleValidationController::class)
     ->name('api.business-rules.validate');
 
+Route::middleware(['web', 'auth', 'verified'])->post('utils/send-document-email', [EmailController::class, 'sendDocumentEmail'])
+    ->name('api.utils.send-document-email');
+
 Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api.app.context.')->group(function () {
     Route::get('/', [AppContextController::class, 'show'])->name('show');
     Route::post('/branch', [AppContextController::class, 'setBranch'])->name('branch');
@@ -228,26 +231,29 @@ Route::apiResource('fiscal-years', FiscalYearController::class);
 
 Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
 Route::apiResource('email-templates', EmailTemplateController::class);
-Route::post('sms/send-test', [SmsUtilityController::class, 'sendTest']);
-Route::post('sms/preview-template', [SmsUtilityController::class, 'previewTemplate']);
-Route::post('sms/validate-phone', [SmsUtilityController::class, 'validatePhone']);
-Route::get('sms-configs/summary', [SmsConfigController::class, 'summary']);
-Route::post('sms-configs/{id}/set-default', [SmsConfigController::class, 'setDefault']);
-Route::post('sms-configs/{id}/test', [SmsConfigController::class, 'testSend']);
-Route::post('sms-configs/{id}/test-send', [SmsConfigController::class, 'testSend']);
-Route::post('sms-configs/{id}/activate', [SmsConfigController::class, 'activate']);
-Route::post('sms-configs/{id}/deactivate', [SmsConfigController::class, 'deactivate']);
-Route::apiResource('sms-configs', SmsConfigController::class)->parameters(['sms-configs' => 'smsConfig']);
-Route::post('sms-templates/preview', [SmsTemplateController::class, 'preview']);
-Route::apiResource('sms-templates', SmsTemplateController::class);
-Route::get('sms-logs/export', [SmsLogController::class, 'export']);
-Route::post('sms-logs/bulk-retry', [SmsLogController::class, 'bulkRetry']);
-Route::post('sms-logs/{id}/retry', [SmsLogController::class, 'retry']);
-Route::apiResource('sms-logs', SmsLogController::class)->only(['index', 'show']);
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::post('sms/send-test', [SmsUtilityController::class, 'sendTest']);
+    Route::post('sms/preview-template', [SmsUtilityController::class, 'previewTemplate']);
+    Route::post('sms/validate-phone', [SmsUtilityController::class, 'validatePhone']);
+    Route::get('sms-configs/summary', [SmsConfigController::class, 'summary']);
+    Route::post('sms-configs/{id}/set-default', [SmsConfigController::class, 'setDefault']);
+    Route::post('sms-configs/{id}/test', [SmsConfigController::class, 'testSend']);
+    Route::post('sms-configs/{id}/test-send', [SmsConfigController::class, 'testSend']);
+    Route::post('sms-configs/{id}/activate', [SmsConfigController::class, 'activate']);
+    Route::post('sms-configs/{id}/deactivate', [SmsConfigController::class, 'deactivate']);
+    Route::apiResource('sms-configs', SmsConfigController::class)->parameters(['sms-configs' => 'smsConfig']);
+    Route::post('sms-templates/preview', [SmsTemplateController::class, 'preview']);
+    Route::apiResource('sms-templates', SmsTemplateController::class);
+    Route::get('sms-logs/export', [SmsLogController::class, 'export']);
+    Route::post('sms-logs/bulk-retry', [SmsLogController::class, 'bulkRetry']);
+    Route::post('sms-logs/{id}/retry', [SmsLogController::class, 'retry']);
+    Route::apiResource('sms-logs', SmsLogController::class)->only(['index', 'show']);
+});
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('reports/registry', [ReportRegistryController::class, 'registry']);
     Route::post('reports/soft-query', [ReportRegistryController::class, 'softQueryEndpoint']);
+    Route::post('reports/summarize', [ReportAiSummaryController::class, 'summarize']);
     Route::get('reports/options/{type}', [ReportRegistryController::class, 'options'])
         ->where('type', '[a-z0-9\-]+');
     Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
@@ -1019,9 +1025,6 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::apiResource('crm-campaigns', CrmCampaignController::class)
         ->parameters(['crm-campaigns' => 'crmCampaign']);
 
-    Route::post('sms-configs/{id}/test-send', [\App\Http\Controllers\Api\SmsConfigController::class, 'testSend']);
-    Route::apiResource('sms-configs', \App\Http\Controllers\Api\SmsConfigController::class)
-        ->parameters(['sms-configs' => 'smsConfig']);
 });
 
 Route::post('crm-sequences/bulk', [CrmSequenceController::class, 'bulkStore']);
@@ -1144,17 +1147,8 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 |--------------------------------------------------------------------------
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
-    // -----------------------------------------------------------------
-    // AI Assistant (canonical chat + settings)
-    // -----------------------------------------------------------------
-    Route::get('health',                                [AiAssistantController::class, 'health']);
-    Route::post('chat',                                 [AiAssistantController::class, 'chat']);
-    Route::post('chat/stream',                          [AiAssistantController::class, 'stream']);
-    Route::get('conversations',                         [AiAssistantController::class, 'conversations']);
-    Route::get('conversations/{conversation}',          [AiAssistantController::class, 'showConversation']);
-    Route::delete('conversations/{conversation}',       [AiAssistantController::class, 'deleteConversation']);
-    Route::post('report-summary',                       [AiAssistantController::class, 'reportSummary']);
-    Route::post('business-insight',                     [AiAssistantController::class, 'businessInsight']);
+    // Focused AI report summarizer and settings.
+    Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize']);
 
     // Settings (DB-backed via GeneralSetting group=ai)
     Route::get('settings',                              [AiSettingsController::class, 'show']);

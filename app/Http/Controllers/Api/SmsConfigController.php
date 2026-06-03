@@ -26,6 +26,29 @@ class SmsConfigController extends BaseCrudApiController
     protected array $sortable = ['id', 'name', 'provider', 'active', 'is_active', 'is_default', 'created_at', 'updated_at'];
     protected string $defaultSort = '-created_at';
 
+    public function index(Request $request)
+    {
+        $this->ensureDefaultTwilioConfig();
+
+        return parent::index($request);
+    }
+
+    public function store(Request $request)
+    {
+        $this->ensureDefaultTwilioConfig();
+
+        return response()->json([
+            'message' => 'SMS provider creation is disabled. Edit the default Twilio configuration instead.',
+        ], 405);
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        return response()->json([
+            'message' => 'SMS provider deletion is disabled. Edit the default Twilio configuration instead.',
+        ], 405);
+    }
+
     protected array $storeRules = [
         'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'name' => ['required', 'string', 'max:120'],
@@ -76,6 +99,9 @@ class SmsConfigController extends BaseCrudApiController
     protected function mutateParentDataBeforeUpdate(array $parentData, array $nestedData, Model $record): array
     {
         $parentData = $this->stripBlankSecrets($parentData);
+        $parentData['name'] = 'Twilio';
+        $parentData['provider'] = SmsConfig::PROVIDER_TWILIO;
+        $parentData['is_default'] = true;
         $parentData['updated_by'] = auth()->id();
 
         return $parentData;
@@ -167,6 +193,7 @@ class SmsConfigController extends BaseCrudApiController
     public function summary(): JsonResponse
     {
         $this->checkAccess(request(), 'index');
+        $this->ensureDefaultTwilioConfig();
 
         return response()->json([
             'total_configs' => SmsConfig::query()->count(),
@@ -211,6 +238,45 @@ class SmsConfigController extends BaseCrudApiController
         }
 
         return $data;
+    }
+
+    private function ensureDefaultTwilioConfig(): SmsConfig
+    {
+        $config = SmsConfig::query()
+            ->where('provider', SmsConfig::PROVIDER_TWILIO)
+            ->orderByDesc('is_default')
+            ->orderBy('created_at')
+            ->first();
+
+        if (!$config) {
+            $config = SmsConfig::query()->create([
+                'name' => 'Twilio',
+                'provider' => SmsConfig::PROVIDER_TWILIO,
+                'sender_id' => 'Twilio',
+                'test_message' => 'KiteLedger SMS test message.',
+                'active' => true,
+                'is_active' => true,
+                'is_default' => true,
+                'is_system_generated' => true,
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+                'user_add_id' => auth()->id(),
+            ]);
+        }
+
+        SmsConfig::query()
+            ->where('id', '!=', $config->id)
+            ->update(['is_default' => false]);
+
+        if (!$config->is_default || $config->provider !== SmsConfig::PROVIDER_TWILIO || $config->name !== 'Twilio') {
+            $config->forceFill([
+                'name' => 'Twilio',
+                'provider' => SmsConfig::PROVIDER_TWILIO,
+                'is_default' => true,
+            ])->save();
+        }
+
+        return $config->refresh();
     }
 
     private function withProviderRules(array $rules, Request $request, bool $partial = false): array

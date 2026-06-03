@@ -6,7 +6,6 @@ import {
     Button,
     Card,
     Col,
-    Divider,
     Form,
     Input,
     InputNumber,
@@ -47,8 +46,8 @@ const SAFE_DEFAULTS = {
     ai_provider: 'openai',
     ai_model: 'gpt-4o-mini',
     ai_base_url: 'https://api.openai.com/v1',
-    ai_temperature: 0.2,
-    ai_max_tokens: 500,
+    ai_temperature: 0.1,
+    ai_max_tokens: 900,
     ai_timeout_seconds: 180,
     ai_connect_timeout_seconds: 15,
     ai_stream_enabled: false,
@@ -56,18 +55,18 @@ const SAFE_DEFAULTS = {
     ai_cache_ttl: 600,
     ai_context_max_rows: 15,
     ai_context_max_chars: 5000,
-    ai_fast_mode: true,
+    ai_fast_mode: false,
     ai_default_financial_date_scope: 'current_fiscal_year',
     ai_allow_developer_details: false,
-    ai_financial_assistant_enabled: true,
-    ai_document_assistant_enabled: true,
-    ai_write_actions_enabled: true,
+    ai_financial_assistant_enabled: false,
+    ai_document_assistant_enabled: false,
+    ai_write_actions_enabled: false,
     ai_fallback_provider: '',
 };
 
 function hasAnyPermission(perms = [], required = []) {
     if (!Array.isArray(perms)) return false;
-    return required.some((r) => perms.includes(r));
+    return required.some((permission) => perms.includes(permission));
 }
 
 function extractApiError(err, fallback) {
@@ -116,7 +115,7 @@ export default function AiSettings() {
     useEffect(() => {
         if (!canView) {
             setLoading(false);
-            return;
+            return undefined;
         }
 
         let mounted = true;
@@ -130,6 +129,7 @@ export default function AiSettings() {
                     ...SAFE_DEFAULTS,
                     ...res.data.settings,
                     ai_api_key: '',
+                    ai_context_max_rows: Math.min(50, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
                 });
             })
             .catch((err) => {
@@ -158,11 +158,25 @@ export default function AiSettings() {
     };
 
     const cleanPayload = (values) => {
-        const payload = { ...values };
+        const payload = {
+            ...SAFE_DEFAULTS,
+            ...values,
+            ai_temperature: 0.1,
+            ai_stream_enabled: false,
+            ai_fast_mode: false,
+            ai_context_max_chars: 5000,
+            ai_financial_assistant_enabled: false,
+            ai_document_assistant_enabled: false,
+            ai_write_actions_enabled: false,
+            ai_allow_developer_details: false,
+            ai_fallback_provider: '',
+        };
 
         if (!payload.ai_api_key || String(payload.ai_api_key).trim() === '') {
             delete payload.ai_api_key;
         }
+
+        payload.ai_context_max_rows = Math.min(50, Number(payload.ai_context_max_rows || 15));
 
         return payload;
     };
@@ -180,9 +194,10 @@ export default function AiSettings() {
             ...SAFE_DEFAULTS,
             ...res.data.settings,
             ai_api_key: '',
+            ai_context_max_rows: Math.min(50, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
         });
 
-        if (showMessage) antMessage.success('AI settings saved.');
+        if (showMessage) antMessage.success('AI report summarizer settings saved.');
         return res.data.settings;
     };
 
@@ -215,7 +230,7 @@ export default function AiSettings() {
         });
 
         setTestResult(null);
-        antMessage.info('Recommended defaults loaded. Save to apply.');
+        antMessage.info('Recommended report summarizer defaults loaded. Save to apply.');
     };
 
     const test = async () => {
@@ -264,7 +279,7 @@ export default function AiSettings() {
                 {loading ? <Spin /> : error ? (
                     <Alert type="error" showIcon message={error} />
                 ) : (
-                    <Card size="small">
+                    <Card size="small" title="AI Report Summarizer">
                         <Form
                             form={form}
                             layout="vertical"
@@ -276,17 +291,7 @@ export default function AiSettings() {
                         >
                             <Row gutter={16}>
                                 <Col xs={24} md={8}>
-                                    <Form.Item name="ai_enabled" label="Enable AI" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={8}>
-                                    <Form.Item name="ai_stream_enabled" label="Enable Streaming" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={8}>
-                                    <Form.Item name="ai_fast_mode" label="Fast Mode" valuePropName="checked">
+                                    <Form.Item name="ai_enabled" label="Enable Report Summarizer" valuePropName="checked">
                                         <Switch />
                                     </Form.Item>
                                 </Col>
@@ -316,7 +321,7 @@ export default function AiSettings() {
                             </Row>
 
                             <Form.Item
-                                label={
+                                label={(
                                     <Space wrap>
                                         API Key
                                         {data?.settings?.ai_has_api_key && (
@@ -324,104 +329,45 @@ export default function AiSettings() {
                                         )}
                                         {currentProvider === 'ollama' && <Tag>Not required</Tag>}
                                     </Space>
-                                }
+                                )}
                                 name="ai_api_key"
-                                extra="Leave blank to keep the existing saved key. Save & Test will save the current form first, then test the saved settings."
+                                extra="Leave blank to keep the existing saved key. Save & Test saves the form first, then tests the saved settings."
                             >
                                 <Input.Password placeholder={PROVIDER_KEY_PLACEHOLDERS[currentProvider] || 'Provider key'} autoComplete="new-password" />
                             </Form.Item>
 
-                            <Divider>Generation</Divider>
                             <Row gutter={16}>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_temperature" label="Temperature">
-                                        <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={6}>
+                                <Col xs={24} md={8}>
                                     <Form.Item name="ai_max_tokens" label="Max Tokens">
-                                        <InputNumber min={50} max={32000} step={50} style={{ width: '100%' }} />
+                                        <InputNumber min={50} max={1200} step={50} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_timeout_seconds" label="Timeout (s)" extra="Use 120–180s for cloud providers; local Ollama may need longer.">
+                                <Col xs={24} md={8}>
+                                    <Form.Item name="ai_timeout_seconds" label="Timeout (s)">
                                         <InputNumber min={5} max={600} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_connect_timeout_seconds" label="Connect Timeout (s)">
-                                        <InputNumber min={2} max={60} style={{ width: '100%' }} />
+                                <Col xs={24} md={8}>
+                                    <Form.Item name="ai_context_max_rows" label="Max Report Rows for Summary">
+                                        <InputNumber min={1} max={50} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
                             </Row>
 
-                            <Divider>Caching & Context</Divider>
                             <Row gutter={16}>
-                                <Col xs={24} md={6}>
+                                <Col xs={24} md={8}>
                                     <Form.Item name="ai_cache_enabled" label="Enable Cache" valuePropName="checked">
                                         <Switch />
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} md={6}>
+                                <Col xs={24} md={8}>
                                     <Form.Item name="ai_cache_ttl" label="Cache TTL (s)">
                                         <InputNumber min={30} max={86400} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_context_max_rows" label="Maximum rows used in answers">
-                                        <InputNumber min={1} max={500} style={{ width: '100%' }} />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_context_max_chars" label="Maximum answer context size">
-                                        <InputNumber min={500} max={200000} step={500} style={{ width: '100%' }} />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-
-                            <Divider>Assistant Safety</Divider>
-                            <Row gutter={16}>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_financial_assistant_enabled" label="Financial assistant" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_document_assistant_enabled" label="Document assistant" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_write_actions_enabled" label="Prepare write actions" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={6}>
-                                    <Form.Item name="ai_allow_developer_details" label="Show developer details" valuePropName="checked">
-                                        <Switch />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-                            <Row gutter={16}>
-                                <Col xs={24} md={12}>
-                                    <Form.Item name="ai_default_financial_date_scope" label="Default financial date range">
-                                        <Select
-                                            options={[
-                                                { value: 'current_fiscal_year', label: 'Current fiscal year' },
-                                                { value: 'this_month', label: 'This month' },
-                                                { value: 'last_30_days', label: 'Last 30 days' },
-                                            ]}
-                                        />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={12}>
-                                    <Form.Item name="ai_fallback_provider" label="Fallback provider">
-                                        <Select
-                                            options={[
-                                                { value: '', label: 'None' },
-                                                ...providerOptions,
-                                            ]}
-                                        />
+                                <Col xs={24} md={8}>
+                                    <Form.Item name="ai_connect_timeout_seconds" label="Connect Timeout (s)">
+                                        <InputNumber min={2} max={60} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
                             </Row>
@@ -449,7 +395,7 @@ export default function AiSettings() {
                                     Reset Recommended Defaults
                                 </Button>
                                 {!canManage && (
-                                    <Text type="secondary">Read-only — you do not have permission to edit AI settings.</Text>
+                                    <Text type="secondary">Read-only - you do not have permission to edit AI settings.</Text>
                                 )}
                             </Space>
                         </Form>

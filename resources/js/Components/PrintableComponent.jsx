@@ -90,9 +90,9 @@ function resolveDefaultEmailApiUrl(customUrl) {
     import.meta.env.VITE_APP_BACKEND_URL || ""
   );
 
-  if (!backendUrl) return "";
+  if (!backendUrl) return "/api/utils/send-document-email";
 
-  return `${backendUrl}/api/utils/send-document-email/`;
+  return `${backendUrl}/api/utils/send-document-email`;
 }
 
 function resolveAuthToken(customToken) {
@@ -108,9 +108,16 @@ function resolveAuthToken(customToken) {
 
 function buildEmailHeaders({ emailApiHeaders, emailAuthToken }) {
   const headers = { ...(emailApiHeaders || {}) };
+  const csrfToken = document
+    .querySelector('meta[name="csrf-token"]')
+    ?.getAttribute("content");
 
   if (!headers.Authorization && !headers.authorization && emailAuthToken) {
     headers.Authorization = `Bearer ${emailAuthToken}`;
+  }
+
+  if (csrfToken && !headers["X-CSRF-TOKEN"] && !headers["x-csrf-token"]) {
+    headers["X-CSRF-TOKEN"] = csrfToken;
   }
 
   // Let browser set multipart boundary automatically
@@ -177,6 +184,10 @@ async function parseErrorResponse(response) {
 
     if (typeof data?.error === "string" && data.error) {
       throw new Error(data.error);
+    }
+
+    if (typeof data?.message === "string" && data.message) {
+      throw new Error(data.message);
     }
 
     if (data && typeof data === "object") {
@@ -579,6 +590,7 @@ const PrintablePdfEmailWrapper = forwardRef(function PrintablePdfEmailWrapper(
       const response = await fetch(resolvedEmailApiUrl, {
         method: emailApiMethod,
         headers: resolvedEmailHeaders,
+        credentials: "include",
         body: formData,
       });
 

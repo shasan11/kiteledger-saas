@@ -11,6 +11,7 @@ class AiPermissionService
         'ai.view',
         'ai.use',
         'ai.chat',
+        'reports.ai_summary',
         'ai.report_summary',
         'ai.business_insight',
         'ai.conversations.view',
@@ -81,7 +82,7 @@ class AiPermissionService
 
     public function canSummarizeReports(?User $user): bool
     {
-        return $this->hasAny($user, ['ai.report_summary', 'ai.use', 'ai.manage']);
+        return $this->hasAny($user, ['reports.ai_summary', 'ai.report_summary', 'ai.manage']);
     }
 
     public function canBusinessInsight(?User $user): bool
@@ -93,7 +94,7 @@ class AiPermissionService
     {
         if (!$this->has($user, $permission)) {
             throw new HttpException(403, json_encode([
-                'message' => 'You do not have permission to use AI Assistant.',
+                'message' => 'You do not have permission to use AI report summaries.',
                 'code' => 'AI_PERMISSION_DENIED',
                 'required_permission' => $permission,
             ]));
@@ -104,7 +105,7 @@ class AiPermissionService
     {
         if (!$this->hasAny($user, $permissions)) {
             throw new HttpException(403, json_encode([
-                'message' => 'You do not have permission to use AI Assistant.',
+                'message' => 'You do not have permission to use AI report summaries.',
                 'code' => 'AI_PERMISSION_DENIED',
                 'required_permission' => $required,
             ]));

@@ -1,5 +1,6 @@
-import { Badge, Select, Space, Tooltip } from 'antd';
-import { useMemo } from 'react';
+import { CalendarOutlined } from '@ant-design/icons';
+import { Badge, Button, Modal, Select, Space, Tooltip, message } from 'antd';
+import { useMemo, useState } from 'react';
 
 import { useAppContext } from '@/Contexts/AppContext';
 
@@ -13,6 +14,8 @@ export default function FiscalYearToggle({ className, style }) {
         loading,
         setFiscalYear,
     } = useAppContext();
+    const [open, setOpen] = useState(false);
+    const [selected, setSelected] = useState(currentFiscalYearId);
 
     const options = useMemo(
         () =>
@@ -27,6 +30,13 @@ export default function FiscalYearToggle({ className, style }) {
         return null;
     }
 
+    const current = options.find((option) => option.value === currentFiscalYearId) || options[0];
+    const apply = async () => {
+        await setFiscalYear(selected || current?.value);
+        setOpen(false);
+        message.success('Fiscal year changed successfully.');
+    };
+
     const badge = fiscal_year_locked
         ? 'locked'
         : fiscal_year_expired
@@ -34,21 +44,21 @@ export default function FiscalYearToggle({ className, style }) {
           : currentFiscalYear?.status?.toLowerCase?.();
 
     return (
-        <Tooltip title="Financial year context">
+        <>
             <Space size={6} style={{ flexShrink: 0 }}>
-                <Select
-                    size="middle"
-                    value={currentFiscalYearId || options[0]?.value}
-                    onChange={setFiscalYear}
-                    colorBgContainer
-                    options={options}
-                    loading={loading}
-                    className={className}
-                    popupClassName="app-dark-select-dropdown"
-                    classNames="app-dark-select app-navbar__mobile-context-select"
-                    popupMatchSelectWidth={190}
-                    style={style}
-                />
+                <Tooltip title={`Fiscal Year: ${current?.label || 'Fiscal Year'}`}>
+                    <Button
+                        type="text"
+                        icon={<CalendarOutlined />}
+                        className={className}
+                        style={style}
+                        onClick={() => {
+                            setSelected(currentFiscalYearId || options[0]?.value);
+                            setOpen(true);
+                        }}
+                        aria-label="Change fiscal year"
+                    />
+                </Tooltip>
                 {(fiscal_year_locked || fiscal_year_expired) && (
                     <Badge
                         color={fiscal_year_locked ? 'red' : 'gold'}
@@ -57,6 +67,22 @@ export default function FiscalYearToggle({ className, style }) {
                     />
                 )}
             </Space>
-        </Tooltip>
+            <Modal
+                title="Change Fiscal Year"
+                open={open}
+                onCancel={() => setOpen(false)}
+                onOk={apply}
+                okText="Apply"
+                confirmLoading={loading}
+            >
+                <Select
+                    value={selected || currentFiscalYearId || options[0]?.value}
+                    onChange={setSelected}
+                    options={options}
+                    loading={loading}
+                    style={{ width: '100%' }}
+                />
+            </Modal>
+        </>
     );
 }

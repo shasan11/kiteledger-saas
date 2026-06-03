@@ -35,6 +35,8 @@ class JournalVoucherController extends BaseCrudApiController
         'approvedBy',
         'items',
         'items.account',
+        'items.account.chartOfAccount',
+        'items.chartOfAccount',
     ];
 
     protected array $relationDetails = [
@@ -152,6 +154,8 @@ class JournalVoucherController extends BaseCrudApiController
 
             'relations' => [
                 'account',
+                'account.chartOfAccount',
+                'chartOfAccount',
             ],
 
             'relation_details' => [

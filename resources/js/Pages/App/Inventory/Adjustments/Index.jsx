@@ -8,6 +8,8 @@ import axios from 'axios';
 import dayjs from 'dayjs';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { branchColumn } from '@/Components/Transactions';
+import { useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { currencySymbolOf, moneyWithSymbol } from '@/Components/Transactions/transactionCalculations.js';
 
 const { Text } = Typography;
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -17,6 +19,8 @@ const statusColor = (s) => ({ draft: 'default', posted: 'green', cancelled: 'red
 
 export default function AdjustmentsIndex(props) {
     const [voidState, setVoidState] = useState({ open: false, reason: '', loading: false, ctx: null });
+    const baseCurrency = useBaseCurrency(true);
+    const baseCurrencySymbol = currencySymbolOf(baseCurrency);
 
     const columns = useMemo(() => [
         { title: 'Adjustment No', dataIndex: 'adjustment_no', key: 'adjustment_no', sorter: true, width: 140, render: (_, r) => <Text strong>{displayDocumentNumber(r, r?.inventory_adjustment_no ? 'inventory_adjustment_no' : 'adjustment_no')}</Text> },
@@ -24,9 +28,10 @@ export default function AdjustmentsIndex(props) {
         { title: 'Date', dataIndex: 'adjustment_date', key: 'adjustment_date', sorter: true, width: 120, render: displayDate },
         { title: 'Warehouse', dataIndex: 'warehouse', key: 'warehouse', render: (_, r) => r?.warehouse?.name || r?.warehouse_name || '-' },
         { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (v) => v || '-' },
+        { title: 'Total Value', dataIndex: 'total', key: 'total', sorter: true, align: 'right', width: 140, render: (v) => moneyWithSymbol(v, baseCurrencySymbol) },
         { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={statusColor(v)} style={{ textTransform: 'capitalize' }}>{v || 'draft'}</Tag> },
         { title: 'Stock Posting', dataIndex: 'stock_posting_status', key: 'stock_posting_status', width: 190, render: (v, r) => <Tag color={r?.stock_posted ? 'green' : r?.status === 'cancelled' ? 'red' : 'default'}>{v || 'Draft'}</Tag> },
-    ], []);
+    ], [baseCurrencySymbol]);
 
     const rowMenu = useMemo(() => [
         {

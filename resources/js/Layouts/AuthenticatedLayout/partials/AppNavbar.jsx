@@ -15,7 +15,6 @@ import {
     Dropdown,
     Grid,
     Layout,
-    Switch,
     theme,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -80,9 +79,6 @@ export default function AppNavbar({
 
     const logoWidth = isMobile ? 118 : isTablet ? 132 : isLaptop ? 140 : 152;
 
-    const branchToggleWidth = isTablet ? 150 : isLaptop ? 170 : 190;
-    const fiscalYearToggleWidth = isTablet ? 128 : isLaptop ? 138 : 150;
-
     useEffect(() => {
         let mounted = true;
 
@@ -139,8 +135,8 @@ export default function AppNavbar({
         };
     }, [brandSettings?.brand_primary_color, token.colorPrimary]);
 
-    const toggleThemeMode = (checked) => {
-        const nextMode = checked ? 'dark' : 'light';
+    const toggleThemeMode = () => {
+        const nextMode = isDarkMode ? 'light' : 'dark';
 
         setThemeMode(nextMode);
         localStorage.setItem('themeMode', nextMode);
@@ -201,9 +197,9 @@ export default function AppNavbar({
 
                         {!isMobile && (
                             <BranchToggle
-                                className="app-dark-select app-navbar__branch"
+                                className="app-navbar__icon-button app-navbar__context-button"
                                 style={{
-                                    width: branchToggleWidth,
+                                    width: controlHeight,
                                     height: controlHeight,
                                 }}
                             />
@@ -226,9 +222,9 @@ export default function AppNavbar({
                     <div className="app-navbar__right">
                         {!isMobile && (
                             <FiscalYearToggle
-                                className="app-dark-select app-navbar__fiscal"
+                                className="app-navbar__icon-button app-navbar__context-button"
                                 style={{
-                                    width: fiscalYearToggleWidth,
+                                    width: controlHeight,
                                     height: controlHeight,
                                 }}
                             />
@@ -254,13 +250,12 @@ export default function AppNavbar({
 
                         {!isMobile && (
                             <>
-                                <Switch
-                                    checked={isDarkMode}
-                                    checkedChildren={<MoonOutlined />}
-                                    unCheckedChildren={<SunOutlined />}
-                                    onChange={toggleThemeMode}
+                                <Button
+                                    type="text"
+                                    icon={isDarkMode ? <MoonOutlined /> : <SunOutlined />}
+                                    onClick={toggleThemeMode}
                                     aria-label="Toggle between light and dark mode"
-                                    className="app-navbar__theme-switch"
+                                    className="app-navbar__icon-button app-navbar__theme-switch"
                                 />
 
                             </>
@@ -371,54 +366,16 @@ export default function AppNavbar({
                         box-shadow: none;
                     }
 
+                    .app-navbar__context-button,
                     .app-navbar__theme-switch {
-                        flex: 0 0 auto;
-                        transform: scale(0.94);
+                        color: var(--app-text-secondary) !important;
                     }
 
-                    .app-dark-select {
-                        min-width: 0;
-                    }
-
-                    .app-dark-select .ant-select-selector {
-                        height: var(--app-control-height) !important;
-                        background: var(--app-nav-soft) !important;
-                        border-color: transparent !important;
-                        border-radius: var(--app-radius) !important;
+                    .app-navbar__context-button:hover,
+                    .app-navbar__theme-switch:hover {
                         color: var(--app-text) !important;
-                        display: flex;
-                        align-items: center;
-                        box-shadow: none !important;
-                        padding-inline: 12px !important;
-                    }
-
-                    .app-dark-select:hover .ant-select-selector,
-                    .app-dark-select.ant-select-focused .ant-select-selector {
                         background: var(--app-nav-elevated) !important;
                         border-color: var(--app-border-strong) !important;
-                    }
-
-                    .app-dark-select .ant-select-selection-search-input {
-                        height: var(--app-control-height) !important;
-                        color: var(--app-text) !important;
-                    }
-
-                    .app-dark-select .ant-select-selection-placeholder {
-                        color: var(--app-text-muted) !important;
-                    }
-
-                    .app-dark-select .ant-select-selection-item {
-                        color: var(--app-text) !important;
-                        font-size: 13px;
-                        font-weight: 600;
-                        line-height: var(--app-control-height) !important;
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                    }
-
-                    .app-dark-select .ant-select-arrow {
-                        color: var(--app-text-muted) !important;
                     }
 
                     .app-navbar__search,

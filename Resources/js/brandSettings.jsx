@@ -18,16 +18,28 @@ export const api = (path = '') => {
 export const resolveMediaUrl = (url) => {
   if (!url) return null;
 
+  const value = String(url).trim();
+
   if (
-    url.startsWith('http://') ||
-    url.startsWith('https://') ||
-    url.startsWith('data:') ||
-    url.startsWith('blob:')
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('data:') ||
+    value.startsWith('blob:')
   ) {
-    return url;
+    return value;
   }
 
-  return api(url.startsWith('/') ? url : `/${url}`);
+  let path = value.replace(/^\/+/, '');
+
+  if (path.startsWith('public/')) {
+    path = path.slice('public/'.length);
+  }
+
+  if (!path.startsWith('storage/') && !path.startsWith('build/') && !path.startsWith('images/')) {
+    path = `storage/${path}`;
+  }
+
+  return api(`/${path}`);
 };
 
 export const getStoredBrandSettings = () => {

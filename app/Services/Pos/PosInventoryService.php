@@ -6,7 +6,6 @@ use App\Models\PosSale;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\WarehouseItem;
-use App\Services\Settings\DatabaseSettingService;
 use InvalidArgumentException;
 
 class PosInventoryService
@@ -36,31 +35,7 @@ class PosInventoryService
         }
 
         $available = $this->availableStock($productId, $warehouseId);
-        $settings = app(DatabaseSettingService::class);
-        $allowZeroStock = $settings->bool('allow_zero_stock_sale', false, 'pos');
-        $allowNegativeStock = $settings->bool('allow_negative_stock_sale', false, 'pos');
-
-        if (!$allowZeroStock && $available <= 0) {
-            $warehouseName = Warehouse::query()->whereKey($warehouseId)->value('name') ?? $warehouseId;
-
-            throw new InvalidArgumentException($this->insufficientStockMessage(
-                $product->name,
-                $warehouseName,
-                $available,
-                $qty
-            ));
-        }
-
-        if (!$allowNegativeStock && $available - $qty < -0.0001) {
-            $warehouseName = Warehouse::query()->whereKey($warehouseId)->value('name') ?? $warehouseId;
-
-            throw new InvalidArgumentException($this->insufficientStockMessage(
-                $product->name,
-                $warehouseName,
-                $available,
-                $qty
-            ));
-        }
+        // POS intentionally permits selling through zero/negative stock.
     }
 
     public function deductStockForSale(PosSale $sale): void
@@ -68,9 +43,6 @@ class PosInventoryService
         $sale->loadMissing(['warehouse', 'posSaleLines.product']);
         $warehouseId = $sale->warehouse_id;
         $warehouseName = $sale->warehouse?->name ?? $warehouseId;
-        $settings = app(DatabaseSettingService::class);
-        $allowZeroStock = $settings->bool('allow_zero_stock_sale', false, 'pos');
-        $allowNegativeStock = $settings->bool('allow_negative_stock_sale', false, 'pos');
 
         foreach ($sale->posSaleLines as $line) {
             if (!$line->product_id) {
@@ -95,15 +67,6 @@ class PosInventoryService
                 ->first();
 
             $available = (float) ($warehouseItem?->qty_on_hand ?? 0);
-
-            if ((!$allowZeroStock && $available <= 0) || (!$allowNegativeStock && $available - $qty < -0.0001)) {
-                throw new InvalidArgumentException($this->insufficientStockMessage(
-                    $product->name,
-                    $warehouseName,
-                    $available,
-                    $qty
-                ));
-            }
 
             if (!$warehouseItem) {
                 $warehouseItem = new WarehouseItem([

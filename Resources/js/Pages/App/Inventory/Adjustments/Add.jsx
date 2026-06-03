@@ -6,7 +6,10 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
+import { useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { currencySymbolOf, moneyWithSymbol } from '@/Components/Transactions/transactionCalculations.js';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -17,7 +20,6 @@ const authHeaders = () => {
 const toNumber = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const nullIfEmpty = (v) => (v === undefined || v === null || v === '' ? null : v);
 const fmtQty = (v) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-const money = (v) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const productCode = (product) => product?.code || product?.sku || product?.barcode || '-';
 
 const emptyLine = () => ({
@@ -38,7 +40,9 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
     const [purchaseOrderId, setPurchaseOrderId] = useState(null);
     const [purchaseOrderDetail, setPurchaseOrderDetail] = useState(null);
     const [loadingPurchaseOrder, setLoadingPurchaseOrder] = useState(false);
+    const baseCurrency = useBaseCurrency(true);
     const warehouseId = Form.useWatch('warehouse_id', form);
+    const baseCurrencySymbol = currencySymbolOf(baseCurrency);
 
     const fetchWarehouseItem = async (productId, selectedWarehouseId) => {
         if (!productId || !selectedWarehouseId) return null;
@@ -326,7 +330,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                 <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%' }} onChange={(v) => updateLine(idx, { unit_cost: v ?? 0 })} />
             ),
         },
-        { title: 'Value', key: 'value', width: 120, align: 'right', render: (_, row) => money(toNumber(row.qty) * toNumber(row.unit_cost)) },
+        { title: 'Value', key: 'value', width: 120, align: 'right', render: (_, row) => moneyWithSymbol(toNumber(row.qty) * toNumber(row.unit_cost), baseCurrencySymbol) },
         {
             title: 'Remarks', dataIndex: 'remarks',
             render: (val, _, idx) => (
@@ -414,14 +418,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                             </Form.Item>
                         </Col>
                         <Col xs={24}>
-                            <Form.Item label="Notes" name="notes">
-                                <Input.TextArea rows={2} placeholder="Notes" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24}>
-                            <Form.Item label="Remarks" name="remarks">
-                                <Input.TextArea rows={2} placeholder="Internal remarks (optional)" />
-                            </Form.Item>
+                            <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
                         </Col>
                     </Row>
                 </FormSection>
@@ -443,7 +440,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                                     <Typography.Text strong>Decrease: {fmtQty(decreaseQty)}</Typography.Text>
                                 </Table.Summary.Cell>
                                 <Table.Summary.Cell index={5} colSpan={2} align="right">
-                                    <Typography.Text strong>Total Value: {money(totalValue)}</Typography.Text>
+                                    <Typography.Text strong>Total Value: {moneyWithSymbol(totalValue, baseCurrencySymbol)}</Typography.Text>
                                 </Table.Summary.Cell>
                                 <Table.Summary.Cell index={7} colSpan={2} />
                             </Table.Summary.Row>

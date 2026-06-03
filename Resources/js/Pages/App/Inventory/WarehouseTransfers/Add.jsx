@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import TransactionFormShell, { FormSection } from '@/Components/Accounting/TransactionFormShell.jsx';
+import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 import { displayDocumentNumber, isApproved } from '@/Components/Transactions/documentNumber.js';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -266,14 +267,7 @@ export default function WarehouseTransferAdd({ initialRecord = null, isEdit = fa
                             </Form.Item>
                         </Col>
                         <Col xs={24}>
-                            <Form.Item label="Notes" name="notes">
-                                <Input.TextArea rows={2} placeholder="Notes" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24}>
-                            <Form.Item label="Remarks" name="remarks">
-                                <Input.TextArea rows={2} placeholder="Internal remarks (optional)" />
-                            </Form.Item>
+                            <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
                         </Col>
                     </Row>
                 </FormSection>

@@ -55,6 +55,11 @@ class JournalVoucherLine extends Model
         return $this->belongsTo(Account::class);
     }
 
+    public function chartOfAccount(): BelongsTo
+    {
+        return $this->belongsTo(ChartOfAccount::class);
+    }
+
     public function currency(): BelongsTo
     {
         return $this->belongsTo(Currency::class);

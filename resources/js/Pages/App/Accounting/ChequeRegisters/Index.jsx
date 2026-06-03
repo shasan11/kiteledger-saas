@@ -6,10 +6,11 @@ import * as Yup from 'yup';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import {
-    Tabs, Row, Col, Typography, Tag, Space, Button, Select, Table, Spin, Divider, Dropdown, theme,
+    Tabs, Row, Col, Typography, Tag, Space, Button, Select, Table, Spin, Divider, Dropdown, Drawer, theme,
     message,
 } from 'antd';
-import { PlusOutlined, CaretDownOutlined, ArrowRightOutlined } from '@ant-design/icons';
+import { PlusOutlined, CaretDownOutlined, ArrowRightOutlined, PrinterOutlined } from '@ant-design/icons';
+import PrintablePdfEmailWrapper from '@/Components/PrintableComponent';
 
 dayjs.extend(customParseFormat);
 
@@ -26,6 +27,49 @@ const formatDate = (v) => {
     if (dayjs.isDayjs(v)) return v.isValid() ? v.format('YYYY-MM-DD') : null;
     const d = dayjs(v);
     return d.isValid() ? d.format('YYYY-MM-DD') : null;
+};
+
+const numberWords = [
+    'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+    'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+    'seventeen', 'eighteen', 'nineteen',
+];
+const tensWords = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const amountInWords = (amount) => {
+    const underThousand = (num) => {
+        const parts = [];
+        if (num >= 100) {
+            parts.push(`${numberWords[Math.floor(num / 100)]} hundred`);
+            num %= 100;
+        }
+        if (num >= 20) {
+            parts.push(`${tensWords[Math.floor(num / 10)]}${num % 10 ? ` ${numberWords[num % 10]}` : ''}`);
+        } else if (num > 0 || parts.length === 0) {
+            parts.push(numberWords[num]);
+        }
+        return parts.join(' ');
+    };
+
+    let rupees = Math.floor(Number(amount || 0));
+    const paisa = Math.round((Number(amount || 0) - rupees) * 100);
+    if (!Number.isFinite(rupees) || rupees < 0) rupees = 0;
+
+    const chunks = [
+        [10000000, 'crore'],
+        [100000, 'lakh'],
+        [1000, 'thousand'],
+    ];
+    const parts = [];
+    chunks.forEach(([value, label]) => {
+        const count = Math.floor(rupees / value);
+        if (count) {
+            parts.push(`${underThousand(count)} ${label}`);
+            rupees %= value;
+        }
+    });
+    if (rupees || !parts.length) parts.push(underThousand(rupees));
+
+    return `${parts.join(' ')} rupees${paisa ? ` and ${underThousand(paisa)} paisa` : ''} only`.replace(/\b\w/g, (m) => m.toUpperCase());
 };
 
 const STATUS_OPTIONS = [
@@ -572,8 +616,48 @@ function ReceivedTab() {
 
 // ─── Cheque Issued Tab ────────────────────────────────────────────────────────
 
+function ChequePrint({ record }) {
+    const payee = record?.payee_name || record?.relatedAccount?.name || record?.related_account?.name || record?.related_account_id_detail?.name || '-';
+    const bank = record?.account?.name || record?.account_id_detail?.name || '-';
+
+    return (
+        <PrintablePdfEmailWrapper
+            title="Cheque Print"
+            subTitle={record?.cheque_no}
+            fileName={`cheque-${record?.cheque_no || record?.id || 'print'}.pdf`}
+            allowDownload={false}
+            allowEmail={false}
+            printButtonText="Print Cheque"
+            pageSize="A4"
+            contentClassName="cheque-print-document"
+            printStyles={`
+                .cheque-print-document { width: 190mm !important; padding: 0 !important; }
+                @page { size: A4 portrait; margin: 12mm; }
+            `}
+        >
+            <div style={{ width: '190mm', minHeight: '85mm', border: '1px solid #111', padding: '10mm 12mm', fontFamily: 'Arial, sans-serif', color: '#111' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
+                    <strong>{bank}</strong>
+                    <span>Date: {fmtDate(record?.cheque_date || record?.issued_date)}</span>
+                </div>
+                <div style={{ marginBottom: 18 }}>Cheque No: <strong>{record?.cheque_no || '-'}</strong></div>
+                <div style={{ marginBottom: 14 }}>Pay: <strong style={{ fontSize: 18 }}>{payee}</strong></div>
+                <div style={{ marginBottom: 14 }}>Amount in words: <strong>{amountInWords(record?.amount)}</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 28 }}>
+                    <div>
+                        <div>Remarks: {record?.notes || record?.remarks || '-'}</div>
+                        <div style={{ marginTop: 14, fontSize: 22, fontWeight: 700 }}>Rs. {money(record?.amount)}</div>
+                    </div>
+                    <div style={{ width: 180, borderTop: '1px solid #111', textAlign: 'center', paddingTop: 8 }}>Authorized Signature</div>
+                </div>
+            </div>
+        </PrintablePdfEmailWrapper>
+    );
+}
+
 function IssuedTab() {
     const { token } = theme.useToken();
+    const [printRecord, setPrintRecord] = useState(null);
 
     const columns = useMemo(() => [
         {
@@ -628,6 +712,16 @@ function IssuedTab() {
             key: 'status',
             width: 130,
             render: (_, record) => <InlineChequeStatus record={record} />,
+        },
+        {
+            title: 'Print',
+            key: 'print',
+            width: 90,
+            render: (_, record) => (
+                <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintRecord(record)}>
+                    Print
+                </Button>
+            ),
         },
     ], [token]);
 
@@ -700,38 +794,43 @@ function IssuedTab() {
     }, []);
 
     return (
-        <ReusableCrud
-            title="Cheque Issued"
-            apiUrl={api('/api/cheque-registers/')}
-            columns={columns}
-            fields={fields}
-            validationSchema={validationSchema}
-            crudInitialValues={crudInitialValues}
-            transformPayload={transformPayload}
-            baseFilters={{ direction: 'issued' }}
-            form_ui="drawer"
-            drawerWidth={500}
-            searchParam="search"
-            pageParam="page"
-            pageSizeParam="page_size"
-            sortMode="ordering"
-            orderingParam="ordering"
-            enableServerPagination
-            showSearch
-            canAdd
-            canEdit
-            canDelete
-            hasActions
-            hasActionColumns
-            anchorFilters={[
-                { key: 'all', label: 'All', params: {} },
-                { key: 'pending', label: 'Pending', params: { status: 'pending' } },
-                { key: 'cleared', label: 'Cleared', params: { status: 'cleared' } },
-                { key: 'bounced', label: 'Bounced', params: { status: 'bounced' } },
-            ]}
-            defaultAnchorKey="all"
-            anchorSyncWithHash={false}
-        />
+        <>
+            <ReusableCrud
+                title="Cheque Issued"
+                apiUrl={api('/api/cheque-registers/')}
+                columns={columns}
+                fields={fields}
+                validationSchema={validationSchema}
+                crudInitialValues={crudInitialValues}
+                transformPayload={transformPayload}
+                baseFilters={{ direction: 'issued' }}
+                form_ui="drawer"
+                drawerWidth={500}
+                searchParam="search"
+                pageParam="page"
+                pageSizeParam="page_size"
+                sortMode="ordering"
+                orderingParam="ordering"
+                enableServerPagination
+                showSearch
+                canAdd
+                canEdit
+                canDelete
+                hasActions
+                hasActionColumns
+                anchorFilters={[
+                    { key: 'all', label: 'All', params: {} },
+                    { key: 'pending', label: 'Pending', params: { status: 'pending' } },
+                    { key: 'cleared', label: 'Cleared', params: { status: 'cleared' } },
+                    { key: 'bounced', label: 'Bounced', params: { status: 'bounced' } },
+                ]}
+                defaultAnchorKey="all"
+                anchorSyncWithHash={false}
+            />
+            <Drawer title="Print Cheque" width={760} open={!!printRecord} onClose={() => setPrintRecord(null)}>
+                {printRecord ? <ChequePrint record={printRecord} /> : null}
+            </Drawer>
+        </>
     );
 }
 

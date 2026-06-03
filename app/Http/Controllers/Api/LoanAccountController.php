@@ -27,7 +27,9 @@ class LoanAccountController extends BaseCrudApiController
         'processingFeePaidFromAccount',
         'userAdd',
         'loanTopUps',
+        'loanTopUps.loanReceivedInAccount',
         'loanCharges',
+        'loanCharges.chargesPaidFromAccount',
     ];
 
     protected array $relationDetails = [

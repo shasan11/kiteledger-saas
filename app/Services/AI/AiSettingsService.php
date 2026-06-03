@@ -142,6 +142,11 @@ class AiSettingsService
         return max(1, min(500, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
     }
 
+    public function reportSummaryMaxRows(): int
+    {
+        return max(1, min(50, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
+    }
+
     public function contextMaxChars(): int
     {
         return max(500, min(200000, $this->db->int('ai_context_max_chars', (int) self::DEFAULTS['ai_context_max_chars'], self::GROUP)));

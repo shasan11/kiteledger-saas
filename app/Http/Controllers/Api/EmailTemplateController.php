@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 class EmailTemplateController extends BaseCrudApiController
 {
     protected string $modelClass = EmailTemplate::class;
+    protected ?string $permissionPrefix = 'email_template';
     protected array $searchable = ['module', 'template_key', 'subject'];
     protected array $filterable = ['module', 'template_key'];
     protected array $booleanFilters = ['active', 'is_system_generated'];
@@ -25,6 +26,16 @@ class EmailTemplateController extends BaseCrudApiController
         'is_system_generated' => ['nullable', 'boolean'],
         'user_add_id' => ['nullable', 'integer', 'exists:users,id'],
     ];
+
+    public function store(Request $request)
+    {
+        abort(403, 'Email templates are system-defined. Please edit an existing template.');
+    }
+
+    public function destroy(Request $request, mixed $id)
+    {
+        abort(403, 'System email templates cannot be deleted.');
+    }
 
     protected function updateRules(Request $request, Model $record): array
     {

@@ -19,7 +19,10 @@ class ReportingTag extends Model
      */
     protected $fillable = [
         'name',
+        'code',
+        'type',
         'color',
+        'sort_order',
         'description',
         'active',
         'is_system_generated',
@@ -35,6 +38,7 @@ class ReportingTag extends Model
     {
         return [
             'active' => 'boolean',
+            'sort_order' => 'integer',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
         ];

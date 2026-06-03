@@ -23,6 +23,8 @@ import { displayDocumentNumber, isApproved } from '@/Components/Transactions/doc
 import { RecordMetaPanel } from '@/Components/Transactions';
 import LabelPrintDrawer, { isLabelPrintableAdjustmentLine } from '@/Components/Labels/LabelPrintDrawer';
 import BusinessRuleApprovalModal from '@/Components/BusinessRules/BusinessRuleApprovalModal';
+import { useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
+import { currencySymbolOf, moneyWithSymbol } from '@/Components/Transactions/transactionCalculations.js';
 
 const { Text, Title } = Typography;
 const { useToken } = theme;
@@ -526,7 +528,7 @@ function tableCard(title, columns, dataSource, summary, emptyText = 'No records'
 }
 
 function buildLineCards(record, documentType, options = {}) {
-  const { onPrintLabelLine } = options;
+  const { onPrintLabelLine, formatBaseMoney = formatMoney } = options;
   const lines = getLines(record, documentType);
   const materialLines = getMaterialLines(record, documentType);
   const outputLines = getOutputLines(record, documentType);
@@ -574,8 +576,8 @@ function buildLineCards(record, documentType, options = {}) {
           { title: 'Product Code / SKU', key: 'code', render: (_, row) => firstPresent(row?.product?.code, row?.product?.sku, row?.product_code) || '-' },
           { title: 'Adjustment Type', dataIndex: 'adjustment_type', render: (value) => value ? value[0].toUpperCase() + value.slice(1) : '-' },
           { title: 'Qty', key: 'qty', align: 'right', render: (_, row) => formatQty(row?.qty) },
-          { title: 'Unit Cost', key: 'unit_cost', align: 'right', render: (_, row) => formatMoney(row?.unit_cost) },
-          { title: 'Line Value', key: 'line_value', align: 'right', render: (_, row) => formatMoney(lineCost(row)) },
+          { title: 'Unit Cost', key: 'unit_cost', align: 'right', render: (_, row) => formatBaseMoney(row?.unit_cost) },
+          { title: 'Line Value', key: 'line_value', align: 'right', render: (_, row) => formatBaseMoney(lineCost(row)) },
           { title: 'Remarks', dataIndex: 'remarks', render: (value) => value || '-' },
           {
             title: '',
@@ -611,7 +613,7 @@ function buildLineCards(record, documentType, options = {}) {
             </Table.Summary.Row>
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={5}>Total Value</Table.Summary.Cell>
-              <Table.Summary.Cell index={5} align="right">{formatMoney(totalValue)}</Table.Summary.Cell>
+              <Table.Summary.Cell index={5} align="right">{formatBaseMoney(totalValue)}</Table.Summary.Cell>
               <Table.Summary.Cell index={6} colSpan={2} />
             </Table.Summary.Row>
           </>
@@ -813,6 +815,9 @@ export default function InventoryRecordShow({
   const [labelInitialLineIds, setLabelInitialLineIds] = useState([]);
   const [approving, setApproving] = useState(false);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const baseCurrency = useBaseCurrency(documentType === 'inventory_adjustment');
+  const baseCurrencySymbol = currencySymbolOf(baseCurrency);
+  const formatBaseMoney = (value) => moneyWithSymbol(value, baseCurrencySymbol);
 
   useEffect(() => {
     let active = true;
@@ -895,8 +900,9 @@ export default function InventoryRecordShow({
   const cards = useMemo(
     () => (record ? buildLineCards(record, documentType, {
       onPrintLabelLine: (row) => openLabelDrawerFor([row.id]),
+      formatBaseMoney,
     }) : []),
-    [record, documentType]
+    [record, documentType, baseCurrencySymbol]
   );
 
   const amount = useMemo(() => {

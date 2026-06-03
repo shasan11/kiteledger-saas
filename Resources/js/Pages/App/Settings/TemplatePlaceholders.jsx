@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Space, Tag, Tooltip, Typography, message, theme } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
+import { humanizeLabel } from '@/utils/humanizeLabel';
 
 const { Text } = Typography;
 
@@ -127,7 +128,7 @@ const defs = [
   ['Printable Layout', ['document_header','document_footer','company_letterhead','watermark','page_number','total_pages','prepared_by_signature','checked_by_signature','approved_by_signature','customer_signature','supplier_signature','authorized_signature','stamp','terms_block','bank_details_block','qr_block','barcode_block']],
 ];
 
-const labels = (key) => key.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+const labels = (key) => humanizeLabel(key);
 const meaningFor = (key) => meanings[key] || `${labels(key)} value.`;
 const exampleFor = (key) => examples[key] || (key.includes('table') ? 'Generated table' : labels(key));
 
@@ -150,7 +151,7 @@ export function sanitizeTemplateHtml(value = '') {
   return String(value).replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
 }
 
-export function TemplatePlaceholderPanel({ documentType, compact = false }) {
+export function TemplatePlaceholderPanel({ documentType, compact = false, onInsert }) {
   const { token } = theme.useToken();
   const [query, setQuery] = useState('');
   const normalized = query.trim().toLowerCase();
@@ -165,17 +166,27 @@ export function TemplatePlaceholderPanel({ documentType, compact = false }) {
     message.success('Copied');
   };
 
+  const insert = (text) => {
+    if (onInsert) {
+      onInsert(text);
+      message.success('Variable inserted');
+      return;
+    }
+
+    copy(text);
+  };
+
   return (
     <Card
       size="small"
-      title="Template Keys"
-      extra={documentType ? <Tag>{documentType}</Tag> : null}
+      title="Available Variables"
+      extra={documentType ? <Tag>{humanizeLabel(documentType)}</Tag> : null}
       style={{ height: '100%', borderColor: token.colorBorderSecondary }}
       styles={{ body: { padding: token.paddingSM } }}
     >
       <Space direction="vertical" size={8} style={{ width: '100%' }}>
         <Text type="secondary" style={{ fontSize: 12 }}>
-          Use keys exactly as shown, including double curly braces.
+          Click a variable to insert it into the template.
         </Text>
         <Input.Search allowClear size="small" placeholder="Search keys" onChange={(event) => setQuery(event.target.value)} />
         {groups.length ? (
@@ -214,7 +225,7 @@ export function TemplatePlaceholderPanel({ documentType, compact = false }) {
                           <br />
                           <Text code copyable style={{ fontSize: 12 }}>{item.placeholder}</Text>
                         </div>
-                        <Button size="small" icon={<CopyOutlined />} onClick={() => copy(item.placeholder)} />
+                        <Button size="small" icon={<CopyOutlined />} onClick={() => insert(item.placeholder)} />
                       </Space>
                       <div style={{ marginTop: 4 }}>
                         <Text type="secondary" style={{ fontSize: 12 }}>{item.meaning}</Text>

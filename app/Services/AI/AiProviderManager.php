@@ -252,7 +252,7 @@ class AiProviderManager
         $provider = strtolower((string) $this->settings->provider());
 
         if (!$this->settings->enabled()) {
-            $this->throwError('AI_DISABLED', 'AI Assistant is disabled in settings.');
+            $this->throwError('AI_DISABLED', 'AI report summarizer is disabled in settings.');
         }
 
         if (!in_array($provider, ['openai', 'groq', 'gemini', 'ollama', 'openrouter'], true)) {

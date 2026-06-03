@@ -36,6 +36,7 @@ import {
   MinusOutlined,
   PauseCircleOutlined,
   PlusOutlined,
+  PrinterOutlined,
   SearchOutlined,
   WalletOutlined,
   WifiOutlined,
@@ -43,8 +44,8 @@ import {
 import axios from "axios";
 import dayjs from "dayjs";
 import PosLayout from "@/Layouts/PosLayout.jsx";
-import PrintablePdfEmailWrapper from "@/Components/PrintableComponent";
 import PosTopBar from "@/Components/Pos/PosTopBar";
+import { useReactToPrint } from "react-to-print";
 import {
   api,
   fetchList,
@@ -98,6 +99,19 @@ const receiptWidthFromPaperSize = (paperSize) => {
   if (String(paperSize).toLowerCase().startsWith("58mm")) return "58mm";
   if (String(paperSize).toLowerCase().startsWith("a4")) return "210mm";
   return "80mm";
+};
+
+const shouldAutoPrintReceipt = (settings = {}) => {
+  const value = firstPresent(
+    settings.auto_print_receipt,
+    settings.pos_auto_print_receipt,
+    settings.default_auto_print,
+    settings.auto_print,
+    settings.print_after_checkout,
+    true,
+  );
+
+  return value === true || value === 1 || value === "1" || value === "true";
 };
 
 const SCANNER_TIMEOUT_MS = 120;
@@ -282,6 +296,151 @@ const compactAddress = (record = null, companyInfo = null) =>
     "",
   );
 
+function PosReceiptDocument({ context }) {
+  if (!context) return null;
+
+  const company = context.company || {};
+  const document = context.document || {};
+  const customer = context.customer || {};
+  const terminal = context.terminal || {};
+  const cashier = context.cashier || {};
+  const totals = context.totals || {};
+  const items = context.items || [];
+  const payments = context.payments || [];
+
+  return (
+    <div className="pos-receipt-jsx">
+      <div className="receipt-center receipt-header">
+        {company.logo ? (
+          <img className="receipt-logo" src={company.logo} alt={company.name} />
+        ) : null}
+        <div className="receipt-company">{company.name || "KiteLedger"}</div>
+        {company.legal_name ? <div>{company.legal_name}</div> : null}
+        {company.address ? <div>{company.address}</div> : null}
+        {company.phone ? <div>Tel: {company.phone}</div> : null}
+        {company.email ? <div>{company.email}</div> : null}
+        {company.pan_or_vat ? <div>PAN/VAT: {company.pan_or_vat}</div> : null}
+      </div>
+
+      <div className="receipt-rule" />
+
+      <div className="receipt-title">{document.title || "POS Sales Receipt"}</div>
+      <div className="receipt-meta-grid">
+        <span>Receipt No.</span>
+        <strong>{document.number || "-"}</strong>
+        <span>Date</span>
+        <strong>{document.date || "-"}</strong>
+        <span>Customer</span>
+        <strong>{customer.name || "Walk-in Customer"}</strong>
+        {customer.phone ? (
+          <>
+            <span>Phone</span>
+            <strong>{customer.phone}</strong>
+          </>
+        ) : null}
+        {terminal.name ? (
+          <>
+            <span>Terminal</span>
+            <strong>{terminal.name}</strong>
+          </>
+        ) : null}
+        {cashier.name ? (
+          <>
+            <span>Cashier</span>
+            <strong>{cashier.name}</strong>
+          </>
+        ) : null}
+      </div>
+
+      <div className="receipt-rule" />
+
+      <table className="receipt-items">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th className="receipt-center">Qty</th>
+            <th className="receipt-right">Rate</th>
+            <th className="receipt-right">Amt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={`${item.id || item.product_id || "item"}-${index}`}>
+              <td>
+                <div className="receipt-item-name">
+                  {item.product_name || item.item_name || "POS Item"}
+                </div>
+                {item.description ? (
+                  <div className="receipt-muted">{item.description}</div>
+                ) : null}
+              </td>
+              <td className="receipt-center">{item.qty}</td>
+              <td className="receipt-right">{item.unit_price || item.rate}</td>
+              <td className="receipt-right">{item.line_total || item.amount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="receipt-rule" />
+
+      <div className="receipt-totals">
+        <div>
+          <span>Subtotal</span>
+          <strong>{totals.subtotal}</strong>
+        </div>
+        <div>
+          <span>Discount</span>
+          <strong>{totals.discount}</strong>
+        </div>
+        <div>
+          <span>Tax</span>
+          <strong>{totals.tax}</strong>
+        </div>
+        <div className="receipt-grand">
+          <span>Total</span>
+          <strong>{totals.grand_total || totals.total}</strong>
+        </div>
+        <div>
+          <span>Paid</span>
+          <strong>{totals.paid || totals.paid_amount}</strong>
+        </div>
+        <div>
+          <span>Change</span>
+          <strong>{totals.change_amount}</strong>
+        </div>
+        {numeric(context.record?.balance_due) > 0 ? (
+          <div>
+            <span>Balance</span>
+            <strong>{totals.balance || totals.balance_due}</strong>
+          </div>
+        ) : null}
+      </div>
+
+      {payments.length ? (
+        <>
+          <div className="receipt-rule" />
+          <div className="receipt-payments">
+            {payments.map((payment, index) => (
+              <div key={`${payment.id || payment.method || "payment"}-${index}`}>
+                <span>{payment.method || payment.payment_method || "Payment"}</span>
+                <strong>{payment.amount}</strong>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      <div className="receipt-rule" />
+
+      <div className="receipt-center receipt-footer">
+        <div>{document.notes || "Thank you for your purchase. Please visit again!"}</div>
+        <div className="receipt-muted">Printed at {context.printed_at}</div>
+      </div>
+    </div>
+  );
+}
+
 const defaultPosReceiptTemplateHtml = `
 <div class="pos-receipt">
     <div class="center">
@@ -354,6 +513,121 @@ const defaultPosReceiptTemplateCss = `
 }
 `.trim();
 
+const posReceiptJsxCss = `
+.pos-receipt-print-document,
+.pos-receipt-jsx {
+    box-sizing: border-box;
+    width: 100%;
+    color: #111;
+    background: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    line-height: 1.35;
+}
+.pos-receipt-jsx,
+.pos-receipt-jsx * {
+    box-sizing: border-box;
+}
+.pos-receipt-jsx {
+    overflow-wrap: anywhere;
+}
+.receipt-center { text-align: center; }
+.receipt-right { text-align: right; }
+.receipt-header,
+.receipt-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.receipt-logo {
+    display: block;
+    max-width: 28mm;
+    max-height: 16mm;
+    object-fit: contain;
+    margin: 0 auto 4px;
+}
+.receipt-company {
+    font-size: 14px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+.receipt-title {
+    text-align: center;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.receipt-rule {
+    border-top: 1px dashed #222;
+    margin: 7px 0;
+}
+.receipt-meta-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 38%) minmax(0, 62%);
+    gap: 2px 6px;
+}
+.receipt-meta-grid span,
+.receipt-muted {
+    color: #555;
+}
+.receipt-meta-grid strong {
+    text-align: right;
+    font-weight: 700;
+}
+.receipt-items {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.receipt-items th,
+.receipt-items td {
+    padding: 3px 0;
+    vertical-align: top;
+}
+.receipt-items th:first-child,
+.receipt-items td:first-child {
+    width: 42%;
+    padding-right: 4px;
+}
+.receipt-items th:nth-child(2),
+.receipt-items td:nth-child(2) {
+    width: 15%;
+}
+.receipt-items th:nth-child(3),
+.receipt-items td:nth-child(3),
+.receipt-items th:nth-child(4),
+.receipt-items td:nth-child(4) {
+    width: 21.5%;
+}
+.receipt-item-name {
+    font-weight: 650;
+}
+.receipt-totals,
+.receipt-payments {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.receipt-totals > div,
+.receipt-payments > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+.receipt-grand {
+    font-size: 13px;
+    font-weight: 800;
+}
+@media screen and (max-width: 520px) {
+    .pos-receipt-jsx {
+        font-size: 10px;
+    }
+    .receipt-company {
+        font-size: 13px;
+    }
+}
+`.trim();
+
 const posReceiptPrintPageCss = `
 @page { size: 80mm auto; margin: 2mm; }
 @media print {
@@ -399,6 +673,7 @@ export default function PosIndex() {
   const scannerTimerRef = useRef(null);
   const printedSaleRef = useRef(null);
   const receiptPrintRef = useRef(null);
+  const receiptContentRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [shiftLoading, setShiftLoading] = useState(false);
@@ -528,25 +803,6 @@ export default function PosIndex() {
     const hasTrackedItem = cart.some((item) => item.track_inventory);
     if (hasTrackedItem && !selectedTerminal?.warehouse_id)
       return "Warehouse is required for inventory-tracked products.";
-
-    const missingStock = !posSettings.allow_negative_stock_sale && cart.find(
-      (item) =>
-        item.track_inventory &&
-        item.available_stock !== null &&
-        item.available_stock !== undefined &&
-        Number(item.qty || 0) > Number(item.available_stock || 0),
-    );
-    if (missingStock)
-      return `${missingStock.product_name} has only ${missingStock.available_stock} available.`;
-
-    const zeroStock = !posSettings.allow_zero_stock_sale && cart.find(
-      (item) =>
-        item.track_inventory &&
-        item.available_stock !== null &&
-        item.available_stock !== undefined &&
-        Number(item.available_stock || 0) <= 0,
-    );
-    if (zeroStock) return `${zeroStock.product_name} is out of stock.`;
 
     const moneyPayments = payments.filter(
       (payment) =>
@@ -817,13 +1073,21 @@ export default function PosIndex() {
   }, [receiptOpen, saleReceipt]);
 
   useEffect(() => {
-    if (receiptOpen && saleReceipt && !receiptTemplateLoading) {
+    if (
+      receiptOpen &&
+      saleReceipt &&
+      !receiptTemplateLoading &&
+      shouldAutoPrintReceipt(posSettings)
+    ) {
       if (printedSaleRef.current !== saleReceipt.id) {
         printedSaleRef.current = saleReceipt.id;
-        setTimeout(() => receiptPrintRef.current?.print?.(), 300);
+        setTimeout(() => {
+          playPosBeep("print");
+          receiptPrintRef.current?.();
+        }, 450);
       }
     }
-  }, [receiptOpen, saleReceipt, receiptTemplateLoading]);
+  }, [receiptOpen, saleReceipt, receiptTemplateLoading, posSettings]);
 
   useEffect(() => {
     const shouldAutoBeep = (target) => {
@@ -1254,15 +1518,12 @@ export default function PosIndex() {
     }
 
     if (
-      !posSettings.allow_zero_stock_sale &&
       product.track_inventory &&
       product.available_stock !== null &&
       product.available_stock !== undefined &&
       Number(product.available_stock) < 1
     ) {
       message.warning(`${product.name} is out of stock.`);
-      playPosBeep("error");
-      return;
     }
 
     setCart((current) => {
@@ -1270,20 +1531,6 @@ export default function PosIndex() {
       const existing = current.find((item) => cartKey(item) === key);
 
       if (existing) {
-        if (
-          !posSettings.allow_negative_stock_sale &&
-          product.track_inventory &&
-          product.available_stock !== null &&
-          product.available_stock !== undefined &&
-          Number(existing.qty || 0) + 1 > Number(product.available_stock || 0)
-        ) {
-          message.warning(
-            `${product.name} has only ${product.available_stock} available.`,
-          );
-          playPosBeep("error");
-          return current;
-        }
-
         playPosBeep(options.scanned ? "scan" : "tap");
 
         return current.map((item) =>
@@ -1595,16 +1842,7 @@ export default function PosIndex() {
         itemIndex === index
           ? {
               ...item,
-              [key]:
-                key === "qty" &&
-                item.track_inventory &&
-                item.available_stock !== null &&
-                item.available_stock !== undefined
-                  ? Math.min(
-                      Number(value || 1),
-                      Number(item.available_stock || 0),
-                    )
-                  : value,
+              [key]: key === "qty" ? Number(value || 1) : value,
             }
           : item,
       ),
@@ -1722,6 +1960,7 @@ export default function PosIndex() {
     if (!shift?.id) return;
 
     if (cart.length < 1) {
+      playPosBeep("error");
       message.warning("Add products before holding the cart.");
       return;
     }
@@ -1750,6 +1989,7 @@ export default function PosIndex() {
       clearSale({ silentSound: true });
       message.success("Sale held successfully.");
     } catch (error) {
+      playPosBeep("error");
       showApiError(message, error, "Unable to hold sale.");
     } finally {
       setProcessing(false);
@@ -1762,11 +2002,13 @@ export default function PosIndex() {
     if (!shift?.id) return;
 
     if (cart.length < 1) {
+      playPosBeep("error");
       message.warning("Cart is empty.");
       return;
     }
 
     if (checkoutError) {
+      playPosBeep("error");
       message.error(checkoutError);
       return;
     }
@@ -1811,6 +2053,7 @@ export default function PosIndex() {
 
       message.success("Sale completed.");
     } catch (error) {
+      playPosBeep("error");
       showApiError(message, error, "Unable to complete sale.");
     } finally {
       setProcessing(false);
@@ -2302,14 +2545,7 @@ export default function PosIndex() {
     selectedTerminal,
   ]);
 
-  const renderedReceipt = useMemo(() => {
-    if (!receiptContext) {
-      return {
-        html: "",
-        css: defaultPosReceiptTemplateCss,
-      };
-    }
-
+  const receiptPrintStyles = useMemo(() => {
     const templateHtml =
       receiptTemplateSource.template_html || defaultPosReceiptTemplateHtml;
     const extractedTemplate = extractTemplateBody(templateHtml);
@@ -2318,7 +2554,7 @@ export default function PosIndex() {
       receiptTemplateSource.template_css || "",
     );
     const css = [
-      defaultPosReceiptTemplateCss,
+      posReceiptJsxCss,
       embeddedCss,
       templateCss,
       posReceiptPrintPageCss,
@@ -2326,14 +2562,8 @@ export default function PosIndex() {
       .filter(Boolean)
       .join("\n");
 
-    return {
-      html: renderPrintTemplate(
-        extractedTemplate.html || defaultPosReceiptTemplateHtml,
-        receiptContext,
-      ),
-      css,
-    };
-  }, [receiptContext, receiptTemplateSource]);
+    return css;
+  }, [receiptTemplateSource]);
 
   const resolvedPaperSize = useMemo(
     () =>
@@ -2344,6 +2574,75 @@ export default function PosIndex() {
     () => receiptWidthFromPaperSize(resolvedPaperSize),
     [resolvedPaperSize],
   );
+
+  const printReceipt = useReactToPrint({
+    contentRef: receiptContentRef,
+    documentTitle: saleReceipt?.sale_no
+      ? `POS Receipt ${saleReceipt.sale_no}`
+      : "POS Receipt",
+    suppressErrors: true,
+    pageStyle: `
+      @page {
+        size: ${resolvedPaperSize};
+        margin: 0 !important;
+      }
+
+      html, body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body * {
+        box-shadow: none !important;
+      }
+
+      ${receiptPrintStyles}
+    `,
+    onBeforePrint: async () => {
+      const node = receiptContentRef.current;
+      if (!node) {
+        throw new Error("No POS receipt content found.");
+      }
+
+      if (document.fonts?.ready) {
+        await document.fonts.ready.catch(() => {});
+      }
+
+      const images = Array.from(node.querySelectorAll("img"));
+      await Promise.all(
+        images.map((img) => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+
+          return new Promise((resolve) => {
+            const done = () => {
+              img.removeEventListener("load", done);
+              img.removeEventListener("error", done);
+              resolve();
+            };
+
+            img.addEventListener("load", done);
+            img.addEventListener("error", done);
+          });
+        }),
+      );
+    },
+    onAfterPrint: () => {
+      playPosBeep("print");
+    },
+    onPrintError: (_location, error) => {
+      console.error(error);
+      playPosBeep("error");
+      message.error(error?.message || "Failed to print POS receipt.");
+    },
+  });
+
+  receiptPrintRef.current = printReceipt;
 
   const cartColumns = [
     {
@@ -3248,12 +3547,13 @@ export default function PosIndex() {
                   type="secondary"
                   style={{ fontSize: 12, display: "block", marginBottom: 8 }}
                 >
-                  Payment Amount
+                  Payment Amount <span className="text-danger">*</span>
                 </Text>
                 <InputNumber
                   style={{ width: "100%", fontSize: 16 }}
                   size="large"
-                  min={0}
+                  min={0} 
+                  required={true}
                   value={payments[0]?.amount}
                   disabled={payments[0]?.payment_method === "credit"}
                   prefix="Rs."
@@ -3439,30 +3739,52 @@ export default function PosIndex() {
 
               <div className="pos-receipt-print-area">
                 <style>{`@page { size: ${resolvedPaperSize}; margin: 0; }`}</style>
-                <PrintablePdfEmailWrapper
-                  imperativeRef={receiptPrintRef}
-                  title="POS Sales Receipt"
-                  subTitle={saleReceipt.sale_no}
-                  fileName={`pos-receipt-${saleReceipt.sale_no || saleReceipt.id || "receipt"}.pdf`}
-                  pageSize={resolvedReceiptWidth}
-                  pageOrientation="portrait"
-                  allowDownload={false}
-                  allowEmail={false}
-                  printButtonText="Print Receipt"
-                  previewBackground={token.colorFillAlter}
-                  printStyles={renderedReceipt.css}
-                  contentClassName="pos-receipt-print-document"
-                  contentStyle={{
-                    width: resolvedReceiptWidth,
-                    maxWidth: resolvedReceiptWidth,
-                    padding: "3mm",
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    marginBottom: 12,
                   }}
                 >
-                  <style>{renderedReceipt.css}</style>
+                  <Space direction="vertical" size={0}>
+                    <Text strong>POS Sales Receipt</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {saleReceipt.sale_no || saleReceipt.id || "Receipt"}
+                    </Text>
+                  </Space>
+                  <Button
+                    type="primary"
+                    icon={<PrinterOutlined />}
+                    onClick={() => printReceipt?.()}
+                  >
+                    Print Receipt
+                  </Button>
+                </div>
+
+                <div
+                  style={{
+                    background: token.colorFillAlter,
+                    padding: 12,
+                    overflowX: "auto",
+                  }}
+                >
                   <div
-                    dangerouslySetInnerHTML={{ __html: renderedReceipt.html }}
-                  />
-                </PrintablePdfEmailWrapper>
+                    ref={receiptContentRef}
+                    className="pos-receipt-print-document"
+                    style={{
+                      width: resolvedReceiptWidth,
+                      maxWidth: resolvedReceiptWidth,
+                      padding: "3mm",
+                      margin: "0 auto",
+                      background: "#fff",
+                    }}
+                  >
+                    <style>{receiptPrintStyles}</style>
+                    <PosReceiptDocument context={receiptContext} />
+                  </div>
+                </div>
               </div>
             </Space>
           </Spin>

@@ -1,25 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Button, Input, InputNumber } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Input, InputNumber, Tooltip } from 'antd';
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  RightOutlined,
+  DownOutlined,
+} from '@ant-design/icons';
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
-import { calculateLine, toNumber, getTaxJurisdictionId, moneyWithSymbol } from './transactionCalculations.js';
+import {
+  calculateLine,
+  toNumber,
+  getTaxJurisdictionId,
+  moneyWithSymbol,
+} from './transactionCalculations.js';
 import TaxLineSelector from '@/Components/Tax/TaxLineSelector.jsx';
 import axios from 'axios';
 
-/**
- * Reusable line-items table for sales/purchase-style transactions.
- * Each row holds: product_id, product_detail, description, qty, unit_price,
- * discount_percent, tax_rate_id (full object), tax_amount, line_total.
- *
- * Props:
- *   items, onChange(newItems)
- *   onDeleteExistingId(id) — invoked with backend id when an existing row is removed
- *   productSearchUrl — defaults to /api/products/search?transaction=sale
- *   priceField — 'selling_price' or 'purchase_price'
- *   currencySymbol — string prefix shown on rate/tax/amount cells
- *   showDiscount, showTax — default true
- *   minRow — keep at least N rows (default 1)
- */
 export default function TransactionLineItems({
   items = [],
   onChange,
@@ -36,10 +32,12 @@ export default function TransactionLineItems({
 }) {
   const isPurchase = priceField === 'purchase_price';
   const documentType = transactionType || (isPurchase ? 'purchase' : 'sales');
+
   const productDefaults = quickAddProductDefaults || {
     allow_sale: !isPurchase,
     allow_purchase: isPurchase,
   };
+
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
   const [taxDefaults, setTaxDefaults] = useState(null);
 
@@ -52,23 +50,33 @@ export default function TransactionLineItems({
 
   const defaultTax = useMemo(() => {
     if (!taxDefaults?.enable_tax) return null;
+
     return documentType === 'purchase'
       ? taxDefaults.default_purchase_tax_rate || taxDefaults.default_sales_tax_rate || null
       : taxDefaults.default_sales_tax_rate || taxDefaults.default_purchase_tax_rate || null;
   }, [documentType, taxDefaults]);
 
-  const taxOverrideAllowed = documentType === 'purchase'
-    ? taxDefaults?.allow_purchase_tax_override !== false
-    : taxDefaults?.allow_sales_tax_override !== false;
+  const taxOverrideAllowed =
+    documentType === 'purchase'
+      ? taxDefaults?.allow_purchase_tax_override !== false
+      : taxDefaults?.allow_sales_tax_override !== false;
 
   const rowKeyOf = (row) => row._key || row.id;
 
   const update = (idx, patch) => {
     const next = items.map((r, i) => (i === idx ? { ...r, ...patch } : r));
+
     const recalced = next.map((r) => {
       const c = calculateLine(r);
-      return { ...r, tax_amount: c.tax_amount, line_total: c.line_total, discount_amount: c.discount_amount };
+
+      return {
+        ...r,
+        tax_amount: c.tax_amount,
+        line_total: c.line_total,
+        discount_amount: c.discount_amount,
+      };
     });
+
     onChange?.(recalced);
   };
 
@@ -77,38 +85,75 @@ export default function TransactionLineItems({
       ...items,
       {
         _key: Math.random().toString(36).slice(2),
-        product_id: null, product_detail: null, product_name: '', description: '',
-        qty: 1, unit_price: 0, discount_percent: 0, discount_amount: 0,
-        tax_rate_id: defaultTax, tax_jurisdiction_id: getTaxJurisdictionId(defaultTax), tax_amount: 0, line_total: 0,
+        product_id: null,
+        product_detail: null,
+        product_name: '',
+        description: '',
+        qty: 1,
+        unit_price: 0,
+        discount_percent: 0,
+        discount_amount: 0,
+        tax_rate_id: defaultTax,
+        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
+        tax_amount: 0,
+        line_total: 0,
       },
     ]);
   };
 
   const removeRow = (idx) => {
     const row = items[idx];
-    if (row?.id && typeof onDeleteExistingId === 'function') onDeleteExistingId(row.id);
+
+    if (row?.id && typeof onDeleteExistingId === 'function') {
+      onDeleteExistingId(row.id);
+    }
+
     const removedKey = rowKeyOf(row);
     const next = items.filter((_, i) => i !== idx);
+
     if (next.length < minRow) {
       next.push({
         _key: Math.random().toString(36).slice(2),
-        product_id: null, product_detail: null, product_name: '', description: '',
-        qty: 1, unit_price: 0, discount_percent: 0,
-        tax_rate_id: defaultTax, tax_jurisdiction_id: getTaxJurisdictionId(defaultTax), tax_amount: 0, line_total: 0,
+        product_id: null,
+        product_detail: null,
+        product_name: '',
+        description: '',
+        qty: 1,
+        unit_price: 0,
+        discount_percent: 0,
+        discount_amount: 0,
+        tax_rate_id: defaultTax,
+        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
+        tax_amount: 0,
+        line_total: 0,
       });
     }
+
     setExpandedRowKeys((keys) => keys.filter((key) => key !== removedKey));
     onChange?.(next);
   };
 
   const handleProductPick = (idx, val, raw) => {
     if (!raw) {
-      update(idx, { product_id: val, product_detail: null });
+      update(idx, {
+        product_id: val,
+        product_detail: null,
+      });
       return;
     }
-    const price = toNumber(raw?.[priceField] ?? raw?.selling_price ?? raw?.sale_price ?? raw?.purchase_price ?? raw?.price ?? items[idx]?.unit_price);
+
+    const price = toNumber(
+      raw?.[priceField] ??
+        raw?.selling_price ??
+        raw?.sale_price ??
+        raw?.purchase_price ??
+        raw?.price ??
+        items[idx]?.unit_price
+    );
+
     const productTax = raw?.default_tax_rate ?? null;
     const selectedTax = productTax || items[idx]?.tax_rate_id || defaultTax;
+
     update(idx, {
       product_id: val,
       product_detail: raw,
@@ -116,27 +161,37 @@ export default function TransactionLineItems({
       description: items[idx]?.description || raw?.description || '',
       unit_price: price,
       tax_rate_id: selectedTax,
-      tax_jurisdiction_id: selectedTax ? getTaxJurisdictionId(selectedTax) : (items[idx]?.tax_jurisdiction_id || null),
+      tax_jurisdiction_id: selectedTax
+        ? getTaxJurisdictionId(selectedTax)
+        : items[idx]?.tax_jurisdiction_id || null,
     });
   };
 
   useEffect(() => {
     if (!defaultTax || !items.length) return;
+
     const needsDefault = items.some((item) => !item.tax_rate_id);
     if (!needsDefault) return;
 
-    onChange?.(items.map((item) => {
-      if (item.tax_rate_id) return item;
-      const c = calculateLine({ ...item, tax_rate_id: defaultTax });
-      return {
-        ...item,
-        tax_rate_id: defaultTax,
-        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
-        tax_amount: c.tax_amount,
-        line_total: c.line_total,
-        discount_amount: c.discount_amount,
-      };
-    }));
+    onChange?.(
+      items.map((item) => {
+        if (item.tax_rate_id) return item;
+
+        const c = calculateLine({
+          ...item,
+          tax_rate_id: defaultTax,
+        });
+
+        return {
+          ...item,
+          tax_rate_id: defaultTax,
+          tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
+          tax_amount: c.tax_amount,
+          line_total: c.line_total,
+          discount_amount: c.discount_amount,
+        };
+      })
+    );
   }, [defaultTax]);
 
   const cellInput = { background: 'transparent' };
@@ -146,45 +201,27 @@ export default function TransactionLineItems({
     {
       title: 'Product / Service',
       dataIndex: 'product_id',
-      width: '24%',
+      width: 300,
+      fixed: 'left',
+      className: 'txn-product-column',
       render: (val, row, idx) => (
-        <BackendSelect
-          value={val}
-          detailValue={row.product_detail}
-          fkUrl={productSearchUrl || '/api/products/search?transaction=sale'}
-          labelKey="label"
-          placeholder="Select product"
-          variant="borderless"
-          style={{ width: '100%', ...cellInput }}
-          onChange={(v, raw) => handleProductPick(idx, v, raw)}
-          quickAddProduct={quickAddProduct}
-          quickAddProductDefaults={productDefaults}
-        />
+        <Tooltip title={row.product_detail?.label || row.product_detail?.name || row.product_name || ''}>
+          <div className="txn-product-select">
+            <BackendSelect
+              value={val}
+              detailValue={row.product_detail}
+              fkUrl={productSearchUrl || '/api/products/search?transaction=sale'}
+              labelKey="label"
+              placeholder="Select product"
+              variant="borderless"
+              style={{ width: '100%', ...cellInput }}
+              onChange={(v, raw) => handleProductPick(idx, v, raw)}
+              quickAddProduct={quickAddProduct}
+              quickAddProductDefaults={productDefaults}
+            />
+          </div>
+        </Tooltip>
       ),
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      width: 130,
-      render: (val, row) => {
-        const rowKey = rowKeyOf(row);
-        const expanded = expandedRowKeys.includes(rowKey);
-        const hasDescription = String(val || '').trim().length > 0;
-
-        return (
-          <Button
-            type={hasDescription ? 'link' : 'text'}
-            size="small"
-            onClick={() =>
-              setExpandedRowKeys((keys) =>
-                expanded ? keys.filter((key) => key !== rowKey) : [...keys, rowKey]
-              )
-            }
-          >
-            {expanded ? 'Hide' : hasDescription ? 'View/Edit' : 'Add'}
-          </Button>
-        );
-      },
     },
     {
       title: 'Qty',
@@ -192,7 +229,13 @@ export default function TransactionLineItems({
       width: 80,
       align: 'right',
       render: (val, _, idx) => (
-        <InputNumber variant="borderless" value={val} min={0} style={{ width: '100%', ...numericStyle }} onChange={(v) => update(idx, { qty: v ?? 0 })} />
+        <InputNumber
+          variant="borderless"
+          value={val}
+          min={0}
+          style={{ width: '100%', ...numericStyle }}
+          onChange={(v) => update(idx, { qty: v ?? 0 })}
+        />
       ),
     },
     {
@@ -205,41 +248,64 @@ export default function TransactionLineItems({
           variant="borderless"
           value={val}
           min={0}
-          prefix={currencySymbol ? <span style={{ color: '#64748b', fontSize: 12 }}>{currencySymbol}</span> : null}
+          prefix={
+            currencySymbol ? (
+              <span style={{ color: '#64748b', fontSize: 12 }}>
+                {currencySymbol}
+              </span>
+            ) : null
+          }
           style={{ width: '100%', ...numericStyle }}
           onChange={(v) => update(idx, { unit_price: v ?? 0 })}
         />
       ),
     },
     ...(showDiscount
-      ? [{
-          title: 'Disc%',
-          dataIndex: 'discount_percent',
-          width: 80,
-          align: 'right',
-          render: (val, _, idx) => (
-            <InputNumber variant="borderless" value={val} min={0} max={100} style={{ width: '100%', ...numericStyle }} onChange={(v) => update(idx, { discount_percent: v ?? 0 })} />
-          ),
-        }]
+      ? [
+          {
+            title: 'Disc%',
+            dataIndex: 'discount_percent',
+            width: 80,
+            align: 'right',
+            render: (val, _, idx) => (
+              <InputNumber
+                variant="borderless"
+                value={val}
+                min={0}
+                max={100}
+                style={{ width: '100%', ...numericStyle }}
+                onChange={(v) => update(idx, { discount_percent: v ?? 0 })}
+              />
+            ),
+          },
+        ]
       : []),
     ...(showTax
-      ? [{
-          title: 'Tax',
-          dataIndex: 'tax_rate_id',
-          width: 140,
-          render: (val, row, idx) => {
-            const id = val && typeof val === 'object' ? val.id : val;
-            return (
-              <TaxLineSelector
-                value={id ?? null}
-                detailValue={typeof val === 'object' ? val : null}
-                disabled={!taxOverrideAllowed}
-                style={{ width: '100%', ...cellInput }}
-                onChange={(raw, taxJurisdictionId) => update(idx, { tax_rate_id: raw, tax_jurisdiction_id: taxJurisdictionId })}
-              />
-            );
+      ? [
+          {
+            title: 'Tax',
+            dataIndex: 'tax_rate_id',
+            width: 140,
+            render: (val, row, idx) => {
+              const id = val && typeof val === 'object' ? val.id : val;
+
+              return (
+                <TaxLineSelector
+                  value={id ?? null}
+                  detailValue={typeof val === 'object' ? val : null}
+                  disabled={!taxOverrideAllowed}
+                  style={{ width: '100%', ...cellInput }}
+                  onChange={(raw, taxJurisdictionId) =>
+                    update(idx, {
+                      tax_rate_id: raw,
+                      tax_jurisdiction_id: taxJurisdictionId,
+                    })
+                  }
+                />
+              );
+            },
           },
-        }]
+        ]
       : []),
     {
       title: 'Tax Amt',
@@ -247,7 +313,9 @@ export default function TransactionLineItems({
       width: 110,
       align: 'right',
       render: (_, row) => (
-        <span style={numericStyle}>{moneyWithSymbol(row.tax_amount, currencySymbol)}</span>
+        <span style={numericStyle}>
+          {moneyWithSymbol(row.tax_amount, currencySymbol)}
+        </span>
       ),
     },
     {
@@ -256,7 +324,9 @@ export default function TransactionLineItems({
       width: 130,
       align: 'right',
       render: (_, row) => (
-        <span style={{ ...numericStyle, fontWeight: 600 }}>{moneyWithSymbol(row.line_total, currencySymbol)}</span>
+        <span style={{ ...numericStyle, fontWeight: 600 }}>
+          {moneyWithSymbol(row.line_total, currencySymbol)}
+        </span>
       ),
     },
     {
@@ -264,7 +334,14 @@ export default function TransactionLineItems({
       key: 'remove',
       width: 40,
       render: (_, __, idx) => (
-        <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => removeRow(idx)} disabled={items.length <= minRow} />
+        <Button
+          type="text"
+          danger
+          size="small"
+          icon={<DeleteOutlined />}
+          onClick={() => removeRow(idx)}
+          disabled={items.length <= minRow}
+        />
       ),
     },
   ];
@@ -272,7 +349,10 @@ export default function TransactionLineItems({
   return (
     <div className="txn-line-items">
       <style>{`
-        .txn-line-items .ant-table { border: 0; }
+        .txn-line-items .ant-table {
+          border: 0;
+        }
+
         .txn-line-items .ant-table-thead > tr > th {
           background: #f1f5f9 !important;
           color: #334155;
@@ -283,26 +363,89 @@ export default function TransactionLineItems({
           padding: 8px 10px;
           border-bottom: 1px solid #e2e8f0;
         }
+
         .txn-line-items .ant-table-tbody > tr > td {
           padding: 4px 8px;
           border-bottom: 1px solid #f1f5f9;
           vertical-align: middle;
         }
+
         .txn-line-items .ant-table-tbody > tr:hover > td {
           background: #fafafa !important;
         }
+
         .txn-line-items .ant-input,
         .txn-line-items .ant-input-number-input,
         .txn-line-items .ant-select-selector {
           padding-left: 0 !important;
           padding-right: 0 !important;
         }
+
         .txn-line-items .ant-input-number,
         .txn-line-items .ant-select {
           border: 0 !important;
           box-shadow: none !important;
         }
+
+        .txn-line-items .txn-expand-btn {
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #64748b;
+        }
+
+        .txn-line-items .txn-expand-btn:hover {
+          color: #0f172a !important;
+          background: #f1f5f9 !important;
+        }
+
+        .txn-line-items .txn-description-box {
+          padding: 8px 12px;
+          background: #f8fafc;
+          border-left: 3px solid #cbd5e1;
+        }
+
+        .txn-line-items .txn-description-box .ant-input {
+          background: #ffffff;
+          padding: 8px 10px !important;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 13px;
+        }
+
+        .txn-line-items .ant-table-expanded-row > td {
+          background: #f8fafc !important;
+          padding: 0 8px 8px 48px !important;
+        }
+
+        .txn-line-items .ant-table-row-expand-icon-cell {
+          width: 36px !important;
+          min-width: 36px !important;
+          padding-left: 8px !important;
+          padding-right: 4px !important;
+        }
+
+        .txn-line-items .txn-product-column {
+          min-width: 280px;
+          max-width: 320px;
+        }
+
+        .txn-line-items .txn-product-select {
+          width: 100%;
+          min-width: 0;
+        }
+
+        .txn-line-items .txn-product-select .ant-select-selection-item,
+        .txn-line-items .txn-product-select .ant-select-selection-placeholder {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       `}</style>
+
       <Table
         rowKey={rowKeyOf}
         size="small"
@@ -310,24 +453,48 @@ export default function TransactionLineItems({
         pagination={false}
         columns={columns}
         dataSource={items}
+        scroll={{ x: 'max-content' }}
         expandable={{
           expandedRowKeys,
           onExpandedRowsChange: setExpandedRowKeys,
-          expandedRowRender: (row, _index, _indent, expanded) => {
-            if (!expanded) return null;
-            const idx = items.findIndex((item) => rowKeyOf(item) === rowKeyOf(row));
+          expandRowByClick: false,
+          showExpandColumn: true,
+          expandIconColumnIndex: 0,
+          rowExpandable: () => true,
+          expandIcon: ({ expanded, onExpand, record }) => (
+            <Button
+              type="text"
+              size="small"
+              className="txn-expand-btn"
+              icon={expanded ? <DownOutlined /> : <RightOutlined />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExpand(record, e);
+              }}
+            />
+          ),
+          expandedRowRender: (row) => {
+            const idx = items.findIndex(
+              (item) => rowKeyOf(item) === rowKeyOf(row)
+            );
+
             if (idx < 0) return null;
 
             return (
-              <Input.TextArea
-                value={row.description || ''}
-                rows={2}
-                placeholder="Line description"
-                onChange={(e) => update(idx, { description: e.target.value })}
-              />
+              <div className="txn-description-box">
+                <Input.TextArea
+                  value={row.description || ''}
+                  rows={2}
+                  placeholder="Add line description"
+                  onChange={(e) =>
+                    update(idx, {
+                      description: e.target.value,
+                    })
+                  }
+                />
+              </div>
             );
           },
-          rowExpandable: () => true,
         }}
         footer={() => (
           <Button icon={<PlusOutlined />} type="dashed" size="small" onClick={addRow}>

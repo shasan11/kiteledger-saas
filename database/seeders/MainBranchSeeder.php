@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class MainBranchSeeder extends Seeder
 {
@@ -15,10 +16,13 @@ class MainBranchSeeder extends Seeder
      */
     public function run(): void
     {
+        $email = env('SEED_MAIN_USER_EMAIL', 'shasandhakal1105@gmail.com');
+
         $user = User::query()->updateOrCreate(
-            ['email' => env('SEED_MAIN_USER_EMAIL', 'shasandhakal1105@gmail.com')],
+            ['email' => $email],
             [
                 'name' => env('SEED_MAIN_USER_NAME', 'Main Branch User'),
+                'username' => env('SEED_MAIN_USER_USERNAME', Str::before($email, '@')),
                 'password' => Hash::make(env('SEED_MAIN_USER_PASSWORD', 'Balkot11@')),
                 'email_verified_at' => now(),
             ]

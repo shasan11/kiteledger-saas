@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Branch;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,6 +15,8 @@ class JournalVoucherApiEndpointTest extends TestCase
     public function test_journal_voucher_api_creates_and_updates_lines_with_account_id(): void
     {
         $branch = Branch::factory()->create(['active' => true]);
+        $this->actingAs(User::factory()->create(['branch_id' => $branch->id]));
+
         $cash = $this->account('Cash Main', '1000', 'cash');
         $capital = $this->account('Capital', '3000', 'coa');
 

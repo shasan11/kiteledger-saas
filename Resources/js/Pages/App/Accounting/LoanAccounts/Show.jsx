@@ -52,6 +52,12 @@ const money = (val) =>
         maximumFractionDigits: 2,
     });
 
+const formatDateTime = (value) => {
+    if (!value) return '-';
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format('DD MMM YYYY, hh:mm A') : String(value);
+};
+
 const acctLabel = (row) =>
     [row?.code, row?.name || row?.display_name].filter(Boolean).join(' – ') || row?.id || '';
 
@@ -175,14 +181,20 @@ export default function LoanAccountShow({ id }) {
 
     /* ── derived values ───────────────────────────────────────────── */
     const activePaybacks = paybacks.filter((p) => p.active);
+    const charges = record?.loan_charges || record?.loanCharges || [];
+    const topups = record?.loan_top_ups || record?.loanTopUps || [];
+    const activeCharges = charges.filter((row) => row?.active !== false && !row?.void);
+    const activeTopups = topups.filter((row) => row?.active !== false && !row?.void);
     const totalRepaid    = activePaybacks.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const totalCharges   = activeCharges.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const totalTopups    = activeTopups.reduce((s, p) => s + Number(p.amount || 0), 0);
     const outstanding    = Number(record?.current_balance ?? 0);
 
     const statusColor = { active: 'success', settled: 'processing', closed: 'default', cancelled: 'error' };
 
     /* ── table columns ────────────────────────────────────────────── */
     const paybackColumns = [
-        { title: 'Date',      dataIndex: 'payback_date', width: 120 },
+        { title: 'Date',      dataIndex: 'payback_date', width: 180, render: formatDateTime },
         {
             title: 'Amount', dataIndex: 'amount', align: 'right', width: 130,
             render: (v) => <Text strong>{money(v)}</Text>,
@@ -217,6 +229,44 @@ export default function LoanAccountShow({ id }) {
     ];
 
     /* ── render ───────────────────────────────────────────────────── */
+    const chargeColumns = [
+        { title: 'Date', dataIndex: 'charge_date', width: 180, render: formatDateTime },
+        { title: 'Charge', dataIndex: 'charge_name', render: (v) => v || '-' },
+        {
+            title: 'Amount', dataIndex: 'amount', align: 'right', width: 130,
+            render: (v) => <Text strong>{money(v)}</Text>,
+        },
+        {
+            title: 'Paid From',
+            render: (_, row) => acctLabel(row?.charges_paid_from_account || row?.chargesPaidFromAccount) || row?.charges_paid_from_account_id || '-',
+        },
+        { title: 'Reference', dataIndex: 'reference', render: (v) => v || '-' },
+        { title: 'Notes', dataIndex: 'notes', render: (v) => v || '-' },
+        {
+            title: 'Status', width: 110,
+            render: (_, row) => <Tag color={row?.void ? 'error' : 'success'}>{row?.void ? 'Voided' : (row?.status || 'Active')}</Tag>,
+        },
+    ];
+
+    const topupColumns = [
+        { title: 'Date', dataIndex: 'topup_date', width: 180, render: formatDateTime },
+        { title: 'Topup No', dataIndex: 'topup_no', render: (v) => v || '-' },
+        {
+            title: 'Amount', dataIndex: 'amount', align: 'right', width: 130,
+            render: (v) => <Text strong>{money(v)}</Text>,
+        },
+        {
+            title: 'Received In',
+            render: (_, row) => acctLabel(row?.loan_received_in_account || row?.loanReceivedInAccount) || row?.loan_received_in_account_id || '-',
+        },
+        { title: 'Reference', dataIndex: 'reference', render: (v) => v || '-' },
+        { title: 'Notes', dataIndex: 'notes', render: (v) => v || '-' },
+        {
+            title: 'Status', width: 110,
+            render: (_, row) => <Tag color={row?.void ? 'error' : 'success'}>{row?.void ? 'Voided' : (row?.status || 'Active')}</Tag>,
+        },
+    ];
+
     return (
         <AuthenticatedLayout
             header={
@@ -347,6 +397,50 @@ export default function LoanAccountShow({ id }) {
                                                 loading={paybacksLoading}
                                                 pagination={{ pageSize: 15, showTotal: (t) => `${t} records` }}
                                                 scroll={{ x: 900 }}
+                                            />
+                                        </div>
+                                    ),
+                                },
+                                {
+                                    key: 'charges',
+                                    label: `Charges (${activeCharges.length})`,
+                                    children: (
+                                        <div style={{ padding: token.padding }}>
+                                            {totalCharges > 0 && (
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: token.marginSM }}>
+                                                    Total charges: <Text strong>{money(totalCharges)}</Text>
+                                                </Text>
+                                            )}
+                                            <Table
+                                                size="small"
+                                                rowKey="id"
+                                                columns={chargeColumns}
+                                                dataSource={charges}
+                                                loading={loading}
+                                                pagination={{ pageSize: 15, showTotal: (t) => `${t} records` }}
+                                                scroll={{ x: 950 }}
+                                            />
+                                        </div>
+                                    ),
+                                },
+                                {
+                                    key: 'topups',
+                                    label: `Topups (${activeTopups.length})`,
+                                    children: (
+                                        <div style={{ padding: token.padding }}>
+                                            {totalTopups > 0 && (
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: token.marginSM }}>
+                                                    Total topups: <Text strong>{money(totalTopups)}</Text>
+                                                </Text>
+                                            )}
+                                            <Table
+                                                size="small"
+                                                rowKey="id"
+                                                columns={topupColumns}
+                                                dataSource={topups}
+                                                loading={loading}
+                                                pagination={{ pageSize: 15, showTotal: (t) => `${t} records` }}
+                                                scroll={{ x: 950 }}
                                             />
                                         </div>
                                     ),

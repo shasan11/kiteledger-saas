@@ -42,6 +42,7 @@ class DatabaseSeeder extends Seeder
             EmailConfigSeeder::class,
             EmailTemplateSeeder::class,
             PrintingTemplateSeeder::class,
+            SmsConfigSeeder::class,
             CustomTemplateSeeder::class,
             AccountingConfigurationSeeder::class,
             HrmConfigurationSeeder::class,
@@ -50,6 +51,8 @@ class DatabaseSeeder extends Seeder
             PosSeeder::class,
             RolesAndPermissionsSeeder::class,
             FullPermissionUserSeeder::class,
+            TransactionalRecordSeeder::class,
+            AccountingTransactionVolumeSeeder::class,
             AiPermissionSeeder::class,
          ]);
     }
