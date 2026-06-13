@@ -54,7 +54,7 @@ class Branding
             return null;
         }
 
-        return rtrim(config('app.url'), '/') . '/storage/' . $path;
+        return asset('storage/' . $path);
     }
 
     public static function faviconMimeType(?string $url): ?string

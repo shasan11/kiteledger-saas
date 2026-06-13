@@ -33,6 +33,29 @@ export default function TransactionLineItems({
   const isPurchase = priceField === 'purchase_price';
   const documentType = transactionType || (isPurchase ? 'purchase' : 'sales');
 
+  const COLUMN_WIDTHS = {
+    expand: 36,
+    product: 300,
+    qty: 80,
+    rate: 130,
+    discount: 80,
+    tax: 140,
+    taxAmount: 110,
+    amount: 130,
+    remove: 40,
+  };
+
+  const tableScrollX =
+    COLUMN_WIDTHS.expand +
+    COLUMN_WIDTHS.product +
+    COLUMN_WIDTHS.qty +
+    COLUMN_WIDTHS.rate +
+    (showDiscount ? COLUMN_WIDTHS.discount : 0) +
+    (showTax ? COLUMN_WIDTHS.tax : 0) +
+    COLUMN_WIDTHS.taxAmount +
+    COLUMN_WIDTHS.amount +
+    COLUMN_WIDTHS.remove;
+
   const productDefaults = quickAddProductDefaults || {
     allow_sale: !isPurchase,
     allow_purchase: isPurchase,
@@ -52,8 +75,12 @@ export default function TransactionLineItems({
     if (!taxDefaults?.enable_tax) return null;
 
     return documentType === 'purchase'
-      ? taxDefaults.default_purchase_tax_rate || taxDefaults.default_sales_tax_rate || null
-      : taxDefaults.default_sales_tax_rate || taxDefaults.default_purchase_tax_rate || null;
+      ? taxDefaults.default_purchase_tax_rate ||
+          taxDefaults.default_sales_tax_rate ||
+          null
+      : taxDefaults.default_sales_tax_rate ||
+          taxDefaults.default_purchase_tax_rate ||
+          null;
   }, [documentType, taxDefaults]);
 
   const taxOverrideAllowed =
@@ -80,25 +107,24 @@ export default function TransactionLineItems({
     onChange?.(recalced);
   };
 
+  const emptyRow = () => ({
+    _key: Math.random().toString(36).slice(2),
+    product_id: null,
+    product_detail: null,
+    product_name: '',
+    description: '',
+    qty: 1,
+    unit_price: 0,
+    discount_percent: 0,
+    discount_amount: 0,
+    tax_rate_id: defaultTax,
+    tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
+    tax_amount: 0,
+    line_total: 0,
+  });
+
   const addRow = () => {
-    onChange?.([
-      ...items,
-      {
-        _key: Math.random().toString(36).slice(2),
-        product_id: null,
-        product_detail: null,
-        product_name: '',
-        description: '',
-        qty: 1,
-        unit_price: 0,
-        discount_percent: 0,
-        discount_amount: 0,
-        tax_rate_id: defaultTax,
-        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
-        tax_amount: 0,
-        line_total: 0,
-      },
-    ]);
+    onChange?.([...items, emptyRow()]);
   };
 
   const removeRow = (idx) => {
@@ -112,21 +138,7 @@ export default function TransactionLineItems({
     const next = items.filter((_, i) => i !== idx);
 
     if (next.length < minRow) {
-      next.push({
-        _key: Math.random().toString(36).slice(2),
-        product_id: null,
-        product_detail: null,
-        product_name: '',
-        description: '',
-        qty: 1,
-        unit_price: 0,
-        discount_percent: 0,
-        discount_amount: 0,
-        tax_rate_id: defaultTax,
-        tax_jurisdiction_id: getTaxJurisdictionId(defaultTax),
-        tax_amount: 0,
-        line_total: 0,
-      });
+      next.push(emptyRow());
     }
 
     setExpandedRowKeys((keys) => keys.filter((key) => key !== removedKey));
@@ -201,11 +213,18 @@ export default function TransactionLineItems({
     {
       title: 'Product / Service',
       dataIndex: 'product_id',
-      width: 300,
+      width: COLUMN_WIDTHS.product,
       fixed: 'left',
-      className: 'txn-product-column',
+      className: 'txn-product-column txn-fixed-cell',
       render: (val, row, idx) => (
-        <Tooltip title={row.product_detail?.label || row.product_detail?.name || row.product_name || ''}>
+        <Tooltip
+          title={
+            row.product_detail?.label ||
+            row.product_detail?.name ||
+            row.product_name ||
+            ''
+          }
+        >
           <div className="txn-product-select">
             <BackendSelect
               value={val}
@@ -226,8 +245,9 @@ export default function TransactionLineItems({
     {
       title: 'Qty',
       dataIndex: 'qty',
-      width: 80,
+      width: COLUMN_WIDTHS.qty,
       align: 'right',
+      className: 'txn-qty-column txn-fixed-cell',
       render: (val, _, idx) => (
         <InputNumber
           variant="borderless"
@@ -241,8 +261,9 @@ export default function TransactionLineItems({
     {
       title: 'Rate',
       dataIndex: 'unit_price',
-      width: 130,
+      width: COLUMN_WIDTHS.rate,
       align: 'right',
+      className: 'txn-rate-column txn-fixed-cell',
       render: (val, _, idx) => (
         <InputNumber
           variant="borderless"
@@ -265,8 +286,9 @@ export default function TransactionLineItems({
           {
             title: 'Disc%',
             dataIndex: 'discount_percent',
-            width: 80,
+            width: COLUMN_WIDTHS.discount,
             align: 'right',
+            className: 'txn-discount-column txn-fixed-cell',
             render: (val, _, idx) => (
               <InputNumber
                 variant="borderless"
@@ -285,23 +307,26 @@ export default function TransactionLineItems({
           {
             title: 'Tax',
             dataIndex: 'tax_rate_id',
-            width: 140,
+            width: COLUMN_WIDTHS.tax,
+            className: 'txn-tax-column txn-fixed-cell',
             render: (val, row, idx) => {
               const id = val && typeof val === 'object' ? val.id : val;
 
               return (
-                <TaxLineSelector
-                  value={id ?? null}
-                  detailValue={typeof val === 'object' ? val : null}
-                  disabled={!taxOverrideAllowed}
-                  style={{ width: '100%', ...cellInput }}
-                  onChange={(raw, taxJurisdictionId) =>
-                    update(idx, {
-                      tax_rate_id: raw,
-                      tax_jurisdiction_id: taxJurisdictionId,
-                    })
-                  }
-                />
+                <div className="txn-tax-select">
+                  <TaxLineSelector
+                    value={id ?? null}
+                    detailValue={typeof val === 'object' ? val : null}
+                    disabled={!taxOverrideAllowed}
+                    style={{ width: '100%', ...cellInput }}
+                    onChange={(raw, taxJurisdictionId) =>
+                      update(idx, {
+                        tax_rate_id: raw,
+                        tax_jurisdiction_id: taxJurisdictionId,
+                      })
+                    }
+                  />
+                </div>
               );
             },
           },
@@ -310,10 +335,11 @@ export default function TransactionLineItems({
     {
       title: 'Tax Amt',
       dataIndex: 'tax_amount',
-      width: 110,
+      width: COLUMN_WIDTHS.taxAmount,
       align: 'right',
+      className: 'txn-tax-amount-column txn-fixed-cell',
       render: (_, row) => (
-        <span style={numericStyle}>
+        <span className="txn-ellipsis-text" style={numericStyle}>
           {moneyWithSymbol(row.tax_amount, currencySymbol)}
         </span>
       ),
@@ -321,10 +347,14 @@ export default function TransactionLineItems({
     {
       title: 'Amount',
       dataIndex: 'line_total',
-      width: 130,
+      width: COLUMN_WIDTHS.amount,
       align: 'right',
+      className: 'txn-amount-column txn-fixed-cell',
       render: (_, row) => (
-        <span style={{ ...numericStyle, fontWeight: 600 }}>
+        <span
+          className="txn-ellipsis-text"
+          style={{ ...numericStyle, fontWeight: 600 }}
+        >
           {moneyWithSymbol(row.line_total, currencySymbol)}
         </span>
       ),
@@ -332,7 +362,8 @@ export default function TransactionLineItems({
     {
       title: '',
       key: 'remove',
-      width: 40,
+      width: COLUMN_WIDTHS.remove,
+      className: 'txn-remove-column txn-fixed-cell',
       render: (_, __, idx) => (
         <Button
           type="text"
@@ -349,8 +380,25 @@ export default function TransactionLineItems({
   return (
     <div className="txn-line-items">
       <style>{`
+        .txn-line-items {
+          width: 100%;
+          max-width: 100%;
+        }
+
+        .txn-line-items .ant-table-wrapper,
+        .txn-line-items .ant-spin-nested-loading,
+        .txn-line-items .ant-spin-container {
+          width: 100%;
+          max-width: 100%;
+        }
+
         .txn-line-items .ant-table {
           border: 0;
+          table-layout: fixed !important;
+        }
+
+        .txn-line-items .ant-table-container table {
+          table-layout: fixed !important;
         }
 
         .txn-line-items .ant-table-thead > tr > th {
@@ -362,16 +410,85 @@ export default function TransactionLineItems({
           letter-spacing: 0.3px;
           padding: 8px 10px;
           border-bottom: 1px solid #e2e8f0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .txn-line-items .ant-table-tbody > tr > td {
           padding: 4px 8px;
           border-bottom: 1px solid #f1f5f9;
           vertical-align: middle;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .txn-line-items .ant-table-tbody > tr:hover > td {
           background: #fafafa !important;
+        }
+
+        .txn-line-items .txn-fixed-cell {
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+        }
+
+        .txn-line-items .txn-product-column {
+          width: 300px !important;
+          min-width: 300px !important;
+          max-width: 300px !important;
+        }
+
+        .txn-line-items .txn-qty-column {
+          width: 80px !important;
+          min-width: 80px !important;
+          max-width: 80px !important;
+        }
+
+        .txn-line-items .txn-rate-column {
+          width: 130px !important;
+          min-width: 130px !important;
+          max-width: 130px !important;
+        }
+
+        .txn-line-items .txn-discount-column {
+          width: 80px !important;
+          min-width: 80px !important;
+          max-width: 80px !important;
+        }
+
+        .txn-line-items .txn-tax-column {
+          width: 140px !important;
+          min-width: 140px !important;
+          max-width: 140px !important;
+        }
+
+        .txn-line-items .txn-tax-amount-column {
+          width: 110px !important;
+          min-width: 110px !important;
+          max-width: 110px !important;
+        }
+
+        .txn-line-items .txn-amount-column {
+          width: 130px !important;
+          min-width: 130px !important;
+          max-width: 130px !important;
+        }
+
+        .txn-line-items .txn-remove-column {
+          width: 40px !important;
+          min-width: 40px !important;
+          max-width: 40px !important;
+          text-align: center;
+        }
+
+        .txn-line-items .txn-ellipsis-text {
+          display: block;
+          width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .txn-line-items .ant-input,
@@ -383,8 +500,55 @@ export default function TransactionLineItems({
 
         .txn-line-items .ant-input-number,
         .txn-line-items .ant-select {
+          width: 100% !important;
+          max-width: 100% !important;
           border: 0 !important;
           box-shadow: none !important;
+          overflow: hidden;
+        }
+
+        .txn-line-items .ant-input-number {
+          min-width: 0 !important;
+        }
+
+        .txn-line-items .ant-input-number-input-wrap,
+        .txn-line-items .ant-input-number-input {
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .txn-line-items .ant-select-selector {
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow: hidden !important;
+        }
+
+        .txn-line-items .ant-select-selection-search {
+          max-width: 100% !important;
+          overflow: hidden !important;
+        }
+
+        .txn-line-items .ant-select-selection-search-input {
+          max-width: 100% !important;
+        }
+
+        .txn-line-items .ant-select-selection-item,
+        .txn-line-items .ant-select-selection-placeholder {
+          max-width: 100% !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+        }
+
+        .txn-line-items .txn-product-select,
+        .txn-line-items .txn-tax-select {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
         }
 
         .txn-line-items .txn-expand-btn {
@@ -406,6 +570,7 @@ export default function TransactionLineItems({
           padding: 8px 12px;
           background: #f8fafc;
           border-left: 3px solid #cbd5e1;
+          white-space: normal;
         }
 
         .txn-line-items .txn-description-box .ant-input {
@@ -414,35 +579,21 @@ export default function TransactionLineItems({
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           font-size: 13px;
+          white-space: normal;
         }
 
         .txn-line-items .ant-table-expanded-row > td {
           background: #f8fafc !important;
           padding: 0 8px 8px 48px !important;
+          white-space: normal !important;
         }
 
         .txn-line-items .ant-table-row-expand-icon-cell {
           width: 36px !important;
           min-width: 36px !important;
+          max-width: 36px !important;
           padding-left: 8px !important;
           padding-right: 4px !important;
-        }
-
-        .txn-line-items .txn-product-column {
-          min-width: 280px;
-          max-width: 320px;
-        }
-
-        .txn-line-items .txn-product-select {
-          width: 100%;
-          min-width: 0;
-        }
-
-        .txn-line-items .txn-product-select .ant-select-selection-item,
-        .txn-line-items .txn-product-select .ant-select-selection-placeholder {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
         }
       `}</style>
 
@@ -453,13 +604,15 @@ export default function TransactionLineItems({
         pagination={false}
         columns={columns}
         dataSource={items}
-        scroll={{ x: 'max-content' }}
+        tableLayout="fixed"
+        scroll={{ x: tableScrollX }}
         expandable={{
           expandedRowKeys,
           onExpandedRowsChange: setExpandedRowKeys,
           expandRowByClick: false,
           showExpandColumn: true,
           expandIconColumnIndex: 0,
+          columnWidth: COLUMN_WIDTHS.expand,
           rowExpandable: () => true,
           expandIcon: ({ expanded, onExpand, record }) => (
             <Button
@@ -497,7 +650,12 @@ export default function TransactionLineItems({
           },
         }}
         footer={() => (
-          <Button icon={<PlusOutlined />} type="dashed" size="small" onClick={addRow}>
+          <Button
+            icon={<PlusOutlined />}
+            type="dashed"
+            size="small"
+            onClick={addRow}
+          >
             Add Row
           </Button>
         )}

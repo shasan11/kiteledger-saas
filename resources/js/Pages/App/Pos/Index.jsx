@@ -2577,15 +2577,13 @@ export default function PosIndex() {
 
   const printReceipt = useReactToPrint({
     contentRef: receiptContentRef,
+    content: () => receiptContentRef.current,
     documentTitle: saleReceipt?.sale_no
       ? `POS Receipt ${saleReceipt.sale_no}`
       : "POS Receipt",
     suppressErrors: true,
     pageStyle: `
-      @page {
-        size: ${resolvedPaperSize};
-        margin: 0 !important;
-      }
+      
 
       html, body {
         background: #fff !important;
@@ -2642,7 +2640,25 @@ export default function PosIndex() {
     },
   });
 
-  receiptPrintRef.current = printReceipt;
+  const handlePrintReceipt = () => {
+    const node = receiptContentRef.current;
+
+    if (!node) {
+      playPosBeep("error");
+      message.error("No receipt content found to print.");
+      return;
+    }
+
+    if (typeof printReceipt === "function") {
+      printReceipt();
+      return;
+    }
+
+    playPosBeep("error");
+    message.error("Print function is not ready yet. Please try again.");
+  };
+
+  receiptPrintRef.current = handlePrintReceipt;
 
   const cartColumns = [
     {
@@ -3757,7 +3773,7 @@ export default function PosIndex() {
                   <Button
                     type="primary"
                     icon={<PrinterOutlined />}
-                    onClick={() => printReceipt?.()}
+                    onClick={handlePrintReceipt}
                   >
                     Print Receipt
                   </Button>
@@ -4110,9 +4126,7 @@ export default function PosIndex() {
                     }
 
                     @media print {
-                        body * {
-                            visibility: hidden !important;
-                        }
+                         
 
                         .pos-receipt-print-area,
                         .pos-receipt-print-area * {

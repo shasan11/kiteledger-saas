@@ -9,6 +9,7 @@ use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class DocumentUploadController extends Controller
 {
@@ -45,9 +46,10 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.create');
 
+        // Validation including allowed file types
         $request->validate([
             'label' => ['required', 'string', 'max:255'],
-            'file' => ['required', 'file'],
+            'file' => ['required', 'file', 'mimes:pdf,doc,docx,xlsx,jpg,png'], // only allowed types
             'document_type' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string'],
             'branch_id' => ['nullable', 'uuid'],
@@ -56,8 +58,18 @@ class DocumentUploadController extends Controller
 
         try {
             $stored = $this->storage->store($request->file('file'));
+        } catch (ValidationException $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Invalid file type',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'message' => $e->getMessage(), 'code' => 'DOCUMENT_UPLOAD_FAILED'], 422);
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'code' => 'DOCUMENT_UPLOAD_FAILED',
+            ], 422);
         }
 
         $doc = DocumentUpload::create([

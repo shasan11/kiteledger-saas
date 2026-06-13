@@ -41,20 +41,26 @@ const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 const DASH = '-';
 
-const COLORS = {
-    indigo: '#4F46E5',
-    blue: '#3B82F6',
-    emerald: '#10B981',
-    amber: '#F59E0B',
-    red: '#EF4444',
-    purple: '#8B5CF6',
-    pink: '#EC4899',
-    cyan: '#06B6D4',
-    lime: '#84CC16',
-    slate: '#64748B',
+const THEME_COLOURS = {
+    primary: 'var(--kd-primary)',
+    primaryActive: 'var(--kd-primary-active)',
+    success: 'var(--kd-success)',
+    warning: 'var(--kd-warning)',
+    error: 'var(--kd-error)',
+    info: 'var(--kd-info)',
+    text: 'var(--kd-text)',
+    muted: 'var(--kd-muted)',
 };
 
-const PIE_PALETTE = [COLORS.indigo, COLORS.emerald, COLORS.amber, COLORS.blue, COLORS.pink, COLORS.purple, COLORS.cyan, COLORS.lime];
+const PIE_PALETTE = [
+    THEME_COLOURS.primary,
+    THEME_COLOURS.success,
+    THEME_COLOURS.warning,
+    THEME_COLOURS.info,
+    THEME_COLOURS.primaryActive,
+    THEME_COLOURS.error,
+    THEME_COLOURS.muted,
+];
 
 const currFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 });
 const compactFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', notation: 'compact', maximumFractionDigits: 1 });
@@ -159,8 +165,8 @@ export default function Dashboard() {
 
                             {/* Bottom: Top Parties + Bank Accounts */}
                             <section className="kd-bottom">
-                                {m.topCustomers.length > 0 && <TopPartiesBar title="Top Customers" data={m.topCustomers} color={COLORS.indigo} />}
-                                {m.topSuppliers.length > 0 && <TopPartiesBar title="Top Suppliers" data={m.topSuppliers} color={COLORS.amber} />}
+                                {m.topCustomers.length > 0 && <TopPartiesBar title="Top Customers" data={m.topCustomers} color={THEME_COLOURS.primary} />}
+                                {m.topSuppliers.length > 0 && <TopPartiesBar title="Top Suppliers" data={m.topSuppliers} color={THEME_COLOURS.warning} />}
                                 {m.bankAccounts.length > 0 && <BankList accounts={m.bankAccounts} />}
                             </section>
                         </>
@@ -178,18 +184,18 @@ function DashHeader({ branches, filters, loading, onRefresh, onChange }) {
     return (
         <div className="kd-hdr">
             <div>
-                <Title level={4} style={{ margin: '0 0 2px', fontWeight: 650 }}>Dashboard</Title>
-                <Text type="secondary" style={{ fontSize: 13 }}>Financial overview for the selected period</Text>
+                <Title level={5} style={{ margin: '0 0 1px', fontWeight: 650 }}>Dashboard</Title>
+                <Text type="secondary" style={{ fontSize: 11 }}>Financial overview for the selected period</Text>
             </div>
             <div className="kd-hdr__ctl">
-                <Select value={filters.branch_id} options={opts} style={{ width: 170 }}
+                <Select value={filters.branch_id} options={opts} style={{ width: 150 }}
                     onChange={(v) => onChange((c) => ({ ...c, branch_id: v || 'all' }))} />
                 <RangePicker
                     value={filters.date_from && filters.date_to ? [dayjs(filters.date_from), dayjs(filters.date_to)] : null}
-                    style={{ width: 260 }}
+                    style={{ width: 230 }}
                     onChange={(d) => onChange((c) => ({ ...c, date_from: d?.[0]?.format('YYYY-MM-DD'), date_to: d?.[1]?.format('YYYY-MM-DD') }))}
                 />
-                <Tooltip title="Refresh"><Button icon={<ReloadOutlined spin={loading} />} onClick={onRefresh} /></Tooltip>
+                <Tooltip title="Refresh"><Button size="small" icon={<ReloadOutlined spin={loading} />} onClick={onRefresh} /></Tooltip>
             </div>
         </div>
     );
@@ -197,35 +203,50 @@ function DashHeader({ branches, filters, loading, onRefresh, onChange }) {
 
 function KpiCard({ label, value, sparkline, color, trend, invertTrend, helper }) {
     const isUp = trend > 0;
-    const trendColor = invertTrend ? (isUp ? COLORS.red : COLORS.emerald) : (isUp ? COLORS.emerald : COLORS.red);
+    const trendColor = invertTrend
+        ? (isUp ? THEME_COLOURS.error : THEME_COLOURS.success)
+        : (isUp ? THEME_COLOURS.success : THEME_COLOURS.error);
     const hasSpark = Array.isArray(sparkline) && sparkline.some((d) => toNum(d.value) !== 0);
+    const gradientId = `kpi-g-${String(label || 'metric').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
     return (
-        <Card className="kd-card kd-kpi" styles={{ body: { padding: 10, height: '100%', position: 'relative', overflow: 'hidden' } }}>
-            <div className="kd-kpi__body">
-                <Text type="secondary" style={{ fontSize: 12, fontWeight: 500, letterSpacing: '0.02em' }}>{label}</Text>
-                <div className="kd-kpi__val">{fmtMoney(value)}</div>
-                <div className="kd-kpi__foot">
+        <Card
+            className="kd-card kd-kpi"
+            style={{ '--kd-accent': color }}
+            styles={{ body: { padding: 0, height: '100%', position: 'relative', overflow: 'hidden' } }}
+        >
+            <div className="kd-kpi__accent" />
+            <div className="kd-kpi__content">
+                <div className="kd-kpi__top">
+                    <Text type="secondary" className="kd-kpi__label">{label}</Text>
                     {trend != null && (
-                        <span style={{ color: trendColor, fontSize: 12, fontWeight: 600 }}>
-                            {isUp ? '+' : '-'} {Math.abs(trend).toFixed(1)}%
+                        <span className="kd-kpi__trend" style={{ '--kd-trend': trendColor }}>
+                            {isUp ? '+' : '-'}{Math.abs(trend).toFixed(1)}%
                         </span>
                     )}
-                    {helper && <Text type="secondary" style={{ fontSize: 11 }}>{helper}</Text>}
                 </div>
+                <div className="kd-kpi__val">{fmtMoney(value)}</div>
+                {helper && <Text type="secondary" className="kd-kpi__helper">{helper}</Text>}
             </div>
             {hasSpark && (
                 <div className="kd-kpi__spark" aria-hidden>
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={sparkline}>
                             <defs>
-                                <linearGradient id={`kpi-g-${label}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={color} stopOpacity={0.2} />
-                                    <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={color} stopOpacity={0.24} />
+                                    <stop offset="100%" stopColor={color} stopOpacity={0.04} />
                                 </linearGradient>
                             </defs>
-                            <Area type="monotone" dataKey="value" stroke={color} strokeWidth={1.5}
-                                fill={`url(#kpi-g-${label})`} dot={false} isAnimationActive={false} />
+                            <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke={color}
+                                strokeWidth={1.6}
+                                fill={`url(#${gradientId})`}
+                                dot={false}
+                                isAnimationActive={false}
+                            />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -234,28 +255,29 @@ function KpiCard({ label, value, sparkline, color, trend, invertTrend, helper })
     );
 }
 
+
 function FinancialChart({ data }) {
     const hasData = data.some((d) => toNum(d.revenue) || toNum(d.expenses) || toNum(d.profit));
 
     return (
-        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr">
                 <span className="kd-card-hdr__t">Financial Performance</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Revenue, expenses & net profit trend</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Revenue, expenses & net profit trend</Text>
             </div>
             {hasData ? (
-                <div style={{ height: 230 }}>
+                <div style={{ height: 180 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                        <LineChart data={data} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={68} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={58} />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                            <Line type="monotone" dataKey="revenue" name="Revenue" stroke={COLORS.indigo} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                            <Line type="monotone" dataKey="expenses" name="Expenses" stroke={COLORS.amber} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={COLORS.emerald} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                            <Line type="monotone" dataKey="revenue" name="Revenue" stroke={THEME_COLOURS.primary} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="expenses" name="Expenses" stroke={THEME_COLOURS.warning} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={THEME_COLOURS.success} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -270,13 +292,13 @@ function ExpenseDonut({ data }) {
     const total = data.reduce((s, d) => s + toNum(d.value), 0);
 
     return (
-        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr">
                 <span className="kd-card-hdr__t">Expense Breakdown</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Where your money goes</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Where your money goes</Text>
             </div>
             {data.length > 0 && total > 0 ? (
-                <div style={{ height: 230, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ height: 180, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="45%"
@@ -284,8 +306,8 @@ function ExpenseDonut({ data }) {
                                 {data.map((_, i) => <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />)}
                             </Pie>
                             <ChartTooltip content={<PieTip total={total} />} />
-                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, lineHeight: '20px' }}
-                                formatter={(val) => <span style={{ color: 'var(--kd-text)', fontSize: 11 }}>{val}</span>} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, lineHeight: '16px' }}
+                                formatter={(val) => <span style={{ color: 'var(--kd-text)', fontSize: 10 }}>{val}</span>} />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>
@@ -309,7 +331,7 @@ function PieTip({ active, payload, total }) {
                 <Text>{fmtMoney(d.value)}</Text>
             </div>
             <div className="kd-tip__row">
-                <span style={{ background: 'transparent' }} />
+                <span style={{ background: 'var(--kd-border)' }} />
                 <Text type="secondary">Share</Text>
                 <Text>{pct}%</Text>
             </div>
@@ -321,24 +343,24 @@ function CashFlowChart({ data }) {
     const hasData = data.some((d) => toNum(d.cash_in) || toNum(d.cash_out));
 
     return (
-        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr">
                 <span className="kd-card-hdr__t">Cash Flow</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Daily cash inflows and outflows</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Daily cash inflows and outflows</Text>
             </div>
             {hasData ? (
-                <div style={{ height: 220 }}>
+                <div style={{ height: 170 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                        <LineChart data={data} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 11 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={68} />
+                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={58} />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                            <Line type="monotone" dataKey="cash_in" name="Cash In" stroke={COLORS.blue} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                            <Line type="monotone" dataKey="cash_out" name="Cash Out" stroke={COLORS.red} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                            <Line type="monotone" dataKey="net" name="Net" stroke={COLORS.purple} strokeWidth={2} strokeDasharray="6 3" dot={false} activeDot={{ r: 4 }} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                            <Line type="monotone" dataKey="cash_in" name="Cash In" stroke={THEME_COLOURS.info} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="cash_out" name="Cash Out" stroke={THEME_COLOURS.error} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="net" name="Net" stroke={THEME_COLOURS.primaryActive} strokeWidth={1.8} strokeDasharray="6 3" dot={false} activeDot={{ r: 3 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -353,23 +375,23 @@ function AgeingChart({ data }) {
     const hasData = data.some((d) => toNum(d.receivables) > 0 || toNum(d.payables) > 0);
 
     return (
-        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card kd-chart-side" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr">
                 <span className="kd-card-hdr__t">Receivables vs Payables Ageing</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Outstanding amounts by age</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Outstanding amounts by age</Text>
             </div>
             {hasData ? (
-                <div style={{ height: 220 }}>
+                <div style={{ height: 170 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                        <BarChart data={data} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
-                            <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }}
-                                tickFormatter={(v) => compactFmt.format(v)} width={60} />
+                            <XAxis dataKey="bucket" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
+                                tickFormatter={(v) => compactFmt.format(v)} width={52} />
                             <ChartTooltip content={<MoneyTip />} />
-                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                            <Bar dataKey="receivables" name="Receivables" fill={COLORS.blue} radius={[4, 4, 0, 0]} maxBarSize={28} />
-                            <Bar dataKey="payables" name="Payables" fill={COLORS.amber} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                            <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
+                            <Bar dataKey="receivables" name="Receivables" fill={THEME_COLOURS.info} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                            <Bar dataKey="payables" name="Payables" fill={THEME_COLOURS.warning} radius={[4, 4, 0, 0]} maxBarSize={22} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -384,7 +406,7 @@ function MoneyTip({ active, payload, label }) {
     if (!active || !payload?.length) return null;
     return (
         <div className="kd-tip">
-            <Text strong style={{ fontSize: 12 }}>{label}</Text>
+            <Text strong style={{ fontSize: 11 }}>{label}</Text>
             {payload.map((p) => (
                 <div className="kd-tip__row" key={p.dataKey}>
                     <span style={{ background: p.color || p.fill }} />
@@ -398,16 +420,16 @@ function MoneyTip({ active, payload, label }) {
 
 function BizCard({ card }) {
     return (
-        <Card className="kd-card kd-biz" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card kd-biz" styles={{ body: { padding: 8 } }}>
             <div className="kd-biz__head">
-                <Text strong style={{ fontSize: 13, fontWeight: 650 }}>{card.title}</Text>
-                {card.href && <Button type="link" size="small" style={{ padding: 0, fontSize: 12, fontWeight: 600 }} onClick={() => visit(card.href)}>{card.linkText || 'View'}</Button>}
+                <Text strong style={{ fontSize: 12, fontWeight: 650 }}>{card.title}</Text>
+                {card.href && <Button type="link" size="small" style={{ padding: 0, fontSize: 11, fontWeight: 600 }} onClick={() => visit(card.href)}>{card.linkText || 'View'}</Button>}
             </div>
             <div className="kd-biz__rows">
                 {card.items.map((i) => (
                     <div className="kd-biz__row" key={i.label}>
-                        <Text type="secondary" style={{ fontSize: 12 }}>{i.label}</Text>
-                        <Text strong style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>{i.label}</Text>
+                        <Text strong style={{ fontSize: 11 }}>
                             {i.format === 'money' ? fmtMoney(i.value, true) : i.format === 'text' ? (i.value || DASH) : fmtNum(i.value)}
                         </Text>
                     </div>
@@ -436,10 +458,10 @@ function TxnTable({ transactions }) {
     ];
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: transactions.length ? 0 : 10 } }}>
-            <div className="kd-card-hdr" style={{ padding: transactions.length ? '10px' : 0, borderBottom: transactions.length ? '1px solid var(--kd-grid)' : 'none' }}>
+        <Card className="kd-card" styles={{ body: { padding: transactions.length ? 0 : 8 } }}>
+            <div className="kd-card-hdr" style={{ padding: transactions.length ? '8px' : 0, borderBottom: transactions.length ? '1px solid var(--kd-grid)' : 'none' }}>
                 <span className="kd-card-hdr__t">Recent Transactions</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Latest financial documents</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Latest financial documents</Text>
             </div>
             {transactions.length > 0 ? (
                 <Table rowKey="key" columns={cols} dataSource={transactions} pagination={false} size="small"
@@ -455,19 +477,19 @@ function TopPartiesBar({ title, data, color }) {
     const chartData = data.slice(0, 5).map((d) => ({ ...d, name: truncate(d.name, 18) }));
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
                 <span className="kd-card-hdr__t">{title}</span>
             </div>
-            <div style={{ height: 150 }}>
+            <div style={{ height: 120 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 4 }}>
-                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 10 }}
+                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--kd-muted)', fontSize: 9 }}
                             tickFormatter={(v) => compactFmt.format(v)} />
-                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={110}
-                            tick={{ fill: 'var(--kd-text)', fontSize: 11 }} />
+                        <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={96}
+                            tick={{ fill: 'var(--kd-text)', fontSize: 10 }} />
                         <ChartTooltip content={<MoneyTip />} />
-                        <Bar dataKey="amount" name="Amount" fill={color} radius={[0, 4, 4, 0]} maxBarSize={20} />
+                        <Bar dataKey="amount" name="Amount" fill={color} radius={[0, 4, 4, 0]} maxBarSize={16} />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
@@ -477,7 +499,7 @@ function TopPartiesBar({ title, data, color }) {
 
 function BankList({ accounts }) {
     return (
-        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr" style={{ marginBottom: 10 }}>
                 <span className="kd-card-hdr__t">Bank Accounts</span>
             </div>
@@ -503,10 +525,10 @@ function BankList({ accounts }) {
 
 function EmptyState({ title, desc, compact }) {
     return (
-        <div style={{ minHeight: compact ? 140 : 240, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 16 }}>
+        <div style={{ minHeight: compact ? 105 : 170, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 10 }}>
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false}>
                 <Title level={5} style={{ margin: '0 0 4px' }}>{title}</Title>
-                <Text type="secondary" style={{ fontSize: 12 }}>{desc}</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>{desc}</Text>
             </Empty>
         </div>
     );
@@ -514,8 +536,8 @@ function EmptyState({ title, desc, compact }) {
 
 function DashSkeleton() {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 10 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 8 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
             <div className="kd-row-2">
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
@@ -555,12 +577,12 @@ function buildModel(data) {
     const paySparkline = (sparklines.payables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
 
     const kpis = [
-        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: COLORS.indigo, trend: calcTrend(revSparkline), helper: 'This period' },
-        { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: COLORS.amber, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
-        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: COLORS.emerald, trend: calcTrend(profitSparkline) },
-        { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: COLORS.cyan, trend: calcTrend(cashSparkline), helper: 'Available' },
-        { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: COLORS.blue, helper: 'Outstanding' },
-        { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: COLORS.red, helper: 'Outstanding' },
+        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'This period' },
+        { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: THEME_COLOURS.warning, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
+        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline) },
+        { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: THEME_COLOURS.info, trend: calcTrend(cashSparkline), helper: 'Available' },
+        { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: THEME_COLOURS.info, helper: 'Outstanding' },
+        { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: THEME_COLOURS.error, helper: 'Outstanding' },
     ];
 
     const expenseBreakdown = data.expense_breakdown || [];
@@ -690,10 +712,10 @@ function ProjectDeadlines({ approaching, overdue }) {
     );
 
     return (
-        <Card className="kd-card" styles={{ body: { padding: 10 } }}>
+        <Card className="kd-card" styles={{ body: { padding: 8 } }}>
             <div className="kd-card-hdr">
                 <span className="kd-card-hdr__t">Project Deadlines</span>
-                <Text type="secondary" style={{ fontSize: 12 }}>Approaching and overdue internal project dates</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Approaching and overdue internal project dates</Text>
             </div>
             <Tabs
                 size="small"
@@ -736,181 +758,360 @@ function Styles({ token }) {
             .kd {
                 --kd-bg: ${token.colorBgLayout};
                 --kd-card: ${token.colorBgContainer};
-                --kd-card-muted: ${token.colorFillQuaternary || token.colorFillTertiary};
+                --kd-elevated: ${token.colorBgElevated};
+                --kd-soft: ${token.colorFillQuaternary};
+                --kd-soft-strong: ${token.colorFillTertiary};
                 --kd-border: ${token.colorBorderSecondary};
-                --kd-grid: ${token.colorSplit || token.colorBorderSecondary};
+                --kd-border-strong: ${token.colorBorder};
+                --kd-grid: ${token.colorSplit};
                 --kd-text: ${token.colorText};
                 --kd-muted: ${token.colorTextSecondary};
+                --kd-subtle: ${token.colorTextTertiary};
+                --kd-disabled: ${token.colorTextDisabled};
                 --kd-hover: ${token.controlItemBgHover};
-                --kd-shadow: ${token.boxShadowTertiary || '0 1px 2px rgba(0,0,0,.04)'};
-                --kd-radius: ${Math.min(token.borderRadiusLG || 8, 8)}px;
-                --kd-radius-sm: ${Math.min(token.borderRadius || 6, 6)}px;
-                --kd-gap: ${Math.max(token.paddingXS || 8, 8)}px;
-                --kd-pad: ${Math.max(token.paddingSM || 10, 10)}px;
+                --kd-active: ${token.controlItemBgActive};
+                --kd-primary: ${token.colorPrimary};
+                --kd-primary-active: ${token.colorPrimaryActive};
+                --kd-primary-bg: ${token.colorPrimaryBg};
+                --kd-primary-bg-hover: ${token.colorPrimaryBgHover};
+                --kd-success: ${token.colorSuccess};
+                --kd-success-bg: ${token.colorSuccessBg};
+                --kd-warning: ${token.colorWarning};
+                --kd-warning-bg: ${token.colorWarningBg};
+                --kd-error: ${token.colorError};
+                --kd-error-bg: ${token.colorErrorBg};
+                --kd-info: ${token.colorInfo || token.colorPrimary};
+                --kd-info-bg: ${token.colorInfoBg || token.colorPrimaryBg};
+                --kd-shadow: ${token.boxShadowTertiary || token.boxShadowSecondary};
+                --kd-shadow-strong: ${token.boxShadowSecondary || token.boxShadow};
+                --kd-radius: ${token.borderRadiusLG}px;
+                --kd-radius-sm: ${token.borderRadius}px;
+                --kd-radius-xs: ${token.borderRadiusSM}px;
+                --kd-gap: ${token.paddingXS}px;
+                --kd-pad: ${token.paddingSM}px;
                 min-height: calc(100vh - 96px);
                 background: var(--kd-bg);
-                padding: clamp(var(--kd-pad), 1.4vw, ${token.paddingLG || 18}px);
+                padding: clamp(${token.paddingXS}px, 1vw, ${token.paddingMD}px);
             }
             .kd-wrap {
-                width: min(1440px, 100%);
+                width: min(1480px, 100%);
                 margin: 0 auto;
                 display: flex;
                 flex-direction: column;
                 gap: var(--kd-gap);
             }
 
-            /* Header */
-            .kd-hdr { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--kd-gap); }
-            .kd-hdr__ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--kd-gap); }
+            .kd-hdr {
+                width: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: var(--kd-gap);
+            }
+            .kd-hdr__ctl {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: var(--kd-gap);
+            }
+            .kd-hdr__ctl .ant-select,
+            .kd-hdr__ctl .ant-picker,
+            .kd-hdr__ctl .ant-btn {
+                border-radius: var(--kd-radius-sm);
+            }
+            .kd-hdr__ctl .ant-select-selector,
+            .kd-hdr__ctl .ant-picker,
+            .kd-hdr__ctl .ant-btn {
+                min-height: 30px !important;
+            }
+            .kd .ant-card-small > .ant-card-body,
+            .kd .ant-table-small .ant-table-cell {
+                padding-top: ${token.paddingXXS}px !important;
+                padding-bottom: ${token.paddingXXS}px !important;
+            }
 
-            /* Card base */
             .kd-card {
                 background: var(--kd-card) !important;
                 border: 1px solid var(--kd-border) !important;
                 border-radius: var(--kd-radius) !important;
                 box-shadow: var(--kd-shadow) !important;
+                overflow: hidden;
+            }
+            .kd-card:hover {
+                border-color: var(--kd-border-strong) !important;
+                box-shadow: var(--kd-shadow-strong) !important;
             }
             .kd-card-hdr {
                 display: flex;
                 flex-direction: column;
-                gap: 1px;
-                margin-bottom: 8px;
+                gap: ${token.marginXXS}px;
+                margin-bottom: ${token.marginXS}px;
             }
-            .kd-card-hdr__t { font-size: 14px; font-weight: 650; color: var(--kd-text); }
+            .kd-card-hdr__t {
+                font-size: ${token.fontSize}px;
+                font-weight: 700;
+                line-height: 1.2;
+                color: var(--kd-text);
+            }
 
-            /* KPI Strip */
             .kd-kpis {
-                display: grid;
-                grid-template-columns: repeat(6, minmax(0, 1fr));
-                gap: var(--kd-gap);
+    display: grid;
+    grid-template-columns: repeat(6, minmax(140px, 1fr));
+    gap: var(--kd-gap);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+}
+    
+            .kd-kpi {
+                min-height: 86px;
+                position: relative;
             }
-            .kd-kpi { min-height: 90px; overflow: hidden; }
-            .kd-kpi__body {
+            .kd-kpi::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: var(--kd-soft);
+                opacity: 0.35;
+                pointer-events: none;
+            }
+            .kd-kpi__accent {
+                position: absolute;
+                inset: 0 auto 0 0;
+                width: ${Math.max(token.lineWidthBold || 2, 3)}px;
+                background: var(--kd-accent);
+            }
+            .kd-kpi__content {
                 position: relative;
                 z-index: 1;
                 display: flex;
                 flex-direction: column;
-                min-height: 72px;
+                min-height: 86px;
+                padding: ${token.paddingXS}px ${token.paddingSM}px;
+            }
+            .kd-kpi__top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: ${token.marginXXS}px;
+            }
+            .kd-kpi__label {
+                font-size: ${token.fontSizeSM}px;
+                font-weight: 600;
+                letter-spacing: ${token.sizeXXS / 200}px;
+                text-transform: uppercase;
+            }
+            .kd-kpi__trend {
+                display: inline-flex;
+                align-items: center;
+                border: 1px solid var(--kd-border);
+                border-radius: ${token.borderRadiusSM}px;
+                background: var(--kd-card);
+                color: var(--kd-trend);
+                font-size: ${token.fontSizeSM}px;
+                line-height: 1;
+                font-weight: 700;
+                padding: 1px ${token.paddingXXS}px;
+                white-space: nowrap;
             }
             .kd-kpi__val {
                 color: var(--kd-text);
-                font-size: clamp(18px, 1.45vw, 22px);
-                font-weight: 700;
-                line-height: 1.15;
-                margin-top: 5px;
+                font-size: clamp(${token.fontSizeLG}px, 1.25vw, ${token.fontSizeHeading5}px);
+                font-weight: 800;
+                line-height: 1.1;
+                margin-top: ${token.marginXS}px;
                 overflow-wrap: anywhere;
             }
-            .kd-kpi__foot {
-                display: flex;
-                align-items: center;
-                gap: 8px;
+            .kd-kpi__helper {
+                display: block;
+                font-size: ${token.fontSizeSM}px;
                 margin-top: auto;
-                padding-top: 5px;
+                padding-top: ${token.paddingXXS}px;
             }
             .kd-kpi__spark {
                 position: absolute;
-                right: 0; bottom: 0;
-                width: 68%; height: 42px;
-                opacity: 0.3;
+                right: ${token.paddingXXS}px;
+                bottom: ${token.paddingXXS}px;
+                width: 58%;
+                height: 34px;
+                opacity: 0.55;
                 pointer-events: none;
             }
 
-            /* Chart rows */
-            .kd-row-2, .kd-row-3 {
+            .kd-row-2,
+            .kd-row-3 {
                 display: grid;
-                grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+                grid-template-columns: minmax(0, 3fr) minmax(270px, 1.35fr);
                 gap: var(--kd-gap);
                 align-items: stretch;
             }
+            .kd-chart-main,
+            .kd-chart-side {
+                min-height: 222px;
+            }
 
-            /* Business cards */
             .kd-biz-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
                 gap: var(--kd-gap);
+            }
+            .kd-biz {
+                position: relative;
+            }
+            .kd-biz::before {
+                content: '';
+                position: absolute;
+                inset: 0 0 auto 0;
+                height: ${Math.max(token.lineWidthBold || 2, 3)}px;
+                background: var(--kd-primary);
+                opacity: 0.8;
             }
             .kd-biz__head {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: 8px;
-                margin-bottom: 6px;
+                gap: ${token.marginXXS}px;
+                margin-bottom: ${token.marginXS}px;
             }
-            .kd-biz__rows { display: flex; flex-direction: column; gap: 4px; }
+            .kd-biz__rows {
+                display: flex;
+                flex-direction: column;
+                gap: ${token.marginXXS}px;
+            }
             .kd-biz__row {
                 display: flex;
                 justify-content: space-between;
                 align-items: baseline;
-                gap: 8px;
+                gap: ${token.marginXXS}px;
+                padding: 1px 0;
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-biz__row:last-child {
+                border-bottom: 0;
             }
 
-            /* Bottom row */
             .kd-bottom {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: var(--kd-gap);
             }
 
-            /* Bank list */
-            .kd-bank-list { display: flex; flex-direction: column; }
+            .kd-bank-list {
+                display: flex;
+                flex-direction: column;
+            }
             .kd-bank-row {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                gap: 12px;
-                padding: 6px 0;
+                gap: ${token.marginXS}px;
+                padding: ${token.paddingXXS}px 0;
                 border-bottom: 1px solid var(--kd-grid);
             }
-            .kd-bank-row:last-child { border-bottom: 0; padding-bottom: 0; }
+            .kd-bank-row:last-child {
+                border-bottom: 0;
+                padding-bottom: 0;
+            }
 
-            /* Table */
             .kd-pill {
                 display: inline-flex;
-                padding: 1px 8px;
+                align-items: center;
+                padding: 1px ${token.paddingXXS}px;
                 border: 1px solid var(--kd-border);
                 border-radius: var(--kd-radius-sm);
                 color: var(--kd-muted);
-                background: var(--kd-card-muted);
-                font-size: 11px;
+                background: var(--kd-soft);
+                font-size: ${token.fontSizeSM}px;
+                line-height: 1.15;
                 text-transform: capitalize;
             }
-            .kd-row--click { cursor: pointer; }
-            .kd-row--click:hover td { background: var(--kd-hover) !important; }
+            .kd-row--click {
+                cursor: pointer;
+            }
+            .kd-row--click:hover td {
+                background: var(--kd-hover) !important;
+            }
+            .kd .ant-table-wrapper .ant-table,
+            .kd .ant-table-wrapper .ant-table-container,
+            .kd .ant-table-wrapper .ant-table-thead > tr > th {
+                background: var(--kd-card) !important;
+            }
+            .kd .ant-table-wrapper .ant-table-thead > tr > th {
+                color: var(--kd-muted) !important;
+                font-weight: 700;
+            }
+            .kd .ant-tabs-nav {
+                margin-bottom: ${token.marginXS}px;
+            }
 
-            /* Tooltip */
             .kd-tip {
-                min-width: 170px;
-                padding: 10px;
-                background: var(--kd-card);
+                min-width: 160px;
+                padding: ${token.paddingXS}px;
+                background: var(--kd-elevated);
                 border: 1px solid var(--kd-border);
                 border-radius: var(--kd-radius);
-                box-shadow: var(--kd-shadow);
+                box-shadow: var(--kd-shadow-strong);
             }
             .kd-tip__row {
                 display: grid;
-                grid-template-columns: 8px 1fr auto;
+                grid-template-columns: ${token.sizeXXS}px 1fr auto;
                 align-items: center;
-                gap: 6px;
-                margin-top: 4px;
-                font-size: 12px;
+                gap: ${token.marginXXS}px;
+                margin-top: ${token.marginXXS}px;
+                font-size: ${token.fontSizeSM}px;
             }
-            .kd-tip__row span:first-child { width: 8px; height: 8px; border-radius: 50%; }
+            .kd-tip__row span:first-child {
+                width: ${token.sizeXXS}px;
+                height: ${token.sizeXXS}px;
+                border-radius: 999px;
+            }
 
-            /* Responsive */
-            @media (max-width: 1180px) {
-                .kd-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-                .kd-row-2, .kd-row-3 { grid-template-columns: minmax(0, 1fr); }
+            .kd .recharts-default-legend {
+                color: var(--kd-muted);
+            }
+            .kd .recharts-cartesian-axis-tick-value {
+                fill: var(--kd-muted);
+            }
+
+            @media (max-width: 1280px) {
+                .kd-kpis {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                }
+                .kd-row-2,
+                .kd-row-3 {
+                    grid-template-columns: minmax(0, 1fr);
+                }
             }
             @media (max-width: 768px) {
-                .kd { padding: 12px; }
-                .kd-hdr { flex-direction: column; align-items: flex-start; }
-                .kd-hdr__ctl { width: 100%; }
-                .kd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-                .kd-biz-grid { grid-template-columns: minmax(0, 1fr); }
-                .kd-bottom { grid-template-columns: minmax(0, 1fr); }
+                .kd {
+                    padding: ${token.paddingXS}px;
+                }
+                .kd-hdr {
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+                .kd-hdr__ctl,
+                .kd-hdr__ctl .ant-picker {
+                    width: 100% !important;
+                }
+                .kd-hdr__ctl .ant-select {
+                    width: 100% !important;
+                }
+                .kd-kpis {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                .kd-biz-grid,
+                .kd-bottom {
+                    grid-template-columns: minmax(0, 1fr);
+                }
             }
-            @media (max-width: 480px) {
-                .kd-kpis { grid-template-columns: minmax(0, 1fr); }
+            @media (max-width: 520px) {
+                .kd-kpis {
+                    grid-template-columns: minmax(0, fr);
+                }
+                .kd-card-hdr__t {
+                    font-size: ${token.fontSize}px;
+                }
             }
         `}</style>
     );
