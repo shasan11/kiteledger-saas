@@ -1,20 +1,50 @@
 <?php
 
 use App\Http\Controllers\Documents\DocumentUploadPageController;
+use App\Http\Controllers\Install\InstallController;
+use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+/*
+| Web installer (/install). Runs only when the app is not installed.
+| Protected by RedirectIfInstalled; install POST routes are CSRF-exempt
+| (see bootstrap/app.php) since the wizard runs before login/session setup.
+| Requires a valid APP_KEY in .env — copy .env.example to .env first.
+*/
+Route::prefix('install')
+    ->middleware(\App\Http\Middleware\RedirectIfInstalled::class)
+    ->group(function () {
+        Route::get('/', [InstallController::class, 'index'])->name('install.index');
+        Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.requirements');
+        Route::post('/database', [InstallController::class, 'testDatabase'])->name('install.database');
+        Route::post('/run', [InstallController::class, 'run'])->name('install.run');
+    });
+
 Route::get('/', function () {
     return redirect()->route('dashboard');
 })->name('home');
+
+Route::post('/locale/change', [LocalizationController::class, 'change'])
+    ->name('locale.change');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::prefix('localization')->name('localization.')->group(function () {
+        Route::get('/languages', [LocalizationController::class, 'index'])->name('languages.index');
+        Route::post('/languages', [LocalizationController::class, 'store'])->name('languages.store');
+        Route::put('/languages/{language}', [LocalizationController::class, 'update'])->name('languages.update');
+        Route::delete('/languages/{language}', [LocalizationController::class, 'destroy'])->name('languages.destroy');
+        Route::get('/languages/{language}/translations', [LocalizationController::class, 'translations'])->name('translations.index');
+        Route::put('/languages/{language}/translations', [LocalizationController::class, 'updateTranslations'])->name('translations.update');
+        Route::post('/languages/{language}/translations/import', [LocalizationController::class, 'importTranslations'])->name('translations.import');
+    });
+
     Route::get('/dashboard-data', DashboardController::class)->name('dashboard.data');
 
     require __DIR__.'/menu/pos.php';

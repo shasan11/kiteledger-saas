@@ -4,8 +4,6 @@ namespace App\Services\Payments;
 
 use App\Models\PaymentGatewaySetting;
 use App\Services\Payments\Contracts\PaymentGatewayInterface;
-use App\Services\Payments\Gateways\EsewaGateway;
-use App\Services\Payments\Gateways\KhaltiGateway;
 use App\Services\Payments\Gateways\PayPalGateway;
 use App\Services\Payments\Gateways\RazorpayGateway;
 use App\Services\Payments\Gateways\StripeGateway;
@@ -16,8 +14,6 @@ class PaymentGatewayManager
         'stripe' => StripeGateway::class,
         'paypal' => PayPalGateway::class,
         'razorpay' => RazorpayGateway::class,
-        'khalti' => KhaltiGateway::class,
-        'esewa' => EsewaGateway::class,
     ];
 
     public function driver(string $provider): PaymentGatewayInterface

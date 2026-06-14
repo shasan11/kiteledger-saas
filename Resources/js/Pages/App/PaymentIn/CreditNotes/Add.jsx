@@ -31,8 +31,11 @@ const mapLines = (lines = [], options = {}) => (lines || []).map((l) => ({
   line_total: toNumber(l.line_total),
 }));
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function CreditNoteAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [items, setItems] = useState([emptyLine()]);
   const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -140,6 +143,7 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
       }
     }
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       sales_return_no: null,
       sales_return_date: formatDate(v.credit_note_date),
       contact_id: asId(v.contact_id),
@@ -276,6 +280,9 @@ export default function CreditNoteAdd({ initialRecord = null, isEdit = false, re
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

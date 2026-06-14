@@ -88,21 +88,51 @@ class PayPalGateway implements PaymentGatewayInterface
 
         $token = $this->getAccessToken();
 
-        // Capture the order
-        $capture = $this->paypalRequest('POST', "/v2/checkout/orders/{$orderId}/capture", $token, []);
+        // Check the current order status first so we never capture an order twice.
+        $order = $this->paypalRequest('GET', "/v2/checkout/orders/{$orderId}", $token);
+        $status = $order['status'] ?? '';
 
-        $status = $capture['status'] ?? '';
-        $captureId = $capture['purchase_units'][0]['payments']['captures'][0]['id'] ?? null;
-        $amount = $capture['purchase_units'][0]['payments']['captures'][0]['amount']['value'] ?? 0;
-        $currency = $capture['purchase_units'][0]['payments']['captures'][0]['amount']['currency_code'] ?? '';
+        if ($status === 'COMPLETED') {
+            // Already captured (e.g. by a webhook or a previous verify call).
+            return $this->extractCaptureResult($order, $orderId);
+        }
+
+        if ($status !== 'APPROVED') {
+            return ['success' => false, 'reason' => 'Order is not ready to capture (status: ' . ($status ?: 'unknown') . ').'];
+        }
+
+        try {
+            // PayPal-Request-Id makes the capture idempotent against retries.
+            $capture = $this->paypalRequest('POST', "/v2/checkout/orders/{$orderId}/capture", $token, [], [
+                'PayPal-Request-Id: capture-' . $orderId,
+            ]);
+
+            return $this->extractCaptureResult($capture, $orderId);
+        } catch (\RuntimeException $e) {
+            // Lost a race with another capture (webhook/redirect): re-read and accept.
+            if (str_contains($e->getMessage(), 'ORDER_ALREADY_CAPTURED')) {
+                $order = $this->paypalRequest('GET', "/v2/checkout/orders/{$orderId}", $token);
+                return $this->extractCaptureResult($order, $orderId);
+            }
+            throw $e;
+        }
+    }
+
+    private function extractCaptureResult(array $data, string $orderId): array
+    {
+        $capture = $data['purchase_units'][0]['payments']['captures'][0] ?? [];
+        $captureStatus = $capture['status'] ?? null;
+
+        $success = $captureStatus === 'COMPLETED'
+            || ($captureStatus === null && ($data['status'] ?? '') === 'COMPLETED');
 
         return [
-            'success' => $status === 'COMPLETED',
-            'payment_id' => $captureId,
+            'success' => $success,
+            'payment_id' => $capture['id'] ?? null,
             'order_id' => $orderId,
-            'amount' => (float) $amount,
-            'currency' => $currency,
-            'raw' => $capture,
+            'amount' => (float) ($capture['amount']['value'] ?? 0),
+            'currency' => $capture['amount']['currency_code'] ?? '',
+            'raw' => $data,
         ];
     }
 
@@ -113,11 +143,14 @@ class PayPalGateway implements PaymentGatewayInterface
         $eventId = $event['id'] ?? null;
         $resource = $event['resource'] ?? [];
 
+        // Verify the event against PayPal using the configured webhook id.
+        $verified = $this->verifyWebhookSignature($request, $event);
+
         $result = [
             'success' => true,
             'event_id' => $eventId,
             'event_type' => $eventType,
-            'verified' => false,
+            'verified' => $verified,
             'payment_id' => null,
             'order_id' => null,
             'amount' => 0,
@@ -125,18 +158,75 @@ class PayPalGateway implements PaymentGatewayInterface
             'raw' => $event,
         ];
 
-        if ($eventType === 'CHECKOUT.ORDER.APPROVED' || $eventType === 'PAYMENT.CAPTURE.COMPLETED') {
-            $result['order_id'] = $resource['supplementary_data']['related_ids']['order_id'] ?? $resource['id'] ?? null;
+        if ($eventType === 'CHECKOUT.ORDER.APPROVED') {
+            // Order approved but not captured yet. Capture it now so funds are taken.
+            $orderId = $resource['id'] ?? null;
+            $result['order_id'] = $orderId;
+
+            if ($orderId) {
+                try {
+                    $capture = $this->verifyPayment(['order_id' => $orderId]);
+                    if ($capture['success']) {
+                        $result['payment_id'] = $capture['payment_id'];
+                        $result['amount'] = $capture['amount'];
+                        $result['currency'] = $capture['currency'];
+                        $result['status'] = 'succeeded';
+                    }
+                } catch (\Throwable) {
+                    // Capture failure is reported via PAYMENT.CAPTURE.DENIED separately.
+                }
+            }
+        } elseif ($eventType === 'PAYMENT.CAPTURE.COMPLETED') {
+            $result['order_id'] = $resource['supplementary_data']['related_ids']['order_id'] ?? null;
             $result['payment_id'] = $resource['id'] ?? null;
             $result['amount'] = (float) ($resource['amount']['value'] ?? 0);
             $result['currency'] = $resource['amount']['currency_code'] ?? '';
             $result['status'] = 'succeeded';
-        } elseif ($eventType === 'PAYMENT.CAPTURE.DENIED') {
+        } elseif ($eventType === 'PAYMENT.CAPTURE.DENIED' || $eventType === 'PAYMENT.CAPTURE.REVERSED') {
+            $result['order_id'] = $resource['supplementary_data']['related_ids']['order_id'] ?? null;
             $result['payment_id'] = $resource['id'] ?? null;
             $result['status'] = 'failed';
+            $result['reason'] = 'PayPal reported the capture as ' . strtolower(str_replace('PAYMENT.CAPTURE.', '', $eventType)) . '.';
+        } elseif ($eventType === 'PAYMENT.CAPTURE.REFUNDED') {
+            $result['payment_id'] = $resource['id'] ?? null;
+            $result['status'] = 'refunded';
         }
 
         return $result;
+    }
+
+    /**
+     * Verify a webhook event using PayPal's verify-webhook-signature API.
+     * Returns true when verified, false when no webhook id is configured.
+     * Throws when a webhook id IS configured but verification fails (so the
+     * controller responds 400 and PayPal retries / the event is rejected).
+     */
+    private function verifyWebhookSignature(Request $request, array $event): bool
+    {
+        $webhookId = $this->setting->getCredential('webhook_id');
+
+        if (!$webhookId) {
+            // Cannot cryptographically verify without a webhook id.
+            return false;
+        }
+
+        $token = $this->getAccessToken();
+
+        $verification = $this->paypalRequest('POST', '/v1/notifications/verify-webhook-signature', $token, [
+            'auth_algo' => $request->header('paypal-auth-algo'),
+            'cert_url' => $request->header('paypal-cert-url'),
+            'transmission_id' => $request->header('paypal-transmission-id'),
+            'transmission_sig' => $request->header('paypal-transmission-sig'),
+            'transmission_time' => $request->header('paypal-transmission-time'),
+            'webhook_id' => $webhookId,
+            'webhook_event' => $event,
+        ]);
+
+        if (($verification['verification_status'] ?? '') !== 'SUCCESS') {
+            throw new \RuntimeException('PayPal webhook signature verification failed.');
+        }
+
+        return true;
     }
 
     public function refundPayment(OnlinePayment $payment, float $amount, array $payload = []): array
@@ -158,15 +248,15 @@ class PayPalGateway implements PaymentGatewayInterface
         ];
     }
 
-    private function paypalRequest(string $method, string $path, string $token, array $data): array
+    private function paypalRequest(string $method, string $path, string $token, array $data = [], array $extraHeaders = []): array
     {
         $ch = curl_init($this->baseUrl() . $path);
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
+            CURLOPT_HTTPHEADER => array_merge([
                 'Content-Type: application/json',
                 'Authorization: Bearer ' . $token,
-            ],
+            ], $extraHeaders),
         ];
 
         if ($method === 'POST') {

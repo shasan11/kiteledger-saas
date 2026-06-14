@@ -52,6 +52,11 @@ class ChequeFormatConfigurationController extends BaseCrudApiController
         'amount_number_position' => ['nullable', 'string', 'max:120'],
         'amount_words_position' => ['nullable', 'string', 'max:120'],
         'signature_position' => ['nullable', 'string', 'max:120'],
+        'layout_json' => ['nullable', 'array'],
+        'layout_json.fields' => ['nullable', 'array'],
+        'signature_image' => ['nullable', 'string'],
+        'signature_width' => ['nullable', 'integer', 'min:0', 'max:2000'],
+        'signature_height' => ['nullable', 'integer', 'min:0', 'max:2000'],
         'active' => ['nullable', 'boolean'],
         'is_system_generated' => ['exclude'],
         'user_add_id' => ['exclude'],
@@ -60,5 +65,16 @@ class ChequeFormatConfigurationController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return $this->makeRulesPartial($this->storeRules);
+    }
+
+    /**
+     * Return the active/default cheque format (seeding one if none exists).
+     * Used by the graphical layout editor.
+     */
+    public function default(Request $request)
+    {
+        $format = ChequeFormatConfiguration::activeDefault();
+
+        return response()->json($this->serializeRecord($format));
     }
 }

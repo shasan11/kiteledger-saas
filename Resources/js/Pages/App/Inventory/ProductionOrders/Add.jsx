@@ -24,8 +24,11 @@ const emptyExpense = () => ({ _key: newKey(), expense_account_id: null, expense_
 
 const fmtNum = (v) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function ProductionOrderAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [materials, setMaterials] = useState([emptyMat()]);
   const [byProducts, setByProducts] = useState([]);
@@ -168,6 +171,7 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
     if (!validMats.length) { setTopError('At least one raw material is required.'); return; }
 
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       date: formatDate(v.date),
       bill_of_material_id: bomId || null,
       finished_product_id: asId(v.finished_product_id),
@@ -377,6 +381,9 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

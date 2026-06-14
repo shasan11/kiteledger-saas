@@ -25,11 +25,13 @@ import { useEffect, useMemo, useState } from 'react';
 import AppNavbar from './partials/AppNavbar';
 import AppSidebar from './partials/AppSidebar';
 import { AppContextProvider } from '@/Contexts/AppContext';
+import { useTrans } from '@/lib/i18n';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
 
 export default function AuthenticatedLayout({ header, children }) {
+    const t = useTrans();
     const page = usePage();
     const user = page.props.auth.user;
     const permissions = page.props.auth?.permissions || [];
@@ -82,8 +84,17 @@ export default function AuthenticatedLayout({ header, children }) {
         return page.url === path || page.url.startsWith(`${path}/`);
     };
 
+    const translateMenuItems = (items) =>
+        items.map((item) => ({
+            ...item,
+            label: typeof item.label === 'string' ? t(item.label) : item.label,
+            children: Array.isArray(item.children)
+                ? translateMenuItems(item.children)
+                : item.children,
+        }));
+
     const menuItems = useMemo(
-        () => [
+        () => translateMenuItems([
             {
                 key: 'home',
                 icon: <HomeOutlined />,
@@ -361,105 +372,10 @@ export default function AuthenticatedLayout({ header, children }) {
                 ],
             },
             {
-                key: 'tax',
+                key: 'tax-settings',
                 icon: <ApartmentOutlined />,
-                label: 'Tax',
-                children: [
-                    {
-                        key: 'tax-dashboard',
-                        label: 'Dashboard',
-                        onClick: () => visit('tax.dashboard', '/tax/dashboard'),
-                    },
-                    {
-                        key: 'tax-settings',
-                        label: 'Tax Settings',
-                        onClick: () => visit('tax.settings', '/tax/settings'),
-                    },
-                    {
-                        key: 'tax-reports',
-                        label: 'Tax Reports',
-                        onClick: () => visit('reports.index', '/reports'),
-                    },
-                    ...(permissions.includes('tax.advanced.manage') || true
-                        ? [
-                              {
-                                  key: 'tax-advanced',
-                                  label: 'Advanced Setup',
-                                  children: [
-                                      {
-                                          key: 'tax-advanced-hub',
-                                          label: 'Advanced Overview',
-                                          onClick: () =>
-                                              visit('tax.advanced', '/tax/advanced'),
-                                      },
-                                      {
-                                          key: 'tax-classes',
-                                          label: 'Tax Groups',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-classes.index',
-                                                  '/tax/tax-classes',
-                                              ),
-                                      },
-                                      {
-                                          key: 'tax-rates',
-                                          label: 'Tax Rates',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-rates.index',
-                                                  '/tax/tax-rates',
-                                              ),
-                                      },
-                                      {
-                                          key: 'tax-rules',
-                                          label: 'When to Apply Tax',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-rules.index',
-                                                  '/tax/tax-rules',
-                                              ),
-                                      },
-                                      {
-                                          key: 'tax-registrations',
-                                          label: 'Tax Registrations',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-registrations.index',
-                                                  '/tax/tax-registrations',
-                                              ),
-                                      },
-                                      {
-                                          key: 'tax-exemptions',
-                                          label: 'Tax Free Reasons',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-exemptions.index',
-                                                  '/tax/tax-exemptions',
-                                              ),
-                                      },
-                                      {
-                                          key: 'tax-jurisdictions',
-                                          label: 'Where Tax Applies',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.tax-jurisdictions.index',
-                                                  '/tax/tax-jurisdictions',
-                                              ),
-                                      },
-                                      {
-                                          key: 'product-tax-categories',
-                                          label: 'Product Tax Types',
-                                          onClick: () =>
-                                              visit(
-                                                  'tax.product-tax-categories.index',
-                                                  '/tax/product-tax-categories',
-                                              ),
-                                      },
-                                  ],
-                              },
-                          ]
-                        : []),
-                ],
+                label: 'Tax Settings',
+                onClick: () => visit('tax.settings', '/tax/settings'),
             },
             {
                 key: 'inventory',
@@ -707,8 +623,8 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Settings',
                 onClick: () => visit('settings.index', '/settings'),
             },
-        ],
-        [page.url, permissions],
+        ]),
+        [page.url, permissions, t],
     );
 
     const selectedKeys = useMemo(() => {
@@ -761,16 +677,7 @@ export default function AuthenticatedLayout({ header, children }) {
         if (isActive('/accounting/fixed-assets')) return ['fixed-asset'];
         if (isActive('/accounting/loan-accounts')) return ['loan-accounts'];
 
-        if (isActive('/tax/dashboard')) return ['tax-dashboard'];
         if (isActive('/tax/settings')) return ['tax-settings'];
-        if (isActive('/tax/advanced')) return ['tax-advanced-hub'];
-        if (isActive('/tax/tax-classes')) return ['tax-classes'];
-        if (isActive('/tax/tax-rates')) return ['tax-rates'];
-        if (isActive('/tax/tax-rules')) return ['tax-rules'];
-        if (isActive('/tax/tax-registrations')) return ['tax-registrations'];
-        if (isActive('/tax/tax-exemptions')) return ['tax-exemptions'];
-        if (isActive('/tax/tax-jurisdictions')) return ['tax-jurisdictions'];
-        if (isActive('/tax/product-tax-categories')) return ['product-tax-categories'];
 
         if (isActive('/warehouse')) return ['warehouse'];
         if (isActive('/inventory/warehouse-items')) return ['inventory-warehouse-items'];
@@ -885,11 +792,11 @@ export default function AuthenticatedLayout({ header, children }) {
             : [];
 
         if (branchContext.canViewAllBranches) {
-            return [{ value: 'all', label: 'All Branches' }, ...items];
+            return [{ value: 'all', label: t('All Branches') }, ...items];
         }
 
         return items;
-    }, [branchContext]);
+    }, [branchContext, t]);
 
     const quickAction = (key, label, icon, routeName, fallback, permission = null) => {
         if (permission && !can(permission)) return null;
@@ -897,7 +804,7 @@ export default function AuthenticatedLayout({ header, children }) {
         return {
             key,
             icon,
-            label,
+            label: t(label),
             onClick: () => visit(routeName, fallback),
         };
     };
@@ -907,7 +814,7 @@ export default function AuthenticatedLayout({ header, children }) {
 
         if (!visibleChildren.length) return null;
 
-        return { key, type: 'group', label, children: visibleChildren };
+        return { key, type: 'group', label: t(label), children: visibleChildren };
     };
 
     const quickAddItems = [
@@ -944,7 +851,7 @@ export default function AuthenticatedLayout({ header, children }) {
         {
             key: 'profile',
             icon: <ProfileOutlined />,
-            label: 'Profile',
+            label: t('Profile'),
             onClick: () => visit('profile.edit', '/profile'),
         },
         {
@@ -953,7 +860,7 @@ export default function AuthenticatedLayout({ header, children }) {
         {
             key: 'logout',
             icon: <ProfileOutlined />,
-            label: 'Log Out',
+            label: t('Log Out'),
             danger: true,
             onClick: () => router.post(route('logout')),
         },
@@ -1025,8 +932,8 @@ export default function AuthenticatedLayout({ header, children }) {
                         shape="circle"
                         size="large"
                         icon={<PlusOutlined />}
-                        title="Quick Add"
-                        aria-label="Quick Add"
+                        title={t('Quick Add')}
+                        aria-label={t('Quick Add')}
                         className="app-floating-quick-add"
                     />
                 </Dropdown>

@@ -4,7 +4,9 @@ import './bootstrap';
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ConfigProvider, App as AntdApp } from 'antd';
-import { createInertiaApp } from '@inertiajs/react';
+import arEG from 'antd/locale/ar_EG';
+import enUS from 'antd/locale/en_US';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 
@@ -16,6 +18,7 @@ import {
 } from './brandSettings';
 
 import { createThemeConfig } from './theme';
+import { useLegacyViewTranslations } from './lib/i18n';
 
 const appName = import.meta.env.VITE_APP_NAME || 'KiteLedger';
 
@@ -71,13 +74,22 @@ const syncFavicon = (settings) => {
 };
 
 function RootApp({ App, props }) {
+  const initialLocale = props?.initialPage?.props?.locale || {
+    current: 'en',
+    dir: 'ltr',
+  };
   const [mode, setMode] = useState(() => {
     return localStorage.getItem('themeMode') || 'light';
   });
+  const [locale, setLocale] = useState(initialLocale);
+  const [translations, setTranslations] = useState(
+    props?.initialPage?.props?.translations || {},
+  );
 
   const [brandSettings, setBrandSettings] = useState(() => {
     return getStoredBrandSettings();
   });
+  useLegacyViewTranslations(translations);
 
   useEffect(() => {
     let mounted = true;
@@ -116,23 +128,60 @@ function RootApp({ App, props }) {
       setMode(event.detail?.mode || localStorage.getItem('themeMode') || 'light');
     };
 
+    const handleLocaleChange = (event) => {
+      const nextLocale = event.detail?.locale;
+
+      if (!nextLocale) return;
+
+      document.documentElement.lang = nextLocale.current || 'en';
+      document.documentElement.dir = nextLocale.dir === 'rtl' ? 'rtl' : 'ltr';
+      setLocale(nextLocale);
+      setTranslations(event.detail?.translations || {});
+    };
+
     window.addEventListener('storage', handleStorage);
     window.addEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
+    window.addEventListener('kiteledger-locale-change', handleLocaleChange);
 
     return () => {
       mounted = false;
       unsubscribe();
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('kiteledger-theme-mode-change', handleThemeModeChange);
+      window.removeEventListener('kiteledger-locale-change', handleLocaleChange);
     };
+  }, []);
+
+  useEffect(() => {
+    const applyLocale = (nextLocale) => {
+      const resolved = nextLocale || { current: 'en', dir: 'ltr' };
+
+      document.documentElement.lang = resolved.current || 'en';
+      document.documentElement.dir = resolved.dir === 'rtl' ? 'rtl' : 'ltr';
+      setLocale(resolved);
+    };
+
+    applyLocale(initialLocale);
+
+    const removeNavigateListener = router.on('navigate', (event) => {
+      applyLocale(event.detail.page.props.locale);
+      setTranslations(event.detail.page.props.translations || {});
+    });
+
+    return removeNavigateListener;
   }, []);
 
   const themeConfig = useMemo(() => {
     return createThemeConfig(mode, brandSettings);
   }, [mode, brandSettings]);
+  const antdLocale = locale?.dir === 'rtl' ? arEG : enUS;
 
   return (
-    <ConfigProvider theme={themeConfig}>
+    <ConfigProvider
+      theme={themeConfig}
+      locale={antdLocale}
+      direction={locale?.dir === 'rtl' ? 'rtl' : 'ltr'}
+    >
       <AntdApp>
         <App {...props} />
       </AntdApp>

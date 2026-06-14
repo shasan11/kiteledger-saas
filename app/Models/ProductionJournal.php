@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasFiscalYear;
+use App\Models\Concerns\HasReportingTags;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductionJournal extends Model
 {
-    use HasFactory, HasFiscalYear, HasUuids;
+    use HasFactory, HasFiscalYear, HasReportingTags, HasUuids;
 
     protected $fillable = [
         'branch_id',

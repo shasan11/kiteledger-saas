@@ -24,8 +24,6 @@ const PROVIDER_LABELS = {
     stripe: 'Stripe',
     paypal: 'PayPal',
     razorpay: 'Razorpay',
-    khalti: 'Khalti',
-    esewa: 'eSewa',
 };
 
 export default function OnlinePaymentsIndex() {

@@ -3,7 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Services\BranchScopeService;
+use App\Services\LocalizationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -32,6 +34,9 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $scope = app(BranchScopeService::class);
+        $localization = app(LocalizationService::class);
+        $locale = $request->attributes->get('locale', App::getLocale());
+        $dir = $request->attributes->get('locale_dir', $localization->direction($locale));
 
         return [
             ...parent::share($request),
@@ -46,6 +51,13 @@ class HandleInertiaRequests extends Middleware
             ],
             'branchContext' => fn () => $scope->resolveContext($request),
             'defaultCurrency' => fn () => $this->defaultCurrencyPayload(),
+            'locale' => [
+                'current' => $locale,
+                'fallback' => LocalizationService::FALLBACK_LOCALE,
+                'supported' => $localization->supportedPayload(),
+                'dir' => $dir,
+            ],
+            'translations' => fn () => $localization->translationsFor($locale),
         ];
     }
 

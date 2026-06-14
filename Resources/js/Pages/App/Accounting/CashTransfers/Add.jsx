@@ -40,8 +40,11 @@ const emptyLine = () => ({
     description: '',
 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function CashTransferAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
     const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [fromAccountId, setFromAccountId] = useState(null);
@@ -112,6 +115,7 @@ export default function CashTransferAdd({ initialRecord = null, isEdit = false, 
         if (err) { message.error(err); return; }
 
         const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
             transfer_no: nullIfEmpty(v.transfer_no),
             transfer_date: v.transfer_date ? v.transfer_date.format('YYYY-MM-DD') : null,
             from_account_id: v.from_account_id || null,
@@ -269,7 +273,10 @@ export default function CashTransferAdd({ initialRecord = null, isEdit = false, 
                         </Col>
                     </Row>
                 </FormSection>
-            </Form>
+              <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
+      </Form>
         </TransactionFormShell>
     );
 }

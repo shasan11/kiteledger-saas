@@ -12,7 +12,7 @@ class PaymentWebhookController extends Controller
 
     public function handle(Request $request, string $provider)
     {
-        $supportedProviders = ['stripe', 'paypal', 'razorpay', 'khalti', 'esewa'];
+        $supportedProviders = ['stripe', 'paypal', 'razorpay'];
 
         if (!in_array($provider, $supportedProviders, true)) {
             return response()->json(['message' => 'Unknown provider.'], 404);

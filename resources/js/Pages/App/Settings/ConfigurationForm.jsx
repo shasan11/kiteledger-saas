@@ -23,19 +23,16 @@ export default function ConfigurationForm({ auth, area }) {
   const [saving, setSaving] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [taxes, setTaxes] = useState([]);
 
   useEffect(() => {
     Promise.all([
       axios.get(api(`/api/settings/configurations/${area}`)),
       fetchList(area === 'pos' ? '/api/accounts' : '/api/chart-of-accounts', { page_size: 100 }),
       fetchList('/api/warehouses', { page_size: 100 }),
-      fetchList('/api/tax-rates', { page_size: 100 }),
-    ]).then(([config, accountRows, warehouseRows, taxRows]) => {
+    ]).then(([config, accountRows, warehouseRows]) => {
       form.setFieldsValue(config.data || {});
       setAccounts(accountRows.map((item) => ({ value: item.id, label: `${item.code || ''} ${item.name}`.trim() })));
       setWarehouses(warehouseRows.map((item) => ({ value: item.id, label: `${item.code || ''} ${item.name}`.trim() })));
-      setTaxes(taxRows.map((item) => ({ value: item.id, label: `${item.code || ''} ${item.name} (${item.rate_percent || 0}%)`.trim() })));
     });
   }, [area, form]);
 
@@ -129,7 +126,6 @@ export default function ConfigurationForm({ auth, area }) {
       return (
         <Row gutter={12}>
           <Col xs={24} md={8}><Form.Item name="default_customer_account_id" label="Default Customer Account"><Select allowClear options={accounts} /></Form.Item></Col>
-          <Col xs={24} md={8}><Form.Item name="default_sales_tax_id" label="Default Sales Tax"><Select allowClear options={taxes} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="quotation_validity_days" label="Quotation Validity Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="invoice_due_days" label="Invoice Due Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="suggest_selling" label="Suggest Selling Price"><Select options={[{ value: 'recent', label: 'Recent' }, { value: 'last_sale', label: 'Last Sale' }, { value: 'standard_price', label: 'Standard Price' }, { value: 'average_cost_markup', label: 'Average Cost + Markup' }]} /></Form.Item></Col>
@@ -146,7 +142,6 @@ export default function ConfigurationForm({ auth, area }) {
     return (
       <Row gutter={12}>
         <Col xs={24} md={8}><Form.Item name="default_supplier_account_id" label="Default Supplier Account"><Select allowClear options={accounts} /></Form.Item></Col>
-        <Col xs={24} md={8}><Form.Item name="default_purchase_tax_id" label="Default Purchase Tax"><Select allowClear options={taxes} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="bill_due_days" label="Bill Due Days"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="negative_item_balance" label="Negative Item Balance"><Select options={behaviorOptions} /></Form.Item></Col>
         <Col xs={24} md={8}><Form.Item name="negative_cash_balance" label="Negative Cash Balance"><Select options={behaviorOptions} /></Form.Item></Col>
@@ -155,7 +150,7 @@ export default function ConfigurationForm({ auth, area }) {
         <Col xs={24} md={8}><Form.Item name="overdue_reminders_enabled" label="Overdue Reminders" valuePropName="checked"><Switch /></Form.Item></Col>
       </Row>
     );
-  }, [accounts, area, taxes, warehouses]);
+  }, [accounts, area, warehouses]);
 
   return (
     <>

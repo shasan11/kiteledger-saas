@@ -21,7 +21,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { CloseOutlined, EditOutlined, PlusOutlined, SaveOutlined, SettingOutlined } from '@ant-design/icons';
+import { CloseOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
 const { Text, Title } = Typography;
@@ -123,7 +123,7 @@ export default function TaxSettings({ auth }) {
       purchase_tax_rate_percent: defaultRatePercent ?? 0,
       default_sales_tax_id: values.default_sales_tax_id || values.default_tax_rate_id || null,
       default_purchase_tax_id: values.default_purchase_tax_id || values.default_tax_rate_id || null,
-      advanced_mode: !!values.advanced_mode,
+      advanced_mode: !!(values.advanced_mode ?? settings.advanced_mode),
       preset: 'custom',
       wizard_completed: true,
     };
@@ -270,7 +270,7 @@ export default function TaxSettings({ auth }) {
         <Space align="start" style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <Title level={4} style={{ margin: 0 }}>Tax Settings</Title>
-            <Text type="secondary">Simple defaults first. Advanced rules stay optional.</Text>
+            <Text type="secondary">Set your tax label, default rate and how tax appears on documents.</Text>
           </div>
           <Button type="primary" icon={<SaveOutlined />} onClick={saveSettings} loading={saving}>
             Save
@@ -327,11 +327,6 @@ export default function TaxSettings({ auth }) {
                 children: (
                   <SalesPurchaseTaxDefaults rateOptions={activeRateOptions} />
                 ),
-              },
-              {
-                key: 'advanced',
-                label: 'Advanced Rules',
-                children: <AdvancedTaxRulesPanel />,
               },
             ]}
           />
@@ -407,16 +402,6 @@ function TaxBasicSetupCard({ form, rateOptions, loading }) {
         <Col xs={24} md={8}>
           <Form.Item name="company_tax_number" label="Company Tax/VAT/GST Number">
             <Input placeholder="Optional" disabled={!taxEnabled} />
-          </Form.Item>
-        </Col>
-        <Col xs={24} md={8}>
-          <Form.Item name="default_sales_tax_id" label="Default tax for sales">
-            <Select options={rateOptions} allowClear placeholder="Use global default" disabled={!taxEnabled} />
-          </Form.Item>
-        </Col>
-        <Col xs={24} md={8}>
-          <Form.Item name="default_purchase_tax_id" label="Default tax for purchase">
-            <Select options={rateOptions} allowClear placeholder="Use global default" disabled={!taxEnabled} />
           </Form.Item>
         </Col>
       </Row>
@@ -589,37 +574,3 @@ function SalesPurchaseTaxDefaults({ rateOptions }) {
   );
 }
 
-function AdvancedTaxRulesPanel() {
-  const optionalRules = [
-    'Product-wise tax',
-    'Customer-wise tax',
-    'Supplier-wise tax',
-    'Branch-wise tax',
-    'Tax exemption rules',
-    'Tax groups',
-    'Multiple taxes per line',
-    'Reverse charge',
-    'Withholding tax / TDS',
-    'Import tax',
-    'Export / zero-rated tax',
-  ];
-
-  return (
-    <Card size="small">
-      <Alert
-        showIcon
-        type="info"
-        message="Advanced rules are optional. Most businesses do not need to configure this."
-        style={{ marginBottom: 16 }}
-      />
-      <Form.Item name="advanced_mode" label="Enable advanced rules" valuePropName="checked">
-        <Switch checkedChildren="Enabled" unCheckedChildren="Disabled" />
-      </Form.Item>
-      <Space wrap>
-        {optionalRules.map((rule) => (
-          <Tag key={rule} icon={<SettingOutlined />}>{rule}</Tag>
-        ))}
-      </Space>
-    </Card>
-  );
-}

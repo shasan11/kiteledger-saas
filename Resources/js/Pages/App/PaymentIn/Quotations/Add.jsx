@@ -15,8 +15,11 @@ import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCur
 const newKey = () => Math.random().toString(36).slice(2);
 const emptyLine = () => ({ _key: newKey(), product_id: null, product_detail: null, product_name: '', description: '', qty: 1, unit_price: 0, discount_percent: 0, tax_rate_id: null, tax_jurisdiction_id: null, tax_amount: 0, line_total: 0 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function QuotationAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [items, setItems] = useState([emptyLine()]);
   const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -98,6 +101,7 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
     const totals = calculateTotals(items);
 
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       quotation_no: null,
       quotation_date: formatDate(v.quotation_date),
       expiry_date: formatDate(v.expiry_date),
@@ -213,6 +217,9 @@ export default function QuotationAdd({ initialRecord = null, isEdit = false, rec
             <RichTextEditor placeholder="Terms and conditions" />
           </Form.Item>
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

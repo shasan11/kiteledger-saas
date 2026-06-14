@@ -9,20 +9,25 @@ use Illuminate\Http\Request;
 
 class PaymentGatewaySettingController extends Controller
 {
-    protected array $providers = ['stripe', 'paypal', 'razorpay', 'khalti', 'esewa'];
+    protected array $providers = ['stripe', 'paypal', 'razorpay'];
 
     protected array $credentialFields = [
         'stripe' => ['publishable_key', 'secret_key', 'webhook_secret', 'statement_descriptor'],
         'paypal' => ['client_id', 'client_secret', 'webhook_id'],
         'razorpay' => ['key_id', 'key_secret', 'webhook_secret'],
-        'khalti' => ['public_key', 'secret_key', 'live_secret_key', 'webhook_secret'],
-        'esewa' => ['merchant_id', 'secret_key'],
     ];
 
     protected array $publicFields = [
         'stripe' => ['publishable_key'],
         'razorpay' => ['key_id'],
-        'khalti' => ['public_key'],
+    ];
+
+    // Only the core credentials needed to authenticate with the provider.
+    // Webhook/display fields are optional and must not block a connection test.
+    protected array $requiredForTest = [
+        'stripe' => ['secret_key'],
+        'paypal' => ['client_id', 'client_secret'],
+        'razorpay' => ['key_id', 'key_secret'],
     ];
 
     public function index(Request $request)
@@ -108,7 +113,7 @@ class PaymentGatewaySettingController extends Controller
         }
 
         $credentials = $setting->getCredentials();
-        $required = $this->credentialFields[$provider] ?? [];
+        $required = $this->requiredForTest[$provider] ?? ($this->credentialFields[$provider] ?? []);
 
         foreach ($required as $field) {
             if (empty($credentials[$field])) {

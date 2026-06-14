@@ -58,16 +58,12 @@ const PROVIDER_LABELS = {
     stripe: 'Stripe',
     paypal: 'PayPal',
     razorpay: 'Razorpay',
-    khalti: 'Khalti',
-    esewa: 'eSewa',
 };
 
 const PROVIDER_COLORS = {
     stripe: '#635BFF',
     paypal: '#003087',
     razorpay: '#3395FF',
-    khalti: '#5C2D91',
-    esewa: '#60BB46',
 };
 
 const APPROVED_STATUSES = new Set([

@@ -36,6 +36,7 @@ import {
     YAxis,
 } from 'recharts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { useTrans } from '@/lib/i18n';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
@@ -84,6 +85,7 @@ function calcTrend(sparkline) {
 }
 
 export default function Dashboard() {
+    const t = useTrans();
     const { token } = theme.useToken();
     const page = usePage();
     const bc = page.props.branchContext || {};
@@ -109,11 +111,11 @@ export default function Dashboard() {
             });
             setData(r.data || {});
         } catch (ex) {
-            setError(ex?.response?.data?.message || 'Unable to load dashboard data.');
+            setError(ex?.response?.data?.message || t('Unable to load dashboard data.'));
         } finally {
             setLoading(false);
         }
-    }, [filters]);
+    }, [filters, t]);
 
     useEffect(() => { fetch(); }, [fetch]);
 
@@ -124,13 +126,13 @@ export default function Dashboard() {
         <AuthenticatedLayout
             header={<DashHeader branches={branches} filters={filters} loading={loading} onRefresh={fetch} onChange={setFilters} />}
         >
-            <Head title="Dashboard" />
+            <Head title={t('Dashboard')} />
             <Styles token={token} />
             <main className="kd">
                 <div className="kd-wrap">
                     {error && (
-                        <Alert showIcon type="error" message="Dashboard could not be loaded" description={error}
-                            action={<Button onClick={fetch}>Retry</Button>} />
+                        <Alert showIcon type="error" message={t('Dashboard could not be loaded')} description={error}
+                            action={<Button onClick={fetch}>{t('Retry')}</Button>} />
                     )}
                     {loading ? <DashSkeleton /> : (
                         <>

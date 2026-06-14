@@ -58,7 +58,7 @@ class PublicInvoicePaymentController extends Controller
         }
 
         $validated = $request->validate([
-            'provider' => ['required', 'string', 'in:stripe,paypal,razorpay,khalti,esewa'],
+            'provider' => ['required', 'string', 'in:stripe,paypal,razorpay'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'customer_name' => ['nullable', 'string', 'max:200'],
             'customer_email' => ['nullable', 'email', 'max:200'],
@@ -158,7 +158,6 @@ class PublicInvoicePaymentController extends Controller
             $verifyPayload = array_merge($request->except(['online_payment_id', 'provider']), [
                 'session_id' => $onlinePayment->provider_session_id,
                 'order_id' => $onlinePayment->provider_order_id,
-                'pidx' => $onlinePayment->provider_order_id,
             ]);
 
             $result = $gateway->verifyPayment($verifyPayload);

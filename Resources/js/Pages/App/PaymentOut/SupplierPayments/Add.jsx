@@ -28,8 +28,11 @@ const emptyAlloc = () => ({
     allocated_amount: 0,
 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function SupplierPaymentAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
     const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([]);
     const [bankChargesEnabled, setBankChargesEnabled] = useState(false);
@@ -119,6 +122,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
         if (!v) return;
 
         const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
             payment_no: v.payment_no === '#DRAFT' ? null : nullIfEmpty(v.payment_no),
             payment_date: v.payment_date ? v.payment_date.format('YYYY-MM-DD') : null,
             contact_id: v.contact_id,
@@ -331,7 +335,10 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
                 <FormSection title="Description &amp; Remarks">
                     <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
                 </FormSection>
-            </Form>
+              <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
+      </Form>
         </TransactionFormShell>
     );
 }

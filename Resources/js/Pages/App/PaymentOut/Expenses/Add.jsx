@@ -32,8 +32,11 @@ const emptyLine = () => ({
     tax_amount: 0,
 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function ExpenseAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
     const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -103,6 +106,7 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
         if (err) { message.error(err); return; }
 
         const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
             expense_no: v.expense_no === '#DRAFT' ? null : nullIfEmpty(v.expense_no),
             expense_date: v.expense_date ? v.expense_date.format('YYYY-MM-DD') : null,
             due_date: v.due_date ? v.due_date.format('YYYY-MM-DD') : null,
@@ -270,7 +274,10 @@ export default function ExpenseAdd({ initialRecord = null, isEdit = false, recor
                 <FormSection title="Description &amp; Remarks">
                     <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
                 </FormSection>
-            </Form>
+              <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
+      </Form>
         </TransactionFormShell>
     );
 }

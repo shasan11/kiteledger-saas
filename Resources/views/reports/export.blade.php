@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}" dir="{{ app(\App\Services\LocalizationService::class)->direction(app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <title>{{ $report['title'] ?? 'Report' }}</title>
@@ -21,7 +21,11 @@
     </style>
 </head>
 <body>
-    @php($company = $report['company'] ?? [])
+    @php
+        $company = $report['company'] ?? [];
+        $tr = fn (string $key) => app(\App\Services\LocalizationService::class)
+            ->translationsFor(app()->getLocale())[$key] ?? $key;
+    @endphp
 
     @if(!empty($company['name']) || !empty($company['address']) || !empty($company['phone']))
         <div class="company">
@@ -35,17 +39,17 @@
                 <p class="line">{{ $company['address'] }}</p>
             @endif
             @php($contactBits = array_filter([
-                !empty($company['phone']) ? 'Phone: ' . $company['phone'] : null,
-                !empty($company['email']) ? 'Email: ' . $company['email'] : null,
+                !empty($company['phone']) ? $tr('Phone') . ': ' . $company['phone'] : null,
+                !empty($company['email']) ? $tr('Email') . ': ' . $company['email'] : null,
                 !empty($company['website']) ? $company['website'] : null,
             ]))
             @if(!empty($contactBits))
                 <p class="line">{{ implode('   ·   ', $contactBits) }}</p>
             @endif
             @php($taxBits = array_filter([
-                !empty($company['tax_number']) ? 'Tax No: ' . $company['tax_number'] : null,
-                !empty($company['vat_number']) ? 'VAT No: ' . $company['vat_number'] : null,
-                !empty($company['registration_number']) ? 'Reg No: ' . $company['registration_number'] : null,
+                !empty($company['tax_number']) ? $tr('Tax No') . ': ' . $company['tax_number'] : null,
+                !empty($company['vat_number']) ? $tr('VAT No') . ': ' . $company['vat_number'] : null,
+                !empty($company['registration_number']) ? $tr('Reg No') . ': ' . $company['registration_number'] : null,
             ]))
             @if(!empty($taxBits))
                 <p class="tax-line">{{ implode('   ·   ', $taxBits) }}</p>
@@ -55,9 +59,9 @@
 
     <p class="report-title">{{ $report['title'] ?? 'Report' }}</p>
     <div class="meta">
-        <p>Generated: {{ $report['generated_at'] ?? now()->format('Y-m-d H:i:s') }}</p>
+        <p>{{ $tr('Generated') }}: {{ $report['generated_at'] ?? now()->format('Y-m-d H:i:s') }}</p>
         @if(!empty(data_get($report, 'period.from')) || !empty(data_get($report, 'period.to')))
-            <p>Period: {{ data_get($report, 'period.from', '-') }} to {{ data_get($report, 'period.to', '-') }}</p>
+            <p>{{ $tr('Period') }}: {{ data_get($report, 'period.from', '-') }} {{ $tr('to') }} {{ data_get($report, 'period.to', '-') }}</p>
         @endif
     </div>
 
@@ -65,7 +69,7 @@
         <thead>
             <tr>
                 @foreach($headers as $header)
-                    <th>{{ $header }}</th>
+                    <th>{{ $tr((string) $header) }}</th>
                 @endforeach
             </tr>
         </thead>
@@ -78,7 +82,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ max(count($headers), 1) }}">No records found.</td>
+                    <td colspan="{{ max(count($headers), 1) }}">{{ $tr('No records found.') }}</td>
                 </tr>
             @endforelse
         </tbody>
@@ -89,7 +93,7 @@
             <tbody>
                 @foreach($report['totals'] as $label => $value)
                     <tr>
-                        <td>{{ \Illuminate\Support\Str::headline((string) $label) }}</td>
+                        <td>{{ $tr(\Illuminate\Support\Str::headline((string) $label)) }}</td>
                         <td>{{ $value }}</td>
                     </tr>
                 @endforeach

@@ -14,8 +14,11 @@ import { applyDefaultCurrency, exchangeRateLabel, useBaseCurrency, useDefaultCur
 const { Text } = Typography;
 const newKey = () => Math.random().toString(36).slice(2);
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function PaymentInAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [allocations, setAllocations] = useState([]);
   const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -120,6 +123,7 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
     if (!v) return;
     const items = allocations.filter((l) => !!asId(l.invoice_id)).map((l) => ({ ...(l.id ? { id: l.id } : {}), invoice_id: asId(l.invoice_id), allocated_amount: toNumber(l.allocated_amount) }));
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       payment_no: null,
       payment_date: formatDate(v.payment_date),
       contact_id: asId(v.contact_id),
@@ -248,6 +252,9 @@ export default function PaymentInAdd({ initialRecord = null, isEdit = false, rec
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

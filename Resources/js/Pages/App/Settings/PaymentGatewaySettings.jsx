@@ -55,18 +55,6 @@ const PROVIDERS = [
         currencies: ['INR', 'USD'],
         docsUrl: 'https://razorpay.com/docs', supportsWebhook: true, supportsRefund: true, regions: ['India'],
     },
-    {
-        key: 'khalti', label: 'Khalti', color: '#5C2D91',
-        description: 'Digital wallet and payment gateway for Nepal.',
-        currencies: ['NPR'],
-        docsUrl: 'https://docs.khalti.com', supportsWebhook: false, supportsRefund: false, regions: ['Nepal'],
-    },
-    {
-        key: 'esewa', label: 'eSewa', color: '#60BB46',
-        description: 'Most widely used digital payment service in Nepal.',
-        currencies: ['NPR'],
-        docsUrl: 'https://developer.esewa.com.np', supportsWebhook: false, supportsRefund: false, regions: ['Nepal'],
-    },
 ];
 
 const CREDENTIAL_FIELDS = {
@@ -86,15 +74,6 @@ const CREDENTIAL_FIELDS = {
         { key: 'key_secret', label: 'Key Secret', hint: 'Never expose this. Used for server-side signature verification.', placeholder: '...', isSecret: true, group: 'API Keys' },
         { key: 'webhook_secret', label: 'Webhook Secret', hint: 'Set when creating a webhook in Razorpay Dashboard', placeholder: '...', isSecret: true, required: false, group: 'Webhook' },
     ],
-    khalti: [
-        { key: 'public_key', label: 'Public Key', hint: 'From Khalti Merchant Dashboard', placeholder: 'test_public_key_...', isSecret: false, group: 'API Keys' },
-        { key: 'secret_key', label: 'Secret Key', hint: 'Used for payment lookup/verification', placeholder: 'test_secret_key_...', isSecret: true, group: 'API Keys' },
-        { key: 'live_secret_key', label: 'Live Secret Key', hint: 'Your live/production secret key', placeholder: 'live_secret_key_...', isSecret: true, required: false, group: 'API Keys' },
-    ],
-    esewa: [
-        { key: 'merchant_id', label: 'Merchant ID (SCD)', hint: 'Your eSewa Merchant Code. Test value: EPAYTEST', placeholder: 'EPAYTEST', isSecret: false, group: 'API Keys' },
-        { key: 'secret_key', label: 'Secret Key', hint: 'Used for HMAC signature generation', placeholder: '...', isSecret: true, required: false, group: 'API Keys' },
-    ],
 };
 
 const NAV_SECTIONS = [
@@ -105,8 +84,6 @@ const NAV_SECTIONS = [
     { key: 'stripe',    label: 'Stripe',    icon: <CreditCardOutlined />, type: 'item' },
     { key: 'paypal',    label: 'PayPal',    icon: <BankOutlined />,       type: 'item' },
     { key: 'razorpay',  label: 'Razorpay',  icon: <DollarOutlined />,     type: 'item' },
-    { key: 'khalti',    label: 'Khalti',    icon: <WalletOutlined />,     type: 'item' },
-    { key: 'esewa',     label: 'eSewa',     icon: <ApiOutlined />,        type: 'item' },
     { type: 'divider', label: 'Activity' },
     { key: 'transactions', label: 'Transactions', icon: <HistoryOutlined />, type: 'item' },
 ];

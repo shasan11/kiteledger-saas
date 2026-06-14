@@ -16,17 +16,27 @@ const PROVIDER_LABELS = {
     stripe: 'Stripe',
     paypal: 'PayPal',
     razorpay: 'Razorpay',
-    khalti: 'Khalti',
-    esewa: 'eSewa',
 };
 
 const PROVIDER_COLORS = {
     stripe: '#635BFF',
     paypal: '#003087',
     razorpay: '#3395FF',
-    khalti: '#5C2D91',
-    esewa: '#60BB46',
 };
+
+// Razorpay uses a JS checkout widget; load its script on demand.
+const loadRazorpayScript = () =>
+    new Promise((resolve, reject) => {
+        if (window.Razorpay) {
+            resolve();
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Razorpay checkout.'));
+        document.body.appendChild(script);
+    });
 
 function StatusBadge({ status }) {
     const map = {
@@ -173,9 +183,7 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
             if (data.checkout_mode === 'redirect' && data.redirect_url) {
                 window.location.href = data.redirect_url;
             } else if (data.checkout_mode === 'razorpay_js') {
-                openRazorpay(data);
-            } else if (data.checkout_mode === 'esewa_form') {
-                submitEsewaForm(data);
+                await openRazorpay(data);
             } else if (data.redirect_url) {
                 window.location.href = data.redirect_url;
             }
@@ -185,7 +193,8 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
         }
     };
 
-    const openRazorpay = (data) => {
+    const openRazorpay = async (data) => {
+        await loadRazorpayScript();
         const gd = data.gateway_data;
         const options = {
             key: gd.key_id,
@@ -214,22 +223,6 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
         };
         const rzp = new window.Razorpay(options);
         rzp.open();
-    };
-
-    const submitEsewaForm = (data) => {
-        const gd = data.gateway_data;
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = gd.redirect_url || 'https://uat.esewa.com.np/epay/main';
-        Object.entries(gd.form_fields || {}).forEach(([k, v]) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = k;
-            input.value = v;
-            form.appendChild(input);
-        });
-        document.body.appendChild(form);
-        form.submit();
     };
 
     if (paymentMethods.length === 0) {

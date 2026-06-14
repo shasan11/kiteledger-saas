@@ -187,6 +187,7 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
   const watchedSellingPrice = Form.useWatch('selling_price', form);
 
   const isVariantParent = selectedProductType === 'variant_parent';
+  const isService = selectedProductType === 'service';
   const isSimpleCatalog = catalogMode === 'simple';
   const isVariantCatalog = catalogMode === 'variant';
   const pageTitle = isVariantCatalog ? 'Variant Products' : 'Products';
@@ -1135,11 +1136,14 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
         <Drawer
           title={
             <Space direction="vertical" size={0}>
-              <Text strong>{editing ? 'Edit Product' : 'New Product'}</Text>
+              <Text strong>
+                {editing ? 'Edit ' : 'New '}
+                {isVariantCatalog ? 'Variant Product' : 'Product'}
+              </Text>
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {isVariantParent
                   ? 'Create a parent product and generate child variants.'
-                  : 'Create a normal saleable/purchasable product.'}
+                  : 'Create a normal simple or service product.'}
               </Text>
             </Space>
           }
@@ -1174,36 +1178,38 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
         >
           <Row gutter={16}>
             <Col xs={24} lg={6}>
-              <Card
-                size="small"
-                bordered={false}
-                style={{
-                  background: token.colorFillAlter,
-                  borderRadius: token.borderRadiusLG,
-                  marginBottom: 12,
-                }}
-              >
-                <Steps
-                  direction="vertical"
-                  current={step}
-                  onChange={(nextStep) => {
-                    if (nextStep > 0 && !canMoveNextFromBasic()) {
-                      message.warning('Enter product name and type first.');
-                      return;
-                    }
-
-                    setStep(nextStep);
+              {isVariantCatalog ? (
+                <Card
+                  size="small"
+                  bordered={false}
+                  style={{
+                    background: token.colorFillAlter,
+                    borderRadius: token.borderRadiusLG,
+                    marginBottom: 12,
                   }}
-                  items={stepItems}
-                />
-              </Card>
+                >
+                  <Steps
+                    direction="vertical"
+                    current={step}
+                    onChange={(nextStep) => {
+                      if (nextStep > 0 && !canMoveNextFromBasic()) {
+                        message.warning('Enter product name and type first.');
+                        return;
+                      }
+
+                      setStep(nextStep);
+                    }}
+                    items={stepItems}
+                  />
+                </Card>
+              ) : null}
 
               <Card size="small" title="Quick Summary">
                 <Space direction="vertical" size={6} style={{ width: '100%' }}>
                   <Text>
                     Type:{' '}
                     <Text strong>
-                      {isVariantParent ? 'Variant Product' : 'Simple Product'}
+                      {isVariantParent ? 'Variant Product' : isService ? 'Service' : 'Simple Product'}
                     </Text>
                   </Text>
 
@@ -1253,13 +1259,16 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
                 form={form}
                 initialValues={emptyProduct}
                 onValuesChange={(changedValues) => {
-                  if (
-                    Object.prototype.hasOwnProperty.call(changedValues, 'product_type') &&
-                    changedValues.product_type === 'simple'
-                  ) {
-                    setStep(0);
-                    setVariantGroups([]);
-                    setVariantChildren([]);
+                  if (Object.prototype.hasOwnProperty.call(changedValues, 'product_type')) {
+                    const nextType = changedValues.product_type;
+                    if (nextType !== 'variant_parent') {
+                      setStep(0);
+                      setVariantGroups([]);
+                      setVariantChildren([]);
+                    }
+                    if (nextType === 'service') {
+                      form.setFieldsValue({ track_inventory: false });
+                    }
                   }
                 }}
               >
@@ -1289,17 +1298,13 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
                             rules={[{ required: true, message: 'Product type is required.' }]}
                           >
                             <Select
-                              disabled={isVariantCatalog || isSimpleCatalog}
-                              options={[
-                                {
-                                  value: 'simple',
-                                  label: 'Simple Product',
-                                },
-                                {
-                                  value: 'variant_parent',
-                                  label: 'Variant Product',
-                                },
-                              ]}
+                              disabled={isVariantCatalog}
+                              options={isVariantCatalog
+                                ? [{ value: 'variant_parent', label: 'Variant Product' }]
+                                : [
+                                    { value: 'simple', label: 'Simple Product' },
+                                    { value: 'service', label: 'Service' },
+                                  ]}
                             />
                           </Form.Item>
                         </Col>
@@ -1417,7 +1422,7 @@ export default function Products({ auth, embedded = false, catalogMode = 'all' }
                             label="Track Inventory"
                             valuePropName="checked"
                           >
-                            <Switch disabled={isVariantParent} />
+                            <Switch disabled={isVariantParent || isService} />
                           </Form.Item>
                         </Col>
 

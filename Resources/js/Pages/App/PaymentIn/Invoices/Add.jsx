@@ -9,6 +9,7 @@ import QuickAddRemoteSelect from '@/Components/QuickAddRemoteSelect.jsx';
 import TransactionLineItems from '@/Components/Transactions/TransactionLineItems.jsx';
 import TransactionTotals from '@/Components/Transactions/TransactionTotals.jsx';
 import ReferenceAutocomplete from '@/Components/Transactions/ReferenceAutocomplete.jsx';
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
 import { postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { calculateTotals, normalizeLine, toNumber, asId, nullIfEmpty, formatDate, toDayjs, currencySymbolOf } from '@/Components/Transactions/transactionCalculations.js';
 import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
@@ -63,6 +64,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
   const [deletedItemIds, setDeletedItemIds] = useState([]);
   const [topError, setTopError] = useState(null);
   const [sourceIds, setSourceIds] = useState({ quotation_id: null, sales_order_id: null });
+  const [reportingTags, setReportingTags] = useState({});
   const [currencyDetail, setCurrencyDetail] = useState(null);
   const defaultCurrency = useDefaultCurrency(true);
   const baseCurrency = useBaseCurrency(true);
@@ -89,6 +91,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
       if (lines.length) setItems(mapLines(lines, { keepIds: true }));
       setSourceIds({ quotation_id: initialRecord.quotation_id || null, sales_order_id: initialRecord.sales_order_id || null });
       setCurrencyDetail(initialRecord.currency || initialRecord.currency_id_detail || null);
+      setReportingTags(reportingTagsToMap(initialRecord));
     } else {
       try {
         const raw = sessionStorage.getItem('kiteledger_invoice_prefill') || sessionStorage.getItem('invoice_prefill');
@@ -178,6 +181,7 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
       tax_total: totals.tax_total,
       items: normalized,
       deleted_item_ids: deletedItemIds,
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
     };
     setSubmitting(true);
     try {
@@ -286,6 +290,10 @@ export default function InvoiceAdd({ initialRecord = null, isEdit = false, recor
 
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
+        </FormSection>
+
+        <FormSection title="">
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
         </FormSection>
       </Form>
     </TransactionFormShell>

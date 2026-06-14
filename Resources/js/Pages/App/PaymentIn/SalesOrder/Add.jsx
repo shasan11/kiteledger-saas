@@ -31,8 +31,11 @@ const mapRefLines = (lines = []) => (lines || []).map((l) => ({
   line_total: toNumber(l.line_total),
 }));
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function SalesOrderAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [items, setItems] = useState([emptyLine()]);
   const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -106,6 +109,7 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
     const normalized = items.map((l) => normalizeLine(l)).filter((l) => !!asId(l.product_id) || !!(l.product_name || '').trim());
     const totals = calculateTotals(items);
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       sales_order_no: null,
       sales_order_date: formatDate(v.sales_order_date),
       due_date: formatDate(v.due_date),
@@ -229,6 +233,9 @@ export default function SalesOrderAdd({ initialRecord = null, isEdit = false, re
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

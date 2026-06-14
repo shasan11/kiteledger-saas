@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\ChequeRegister;
+use App\Services\ChequePrintService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 
@@ -128,5 +130,50 @@ class ChequeRegisterController extends BaseCrudApiController
     protected function updateRules(Request $request, Model $record): array
     {
         return $this->makeRulesPartial($this->storeRules($request));
+    }
+
+    /**
+     * Render a browser-printable cheque (HTML) using the active cheque format.
+     * Only issued cheques are printable.
+     */
+    public function print(Request $request, mixed $id)
+    {
+        $cheque = $this->resolvePrintableCheque($request, $id);
+
+        $data = app(ChequePrintService::class)->viewData($cheque);
+        $data['autoPrint'] = true;
+
+        return response()
+            ->view('cheques.print', $data)
+            ->header('Content-Type', 'text/html');
+    }
+
+    /**
+     * Render the same cheque as a downloadable/streamable PDF.
+     */
+    public function printPdf(Request $request, mixed $id)
+    {
+        $cheque = $this->resolvePrintableCheque($request, $id);
+
+        $data = app(ChequePrintService::class)->viewData($cheque);
+
+        $pdf = Pdf::loadView('cheques.print', $data)
+            ->setPaper([0, 0, $data['width'] * 2.83465, $data['height'] * 2.83465]); // mm -> points
+
+        return $pdf->stream('cheque-' . ($cheque->cheque_no ?: $cheque->id) . '.pdf');
+    }
+
+    private function resolvePrintableCheque(Request $request, mixed $id): ChequeRegister
+    {
+        $cheque = $this->findRecord($id);
+
+        $this->checkAccess($request, 'show', $cheque);
+        $this->assertRecordBranchAccess($request, $cheque);
+
+        if ($cheque->direction !== 'issued') {
+            abort(422, 'Only issued cheques can be printed.');
+        }
+
+        return $cheque;
     }
 }

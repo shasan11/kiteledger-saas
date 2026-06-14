@@ -2,7 +2,9 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 import BranchToggle from '@/Components/BranchToggle';
 import FiscalYearToggle from '@/Components/FiscalYearToggle';
 import GlobalSearch from '@/Components/GlobalSearch';
+import LanguageSwitcher from '@/Components/LanguageSwitcher';
 import { fetchBrandSettings, subscribeToBrandSettings } from '@/brandSettings';
+import { useTrans } from '@/lib/i18n';
 import { Link } from '@inertiajs/react';
 import {
     MenuOutlined,
@@ -64,6 +66,7 @@ export default function AppNavbar({
     getUrl,
     onSidebarToggle,
 }) {
+    const t = useTrans();
     const { token } = theme.useToken();
     const screens = useBreakpoint();
 
@@ -177,7 +180,7 @@ export default function AppNavbar({
                                 icon={<MenuOutlined />}
                                 className="app-navbar__icon-button"
                                 onClick={onSidebarToggle}
-                                aria-label="Open navigation"
+                                aria-label={t('Open navigation')}
                             />
                         )}
 
@@ -241,12 +244,18 @@ export default function AppNavbar({
                                     type="primary"
                                     icon={<PlusOutlined />}
                                     className="app-navbar__quick-add"
-                                    title="Quick Add"
+                                    title={t('Quick Add')}
                                 >
-                                    {!isMobile && !isTablet && 'Quick Add'}
+                                    {!isMobile && !isTablet && t('Quick Add')}
                                 </Button>
                             </Dropdown>
                         )}
+
+                        <LanguageSwitcher
+                            compact
+                            className="app-navbar__language-switcher"
+                            style={{ height: controlHeight }}
+                        />
 
                         {!isMobile && (
                             <>
@@ -254,7 +263,7 @@ export default function AppNavbar({
                                     type="text"
                                     icon={isDarkMode ? <MoonOutlined /> : <SunOutlined />}
                                     onClick={toggleThemeMode}
-                                    aria-label="Toggle between light and dark mode"
+                                    aria-label={t('Toggle between light and dark mode')}
                                     className="app-navbar__icon-button app-navbar__theme-switch"
                                 />
 
@@ -332,7 +341,8 @@ export default function AppNavbar({
                     }
 
                     .app-navbar__icon-button,
-                    .app-navbar__quick-add {
+                    .app-navbar__quick-add,
+                    .app-navbar__language-switcher .ant-select-selector {
                         height: var(--app-control-height);
                         border-radius: var(--app-radius);
                         display: inline-flex;
@@ -368,6 +378,17 @@ export default function AppNavbar({
 
                     .app-navbar__context-button,
                     .app-navbar__theme-switch {
+                        color: var(--app-text-secondary) !important;
+                    }
+
+                    .app-navbar__language-switcher .ant-select-selector {
+                        color: var(--app-text-secondary) !important;
+                        background: var(--app-nav-soft) !important;
+                        border-color: var(--app-border) !important;
+                    }
+
+                    .app-navbar__language-switcher .ant-select-selection-item,
+                    .app-navbar__language-switcher .ant-select-arrow {
                         color: var(--app-text-secondary) !important;
                     }
 

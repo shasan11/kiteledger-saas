@@ -4,7 +4,9 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "i18n:extract": "node scripts/extract-i18n-strings.mjs",
+        "i18n:sync": "node scripts/sync-i18n-translations.mjs"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",

@@ -23,6 +23,7 @@ class User extends Authenticatable
         'branch_id',
         'username',
         'email',
+        'locale',
         'password',
         'active',
 

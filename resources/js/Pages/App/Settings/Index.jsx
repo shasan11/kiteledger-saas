@@ -25,6 +25,7 @@ import {
   CreditCardOutlined,
   DollarOutlined,
   FileTextOutlined,
+  GlobalOutlined,
   InboxOutlined,
   MailOutlined,
   MessageOutlined,
@@ -35,11 +36,13 @@ import {
   TagsOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
+import { useTrans } from '@/lib/i18n';
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 const CompanyProfile = lazy(() => import('./CompanyProfile'));
+const Localization = lazy(() => import('./Localization'));
 
 const Branches = lazy(() => import('../Master/Branches/Index'));
 const FiscalYears = lazy(() => import('./FiscalYears'));
@@ -81,6 +84,14 @@ const SETTINGS_TABS = [
     description: 'Company details and print identity.',
     icon: <BankOutlined />,
     component: CompanyProfile,
+    props: {},
+  },
+  {
+    key: 'localization',
+    label: 'Localization',
+    description: 'Language, region and display preferences.',
+    icon: <GlobalOutlined />,
+    component: Localization,
     props: {},
   },
   {
@@ -398,7 +409,7 @@ class TabErrorBoundary extends ReactComponent {
   }
 
   render() {
-    const { token } = this.props;
+    const { token, failedTitle, failedDescription } = this.props;
 
     if (this.state.hasError) {
       return (
@@ -409,12 +420,11 @@ class TabErrorBoundary extends ReactComponent {
           }}
         >
           <Title level={5} style={{ marginTop: 0, color: token.colorError }}>
-            This settings tab failed to load.
+            {failedTitle}
           </Title>
 
           <Text type="secondary">
-            Check whether the imported component path exists and whether that
-            component has a valid default export.
+            {failedDescription}
           </Text>
 
           {this.state.error?.message ? (
@@ -441,7 +451,7 @@ class TabErrorBoundary extends ReactComponent {
   }
 }
 
-function ActiveComponent({ activeKey, auth, token }) {
+function ActiveComponent({ activeKey, auth, token, t }) {
   const activeTab = SETTINGS_TABS.find(
     (item) => item && item.key === activeKey && !item.disabled
   );
@@ -454,7 +464,7 @@ function ActiveComponent({ activeKey, auth, token }) {
           background: token.colorBgContainer,
         }}
       >
-        <Text type="secondary">No settings component found.</Text>
+        <Text type="secondary">{t('No settings component found.')}</Text>
       </div>
     );
   }
@@ -463,7 +473,12 @@ function ActiveComponent({ activeKey, auth, token }) {
   const props = activeTab.props || {};
 
   return (
-    <TabErrorBoundary activeKey={activeKey} token={token}>
+    <TabErrorBoundary
+      activeKey={activeKey}
+      token={token}
+      failedTitle={t('This settings tab failed to load.')}
+      failedDescription={t('Check whether the imported component path exists and whether that component has a valid default export.')}
+    >
       <Suspense fallback={<LoadingState token={token} />}>
         <Component auth={auth} embedded {...props} />
       </Suspense>
@@ -471,7 +486,7 @@ function ActiveComponent({ activeKey, auth, token }) {
   );
 }
 
-function SiderItem({ item, active, token, onClick }) {
+function SiderItem({ item, active, token, onClick, t }) {
   if (!item) return null;
 
   if (item.disabled) {
@@ -491,7 +506,7 @@ function SiderItem({ item, active, token, onClick }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {item.label}
+        {t(item.label)}
       </div>
     );
   }
@@ -500,7 +515,7 @@ function SiderItem({ item, active, token, onClick }) {
     <button
       type="button"
       onClick={() => onClick(item.key)}
-      title={item.description}
+      title={item.description ? t(item.description) : undefined}
       style={{
         width: '100%',
         height: 32,
@@ -561,13 +576,14 @@ function SiderItem({ item, active, token, onClick }) {
           textOverflow: 'ellipsis',
         }}
       >
-        {item.label}
+        {t(item.label)}
       </span>
     </button>
   );
 }
 
 export default function SettingsIndex({ auth }) {
+  const t = useTrans();
   const { token } = theme.useToken();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -589,7 +605,7 @@ export default function SettingsIndex({ auth }) {
 
   return (
     <AuthenticatedLayout auth={auth}>
-      <Head title="Configuration" />
+      <Head title={t('Configuration')} />
 
       <style>
         {`
@@ -708,7 +724,7 @@ export default function SettingsIndex({ auth }) {
                       fontWeight: 750,
                     }}
                   >
-                    Configuration
+                    {t('Configuration')}
                   </Title>
 
                   {activeTab?.description ? (
@@ -724,7 +740,7 @@ export default function SettingsIndex({ auth }) {
                         maxWidth: isMobile ? 220 : 520,
                       }}
                     >
-                      {activeTab.description}
+                      {t(activeTab.description)}
                     </Text>
                   ) : null}
                 </div>
@@ -779,6 +795,7 @@ export default function SettingsIndex({ auth }) {
                   active={item.key === activeKey}
                   token={token}
                   onClick={handleChange}
+                  t={t}
                 />
               </div>
             ))}
@@ -815,6 +832,7 @@ export default function SettingsIndex({ auth }) {
                 activeKey={activeKey}
                 auth={auth}
                 token={token}
+                t={t}
               />
             </Card>
           </main>

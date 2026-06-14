@@ -22,8 +22,11 @@ const emptyMat = () => ({ _key: newKey(), product_id: null, product_detail: null
 const emptyByProduct = () => ({ _key: newKey(), product_id: null, product_detail: null, cost_percent: 0, quantity: 0, unit_code: '', allocated_cost: 0 });
 const emptyExpense = () => ({ _key: newKey(), cost_term_id: null, cost_term_detail: null, amount: 0, notes: '' });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function ProductionJournalAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [materials, setMaterials] = useState([emptyMat()]);
   const [byProducts, setByProducts] = useState([]);
@@ -159,6 +162,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
     if (!validMats.length) { setTopError('At least one raw material is required.'); return; }
 
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       date: formatDate(v.date),
       finished_product_id: asId(v.finished_product_id),
       output_quantity: toNumber(v.output_quantity),
@@ -356,6 +360,9 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );

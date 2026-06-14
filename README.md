@@ -7,6 +7,39 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## KiteLedger — Installation (CodeCanyon)
+
+KiteLedger ships with a **web installer** so you can set it up from the browser — no command line or manual `.env` editing required.
+
+### Requirements
+- PHP **8.3+** with extensions: `pdo`, `mbstring`, `openssl`, `tokenizer`, `json`, `curl`, `fileinfo`, `ctype`, `xml`, `bcmath`
+- MySQL 8 / MariaDB 10.4+ / PostgreSQL (or SQLite for evaluation)
+- A web server (Apache/Nginx) with the document root pointing at the `public/` folder
+- Writable `storage/` and `bootstrap/cache/` directories
+
+### Steps
+1. Upload/extract the files to your server and point the web root at `public/`.
+2. **Copy `.env.example` to `.env`** (it already contains a valid `APP_KEY`).
+3. Install PHP dependencies: `composer install --no-dev --optimize-autoloader`.
+4. Build front-end assets (prebuilt in the package; only needed if you change code): `npm install && npm run build`.
+5. Visit **`https://your-domain.com/install`** in a browser and follow the wizard:
+   - **Welcome → Requirements check** (PHP version, extensions, writable paths)
+   - **Database** — enter DB credentials and click *Test Connection*
+   - **Application** — app name, URL, timezone, default currency
+   - **Company** — company name, legal name, email, phone, address, country, website
+   - **Administrator** — name, email, password (becomes your Super Admin login)
+   - **Install** — writes `.env`, runs migrations + seeders, and creates your default currency, fiscal year, branch, company profile (`AppSetting`), Super Admin user, the default cheque format, and disabled Stripe/PayPal/Razorpay gateway rows.
+6. On the **Finish** screen, click **Go to Login** and sign in.
+
+### After installation
+- The installer creates `storage/app/installed` (the install lock). While it exists, `/install` is blocked and redirects to the dashboard.
+- To re-run the installer (e.g. a staging reset), delete `storage/app/installed`.
+- Configure payment gateways under **Settings → Online Payments** (Stripe / PayPal / Razorpay) and your cheque layout under **Settings → Cheque Format Editor**.
+
+### Notes
+- The system is never marked installed unless every step completes successfully; failures show a readable error and leave it un-installed.
+- Database passwords are never logged or returned to the browser.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

@@ -358,10 +358,16 @@ Route::post('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkStor
 Route::patch('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkUpdate']);
 Route::delete('cheque-registers/bulk', [ChequeRegisterController::class, 'bulkDestroy']);
 
+Route::get('cheque-registers/{id}/print', [ChequeRegisterController::class, 'print']);
+Route::get('cheque-registers/{id}/print-pdf', [ChequeRegisterController::class, 'printPdf']);
+
 Route::apiResource('cheque-registers', ChequeRegisterController::class)
     ->parameters([
         'cheque-registers' => 'chequeRegister',
     ]);
+
+// Must precede the apiResource so "default" is not treated as a record id.
+Route::get('cheque-format-configurations/default', [ChequeFormatConfigurationController::class, 'default']);
 
 Route::apiResource('cheque-format-configurations', ChequeFormatConfigurationController::class)
     ->parameters([

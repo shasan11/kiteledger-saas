@@ -13,12 +13,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Prepended so an un-installed deployment is redirected to /install
+        // before session/cookie middleware (which need APP_KEY) ever run.
+        $middleware->web(prepend: [
+            \App\Http\Middleware\EnsureInstalled::class,
+        ]);
+
         $middleware->web(append: [
+            \App\Http\Middleware\SetLocale::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        //
+        // The installer posts before APP_KEY/session exist.
+        $middleware->validateCsrfTokens(except: [
+            'install',
+            'install/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (InvalidArgumentException $exception, Request $request) {

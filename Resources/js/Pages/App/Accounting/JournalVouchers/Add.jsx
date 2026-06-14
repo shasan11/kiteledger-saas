@@ -54,8 +54,11 @@ const emptyLine = () => ({
     credit: 0,
 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function JournalVoucherAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
     const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine(), emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -146,6 +149,7 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
         if (lineErr) { message.error(lineErr); return; }
 
         const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
             voucher_no: nullIfEmpty(fieldValues.voucher_no),
             voucher_date: fieldValues.voucher_date ? fieldValues.voucher_date.format('YYYY-MM-DD') : null,
             currency_id: fieldValues.currency_id || null,
@@ -311,7 +315,10 @@ export default function JournalVoucherAdd({ initialRecord = null, isEdit = false
                 <FormSection title="Description &amp; Remarks">
                     <DescriptionRemarksCollapse descriptionName="narration" remarksName="remarks" />
                 </FormSection>
-            </Form>
+              <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
+      </Form>
         </TransactionFormShell>
     );
 }

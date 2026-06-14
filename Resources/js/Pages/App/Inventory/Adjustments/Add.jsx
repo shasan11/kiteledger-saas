@@ -32,8 +32,11 @@ const emptyLine = () => ({
     remarks: '',
 });
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function AdjustmentAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
     const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
     const [submitting, setSubmitting] = useState(false);
     const [items, setItems] = useState([emptyLine()]);
     const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -228,6 +231,7 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
         if (err) { message.error(err); return; }
 
         const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
             adjustment_no: v.adjustment_no === '#DRAFT' ? null : nullIfEmpty(v.adjustment_no),
             adjustment_date: v.adjustment_date ? v.adjustment_date.format('YYYY-MM-DD') : null,
             warehouse_id: v.warehouse_id || null,
@@ -447,7 +451,10 @@ export default function AdjustmentAdd({ initialRecord = null, isEdit = false, re
                         )}
                     />
                 </FormSection>
-            </Form>
+              <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
+      </Form>
         </TransactionFormShell>
     );
 }

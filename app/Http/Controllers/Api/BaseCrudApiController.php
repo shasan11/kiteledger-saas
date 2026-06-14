@@ -152,6 +152,8 @@ abstract class BaseCrudApiController extends Controller
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
+        $reportingTags = $this->extractReportingTagsInput($parentData);
+
         if ($this->validateBusinessRulesOnSave && $this->businessRuleModule()) {
             $result = $this->validateBusinessRulesForSave(
                 $this->businessRuleModule(),
@@ -160,7 +162,7 @@ abstract class BaseCrudApiController extends Controller
             $this->blockIfBusinessRuleErrors($result);
         }
 
-        $record = DB::transaction(function () use ($parentData, $nestedData, $deletedIds) {
+        $record = DB::transaction(function () use ($parentData, $nestedData, $deletedIds, $reportingTags) {
             $parentData = $this->mutateParentDataBeforeCreate($parentData, $nestedData);
 
             $record = $this->createModel($parentData);
@@ -168,6 +170,8 @@ abstract class BaseCrudApiController extends Controller
             $this->saveNestedCollections($record, $nestedData, $deletedIds, false);
 
             $record = $this->afterSave($record, $parentData, $nestedData, false);
+
+            $this->syncReportingTags($record, $reportingTags);
 
             return $record->fresh($this->validEagerLoadRelations($record));
         });
@@ -211,6 +215,8 @@ abstract class BaseCrudApiController extends Controller
 
         [$parentData, $nestedData, $deletedIds] = $this->splitPayload($validated);
 
+        $reportingTags = $this->extractReportingTagsInput($parentData);
+
         if ($this->validateBusinessRulesOnEdit && $this->businessRuleModule()) {
             $result = $this->validateBusinessRulesForEdit(
                 $this->businessRuleModule(),
@@ -227,7 +233,7 @@ abstract class BaseCrudApiController extends Controller
             $this->blockIfBusinessRuleErrors($result);
         }
 
-        $record = DB::transaction(function () use ($record, $parentData, $nestedData, $deletedIds) {
+        $record = DB::transaction(function () use ($record, $parentData, $nestedData, $deletedIds, $reportingTags) {
             $parentData = $this->mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
 
             if (!empty($parentData)) {
@@ -237,6 +243,8 @@ abstract class BaseCrudApiController extends Controller
             $this->saveNestedCollections($record, $nestedData, $deletedIds, true);
 
             $record = $this->afterSave($record, $parentData, $nestedData, true);
+
+            $this->syncReportingTags($record, $reportingTags);
 
             $this->syncAccountingImpactAfterUpdate($record);
 
@@ -683,18 +691,18 @@ abstract class BaseCrudApiController extends Controller
 
     protected function rulesForStore(Request $request): array
     {
-        return $this->withFiscalYearRules($this->withNestedRules(
+        return $this->withReportingTagRules($this->withFiscalYearRules($this->withNestedRules(
             $this->withApprovalRules($this->storeRules($request)),
             false
-        ));
+        )));
     }
 
     protected function rulesForUpdate(Request $request, Model $record): array
     {
-        return $this->withFiscalYearRules($this->withNestedRules(
+        return $this->withReportingTagRules($this->withFiscalYearRules($this->withNestedRules(
             $this->withApprovalRules($this->updateRules($request, $record), true),
             true
-        ), true);
+        ), true));
     }
 
     protected function storeRules(Request $request): array
@@ -2169,7 +2177,72 @@ abstract class BaseCrudApiController extends Controller
                 ->all();
         }
 
-        return $this->mutateSerializedRecord($data, $record);
+        $data = $this->mutateSerializedRecord($data, $record);
+
+        return $this->attachReportingTags($data, $record);
+    }
+
+    protected function modelSupportsReportingTags(?Model $model = null): bool
+    {
+        $model = $model ?: $this->newModelInstance();
+
+        return in_array(
+            \App\Models\Concerns\HasReportingTags::class,
+            class_uses_recursive($model),
+            true
+        );
+    }
+
+    protected function withReportingTagRules(array $rules): array
+    {
+        if (! $this->modelSupportsReportingTags()) {
+            return $rules;
+        }
+
+        $rules['reporting_tags'] ??= ['sometimes', 'nullable', 'array'];
+        $rules['reporting_tags.*.reporting_tag_id'] ??= ['required', 'uuid'];
+        $rules['reporting_tags.*.value'] ??= ['nullable'];
+
+        return $rules;
+    }
+
+    /**
+     * Pull (and remove) the reporting_tags payload from parent data so it never
+     * reaches mass-assignment. Returns null when the key is absent (partial
+     * update: leave existing values untouched).
+     */
+    protected function extractReportingTagsInput(array &$parentData): ?array
+    {
+        if (! $this->modelSupportsReportingTags() || ! array_key_exists('reporting_tags', $parentData)) {
+            unset($parentData['reporting_tags']);
+
+            return null;
+        }
+
+        $value = $parentData['reporting_tags'];
+        unset($parentData['reporting_tags']);
+
+        return is_array($value) ? $value : [];
+    }
+
+    protected function syncReportingTags(Model $record, ?array $items): void
+    {
+        if ($items === null || ! $this->modelSupportsReportingTags($record)) {
+            return;
+        }
+
+        app(\App\Services\ReportingTagValueService::class)->sync($record, $items);
+    }
+
+    protected function attachReportingTags(array $data, Model $record): array
+    {
+        if (! $this->modelSupportsReportingTags($record)) {
+            return $data;
+        }
+
+        $data['reporting_tags'] = app(\App\Services\ReportingTagValueService::class)->serializeFor($record);
+
+        return $data;
     }
 
     protected function serializeNestedRecord(Model $child, array $config): array
@@ -2287,6 +2360,10 @@ abstract class BaseCrudApiController extends Controller
             foreach (($config['relations'] ?? []) as $childRelation) {
                 $relations[] = "{$relation}.{$childRelation}";
             }
+        }
+
+        if ($this->modelSupportsReportingTags()) {
+            $relations[] = 'reportingTagValues';
         }
 
         return array_values(array_unique(array_filter($relations)));

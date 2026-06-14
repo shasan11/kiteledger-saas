@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\AppSetting;
+use App\Services\LocalizationService;
 use App\Support\Branding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class AppSettingController extends BaseCrudApiController
 {
@@ -134,7 +136,7 @@ class AppSettingController extends BaseCrudApiController
             ? $this->makeRulesPartial($this->storeRules)
             : $this->storeRules;
 
-        $validated = Validator::make($request->all(), $rules)->validate();
+        $validated = Validator::make($request->all(), $this->withLanguageRule($rules))->validate();
 
         $this->removeUploadOnlyFields($validated);
 
@@ -159,7 +161,10 @@ class AppSettingController extends BaseCrudApiController
 
         $this->normalizeBooleanFields($request);
 
-        $validated = Validator::make($request->all(), $this->storeRules)->validate();
+        $validated = Validator::make(
+            $request->all(),
+            $this->withLanguageRule($this->storeRules)
+        )->validate();
 
         $this->removeUploadOnlyFields($validated);
 
@@ -185,7 +190,7 @@ class AppSettingController extends BaseCrudApiController
 
         $rules = $this->makeRulesPartial($this->storeRules);
 
-        $validated = Validator::make($request->all(), $rules)->validate();
+        $validated = Validator::make($request->all(), $this->withLanguageRule($rules))->validate();
 
         $this->removeUploadOnlyFields($validated);
 
@@ -202,7 +207,19 @@ class AppSettingController extends BaseCrudApiController
 
     protected function updateRules(Request $request, Model $record): array
     {
-        return $this->makeRulesPartial($this->storeRules);
+        return $this->withLanguageRule($this->makeRulesPartial($this->storeRules));
+    }
+
+    protected function withLanguageRule(array $rules): array
+    {
+        $rules['language'] = [
+            'nullable',
+            'string',
+            'max:20',
+            Rule::in(app(LocalizationService::class)->supportedCodes()),
+        ];
+
+        return $rules;
     }
 
     protected function serializeAppSetting(AppSetting $record): array

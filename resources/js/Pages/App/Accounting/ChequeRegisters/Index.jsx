@@ -657,7 +657,6 @@ function ChequePrint({ record }) {
 
 function IssuedTab() {
     const { token } = theme.useToken();
-    const [printRecord, setPrintRecord] = useState(null);
 
     const columns = useMemo(() => [
         {
@@ -716,11 +715,23 @@ function IssuedTab() {
         {
             title: 'Print',
             key: 'print',
-            width: 90,
+            width: 160,
             render: (_, record) => (
-                <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintRecord(record)}>
-                    Print
-                </Button>
+                <Space size={4}>
+                    <Button
+                        size="small"
+                        icon={<PrinterOutlined />}
+                        onClick={() => window.open(api(`/api/cheque-registers/${record.id}/print`), '_blank')}
+                    >
+                        Print
+                    </Button>
+                    <Button
+                        size="small"
+                        onClick={() => window.open(api(`/api/cheque-registers/${record.id}/print-pdf`), '_blank')}
+                    >
+                        PDF
+                    </Button>
+                </Space>
             ),
         },
     ], [token]);
@@ -827,9 +838,6 @@ function IssuedTab() {
                 defaultAnchorKey="all"
                 anchorSyncWithHash={false}
             />
-            <Drawer title="Print Cheque" width={760} open={!!printRecord} onClose={() => setPrintRecord(null)}>
-                {printRecord ? <ChequePrint record={printRecord} /> : null}
-            </Drawer>
         </>
     );
 }

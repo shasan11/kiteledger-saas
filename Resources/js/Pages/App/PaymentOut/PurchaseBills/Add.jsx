@@ -24,8 +24,11 @@ const mapLines = (lines = [], options = {}) => (lines || []).map((l) => ({
   tax_jurisdiction_id: l.tax_jurisdiction_id ?? null, tax_amount: toNumber(l.tax_amount), line_total: toNumber(l.line_total),
 }));
 
+import ReportingTagsPanel, { reportingTagsToMap, mapToReportingTagsPayload } from '@/Components/ReportingTagsPanel.jsx';
+
 export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, recordId = null, ...props }) {
   const [form] = Form.useForm();
+  const [reportingTags, setReportingTags] = useState(() => reportingTagsToMap(initialRecord));
   const [submitting, setSubmitting] = useState(false);
   const [items, setItems] = useState([emptyLine()]);
   const [deletedItemIds, setDeletedItemIds] = useState([]);
@@ -93,6 +96,7 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
     const normalized = items.map((l) => normalizeLine(l)).filter((l) => !!asId(l.product_id) || !!(l.product_name || '').trim());
     const totals = calculateTotals(items);
     const payload = {
+      reporting_tags: mapToReportingTagsPayload(reportingTags),
       bill_no: null,
       bill_date: formatDate(v.bill_date),
       due_date: formatDate(v.due_date),
@@ -155,6 +159,9 @@ export default function PurchaseBillAdd({ initialRecord = null, isEdit = false, 
         <FormSection title="Description &amp; Remarks">
           <DescriptionRemarksCollapse descriptionName="notes" remarksName="remarks" />
         </FormSection>
+        <div style={{ marginTop: 16 }}>
+          <ReportingTagsPanel value={reportingTags} onChange={setReportingTags} />
+        </div>
       </Form>
     </TransactionFormShell>
   );
