@@ -90,6 +90,8 @@ class PublicInvoicePaymentController extends Controller
             ], 422);
         }
 
+        $onlinePayment = null;
+
         try {
             $gateway = $this->gatewayManager->driver($provider);
 
@@ -100,14 +102,20 @@ class PublicInvoicePaymentController extends Controller
             ]);
 
             $appSettings = AppSetting::query()->first();
+            $redirectQuery = http_build_query([
+                'online_payment_id' => $onlinePayment->id,
+                'provider' => $provider,
+            ]);
+            $successUrl = url("/pay/invoice/{$token}/success") . '?' . $redirectQuery;
+            $cancelUrl = url("/pay/invoice/{$token}/cancel") . '?' . $redirectQuery;
 
             $gatewayPayload = [
                 'amount' => $amount,
                 'currency' => $invoiceCurrency,
                 'public_token' => $token,
                 'company_name' => $appSettings?->company_name ?? 'Invoice Payment',
-                'success_url' => url("/pay/invoice/{$token}/success"),
-                'cancel_url' => url("/pay/invoice/{$token}/cancel"),
+                'success_url' => $successUrl,
+                'cancel_url' => $cancelUrl,
                 'base_url' => url('/'),
             ];
 
@@ -129,6 +137,10 @@ class PublicInvoicePaymentController extends Controller
                 'gateway_data' => $this->safeGatewayData($result),
             ]);
         } catch (\RuntimeException $e) {
+            if ($onlinePayment?->isPending()) {
+                $this->paymentService->markFailed($onlinePayment, $e->getMessage());
+            }
+
             return response()->json(['message' => $e->getMessage()], 422);
         }
     }
@@ -137,7 +149,7 @@ class PublicInvoicePaymentController extends Controller
     {
         $validated = $request->validate([
             'online_payment_id' => ['required', 'uuid'],
-            'provider' => ['required', 'string'],
+            'provider' => ['required', 'string', 'in:stripe,paypal,razorpay'],
         ]);
 
         $onlinePayment = OnlinePayment::query()
@@ -147,6 +159,10 @@ class PublicInvoicePaymentController extends Controller
 
         if (!$onlinePayment) {
             return response()->json(['message' => 'Payment record not found.'], 404);
+        }
+
+        if ($onlinePayment->provider !== $validated['provider']) {
+            return response()->json(['message' => 'Payment provider does not match this payment.'], 422);
         }
 
         if ($onlinePayment->isSucceeded()) {

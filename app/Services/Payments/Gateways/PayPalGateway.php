@@ -6,7 +6,9 @@ use App\Models\Invoice;
 use App\Models\OnlinePayment;
 use App\Models\PaymentGatewaySetting;
 use App\Services\Payments\Contracts\PaymentGatewayInterface;
+use App\Services\Payments\PaymentHttpClient;
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\ConnectionException;
 
 class PayPalGateway implements PaymentGatewayInterface
 {
@@ -29,25 +31,43 @@ class PayPalGateway implements PaymentGatewayInterface
 
     private function getAccessToken(): string
     {
-        $clientId = $this->setting->getCredential('client_id');
-        $clientSecret = $this->setting->getCredential('client_secret');
+        $clientId = trim((string) $this->setting->getCredential('client_id'));
+        $clientSecret = trim((string) $this->setting->getCredential('client_secret'));
+        $mode = $this->setting->mode === 'live' ? 'live' : 'sandbox';
 
-        $ch = curl_init($this->baseUrl() . '/v1/oauth2/token');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => 'grant_type=client_credentials',
-            CURLOPT_USERPWD => $clientId . ':' . $clientSecret,
-            CURLOPT_HTTPHEADER => ['Accept: application/json'],
-        ]);
-        $response = json_decode(curl_exec($ch), true);
-        curl_close($ch);
-
-        if (empty($response['access_token'])) {
-            throw new \RuntimeException('PayPal authentication failed.');
+        if ($clientId === '' || $clientSecret === '') {
+            throw new \RuntimeException('PayPal client ID and client secret are not configured.');
         }
 
-        return $response['access_token'];
+        try {
+            $response = PaymentHttpClient::request()
+                ->withBasicAuth($clientId, $clientSecret)
+                ->asForm()
+                ->post($this->baseUrl() . '/v1/oauth2/token', [
+                    'grant_type' => 'client_credentials',
+                ]);
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'Could not connect to PayPal. Check the server network connection and cURL/CA certificate configuration.',
+                previous: $e
+            );
+        }
+
+        $decoded = $response->json();
+        $accessToken = is_array($decoded) ? ($decoded['access_token'] ?? null) : null;
+
+        if ($response->failed() || !$accessToken) {
+            $reason = is_array($decoded)
+                ? ($decoded['error_description'] ?? $decoded['message'] ?? $decoded['error'] ?? null)
+                : null;
+
+            throw new \RuntimeException(
+                "PayPal {$mode} authentication failed: " . ($reason ?: "HTTP {$response->status()}")
+                . '. Confirm that the credentials belong to the selected mode.'
+            );
+        }
+
+        return $accessToken;
     }
 
     public function createPayment(Invoice $invoice, array $payload): array
@@ -70,11 +90,18 @@ class PayPalGateway implements PaymentGatewayInterface
         ]);
 
         $approvalUrl = collect($order['links'] ?? [])->firstWhere('rel', 'approve')['href'] ?? null;
+        $orderId = $order['id'] ?? null;
+
+        if (!$orderId || !$approvalUrl) {
+            throw new \RuntimeException(
+                'PayPal did not return a valid approval URL. Verify the app credentials and account status.'
+            );
+        }
 
         return [
             'redirect_url' => $approvalUrl,
-            'order_id' => $order['id'],
-            'provider_order_id' => $order['id'],
+            'order_id' => $orderId,
+            'provider_order_id' => $orderId,
             'raw' => $order,
         ];
     }
@@ -250,32 +277,55 @@ class PayPalGateway implements PaymentGatewayInterface
 
     private function paypalRequest(string $method, string $path, string $token, array $data = [], array $extraHeaders = []): array
     {
-        $ch = curl_init($this->baseUrl() . $path);
-        $opts = [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => array_merge([
-                'Content-Type: application/json',
-                'Authorization: Bearer ' . $token,
-            ], $extraHeaders),
-        ];
+        try {
+            $client = PaymentHttpClient::request()
+                ->withToken($token)
+                ->withHeaders($this->headerLinesToArray($extraHeaders));
 
-        if ($method === 'POST') {
-            $opts[CURLOPT_POST] = true;
-            $opts[CURLOPT_POSTFIELDS] = json_encode($data);
+            if ($method === 'POST') {
+                $response = empty($data)
+                    ? $client->withBody('{}', 'application/json')->post($this->baseUrl() . $path)
+                    : $client->post($this->baseUrl() . $path, $data);
+            } else {
+                $response = $client->get($this->baseUrl() . $path);
+            }
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'Could not connect to PayPal. Check the server network connection and cURL/CA certificate configuration.',
+                previous: $e
+            );
         }
 
-        curl_setopt_array($ch, $opts);
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $decoded = $response->json();
 
-        $decoded = json_decode($response, true) ?? [];
+        if ($response->failed()) {
+            $msg = is_array($decoded)
+                ? ($decoded['message'] ?? $decoded['details'][0]['description'] ?? $decoded['name'] ?? null)
+                : null;
 
-        if ($httpCode >= 400) {
-            $msg = $decoded['message'] ?? 'PayPal API error';
-            throw new \RuntimeException('PayPal error: ' . $msg);
+            throw new \RuntimeException('PayPal error: ' . ($msg ?: "HTTP {$response->status()}"));
+        }
+
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('PayPal returned an invalid response.');
         }
 
         return $decoded;
+    }
+
+    private function headerLinesToArray(array $headers): array
+    {
+        $normalized = [];
+
+        foreach ($headers as $header) {
+            if (!str_contains($header, ':')) {
+                continue;
+            }
+
+            [$name, $value] = explode(':', $header, 2);
+            $normalized[trim($name)] = trim($value);
+        }
+
+        return $normalized;
     }
 }

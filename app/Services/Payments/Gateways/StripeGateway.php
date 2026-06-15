@@ -6,8 +6,9 @@ use App\Models\Invoice;
 use App\Models\OnlinePayment;
 use App\Models\PaymentGatewaySetting;
 use App\Services\Payments\Contracts\PaymentGatewayInterface;
+use App\Services\Payments\PaymentHttpClient;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\ConnectionException;
 
 class StripeGateway implements PaymentGatewayInterface
 {
@@ -23,8 +24,8 @@ class StripeGateway implements PaymentGatewayInterface
 
     public function createPayment(Invoice $invoice, array $payload): array
     {
-        $secretKey = $this->setting->getCredential('secret_key');
-        if (!$secretKey) {
+        $secretKey = trim((string) $this->setting->getCredential('secret_key'));
+        if ($secretKey === '') {
             throw new \RuntimeException('Stripe secret key is not configured.');
         }
 
@@ -47,7 +48,7 @@ class StripeGateway implements PaymentGatewayInterface
                 'quantity' => 1,
             ]],
             'mode' => 'payment',
-            'success_url' => $successUrl . '?session_id={CHECKOUT_SESSION_ID}',
+            'success_url' => $successUrl . (str_contains($successUrl, '?') ? '&' : '?') . 'session_id={CHECKOUT_SESSION_ID}',
             'cancel_url' => $cancelUrl,
             'metadata' => [
                 'invoice_id' => $invoice->id,
@@ -55,11 +56,20 @@ class StripeGateway implements PaymentGatewayInterface
             ],
         ]);
 
+        $sessionId = $response['id'] ?? null;
+        $redirectUrl = $response['url'] ?? null;
+
+        if (!$sessionId || !$redirectUrl) {
+            throw new \RuntimeException(
+                'Stripe did not return a valid Checkout Session. Verify that the secret key is valid and Checkout is enabled for this account.'
+            );
+        }
+
         return [
-            'redirect_url' => $response['url'],
-            'session_id' => $response['id'],
-            'order_id' => $response['id'],
-            'provider_session_id' => $response['id'],
+            'redirect_url' => $redirectUrl,
+            'session_id' => $sessionId,
+            'order_id' => $sessionId,
+            'provider_session_id' => $sessionId,
         ];
     }
 
@@ -179,33 +189,34 @@ class StripeGateway implements PaymentGatewayInterface
 
     private function stripeRequest(string $method, string $url, string $secretKey, array $data): array
     {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $secretKey,
-                'Content-Type: application/x-www-form-urlencoded',
-            ],
-        ]);
+        try {
+            $client = PaymentHttpClient::request()->withToken(trim($secretKey));
 
-        if ($method === 'POST') {
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($this->flattenForStripe($data)));
+            $response = $method === 'POST'
+                ? $client->asForm()->post($url, $this->flattenForStripe($data))
+                : $client->get($url);
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'Could not connect to Stripe. Check the server network connection and cURL/CA certificate configuration.',
+                previous: $e
+            );
         }
 
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $decoded = $response->json();
 
-        $decoded = json_decode($response, true);
+        if ($response->failed()) {
+            $errorMsg = is_array($decoded)
+                ? ($decoded['error']['message'] ?? $decoded['error']['code'] ?? null)
+                : null;
 
-        if ($httpCode >= 400) {
-            $errorMsg = $decoded['error']['message'] ?? 'Stripe API error';
-            throw new \RuntimeException('Stripe error: ' . $errorMsg);
+            throw new \RuntimeException('Stripe error: ' . ($errorMsg ?: "HTTP {$response->status()}"));
         }
 
-        return $decoded ?? [];
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('Stripe returned an invalid response.');
+        }
+
+        return $decoded;
     }
 
     private function flattenForStripe(array $data, string $prefix = ''): array

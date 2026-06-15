@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'payment_gateways' => [
+        'ca_bundle' => env('PAYMENT_GATEWAY_CA_BUNDLE'),
+    ],
+
 ];

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PaymentGatewaySetting;
+use App\Services\Payments\PaymentHttpClient;
 use App\Services\Payments\PaymentGatewayManager;
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\ConnectionException;
 
 class PaymentGatewaySettingController extends Controller
 {
@@ -145,36 +147,55 @@ class PaymentGatewaySettingController extends Controller
 
     private function testStripe(array $credentials): void
     {
-        $ch = curl_init('https://api.stripe.com/v1/account');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $credentials['secret_key']],
-        ]);
-        $response = json_decode(curl_exec($ch), true);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        try {
+            $response = PaymentHttpClient::request()
+                ->withToken(trim((string) $credentials['secret_key']))
+                ->get('https://api.stripe.com/v1/account');
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'Could not connect to Stripe. Check the server network connection and cURL/CA certificate configuration.',
+                previous: $e
+            );
+        }
 
-        if ($code !== 200) {
-            throw new \RuntimeException($response['error']['message'] ?? 'Stripe authentication failed.');
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                $response->json('error.message') ?: "Stripe authentication failed (HTTP {$response->status()})."
+            );
         }
     }
 
     private function testPaypal(array $credentials, string $mode): void
     {
         $baseUrl = $mode === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
-        $ch = curl_init($baseUrl . '/v1/oauth2/token');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => 'grant_type=client_credentials',
-            CURLOPT_USERPWD => $credentials['client_id'] . ':' . $credentials['client_secret'],
-            CURLOPT_HTTPHEADER => ['Accept: application/json'],
-        ]);
-        $response = json_decode(curl_exec($ch), true);
-        curl_close($ch);
+        $modeLabel = $mode === 'live' ? 'live' : 'sandbox';
 
-        if (empty($response['access_token'])) {
-            throw new \RuntimeException('PayPal authentication failed. Check credentials.');
+        try {
+            $response = PaymentHttpClient::request()
+                ->withBasicAuth(
+                    trim((string) $credentials['client_id']),
+                    trim((string) $credentials['client_secret'])
+                )
+                ->asForm()
+                ->post($baseUrl . '/v1/oauth2/token', [
+                    'grant_type' => 'client_credentials',
+                ]);
+        } catch (ConnectionException $e) {
+            throw new \RuntimeException(
+                'Could not connect to PayPal. Check the server network connection and cURL/CA certificate configuration.',
+                previous: $e
+            );
+        }
+
+        if ($response->failed() || !$response->json('access_token')) {
+            $reason = $response->json('error_description')
+                ?: $response->json('message')
+                ?: $response->json('error')
+                ?: "HTTP {$response->status()}";
+
+            throw new \RuntimeException(
+                "PayPal {$modeLabel} authentication failed: {$reason}. Confirm that the credentials belong to the selected mode."
+            );
         }
     }
 

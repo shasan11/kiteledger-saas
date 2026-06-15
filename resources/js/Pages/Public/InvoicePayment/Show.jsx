@@ -214,9 +214,17 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
                         amount: gd.amount,
                         currency: gd.currency,
                     });
-                    window.location.href = `/pay/invoice/${publicToken}/success?online_payment_id=${data.online_payment_id}`;
+                    const successParams = new URLSearchParams({
+                        online_payment_id: data.online_payment_id,
+                        provider: 'razorpay',
+                    });
+                    window.location.href = `/pay/invoice/${publicToken}/success?${successParams.toString()}`;
                 } catch {
-                    window.location.href = `/pay/invoice/${publicToken}/failed`;
+                    const failedParams = new URLSearchParams({
+                        online_payment_id: data.online_payment_id,
+                        provider: 'razorpay',
+                    });
+                    window.location.href = `/pay/invoice/${publicToken}/failed?${failedParams.toString()}`;
                 }
             },
             modal: { ondismiss: () => setSubmitting(false) },
