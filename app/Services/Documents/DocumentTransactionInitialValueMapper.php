@@ -3,6 +3,7 @@
 namespace App\Services\Documents;
 
 use App\Models\Account;
+use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\DocumentEntityMatch;
 use App\Models\DocumentUpload;
@@ -129,16 +130,22 @@ class DocumentTransactionInitialValueMapper
     {
         $party = $normalized['party'] ?? [];
         $totals = $normalized['totals'] ?? [];
+        $normalizedLines = $normalized['lines']
+            ?? $normalized['line_items']
+            ?? $normalized['items']
+            ?? $normalized['products']
+            ?? $normalized['services']
+            ?? [];
         $grand = $this->num($totals['grand_total'] ?? $totals['total'] ?? null);
         $documentDate = $normalized['document_date'] ?? now()->toDateString();
-        $common = $initial + [
+        $common = array_replace($initial, [
             'contact_id' => $matches['contact'] ?? null,
             'currency_id' => $matches['currency'] ?? $initial['currency_id'],
             'warehouse_id' => $matches['warehouse_default'] ?? null,
             'reference' => $normalized['document_number'] ?? null,
             'notes' => null,
             'total' => $grand,
-            'lines' => $this->mapLines($normalized['lines'] ?? [], $matches),
+            'lines' => $this->mapLines(is_array($normalizedLines) ? $normalizedLines : [], $matches),
             'extracted_party' => [
                 'role' => $party['role'] ?? null,
                 'name' => $party['name'] ?? null,
@@ -147,7 +154,11 @@ class DocumentTransactionInitialValueMapper
                 'phone' => $party['phone'] ?? null,
                 'address' => $party['address'] ?? null,
             ],
-        ];
+        ]);
+
+        if ($type === 'expense') {
+            $common['lines'] = $this->normalizeExpenseLineAccounts($common['lines']);
+        }
 
         $payload = match ($type) {
             'purchase_bill' => $common + [
@@ -164,7 +175,7 @@ class DocumentTransactionInitialValueMapper
                 'due_date' => $normalized['due_date'] ?? null,
                 'payment_method' => $normalized['payment']['method'] ?? null,
             ],
-            'customer_payment', 'supplier_payment' => $initial + [
+            'customer_payment', 'supplier_payment' => array_replace($initial, [
                 'contact_id' => $matches['contact'] ?? null,
                 'currency_id' => $matches['currency'] ?? $initial['currency_id'],
                 'payment_date' => $normalized['payment']['payment_date'] ?? $documentDate,
@@ -175,7 +186,7 @@ class DocumentTransactionInitialValueMapper
                 'payment_method' => $normalized['payment']['method'] ?? null,
                 'reference' => $normalized['payment']['reference_no'] ?? $normalized['document_number'] ?? null,
                 'extracted_party' => $common['extracted_party'],
-            ],
+            ]),
             'credit_note' => $common + [
                 'sales_return_date' => $documentDate,
             ],
@@ -197,7 +208,17 @@ class DocumentTransactionInitialValueMapper
             default => $common,
         };
 
-        return array_replace_recursive($payload, $review);
+        $merged = array_replace_recursive($payload, $review);
+
+        if (array_key_exists('lines', $review) && is_array($review['lines'])) {
+            $merged['lines'] = array_values($review['lines']);
+        }
+
+        if ($type === 'expense') {
+            $merged['lines'] = $this->normalizeExpenseLineAccounts($merged['lines'] ?? []);
+        }
+
+        return $merged;
     }
 
     private function mapLines(array $lines, array $matches): array
@@ -282,6 +303,86 @@ class DocumentTransactionInitialValueMapper
     {
         return Account::query()->where('active', true)->oldest()->value('id')
             ?: Account::query()->oldest()->value('id');
+    }
+
+    private function normalizeExpenseLineAccounts(array $lines): array
+    {
+        $default = $this->defaultExpenseAccount();
+
+        return array_values(array_map(function (array $line) use ($default) {
+            $accountId = $line['account_id'] ?? null;
+            $chartOfAccountId = $line['chart_of_account_id'] ?? null;
+
+            if (!$accountId && $chartOfAccountId) {
+                $accountId = ChartOfAccount::query()
+                    ->whereKey($chartOfAccountId)
+                    ->value('account_id');
+            }
+
+            $accountId = $accountId ?: $default['account_id'];
+            $chartOfAccountId = $accountId
+                ? $this->chartOfAccountIdForAccount($accountId)
+                : ($chartOfAccountId ?: $default['chart_of_account_id']);
+
+            return [
+                ...$line,
+                'account_id' => $accountId,
+                'chart_of_account_id' => $chartOfAccountId,
+            ];
+        }, $lines));
+    }
+
+    private function defaultExpenseAccount(): array
+    {
+        $account = Account::query()
+            ->where('active', true)
+            ->where('nature', 'coa')
+            ->orderBy('name')
+            ->first()
+            ?: Account::query()->firstOrCreate(
+                ['code' => 'DOC-EXPENSE'],
+                [
+                    'name' => 'Uncategorized Document Expense',
+                    'nature' => 'coa',
+                    'active' => true,
+                    'is_system_generated' => true,
+                    'user_add_id' => auth()->id(),
+                ]
+            );
+
+        return [
+            'account_id' => $account->id,
+            'chart_of_account_id' => $this->chartOfAccountIdForAccount($account->id),
+        ];
+    }
+
+    private function chartOfAccountIdForAccount(string $accountId): string
+    {
+        $chartOfAccountId = ChartOfAccount::query()
+            ->where('account_id', $accountId)
+            ->value('id');
+
+        if ($chartOfAccountId) {
+            return $chartOfAccountId;
+        }
+
+        $account = Account::query()->findOrFail($accountId);
+
+        return ChartOfAccount::withoutEvents(function () use ($account) {
+            $chart = new ChartOfAccount;
+            $chart->forceFill([
+                'account_id' => $account->id,
+                'type' => 'expense',
+                'code' => null,
+                'name' => $account->name,
+                'description' => 'Legacy expense line compatibility link for account-based posting.',
+                'active' => (bool) $account->active,
+                'is_system_generated' => true,
+                'user_add_id' => $account->user_add_id,
+            ])->saveQuietly();
+
+            return $chart->id;
+        });
     }
 
     private function num(mixed $value): float

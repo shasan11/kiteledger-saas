@@ -7,9 +7,9 @@ use App\Models\DocumentUpload;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentStorageService;
+use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
 
 class DocumentUploadController extends Controller
 {
@@ -17,6 +17,7 @@ class DocumentUploadController extends Controller
         protected DocumentPermissionService $perms,
         protected DocumentStorageService $storage,
         protected DocumentAuditService $audit,
+        protected BranchScopeService $branchScope,
     ) {}
 
     public function index(Request $request)
@@ -28,6 +29,8 @@ class DocumentUploadController extends Controller
             ->withCount('proposals')
             ->latest();
 
+        $this->applyDocumentScope($q, $request);
+
         if ($search = $request->get('search')) {
             $q->where(function ($q) use ($search) {
                 $q->where('label', 'like', "%{$search}%")
@@ -36,8 +39,6 @@ class DocumentUploadController extends Controller
         }
         if ($status = $request->get('status')) $q->where('status', $status);
         if ($type = $request->get('document_type')) $q->where('document_type', $type);
-        if ($branch = $request->get('branch_id')) $q->where('branch_id', $branch);
-
         $perPage = min((int) $request->get('per_page', 20), 100);
         return response()->json($q->paginate($perPage));
     }
@@ -46,8 +47,7 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.create');
 
-        // Validation including allowed file types
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'label' => ['required', 'string', 'max:255'],
             'file' => ['required', 'file', 'mimes:pdf,doc,docx,xlsx,jpg,png'], // only allowed types
             'document_type' => ['nullable', 'string', 'max:60'],
@@ -56,14 +56,16 @@ class DocumentUploadController extends Controller
             'fiscal_year_id' => ['nullable', 'uuid'],
         ]);
 
-        try {
-            $stored = $this->storage->store($request->file('file'));
-        } catch (ValidationException $e) {
+        if ($validator->fails()) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Invalid file type',
-                'errors' => $e->errors(),
+                'message' => 'The uploaded document is invalid.',
+                'errors' => $validator->errors(),
             ], 422);
+        }
+
+        try {
+            $stored = $this->storage->store($request->file('file'));
         } catch (\Throwable $e) {
             return response()->json([
                 'ok' => false,
@@ -72,11 +74,23 @@ class DocumentUploadController extends Controller
             ], 422);
         }
 
+        $selectedBranchId = $this->branchScope->selectedBranchId($request, $request->user());
+        $branchId = $request->input('branch_id') ?: $selectedBranchId;
+
+        if ($branchId) {
+            $this->branchScope->assertCanAccessBranch($request->user(), (string) $branchId);
+            abort_if(
+                $selectedBranchId && (string) $selectedBranchId !== (string) $branchId,
+                403,
+                'Select the target branch before uploading this document.'
+            );
+        }
+
         $doc = DocumentUpload::create([
             'label' => $request->string('label'),
             'document_type' => $request->string('document_type', 'unknown') ?: 'unknown',
             'notes' => $request->string('notes'),
-            'branch_id' => $request->input('branch_id') ?: ($request->user()->branch_id ?? null),
+            'branch_id' => $branchId,
             'fiscal_year_id' => $request->input('fiscal_year_id'),
             'uploaded_by' => $request->user()->id ?? null,
             'status' => 'uploaded',
@@ -94,6 +108,7 @@ class DocumentUploadController extends Controller
         $doc = DocumentUpload::query()
             ->with(['extraction', 'entityMatches', 'proposals', 'uploader:id,name'])
             ->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         return response()->json([
             'ok' => true,
             'document' => $doc,
@@ -105,6 +120,7 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.update');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         $data = $request->validate([
             'label' => ['nullable', 'string', 'max:255'],
             'document_type' => ['nullable', 'string', 'max:60'],
@@ -117,6 +133,7 @@ class DocumentUploadController extends Controller
     public function destroy(Request $request, string $id)
     {
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         $hasConverted = $doc->proposals()->where('status', 'converted')->exists();
 
         if ($hasConverted) {
@@ -137,6 +154,7 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.view');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         return $this->storage->streamResponse($doc);
     }
 
@@ -144,8 +162,49 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.archive');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         $doc->update(['status' => 'archived']);
         $this->audit->log('document.archived', ['document_upload_id' => $doc->id]);
         return response()->json(['ok' => true, 'document' => $doc->fresh()]);
+    }
+
+    private function assertDocumentAccess(Request $request, DocumentUpload $doc): void
+    {
+        $user = $request->user();
+
+        if (!$doc->branch_id) {
+            return;
+        }
+
+        $this->branchScope->assertCanAccessBranch($user, (string) $doc->branch_id);
+        $selectedBranchId = $this->branchScope->selectedBranchId($request, $user);
+
+        abort_if(
+            $selectedBranchId && (string) $selectedBranchId !== (string) $doc->branch_id,
+            403,
+            'This document belongs to another branch.'
+        );
+    }
+
+    private function applyDocumentScope($query, Request $request): void
+    {
+        $user = $request->user();
+        $selected = $this->branchScope->selectedBranchId($request, $user);
+
+        if ($this->branchScope->canViewAllBranches($user) && !$selected) {
+            return;
+        }
+
+        $branchIds = $selected
+            ? [(string) $selected]
+            : $this->branchScope->accessibleBranchIds($user);
+
+        $query->where(function ($inner) use ($branchIds) {
+            $inner->whereNull('branch_id');
+
+            if ($branchIds) {
+                $inner->orWhereIn('branch_id', $branchIds);
+            }
+        });
     }
 }

@@ -8,14 +8,21 @@ const DEFAULT_BRAND = {
   info: '#0ea5e9',
 };
 
-const text = {
+const lightText = {
   main: '#0f172a',
   secondary: '#475569',
   tertiary: '#64748b',
   quaternary: '#94a3b8',
 };
 
-const surface = {
+const darkText = {
+  main: '#e5e7eb',
+  secondary: '#cbd5e1',
+  tertiary: '#94a3b8',
+  quaternary: '#64748b',
+};
+
+const lightSurface = {
   body: '#eef3f8',
   layout: '#f4f7fb',
   card: '#ffffff',
@@ -23,12 +30,30 @@ const surface = {
   muted: '#f8fafc',
   muted2: '#edf2f7',
   muted3: '#f6f9fc',
+  input: '#ffffff',
 };
 
-const border = {
+const darkSurface = {
+  body: '#0b1220',
+  layout: '#060d19',
+  card: '#111827',
+  elevated: '#1f2937',
+  muted: '#1e293b',
+  muted2: '#0f172a',
+  muted3: '#020617',
+  input: '#0f172a',
+};
+
+const lightBorder = {
   base: '#e2e8f0',
   soft: '#edf2f7',
   strong: '#dbe4ee',
+};
+
+const darkBorder = {
+  base: '#334155',
+  soft: '#1f2937',
+  strong: '#475569',
 };
 
 const radius = {
@@ -40,9 +65,14 @@ const radius = {
   pill: 999,
 };
 
-const shadow = {
+const lightShadow = {
   soft: '0 4px 14px rgba(15, 23, 42, 0.06)',
   card: '0 10px 30px rgba(15, 23, 42, 0.08)',
+};
+
+const darkShadow = {
+  soft: '0 10px 22px rgba(2, 6, 23, 0.45)',
+  card: '0 14px 32px rgba(2, 6, 23, 0.55)',
 };
 
 const normalizeHexColor = (value) => {
@@ -60,7 +90,6 @@ const normalizeHexColor = (value) => {
       .join('')}`;
   }
 
-  // Strip alpha from 8-digit hex (e.g. #rrggbbaa from ColorPicker)
   if (/^#[0-9a-f]{8}$/i.test(trimmed)) return trimmed.slice(0, 7);
 
   return null;
@@ -108,24 +137,38 @@ const getBrandValue = (settings, key, fallback) => {
   return normalizeHexColor(settings?.[key]) || fallback;
 };
 
+const getModeTokens = (mode = 'light') => {
+  const isDark = mode === 'dark';
+
+  return {
+    isDark,
+    text: isDark ? darkText : lightText,
+    surface: isDark ? darkSurface : lightSurface,
+    border: isDark ? darkBorder : lightBorder,
+    shadow: isDark ? darkShadow : lightShadow,
+  };
+};
+
 const createDynamicBrand = (settings = {}, mode = 'light') => {
+  const isDark = mode === 'dark';
+
   const primary = getBrandValue(
     settings,
     'brand_primary_color',
     DEFAULT_BRAND.primary
   );
 
-  const primaryHover = darken(primary, 0.1);
+  const primaryHover = isDark ? lighten(primary, 0.12) : darken(primary, 0.1);
 
   const primaryActive = getBrandValue(
     settings,
     'brand_secondary_color',
-    darken(primary, 0.25)
+    isDark ? lighten(primary, 0.22) : darken(primary, 0.25)
   );
 
-  const primarySoft = hexToRgba(primary, 0.08);
-  const primarySoftHover = hexToRgba(primary, 0.14);
-  const primaryBorder = hexToRgba(primary, 0.38);
+  const primarySoft = hexToRgba(primary, isDark ? 0.16 : 0.08);
+  const primarySoftHover = hexToRgba(primary, isDark ? 0.22 : 0.14);
+  const primaryBorder = hexToRgba(primary, isDark ? 0.5 : 0.38);
   const primaryBorderHover = primary;
 
   const accent = getBrandValue(
@@ -137,16 +180,20 @@ const createDynamicBrand = (settings = {}, mode = 'light') => {
   const sidebar = getBrandValue(
     settings,
     'brand_sidebar_color',
-    mode === 'dark' ? '#020617' : '#0b1220'
+    isDark ? '#020617' : '#0b1220'
   );
 
   const header = getBrandValue(
     settings,
     'brand_header_color',
-    mode === 'dark' ? '#111827' : '#ffffff'
+    isDark ? '#111827' : '#ffffff'
   );
 
-  const mainText = getBrandValue(settings, 'brand_text_color', text.main);
+  const mainText = getBrandValue(
+    settings,
+    isDark ? 'brand_dark_text_color' : 'brand_text_color',
+    isDark ? darkText.main : lightText.main
+  );
 
   return {
     primary,
@@ -167,609 +214,22 @@ const createDynamicBrand = (settings = {}, mode = 'light') => {
     header,
     mainText,
 
-    focusShadow: `0 0 0 4px ${hexToRgba(primary, 0.1)}`,
-    selectedBg: hexToRgba(primary, 0.08),
-    selectedStrongBg: hexToRgba(primary, 0.18),
+    focusShadow: `0 0 0 4px ${hexToRgba(primary, isDark ? 0.18 : 0.1)}`,
+    selectedBg: hexToRgba(primary, isDark ? 0.16 : 0.08),
+    selectedStrongBg: hexToRgba(primary, isDark ? 0.3 : 0.18),
   };
 };
 
-const defaultBrand = createDynamicBrand();
+const createTheme = (mode = 'light', settings = null) => {
+  const { isDark, text, surface, border, shadow } = getModeTokens(mode);
+  const brand = createDynamicBrand(settings || {}, mode);
 
-export const themeMain = {
-  algorithm: [theme.defaultAlgorithm],
+  return {
+    algorithm: [isDark ? theme.darkAlgorithm : theme.defaultAlgorithm],
 
-  token: {
-    fontFamily:
-      "Inter, Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-
-    colorPrimary: defaultBrand.primary,
-    colorPrimaryHover: defaultBrand.primaryHover,
-    colorPrimaryActive: defaultBrand.primaryActive,
-    colorPrimaryBg: defaultBrand.primarySoft,
-    colorPrimaryBgHover: defaultBrand.primarySoftHover,
-    colorPrimaryBorder: defaultBrand.primaryBorder,
-    colorPrimaryBorderHover: defaultBrand.primaryBorderHover,
-
-    colorSuccess: defaultBrand.success,
-    colorWarning: defaultBrand.warning,
-    colorError: defaultBrand.error,
-    colorInfo: defaultBrand.info,
-
-    colorText: text.main,
-    colorTextSecondary: text.secondary,
-    colorTextTertiary: text.tertiary,
-    colorTextQuaternary: text.quaternary,
-
-    colorBgBase: surface.body,
-    colorBgLayout: surface.layout,
-    colorBgContainer: surface.card,
-    colorBgElevated: surface.elevated,
-
-    colorFillSecondary: surface.muted,
-    colorFillTertiary: surface.muted2,
-    colorFillQuaternary: surface.muted3,
-
-    colorBorder: border.base,
-    colorBorderSecondary: border.soft,
-
-    borderRadius: radius.md,
-    borderRadiusXS: radius.xs,
-    borderRadiusSM: radius.sm,
-    borderRadiusLG: radius.lg,
-    borderRadiusOuter: radius.xl,
-
-    lineWidth: 1,
-
-    fontSize: 13,
-    fontSizeSM: 13,
-    fontSizeLG: 16,
-    fontWeightStrong: 600,
-
-    controlHeight: 40,
-    controlHeightSM: 34,
-    controlHeightLG: 46,
-
-    boxShadow: shadow.card,
-    boxShadowSecondary: shadow.soft,
-
-    wireframe: false,
-    motionDurationFast: '0.15s',
-    motionDurationMid: '0.2s',
-    motionDurationSlow: '0.28s',
-  },
-
-  components: {
-    Layout: {
-      bodyBg: surface.layout,
-      headerBg: '#ffffff',
-      siderBg: '#0b1220',
-      triggerBg: '#111827',
-      triggerColor: '#e2e8f0',
-      footerBg: surface.layout,
-      lightSiderBg: '#ffffff',
-    },
-
-    Menu: {
-      itemHeight: 42,
-      itemBorderRadius: 10,
-      itemMarginBlock: 6,
-      itemMarginInline: 10,
-
-      darkItemBg: '#0b1220',
-      darkSubMenuItemBg: '#0f172a',
-      darkPopupBg: '#0f172a',
-      darkItemColor: 'rgba(226,232,240,0.76)',
-      darkItemHoverColor: '#ffffff',
-      darkItemSelectedColor: '#ffffff',
-      darkItemHoverBg: 'rgba(255,255,255,0.06)',
-      darkItemSelectedBg: defaultBrand.selectedStrongBg,
-
-      itemColor: text.secondary,
-      itemHoverColor: text.main,
-      itemSelectedColor: defaultBrand.primaryActive,
-      itemSelectedBg: defaultBrand.primarySoft,
-      itemHoverBg: surface.muted,
-      itemActiveBg: defaultBrand.primarySoft,
-    },
-
-    Button: {
-      borderRadius: 5,
-      fontWeight: 600,
-
-      colorPrimary: defaultBrand.primary,
-      colorPrimaryHover: defaultBrand.primaryHover,
-      colorPrimaryActive: defaultBrand.primaryActive,
-
-      defaultBg: '#ffffff',
-      defaultBorderColor: border.strong,
-      defaultColor: text.main,
-      defaultHoverBg: surface.muted,
-      defaultHoverBorderColor: defaultBrand.primary,
-      defaultHoverColor: defaultBrand.primaryActive,
-      defaultActiveBg: defaultBrand.primarySoft,
-      defaultActiveBorderColor: defaultBrand.primaryHover,
-      defaultActiveColor: defaultBrand.primaryActive,
-
-      primaryColor: '#ffffff',
-      contentFontSize: 14,
-      contentFontSizeLG: 15,
-      contentFontSizeSM: 13,
-      paddingInline: 16,
-      paddingInlineLG: 18,
-      paddingInlineSM: 12,
-    },
-
-    Card: {
-      borderRadius: 0,
-      borderColor: '#e5eaf1',
-      headerBg: 'transparent',
-      bodyPadding: 20,
-      bodyPaddingSM: 16,
-      headerHeight: 56,
-      headerFontSize: 15,
-      headerFontSizeSM: 14,
-      extraColor: text.secondary,
-    },
-
-    Collapse: {
-      headerBg: surface.muted,
-      contentBg: '#ffffff',
-      borderRadiusLG: 14,
-      headerPadding: '14px 16px',
-      contentPadding: '16px 18px',
-    },
-
-    Alert: {
-      borderRadiusLG: 14,
-      withDescriptionPadding: '14px 16px',
-    },
-
-    Anchor: {
-      colorPrimary: defaultBrand.primary,
-    },
-
-    Avatar: {
-      containerSize: 36,
-      containerSizeLG: 44,
-      containerSizeSM: 28,
-      textFontSize: 14,
-      groupSpace: 4,
-    },
-
-    Badge: {
-      textFontSize: 12,
-      textFontWeight: 600,
-    },
-
-    Breadcrumb: {
-      itemColor: text.tertiary,
-      lastItemColor: text.secondary,
-      linkColor: text.tertiary,
-      linkHoverColor: text.main,
-      separatorColor: '#cbd5e1',
-    },
-
-    Calendar: {
-      fullBg: '#ffffff',
-      fullPanelBg: '#ffffff',
-      itemActiveBg: defaultBrand.primarySoft,
-      miniContentHeight: 260,
-    },
-
-    Checkbox: {
-      colorPrimary: defaultBrand.primary,
-      colorPrimaryHover: defaultBrand.primaryHover,
-      colorBorder: '#cbd5e1',
-      borderRadiusSM: 5,
-    },
-
-    DatePicker: {
-      borderRadius: 10,
-      activeBg: '#ffffff',
-      hoverBg: '#ffffff',
-      activeBorderColor: defaultBrand.primary,
-      hoverBorderColor: defaultBrand.primary,
-      activeShadow: defaultBrand.focusShadow,
-      cellHoverBg: surface.muted,
-      cellActiveWithRangeBg: defaultBrand.primarySoft,
-      cellRangeBorderColor: defaultBrand.primaryBorder,
-      cellRangeBg: defaultBrand.primarySoft,
-      multipleItemBg: defaultBrand.primarySoft,
-      multipleItemBorderColor: defaultBrand.primaryBorder,
-    },
-
-    Descriptions: {
-      labelBg: surface.muted,
-      titleColor: text.main,
-      extraColor: text.secondary,
-      itemPaddingBottom: 14,
-    },
-
-    Divider: {
-      colorSplit: border.base,
-      marginLG: 20,
-      margin: 16,
-    },
-
-    Drawer: {
-      colorBgElevated: '#ffffff',
-      footerPaddingBlock: 14,
-      footerPaddingInline: 18,
-    },
-
-    Dropdown: {
-      paddingBlock: 8,
-      controlItemBgHover: surface.muted,
-      controlItemBgActive: defaultBrand.primarySoft,
-    },
-
-    Empty: {
-      colorText: text.secondary,
-      colorTextDescription: text.tertiary,
-      fontSize: 14,
-    },
-
-    Form: {
-      labelColor: '#334155',
-      labelFontSize: 14,
-      labelHeight: 30,
-      itemMarginBottom: 18,
-      verticalLabelPadding: '0 0 6px',
-    },
-
-    Input: {
-      borderRadius: 10,
-      activeBg: '#ffffff',
-      hoverBg: '#ffffff',
-      addonBg: surface.muted,
-      activeBorderColor: defaultBrand.primary,
-      hoverBorderColor: defaultBrand.primary,
-      activeShadow: defaultBrand.focusShadow,
-      paddingBlock: 9,
-      paddingInline: 12,
-    },
-
-    InputNumber: {
-      borderRadius: 10,
-      activeBg: '#ffffff',
-      handleBg: '#ffffff',
-      activeBorderColor: defaultBrand.primary,
-      hoverBorderColor: defaultBrand.primary,
-      activeShadow: defaultBrand.focusShadow,
-    },
-
-    List: {
-      itemPadding: '14px 0',
-      headerBg: 'transparent',
-      footerBg: 'transparent',
-    },
-
-    Mentions: {
-      activeBorderColor: defaultBrand.primary,
-      hoverBorderColor: defaultBrand.primary,
-    },
-
-    Modal: {
-      borderRadiusLG: 3,
-      contentBg: '#ffffff',
-      headerBg: '#ffffff',
-      footerBg: '#ffffff',
-      titleFontSize: 18,
-      titleLineHeight: 1.4,
-    },
-
-    Pagination: {
-      itemBg: '#ffffff',
-      itemActiveBg: defaultBrand.primarySoft,
-      itemLinkBg: '#ffffff',
-      itemSize: 34,
-      borderRadius: 10,
-      colorPrimary: defaultBrand.primary,
-      colorPrimaryHover: defaultBrand.primaryHover,
-      colorText: text.secondary,
-      colorTextDisabled: '#cbd5e1',
-    },
-
-    Popconfirm: {
-      zIndexPopup: 1060,
-    },
-
-    Popover: {
-      titleMinWidth: 180,
-      borderRadiusLG: 14,
-    },
-
-    Progress: {
-      defaultColor: defaultBrand.primary,
-      remainingColor: '#e5e7eb',
-      lineBorderRadius: radius.pill,
-      circleTextColor: text.main,
-    },
-
-    Radio: {
-      colorPrimary: defaultBrand.primary,
-      colorPrimaryHover: defaultBrand.primaryHover,
-      buttonBg: '#ffffff',
-      buttonCheckedBg: defaultBrand.primarySoft,
-      buttonCheckedBgDisabled: '#f1f5f9',
-      buttonColor: text.secondary,
-      buttonCheckedColor: defaultBrand.primaryActive,
-      buttonSolidCheckedBg: defaultBrand.primary,
-      buttonSolidCheckedColor: '#ffffff',
-      buttonSolidCheckedHoverBg: defaultBrand.primaryHover,
-      dotSize: 8,
-      radioSize: 16,
-    },
-
-    Rate: {
-      starColor: '#f59e0b',
-      starHoverScale: 'scale(1.08)',
-    },
-
-    Result: {
-      titleFontSize: 22,
-      subtitleFontSize: 14,
-      iconFontSize: 60,
-      extraMargin: '20px 0 0 0',
-    },
-
-    Segmented: {
-      trackBg: '#eef2f7',
-      itemColor: text.secondary,
-      itemHoverColor: text.main,
-      itemHoverBg: '#f8fafc',
-      itemSelectedBg: '#ffffff',
-      itemSelectedColor: defaultBrand.primaryActive,
-      itemBorderRadius: 10,
-    },
-
-    Select: {
-      borderRadius: 10,
-      selectorBg: '#ffffff',
-      clearBg: '#ffffff',
-      activeBorderColor: defaultBrand.primary,
-      hoverBorderColor: defaultBrand.primary,
-      activeOutlineColor: hexToRgba(defaultBrand.primary, 0.1),
-      optionSelectedBg: defaultBrand.primarySoft,
-      optionActiveBg: surface.muted,
-      multipleItemBg: defaultBrand.primarySoft,
-      multipleItemBorderColor: defaultBrand.primaryBorder,
-      multipleItemBorderColorDisabled: border.base,
-      multipleItemColorDisabled: text.tertiary,
-      showArrowPaddingInlineEnd: 30,
-    },
-
-    Skeleton: {
-      gradientFromColor: '#f8fafc',
-      gradientToColor: '#eef2f7',
-      blockRadius: 10,
-      paragraphLiHeight: 14,
-    },
-
-    Slider: {
-      railBg: '#e5e7eb',
-      railHoverBg: '#d1d5db',
-      trackBg: defaultBrand.primary,
-      trackHoverBg: defaultBrand.primaryHover,
-      handleColor: defaultBrand.primary,
-      handleActiveColor: defaultBrand.primaryHover,
-      handleSize: 14,
-      handleSizeHover: 16,
-    },
-
-    Spin: {
-      dotSize: 22,
-      dotSizeLG: 30,
-      dotSizeSM: 16,
-      contentHeight: 400,
-    },
-
-    Statistic: {
-      titleFontSize: 13,
-      contentFontSize: 24,
+    token: {
       fontFamily:
         "Inter, Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    },
-
-    Steps: {
-      colorTextDescription: text.tertiary,
-      colorTextLabel: text.secondary,
-      colorText: text.main,
-      iconSize: 30,
-      iconSizeSM: 24,
-      dotSize: 10,
-      dotCurrentSize: 12,
-      navArrowColor: '#cbd5e1',
-      customIconSize: 30,
-      customIconTop: 0,
-      titleLineHeight: 1.4,
-    },
-
-    Switch: {
-      colorPrimary: defaultBrand.primary,
-      colorPrimaryHover: defaultBrand.primaryHover,
-      handleBg: '#ffffff',
-      trackHeight: 24,
-      trackMinWidth: 46,
-      trackPadding: 2,
-      innerMinMargin: 20,
-      innerMaxMargin: 24,
-    },
-
-    Table: {
-      headerBg: '#f8fafc',
-      headerColor: '#334155',
-      headerSplitColor: '#e5eaf1',
-      borderColor: '#e8edf4',
-      rowHoverBg: '#f8fbff',
-      cellPaddingBlock: 14,
-      cellPaddingInline: 14,
-      footerBg: '#ffffff',
-      headerBorderRadius: 12,
-    },
-
-    Tabs: {
-      cardBg: '#f8fafc',
-      itemColor: text.tertiary,
-      itemHoverColor: text.main,
-      itemSelectedColor: defaultBrand.primaryActive,
-      inkBarColor: defaultBrand.primary,
-      horizontalItemGutter: 24,
-      horizontalItemPadding: '12px 4px',
-      cardHeight: 42,
-      titleFontSize: 14,
-      titleFontSizeLG: 15,
-    },
-
-    Tag: {
-      defaultBg: defaultBrand.primarySoft,
-      defaultColor: defaultBrand.primaryActive,
-      borderRadiusSM: radius.pill,
-      fontSizeSM: 12,
-      lineHeightSM: 1.2,
-    },
-
-    Timeline: {
-      dotBg: '#ffffff',
-      tailColor: '#e2e8f0',
-      itemPaddingBottom: 18,
-    },
-
-    Tooltip: {
-      borderRadius: 10,
-      colorBgSpotlight: '#0f172a',
-      colorTextLightSolid: '#ffffff',
-    },
-
-    Tour: {
-      borderRadiusLG: 16,
-      closeBtnSize: 24,
-      primaryNextBtnHoverBg: defaultBrand.primaryHover,
-    },
-
-    Tree: {
-      nodeHoverBg: surface.muted,
-      nodeSelectedBg: defaultBrand.primarySoft,
-      directoryNodeSelectedBg: defaultBrand.primarySoft,
-      directoryNodeSelectedColor: defaultBrand.primaryActive,
-      titleHeight: 32,
-      indentSize: 20,
-    },
-
-    TreeSelect: {
-      borderRadius: 10,
-    },
-
-    Upload: {
-      colorText: text.secondary,
-      colorTextDescription: text.tertiary,
-      actionsColor: text.tertiary,
-    },
-
-    Notification: {
-      zIndexPopup: 2050,
-    },
-
-    Message: {
-      contentBg: '#ffffff',
-      zIndexPopup: 2010,
-    },
-
-    QRCode: {
-      colorText: text.main,
-    },
-
-    App: {
-      colorPrimary: defaultBrand.primary,
-    },
-  },
-};
-
-const darkThemeOverrides = {
-  token: {
-    colorBgBase: '#0b1220',
-    colorBgLayout: '#060d19',
-    colorBgContainer: '#111827',
-    colorBgElevated: '#1f2937',
-    colorText: '#e5e7eb',
-    colorTextSecondary: '#cbd5e1',
-    colorTextTertiary: '#94a3b8',
-    colorTextQuaternary: '#64748b',
-    colorBorder: '#334155',
-    colorBorderSecondary: '#1f2937',
-    boxShadow: '0 14px 32px rgba(2, 6, 23, 0.55)',
-    boxShadowSecondary: '0 10px 22px rgba(2, 6, 23, 0.45)',
-  },
-
-  components: {
-    Layout: {
-      bodyBg: '#060d19',
-      headerBg: '#111827',
-      siderBg: '#020617',
-      triggerBg: '#0f172a',
-      triggerColor: '#e2e8f0',
-      footerBg: '#060d19',
-      lightSiderBg: '#0f172a',
-    },
-
-    Menu: {
-      itemColor: '#cbd5e1',
-      itemHoverColor: '#ffffff',
-      itemHoverBg: 'rgba(148, 163, 184, 0.16)',
-      itemSelectedColor: '#ffffff',
-      itemSelectedBg: defaultBrand.selectedStrongBg,
-    },
-
-    Card: {
-      borderColor: '#334155',
-      extraColor: '#94a3b8',
-    },
-
-    Table: {
-      headerBg: '#1e293b',
-      headerColor: '#e2e8f0',
-      borderColor: '#334155',
-      rowHoverBg: '#0f172a',
-      footerBg: '#111827',
-    },
-  },
-};
-
-const mergeDarkTheme = () => {
-  return {
-    ...themeMain,
-
-    algorithm: [theme.darkAlgorithm],
-
-    token: {
-      ...themeMain.token,
-      ...darkThemeOverrides.token,
-    },
-
-    components: {
-      ...themeMain.components,
-      ...Object.fromEntries(
-        Object.entries(darkThemeOverrides.components).map(([name, values]) => [
-          name,
-          {
-            ...(themeMain.components?.[name] || {}),
-            ...values,
-          },
-        ])
-      ),
-    },
-  };
-};
-
-const applyBrandSettings = (config, settings = null, mode = 'light') => {
-  const brand = createDynamicBrand(settings || {}, mode);
-  const explicitTextColor = normalizeHexColor(settings?.brand_text_color);
-
-  return {
-    ...config,
-
-    token: {
-      ...config.token,
 
       colorPrimary: brand.primary,
       colorPrimaryHover: brand.primaryHover,
@@ -784,46 +244,98 @@ const applyBrandSettings = (config, settings = null, mode = 'light') => {
       colorError: brand.error,
       colorInfo: brand.info,
 
-      colorText: explicitTextColor || config.token.colorText,
+      colorText: brand.mainText,
+      colorTextSecondary: text.secondary,
+      colorTextTertiary: text.tertiary,
+      colorTextQuaternary: text.quaternary,
+      colorTextLightSolid: '#ffffff',
+
+      colorBgBase: surface.body,
+      colorBgLayout: surface.layout,
+      colorBgContainer: surface.card,
+      colorBgElevated: surface.elevated,
+
+      colorFillSecondary: surface.muted,
+      colorFillTertiary: surface.muted2,
+      colorFillQuaternary: surface.muted3,
+
+      colorBorder: border.base,
+      colorBorderSecondary: border.soft,
+
+      colorSplit: border.base,
+
+      borderRadius: radius.md,
+      borderRadiusXS: radius.xs,
+      borderRadiusSM: radius.sm,
+      borderRadiusLG: radius.lg,
+      borderRadiusOuter: radius.xl,
+
+      lineWidth: 1,
+
+      fontSize: 13,
+      fontSizeSM: 13,
+      fontSizeLG: 16,
+      fontWeightStrong: 600,
+
+      controlHeight: 40,
+      controlHeightSM: 34,
+      controlHeightLG: 46,
+
+      boxShadow: shadow.card,
+      boxShadowSecondary: shadow.soft,
+
+      wireframe: false,
+      motionDurationFast: '0.15s',
+      motionDurationMid: '0.2s',
+      motionDurationSlow: '0.28s',
     },
 
     components: {
-      ...config.components,
-
       Layout: {
-        ...(config.components?.Layout || {}),
+        bodyBg: surface.layout,
         headerBg: brand.header,
         siderBg: brand.sidebar,
         triggerBg: brand.sidebar,
+        triggerColor: '#e2e8f0',
+        footerBg: surface.layout,
+        lightSiderBg: surface.card,
       },
 
       Menu: {
-        ...(config.components?.Menu || {}),
+        itemHeight: 42,
+        itemBorderRadius: 10,
+        itemMarginBlock: 6,
+        itemMarginInline: 10,
 
         darkItemBg: brand.sidebar,
         darkSubMenuItemBg: brand.sidebar,
         darkPopupBg: brand.sidebar,
-
-        darkItemSelectedBg: brand.selectedStrongBg,
+        darkItemColor: 'rgba(226,232,240,0.76)',
+        darkItemHoverColor: '#ffffff',
         darkItemSelectedColor: '#ffffff',
+        darkItemHoverBg: 'rgba(255,255,255,0.08)',
+        darkItemSelectedBg: brand.selectedStrongBg,
 
-        itemSelectedColor: brand.primaryActive,
+        itemColor: text.secondary,
+        itemHoverColor: text.main,
+        itemSelectedColor: isDark ? '#ffffff' : brand.primaryActive,
         itemSelectedBg: brand.primarySoft,
+        itemHoverBg: isDark ? 'rgba(148, 163, 184, 0.16)' : surface.muted,
         itemActiveBg: brand.primarySoft,
       },
 
-      Anchor: {
-        ...(config.components?.Anchor || {}),
-        colorPrimary: brand.primary,
-      },
-
       Button: {
-        ...(config.components?.Button || {}),
+        borderRadius: 5,
+        fontWeight: 600,
 
         colorPrimary: brand.primary,
         colorPrimaryHover: brand.primaryHover,
         colorPrimaryActive: brand.primaryActive,
 
+        defaultBg: surface.input,
+        defaultBorderColor: border.strong,
+        defaultColor: text.main,
+        defaultHoverBg: surface.muted,
         defaultHoverBorderColor: brand.primary,
         defaultHoverColor: brand.primaryActive,
         defaultActiveBg: brand.primarySoft,
@@ -831,19 +343,92 @@ const applyBrandSettings = (config, settings = null, mode = 'light') => {
         defaultActiveColor: brand.primaryActive,
 
         primaryColor: '#ffffff',
+        contentFontSize: 14,
+        contentFontSizeLG: 15,
+        contentFontSizeSM: 13,
+        paddingInline: 16,
+        paddingInlineLG: 18,
+        paddingInlineSM: 12,
+      },
+
+      Card: {
+        borderRadius: 0,
+        borderColor: border.base,
+        headerBg: 'transparent',
+        colorTextHeading: text.main,
+        colorTextDescription: text.secondary,
+        bodyPadding: 20,
+        bodyPaddingSM: 16,
+        headerHeight: 56,
+        headerFontSize: 15,
+        headerFontSizeSM: 14,
+        extraColor: text.secondary,
+      },
+
+      Collapse: {
+        headerBg: surface.muted,
+        contentBg: surface.card,
+        colorTextHeading: text.main,
+        colorText: text.main,
+        borderRadiusLG: 14,
+        headerPadding: '14px 16px',
+        contentPadding: '16px 18px',
+      },
+
+      Alert: {
+        borderRadiusLG: 14,
+        withDescriptionPadding: '14px 16px',
+      },
+
+      Anchor: {
+        colorPrimary: brand.primary,
+      },
+
+      Avatar: {
+        containerSize: 36,
+        containerSizeLG: 44,
+        containerSizeSM: 28,
+        textFontSize: 14,
+        groupSpace: 4,
+      },
+
+      Badge: {
+        textFontSize: 12,
+        textFontWeight: 600,
+      },
+
+      Breadcrumb: {
+        itemColor: text.tertiary,
+        lastItemColor: text.secondary,
+        linkColor: text.tertiary,
+        linkHoverColor: text.main,
+        separatorColor: isDark ? '#475569' : '#cbd5e1',
+      },
+
+      Calendar: {
+        fullBg: surface.card,
+        fullPanelBg: surface.card,
+        itemActiveBg: brand.primarySoft,
+        colorText: text.main,
+        colorTextHeading: text.main,
+        miniContentHeight: 260,
       },
 
       Checkbox: {
-        ...(config.components?.Checkbox || {}),
         colorPrimary: brand.primary,
         colorPrimaryHover: brand.primaryHover,
+        colorBorder: isDark ? '#475569' : '#cbd5e1',
+        borderRadiusSM: 5,
       },
 
       DatePicker: {
-        ...(config.components?.DatePicker || {}),
+        borderRadius: 10,
+        activeBg: surface.input,
+        hoverBg: surface.input,
         activeBorderColor: brand.primary,
         hoverBorderColor: brand.primary,
         activeShadow: brand.focusShadow,
+        cellHoverBg: surface.muted,
         cellActiveWithRangeBg: brand.primarySoft,
         cellRangeBorderColor: brand.primaryBorder,
         cellRangeBg: brand.primarySoft,
@@ -851,118 +436,360 @@ const applyBrandSettings = (config, settings = null, mode = 'light') => {
         multipleItemBorderColor: brand.primaryBorder,
       },
 
+      Descriptions: {
+        labelBg: surface.muted,
+        titleColor: text.main,
+        extraColor: text.secondary,
+        colorText: text.main,
+        colorTextSecondary: text.secondary,
+        itemPaddingBottom: 14,
+      },
+
+      Divider: {
+        colorSplit: border.base,
+        marginLG: 20,
+        margin: 16,
+      },
+
+      Drawer: {
+        colorBgElevated: surface.card,
+        colorText: text.main,
+        colorTextHeading: text.main,
+        footerPaddingBlock: 14,
+        footerPaddingInline: 18,
+      },
+
       Dropdown: {
-        ...(config.components?.Dropdown || {}),
+        paddingBlock: 8,
+        colorBgElevated: surface.elevated,
+        controlItemBgHover: surface.muted,
         controlItemBgActive: brand.primarySoft,
+        colorText: text.main,
+      },
+
+      Empty: {
+        colorText: text.secondary,
+        colorTextDescription: text.tertiary,
+        fontSize: 14,
+      },
+
+      Form: {
+        labelColor: text.secondary,
+        labelFontSize: 14,
+        labelHeight: 30,
+        itemMarginBottom: 18,
+        verticalLabelPadding: '0 0 6px',
       },
 
       Input: {
-        ...(config.components?.Input || {}),
+        borderRadius: 10,
+        activeBg: surface.input,
+        hoverBg: surface.input,
+        addonBg: surface.muted,
+        colorBgContainer: surface.input,
+        colorText: text.main,
+        colorTextPlaceholder: text.quaternary,
         activeBorderColor: brand.primary,
         hoverBorderColor: brand.primary,
         activeShadow: brand.focusShadow,
+        paddingBlock: 9,
+        paddingInline: 12,
       },
 
       InputNumber: {
-        ...(config.components?.InputNumber || {}),
+        borderRadius: 10,
+        activeBg: surface.input,
+        handleBg: surface.input,
+        colorBgContainer: surface.input,
+        colorText: text.main,
         activeBorderColor: brand.primary,
         hoverBorderColor: brand.primary,
         activeShadow: brand.focusShadow,
       },
 
+      List: {
+        itemPadding: '14px 0',
+        headerBg: 'transparent',
+        footerBg: 'transparent',
+        colorText: text.main,
+      },
+
       Mentions: {
-        ...(config.components?.Mentions || {}),
         activeBorderColor: brand.primary,
         hoverBorderColor: brand.primary,
+        colorBgContainer: surface.input,
+        colorText: text.main,
+      },
+
+      Modal: {
+        borderRadiusLG: 3,
+        contentBg: surface.card,
+        headerBg: surface.card,
+        footerBg: surface.card,
+        titleColor: text.main,
+        colorText: text.main,
+        titleFontSize: 18,
+        titleLineHeight: 1.4,
       },
 
       Pagination: {
-        ...(config.components?.Pagination || {}),
+        itemBg: surface.input,
         itemActiveBg: brand.primarySoft,
+        itemLinkBg: surface.input,
+        itemSize: 34,
+        borderRadius: 10,
         colorPrimary: brand.primary,
         colorPrimaryHover: brand.primaryHover,
+        colorText: text.secondary,
+        colorTextDisabled: isDark ? '#475569' : '#cbd5e1',
+      },
+
+      Popconfirm: {
+        zIndexPopup: 1060,
+      },
+
+      Popover: {
+        titleMinWidth: 180,
+        borderRadiusLG: 14,
+        colorBgElevated: surface.elevated,
+        colorText: text.main,
+        colorTextHeading: text.main,
       },
 
       Progress: {
-        ...(config.components?.Progress || {}),
         defaultColor: brand.primary,
+        remainingColor: isDark ? '#334155' : '#e5e7eb',
+        lineBorderRadius: radius.pill,
+        circleTextColor: text.main,
       },
 
       Radio: {
-        ...(config.components?.Radio || {}),
         colorPrimary: brand.primary,
         colorPrimaryHover: brand.primaryHover,
+        buttonBg: surface.input,
         buttonCheckedBg: brand.primarySoft,
+        buttonCheckedBgDisabled: surface.muted,
+        buttonColor: text.secondary,
         buttonCheckedColor: brand.primaryActive,
         buttonSolidCheckedBg: brand.primary,
+        buttonSolidCheckedColor: '#ffffff',
         buttonSolidCheckedHoverBg: brand.primaryHover,
+        dotSize: 8,
+        radioSize: 16,
+      },
+
+      Rate: {
+        starColor: '#f59e0b',
+        starHoverScale: 'scale(1.08)',
+      },
+
+      Result: {
+        titleFontSize: 22,
+        subtitleFontSize: 14,
+        iconFontSize: 60,
+        extraMargin: '20px 0 0 0',
+        colorText: text.main,
+        colorTextDescription: text.secondary,
       },
 
       Segmented: {
-        ...(config.components?.Segmented || {}),
+        trackBg: isDark ? '#020617' : '#eef2f7',
+        itemColor: text.secondary,
+        itemHoverColor: text.main,
+        itemHoverBg: surface.muted,
+        itemSelectedBg: surface.card,
         itemSelectedColor: brand.primaryActive,
+        itemBorderRadius: 10,
       },
 
       Select: {
-        ...(config.components?.Select || {}),
+        borderRadius: 10,
+        selectorBg: surface.input,
+        clearBg: surface.input,
+        colorBgContainer: surface.input,
+        colorBgElevated: surface.elevated,
+        colorText: text.main,
+        colorTextPlaceholder: text.quaternary,
         activeBorderColor: brand.primary,
         hoverBorderColor: brand.primary,
-        activeOutlineColor: hexToRgba(brand.primary, 0.1),
+        activeOutlineColor: hexToRgba(brand.primary, isDark ? 0.18 : 0.1),
         optionSelectedBg: brand.primarySoft,
+        optionActiveBg: surface.muted,
+        optionSelectedColor: text.main,
         multipleItemBg: brand.primarySoft,
         multipleItemBorderColor: brand.primaryBorder,
+        multipleItemBorderColorDisabled: border.base,
+        multipleItemColorDisabled: text.tertiary,
+        showArrowPaddingInlineEnd: 30,
+      },
+
+      Skeleton: {
+        gradientFromColor: isDark ? '#1e293b' : '#f8fafc',
+        gradientToColor: isDark ? '#334155' : '#eef2f7',
+        blockRadius: 10,
+        paragraphLiHeight: 14,
       },
 
       Slider: {
-        ...(config.components?.Slider || {}),
+        railBg: isDark ? '#334155' : '#e5e7eb',
+        railHoverBg: isDark ? '#475569' : '#d1d5db',
         trackBg: brand.primary,
         trackHoverBg: brand.primaryHover,
         handleColor: brand.primary,
         handleActiveColor: brand.primaryHover,
+        handleSize: 14,
+        handleSizeHover: 16,
+      },
+
+      Spin: {
+        dotSize: 22,
+        dotSizeLG: 30,
+        dotSizeSM: 16,
+        contentHeight: 400,
+      },
+
+      Statistic: {
+        titleFontSize: 13,
+        contentFontSize: 24,
+        colorText: text.main,
+        colorTextDescription: text.secondary,
+        fontFamily:
+          "Inter, Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      },
+
+      Steps: {
+        colorTextDescription: text.tertiary,
+        colorTextLabel: text.secondary,
+        colorText: text.main,
+        iconSize: 30,
+        iconSizeSM: 24,
+        dotSize: 10,
+        dotCurrentSize: 12,
+        navArrowColor: isDark ? '#475569' : '#cbd5e1',
+        customIconSize: 30,
+        customIconTop: 0,
+        titleLineHeight: 1.4,
       },
 
       Switch: {
-        ...(config.components?.Switch || {}),
         colorPrimary: brand.primary,
         colorPrimaryHover: brand.primaryHover,
+        handleBg: '#ffffff',
+        trackHeight: 24,
+        trackMinWidth: 46,
+        trackPadding: 2,
+        innerMinMargin: 20,
+        innerMaxMargin: 24,
+      },
+
+      Table: {
+        headerBg: isDark ? '#1e293b' : '#f8fafc',
+        headerColor: isDark ? '#e2e8f0' : '#334155',
+        headerSplitColor: border.base,
+        borderColor: border.base,
+        rowHoverBg: isDark ? '#0f172a' : '#f8fbff',
+        colorBgContainer: surface.card,
+        colorText: text.main,
+        colorTextHeading: text.main,
+        cellPaddingBlock: 14,
+        cellPaddingInline: 14,
+        footerBg: surface.card,
+        headerBorderRadius: 12,
       },
 
       Tabs: {
-        ...(config.components?.Tabs || {}),
+        cardBg: surface.muted,
+        itemColor: text.tertiary,
+        itemHoverColor: text.main,
         itemSelectedColor: brand.primaryActive,
         inkBarColor: brand.primary,
+        horizontalItemGutter: 24,
+        horizontalItemPadding: '12px 4px',
+        cardHeight: 42,
+        titleFontSize: 14,
+        titleFontSizeLG: 15,
       },
 
       Tag: {
-        ...(config.components?.Tag || {}),
         defaultBg: brand.primarySoft,
         defaultColor: brand.primaryActive,
+        borderRadiusSM: radius.pill,
+        fontSizeSM: 12,
+        lineHeightSM: 1.2,
+      },
+
+      Timeline: {
+        dotBg: surface.card,
+        tailColor: border.base,
+        itemPaddingBottom: 18,
+        colorText: text.main,
+      },
+
+      Tooltip: {
+        borderRadius: 10,
+        colorBgSpotlight: isDark ? '#020617' : '#0f172a',
+        colorTextLightSolid: '#ffffff',
       },
 
       Tour: {
-        ...(config.components?.Tour || {}),
+        borderRadiusLG: 16,
+        closeBtnSize: 24,
         primaryNextBtnHoverBg: brand.primaryHover,
+        colorBgElevated: surface.elevated,
+        colorText: text.main,
       },
 
       Tree: {
-        ...(config.components?.Tree || {}),
+        nodeHoverBg: surface.muted,
         nodeSelectedBg: brand.primarySoft,
         directoryNodeSelectedBg: brand.primarySoft,
         directoryNodeSelectedColor: brand.primaryActive,
+        colorText: text.main,
+        titleHeight: 32,
+        indentSize: 20,
+      },
+
+      TreeSelect: {
+        borderRadius: 10,
+        colorBgContainer: surface.input,
+        colorBgElevated: surface.elevated,
+        colorText: text.main,
+      },
+
+      Upload: {
+        colorText: text.secondary,
+        colorTextDescription: text.tertiary,
+        actionsColor: text.tertiary,
+      },
+
+      Notification: {
+        zIndexPopup: 2050,
+        colorBgElevated: surface.elevated,
+        colorText: text.main,
+        colorTextHeading: text.main,
+      },
+
+      Message: {
+        contentBg: surface.elevated,
+        colorText: text.main,
+        zIndexPopup: 2010,
+      },
+
+      QRCode: {
+        colorText: text.main,
       },
 
       App: {
-        ...(config.components?.App || {}),
         colorPrimary: brand.primary,
       },
     },
   };
 };
 
-export const createThemeConfig = (mode = 'light', settings = null) => {
-  const baseConfig = mode === 'dark' ? mergeDarkTheme() : themeMain;
+export const themeMain = createTheme('light');
 
-  return applyBrandSettings(baseConfig, settings, mode);
+export const createThemeConfig = (mode = 'light', settings = null) => {
+  return createTheme(mode, settings);
 };
 
 export default createThemeConfig;

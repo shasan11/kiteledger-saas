@@ -9,6 +9,7 @@ use App\Services\Documents\DocumentAiExtractionService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentEntityMatcher;
 use App\Services\Documents\DocumentPermissionService;
+use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 
 class DocumentExtractionController extends Controller
@@ -16,12 +17,14 @@ class DocumentExtractionController extends Controller
     public function __construct(
         protected DocumentPermissionService $perms,
         protected DocumentAuditService $audit,
+        protected BranchScopeService $branchScope,
     ) {}
 
     public function scan(Request $request, string $id)
     {
         $this->perms->authorize($request->user(), 'document_upload.scan_ai');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
 
         if (!in_array($doc->status, ['uploaded', 'failed', 'needs_review', 'extracted'], true)) {
             return response()->json([
@@ -69,6 +72,7 @@ class DocumentExtractionController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.extract.view');
         $doc = DocumentUpload::with(['extraction', 'entityMatches', 'proposals'])->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
 
         return response()->json([
             'ok' => true,
@@ -77,5 +81,14 @@ class DocumentExtractionController extends Controller
             'matches' => $doc->entityMatches,
             'proposals' => $doc->proposals,
         ]);
+    }
+
+    private function assertDocumentAccess(Request $request, DocumentUpload $doc): void
+    {
+        if ($doc->branch_id) {
+            $this->branchScope->assertCanAccessBranch($request->user(), (string) $doc->branch_id);
+            $selected = $this->branchScope->selectedBranchId($request, $request->user());
+            abort_if($selected && (string) $selected !== (string) $doc->branch_id, 403);
+        }
     }
 }

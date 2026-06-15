@@ -13,6 +13,7 @@ use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentEntityMatcher;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentTransactionProposalService;
+use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 
 class DocumentEntityMatchController extends Controller
@@ -22,12 +23,14 @@ class DocumentEntityMatchController extends Controller
         protected DocumentEntityMatcher $matcher,
         protected DocumentAuditService $audit,
         protected DocumentTransactionProposalService $proposalService,
+        protected BranchScopeService $branchScope,
     ) {}
 
     public function match(Request $request, string $id)
     {
         $this->perms->authorize($request->user(), 'document_upload.entity_match');
         $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         if (!$doc->extraction || !is_array($doc->extraction->normalized_json)) {
             return response()->json(['ok' => false, 'message' => 'No extraction available.', 'code' => 'NO_EXTRACTION'], 422);
         }
@@ -39,6 +42,7 @@ class DocumentEntityMatchController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.entity_match');
         $match = DocumentEntityMatch::findOrFail($matchId);
+        $this->assertDocumentAccess($request, $match->documentUpload()->firstOrFail());
         $data = $request->validate([
             'matched_id' => ['required', 'uuid'],
             'matched_model' => ['nullable', 'string'],
@@ -61,6 +65,7 @@ class DocumentEntityMatchController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.create_fk');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
 
         $data = $request->validate([
             'match_id' => ['required', 'uuid'],
@@ -141,6 +146,15 @@ class DocumentEntityMatchController extends Controller
         foreach ($doc->proposals as $proposal) {
             if ($proposal->status === 'converted') continue;
             $this->proposalService->refreshProposalMatches($proposal);
+        }
+    }
+
+    private function assertDocumentAccess(Request $request, DocumentUpload $doc): void
+    {
+        if ($doc->branch_id) {
+            $this->branchScope->assertCanAccessBranch($request->user(), (string) $doc->branch_id);
+            $selected = $this->branchScope->selectedBranchId($request, $request->user());
+            abort_if($selected && (string) $selected !== (string) $doc->branch_id, 403);
         }
     }
 }

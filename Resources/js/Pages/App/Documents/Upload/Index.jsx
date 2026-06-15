@@ -281,6 +281,50 @@ function getLineItems(normalized = {}, payload = {}) {
     return [];
 }
 
+function normalizeLineItem(line = {}) {
+    const qty = Number(pickValue(line, ['qty', 'quantity']) || 1);
+    const unitPrice = Number(pickValue(line, ['unit_price', 'rate', 'price']) || 0);
+    const discount = Number(pickValue(line, ['discount_amount', 'discount']) || 0);
+    const tax = Number(pickValue(line, ['tax_amount', 'tax']) || 0);
+    const suppliedTotal = pickValue(line, ['line_total', 'total', 'amount']);
+
+    return {
+        ...line,
+        product_id: pickValue(line, ['product_id', 'matched_product_id']) || null,
+        product_name: pickValue(line, ['product_name', 'name', 'item']) || null,
+        description: pickValue(line, ['description', 'details', 'product_name', 'name', 'item']) || '',
+        qty: Number.isFinite(qty) ? qty : 1,
+        unit: pickValue(line, ['unit', 'uom', 'unit_name']) || '',
+        unit_price: Number.isFinite(unitPrice) ? unitPrice : 0,
+        discount_amount: Number.isFinite(discount) ? discount : 0,
+        tax_amount: Number.isFinite(tax) ? tax : 0,
+        line_total: Number.isFinite(Number(suppliedTotal))
+            ? Number(suppliedTotal)
+            : Number(((qty * unitPrice) - discount + tax).toFixed(2)),
+    };
+}
+
+function reviewLinesFromData(payload = {}, data = {}) {
+    const normalized = data?.extraction?.normalized_json || {};
+    const candidates = [
+        payload.lines,
+        payload.line_items,
+        payload.items,
+        payload.products,
+        payload.services,
+        data?.mapped_payload?.lines,
+        data?.mapped_payload?.line_items,
+        normalized.lines,
+        normalized.line_items,
+        normalized.items,
+        normalized.products,
+        normalized.services,
+    ];
+
+    const lines = candidates.find((items) => Array.isArray(items) && items.length > 0) || [];
+    return lines.map(normalizeLineItem);
+}
+
 function buildKnownRows(source = {}, fields = []) {
     const rows = [];
 
@@ -631,7 +675,7 @@ export default function DocumentUploadIndex() {
 
             setReviewData(data);
             setReviewType(data.transaction_type || type);
-            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}));
+            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}, data));
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Could not open review');
         } finally {
@@ -650,7 +694,7 @@ export default function DocumentUploadIndex() {
             });
 
             setReviewData(data);
-            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}));
+            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}, data));
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Could not create proposal');
         } finally {
@@ -671,7 +715,7 @@ export default function DocumentUploadIndex() {
             );
 
             setReviewData(data);
-            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}));
+            reviewForm.setFieldsValue(normalizeReviewValues(data.mapped_payload || {}, data));
             antMessage.success('Review saved.');
             fetchDocs();
 
@@ -1022,7 +1066,7 @@ export default function DocumentUploadIndex() {
     );
 }
 
-function normalizeReviewValues(payload) {
+function normalizeReviewValues(payload, data = {}) {
     const next = { ...payload };
 
     [
@@ -1040,6 +1084,8 @@ function normalizeReviewValues(payload) {
     ].forEach((field) => {
         if (next[field]) next[field] = dayjs(next[field]);
     });
+
+    next.lines = reviewLinesFromData(payload, data);
 
     return next;
 }
@@ -1138,9 +1184,10 @@ function DocumentActionMenu({
     );
 }
 
-function RemoteSelect({ endpoint, value, onChange, placeholder }) {
+function RemoteSelect({ endpoint, value, onChange, placeholder, selectedLabel }) {
     const [options, setOptions] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [resolvedLabel, setResolvedLabel] = useState(selectedLabel || null);
 
     const load = async (search = '') => {
         setLoading(true);
@@ -1150,7 +1197,7 @@ function RemoteSelect({ endpoint, value, onChange, placeholder }) {
                 params: { search, per_page: 20 },
             });
 
-            const rows = Array.isArray(data) ? data : data.data || [];
+            const rows = Array.isArray(data) ? data : data.results || data.data || [];
 
             setOptions(rows.map((row) => ({
                 value: row.id,
@@ -1168,18 +1215,49 @@ function RemoteSelect({ endpoint, value, onChange, placeholder }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [endpoint]);
 
+    useEffect(() => {
+        setResolvedLabel(selectedLabel || null);
+    }, [selectedLabel, value]);
+
+    useEffect(() => {
+        if (!value || selectedLabel || options.some((item) => String(item.value) === String(value))) {
+            return;
+        }
+
+        let active = true;
+        const loadSelected = async () => {
+            try {
+                const { data } = await axios.get(`${String(endpoint).replace(/\/+$/, '')}/${value}`);
+                const record = data?.result || data?.data || data;
+                const label = record && typeof record === 'object' ? optionLabel(record) : null;
+
+                if (active && label && label !== 'Record') {
+                    setResolvedLabel(label);
+                }
+            } catch {
+                // The list endpoint may not expose a show route. Keep the safe label fallback.
+            }
+        };
+
+        void loadSelected();
+
+        return () => {
+            active = false;
+        };
+    }, [endpoint, options, selectedLabel, value]);
+
     const displayOptions = useMemo(() => {
         const next = [...options];
 
-        if (value && !next.some((item) => item.value === value)) {
+        if (value && !next.some((item) => String(item.value) === String(value))) {
             next.unshift({
                 value,
-                label: isUuidLike(value) ? 'Selected record' : safeDisplay(value),
+                label: resolvedLabel || (isUuidLike(value) ? 'Linked record' : safeDisplay(value)),
             });
         }
 
         return next;
-    }, [options, value]);
+    }, [options, resolvedLabel, value]);
 
     return (
         <Select
@@ -1227,7 +1305,20 @@ function ReviewField({ schema, form, doc, onFkCreated }) {
     };
 
     const input = schema.type === 'fk_select'
-        ? <RemoteSelect endpoint={schema.endpoint} placeholder={schema.placeholder} />
+        ? (
+            <RemoteSelect
+                endpoint={schema.endpoint}
+                placeholder={schema.placeholder}
+                selectedLabel={
+                    schema.selected_label
+                    || schema.matched_label
+                    || schema.create_payload?.name
+                    || schema.create_payload?.code
+                    || schema.create_payload?.email
+                    || null
+                }
+            />
+        )
         : schema.type === 'date'
             ? <DatePicker style={{ width: '100%' }} />
             : schema.type === 'money'
@@ -1277,6 +1368,9 @@ function DocumentReviewDrawer({
 }) {
     const payload = data?.mapped_payload || {};
     const normalized = data?.extraction?.normalized_json || {};
+    const document = data?.document || doc || {};
+    const party = getExtractedParty(normalized, payload);
+    const totals = normalized?.totals || normalized;
 
     const lineColumns = [
         {
@@ -1428,6 +1522,17 @@ function DocumentReviewDrawer({
                                 />
                             )}
 
+                            <Card size="small" title="Document Details" style={styles.card}>
+                                <Descriptions size="small" column={3}>
+                                    <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
+                                    <Descriptions.Item label="Original File">{safeDisplay(document.original_file_name)}</Descriptions.Item>
+                                    <Descriptions.Item label="Status">{humanize(document.status || '-')}</Descriptions.Item>
+                                    <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
+                                    <Descriptions.Item label="File Size">{fileSize(document.file_size)}</Descriptions.Item>
+                                    <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
+                                </Descriptions>
+                            </Card>
+
                             <Card size="small" title="Document Summary" style={styles.card}>
                                 <Descriptions size="small" column={3}>
                                     <Descriptions.Item label="Document Type">
@@ -1446,7 +1551,24 @@ function DocumentReviewDrawer({
                                         {safeDisplay(normalized.currency_code)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Confidence">
-                                        {data?.confidence ? `${Math.round(data.confidence * 100)}%` : '-'}
+                                        {data?.confidence !== null && data?.confidence !== undefined
+                                            ? `${Math.round(data.confidence * 100)}%`
+                                            : '-'}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Subtotal">
+                                        {money(pickValue(totals, ['subtotal', 'sub_total']))}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Discount">
+                                        {money(pickValue(totals, ['discount_amount', 'discount']))}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Tax">
+                                        {money(pickValue(totals, ['tax_amount', 'tax']))}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Total">
+                                        {money(pickValue(totals, ['grand_total', 'total', 'total_amount']))}
+                                    </Descriptions.Item>
+                                    <Descriptions.Item label="Amount Due">
+                                        {money(pickValue(totals, ['amount_due', 'balance_due']))}
                                     </Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1454,22 +1576,22 @@ function DocumentReviewDrawer({
                             <Card size="small" title="Extracted Party" style={styles.card}>
                                 <Descriptions size="small" column={2}>
                                     <Descriptions.Item label="Name">
-                                        {safeDisplay(payload.extracted_party?.name)}
+                                        {safeDisplay(party.name)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Role">
-                                        {humanize(payload.extracted_party?.role || '-')}
+                                        {humanize(party.role || '-')}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Email">
-                                        {safeDisplay(payload.extracted_party?.email)}
+                                        {safeDisplay(party.email)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Phone">
-                                        {safeDisplay(payload.extracted_party?.phone)}
+                                        {safeDisplay(party.phone)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Tax Number">
-                                        {safeDisplay(payload.extracted_party?.tax_number)}
+                                        {safeDisplay(party.tax_number)}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Address">
-                                        {safeDisplay(payload.extracted_party?.address)}
+                                        {safeDisplay(party.address)}
                                     </Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1656,7 +1778,7 @@ function ExtractedLineItemsTable({ items }) {
 
 function ExtractedDataTables({ normalized = {}, payload = {}, styles }) {
     const summaryRows = buildKnownRows(normalized, SUMMARY_FIELDS);
-    const totalRows = buildKnownRows(normalized, TOTAL_FIELDS);
+    const totalRows = buildKnownRows(normalized.totals || normalized, TOTAL_FIELDS);
     const partyRows = buildObjectRows(getExtractedParty(normalized, payload));
     const otherRows = buildObjectRows(normalized, EXCLUDED_EXTRACTION_KEYS);
     const lineItems = getLineItems(normalized, payload);
@@ -1835,6 +1957,7 @@ function PreviewModal({ doc, styles, onClose }) {
 function ExtractionModal({ doc, data, loading, styles, onClose }) {
     const normalized = data?.extraction?.normalized_json || {};
     const payload = data?.document?.mapped_payload || data?.mapped_payload || {};
+    const document = data?.document || doc || {};
 
     return (
         <Modal
@@ -1853,6 +1976,17 @@ function ExtractionModal({ doc, data, loading, styles, onClose }) {
                         <Tag color="blue">{humanize(normalized.document_type || 'unknown')}</Tag>
                         <Tag>Status: {humanize(data.extraction.status)}</Tag>
                     </Space>
+
+                    <Card size="small" title="Document Details" style={styles.card}>
+                        <Descriptions size="small" column={3}>
+                            <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
+                            <Descriptions.Item label="Original File">{safeDisplay(document.original_file_name)}</Descriptions.Item>
+                            <Descriptions.Item label="Document Type">{humanize(document.document_type || normalized.document_type || 'unknown')}</Descriptions.Item>
+                            <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
+                            <Descriptions.Item label="File Size">{fileSize(document.file_size)}</Descriptions.Item>
+                            <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
+                        </Descriptions>
+                    </Card>
 
                     {normalized.warnings?.length > 0 && (
                         <Alert

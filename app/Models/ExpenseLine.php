@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class ExpenseLine extends Model
 {
@@ -19,6 +20,7 @@ class ExpenseLine extends Model
     protected $fillable = [
         'expense_id',
         'account_id',
+        'chart_of_account_id',
         'description',
         'tax_rate_id',
         'tax_jurisdiction_id',
@@ -50,7 +52,11 @@ class ExpenseLine extends Model
 
     public function account(): BelongsTo
     {
-        return $this->belongsTo(Account::class);
+        if (Schema::hasColumn($this->getTable(), 'account_id')) {
+            return $this->belongsTo(Account::class);
+        }
+
+        return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
     }
 
     public function taxRate(): BelongsTo

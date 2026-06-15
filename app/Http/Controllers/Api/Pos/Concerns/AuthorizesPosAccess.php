@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api\Pos\Concerns;
 
-use App\Models\Branch;
 use App\Models\PosShift;
 use App\Models\PosTerminal;
+use App\Services\BranchScopeService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -20,26 +20,28 @@ trait AuthorizesPosAccess
 
     protected function applyBranchScope(Builder $query, Request $request, string $column = 'branch_id'): Builder
     {
-        if (!$this->canViewAllBranches($request)) {
-            return $query->whereIn($column, $this->accessibleBranchIds($request));
-        }
-
-        if ($request->filled('branch_id')) {
-            $this->assertBranchAccess($request, (string) $request->input('branch_id'));
-
-            return $query->where($column, (string) $request->input('branch_id'));
-        }
-
-        return $query;
+        return $this->branchScope()->applyToQuery($query, $request, $request->user(), $column);
     }
 
     protected function assertBranchAccess(Request $request, ?string $branchId, string $message = 'You cannot access POS data from another branch.'): void
     {
-        if (!$branchId || $this->canViewAllBranches($request)) {
+        if (!$branchId) {
             return;
         }
 
-        abort_unless(in_array((string) $branchId, $this->accessibleBranchIds($request), true), 403, $message);
+        abort_unless(
+            $this->branchScope()->canAccessBranch($request->user(), (string) $branchId),
+            403,
+            $message
+        );
+
+        $selectedBranchId = $this->branchScope()->selectedBranchId($request, $request->user());
+
+        abort_if(
+            $selectedBranchId && (string) $selectedBranchId !== (string) $branchId,
+            403,
+            $message
+        );
     }
 
     protected function assertTerminalAccess(Request $request, PosTerminal $terminal): void
@@ -60,73 +62,26 @@ trait AuthorizesPosAccess
             return $branchId;
         }
 
-        $user = $request->user();
+        $resolved = $this->branchScope()->selectedBranchId($request, $request->user());
 
-        return $user?->current_branch_id
-            ?? $user?->branch_id
-            ?? Branch::query()->where('code', 'MAIN')->value('id')
-            ?? Branch::query()->value('id');
+        abort_if(!$resolved, 422, 'Select a branch before creating POS records.');
+
+        return $resolved;
     }
 
     protected function accessibleBranchIds(Request $request): array
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return [];
-        }
-
-        $ids = array_filter([
-            $user->current_branch_id ?? null,
-            $user->branch_id ?? null,
-        ]);
-
-        if (!empty($user->branch_ids) && is_array($user->branch_ids)) {
-            foreach ($user->branch_ids as $branchId) {
-                if ($branchId) {
-                    $ids[] = $branchId;
-                }
-            }
-        }
-
-        try {
-            if (method_exists($user, 'branches')) {
-                foreach ($user->branches()->pluck('branches.id')->all() as $branchId) {
-                    if ($branchId) {
-                        $ids[] = $branchId;
-                    }
-                }
-            }
-        } catch (\Throwable) {
-            //
-        }
-
-        if (empty($ids)) {
-            $fallback = Branch::query()->where('code', 'MAIN')->value('id') ?? Branch::query()->value('id');
-
-            if ($fallback) {
-                $ids[] = $fallback;
-            }
-        }
-
-        return array_values(array_unique(array_map('strval', $ids)));
+        return $this->branchScope()->accessibleBranchIds($request->user());
     }
 
     protected function canViewAllBranches(Request $request): bool
     {
-        $user = $request->user();
+        return $this->branchScope()->canViewAllBranches($request->user());
+    }
 
-        if (!$user) {
-            return false;
-        }
-
-        try {
-            return $user->can('branch.view_all')
-                || $user->can('branches.view-all')
-                || $user->can('branches.view_all');
-        } catch (\Throwable) {
-            return false;
-        }
+    protected function branchScope(): BranchScopeService
+    {
+        return app(BranchScopeService::class);
     }
 
     protected function tableHasColumn(string $table, string $column): bool

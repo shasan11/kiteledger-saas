@@ -1012,32 +1012,8 @@ abstract class BaseCrudApiController extends Controller
             abort(401, 'Unauthenticated.');
         }
 
-        $requestedBranch = $scope->normalizeRequestedBranch($request);
         $branchColumn = $this->qualifiedColumn($this->branchColumn);
-
-        if ($scope->canViewAllBranches($user)) {
-            if ($requestedBranch && $requestedBranch !== 'all') {
-                $scope->assertCanAccessBranch($user, (string) $requestedBranch);
-                $query->where($branchColumn, (string) $requestedBranch);
-            }
-
-            return;
-        }
-
-        $assignedBranchIds = $scope->assignedBranchIds($user);
-
-        if (empty($assignedBranchIds)) {
-            $query->whereRaw('1 = 0');
-            return;
-        }
-
-        if ($requestedBranch && $requestedBranch !== 'all') {
-            $scope->assertCanAccessBranch($user, (string) $requestedBranch);
-            $query->where($branchColumn, (string) $requestedBranch);
-            return;
-        }
-
-        $query->whereIn($branchColumn, $assignedBranchIds);
+        $scope->applyToQuery($query, $request, $user, $branchColumn);
     }
 
     protected function modelTable(): string

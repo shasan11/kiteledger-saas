@@ -21,6 +21,7 @@ import {
   notification,
   AutoComplete,
   Alert,
+  Empty,
   Space,
   theme,
 } from "antd";
@@ -99,6 +100,16 @@ const splitPhoneValue = (value, defaultCode = "+977") => {
 const buildPhoneValue = (code, number) => {
   const cleanNumber = String(number || "").trim().replace(/^(\+\d{1,4})\s*/, "");
   return cleanNumber ? `${code || "+977"} ${cleanNumber}` : "";
+};
+
+const singularTitle = (title) => {
+  const value = String(title || "Record").trim();
+
+  if (/ies$/i.test(value)) return value.replace(/ies$/i, "y");
+  if (/sses$/i.test(value)) return value.replace(/es$/i, "");
+  if (/s$/i.test(value) && !/ss$/i.test(value)) return value.slice(0, -1);
+
+  return value;
 };
 
 export default function ReusableCrud({
@@ -4552,26 +4563,57 @@ export default function ReusableCrud({
     </Formik>
   );
 
+  const addLabel = `Add ${singularTitle(title)}`;
+  const openAdd = () => {
+    if (!canAdd) return;
+
+    setSubmitErrors(EMPTY_ARRAY);
+
+    if (custom_add_link) {
+      router.visit(custom_add_link);
+      return;
+    }
+
+    if (typeof custom_add === "function") {
+      custom_add();
+      return;
+    }
+
+    setEditingRecord(null);
+    setVisible(true);
+  };
+
+  const emptyTableContent = (
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description={
+        <Space direction="vertical" size={2}>
+          <span>{`No ${title || "records"} found`}</span>
+          {canAdd && (
+            <span style={{ color: token.colorTextSecondary }}>
+              {`Create your first ${singularTitle(title)}`}
+            </span>
+          )}
+        </Space>
+      }
+    >
+      {canAdd && ui_type !== "add_related" && (
+        <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+          {addLabel}
+        </Button>
+      )}
+    </Empty>
+  );
+
   const headerRight = (
     <Space size={8} wrap>
-      {(custom_add || custom_add_link) && (
+      {canAdd && (custom_add || custom_add_link) && (
         <Button
           icon={<PlusOutlined />}
           type="primary"
-          onClick={() => {
-            setSubmitErrors(EMPTY_ARRAY);
-
-            if (custom_add_link) {
-              router.visit(custom_add_link);
-              return;
-            }
-
-            if (typeof custom_add === 'function') {
-              custom_add();
-            }
-          }}
+          onClick={openAdd}
         >
-          Add New
+          {addLabel}
         </Button>
       )}
 
@@ -4583,13 +4625,9 @@ export default function ReusableCrud({
           <Button
             icon={<PlusOutlined />}
             type="primary"
-            onClick={() => {
-              setSubmitErrors(EMPTY_ARRAY);
-              setEditingRecord(null);
-              setVisible(true);
-            }}
+            onClick={openAdd}
           >
-            Add New
+            {addLabel}
           </Button>
         )}
 
@@ -4792,6 +4830,7 @@ export default function ReusableCrud({
                 columns={mainColumns}
                 size="medium"
                 dataSource={filteredData}
+                locale={{ emptyText: emptyTableContent }}
                 onRow={activeTableRowFunction}
                 loading={loading}
                 scroll={{ x: "max-content" }}

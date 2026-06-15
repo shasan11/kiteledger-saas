@@ -1,9 +1,21 @@
+Options -Indexes
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /
 
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
+    # Never allow web access to Laravel internals or project metadata.
+    RewriteRule "(^|/)\.(?!well-known(?:/|$))" - [F,L,NC]
+    RewriteRule "^(?:app|bootstrap|config|database|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$)" - [F,L,NC]
+    RewriteRule "^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml|vite\.config\.js|webpack\.mix\.js|server\.php)(?:/|$)" - [F,L,NC]
 
-    RewriteRule ^ index.php [L]
+    # Remove /public only when it was explicitly requested by the browser.
+    # THE_REQUEST prevents this redirect from firing after the internal rewrite below.
+    RewriteCond %{THE_REQUEST} \s/+public(?:[/?\s]|$) [NC]
+    RewriteRule ^public(?:/(.*))?$ /$1 [R=301,L,NE]
+
+    # Do not rewrite a request that is already being processed inside public.
+    RewriteRule ^public(?:/|$) - [L]
+
+    # Internally serve every web request from Laravel's public directory.
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

@@ -22,14 +22,14 @@ class AppContextService
             ?: AppSetting::query()->with('defaultCurrency', 'fiscalYear')->oldest()->first();
 
         $accessibleBranches = $this->accessibleBranches($user);
-        $branch = $this->resolveBranch($request, $user, $savedContext, $accessibleBranches);
+        $branch = $this->resolveBranch($request, $user, $accessibleBranches);
         $fiscalYear = $this->resolveFiscalYear($request, $savedContext, $appSettings);
         $today = Carbon::today();
 
         return [
             'current_branch' => $branch ? $this->branchPayload($branch) : null,
             'current_branch_id' => $branch?->id,
-            'all_branches' => $branch === null && $savedContext && $savedContext->branch_id === null && $this->canViewAllBranches($user),
+            'all_branches' => $branch === null && $this->canViewAllBranches($user),
             'current_fiscal_year' => $fiscalYear ? $this->fiscalYearPayload($fiscalYear) : null,
             'current_fiscal_year_id' => $fiscalYear?->id,
             'accessible_branches' => $accessibleBranches->map(fn (Branch $branch) => $this->branchPayload($branch))->values(),
@@ -137,53 +137,21 @@ class AppContextService
         return UserAppContext::query()->firstOrCreate(['user_id' => $user->getKey()]);
     }
 
-    private function resolveBranch(Request $request, User $user, ?UserAppContext $savedContext, $accessibleBranches): ?Branch
+    private function resolveBranch(Request $request, User $user, $accessibleBranches): ?Branch
     {
-        $requested = $request->header('X-Branch-ID')
-            ?: $request->input('branch_id')
-            ?: $request->query('branch_id');
+        $selectedBranchId = app(BranchScopeService::class)->selectedBranchId($request, $user);
 
-        if (in_array($requested, ['all', '*'], true)) {
-            abort_unless($this->canViewAllBranches($user), 403, 'You do not have access to all branches.');
-
+        if (!$selectedBranchId) {
             return null;
         }
 
-        if ($requested) {
-            $branch = Branch::query()->whereKey((string) $requested)->where('active', true)->first();
-            abort_unless($branch, 404, 'Branch not found.');
-            abort_unless($this->canViewAllBranches($user) || $accessibleBranches->contains('id', $branch->id), 403, 'You do not have access to this branch.');
+        $selectedBranch = $accessibleBranches->firstWhere('id', $selectedBranchId)
+            ?: Branch::query()->whereKey($selectedBranchId)->where('active', true)->first();
 
-            return $branch;
-        }
+        abort_unless($selectedBranch, 404, 'Branch not found.');
+        app(BranchScopeService::class)->assertCanAccessBranch($user, (string) $selectedBranch->id);
 
-        if ($savedContext && $savedContext->exists && $savedContext->branch_id === null && $this->canViewAllBranches($user)) {
-            return null;
-        }
-
-        if ($savedContext?->branch_id) {
-            $branch = $accessibleBranches->firstWhere('id', $savedContext->branch_id)
-                ?: Branch::query()->whereKey($savedContext->branch_id)->where('active', true)->first();
-
-            if ($branch && ($this->canViewAllBranches($user) || $accessibleBranches->contains('id', $branch->id))) {
-                return $branch;
-            }
-        }
-
-        if ($user->branch_id && ($branch = $accessibleBranches->firstWhere('id', $user->branch_id))) {
-            return $branch;
-        }
-
-        // Above-branch users may safely default to head office. Branch-limited
-        // users must never inherit head office as a silent fallback — they
-        // either land on an explicitly assigned branch (handled above) or get
-        // no branch context at all.
-        if ($this->canViewAllBranches($user)) {
-            return Branch::query()->where('active', true)->where('is_head_office', true)->first()
-                ?: Branch::query()->where('active', true)->oldest()->first();
-        }
-
-        return $accessibleBranches->first();
+        return $selectedBranch;
     }
 
     private function resolveFiscalYear(Request $request, ?UserAppContext $savedContext, ?AppSetting $appSettings): ?FiscalYear

@@ -2,6 +2,8 @@
 
 namespace App\Services\Documents;
 
+use App\Models\Account;
+use App\Models\ChartOfAccount;
 use App\Models\CustomerPayment;
 use App\Models\DebitNote;
 use App\Models\DebitNoteLine;
@@ -23,6 +25,7 @@ use App\Models\SalesReturn;
 use App\Models\SalesReturnLine;
 use App\Models\SupplierPayment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -172,19 +175,68 @@ class DocumentTransactionConverter
             'due_date' => $payload['due_date'] ?? null,
         ]);
         foreach (($payload['lines'] ?? []) as $line) {
-            $accountId = $line['account_id'] ?? $line['chart_of_account_id'] ?? null;
-            if (!$accountId) continue; // expense lines require an account; user picks it during review
-            ExpenseLine::create([
+            $accountId = $line['account_id'] ?? null;
+            $chartOfAccountId = $line['chart_of_account_id'] ?? null;
+
+            if (!$accountId && $chartOfAccountId) {
+                $accountId = ChartOfAccount::query()
+                    ->whereKey($chartOfAccountId)
+                    ->value('account_id');
+            }
+
+            if (!$accountId) {
+                continue;
+            }
+
+            $linePayload = [
                 'expense_id' => $expense->id,
-                'account_id' => $accountId,
                 'description' => $line['description'] ?? $line['product_name'] ?? null,
                 'tax_rate_id' => $line['tax_rate_id'] ?? null,
                 'amount' => $line['line_total'] ?? round(($line['qty'] ?? 1) * ($line['unit_price'] ?? 0), 2),
                 'tax_amount' => $line['tax_amount'] ?? 0,
                 'line_total' => $line['line_total'] ?? round(($line['qty'] ?? 1) * ($line['unit_price'] ?? 0), 2),
-            ]);
+            ];
+
+            if (Schema::hasColumn('expense_lines', 'account_id')) {
+                $linePayload['account_id'] = $accountId;
+            }
+
+            if (Schema::hasColumn('expense_lines', 'chart_of_account_id')) {
+                $linePayload['chart_of_account_id'] = $this->chartOfAccountIdForAccount($accountId);
+            }
+
+            ExpenseLine::create($linePayload);
         }
         return ['record_id' => $expense->id, 'record_type' => Expense::class, 'open_url' => "/payment-out/expenses/{$expense->id}"];
+    }
+
+    private function chartOfAccountIdForAccount(string $accountId): string
+    {
+        $chartOfAccountId = ChartOfAccount::query()
+            ->where('account_id', $accountId)
+            ->value('id');
+
+        if ($chartOfAccountId) {
+            return $chartOfAccountId;
+        }
+
+        $account = Account::query()->findOrFail($accountId);
+
+        return ChartOfAccount::withoutEvents(function () use ($account) {
+            $chart = new ChartOfAccount;
+            $chart->forceFill([
+                'account_id' => $account->id,
+                'type' => 'expense',
+                'code' => null,
+                'name' => $account->name,
+                'description' => 'Legacy expense line compatibility link for account-based posting.',
+                'active' => (bool) $account->active,
+                'is_system_generated' => true,
+                'user_add_id' => $account->user_add_id,
+            ])->saveQuietly();
+
+            return $chart->id;
+        });
     }
 
     private function createCustomerPayment(array $payload): array

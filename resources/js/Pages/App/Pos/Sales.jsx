@@ -21,6 +21,106 @@ const resolveLogoUrl = (path) => {
     return `${base}/${normalized}`;
 };
 
+function PosSaleReceipt({ sale, company }) {
+    const logoUrl = resolveLogoUrl(
+        company?.logo || company?.logo_url || company?.logo_path || company?.company_logo || null
+    );
+    const companyName = company?.company_name || company?.name || 'Company';
+    const companyAddress = [company?.address, company?.city, company?.state, company?.country].filter(Boolean).join(', ');
+    const companyContact = [company?.phone, company?.email].filter(Boolean).join(' | ');
+    const companyPanVat = company?.pan_vat || company?.pan || company?.vat || company?.tax_id || null;
+    const lines = sale.pos_sale_lines || sale.posSaleLines || [];
+    const payments = sale.pos_payments || sale.posPayments || [];
+    const cashier = sale.pos_shift?.cashier || sale.posShift?.cashier || sale.cashier || {};
+    const terminal = sale.pos_terminal || sale.posTerminal || {};
+    const customer = sale.customer_name || sale.contact?.name || 'Walk-in';
+    const row = (label, value, strong = false) => (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontWeight: strong ? 700 : 400 }}>
+            <span>{label}</span>
+            <span style={{ textAlign: 'right' }}>{value}</span>
+        </div>
+    );
+
+    return (
+        <div style={{ width: '80mm', padding: '4mm', fontFamily: 'Arial, sans-serif', fontSize: 11, lineHeight: 1.35, color: '#111', background: '#fff' }}>
+            <div style={{ textAlign: 'center' }}>
+                {logoUrl && <img src={logoUrl} alt="" style={{ maxWidth: 120, maxHeight: 52, objectFit: 'contain', marginBottom: 4 }} />}
+                <div style={{ fontSize: 16, fontWeight: 800 }}>{companyName}</div>
+                {companyAddress && <div>{companyAddress}</div>}
+                {companyContact && <div>{companyContact}</div>}
+                {companyPanVat && <div>PAN/VAT: {companyPanVat}</div>}
+            </div>
+
+            <div style={{ borderTop: '1px dashed #777', borderBottom: '1px dashed #777', padding: '6px 0', margin: '8px 0' }}>
+                {row('Receipt No', sale.sale_no || sale.id)}
+                {row('Date', dayjs(sale.sale_date || sale.created_at).format('DD-MM-YYYY HH:mm'))}
+                {row('Customer', customer)}
+                {sale.customer_phone && row('Phone', sale.customer_phone)}
+                {row('Branch', sale.branch?.name || '-')}
+                {row('Terminal', terminal.name || terminal.code || '-')}
+                {row('Cashier', cashier.display_name || cashier.name || cashier.username || '-')}
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                    <tr style={{ borderBottom: '1px solid #777' }}>
+                        <th style={{ textAlign: 'left', padding: '3px 0' }}>Item</th>
+                        <th style={{ textAlign: 'right', padding: '3px 0' }}>Qty</th>
+                        <th style={{ textAlign: 'right', padding: '3px 0' }}>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {lines.map((line, index) => (
+                        <tr key={line.id || `${line.product_id || 'line'}-${index}`}>
+                            <td style={{ padding: '3px 0', verticalAlign: 'top' }}>
+                                <div>{line.product_name || line.product?.name || line.description || 'Item'}</div>
+                                <div style={{ fontSize: 10, color: '#555' }}>
+                                    {money(line.unit_price)} each
+                                    {Number(line.discount_amount || line.discount_total || 0) > 0
+                                        ? `, discount ${money(line.discount_amount || line.discount_total)}`
+                                        : ''}
+                                </div>
+                            </td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', verticalAlign: 'top' }}>{Number(line.qty || 0)}</td>
+                            <td style={{ padding: '3px 0', textAlign: 'right', verticalAlign: 'top' }}>{money(line.line_total)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+
+            <div style={{ borderTop: '1px dashed #777', paddingTop: 6, marginTop: 4 }}>
+                {row('Subtotal', `Rs. ${money(sale.subtotal)}`)}
+                {Number(sale.discount_total || 0) > 0 && row('Discount', `Rs. ${money(sale.discount_total)}`)}
+                {Number(sale.tax_total || 0) > 0 && row('Tax', `Rs. ${money(sale.tax_total)}`)}
+                {row('Grand Total', `Rs. ${money(sale.grand_total)}`, true)}
+                {row('Paid', `Rs. ${money(sale.paid_total)}`)}
+                {Number(sale.balance_due || 0) > 0
+                    ? row('Amount Due', `Rs. ${money(sale.balance_due)}`, true)
+                    : row('Change', `Rs. ${money(sale.change_amount)}`)}
+            </div>
+
+            {payments.length > 0 && (
+                <div style={{ borderTop: '1px dashed #777', paddingTop: 6, marginTop: 6 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Payments</div>
+                    {payments.map((payment, index) => (
+                        <div key={payment.id || index}>
+                            {row(
+                                String(payment.payment_method || 'payment').replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+                                `Rs. ${money(payment.amount)}`
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <div style={{ textAlign: 'center', borderTop: '1px dashed #777', marginTop: 8, paddingTop: 8 }}>
+                <div>{company?.receipt_footer || company?.invoice_footer || 'Thank you for your business.'}</div>
+                <div style={{ fontSize: 9, color: '#666', marginTop: 3 }}>Please keep this receipt for your records.</div>
+            </div>
+        </div>
+    );
+}
+
 export default function PosSalesPage() {
     const { message } = App.useApp();
     const { props } = usePage();
@@ -34,6 +134,7 @@ export default function PosSalesPage() {
     const [filters, setFilters] = useState({ status: undefined, pos_terminal_id: undefined });
     const [returnSaleId, setReturnSaleId] = useState(null);
     const [printSale, setPrintSale] = useState(null);
+    const [printLoading, setPrintLoading] = useState(false);
     const [company, setCompany] = useState(null);
 
     useEffect(() => {
@@ -79,6 +180,20 @@ export default function PosSalesPage() {
         return can('pos.return.create') && ['completed', 'part_refunded'].includes(record.status);
     }
 
+    async function openPrintSale(record) {
+        setPrintLoading(true);
+
+        try {
+            const { data } = await axios.get(api(`/api/pos-sales/${record.id}`));
+            setPrintSale(data || record);
+        } catch (error) {
+            setPrintSale(record);
+            showApiError(message, error, 'Could not load the complete receipt. Showing available sale details.');
+        } finally {
+            setPrintLoading(false);
+        }
+    }
+
     const columns = useMemo(() => [
         { title: 'Sale No', dataIndex: 'sale_no', key: 'sale_no', render: (value) => <Text strong>{value}</Text> },
         { title: 'Date', dataIndex: 'sale_date', key: 'sale_date', render: (value) => dayjs(value).format('DD-MM-YYYY HH:mm') },
@@ -96,7 +211,7 @@ export default function PosSalesPage() {
             render: (_, record) => (
                 <Space>
                     <Button size="small" onClick={() => router.visit(route('pos.sales.show', record.id))}>View</Button>
-                    <Button size="small" onClick={() => setPrintSale(record)}>Print</Button>
+                    <Button size="small" loading={printLoading} onClick={() => openPrintSale(record)}>Print</Button>
                     {canReturnSale(record) && (
                         <Button size="small" danger onClick={() => setReturnSaleId(record.id)}>Return</Button>
                     )}
@@ -322,25 +437,9 @@ export default function PosSalesPage() {
                         allowDownload={false}
                         allowEmail={false}
                     >
-                        <div style={{ width: '80mm', padding: '4mm', fontFamily: 'Arial, sans-serif', fontSize: 12 }}>
-                            <div style={{ textAlign: 'center', fontWeight: 700 }}>{companyName}</div>
-                            <div style={{ textAlign: 'center', marginBottom: 8 }}>{printSale.sale_no}</div>
-                            <div>Date: {dayjs(printSale.sale_date).format('DD-MM-YYYY HH:mm')}</div>
-                            <div>Customer: {printSale.customer_name || printSale.contact?.name || 'Walk-in'}</div>
-                            <hr />
-                            {(printSale.pos_sale_lines || []).map((line) => (
-                                <div key={line.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                                    <span>{line.product_name} x {Number(line.qty || 0)}</span>
-                                    <strong>Rs. {money(line.line_total)}</strong>
-                                </div>
-                            ))}
-                            <hr />
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>Total</strong><strong>Rs. {money(printSale.grand_total)}</strong></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Paid</span><span>Rs. {money(printSale.paid_total)}</span></div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Due/Change</span><span>Rs. {money(Number(printSale.balance_due || 0) || printSale.change_amount)}</span></div>
-                        </div>
+                        <PosSaleReceipt sale={printSale} company={company} />
                     </PrintablePdfEmailWrapper>
-                ) : null}
+                ) : <Spin />}
             </Drawer>
         </PosLayout>
     );

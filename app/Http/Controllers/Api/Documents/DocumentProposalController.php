@@ -12,6 +12,7 @@ use App\Services\Documents\DocumentReviewSchemaBuilder;
 use App\Services\Documents\DocumentTransactionConverter;
 use App\Services\Documents\DocumentTransactionPayloadValidator;
 use App\Services\Documents\DocumentTransactionProposalService;
+use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 
 class DocumentProposalController extends Controller
@@ -24,12 +25,14 @@ class DocumentProposalController extends Controller
         protected DocumentAuditService $audit,
         protected DocumentReviewSchemaBuilder $schemaBuilder,
         protected DocumentTransactionPayloadValidator $validator,
+        protected BranchScopeService $branchScope,
     ) {}
 
     public function index(Request $request, string $id)
     {
         $this->perms->authorize($request->user(), 'document_upload.view');
         $doc = DocumentUpload::findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         return response()->json(['ok' => true, 'proposals' => $doc->proposals()->latest()->get()]);
     }
 
@@ -38,6 +41,7 @@ class DocumentProposalController extends Controller
         $this->perms->authorize($request->user(), 'document_upload.proposal.create');
 
         $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
 
         $data = $request->validate([
             'transaction_type' => ['required', 'string', 'in:' . implode(',', DocumentTransactionProposalService::SUPPORTED_TYPES)],
@@ -74,6 +78,7 @@ class DocumentProposalController extends Controller
         $this->perms->authorize($request->user(), 'document_upload.view');
 
         $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
             ->where('id', $proposalId)
             ->firstOrFail();
@@ -86,6 +91,7 @@ class DocumentProposalController extends Controller
         $this->perms->authorize($request->user(), 'document_upload.proposal.update');
 
         $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $this->assertDocumentAccess($request, $doc);
         $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
             ->where('id', $proposalId)
             ->firstOrFail();
@@ -117,11 +123,12 @@ class DocumentProposalController extends Controller
         $this->perms->authorize($request->user(), 'document_upload.proposal.update');
         $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
             ->where('id', $proposalId)->firstOrFail();
+        $doc = $proposal->documentUpload()->with('extraction')->firstOrFail();
+        $this->assertDocumentAccess($request, $doc);
         $data = $request->validate([
             'payload' => ['required', 'array'],
             'warnings' => ['nullable', 'array'],
         ]);
-        $doc = $proposal->documentUpload()->with('extraction')->firstOrFail();
         $review = $this->proposalService->buildReview(
             $doc,
             $proposal->transaction_type,
@@ -139,6 +146,7 @@ class DocumentProposalController extends Controller
             ->where('id', $proposalId)->firstOrFail();
 
         $doc = $proposal->documentUpload;
+        $this->assertDocumentAccess($request, $doc);
         $validation = $this->validator->validateForConversion($proposal->transaction_type, $proposal->payload ?? []);
 
         if (!$validation['ok']) {
@@ -176,6 +184,7 @@ class DocumentProposalController extends Controller
         try {
             $result = $this->converter->convert($proposal);
         } catch (\Throwable $e) {
+            report($e);
             $proposal->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
             return response()->json([
                 'ok' => false,
@@ -220,5 +229,14 @@ class DocumentProposalController extends Controller
             'review_schema' => $review['review_schema'],
             'can_convert' => empty($review['missing_fields']),
         ];
+    }
+
+    private function assertDocumentAccess(Request $request, DocumentUpload $doc): void
+    {
+        if ($doc->branch_id) {
+            $this->branchScope->assertCanAccessBranch($request->user(), (string) $doc->branch_id);
+            $selected = $this->branchScope->selectedBranchId($request, $request->user());
+            abort_if($selected && (string) $selected !== (string) $doc->branch_id, 403);
+        }
     }
 }

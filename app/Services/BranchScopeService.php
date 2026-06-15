@@ -45,10 +45,6 @@ class BranchScopeService
         'branches.view-all',
     ];
 
-    public function __construct(private readonly AppContextService $contextService)
-    {
-    }
-
     public function canViewAllBranches(?User $user): bool
     {
         if (!$user) {

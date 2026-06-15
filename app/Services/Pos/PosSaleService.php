@@ -17,6 +17,7 @@ use App\Models\PosShift;
 use App\Models\PosTerminal;
 use App\Models\Product;
 use App\Services\AppContextService;
+use App\Services\BranchScopeService;
 use App\Services\Settings\DatabaseSettingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -476,25 +477,24 @@ class PosSaleService
     {
         $user = request()->user();
 
-        if (!$user || !$terminal->branch_id) {
-            return;
+        if (!$user) {
+            throw new AuthorizationException('Unauthenticated.');
         }
 
-        try {
-            if ($user->can('branch.view_all') || $user->can('branches.view-all') || $user->can('branches.view_all')) {
-                return;
-            }
-        } catch (\Throwable) {
-            //
+        if (!$terminal->branch_id) {
+            throw new InvalidArgumentException('The POS terminal must belong to a branch.');
         }
 
-        $branchIds = array_filter([
-            $user->current_branch_id ?? null,
-            $user->branch_id ?? null,
-        ]);
+        $scope = app(BranchScopeService::class);
 
-        if (!in_array((string) $terminal->branch_id, array_map('strval', $branchIds), true)) {
+        if (!$scope->canAccessBranch($user, (string) $terminal->branch_id)) {
             throw new AuthorizationException('You cannot create a POS sale for another branch.');
+        }
+
+        $selectedBranchId = $scope->selectedBranchId(request(), $user);
+
+        if ($selectedBranchId && (string) $selectedBranchId !== (string) $terminal->branch_id) {
+            throw new AuthorizationException('Switch to the terminal branch before creating this POS sale.');
         }
 
         if ((string) $shift->branch_id !== (string) $terminal->branch_id) {

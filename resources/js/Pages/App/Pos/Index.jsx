@@ -668,10 +668,12 @@ export default function PosIndex() {
   const barcodeRef = useRef(null);
   const beepContextRef = useRef(null);
   const audioUnlockedRef = useRef(false);
-  const lastAutoBeepAtRef = useRef(0);
+  const lastBeepRef = useRef({ type: null, at: 0 });
   const scannerBufferRef = useRef("");
   const scannerTimerRef = useRef(null);
   const printedSaleRef = useRef(null);
+  const scheduledPrintSaleRef = useRef(null);
+  const autoPrintTimerRef = useRef(null);
   const receiptPrintRef = useRef(null);
   const receiptContentRef = useRef(null);
 
@@ -1079,65 +1081,30 @@ export default function PosIndex() {
       !receiptTemplateLoading &&
       shouldAutoPrintReceipt(posSettings)
     ) {
-      if (printedSaleRef.current !== saleReceipt.id) {
-        printedSaleRef.current = saleReceipt.id;
-        setTimeout(() => {
-          playPosBeep("print");
-          receiptPrintRef.current?.();
+      if (
+        printedSaleRef.current !== saleReceipt.id &&
+        scheduledPrintSaleRef.current !== saleReceipt.id
+      ) {
+        scheduledPrintSaleRef.current = saleReceipt.id;
+        autoPrintTimerRef.current = window.setTimeout(() => {
+          scheduledPrintSaleRef.current = null;
+
+          if (printedSaleRef.current === saleReceipt.id) return;
+
+          printedSaleRef.current = saleReceipt.id;
+          receiptPrintRef.current?.({ auto: true });
         }, 450);
       }
     }
   }, [receiptOpen, saleReceipt, receiptTemplateLoading, posSettings]);
 
   useEffect(() => {
-    const shouldAutoBeep = (target) => {
-      if (!target?.closest) return false;
-      if (target.closest('[data-pos-silent="true"]')) return false;
-
-      return !!target.closest(
-        [
-          "button",
-          ".ant-btn",
-          ".ant-card-hoverable",
-          ".ant-select-selector",
-          ".ant-select-item-option",
-          ".ant-switch",
-          ".ant-input-number-handler",
-          ".pos-payment-method-box",
-          ".pos-click-sound",
-          '[role="button"]',
-        ].join(","),
-      );
+    const handlePointerDown = () => {
+      unlockPosAudio();
     };
 
-    const handlePointerDown = (event) => {
+    const handleKeyDown = () => {
       unlockPosAudio();
-
-      if (!shouldAutoBeep(event.target)) return;
-
-      const now = Date.now();
-      if (now - lastAutoBeepAtRef.current < 45) return;
-      lastAutoBeepAtRef.current = now;
-
-      playPosBeep("tap", { soft: true });
-    };
-
-    const handleKeyDown = (event) => {
-      unlockPosAudio();
-
-      const target = event.target;
-      const isTypingField = ["input", "textarea", "select"].includes(
-        String(target?.tagName || "").toLowerCase(),
-      );
-
-      if (isTypingField || target?.isContentEditable) return;
-      if (!["Enter", " ", "Escape"].includes(event.key)) return;
-
-      const now = Date.now();
-      if (now - lastAutoBeepAtRef.current < 45) return;
-      lastAutoBeepAtRef.current = now;
-
-      playPosBeep("key", { soft: true });
     };
 
     document.addEventListener("pointerdown", handlePointerDown, true);
@@ -1148,6 +1115,17 @@ export default function PosIndex() {
       document.removeEventListener("keydown", handleKeyDown, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (receiptOpen) return;
+
+    if (autoPrintTimerRef.current) {
+      window.clearTimeout(autoPrintTimerRef.current);
+      autoPrintTimerRef.current = null;
+    }
+
+    scheduledPrintSaleRef.current = null;
+  }, [receiptOpen]);
 
   async function bootstrap() {
     setLoading(true);
@@ -1514,6 +1492,7 @@ export default function PosIndex() {
   function addProduct(product, options = {}) {
     if (!currentShift?.id) {
       message.warning("Open a shift before adding products.");
+      playPosBeep("error");
       return;
     }
 
@@ -1526,21 +1505,19 @@ export default function PosIndex() {
       message.warning(`${product.name} is out of stock.`);
     }
 
+    playPosBeep(options.scanned ? "scan" : "tap");
+
     setCart((current) => {
       const key = cartKeyFromProduct(product);
       const existing = current.find((item) => cartKey(item) === key);
 
       if (existing) {
-        playPosBeep(options.scanned ? "scan" : "tap");
-
         return current.map((item) =>
           cartKey(item) === key
             ? { ...item, qty: Number(item.qty || 0) + 1 }
             : item,
         );
       }
-
-      playPosBeep(options.scanned ? "scan" : "tap");
 
       return [
         ...current,
@@ -1602,6 +1579,17 @@ export default function PosIndex() {
       if (!audioContext) return;
 
       const requestedType = type || "tap";
+      const nowMs = Date.now();
+      const dedupeMs = options.dedupeMs ?? (["tap", "key"].includes(requestedType) ? 45 : 80);
+
+      if (
+        lastBeepRef.current.type === requestedType &&
+        nowMs - lastBeepRef.current.at < dedupeMs
+      ) {
+        return;
+      }
+
+      lastBeepRef.current = { type: requestedType, at: nowMs };
       const patterns = {
         scan: [
           {
@@ -1895,11 +1883,13 @@ export default function PosIndex() {
 
   async function submitOpenShift(values) {
     if (!terminalId) {
+      playPosBeep("error");
       message.warning("Select a terminal before opening shift.");
       return;
     }
 
     if (!can("pos.shift.open")) {
+      playPosBeep("error");
       message.error("You do not have permission to open POS shift.");
       return;
     }
@@ -1928,6 +1918,7 @@ export default function PosIndex() {
         barcodeRef.current?.focus();
       }, 80);
     } catch (error) {
+      playPosBeep("error");
       showApiError(message, error, "Failed to open shift.");
     } finally {
       setProcessing(false);
@@ -1936,6 +1927,7 @@ export default function PosIndex() {
 
   async function ensureActiveShift() {
     if (!terminalId) {
+      playPosBeep("error");
       message.warning("Select a terminal before continuing.");
       return null;
     }
@@ -1951,6 +1943,7 @@ export default function PosIndex() {
     }
 
     message.warning("Open a shift before continuing.");
+    playPosBeep("error");
     return null;
   }
 
@@ -2170,6 +2163,7 @@ export default function PosIndex() {
 
   function openCashMovement(type) {
     if (!currentShift?.id) {
+      playPosBeep("error");
       message.warning("Open a shift before recording cash movement.");
       return;
     }
@@ -2209,6 +2203,7 @@ export default function PosIndex() {
       playPosBeep("cash");
       message.success("Cash movement recorded.");
     } catch (error) {
+      playPosBeep("error");
       showApiError(message, error, "Failed to record cash movement.");
     } finally {
       setCashMovementLoading(false);
@@ -2275,6 +2270,7 @@ export default function PosIndex() {
       message.success("Shift closed.");
       router.visit(route("pos.shifts.closing-summary", closedShiftId));
     } catch (error) {
+      playPosBeep("error");
       showApiError(message, error, "Unable to close shift.");
     } finally {
       setCloseShiftLoading(false);
@@ -2640,8 +2636,15 @@ export default function PosIndex() {
     },
   });
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = (options = {}) => {
     const node = receiptContentRef.current;
+    const isAutoPrint = options?.auto === true;
+
+    if (!isAutoPrint && autoPrintTimerRef.current) {
+      window.clearTimeout(autoPrintTimerRef.current);
+      autoPrintTimerRef.current = null;
+      scheduledPrintSaleRef.current = null;
+    }
 
     if (!node) {
       playPosBeep("error");
@@ -2650,6 +2653,9 @@ export default function PosIndex() {
     }
 
     if (typeof printReceipt === "function") {
+      if (saleReceipt?.id) {
+        printedSaleRef.current = saleReceipt.id;
+      }
       printReceipt();
       return;
     }
