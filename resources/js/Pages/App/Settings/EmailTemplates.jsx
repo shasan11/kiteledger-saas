@@ -12,7 +12,34 @@ import { humanizeLabel } from '@/utils/humanizeLabel';
 
 const { Text } = Typography;
 
-const getError = (error, fallback) => error?.response?.data?.message || Object.values(error?.response?.data || {})?.[0]?.[0] || fallback;
+const getError = (error, fallback) => {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+
+  if (status === 401) {
+    return 'Your session expired. Please refresh and login again.';
+  }
+
+  if (status === 403) {
+    return data?.message || fallback;
+  }
+
+  if (data?.message) {
+    return data.message;
+  }
+
+  const firstError = Object.values(data || {})?.[0];
+
+  if (Array.isArray(firstError)) {
+    return firstError[0] || fallback;
+  }
+
+  if (typeof firstError === 'string') {
+    return firstError;
+  }
+
+  return fallback;
+};
 const formatDate = (value) => value ? new Date(value).toLocaleString() : '-';
 const sample = {
   customer_name: 'ABC Traders',

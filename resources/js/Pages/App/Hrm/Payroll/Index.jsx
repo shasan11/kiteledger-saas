@@ -4,6 +4,7 @@ import ReusableCrud from '@/Components/ReusableCrud';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import * as Yup from 'yup';
 import {
   App,
@@ -53,6 +54,7 @@ import {
 import { exchangeRateLabel, useBaseCurrency } from '@/Components/Transactions/defaultCurrency.js';
 
 const { Text, Title } = Typography;
+dayjs.extend(relativeTime);
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -82,7 +84,13 @@ const apiErrorMessage = (error, fallback = 'Something went wrong.') => {
     if (typeof first === 'string') return first;
   }
 
-  return error?.message || fallback;
+  const message = error?.message || fallback;
+
+  if (/currency/i.test(message) && /not configured|not found|missing/i.test(message)) {
+    return 'Payroll currency is not configured. Please create an active currency or select one before generating payroll.';
+  }
+
+  return message;
 };
 
 const idOf = (value) => {
@@ -93,22 +101,28 @@ const idOf = (value) => {
 
 const statusColor = {
   draft: 'default',
+  previewed: 'cyan',
   generated: 'processing',
   approved: 'green',
   processed: 'blue',
   paid: 'cyan',
   locked: 'purple',
   void: 'red',
+  voided: 'red',
+  reopened: 'orange',
 };
 
 const statusLabel = {
   draft: 'Draft',
+  previewed: 'Previewed',
   generated: 'Generated',
   approved: 'Approved',
   processed: 'Processed',
   paid: 'Paid',
   locked: 'Locked',
   void: 'Void',
+  voided: 'Voided',
+  reopened: 'Reopened',
 };
 
 const SALARY_COMPONENT_TYPES = {
@@ -175,6 +189,31 @@ const money = (value) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const formatDate = (value) => {
+  if (!value) return '-';
+  const date = dayjs(value);
+  return date.isValid() ? date.format('DD MMM YYYY') : '-';
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '-';
+  const date = dayjs(value);
+  return date.isValid() ? date.format('DD MMM YYYY, hh:mm A') : '-';
+};
+
+const fromNow = (value) => {
+  if (!value) return null;
+  const date = dayjs(value);
+  return date.isValid() ? date.fromNow() : null;
+};
+
+const DateTimeText = ({ value }) => (
+  <Space direction="vertical" size={0}>
+    <Text>{formatDateTime(value)}</Text>
+    {fromNow(value) ? <Text type="secondary" style={{ fontSize: 12 }}>{fromNow(value)}</Text> : null}
+  </Space>
+);
 
 const employeeName = (employee) => {
   if (!employee) return '-';
@@ -727,6 +766,8 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
   const baseCurrency = useBaseCurrency(true);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewResult, setPreviewResult] = useState(null);
 
   const employeeScope = Form.useWatch('employee_scope', form);
   const selectedPeriodId = Form.useWatch('payroll_period_id', form);
@@ -745,7 +786,8 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
     (currency) => currency.id === selectedCurrencyId,
   );
 
-  const canGenerate = Boolean(selectedPeriodId && selectedCurrencyId);
+  const hasCurrencies = lookups.currencies?.some((currency) => currency.active !== false);
+  const canGenerate = Boolean(selectedPeriodId);
 
   useEffect(() => {
     if (!lookups.currencies?.length) return;
@@ -793,12 +835,12 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
     setLoading(true);
 
     try {
-      await axios.post(api('/api/hrm/payroll/payrolls/generate'), {
+      const payload = {
         ...values,
         payroll_period_id: idOf(values.payroll_period_id),
         branch_id: idOf(values.branch_id),
-        currency_id: idOf(values.currency_id),
-        exchange_rate: Number(values.exchange_rate || 1),
+        currency_id: idOf(values.currency_id) || undefined,
+        exchange_rate: values.exchange_rate ? Number(values.exchange_rate) : undefined,
         source_account_id: idOf(values.source_account_id),
         department_id: idOf(values.department_id),
         employee_ids:
@@ -806,7 +848,9 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
             ? values.employee_ids || []
             : undefined,
         idempotency_key: `payroll-${values.payroll_period_id}-${values.branch_id || 'all'}-${Date.now()}`,
-      });
+      };
+
+      await axios.post(api('/api/hrm/payroll/payrolls/generate'), payload);
 
       message.success('Payroll generated. Review it in the Payrolls tab.');
 
@@ -838,6 +882,34 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
     }
   };
 
+  const preview = async () => {
+    const values = await form.validateFields(['payroll_period_id', 'branch_id', 'currency_id', 'exchange_rate', 'employee_scope', 'department_id', 'employee_ids']);
+
+    setPreviewing(true);
+
+    try {
+      const { data } = await axios.post(api('/api/hrm/payroll/payrolls/preview'), {
+        ...values,
+        payroll_period_id: idOf(values.payroll_period_id),
+        branch_id: idOf(values.branch_id),
+        currency_id: idOf(values.currency_id) || undefined,
+        exchange_rate: values.exchange_rate ? Number(values.exchange_rate) : undefined,
+        department_id: idOf(values.department_id),
+        employee_ids:
+          values.employee_scope === 'selected'
+            ? values.employee_ids || []
+            : undefined,
+      });
+
+      setPreviewResult(data);
+      message.success('Payroll preview is ready.');
+    } catch (error) {
+      message.error(apiErrorMessage(error, 'Unable to preview payroll.'));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   return (
     <Card
       bordered={false}
@@ -865,12 +937,32 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
         style={{ marginBottom: 16 }}
       />
 
-      {!lookups.currencies?.length ? (
+      {!loadingLookups && !hasCurrencies ? (
         <Alert
           showIcon
-          type="error"
-          message="No currency found"
-          description="Create at least one active currency or configure base currency before generating payroll."
+          type="warning"
+          message="No active currency is configured"
+          description="Create a currency in Settings > Currencies before generating payroll."
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
+
+      {!loadingLookups && !lookups.periods?.length ? (
+        <Alert
+          showIcon
+          type="warning"
+          message="No payroll period is available"
+          description="Create a payroll period before previewing or generating payroll."
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
+
+      {!loadingLookups && !lookups.employees?.length ? (
+        <Alert
+          showIcon
+          type="info"
+          message="No active employees found"
+          description="Add active employees before running payroll."
           style={{ marginBottom: 16 }}
         />
       ) : null}
@@ -936,18 +1028,14 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
             <Form.Item
               name="currency_id"
               label="Currency"
-              rules={[
-                {
-                  required: true,
-                  message: 'Currency is required.',
-                },
-              ]}
+              extra="Optional when payroll settings or a base currency are configured."
             >
               <Select
+                allowClear
                 showSearch
                 loading={loadingLookups}
                 optionFilterProp="label"
-                placeholder="Select currency"
+                placeholder="Let backend resolve or select currency"
                 onChange={handleCurrencyChange}
                 options={lookups.currencies.map((currency) => ({
                   value: currency.id,
@@ -963,12 +1051,7 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
             <Form.Item
               name="exchange_rate"
               label={exchangeRateLabel(baseCurrency)}
-              rules={[
-                {
-                  required: true,
-                  message: 'Exchange rate is required.',
-                },
-              ]}
+              extra="Leave blank to use the selected currency rate or 1."
             >
               <InputNumber
                 min={0.000001}
@@ -979,13 +1062,17 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
           </Col>
 
           <Col xs={24} md={10}>
-            <Form.Item name="source_account_id" label="Payment From Account">
+            <Form.Item
+              name="source_account_id"
+              label="Payment From Account"
+              rules={[{ required: true, message: 'Select a payment account before generating payroll.' }]}
+            >
               <Select
                 allowClear
                 showSearch
                 loading={loadingLookups}
                 optionFilterProp="label"
-                placeholder="Required before processing payroll"
+                placeholder={lookups.paymentAccounts.length ? 'Select cash or bank account' : 'No cash/bank account available'}
                 options={lookups.paymentAccounts.map((account) => ({
                   value: account.id,
                   label: `${account.code ? `${account.code} - ` : ''}${account.name}`,
@@ -1117,6 +1204,15 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
 
         <Space wrap>
           <Button
+            onClick={preview}
+            loading={previewing}
+            disabled={!canGenerate}
+            icon={<InfoCircleOutlined />}
+          >
+            Preview
+          </Button>
+
+          <Button
             type="primary"
             onClick={generate}
             loading={loading}
@@ -1147,6 +1243,16 @@ function PayrollWizard({ lookups, loadingLookups, onGenerated, onQuickAddPeriod 
             Reset
           </Button>
         </Space>
+
+        {previewResult ? (
+          <Alert
+            showIcon
+            type={previewResult.settings_checklist?.ready ? 'success' : 'warning'}
+            message={`${previewResult.eligible_employee_count || 0} employees ready for payroll`}
+            description={`${previewResult.skipped_employee_count || 0} skipped. Net payable: ${money(previewResult.totals?.net_payable)}.`}
+            style={{ marginTop: 16 }}
+          />
+        ) : null}
       </Form>
     </Card>
   );
@@ -1189,7 +1295,7 @@ function PayrollPeriodsPanel({ periods, branches, loading, onCreate, onEdit, onR
               <Space direction="vertical" size={0}>
                 <Text strong>{periodLabel(row)}</Text>
                 <Text type="secondary">
-                  {row.start_date || '-'} to {row.end_date || '-'}
+                  {formatDate(row.start_date)} to {formatDate(row.end_date)}
                 </Text>
               </Space>
             ),
@@ -1288,6 +1394,8 @@ export default function Payroll({ auth }) {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [syncingAccounts, setSyncingAccounts] = useState(false);
   const [savingSourceAccount, setSavingSourceAccount] = useState(false);
+  const [runningAction, setRunningAction] = useState(null);
+  const [voiding, setVoiding] = useState(false);
 
   const [lookups, setLookups] = useState({
     periods: [],
@@ -1556,6 +1664,10 @@ export default function Payroll({ auth }) {
   };
 
   const act = (payroll, action, label) => {
+    const actionKey = `${payroll.id}:${action}`;
+
+    if (runningAction) return;
+
     if (action === 'process' && !payroll.source_account_id) {
       message.error('Select and save Payment From Account before processing payroll.');
       return;
@@ -1571,6 +1683,8 @@ export default function Payroll({ auth }) {
       content: `${payroll.payroll_number || payroll.run_number} will move to ${label.toLowerCase()}.`,
       okText: label,
       onOk: async () => {
+        setRunningAction(actionKey);
+
         try {
           await axios.post(api(`/api/hrm/payroll/payrolls/${payroll.id}/${action}`));
           message.success(`Payroll ${label.toLowerCase()} complete.`);
@@ -1579,10 +1693,14 @@ export default function Payroll({ auth }) {
         } catch (error) {
           message.error(apiErrorMessage(error, `Unable to ${label.toLowerCase()} payroll.`));
           throw error;
+        } finally {
+          setRunningAction(null);
         }
       },
     });
   };
+
+  const isActionRunning = (payroll, action) => runningAction === `${payroll?.id}:${action}`;
 
   const saveAdjustment = async () => {
     const values = await form.validateFields();
@@ -1645,18 +1763,30 @@ export default function Payroll({ auth }) {
 
   const payrollColumns = [
     {
-      title: 'Payroll #',
+      title: 'Payroll No.',
       dataIndex: 'payroll_number',
       width: 170,
       render: (value, record) => <Text strong>{value || record.run_number}</Text>,
     },
     {
       title: 'Period',
-      width: 140,
-      render: (_, record) => periodLabel(record.payroll_period),
+      width: 190,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Text>{periodLabel(record.payroll_period)}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {formatDate(record.payroll_period?.start_date)} to {formatDate(record.payroll_period?.end_date)}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Branch',
+      width: 160,
+      render: (_, record) => record.branch?.name || <Text type="secondary">All branches</Text>,
     },
     { title: 'Employees', dataIndex: 'total_employees', align: 'right', width: 100 },
-    { title: 'Earnings', dataIndex: 'total_earnings', align: 'right', render: money },
+    { title: 'Gross', dataIndex: 'total_earnings', align: 'right', render: money },
     { title: 'Deductions', dataIndex: 'total_deductions', align: 'right', render: money },
     {
       title: 'Net Payable',
@@ -1665,29 +1795,37 @@ export default function Payroll({ auth }) {
       render: (value) => <Text strong>{money(value)}</Text>,
     },
     {
-      title: 'Payment Account',
-      render: (_, record) => record.source_account?.name || <Tag color="warning">Not selected</Tag>,
-    },
-    {
       title: 'Status',
       dataIndex: 'status',
       width: 120,
       render: (value) => <StatusTag status={value} />,
     },
     {
-      title: 'JV',
-      width: 130,
-      render: (_, record) =>
-        record.journal_voucher?.voucher_no ? (
-          <Tag color="green">{record.journal_voucher.voucher_no}</Tag>
-        ) : (
-          <Tag color="warning">Not posted</Tag>
-        ),
+      title: 'Created',
+      dataIndex: 'created_at',
+      width: 190,
+      render: (value) => <DateTimeText value={value} />,
     },
     {
-      title: '',
-      width: 80,
-      render: (_, record) => <Button size="small" type="link" onClick={() => openPayroll(record)}>Open</Button>,
+      title: 'Actions',
+      width: 320,
+      render: (_, record) => (
+        <Space size={6} wrap>
+          <Button size="small" onClick={() => openPayroll(record)}>View</Button>
+          {record.status === 'generated' && (
+            <Button size="small" type="primary" loading={isActionRunning(record, 'approve')} disabled={!!runningAction} onClick={() => act(record, 'approve', 'Approve')}>Approve</Button>
+          )}
+          {record.status === 'approved' && (
+            <Button size="small" type="primary" loading={isActionRunning(record, 'process')} disabled={!!runningAction} onClick={() => act(record, 'process', 'Process')}>Process</Button>
+          )}
+          {record.status === 'processed' && (
+            <Button size="small" loading={isActionRunning(record, 'mark-paid')} disabled={!!runningAction} onClick={() => act(record, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>
+          )}
+          {['generated', 'approved'].includes(record.status) && (
+            <Button size="small" danger disabled={!!runningAction} onClick={() => setVoidingPayroll(record)}>Void</Button>
+          )}
+        </Space>
+      ),
     },
   ];
 
@@ -1747,7 +1885,9 @@ export default function Payroll({ auth }) {
                 <Space direction="vertical" size={2}>
                   <Title level={3} style={{ margin: 0 }}>Payroll</Title>
                   <Text style={pageStyles.headerMeta}>
-                    Generate payroll, review payslips, apply additions/deductions, post the journal voucher, and settle salaries from the selected payment account.
+                    {dashboard?.current_period
+                      ? `Current payroll period: ${periodLabel(dashboard.current_period)} (${dashboard.current_period.status || 'open'}). Generate payroll, review payslips, post journals, and settle salaries.`
+                      : 'No open payroll period is selected yet. Create a period, preview employees, then generate payroll.'}
                   </Text>
                 </Space>
               </Col>
@@ -1782,7 +1922,7 @@ export default function Payroll({ auth }) {
 
           <Row gutter={[12, 12]}>
             <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Employees Included" value={dashboard?.employees_included || 0} helper="Across recent payrolls" icon={<TeamOutlined />} tone="info" />
+              <MetricCard title="Employees" value={dashboard?.employees_included || 0} helper="Across payroll runs" icon={<TeamOutlined />} tone="info" />
             </Col>
             <Col xs={24} sm={12} xl={6}>
               <MetricCard title="Gross Payroll" value={dashboard?.gross_payroll || 0} helper="Before deductions" icon={<DollarOutlined />} tone="success" />
@@ -1791,7 +1931,7 @@ export default function Payroll({ auth }) {
               <MetricCard title="Deductions" value={dashboard?.total_deductions || 0} helper="Tax, benefits, and deductions" icon={<AuditOutlined />} tone="warning" />
             </Col>
             <Col xs={24} sm={12} xl={6}>
-              <MetricCard title="Net Payable" value={dashboard?.net_payable || 0} helper="Salary to pay" icon={<BankOutlined />} tone="default" />
+              <MetricCard title="Net Payable" value={dashboard?.net_payable || 0} helper={`Paid ${money(dashboard?.paid_amount)} / Unpaid ${money(dashboard?.unpaid_amount)}`} icon={<BankOutlined />} tone="default" />
             </Col>
           </Row>
 
@@ -1873,16 +2013,16 @@ export default function Payroll({ auth }) {
           selectedPayroll && (
             <Space wrap>
               {selectedPayroll.status === 'generated' && (
-                <Button type="primary" onClick={() => act(selectedPayroll, 'approve', 'Approve')}>Approve</Button>
+                <Button type="primary" loading={isActionRunning(selectedPayroll, 'approve')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'approve', 'Approve')}>Approve</Button>
               )}
               {selectedPayroll.status === 'approved' && (
-                <Button type="primary" onClick={() => act(selectedPayroll, 'process', 'Process')}>Process</Button>
+                <Button type="primary" loading={isActionRunning(selectedPayroll, 'process')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'process', 'Process')}>Process</Button>
               )}
               {selectedPayroll.status === 'processed' && (
-                <Button onClick={() => act(selectedPayroll, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>
+                <Button loading={isActionRunning(selectedPayroll, 'mark-paid')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'mark-paid', 'Mark Paid')}>Mark Paid</Button>
               )}
               {selectedPayroll.status === 'paid' && (
-                <Button onClick={() => act(selectedPayroll, 'lock', 'Lock')}>Lock</Button>
+                <Button loading={isActionRunning(selectedPayroll, 'lock')} disabled={!!runningAction} onClick={() => act(selectedPayroll, 'lock', 'Lock')}>Lock</Button>
               )}
               {['generated', 'approved'].includes(selectedPayroll.status) && (
                 <Button danger onClick={() => setVoidingPayroll(selectedPayroll)}>Void</Button>
@@ -1900,6 +2040,12 @@ export default function Payroll({ auth }) {
               <Descriptions.Item label={exchangeRateLabel(baseCurrency)}>{selectedPayroll.exchange_rate || '-'}</Descriptions.Item>
               <Descriptions.Item label="Journal Voucher">{selectedPayroll.journal_voucher?.voucher_no || '-'}</Descriptions.Item>
               <Descriptions.Item label="Status"><StatusTag status={selectedPayroll.status} /></Descriptions.Item>
+              <Descriptions.Item label="Created">{formatDateTime(selectedPayroll.created_at)}</Descriptions.Item>
+              <Descriptions.Item label="Generated">{formatDateTime(selectedPayroll.generated_at)}</Descriptions.Item>
+              <Descriptions.Item label="Approved">{formatDateTime(selectedPayroll.approved_at)}</Descriptions.Item>
+              <Descriptions.Item label="Processed">{formatDateTime(selectedPayroll.processed_at)}</Descriptions.Item>
+              <Descriptions.Item label="Paid">{formatDateTime(selectedPayroll.paid_at)}</Descriptions.Item>
+              <Descriptions.Item label="Updated">{formatDateTime(selectedPayroll.updated_at)}</Descriptions.Item>
             </Descriptions>
 
             <Card size="small" title={<Space><WalletOutlined />Payment Account</Space>}>
@@ -2084,6 +2230,8 @@ export default function Payroll({ auth }) {
               <Descriptions.Item label="Earnings">{money(payslipDrawer.gross_earnings)}</Descriptions.Item>
               <Descriptions.Item label="Deductions">{money(payslipDrawer.total_deductions)}</Descriptions.Item>
               <Descriptions.Item label="Net Payable"><Text strong>{money(payslipDrawer.net_payable)}</Text></Descriptions.Item>
+              <Descriptions.Item label="Created">{formatDateTime(payslipDrawer.created_at)}</Descriptions.Item>
+              <Descriptions.Item label="Paid">{formatDateTime(payslipDrawer.paid_at)}</Descriptions.Item>
             </Descriptions>
 
             <Table
@@ -2152,7 +2300,8 @@ export default function Payroll({ auth }) {
         title="Void payroll"
         open={Boolean(voidingPayroll)}
         okText="Void Payroll"
-        okButtonProps={{ danger: true }}
+        confirmLoading={voiding}
+        okButtonProps={{ danger: true, disabled: voiding }}
         onCancel={() => {
           setVoidingPayroll(null);
           setVoidReason('');
@@ -2162,6 +2311,8 @@ export default function Payroll({ auth }) {
             message.warning('Void reason is required.');
             return;
           }
+
+          setVoiding(true);
 
           try {
             const payrollId = voidingPayroll.id;
@@ -2173,6 +2324,8 @@ export default function Payroll({ auth }) {
             await refreshSelected(payrollId);
           } catch (error) {
             message.error(apiErrorMessage(error, 'Unable to void payroll.'));
+          } finally {
+            setVoiding(false);
           }
         }}
       >

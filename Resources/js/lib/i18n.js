@@ -22,12 +22,41 @@ const translatedAttributes = ['placeholder', 'title', 'aria-label', 'data-empty-
 const ignoredSelector = [
     'script',
     'style',
+    'svg',
+    'canvas',
     'code',
     'pre',
     'textarea',
     '[contenteditable="true"]',
     '[data-i18n-ignore]',
+    '.recharts-wrapper',
 ].join(',');
+
+const hasEffectiveTranslations = (translations = {}) =>
+    Object.entries(translations).some(
+        ([key, value]) => typeof value === 'string' && value !== '' && value !== key,
+    );
+
+const scheduleIdle = (callback) => {
+    if (typeof window === 'undefined') return 0;
+
+    if (typeof window.requestIdleCallback === 'function') {
+        return window.requestIdleCallback(callback, { timeout: 250 });
+    }
+
+    return window.requestAnimationFrame(callback);
+};
+
+const cancelIdle = (handle) => {
+    if (!handle || typeof window === 'undefined') return;
+
+    if (typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(handle);
+        return;
+    }
+
+    window.cancelAnimationFrame(handle);
+};
 
 const translateValue = (value, translations) => {
     const exact = translations?.[value];
@@ -163,26 +192,48 @@ export function isRtl() {
 export function useLegacyViewTranslations(translations = {}) {
     useEffect(() => {
         if (typeof document === 'undefined') return undefined;
+        if (!hasEffectiveTranslations(translations)) return undefined;
 
-        translateTree(document, translations);
+        const pendingNodes = new Set();
+        let scheduledHandle = 0;
+
+        const flush = () => {
+            scheduledHandle = 0;
+            const nodes = Array.from(pendingNodes);
+            pendingNodes.clear();
+
+            nodes.forEach((node) => translateTree(node, translations));
+        };
+
+        const enqueue = (node) => {
+            if (!node) return;
+
+            pendingNodes.add(node);
+
+            if (!scheduledHandle) {
+                scheduledHandle = scheduleIdle(flush);
+            }
+        };
+
+        enqueue(document.body || document.documentElement);
 
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.type === 'characterData') {
-                    translateTextNode(mutation.target, translations);
+                    enqueue(mutation.target);
                     return;
                 }
 
                 if (mutation.type === 'attributes') {
-                    translateElementAttributes(mutation.target, translations);
+                    enqueue(mutation.target);
                     return;
                 }
 
-                mutation.addedNodes.forEach((node) => translateTree(node, translations));
+                mutation.addedNodes.forEach(enqueue);
             });
         });
 
-        observer.observe(document.documentElement, {
+        observer.observe(document.body || document.documentElement, {
             subtree: true,
             childList: true,
             characterData: true,
@@ -190,6 +241,10 @@ export function useLegacyViewTranslations(translations = {}) {
             attributeFilter: translatedAttributes,
         });
 
-        return () => observer.disconnect();
+        return () => {
+            observer.disconnect();
+            cancelIdle(scheduledHandle);
+            pendingNodes.clear();
+        };
     }, [translations]);
 }

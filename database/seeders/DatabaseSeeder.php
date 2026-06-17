@@ -30,6 +30,7 @@ class DatabaseSeeder extends Seeder
             HRMTransactionalSeeder::class,
             MasterDealDataSeeder::class,
             MasterDataTypesSeeder::class,
+            AlertTypeSeeder::class,
             TaxSystemSeeder::class,
             MasterTaxJurisdictionSeeder::class,
             MasterProductDataSeeder::class,

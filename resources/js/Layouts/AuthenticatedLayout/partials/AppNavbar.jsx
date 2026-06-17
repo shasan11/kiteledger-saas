@@ -10,13 +10,14 @@ import {
     MenuOutlined,
     MoonOutlined,
     PlusOutlined,
+    ShopOutlined,
     SunOutlined,
 } from '@ant-design/icons';
 import {
     Button,
-    Dropdown,
     Grid,
     Layout,
+    Popover,
     theme,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -62,8 +63,10 @@ const getStoredThemeMode = () => {
 
 export default function AppNavbar({
     branchContext,
-    quickAddItems = [],
+    quickAddSections = [],
     getUrl,
+    visit,
+    canAccessPos = false,
     onSidebarToggle,
 }) {
     const t = useTrans();
@@ -152,6 +155,53 @@ export default function AppNavbar({
         );
     };
 
+    const openQuickAction = (action) => {
+        if (typeof visit === 'function') {
+            visit(action.routeName, action.fallback);
+            return;
+        }
+
+        const url = getUrl(action.routeName, action.fallback);
+
+        if (url && url !== '#') {
+            window.location.href = url;
+        }
+    };
+
+    const quickAddContent = quickAddSections.length ? (
+        <div className="app-navbar-quick-add-panel">
+            <div className="app-navbar-quick-add-panel__head">
+                <span className="app-navbar-quick-add-panel__title">{t('Quick Add')}</span>
+                <span className="app-navbar-quick-add-panel__hint">{t('Create records by module')}</span>
+            </div>
+
+            <div className="app-navbar-quick-add-panel__grid">
+                {quickAddSections.map((section) => (
+                    <section key={section.key} className="app-navbar-quick-add-card">
+                        <div className="app-navbar-quick-add-card__title">
+                            <span className="app-navbar-quick-add-card__icon">{section.icon}</span>
+                            <span>{section.title}</span>
+                        </div>
+
+                        <div className="app-navbar-quick-add-card__actions">
+                            {section.children.map((action) => (
+                                <button
+                                    key={action.key}
+                                    type="button"
+                                    className="app-navbar-quick-add-action"
+                                    onClick={() => openQuickAction(action)}
+                                >
+                                    <span className="app-navbar-quick-add-action__icon">{action.icon}</span>
+                                    <span className="app-navbar-quick-add-action__label">{action.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                ))}
+            </div>
+        </div>
+    ) : null;
+
     return (
         <>
             <Header
@@ -233,12 +283,25 @@ export default function AppNavbar({
                             />
                         )}
 
-                        {quickAddItems.length > 0 && (
-                            <Dropdown
-                                menu={{ items: quickAddItems }}
+                        {canAccessPos && (
+                            <Button
+                                type="text"
+                                icon={<ShopOutlined />}
+                                className="app-navbar__pos-button"
+                                title={t('POS')}
+                                onClick={() => openQuickAction({ routeName: 'pos.index', fallback: '/pos' })}
+                            >
+                                {!isMobile && !isTablet && t('POS')}
+                            </Button>
+                        )}
+
+                        {quickAddSections.length > 0 && (
+                            <Popover
+                                content={quickAddContent}
                                 placement="bottomRight"
-                                trigger={['click']}
-                                overlayClassName="app-navbar-dropdown"
+                                trigger="click"
+                                arrow={false}
+                                overlayClassName="app-navbar-quick-add-popover"
                             >
                                 <Button
                                     type="primary"
@@ -248,7 +311,7 @@ export default function AppNavbar({
                                 >
                                     {!isMobile && !isTablet && t('Quick Add')}
                                 </Button>
-                            </Dropdown>
+                            </Popover>
                         )}
 
                         <LanguageSwitcher
@@ -342,6 +405,7 @@ export default function AppNavbar({
 
                     .app-navbar__icon-button,
                     .app-navbar__quick-add,
+                    .app-navbar__pos-button,
                     .app-navbar__language-switcher .ant-select-selector {
                         height: var(--app-control-height);
                         border-radius: var(--app-radius);
@@ -374,6 +438,22 @@ export default function AppNavbar({
                         padding-inline: 12px;
                         font-weight: 700;
                         box-shadow: none;
+                    }
+
+                    .app-navbar__pos-button {
+                        min-width: var(--app-control-height);
+                        padding-inline: 11px;
+                        font-weight: 700;
+                        color: var(--app-text-secondary) !important;
+                        background: var(--app-nav-soft) !important;
+                        border: 1px solid var(--app-border) !important;
+                        box-shadow: none;
+                    }
+
+                    .app-navbar__pos-button:hover {
+                        color: var(--app-text) !important;
+                        background: var(--app-nav-elevated) !important;
+                        border-color: var(--app-border-strong) !important;
                     }
 
                     .app-navbar__context-button,
@@ -426,24 +506,131 @@ export default function AppNavbar({
                         color: var(--app-text-muted) !important;
                     }
 
-                    .app-navbar-dropdown .ant-dropdown-menu {
+                    .app-navbar-quick-add-popover .ant-popover-inner {
                         background: var(--app-nav-soft) !important;
                         border: 1px solid var(--app-border) !important;
                         border-radius: var(--app-radius) !important;
                         box-shadow: 0 18px 45px rgba(2, 6, 23, 0.45) !important;
-                        padding: 6px !important;
+                        padding: 0 !important;
+                        overflow: hidden;
                     }
 
-                    .app-navbar-dropdown .ant-dropdown-menu-item,
-                    .app-navbar-dropdown .ant-dropdown-menu-submenu-title {
-                        color: var(--app-text-secondary) !important;
-                        border-radius: 8px !important;
+                    .app-navbar-quick-add-popover .ant-popover-inner-content {
+                        padding: 0 !important;
                     }
 
-                    .app-navbar-dropdown .ant-dropdown-menu-item:hover,
-                    .app-navbar-dropdown .ant-dropdown-menu-submenu-title:hover {
-                        background: var(--app-nav-elevated) !important;
-                        color: var(--app-text) !important;
+                    .app-navbar-quick-add-panel {
+                        width: min(940px, calc(100vw - 24px));
+                        padding: 12px;
+                        color: var(--app-text-secondary);
+                    }
+
+                    .app-navbar-quick-add-panel__head {
+                        display: flex;
+                        align-items: baseline;
+                        justify-content: space-between;
+                        gap: 12px;
+                        padding: 0 2px 10px;
+                        border-bottom: 1px solid var(--app-border);
+                        margin-bottom: 10px;
+                    }
+
+                    .app-navbar-quick-add-panel__title {
+                        color: var(--app-text);
+                        font-weight: 800;
+                        font-size: 14px;
+                    }
+
+                    .app-navbar-quick-add-panel__hint {
+                        color: var(--app-text-muted);
+                        font-size: 12px;
+                    }
+
+                    .app-navbar-quick-add-panel__grid {
+                        display: grid;
+                        grid-template-columns: repeat(7, minmax(116px, 1fr));
+                        gap: 8px;
+                    }
+
+                    .app-navbar-quick-add-card {
+                        min-width: 0;
+                        border: 1px solid var(--app-border);
+                        border-radius: var(--app-radius);
+                        background: var(--app-nav);
+                        padding: 8px;
+                    }
+
+                    .app-navbar-quick-add-card__title {
+                        display: flex;
+                        align-items: center;
+                        gap: 7px;
+                        color: var(--app-text);
+                        font-size: 12px;
+                        font-weight: 800;
+                        line-height: 16px;
+                        margin-bottom: 7px;
+                    }
+
+                    .app-navbar-quick-add-card__icon {
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 7px;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: var(--app-primary);
+                        background: var(--app-primary-soft);
+                        border: 1px solid var(--app-primary-border);
+                        flex: 0 0 auto;
+                    }
+
+                    .app-navbar-quick-add-card__actions {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 3px;
+                    }
+
+                    .app-navbar-quick-add-action {
+                        width: 100%;
+                        min-height: 28px;
+                        border: 0;
+                        border-radius: 8px;
+                        background: transparent;
+                        color: var(--app-text-secondary);
+                        display: flex;
+                        align-items: center;
+                        gap: 7px;
+                        padding: 5px 6px;
+                        cursor: pointer;
+                        text-align: left;
+                        font: inherit;
+                    }
+
+                    .app-navbar-quick-add-action:hover {
+                        color: var(--app-text);
+                        background: var(--app-nav-elevated);
+                    }
+
+                    .app-navbar-quick-add-action__icon {
+                        width: 18px;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: var(--app-text-muted);
+                        flex: 0 0 auto;
+                    }
+
+                    .app-navbar-quick-add-action:hover .app-navbar-quick-add-action__icon {
+                        color: var(--app-primary);
+                    }
+
+                    .app-navbar-quick-add-action__label {
+                        min-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        font-size: 12px;
+                        font-weight: 650;
                     }
 
                     @media (max-width: 767px) {
@@ -478,6 +665,25 @@ export default function AppNavbar({
                             width: var(--app-control-height);
                             padding-inline: 0;
                         }
+
+                        .app-navbar__pos-button {
+                            width: var(--app-control-height);
+                            padding-inline: 0;
+                        }
+
+                        .app-navbar-quick-add-panel {
+                            width: min(360px, calc(100vw - 16px));
+                        }
+
+                        .app-navbar-quick-add-panel__head {
+                            align-items: flex-start;
+                            flex-direction: column;
+                            gap: 2px;
+                        }
+
+                        .app-navbar-quick-add-panel__grid {
+                            grid-template-columns: 1fr;
+                        }
                     }
 
                     @media (min-width: 768px) and (max-width: 991px) {
@@ -505,6 +711,19 @@ export default function AppNavbar({
                         .app-navbar__quick-add {
                             width: var(--app-control-height);
                             padding-inline: 0;
+                        }
+
+                        .app-navbar__pos-button {
+                            width: var(--app-control-height);
+                            padding-inline: 0;
+                        }
+
+                        .app-navbar-quick-add-panel {
+                            width: min(620px, calc(100vw - 24px));
+                        }
+
+                        .app-navbar-quick-add-panel__grid {
+                            grid-template-columns: repeat(2, minmax(0, 1fr));
                         }
                     }
 

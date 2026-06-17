@@ -457,36 +457,45 @@ class PayrollController extends BaseCrudApiController
             return $data['currency_id'];
         }
 
-        $settings = PayrollSetting::query()
-            ->where(function ($query) use ($branchId) {
-                $query->where('branch_id', $branchId)->orWhereNull('branch_id');
-            })
-            ->orderByRaw('branch_id is null')
-            ->first();
+        if ($branchId) {
+            $branchCurrencyId = PayrollSetting::query()
+                ->where('branch_id', $branchId)
+                ->whereNotNull('currency_id')
+                ->value('currency_id');
 
-        if ($settings?->currency_id) {
-            return $settings->currency_id;
+            if ($branchCurrencyId) {
+                return $branchCurrencyId;
+            }
         }
 
-        $baseCurrency = Currency::query()
+        $globalCurrencyId = PayrollSetting::query()
+            ->whereNull('branch_id')
+            ->whereNotNull('currency_id')
+            ->value('currency_id');
+
+        if ($globalCurrencyId) {
+            return $globalCurrencyId;
+        }
+
+        $baseCurrencyId = Currency::query()
             ->where('active', true)
             ->where('is_base', true)
-            ->first();
+            ->value('id');
 
-        if ($baseCurrency) {
-            return $baseCurrency->id;
+        if ($baseCurrencyId) {
+            return $baseCurrencyId;
         }
 
-        $firstActiveCurrency = Currency::query()
+        $firstActiveCurrencyId = Currency::query()
             ->where('active', true)
             ->orderBy('code')
-            ->first();
+            ->value('id');
 
-        if ($firstActiveCurrency) {
-            return $firstActiveCurrency->id;
+        if ($firstActiveCurrencyId) {
+            return $firstActiveCurrencyId;
         }
 
-        abort(422, 'Payroll currency is not configured. Select a currency in payroll generation, configure Payroll Settings, or create an active base currency.');
+        abort(422, 'Payroll currency is not configured. Please create an active currency or select one before generating payroll.');
     }
 
     protected function resolveExchangeRate(string $currencyId, mixed $exchangeRate = null): float

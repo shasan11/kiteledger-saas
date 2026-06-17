@@ -18,7 +18,6 @@ use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
 use App\Http\Controllers\Api\AppSettingController;
 use App\Http\Controllers\Api\ApplicationSettingController;
-use App\Http\Controllers\Api\ApprovalWorkflowController;
 use App\Http\Controllers\Api\BankAccountController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\BusinessRuleValidationController;
@@ -229,9 +228,8 @@ Route::post('fiscal-years/{id}/mark-current', [FiscalYearController::class, 'mar
 Route::post('fiscal-years/{id}/close', [FiscalYearController::class, 'close']);
 Route::apiResource('fiscal-years', FiscalYearController::class);
 
-Route::apiResource('approval-workflows', ApprovalWorkflowController::class);
-Route::apiResource('email-templates', EmailTemplateController::class);
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
+    Route::apiResource('email-templates', EmailTemplateController::class);
     Route::post('sms/send-test', [SmsUtilityController::class, 'sendTest']);
     Route::post('sms/preview-template', [SmsUtilityController::class, 'previewTemplate']);
     Route::post('sms/validate-phone', [SmsUtilityController::class, 'validatePhone']);

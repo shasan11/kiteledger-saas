@@ -49,7 +49,6 @@ const FiscalYears = lazy(() => import('./FiscalYears'));
 const Currencies = lazy(() => import('../Master/Currencies/Index'));
 const Taxes = lazy(() => import('../Tax/TaxRates/Index'));
 
-const ApprovalWorkflows = lazy(() => import('./ApprovalWorkflows'));
 const EmailConfiguration = lazy(() => import('../Hrm/EmailConfigs/Index'));
 const SmsConfiguration = lazy(() => import('./SmsConfig/Index'));
 const EmailTemplates = lazy(() => import('./EmailTemplates'));
@@ -245,14 +244,6 @@ const SETTINGS_TABS = [
     description: 'Lead, deal and contact setup data.',
     icon: <AppstoreOutlined />,
     component: CrmSetup,
-    props: {},
-  },
-  {
-    key: 'approval-workflows',
-    label: 'Approval Workflows',
-    description: 'Approval rules by module.',
-    icon: <SafetyCertificateOutlined />,
-    component: ApprovalWorkflows,
     props: {},
   },
   {

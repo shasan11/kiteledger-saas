@@ -63,9 +63,17 @@ const PIE_PALETTE = [
     THEME_COLOURS.muted,
 ];
 
-const currFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 });
-const compactFmt = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', notation: 'compact', maximumFractionDigits: 1 });
-const numFmt = new Intl.NumberFormat('en-NP');
+const createNumberFormatter = (locale, options = {}) => {
+    try {
+        return new Intl.NumberFormat(locale, options);
+    } catch {
+        return new Intl.NumberFormat('en-US', options);
+    }
+};
+
+const currFmt = createNumberFormatter('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 });
+const compactFmt = createNumberFormatter('en-NP', { style: 'currency', currency: 'NPR', notation: 'compact', maximumFractionDigits: 1 });
+const numFmt = createNumberFormatter('en-NP');
 
 const fmtMoney = (v, compact) => (v == null || v === '' ? DASH : (compact ? compactFmt : currFmt).format(Number(v || 0)));
 const fmtNum = (v) => (v == null || v === '' ? DASH : numFmt.format(Number(v || 0)));
@@ -858,7 +866,7 @@ function Styles({ token }) {
 
             .kd-kpis {
     display: grid;
-    grid-template-columns: repeat(6, minmax(140px, 1fr));
+    grid-template-columns: repeat(6, minmax(140px, 2fr));
     gap: var(--kd-gap);
     overflow-x: auto;
     overflow-y: hidden;
@@ -1077,7 +1085,7 @@ function Styles({ token }) {
 
             @media (max-width: 1280px) {
                 .kd-kpis {
-                    grid-template-columns: repeat(3, minmax(0, 1fr));
+                    grid-template-columns: repeat(6, minmax(0, 1fr));
                 }
                 .kd-row-2,
                 .kd-row-3 {

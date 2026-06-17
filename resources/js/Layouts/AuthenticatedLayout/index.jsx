@@ -9,6 +9,7 @@ import {
     FileTextOutlined,
     HomeOutlined,
     InboxOutlined,
+    InfoCircleOutlined,
     ProfileOutlined,
     ProjectOutlined,
     SettingOutlined,
@@ -17,9 +18,8 @@ import {
     TeamOutlined,
     UserOutlined,
     WalletOutlined,
-    PlusOutlined,
 } from '@ant-design/icons';
-import { Button, Dropdown, Grid, Layout, theme } from 'antd';
+import { Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
@@ -798,6 +798,19 @@ export default function AuthenticatedLayout({ header, children }) {
         return items;
     }, [branchContext, t]);
 
+    const canAny = (items) => items.some((permission) => can(permission));
+
+    const posPermissions = [
+        'pos.sale.create',
+        'pos.sale.view',
+        'pos.shift.view',
+        'pos.terminal.view',
+        'pos.cash_movement.view',
+        'pos.return.view',
+    ];
+
+    const canAccessPos = canAny(posPermissions);
+
     const quickAction = (key, label, icon, routeName, fallback, permission = null) => {
         if (permission && !can(permission)) return null;
 
@@ -805,45 +818,61 @@ export default function AuthenticatedLayout({ header, children }) {
             key,
             icon,
             label: t(label),
-            onClick: () => visit(routeName, fallback),
+            routeName,
+            fallback,
         };
     };
 
-    const quickGroup = (key, label, children) => {
+    const quickSection = (key, title, icon, children) => {
         const visibleChildren = children.filter(Boolean);
 
         if (!visibleChildren.length) return null;
 
-        return { key, type: 'group', label: t(label), children: visibleChildren };
+        return { key, title: t(title), icon, children: visibleChildren };
     };
 
-    const quickAddItems = [
-        quickGroup('quick-sales', 'Sales', [
+    const quickAddSections = [
+        quickSection('quick-sales', 'Sales / Payment In', <CreditCardOutlined />, [
             quickAction('invoice', 'Invoice', <FileTextOutlined />, 'payment-in.invoices.add', '/payment-in/invoices/add', 'sales.invoice.create'),
             quickAction('quotation', 'Quotation', <FileTextOutlined />, 'payment-in.quotations.add', '/payment-in/quotations/add', 'sales.quotation.create'),
             quickAction('sales-order', 'Sales Order', <ProfileOutlined />, 'payment-in.sales-orders.add', '/payment-in/sales-orders/add', 'sales.sales_order.create'),
             quickAction('payment-in', 'Payment In', <CreditCardOutlined />, 'payment-in.payments.add', '/payment-in/payments/add', 'sales.customer_payment.create'),
             quickAction('credit-note', 'Credit Note', <AuditOutlined />, 'payment-in.credit-notes.add', '/payment-in/credit-notes/add', 'sales.credit_note.create'),
         ]),
-        quickGroup('quick-purchase', 'Purchase', [
+        quickSection('quick-purchase', 'Purchase / Payment Out', <WalletOutlined />, [
             quickAction('purchase-bill', 'Purchase Bill', <BookOutlined />, 'payment-out.purchase-bills.add', '/payment-out/purchase-bills/add', 'purchase.purchase_bill.create'),
             quickAction('purchase-order', 'Purchase Order', <InboxOutlined />, 'payment-out.purchase-orders.add', '/payment-out/purchase-orders/add', 'purchase.purchase_order.create'),
             quickAction('supplier-payment', 'Supplier Payment', <WalletOutlined />, 'payment-out.supplier-payments.add', '/payment-out/supplier-payments/add', 'purchase.supplier_payment.create'),
             quickAction('expense', 'Expense', <AuditOutlined />, 'payment-out.expenses.add', '/payment-out/expenses/add', 'purchase.expense.create'),
             quickAction('debit-note', 'Debit Note', <SwapOutlined />, 'payment-out.debit-notes.add', '/payment-out/debit-notes/add', 'purchase.debit_note.create'),
         ]),
-        quickGroup('quick-accounting', 'Accounting', [
+        quickSection('quick-accounting', 'Accounting', <CalculatorOutlined />, [
             quickAction('journal-voucher', 'Journal Voucher', <CalculatorOutlined />, 'accounting.journal-vouchers.add', '/accounting/journal-vouchers/add', 'accounting.journal_voucher.create'),
             quickAction('cash-transfer', 'Cash Transfer', <SwapOutlined />, 'accounting.cash-transfers.add', '/accounting/cash-transfers/add', 'accounting.cash_transfer.create'),
             quickAction('chart-account', 'Chart Account', <BookOutlined />, null, '/accounting/chart-of-accounts?create=1', 'accounting.chart_of_account.create'),
         ]),
-        quickGroup('quick-records', 'Records', [
+        quickSection('quick-crm', 'CRM', <ContactsOutlined />, [
             quickAction('contact', 'Contact', <UserOutlined />, null, '/crm/contacts?create=1', 'crm.contacts.create'),
             quickAction('lead', 'Lead', <ContactsOutlined />, null, '/crm/leads?create=1', 'crm.lead.create'),
             quickAction('deal', 'Deal', <ProjectOutlined />, null, '/crm/deals?create=1', 'crm.deal.create'),
+            quickAction('ticket', 'Ticket', <InfoCircleOutlined />, null, '/crm/tickets?create=1', 'support.ticket.create'),
+        ]),
+        quickSection('quick-inventory', 'Inventory', <InboxOutlined />, [
             quickAction('product', 'Product', <ShopOutlined />, null, '/inventory/products?create=1', 'inventory.product.create'),
             quickAction('service', 'Service', <ProfileOutlined />, null, '/inventory/services?create=1', 'inventory.product.create'),
             quickAction('warehouse', 'Warehouse', <InboxOutlined />, null, '/warehouse?create=1', 'inventory.warehouse.create'),
+            quickAction('stock-adjustment', 'Stock Adjustment', <SwapOutlined />, 'inventory.adjustments.add', '/inventory/adjustments/add', 'inventory.adjustment.create'),
+        ]),
+        quickSection('quick-hrm', 'HRM', <TeamOutlined />, [
+            quickAction('employee', 'Employee', <TeamOutlined />, null, '/hrm/users?create=1', 'hrm.user.create'),
+            quickAction('attendance', 'Attendance', <AuditOutlined />, null, '/hrm/attendance?create=1', 'hrm.attendance.create'),
+            quickAction('leave-application', 'Leave Application', <FileTextOutlined />, null, '/hrm/leave-applications?create=1', 'hrm.leave_application.create'),
+            quickAction('payroll', 'Payroll', <WalletOutlined />, 'hrm.payroll.index', '/hrm/payroll', 'hrm.payroll.view'),
+        ]),
+        quickSection('quick-pos', 'POS', <ShopOutlined />, [
+            quickAction('open-pos', 'Open POS', <ShopOutlined />, 'pos.index', '/pos', canAccessPos ? null : 'pos.sale.view'),
+            quickAction('new-sale', 'New Sale', <CreditCardOutlined />, 'pos.index', '/pos', 'pos.sale.create'),
+            quickAction('terminal', 'Terminal', <InboxOutlined />, 'pos.terminals.index', '/pos/terminals', 'pos.terminal.view'),
         ]),
     ].filter(Boolean);
 
@@ -871,8 +900,10 @@ export default function AuthenticatedLayout({ header, children }) {
         <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
             <AppNavbar
                 branchContext={branchContext}
-                quickAddItems={quickAddItems}
+                quickAddSections={quickAddSections}
                 getUrl={getUrl}
+                visit={visit}
+                canAccessPos={canAccessPos}
                 onSidebarToggle={() => setCollapsed((current) => !current)}
                 colorBgContainer={colorBgContainer}
                 colorBorderSecondary={colorBorderSecondary}
@@ -920,45 +951,6 @@ export default function AuthenticatedLayout({ header, children }) {
                 </Layout>
             </Layout>
 
-            {quickAddItems.length > 0 && (
-                <Dropdown
-                    menu={{ items: quickAddItems }}
-                    placement="topRight"
-                    trigger={['click']}
-                    overlayClassName="app-floating-quick-add-menu"
-                >
-                    <Button
-                        type="primary"
-                        shape="circle"
-                        size="large"
-                        icon={<PlusOutlined />}
-                        title={t('Quick Add')}
-                        aria-label={t('Quick Add')}
-                        className="app-floating-quick-add"
-                    />
-                </Dropdown>
-            )}
-
-            <style>
-                {`
-                    .app-floating-quick-add {
-                        position: fixed !important;
-                        right: ${isMobile ? '18px' : '28px'};
-                        bottom: ${isMobile ? '18px' : '28px'};
-                        width: ${isMobile ? '52px' : '56px'} !important;
-                        height: ${isMobile ? '52px' : '56px'} !important;
-                        z-index: 150;
-                        box-shadow: 0 16px 38px rgba(15, 23, 42, 0.24) !important;
-                        display: inline-flex !important;
-                        align-items: center;
-                        justify-content: center;
-                    }
-
-                    .app-floating-quick-add .anticon {
-                        font-size: 20px;
-                    }
-                `}
-            </style>
         </Layout>
         </AppContextProvider>
     );
