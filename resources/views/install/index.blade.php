@@ -40,6 +40,12 @@
         .center { text-align:center; }
         .spinner { display:inline-block; width:16px; height:16px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        .progress-wrap { display:none; margin:20px 0 4px; }
+        .progress-wrap.show { display:block; }
+        .progress { height:10px; background:#e8edf3; border-radius:999px; overflow:hidden; }
+        .progress .bar { height:100%; width:0; background:var(--pri); border-radius:999px; transition:width .45s ease; }
+        .progress-label { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); margin-top:8px; }
+        .progress-label .pct { font-weight:600; color:#0f172a; }
         @media (max-width:700px) {
             .row, .actions { flex-direction:column; }
             .actions span { justify-content:stretch; }
@@ -180,8 +186,16 @@
             <p class="sub">English is the installation default. Enable any extra languages your users should be able to choose.</p>
             <div id="langList"></div>
             <div id="runMsg" class="msg"></div>
+            <div id="installProgress" class="progress-wrap">
+                <div class="progress"><div class="bar" id="progressBar"></div></div>
+                <div class="progress-label">
+                    <span id="progressStage">Preparing&hellip;</span>
+                    <span class="pct" id="progressPct">0%</span>
+                </div>
+                <p class="hint" style="margin-top:6px;">This can take a minute or two on the first install. Please keep this tab open.</p>
+            </div>
             <div class="actions">
-                <button type="button" class="ghost" onclick="go(6)">&larr; Back</button>
+                <button type="button" class="ghost" id="installBack" onclick="go(6)">&larr; Back</button>
                 <button type="button" id="installBtn" onclick="install()">Install Now</button>
             </div>
         </div>
@@ -343,12 +357,66 @@
         msg('dbMsg', data.message || (ok ? 'Connection successful.' : 'Connection failed.'), ok);
     }
 
+    // The /install/run request runs the whole install in one blocking call
+    // (no server-side streaming), so this drives a believable progress bar:
+    // it eases up toward 95% with labels matching the real server steps, then
+    // snaps to 100% when the request actually returns. Stage `at` = percent
+    // at which each label appears.
+    const INSTALL_STAGES = [
+        { at: 0,  text: 'Writing configuration…' },
+        { at: 10, text: 'Connecting to the database…' },
+        { at: 18, text: 'Running database migrations…' },
+        { at: 62, text: 'Seeding initial data…' },
+        { at: 80, text: 'Creating company, branch & admin…' },
+        { at: 92, text: 'Finalizing installation…' },
+    ];
+    let progressTimer = null;
+
+    function setProgress(pct) {
+        const p = Math.max(0, Math.min(100, Math.round(pct)));
+        document.getElementById('progressBar').style.width = p + '%';
+        document.getElementById('progressPct').textContent = p + '%';
+        const stage = INSTALL_STAGES.filter((s) => p >= s.at).pop();
+        if (stage) document.getElementById('progressStage').textContent = stage.text;
+    }
+
+    function startProgress() {
+        document.getElementById('installProgress').classList.add('show');
+        let pct = 0;
+        setProgress(0);
+        clearInterval(progressTimer);
+        progressTimer = setInterval(() => {
+            // Ease-out: approach 95% asymptotically so it keeps moving on slow
+            // hosts but never claims to be finished before the server is.
+            pct += Math.max(0.25, (95 - pct) * 0.015);
+            if (pct > 95) pct = 95;
+            setProgress(pct);
+        }, 400);
+    }
+
+    function stopProgress(success) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+        if (success) {
+            setProgress(100);
+            document.getElementById('progressStage').textContent = 'Complete';
+        } else {
+            document.getElementById('installProgress').classList.remove('show');
+            setProgress(0);
+        }
+    }
+
     async function install() {
         if (!validateStep(7)) return;
 
         const btn = document.getElementById('installBtn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> Installing...';
+        document.getElementById('installBack').disabled = true;
+        clearStepMessage();
+        msg('runMsg', '', true);
+        document.getElementById('runMsg').className = 'msg';
+        startProgress();
 
         const payload = Object.assign(dbPayload(), {
             app_name: val('app_name'),
@@ -373,15 +441,29 @@
             enabled_languages: Array.from(document.querySelectorAll('.lang-enable:checked')).map((checkbox) => checkbox.value),
         });
 
-        const { ok, data } = await post('{{ url('/install/run') }}', payload);
-        btn.disabled = false;
-        btn.textContent = 'Install Now';
+        let ok = false, data = {};
+        try {
+            ({ ok, data } = await post('{{ url('/install/run') }}', payload));
+        } catch (e) {
+            stopProgress(false);
+            btn.disabled = false;
+            btn.textContent = 'Install Now';
+            document.getElementById('installBack').disabled = false;
+            msg('runMsg', 'The install request could not be completed. Check your network and try again.', false);
+            return;
+        }
 
         if (ok && data.success) {
+            stopProgress(true);
             if (data.login_url) document.getElementById('loginLink').href = data.login_url;
             if (data.storage?.message) document.getElementById('storageNotice').textContent = data.storage.message;
-            show(8);
+            // Brief beat so the user sees 100% before the Finish screen.
+            setTimeout(() => show(8), 500);
         } else {
+            stopProgress(false);
+            btn.disabled = false;
+            btn.textContent = 'Install Now';
+            document.getElementById('installBack').disabled = false;
             const first = data.errors ? Object.values(data.errors)[0][0] : data.message;
             msg('runMsg', first || 'Installation failed.', false);
         }
