@@ -19,7 +19,7 @@ return new class extends Migration
             // Only rebuild if the invalid FK actually exists
             $ddl = DB::select("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
             $sql = $ddl[0]->sql ?? '';
-            if (!str_contains($sql, "references \"roles\"") && !str_contains($sql, 'references roles')) {
+            if (! str_contains($sql, 'references "roles"') && ! str_contains($sql, 'references roles')) {
                 return; // Already clean, nothing to do
             }
 

@@ -13,6 +13,7 @@ use App\Models\PaymentGatewaySetting;
 use App\Models\User;
 use App\Support\Installer\EnvWriter;
 use App\Support\Installer\InstalledState;
+use App\Support\Installer\SqlInstallImporter;
 use Database\Seeders\ProductionSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -182,10 +183,14 @@ class InstallController extends Controller
             // 2. Point the running process at the new database.
             $this->configureRuntimeDatabase($db);
 
-            // 3. Migrate + seed structural/config data only (no demo records or
-            // backdoor accounts — see database/seeders/ProductionSeeder.php).
-            Artisan::call('migrate', ['--force' => true]);
-            Artisan::call('db:seed', ['--force' => true, '--class' => ProductionSeeder::class]);
+            // 3. Prefer a packaged SQL install dump for faster production
+            // installs; fall back to migrations when the dump is absent.
+            if (SqlInstallImporter::availableFor($db['connection'])) {
+                SqlInstallImporter::importFor($db['connection']);
+            } else {
+                Artisan::call('migrate:fresh', ['--force' => true]);
+                Artisan::call('db:seed', ['--force' => true, '--class' => ProductionSeeder::class]);
+            }
 
             // 4. Link public storage when the host allows symlinks. Shared
             // hosts often block this, so /storage also has a Laravel fallback.
