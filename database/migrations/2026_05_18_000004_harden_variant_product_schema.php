@@ -11,10 +11,16 @@ return new class extends Migration
     {
         if (Schema::hasTable('products')) {
             Schema::table('products', function (Blueprint $table) {
-                if (!Schema::hasColumn('products', 'variant_signature')) {
-                    $table->string('variant_signature', 1000)->nullable()->after('product_type');
+                if (! Schema::hasColumn('products', 'variant_signature')) {
+                    $column = $table->string('variant_signature', 1000)->nullable()->after('product_type');
+
+                    if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+                        $column->charset('ascii')->collation('ascii_bin');
+                    }
                 }
             });
+
+            $this->ensureVariantSignatureUsesIndexSafeCharset();
 
             $this->addIndexIfMissing('products', 'products_parent_type_index', ['parent_id', 'product_type']);
             $this->addIndexIfMissing('products', 'products_sku_index', ['sku']);
@@ -75,13 +81,22 @@ return new class extends Migration
 
     private function dropIndexIfExists(string $table, string $index): void
     {
-        if (!$this->indexExists($table, $index)) {
+        if (! $this->indexExists($table, $index)) {
             return;
         }
 
         Schema::table($table, function (Blueprint $blueprint) use ($index) {
             $blueprint->dropIndex($index);
         });
+    }
+
+    private function ensureVariantSignatureUsesIndexSafeCharset(): void
+    {
+        if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
+            return;
+        }
+
+        DB::statement('ALTER TABLE `products` MODIFY `variant_signature` VARCHAR(1000) CHARACTER SET ascii COLLATE ascii_bin NULL');
     }
 
     private function indexExists(string $table, string $index): bool
