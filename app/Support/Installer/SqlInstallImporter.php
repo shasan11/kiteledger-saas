@@ -37,6 +37,8 @@ class SqlInstallImporter
             throw new RuntimeException("Install SQL file is empty or unreadable: {$path}");
         }
 
+        self::assertMysqlDump($sql, $path);
+
         try {
             DB::statement('SET FOREIGN_KEY_CHECKS=0');
             self::dropCurrentTables();
@@ -46,6 +48,24 @@ class SqlInstallImporter
             }
         } finally {
             DB::statement('SET FOREIGN_KEY_CHECKS=1');
+        }
+    }
+
+    private static function assertMysqlDump(string $sql, string $path): void
+    {
+        $sqlitePatterns = [
+            'PRAGMA ',
+            'sqlite_master',
+            'BEGIN TRANSACTION',
+            'COMMIT;',
+        ];
+
+        foreach ($sqlitePatterns as $pattern) {
+            if (stripos($sql, $pattern) !== false) {
+                throw new RuntimeException(
+                    "The install SQL file is not a MySQL/MariaDB dump: {$path}. Delete it or regenerate it with: php artisan install:build-sql --force"
+                );
+            }
         }
     }
 

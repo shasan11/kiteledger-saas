@@ -22,3 +22,6 @@ php artisan install:build-sql --force
 The command runs `migrate:fresh`, seeds `ProductionSeeder`, and writes
 `database/sql/mysql_install.sql`. Do not run it against a database containing
 customer data.
+
+Do not place a SQLite dump in `mysql_install.sql`. MySQL cannot run SQLite
+statements such as `PRAGMA foreign_keys = OFF`.
