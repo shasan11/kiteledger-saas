@@ -77,27 +77,40 @@ class InstallController extends Controller
                 : 'Could not detect mod_rewrite (normal on Nginx/LiteSpeed) — ensure your host honors .htaccess or has equivalent rewrite rules. See INSTALL.md.',
         ];
 
+        // Probe each path with a real write+delete, not is_writable() — the
+        // latter lies on hosts with ACLs/SELinux/open_basedir, letting the
+        // installer pass the check and then fail mid-run (e.g. the install-lock
+        // write). storage/app is checked explicitly because that is where the
+        // install lock is written at the very end.
         $writable = [
-            'storage' => storage_path(),
-            'storage/app/public' => storage_path('app/public'),
-            'storage/framework' => storage_path('framework'),
-            'storage/logs' => storage_path('logs'),
-            'bootstrap/cache' => base_path('bootstrap/cache'),
-            'public (for storage symlink)' => public_path(),
+            'storage' => [storage_path(), 'Stores logs, cache and uploaded files.'],
+            'storage/app' => [storage_path('app'), 'Stores uploads and the install lock.'],
+            'storage/app/public' => [storage_path('app/public'), 'Holds publicly served uploads (logos, attachments).'],
+            'storage/framework' => [storage_path('framework'), 'Holds compiled views, sessions and cache.'],
+            'storage/logs' => [storage_path('logs'), 'Holds the application log.'],
+            'bootstrap/cache' => [base_path('bootstrap/cache'), 'Holds the framework bootstrap cache.'],
+            'public' => [public_path(), 'Needed to create the storage symlink for images.'],
         ];
 
-        foreach ($writable as $label => $path) {
-            $checks[] = ['key' => 'writable_'.$label, 'label' => "Writable: $label", 'passed' => is_dir($path) ? is_writable($path) : false, 'hint' => $path];
+        foreach ($writable as $label => [$path, $why]) {
+            $ok = $this->canActuallyWrite($path);
+            $checks[] = [
+                'key' => 'writable_'.$label,
+                'label' => "Writable: $label",
+                'passed' => $ok,
+                'hint' => $ok ? $why : "Not writable. Run: chmod -R 775 $label  (and chown it to your web-server user).",
+            ];
         }
 
         $envPath = base_path('.env');
+        $envOk = is_file($envPath) ? is_writable($envPath) : $this->canActuallyWrite(base_path());
         $checks[] = [
             'key' => 'writable_env',
             'label' => 'Writable: .env',
-            'passed' => is_file($envPath) ? is_writable($envPath) : is_writable(base_path()),
-            'hint' => is_file($envPath)
-                ? $envPath
-                : 'Missing .env; the project root must be writable so the installer can create it.',
+            'passed' => $envOk,
+            'hint' => $envOk
+                ? 'The installer can save your configuration here.'
+                : 'The project root (or .env) must be writable so the installer can save your settings.',
         ];
 
         return response()->json([
@@ -242,17 +255,25 @@ class InstallController extends Controller
             // caching during this request would freeze a wrong value into
             // bootstrap/cache and make it un-fixable by editing .env (the
             // textbook "persistent error"). Production caching is an explicit,
-            // documented post-install step (php artisan optimize).
+            // documented post-install step (config:cache + view:cache; not
+            // route:cache — this app has closure routes).
             try {
                 Artisan::call('optimize:clear');
             } catch (Throwable) {
                 // Non-fatal — the app runs fine without compiled caches.
             }
         } catch (Throwable $e) {
-            // Do not mark installed on failure; surface a readable error.
+            // Do not mark installed on failure. Log the full trace so the exact
+            // failing line is recoverable from storage/logs/laravel.log even
+            // when the browser only shows the short message, and return a
+            // message that names the error type (helps distinguish a DB error
+            // from a filesystem/permission error like the install-lock write).
+            report($e);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Installation failed: '.$e->getMessage(),
+                'error_type' => class_basename($e),
             ], 500);
         }
 
@@ -437,26 +458,81 @@ class InstallController extends Controller
             @mkdir($target, 0775, true);
         }
 
-        $error = null;
+        $targetReal = realpath($target);
 
-        try {
-            Artisan::call('storage:link');
-        } catch (Throwable $e) {
-            $error = $e->getMessage();
+        // Clear away a stale public/storage that would stop files from loading.
+        // A *broken* or *wrong* symlink (common after a ZIP upload mangles it,
+        // or a previous install on a different path) makes the web server return
+        // 404 for /storage/* and never fall through to the PublicStorageController
+        // fallback route. An *empty* leftover directory has the same effect.
+        // Either way uploaded images appear broken. Remove only these safe cases —
+        // never a directory that actually contains files.
+        if (is_link($link)) {
+            $resolved = realpath($link); // false if the link is broken
+            if ($resolved === false || $resolved !== $targetReal) {
+                @unlink($link);
+            }
+        } elseif (is_dir($link) && ! $this->directoryHasEntries($link)) {
+            @rmdir($link);
         }
 
-        $targetReal = realpath($target);
-        $linkReal = file_exists($link) ? realpath($link) : false;
-        $linked = is_link($link) || ($targetReal && $linkReal && $targetReal === $linkReal);
+        $error = null;
 
+        // Only try to link when nothing valid is in the way.
+        if (! file_exists($link) && ! is_link($link)) {
+            try {
+                Artisan::call('storage:link');
+            } catch (Throwable $e) {
+                $error = $e->getMessage();
+            }
+        }
+
+        $linkReal = is_link($link) || file_exists($link) ? realpath($link) : false;
+        $linked = $targetReal && $linkReal && $linkReal === $targetReal;
+
+        // If the symlink could not be made, the PublicStorageController route
+        // (GET /storage/{path}) serves the files instead — so uploads work
+        // either way and the customer never has to touch the command line.
         return [
             'linked' => (bool) $linked,
             'url' => url('/storage'),
             'message' => $linked
-                ? 'public/storage is linked to storage/app/public.'
-                : 'Storage symlink was not created, but /storage files are served through the built-in fallback route.',
+                ? 'Uploaded files are served through the public/storage link.'
+                : 'This host does not allow symlinks, so uploaded files are served automatically through the built-in /storage route instead. No action needed.',
             'error' => $linked ? null : $error,
         ];
+    }
+
+    /**
+     * Real writability test: create the directory if needed, then write and
+     * delete a probe file. More reliable than is_writable() under ACLs/SELinux.
+     */
+    private function canActuallyWrite(string $dir): bool
+    {
+        if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            return false;
+        }
+
+        $probe = rtrim($dir, '/\\').DIRECTORY_SEPARATOR.'.kl_write_test_'.uniqid();
+
+        if (@file_put_contents($probe, 'ok') === false) {
+            return false;
+        }
+
+        @unlink($probe);
+
+        return true;
+    }
+
+    private function directoryHasEntries(string $dir): bool
+    {
+        foreach (scandir($dir) ?: [] as $entry) {
+            if ($entry !== '.' && $entry !== '..') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function applyLanguages(array $data, Branch $branch): void

@@ -11,7 +11,6 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 
@@ -37,16 +36,13 @@ Route::prefix('install')
         Route::post('/run', [InstallController::class, 'run'])->name('install.run');
     });
 
-Route::get('/storage/{path}', function (string $path) {
-    abort_if(str_contains($path, '..') || str_starts_with($path, '/'), 404);
-    abort_unless(Storage::disk('public')->exists($path), 404);
+// Note: GET /storage/{path} is served by Laravel's built-in route (named
+// storage.public, registered because the "public" disk has 'serve' => true in
+// config/filesystems.php). That makes uploaded images work even when the
+// public/storage symlink is missing — the installer also clears away any
+// broken symlink so requests actually reach this route. No custom route needed.
 
-    return Storage::disk('public')->response($path);
-})->where('path', '.*')->name('public.storage');
-
-Route::get('/', function () {
-    return redirect()->route('dashboard');
-})->name('home');
+Route::redirect('/', '/dashboard')->name('home');
 
 Route::post('/locale/change', [LocalizationController::class, 'change'])
     ->name('locale.change');

@@ -103,7 +103,8 @@ class InstallCommand extends Command
         $this->line('Login at: '.($data['login_url'] ?? url('/login')));
         $this->newLine();
         $this->line('Optional production speed-up (run only AFTER confirming login works):');
-        $this->line('  php artisan optimize');
+        $this->line('  php artisan config:cache && php artisan view:cache');
+        $this->line('  (Do not run route:cache / optimize — this app uses closure routes.)');
 
         return self::SUCCESS;
     }
