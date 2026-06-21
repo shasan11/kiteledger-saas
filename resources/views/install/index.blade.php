@@ -3,64 +3,119 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Install - {{ config('app.name', 'KiteLedger') }}</title>
+    <title>{{ config('app.name', 'KiteLedger') }} Installer</title>
     <style>
-        :root { --pri:#1677ff; --ok:#16a34a; --bad:#dc2626; --bg:#f1f5f9; --card:#fff; --bd:#e2e8f0; --muted:#64748b; }
+        :root {
+            --ink:#111827; --ink-soft:#1f2937; --muted:#6b7280; --faint:#9ca3af;
+            --bg:#f4f5f7; --card:#ffffff; --bd:#e5e7eb; --bd-strong:#d1d5db;
+            --accent:#111827; --ok:#15803d; --ok-bg:#f0fdf4; --bad:#b91c1c; --bad-bg:#fef2f2;
+            --ring:rgba(17,24,39,.10);
+        }
         * { box-sizing:border-box; }
-        body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:#0f172a; }
-        .wrap { max-width:820px; margin:0 auto; padding:32px 16px; }
-        .brand { text-align:center; margin-bottom:20px; }
-        .brand h1 { margin:0; font-size:24px; }
-        .brand p { margin:4px 0 0; color:var(--muted); }
-        .steps { display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap; }
-        .steps .s { flex:1; min-width:86px; text-align:center; font-size:12px; padding:8px 4px; border-radius:8px; background:#e8edf3; color:var(--muted); }
-        .steps .s.active { background:var(--pri); color:#fff; }
-        .steps .s.done { background:#dcfce7; color:var(--ok); }
-        .card { background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:24px; box-shadow:0 1px 4px rgba(0,0,0,.04); }
-        .card h2 { margin:0 0 4px; font-size:18px; }
-        .card .sub { color:var(--muted); margin:0 0 18px; font-size:14px; }
-        label { display:block; font-size:13px; font-weight:600; margin:12px 0 4px; }
-        input, select { width:100%; padding:10px 12px; border:1px solid var(--bd); border-radius:8px; font-size:14px; }
-        input[type="checkbox"], input[type="radio"] { width:auto; padding:0; }
-        .row { display:flex; gap:12px; }
+        body {
+            margin:0; min-height:100vh;
+            font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+            background:var(--bg); color:var(--ink);
+            -webkit-font-smoothing:antialiased; line-height:1.5;
+        }
+        .wrap { max-width:640px; margin:0 auto; padding:56px 20px 72px; }
+        .brand { text-align:center; margin-bottom:30px; }
+        .brand .mark {
+            width:46px; height:46px; margin:0 auto 14px; border-radius:12px;
+            background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center;
+            font-size:22px; font-weight:600; letter-spacing:-.5px;
+        }
+        .brand h1 { margin:0; font-size:21px; font-weight:600; letter-spacing:-.3px; }
+        .brand p { margin:5px 0 0; color:var(--muted); font-size:14px; }
+
+        /* Slim numbered stepper */
+        .stepper-track { display:flex; align-items:center; margin:0 auto 8px; max-width:520px; }
+        .stepper-track .dot {
+            flex:0 0 auto; width:26px; height:26px; border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-size:12px; font-weight:600; background:#fff; color:var(--faint);
+            border:1.5px solid var(--bd-strong); transition:.2s; z-index:1;
+        }
+        .stepper-track .dot.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .stepper-track .dot.done { background:var(--accent); color:#fff; border-color:var(--accent); }
+        .stepper-track .seg { flex:1 1 auto; height:1.5px; background:var(--bd-strong); margin:0 -1px; }
+        .stepper-track .seg.filled { background:var(--accent); }
+        .stepper-caption { text-align:center; font-size:12.5px; color:var(--muted); margin-bottom:22px; letter-spacing:.1px; }
+
+        .card { background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:30px 30px 26px; box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05); }
+        .card h2 { margin:0 0 6px; font-size:18px; font-weight:600; letter-spacing:-.2px; }
+        .card .sub { color:var(--muted); margin:0 0 22px; font-size:14px; }
+        .card > p { font-size:14px; color:var(--ink-soft); }
+
+        label { display:block; font-size:13px; font-weight:500; color:var(--ink-soft); margin:14px 0 6px; }
+        input, select {
+            width:100%; padding:10px 12px; border:1px solid var(--bd-strong); border-radius:9px;
+            font-size:14px; color:var(--ink); background:#fff; transition:border-color .15s, box-shadow .15s;
+            font-family:inherit;
+        }
+        input::placeholder { color:var(--faint); }
+        input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+        input[type="checkbox"], input[type="radio"] { width:auto; padding:0; accent-color:var(--accent); }
+        .row { display:flex; gap:14px; }
         .row > div { flex:1; }
-        .actions { display:flex; justify-content:space-between; gap:12px; margin-top:22px; }
-        .actions span { display:inline-flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-        button { padding:10px 20px; border-radius:8px; border:1px solid var(--pri); background:var(--pri); color:#fff; font-size:14px; cursor:pointer; }
-        button.ghost { background:#fff; color:#334155; border-color:var(--bd); }
-        button:disabled { opacity:.55; cursor:not-allowed; }
-        .check { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid #f1f5f9; font-size:14px; }
-        .pill { white-space:nowrap; font-size:12px; padding:2px 10px; border-radius:20px; }
-        .pill.ok { background:#dcfce7; color:var(--ok); }
-        .pill.bad { background:#fee2e2; color:var(--bad); }
-        .msg { padding:10px 12px; border-radius:8px; font-size:13px; margin-top:12px; display:none; }
-        .msg.ok { background:#dcfce7; color:#166534; display:block; }
-        .msg.bad { background:#fee2e2; color:#991b1b; display:block; }
+
+        .actions { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:28px; }
+        .actions span { display:inline-flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+        button {
+            padding:10px 18px; border-radius:9px; border:1px solid var(--accent); background:var(--accent);
+            color:#fff; font-size:14px; font-weight:500; cursor:pointer; font-family:inherit; transition:.15s;
+        }
+        button:hover:not(:disabled) { background:var(--ink-soft); }
+        button.ghost { background:#fff; color:var(--ink-soft); border-color:var(--bd-strong); }
+        button.ghost:hover:not(:disabled) { background:#f9fafb; }
+        button:disabled { opacity:.5; cursor:not-allowed; }
+
+        .check { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--bd); font-size:14px; }
+        .check:last-child { border-bottom:none; }
+        .pill { white-space:nowrap; font-size:12px; font-weight:500; padding:3px 10px; border-radius:999px; display:inline-flex; align-items:center; gap:5px; }
+        .pill::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+        .pill.ok { background:var(--ok-bg); color:var(--ok); }
+        .pill.bad { background:var(--bad-bg); color:var(--bad); }
+        .msg { padding:11px 13px; border-radius:9px; font-size:13px; margin-top:14px; display:none; border:1px solid transparent; }
+        .msg.ok { background:var(--ok-bg); color:#166534; border-color:#bbf7d0; display:block; }
+        .msg.bad { background:var(--bad-bg); color:#991b1b; border-color:#fecaca; display:block; }
         .hint { color:var(--muted); font-size:12px; }
         .center { text-align:center; }
-        .spinner { display:inline-block; width:16px; height:16px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; }
+        .spinner { display:inline-block; width:15px; height:15px; border:2px solid currentColor; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:4px; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .progress-wrap { display:none; margin:20px 0 4px; }
+
+        .success-mark {
+            width:52px; height:52px; margin:4px auto 16px; border-radius:50%;
+            background:var(--ok-bg); color:var(--ok); border:1.5px solid #bbf7d0;
+            display:flex; align-items:center; justify-content:center; font-size:26px; line-height:1;
+        }
+
+        .progress-wrap { display:none; margin:22px 0 4px; }
         .progress-wrap.show { display:block; }
-        .progress { height:10px; background:#e8edf3; border-radius:999px; overflow:hidden; }
-        .progress .bar { height:100%; width:0; background:var(--pri); border-radius:999px; transition:width .45s ease; }
-        .progress-label { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); margin-top:8px; }
-        .progress-label .pct { font-weight:600; color:#0f172a; }
-        @media (max-width:700px) {
-            .row, .actions { flex-direction:column; }
+        .progress { height:8px; background:#eceef1; border-radius:999px; overflow:hidden; }
+        .progress .bar { height:100%; width:0; background:var(--accent); border-radius:999px; transition:width .45s ease; }
+        .progress-label { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); margin-top:10px; }
+        .progress-label .pct { font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+
+        @media (max-width:640px) {
+            .wrap { padding:32px 16px 48px; }
+            .card { padding:22px 18px; border-radius:14px; }
+            .row, .actions { flex-direction:column; align-items:stretch; }
             .actions span { justify-content:stretch; }
             button { width:100%; }
+            .stepper-caption { margin-bottom:18px; }
         }
     </style>
 </head>
 <body>
 <div class="wrap">
     <div class="brand">
-        <h1>{{ config('app.name', 'KiteLedger') }} Installer</h1>
+        <div class="mark">{{ strtoupper(substr(config('app.name', 'KiteLedger'), 0, 1)) }}</div>
+        <h1>Install {{ config('app.name', 'KiteLedger') }}</h1>
         <p>Set up your accounting application in a few steps.</p>
     </div>
 
-    <div class="steps" id="steps"></div>
+    <div id="steps"></div>
 
     <div class="card">
         <div id="stepMsg" class="msg"></div>
@@ -201,11 +256,11 @@
         </div>
 
         <div class="panel" data-step="8" hidden>
-            <h2>Installation Complete</h2>
-            <p class="sub">Your application is ready to use.</p>
-            <p>You can now sign in with the administrator account you created.</p>
-            <p id="storageNotice" class="hint"></p>
-            <div class="actions center" style="justify-content:center">
+            <div class="center">
+                <div class="success-mark">&#10003;</div>
+                <h2 style="margin-bottom:8px;">Installation complete</h2>
+                <p class="sub" style="margin-bottom:18px;">Your application is ready. Sign in with the administrator account you just created.</p>
+                <p id="storageNotice" class="hint" style="margin-bottom:22px;"></p>
                 <a id="loginLink" href="/login"><button type="button">Go to Login &rarr;</button></a>
             </div>
         </div>
@@ -226,9 +281,16 @@
     const val = (id) => (document.getElementById(id)?.value || '').trim();
 
     function renderSteps() {
-        document.getElementById('steps').innerHTML = STEP_LABELS.map((label, index) =>
-            `<div class="s ${index === current ? 'active' : (index < current ? 'done' : '')}">${index + 1}. ${label}</div>`
-        ).join('');
+        let track = '';
+        STEP_LABELS.forEach((label, index) => {
+            if (index > 0) track += `<div class="seg ${index <= current ? 'filled' : ''}"></div>`;
+            const state = index === current ? 'active' : (index < current ? 'done' : '');
+            const inner = index < current ? '&#10003;' : (index + 1);
+            track += `<div class="dot ${state}" title="${label}">${inner}</div>`;
+        });
+        document.getElementById('steps').innerHTML =
+            `<div class="stepper-track">${track}</div>
+             <div class="stepper-caption">Step ${current + 1} of ${STEP_LABELS.length} &middot; ${STEP_LABELS[current]}</div>`;
     }
 
     function renderLanguages() {

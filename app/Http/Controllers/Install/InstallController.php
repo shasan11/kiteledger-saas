@@ -176,6 +176,23 @@ class InstallController extends Controller
         }
 
         try {
+            // 0. Force an in-memory cache for the whole install run.
+            //
+            // Laravel's default cache store is "database", and that store's
+            // connection falls back to the default DB connection (sqlite by
+            // default). At boot — before we repoint the DB to the customer's
+            // MySQL — Spatie's PermissionRegistrar singleton binds its cache to
+            // that sqlite-backed store. Migrating MySQL afterwards doesn't
+            // rebind it, so the permission-cache flush in createSuperAdmin()
+            // runs "delete from cache ..." against a sqlite file that doesn't
+            // exist. (The .env we write uses file cache, but this process has
+            // already booted.) Using the array store sidesteps the DB entirely.
+            config([
+                'cache.default' => 'array',
+                'permission.cache.store' => 'array',
+            ]);
+            app()->forgetInstance(\Spatie\Permission\PermissionRegistrar::class);
+
             // 1. Write .env (generates a fresh APP_KEY).
             EnvWriter::write([
                 'APP_NAME' => $data['app_name'],
