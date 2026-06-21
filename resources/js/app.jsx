@@ -15,10 +15,10 @@ import {
   getStoredBrandSettings,
   resolveMediaUrl,
   subscribeToBrandSettings,
-} from './brandSettings';
+} from './brandSettings.jsx';
 
 import { createThemeConfig } from './theme';
-import { useLegacyViewTranslations } from './lib/i18n';
+import { useLegacyViewTranslations } from './lib/i18n.js';
 
 const appName = import.meta.env.VITE_APP_NAME || 'KiteLedger';
 
