@@ -131,6 +131,15 @@ class InstallController extends Controller
             return response()->json(['success' => false, 'message' => 'Application is already installed.'], 403);
         }
 
+        // migrate:fresh + ProductionSeeder can take longer than the default
+        // PHP request limits on shared/VPS hosting. Without this, the request
+        // dies mid-migration and every retry fails the same way ("persistent
+        // error"). Give the install all the time/memory it needs and keep
+        // running even if the browser disconnects.
+        @set_time_limit(0);
+        @ini_set('memory_limit', '512M');
+        ignore_user_abort(true);
+
         $db = $this->validateDatabase($request);
 
         $data = Validator::make($request->all(), [
@@ -211,10 +220,17 @@ class InstallController extends Controller
             // 6. Lock.
             InstalledState::mark();
 
-            // 7. Now that .env is finalized and the database is fully set up,
-            // cache config/routes/views for production speed. Best-effort —
-            // a cache failure must never fail an otherwise-complete install.
-            $this->optimizeForProduction();
+            // 7. Clear every compiled cache so the new .env/DB take effect on
+            // the next request. We deliberately do NOT config:cache here:
+            // caching during this request would freeze a wrong value into
+            // bootstrap/cache and make it un-fixable by editing .env (the
+            // textbook "persistent error"). Production caching is an explicit,
+            // documented post-install step (php artisan optimize).
+            try {
+                Artisan::call('optimize:clear');
+            } catch (Throwable) {
+                // Non-fatal — the app runs fine without compiled caches.
+            }
         } catch (Throwable $e) {
             // Do not mark installed on failure; surface a readable error.
             return response()->json([
@@ -478,22 +494,6 @@ class InstallController extends Controller
             $user->syncRoles([$role]);
         } catch (Throwable) {
             // Spatie not fully seeded — non-fatal; user still has credentials.
-        }
-    }
-
-    /**
-     * Cache config, routes and views for production. Only safe to call once
-     * .env is finalized and the database install has completed — never cache
-     * config before DB setup, or the app caches the placeholder credentials.
-     */
-    private function optimizeForProduction(): void
-    {
-        foreach (['config:cache', 'route:cache', 'view:cache'] as $command) {
-            try {
-                Artisan::call($command);
-            } catch (Throwable) {
-                // Non-fatal; the app still runs without compiled caches.
-            }
         }
     }
 

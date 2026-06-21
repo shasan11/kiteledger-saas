@@ -151,7 +151,20 @@ The fast-install script:
 5. `npm install && npm run build`
 6. `php artisan storage:link`, sets `775` permissions on `storage/` and `bootstrap/cache/`, and clears caches.
 
-It **deliberately does not** run `php artisan migrate` or `db:seed` — the database is not configured yet. After it finishes, open `https://your-domain.com/install` and complete the wizard; the installer writes your DB credentials into `.env` and runs the migrations.
+It **deliberately does not** run `php artisan migrate` or `db:seed` — the database is not configured yet. After it finishes, complete setup either way:
+
+```bash
+# Browser wizard
+https://your-domain.com/install
+
+# OR terminal installer — recommended on a VPS. The migrate + seed can take a
+# minute or two; running it from the CLI avoids any HTTP request timeout that
+# would abort the browser installer mid-migration (a common "blank page on
+# /install/run" cause). Interactive prompts, or pass --help for all options.
+php artisan kiteledger:install
+```
+
+Both paths write your DB credentials into `.env` and run the migrations/seed.
 
 > Prefer to do it by hand? Run `composer install --no-dev --optimize-autoloader`, then `npm install && npm run build`, then open `/install`. Do **not** run `composer setup` for a production DB install — `composer setup` only builds the app and never touches the database.
 

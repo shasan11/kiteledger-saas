@@ -57,13 +57,18 @@ On Windows use `scripts\install-fast.bat` instead.
 
 The script runs `composer install`, copies `.env.example` → `.env` (only if missing), generates `APP_KEY`, runs `npm install && npm run build`, links storage, and clears caches. It **does not** run migrations.
 
-Then open:
+Then finish the database setup **either** in the browser **or** from the terminal:
 
-```
+```bash
+# Option 1 — browser wizard
 https://your-domain.com/install
+
+# Option 2 — terminal (recommended on a VPS: no request timeout on the
+# migrate + seed, which can take a minute or two)
+php artisan kiteledger:install
 ```
 
-and complete the wizard (DB + admin). The installer writes the DB credentials into `.env` and runs migrations for you.
+`kiteledger:install` runs interactively (prompts for DB + admin), or fully non-interactive with options — see `php artisan kiteledger:install --help`. Both paths run the exact same install pipeline and write the DB credentials into `.env` for you.
 
 **Important:**
 - Do **not** run `php artisan migrate` manually before `/install` — the database isn't configured yet.
