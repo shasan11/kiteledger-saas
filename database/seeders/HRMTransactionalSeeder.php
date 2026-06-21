@@ -29,8 +29,11 @@ class HRMTransactionalSeeder extends Seeder
 {
     public function run(): void
     {
-        // Disable FK checks for SQLite (role_id references roles table not present in this schema)
-        DB::statement('PRAGMA foreign_keys = OFF;');
+        // NOTE: an early `return;` below stops this seeder after the public
+        // holidays — the demo-employee block is intentionally dead code. The
+        // old `PRAGMA foreign_keys = OFF` workaround for those inserts was
+        // SQLite-only syntax and crashed MySQL installs (error 1064), so it is
+        // removed: nothing that actually runs here violates a foreign key.
 
         $branch          = Branch::first();
         $branchId        = $branch?->id;
