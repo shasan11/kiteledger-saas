@@ -738,12 +738,6 @@ export default function AuthenticatedLayout({ header, children }) {
 
         if (isActive('/reports')) return ['reports'];
 
-        if (isActive('/online-store/products')) return ['online-store-products'];
-        if (isActive('/online-store/orders')) return ['online-store-orders'];
-        if (isActive('/online-store/customers')) return ['online-store-customers'];
-        if (isActive('/online-store/coupons')) return ['online-store-coupons'];
-        if (isActive('/online-store')) return ['online-store-dashboard'];
-
         if (isActive('/configurations/application')) return ['config-application'];
         if (isActive('/configurations/users-permission')) return ['config-users-permission'];
         if (isActive('/configurations/import-export')) return ['config-import-export'];

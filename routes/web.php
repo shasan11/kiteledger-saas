@@ -59,7 +59,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__.'/menu/human-resource.php';
     require __DIR__.'/menu/hrm.php';
     require __DIR__.'/menu/reports.php';
-    require __DIR__.'/menu/online-store.php';
     require __DIR__.'/menu/configurations.php';
     require __DIR__.'/menu/master.php';
     require __DIR__.'/menu/tax.php';

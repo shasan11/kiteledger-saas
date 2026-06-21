@@ -811,7 +811,7 @@ export default function BankAccountShow({ id }) {
                                                 <Descriptions.Item label="Branch">{record?.branch?.name || '-'}</Descriptions.Item>
                                                 <Descriptions.Item label="Linked Accounting Account">
                                                     {record?.account ? (
-                                                        <Link href={route('accounting.accounts.index')}>
+                                                        <Link href={route('accounting.chart-of-accounts.index')}>
                                                             {accountLabel(record.account)}
                                                         </Link>
                                                     ) : '-'}

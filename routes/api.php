@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Documents\DocumentEntityMatchController;
 use App\Http\Controllers\Api\Documents\DocumentExtractionController;
 use App\Http\Controllers\Api\Documents\DocumentProposalController;
 use App\Http\Controllers\Api\Documents\DocumentUploadController;
+use App\Http\Controllers\Api\AI\AiAssistantController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
 use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\Reports\ReportAiSummaryController;
@@ -170,6 +171,8 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('app/context')->name('api
 Route::middleware(['web', 'auth', 'verified'])->prefix('branch-context')->name('api.branch-context.')->group(function () {
     Route::post('/select', [AppContextController::class, 'setBranch'])->name('select');
 });
+
+Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
@@ -1151,6 +1154,9 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 |--------------------------------------------------------------------------
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
+    Route::get('health',                              [AiAssistantController::class, 'health']);
+    Route::post('chat',                              [AiAssistantController::class, 'chat']);
+
     // Focused AI report summarizer and settings.
     Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize']);
 
@@ -1162,6 +1168,8 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
 
     // Usage logs
     Route::get('usage-logs',                            [AiUsageLogController::class, 'index']);
+});
+
 });
 
 });

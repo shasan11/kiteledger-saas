@@ -10,6 +10,34 @@ use Throwable;
 
 class AiAssistantController extends AiAgentChatController
 {
+    public function chat(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'message' => 'required|string|max:4000',
+            'conversation_id' => 'nullable|string',
+            'context_type' => 'nullable|string|max:60',
+            'context_payload' => 'nullable|array',
+            'cache' => 'nullable|boolean',
+        ]);
+
+        if (!$this->isReportRequest($data['message'], $data['context_payload'] ?? [])) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'AI_REPORTS_ONLY',
+                'message' => 'AI Assistant is limited to report questions for now. Ask it to open, explain, summarize, or analyze a report.',
+            ], 422);
+        }
+
+        $request->merge([
+            'context_type' => 'reports',
+            'context_payload' => array_merge($data['context_payload'] ?? [], [
+                'assistant_scope' => 'reports_only',
+            ]),
+        ]);
+
+        return parent::chat($request);
+    }
+
     public function health(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -26,6 +54,7 @@ class AiAssistantController extends AiAgentChatController
             'stream_enabled' => $this->settings->streamEnabled(),
             'cache_enabled' => $this->settings->cacheEnabled(),
             'fast_mode' => $this->settings->fastMode(),
+            'scope' => 'reports_only',
             'permissions' => $this->permissions->summary($user),
         ]);
     }
@@ -206,5 +235,19 @@ class AiAssistantController extends AiAgentChatController
         $text = preg_replace('/\s*```$/', '', $text);
         $decoded = json_decode($text, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    private function isReportRequest(string $message, array $payload): bool
+    {
+        if (($payload['module'] ?? null) === 'reports' || str_starts_with((string) ($payload['url'] ?? ''), '/reports')) {
+            return true;
+        }
+
+        $classification = $this->toolRouter->classify($message, $payload);
+        if (($classification['type'] ?? null) === 'report') {
+            return true;
+        }
+
+        return (bool) preg_match('/\b(report|reports|trial balance|balance sheet|profit and loss|p&l|cash flow|ledger|receivable|payable|sales summary|purchase summary|inventory report|tax report|payroll report|analytics)\b/i', $message);
     }
 }

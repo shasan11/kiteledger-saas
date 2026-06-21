@@ -37,14 +37,14 @@ import AiSuggestedQuestions from '@/Components/AI/AiSuggestedQuestions';
 const { Title, Paragraph, Text } = Typography;
 
 const SUGGESTED_PROMPTS = [
-    "Summarize today's sales",
+    'Open the sales report',
     'Explain this report',
-    'What receivables should I follow up?',
-    'Find inventory risks',
-    'What is my profit this month?',
-    'What should I check today?',
-    'Summarize this branch performance',
-    'Show business risks',
+    'Show trial balance report',
+    'Open receivables report',
+    'Summarize inventory report',
+    'Show profit and loss report',
+    'Open tax report',
+    'Find payroll report',
 ];
 
 function hasAnyPermission(perms = [], required = []) {
@@ -76,7 +76,7 @@ function HeaderTitle({ token }) {
                     AI Assistant
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                    Ask questions about sales, purchases, accounts, cash flow, receivables, payables, and documents.
+                    Ask it to find, explain, and summarize reports.
                 </Text>
             </div>
         </Space>
@@ -386,7 +386,7 @@ export default function Assistant() {
                     context_type: 'auto',
                     context_payload: {
                         url: page.url,
-                        module: page.props?.module || null,
+                        module: 'reports',
                     },
                     cache: true,
                 },
@@ -622,7 +622,7 @@ export default function Assistant() {
                                             description={
                                                 <Space direction="vertical" size={4}>
                                                     <Title level={4} style={{ margin: 0 }}>
-                                                        Ask about your business
+                                                        Ask about reports
                                                     </Title>
                                                     <Paragraph
                                                         type="secondary"
@@ -631,8 +631,8 @@ export default function Assistant() {
                                                             maxWidth: 460,
                                                         }}
                                                     >
-                                                        Use it for sales summaries, receivables, inventory risks,
-                                                        profit and loss, branch performance and daily checks.
+                                                        Use it to open, explain, and summarize reports while the
+                                                        broader assistant is paused.
                                                     </Paragraph>
                                                 </Space>
                                             }
@@ -688,7 +688,7 @@ export default function Assistant() {
                                     onChange={(e) => setInput(e.target.value)}
                                     placeholder={
                                         aiReady
-                                            ? 'Ask the AI assistant...'
+                                            ? 'Ask about reports...'
                                             : 'AI assistant is not ready.'
                                     }
                                     autoSize={{ minRows: 1, maxRows: 5 }}
