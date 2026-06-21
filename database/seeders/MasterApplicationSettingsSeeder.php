@@ -11,9 +11,11 @@ class MasterApplicationSettingsSeeder extends Seeder
 {
     public function run(): void
     {
-        $lightLogoPath = 'company/logos/light_logo.png';
-        $darkLogoPath = 'company/logos/dark_logo.png';
-        $faviconPath = 'company/logos/favicon.png';
+        // No logo files ship with the app — leave null so nothing points at a
+        // missing file (broken image). Users upload their own logo in Settings.
+        $lightLogoPath = null;
+        $darkLogoPath = null;
+        $faviconPath = null;
 
         AppSetting::updateOrCreate(
             ['company_name' => 'Demo Company Pvt. Ltd.'],

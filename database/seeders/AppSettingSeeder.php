@@ -11,9 +11,13 @@ class AppSettingSeeder extends Seeder
 {
     public function run(): void
     {
-        $lightLogoPath = 'company/logos/light_logo.png';
-        $darkLogoPath = 'company/logos/dark_logo.png';
-        $faviconPath = 'company/logos/favicon.png';
+        // No logo files ship with the app, so leave these null — otherwise the
+        // UI and invoice/print templates point at a non-existent file and show
+        // a broken image. The customer uploads their own logo in Settings, and
+        // the UI falls back to the built-in default mark until they do.
+        $lightLogoPath = null;
+        $darkLogoPath = null;
+        $faviconPath = null;
 
         AppSetting::query()->updateOrCreate(
             ['company_name' => 'KiteLedger Pvt. Ltd.'],

@@ -2,8 +2,6 @@
 
 namespace App\Support\Installer;
 
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class InstalledState
@@ -14,28 +12,19 @@ class InstalledState
     }
 
     /**
-     * The system is considered installed when the lock file exists, OR when an
-     * app key is configured and the database already has users (an existing
-     * deployment that pre-dates the installer). In the latter case we self-heal
-     * by writing the lock file so subsequent checks are cheap.
+     * Installed === the lock file exists. Nothing else.
+     *
+     * We deliberately do NOT infer "installed" from the database having users:
+     * the installer runs migrate:fresh + seed BEFORE it writes the lock, so a
+     * run that fails partway leaves users in the DB with no lock. Treating that
+     * as "installed" would permanently block /install with "already installed"
+     * and make the failure unrecoverable from the browser. The lock is written
+     * only after a fully successful install, so its presence is the one true
+     * signal. To re-run the installer, delete storage/app/installed.
      */
     public static function isInstalled(): bool
     {
-        if (is_file(self::lockPath())) {
-            return true;
-        }
-
-        try {
-            if (config('app.key') && Schema::hasTable('users') && DB::table('users')->exists()) {
-                self::mark();
-
-                return true;
-            }
-        } catch (\Throwable) {
-            // Database not reachable / not migrated yet → not installed.
-        }
-
-        return false;
+        return is_file(self::lockPath());
     }
 
     public static function mark(): void

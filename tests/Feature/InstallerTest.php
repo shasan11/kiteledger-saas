@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
 use App\Support\Installer\InstalledState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -57,8 +56,10 @@ class InstallerTest extends TestCase
 
     public function test_installer_is_blocked_once_installed(): void
     {
-        // Presence of a user makes the system "installed".
-        User::factory()->create();
+        // Installed === the lock file exists (a failed install that left users
+        // in the DB but no lock must remain re-runnable, so users alone do NOT
+        // count as installed).
+        InstalledState::mark();
 
         $this->get('/install')->assertRedirect('/');
         $this->postJson('/install/run', [])->assertStatus(403);

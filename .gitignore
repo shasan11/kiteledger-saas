@@ -21,9 +21,25 @@ auth.json
 node_modules/
 vendor/
 
- 
+
 
 _ide_helper.php
 
 Homestead.json
 Homestead.yaml
+
+# Environment — never commit real credentials/keys (ship .env.example only)
+.env
+.env.backup
+.env.production
+.env.*.local
+
+# Local dev database — must not ship in the repo or package
+/database/*.sqlite
+/database/*.sqlite-journal
+
+# Generated at runtime by the installer / Laravel
+/storage/app/installed
+/public/storage
+/public/hot
+/bootstrap/ssr
