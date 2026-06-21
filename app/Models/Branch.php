@@ -33,6 +33,8 @@ class Branch extends Model
         'track_location',
         'logo',
         'favicon',
+        'language_id',
+        'enabled_languages',
         'active',
         'is_system_generated',
         'user_add_id',
@@ -57,7 +59,13 @@ class Branch extends Model
             'active' => 'boolean',
             'is_system_generated' => 'boolean',
             'user_add_id' => 'integer',
+            'enabled_languages' => 'array',
         ];
+    }
+
+    public function language(): BelongsTo
+    {
+        return $this->belongsTo(Language::class);
     }
 
     public function bankAccounts(): HasMany

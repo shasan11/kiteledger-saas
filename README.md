@@ -9,27 +9,26 @@
 
 ## KiteLedger — Installation (CodeCanyon)
 
-KiteLedger ships with a **web installer** so you can set it up from the browser — no command line or manual `.env` editing required.
+KiteLedger ships with a **web installer** so you can set it up from the browser — no command line or manual `.env` editing required. **See [INSTALL.md](INSTALL.md) for the full setup guide**, including shared-hosting specific notes. Quick version below.
 
 ### Requirements
 - PHP **8.3+** with extensions: `pdo`, `mbstring`, `openssl`, `tokenizer`, `json`, `curl`, `fileinfo`, `ctype`, `xml`, `bcmath`
 - MySQL 8 / MariaDB 10.4+ / PostgreSQL (or SQLite for evaluation)
-- A web server (Apache/Nginx) with the document root pointing at the `public/` folder
-- Writable `storage/` and `bootstrap/cache/` directories
+- Writable `storage/`, `storage/app/public/`, `bootstrap/cache/`, and project root (for `.env`)
 
 ### Steps
-1. Upload/extract the files to your server and point the web root at `public/`.
-2. **Copy `.env.example` to `.env`** (it already contains a valid `APP_KEY`).
-3. Install PHP dependencies: `composer install --no-dev --optimize-autoloader`.
-4. Build front-end assets (prebuilt in the package; only needed if you change code): `npm install && npm run build`.
-5. Visit **`https://your-domain.com/install`** in a browser and follow the wizard:
-   - **Welcome → Requirements check** (PHP version, extensions, writable paths)
+1. Upload/extract **the entire package as-is** to your hosting account's web root (e.g. `public_html/`). Do **not** move the `public/` folder out and do **not** change your document root — the included root `.htaccess` already forwards requests into `public/` for you, which is exactly what most shared hosting needs. (If you're on a VPS/control panel and prefer pointing the document root at `public/` directly, that also works — see INSTALL.md.)
+2. `vendor/` and `public/build/` ship pre-built inside the package, so most customers don't need to run Composer or npm at all.
+3. Visit **`https://your-domain.com/install`** in a browser and follow the wizard:
+   - **Welcome → Requirements** (PHP version, extensions, vendor/build presence, writable paths, rewrite support)
    - **Database** — enter DB credentials and click *Test Connection*
-   - **Application** — app name, URL, timezone, default currency
+   - **Application** — app name, URL (auto-detected), timezone, default currency
    - **Company** — company name, legal name, email, phone, address, country, website
+   - **Branch** — your company's first (head office) branch
    - **Administrator** — name, email, password (becomes your Super Admin login)
-   - **Install** — writes `.env`, runs migrations + seeders, and creates your default currency, fiscal year, branch, company profile (`AppSetting`), Super Admin user, the default cheque format, and disabled Stripe/PayPal/Razorpay gateway rows.
-6. On the **Finish** screen, click **Go to Login** and sign in.
+   - **Language** — choose which languages to enable and your default (English, Spanish, French ship pre-translated; Nepali and Arabic are also included)
+   - **Install** — writes `.env`, runs migrations and a production-safe seed set (no demo data or sample logins), creates your branch, currency, fiscal year, company profile, Super Admin user, and disabled Stripe/PayPal/Razorpay gateway rows, then attempts `storage:link`.
+4. On the **Finish** screen, click **Go to Login** and sign in.
 
 ### After installation
 - The installer creates `storage/app/installed` (the install lock). While it exists, `/install` is blocked and redirects to the dashboard.

@@ -210,6 +210,8 @@ class LocalizationService
     {
         $known = [
             'en' => ['name' => 'English', 'native_name' => 'English', 'direction' => 'ltr'],
+            'es' => ['name' => 'Spanish', 'native_name' => 'Español', 'direction' => 'ltr'],
+            'fr' => ['name' => 'French', 'native_name' => 'Français', 'direction' => 'ltr'],
             'ne' => ['name' => 'Nepali', 'native_name' => 'नेपाली', 'direction' => 'ltr'],
             'ar' => ['name' => 'Arabic', 'native_name' => 'العربية', 'direction' => 'rtl'],
         ];

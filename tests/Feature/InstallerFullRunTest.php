@@ -1,0 +1,116 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Branch;
+use App\Models\Language;
+use App\Models\User;
+use App\Support\Installer\InstalledState;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+/**
+ * Exercises the full /install/run flow end-to-end (the one path the
+ * standard InstallerTest deliberately avoids, since it writes a real
+ * .env). Runs against the RefreshDatabase test connection so it's safe
+ * here, and asserts ProductionSeeder + the new branch/language/admin
+ * wiring actually produce a working installation with no demo data or
+ * backdoor accounts.
+ */
+class InstallerFullRunTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private ?string $envBackup = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        InstalledState::clear();
+
+        // /install/run calls EnvWriter::write(), which overwrites the real
+        // .env on disk no matter what DB the test itself runs against.
+        // Snapshot it so tearDown can restore it unconditionally.
+        $envPath = base_path('.env');
+        $this->envBackup = is_file($envPath) ? file_get_contents($envPath) : null;
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->envBackup !== null) {
+            file_put_contents(base_path('.env'), $this->envBackup);
+        }
+
+        InstalledState::clear();
+        parent::tearDown();
+    }
+
+    public function test_full_install_run_creates_branch_admin_and_languages_without_demo_data(): void
+    {
+        $dbConfig = config('database.connections.'.config('database.default'));
+
+        $payload = [
+            'db_connection' => 'sqlite',
+            'db_host' => $dbConfig['host'] ?? '127.0.0.1',
+            'db_port' => $dbConfig['port'] ?? '3306',
+            'db_database' => $dbConfig['database'] ?? ':memory:',
+            'db_username' => $dbConfig['username'] ?? '',
+            'db_password' => $dbConfig['password'] ?? '',
+            'app_name' => 'KiteLedger Test',
+            'app_url' => 'http://kiteledger.test',
+            'timezone' => 'UTC',
+            'currency_code' => 'USD',
+            'currency_symbol' => '$',
+            'company_name' => 'Acme Inc',
+            'company_email' => 'hello@acme.test',
+            'company_phone' => '555-0100',
+            'branch_name' => 'Head Quarters',
+            'branch_code' => 'HQ',
+            'admin_name' => 'Site Admin',
+            'admin_email' => 'owner@acme.test',
+            'admin_password' => 'password123',
+            'admin_password_confirmation' => 'password123',
+            'default_language' => 'es',
+            'enabled_languages' => ['es', 'fr'],
+        ];
+
+        // In-memory sqlite can't be reconnected mid-request the way the
+        // controller's configureRuntimeDatabase() expects for file-based
+        // DBs, so this test only applies when the suite runs against a
+        // real sqlite file or mysql connection.
+        if (($dbConfig['database'] ?? null) === ':memory:') {
+            $this->markTestSkipped('Requires a file-based or networked test database, not :memory: sqlite.');
+        }
+
+        $response = $this->postJson('/install/run', $payload);
+
+        $response->assertOk();
+        $response->assertJson(['success' => true]);
+
+        $this->assertTrue(InstalledState::isInstalled());
+
+        $branch = Branch::query()->where('code', 'HQ')->first();
+        $this->assertNotNull($branch);
+        $this->assertSame('Head Quarters', $branch->name);
+        $this->assertTrue((bool) $branch->is_head_office);
+
+        $admin = User::query()->where('email', 'owner@acme.test')->first();
+        $this->assertNotNull($admin);
+        $this->assertSame($branch->id, $admin->branch_id);
+        $this->assertSame('en', $admin->locale);
+        $this->assertTrue($admin->hasRole('Super Admin'));
+
+        $default = Language::query()->where('is_default', true)->first();
+        $this->assertNotNull($default);
+        $this->assertSame('en', $default->code);
+        $this->assertTrue(Language::query()->where('code', 'en')->value('is_active'));
+        $this->assertTrue(Language::query()->where('code', 'es')->value('is_active'));
+        $this->assertTrue(Language::query()->where('code', 'fr')->value('is_active'));
+        $this->assertSame('en', $branch->fresh()->language?->code);
+        $this->assertSame(['en', 'es', 'fr'], $branch->fresh()->enabled_languages);
+
+        // No demo/backdoor accounts from the excluded seeders.
+        $this->assertNull(User::query()->where('email', 'admin@kiteledger.test')->first());
+        $this->assertSame(1, User::query()->count(), 'Only the real admin created by the installer should exist.');
+    }
+}

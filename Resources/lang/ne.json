@@ -3080,5 +3080,11 @@
     "Your tax position for the selected period.": "Your tax position for the selected period.",
     "Your Webhook URL": "Your Webhook URL",
     "YYYY-MM-DD HH:mm:ss": "YYYY-MM-DD HH:mm:ss",
-    "Zero Rated": "Zero Rated"
+    "Zero Rated": "Zero Rated",
+    "Email": "Email",
+    "Password": "Password",
+    "Please enter a valid email address": "Please enter a valid email address",
+    "Email is required": "Email is required",
+    "Password must be at least 6 characters": "Password must be at least 6 characters",
+    "Password is required": "Password is required"
 }

@@ -4,26 +4,38 @@ namespace App\Http\Controllers\Install;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Branch;
 use App\Models\ChequeFormatConfiguration;
 use App\Models\Currency;
 use App\Models\FiscalYear;
+use App\Models\Language;
 use App\Models\PaymentGatewaySetting;
 use App\Models\User;
 use App\Support\Installer\EnvWriter;
 use App\Support\Installer\InstalledState;
+use Database\Seeders\ProductionSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use PDO;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 use Throwable;
 
 class InstallController extends Controller
 {
-    public function index()
+    /** Codes that ship pre-translated and seeded; keep in sync with LanguageSeeder. */
+    private const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'ne', 'ar'];
+
+    private const DEFAULT_LANGUAGE = 'en';
+
+    public function index(Request $request)
     {
-        return view('install.index');
+        return view('install.index', [
+            'detectedUrl' => rtrim($request->getSchemeAndHttpHost(), '/'),
+        ]);
     }
 
     /**
@@ -34,25 +46,52 @@ class InstallController extends Controller
         $extensions = ['pdo', 'mbstring', 'openssl', 'tokenizer', 'json', 'curl', 'fileinfo', 'ctype', 'xml', 'bcmath'];
 
         $checks = [
-            ['key' => 'php', 'label' => 'PHP >= 8.3', 'passed' => version_compare(PHP_VERSION, '8.3.0', '>='), 'hint' => 'Current: ' . PHP_VERSION],
+            ['key' => 'php', 'label' => 'PHP >= 8.3', 'passed' => version_compare(PHP_VERSION, '8.3.0', '>='), 'hint' => 'Current: '.PHP_VERSION],
         ];
 
         foreach ($extensions as $ext) {
             $checks[] = ['key' => "ext_$ext", 'label' => "PHP ext: $ext", 'passed' => extension_loaded($ext), 'hint' => ''];
         }
 
+        $checks[] = [
+            'key' => 'vendor',
+            'label' => 'Composer dependencies (vendor/)',
+            'passed' => is_file(base_path('vendor/autoload.php')),
+            'hint' => 'vendor/autoload.php missing — re-upload the full package or run composer install --no-dev.',
+        ];
+
+        $checks[] = [
+            'key' => 'build_assets',
+            'label' => 'Compiled front-end assets (public/build/)',
+            'passed' => is_file(public_path('build/manifest.json')),
+            'hint' => 'public/build/manifest.json missing — re-upload the full package or run npm run build.',
+        ];
+
+        $checks[] = [
+            'key' => 'htaccess',
+            'label' => 'URL rewriting (.htaccess / mod_rewrite)',
+            'passed' => is_file(base_path('.htaccess')) && is_file(public_path('.htaccess')),
+            'hint' => function_exists('apache_get_modules')
+                ? (in_array('mod_rewrite', apache_get_modules(), true) ? 'mod_rewrite detected.' : 'mod_rewrite not detected — enable it or use Nginx try_files rules (see INSTALL.md).')
+                : 'Could not detect mod_rewrite (normal on Nginx/LiteSpeed) — ensure your host honors .htaccess or has equivalent rewrite rules. See INSTALL.md.',
+        ];
+
         $writable = [
             'storage' => storage_path(),
+            'storage/app/public' => storage_path('app/public'),
+            'storage/framework' => storage_path('framework'),
+            'storage/logs' => storage_path('logs'),
             'bootstrap/cache' => base_path('bootstrap/cache'),
             '.env (project root)' => base_path(),
+            'public (for storage symlink)' => public_path(),
         ];
 
         foreach ($writable as $label => $path) {
-            $checks[] = ['key' => 'writable_' . $label, 'label' => "Writable: $label", 'passed' => is_writable($path), 'hint' => $path];
+            $checks[] = ['key' => 'writable_'.$label, 'label' => "Writable: $label", 'passed' => is_dir($path) ? is_writable($path) : false, 'hint' => $path];
         }
 
         return response()->json([
-            'passed' => collect($checks)->every(fn ($c) => $c['passed']),
+            'passed' => collect($checks)->every(fn ($c) => $c['passed'] || $c['key'] === 'htaccess'),
             'checks' => $checks,
         ]);
     }
@@ -67,7 +106,7 @@ class InstallController extends Controller
         try {
             $this->makePdo($data);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Connection failed: ' . $e->getMessage()], 422);
+            return response()->json(['success' => false, 'message' => 'Connection failed: '.$e->getMessage()], 422);
         }
 
         return response()->json(['success' => true, 'message' => 'Database connection successful.']);
@@ -97,16 +136,24 @@ class InstallController extends Controller
             'company_address' => ['nullable', 'string', 'max:500'],
             'company_country' => ['nullable', 'string', 'max:100'],
             'company_website' => ['nullable', 'string', 'max:180'],
+            'branch_name' => ['required', 'string', 'max:120'],
+            'branch_code' => ['nullable', 'string', 'max:30'],
             'admin_name' => ['required', 'string', 'max:120'],
             'admin_email' => ['required', 'email', 'max:180'],
             'admin_password' => ['required', 'string', 'min:8', 'confirmed'],
+            'default_language' => ['nullable', 'string', 'in:'.implode(',', self::SUPPORTED_LANGUAGES)],
+            'enabled_languages' => ['nullable', 'array'],
+            'enabled_languages.*' => ['string', 'in:'.implode(',', self::SUPPORTED_LANGUAGES)],
         ])->validate();
+
+        $data['default_language'] = self::DEFAULT_LANGUAGE;
+        $data['enabled_languages'] = $this->normalizeEnabledLanguages($data['enabled_languages'] ?? []);
 
         // Verify DB connectivity before touching the filesystem.
         try {
             $this->makePdo($db);
         } catch (Throwable $e) {
-            return response()->json(['success' => false, 'message' => 'Database connection failed: ' . $e->getMessage()], 422);
+            return response()->json(['success' => false, 'message' => 'Database connection failed: '.$e->getMessage()], 422);
         }
 
         try {
@@ -126,31 +173,57 @@ class InstallController extends Controller
             // 2. Point the running process at the new database.
             $this->configureRuntimeDatabase($db);
 
-            // 3. Migrate + seed.
+            // 3. Migrate + seed structural/config data only (no demo records or
+            // backdoor accounts — see database/seeders/ProductionSeeder.php).
             Artisan::call('migrate', ['--force' => true]);
-            Artisan::call('db:seed', ['--force' => true]);
+            Artisan::call('db:seed', ['--force' => true, '--class' => ProductionSeeder::class]);
 
-            // 4. Apply installer-specific data.
+            // 4. Link public storage when the host allows symlinks. Shared
+            // hosts often block this, so /storage also has a Laravel fallback.
+            $storage = $this->ensurePublicStorageAccess();
+
+            // 5. Apply installer-specific data.
             $currency = $this->ensureCurrency($data);
             $fiscalYear = FiscalYear::query()->where('is_current', true)->first()
                 ?? FiscalYear::query()->where('active', true)->orderByDesc('created_at')->first();
 
             $this->applyCompanySettings($data, $currency, $fiscalYear);
-            $this->createSuperAdmin($data);
+            $branch = $this->applyBranch($data);
+            $this->applyLanguages($data, $branch);
+            $this->createSuperAdmin($data, $branch);
             $this->ensurePaymentGateways();
             ChequeFormatConfiguration::activeDefault();
 
-            // 5. Lock.
+            // 6. Lock.
             InstalledState::mark();
         } catch (Throwable $e) {
             // Do not mark installed on failure; surface a readable error.
             return response()->json([
                 'success' => false,
-                'message' => 'Installation failed: ' . $e->getMessage(),
+                'message' => 'Installation failed: '.$e->getMessage(),
             ], 500);
         }
 
-        return response()->json(['success' => true, 'message' => 'Installation complete.', 'login_url' => url('/login')]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Installation complete.',
+            'login_url' => url('/login'),
+            'storage' => $storage ?? null,
+        ]);
+    }
+
+    private function normalizeEnabledLanguages(array $enabled): array
+    {
+        $enabled = array_values(array_unique(array_filter(
+            $enabled,
+            fn ($code) => is_string($code) && in_array($code, self::SUPPORTED_LANGUAGES, true),
+        )));
+
+        if (! in_array(self::DEFAULT_LANGUAGE, $enabled, true)) {
+            array_unshift($enabled, self::DEFAULT_LANGUAGE);
+        }
+
+        return $enabled;
     }
 
     private function validateDatabase(Request $request): array
@@ -180,13 +253,14 @@ class InstallController extends Controller
 
         if ($conn === 'sqlite') {
             $path = $db['database'];
-            if (!str_starts_with($path, '/') && !preg_match('/^[A-Za-z]:/', $path)) {
+            if (! str_starts_with($path, '/') && ! preg_match('/^[A-Za-z]:/', $path)) {
                 $path = base_path($path);
             }
-            if (!is_file($path)) {
+            if (! is_file($path)) {
                 @touch($path);
             }
-            return new PDO('sqlite:' . $path);
+
+            return new PDO('sqlite:'.$path);
         }
 
         $driver = $conn === 'pgsql' ? 'pgsql' : 'mysql';
@@ -223,7 +297,7 @@ class InstallController extends Controller
 
         $currency = Currency::query()->where('code', $code)->first();
 
-        if (!$currency) {
+        if (! $currency) {
             $currency = Currency::query()->create([
                 'code' => $code,
                 'name' => $code,
@@ -245,7 +319,7 @@ class InstallController extends Controller
 
     private function applyCompanySettings(array $data, Currency $currency, ?FiscalYear $fiscalYear): void
     {
-        $settings = AppSetting::query()->first() ?? new AppSetting();
+        $settings = AppSetting::query()->first() ?? new AppSetting;
 
         $settings->fill([
             'company_name' => $data['company_name'],
@@ -263,7 +337,100 @@ class InstallController extends Controller
         $settings->save();
     }
 
-    private function createSuperAdmin(array $data): void
+    private function applyBranch(array $data): Branch
+    {
+        $branch = Branch::query()->where('is_head_office', true)->first()
+            ?? Branch::query()->orderBy('created_at')->first();
+
+        $code = $data['branch_code'] ?? null;
+
+        $attributes = [
+            'name' => $data['branch_name'],
+            'email' => $data['company_email'] ?? null,
+            'phone' => $data['company_phone'] ?? null,
+            'address' => $data['company_address'] ?? null,
+            'is_head_office' => true,
+            'active' => true,
+        ];
+
+        if ($code) {
+            $attributes['code'] = $code;
+        }
+
+        if ($branch) {
+            $branch->forceFill($attributes)->save();
+
+            return $branch;
+        }
+
+        return Branch::query()->create($attributes + [
+            'code' => $code ?: 'MAIN',
+            'is_transaction_enabled' => true,
+            'is_pos_enabled' => true,
+            'is_warehouse_enabled' => true,
+            'is_ai_enabled' => true,
+            'is_billing_location_enabled' => true,
+            'abbreviated_tax_enabled' => true,
+            'track_location' => true,
+            'is_system_generated' => true,
+        ]);
+    }
+
+    private function ensurePublicStorageAccess(): array
+    {
+        $target = storage_path('app/public');
+        $link = public_path('storage');
+
+        if (! is_dir($target)) {
+            @mkdir($target, 0775, true);
+        }
+
+        $error = null;
+
+        try {
+            Artisan::call('storage:link');
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+        }
+
+        $targetReal = realpath($target);
+        $linkReal = file_exists($link) ? realpath($link) : false;
+        $linked = is_link($link) || ($targetReal && $linkReal && $targetReal === $linkReal);
+
+        return [
+            'linked' => (bool) $linked,
+            'url' => url('/storage'),
+            'message' => $linked
+                ? 'public/storage is linked to storage/app/public.'
+                : 'Storage symlink was not created, but /storage files are served through the built-in fallback route.',
+            'error' => $linked ? null : $error,
+        ];
+    }
+
+    private function applyLanguages(array $data, Branch $branch): void
+    {
+        $enabled = $data['enabled_languages'];
+        $default = $data['default_language'];
+
+        if (! in_array($default, $enabled, true)) {
+            $enabled[] = $default;
+        }
+
+        Language::query()->update(['is_active' => false, 'is_default' => false]);
+        Language::query()->whereIn('code', $enabled)->update(['is_active' => true]);
+        Language::query()->where('code', $default)->update(['is_default' => true, 'is_active' => true]);
+
+        $settings = AppSetting::query()->first();
+        $settings?->forceFill(['language' => $default])->save();
+
+        $defaultLanguage = Language::query()->where('code', $default)->first();
+        $branch->forceFill([
+            'language_id' => $defaultLanguage?->id,
+            'enabled_languages' => $enabled,
+        ])->save();
+    }
+
+    private function createSuperAdmin(array $data, Branch $branch): void
     {
         $user = User::query()->updateOrCreate(
             ['email' => $data['admin_email']],
@@ -271,13 +438,23 @@ class InstallController extends Controller
                 'name' => $data['admin_name'],
                 'username' => str($data['admin_email'])->before('@')->slug()->value(),
                 'password' => Hash::make($data['admin_password']),
+                'branch_id' => $branch->id,
+                'locale' => $data['default_language'],
                 'active' => true,
                 'is_system_generated' => false,
             ]
         );
 
         try {
-            $roleClass = \Spatie\Permission\Models\Role::class;
+            if (class_exists(PermissionRegistrar::class)) {
+                app(PermissionRegistrar::class)->forgetCachedPermissions();
+            }
+
+            // Use the app's configured Role model (App\Models\Role, UUID-keyed)
+            // rather than Spatie's base class — they share a table, but the
+            // base class's integer key assumptions corrupt the uuid role_id
+            // written into model_has_roles via syncRoles().
+            $roleClass = config('permission.models.role', Role::class);
             $role = $roleClass::findOrCreate('Super Admin', 'web');
             $user->syncRoles([$role]);
         } catch (Throwable) {

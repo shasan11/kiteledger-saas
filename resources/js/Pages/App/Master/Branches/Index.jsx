@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/react';
 import * as Yup from 'yup';
 import { Tag } from 'antd';
 import { BankOutlined } from '@ant-design/icons';
+import { useEffect, useState } from 'react';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -14,6 +15,20 @@ const withPhonePrefix = (value) => {
 };
 
 export default function Branches(props) {
+  const [languages, setLanguages] = useState([]);
+
+  useEffect(() => {
+    fetch('/localization/languages', { headers: { Accept: 'application/json' } })
+      .then((res) => (res.ok ? res.json() : { languages: [] }))
+      .then((data) => setLanguages(data.languages || []))
+      .catch(() => setLanguages([]));
+  }, []);
+
+  const languageOptions = languages.map((lang) => ({
+    value: lang.id,
+    label: lang.native || lang.native_name || lang.name || lang.code,
+  }));
+
   const columns = [
     { title: 'Code', dataIndex: 'code', key: 'code', sorter: true },
     { title: 'Name', dataIndex: 'name', key: 'name', sorter: true },
@@ -54,6 +69,10 @@ export default function Branches(props) {
       { name: 'logo', label: 'Logo', type: 'text', col: 12 },
       { name: 'favicon', label: 'Favicon', type: 'text', col: 12 },
     ] },
+    { type: 'group', label: 'Language', col: 24, children: [
+      { name: 'language_id', label: 'Branch Default Language', type: 'select', col: 12, options: languageOptions, placeholder: 'Use company default' },
+      { name: 'enabled_languages_text', label: 'Enabled Language Codes', type: 'text', col: 12, placeholder: 'e.g. en,es,fr (blank = all)' },
+    ] },
   ];
 
   const validationSchema = Yup.object().shape({
@@ -73,6 +92,8 @@ export default function Branches(props) {
     logo: Yup.string().nullable(),
     favicon: Yup.string().nullable(),
     address: Yup.string().nullable(),
+    language_id: Yup.string().nullable(),
+    enabled_languages_text: Yup.string().nullable(),
   });
 
   const crudInitialValues = {
@@ -92,6 +113,8 @@ export default function Branches(props) {
     logo: '',
     favicon: '',
     address: '',
+    language_id: null,
+    enabled_languages_text: '',
   };
 
   const transformPayload = (values) => {
@@ -107,6 +130,12 @@ export default function Branches(props) {
     payload.is_billing_location_enabled = Boolean(payload.is_billing_location_enabled);
     payload.abbreviated_tax_enabled = Boolean(payload.abbreviated_tax_enabled);
     payload.track_location = Boolean(payload.track_location);
+    payload.enabled_languages = String(payload.enabled_languages_text || '')
+      .split(',')
+      .map((code) => code.trim())
+      .filter(Boolean);
+    if (!payload.enabled_languages.length) payload.enabled_languages = null;
+    delete payload.enabled_languages_text;
     Object.keys(payload).forEach((key) => payload[key] === '' && (payload[key] = null));
     return payload;
   };

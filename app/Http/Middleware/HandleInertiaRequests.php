@@ -54,7 +54,7 @@ class HandleInertiaRequests extends Middleware
             'locale' => [
                 'current' => $locale,
                 'fallback' => LocalizationService::FALLBACK_LOCALE,
-                'supported' => $localization->supportedPayload(),
+                'supported' => $this->supportedLanguagesForUser($localization, $user),
                 'dir' => $dir,
             ],
             'translations' => fn () => $localization->translationsFor($locale),
@@ -86,6 +86,29 @@ class HandleInertiaRequests extends Middleware
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Limit the language switcher to a branch's enabled languages, if configured.
+     * Falls back to every active language when the branch hasn't restricted any.
+     */
+    protected function supportedLanguagesForUser(LocalizationService $localization, $user): array
+    {
+        $supported = $localization->supportedPayload();
+
+        try {
+            $enabled = $user?->branch?->enabled_languages;
+        } catch (\Throwable) {
+            $enabled = null;
+        }
+
+        if (empty($enabled)) {
+            return $supported;
+        }
+
+        $filtered = array_values(array_filter($supported, fn ($language) => in_array($language['code'], $enabled, true)));
+
+        return $filtered ?: $supported;
     }
 
     protected function canBypassPermissions($user): bool

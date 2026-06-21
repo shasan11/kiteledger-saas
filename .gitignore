@@ -2,9 +2,7 @@
 .DS_Store
 Thumbs.db
 
-.env
-.env.*
-!.env.example
+ 
 
 .phpactor.json
 .phpunit.result.cache

@@ -31,6 +31,7 @@ class SetLocale
         $candidates = [
             $request->session()->get('locale'),
             $this->userLocale($request),
+            $this->branchLocale($request),
             $this->appSettingLocale(),
             config('app.locale'),
             $this->localization->defaultLocale(),
@@ -63,6 +64,21 @@ class SetLocale
         }
 
         return null;
+    }
+
+    private function branchLocale(Request $request): ?string
+    {
+        $user = $request->user();
+
+        if (!$user || !$user->branch_id) {
+            return null;
+        }
+
+        try {
+            return $user->branch?->language?->code;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function appSettingLocale(): ?string

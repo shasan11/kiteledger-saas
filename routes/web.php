@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Documents\DocumentUploadPageController;
 use App\Http\Controllers\Install\InstallController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\DashboardController;
+use App\Http\Middleware\RedirectIfInstalled;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 /*
@@ -15,13 +17,20 @@ use Inertia\Inertia;
 | Requires a valid APP_KEY in .env — copy .env.example to .env first.
 */
 Route::prefix('install')
-    ->middleware(\App\Http\Middleware\RedirectIfInstalled::class)
+    ->middleware(RedirectIfInstalled::class)
     ->group(function () {
         Route::get('/', [InstallController::class, 'index'])->name('install.index');
         Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.requirements');
         Route::post('/database', [InstallController::class, 'testDatabase'])->name('install.database');
         Route::post('/run', [InstallController::class, 'run'])->name('install.run');
     });
+
+Route::get('/storage/{path}', function (string $path) {
+    abort_if(str_contains($path, '..') || str_starts_with($path, '/'), 404);
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('path', '.*')->name('public.storage');
 
 Route::get('/', function () {
     return redirect()->route('dashboard');

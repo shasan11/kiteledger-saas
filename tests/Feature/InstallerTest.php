@@ -54,4 +54,57 @@ class InstallerTest extends TestCase
         $this->get('/install')->assertRedirect('/');
         $this->postJson('/install/run', [])->assertStatus(403);
     }
+
+    /**
+     * Validation for the new branch/admin fields must fail before
+     * the controller ever calls EnvWriter::write() (which would overwrite
+     * the real .env) — db_* fields are valid here specifically so the
+     * second validator (app/company/branch/admin) is reached.
+     */
+    public function test_run_validates_branch_fields_before_writing_env(): void
+    {
+        $response = $this->postJson('/install/run', [
+            'db_connection' => 'sqlite',
+            'db_database' => 'database/this_file_need_not_exist.sqlite',
+            'app_name' => 'KiteLedger',
+            'app_url' => 'http://localhost',
+            'timezone' => 'UTC',
+            'currency_code' => 'USD',
+            'company_name' => 'Acme Inc',
+            // branch_name intentionally omitted
+            'admin_name' => 'Admin',
+            'admin_email' => 'admin@example.com',
+            'admin_password' => 'password123',
+            'admin_password_confirmation' => 'password123',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['branch_name']);
+
+        // The real .env on disk must be untouched.
+        $this->assertFileExists(base_path('.env'));
+    }
+
+    public function test_run_rejects_unsupported_language_code(): void
+    {
+        $response = $this->postJson('/install/run', [
+            'db_connection' => 'sqlite',
+            'db_database' => 'database/this_file_need_not_exist.sqlite',
+            'app_name' => 'KiteLedger',
+            'app_url' => 'http://localhost',
+            'timezone' => 'UTC',
+            'currency_code' => 'USD',
+            'company_name' => 'Acme Inc',
+            'branch_name' => 'Main Branch',
+            'admin_name' => 'Admin',
+            'admin_email' => 'admin@example.com',
+            'admin_password' => 'password123',
+            'admin_password_confirmation' => 'password123',
+            'default_language' => 'de',
+            'enabled_languages' => ['de'],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['default_language', 'enabled_languages.0']);
+    }
 }

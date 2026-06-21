@@ -1,4 +1,5 @@
 import GuestLayout from '@/Layouts/GuestLayout';
+import { useTrans } from '@/lib/i18n';
 import { Head, Link, router } from '@inertiajs/react';
 import { Button, Checkbox, Form, Input, Alert } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
@@ -6,19 +7,20 @@ import { Formik } from 'formik';
 import * as Yup from 'yup';
 import { useState } from 'react';
 
-const LoginSchema = Yup.object().shape({
-    email: Yup.string()
-        .email('Please enter a valid email address')
-        .required('Email is required'),
-    password: Yup.string()
-        .min(6, 'Password must be at least 6 characters')
-        .required('Password is required'),
-    remember: Yup.boolean(),
-});
-
 export default function Login({ status, canResetPassword }) {
+    const t = useTrans();
     const [processing, setProcessing] = useState(false);
     const [serverErrors, setServerErrors] = useState({});
+
+    const LoginSchema = Yup.object().shape({
+        email: Yup.string()
+            .email(t('Please enter a valid email address'))
+            .required(t('Email is required')),
+        password: Yup.string()
+            .min(6, t('Password must be at least 6 characters'))
+            .required(t('Password is required')),
+        remember: Yup.boolean(),
+    });
 
     const handleSubmit = (values, { setSubmitting, resetForm }) => {
         setProcessing(true);
@@ -40,7 +42,7 @@ export default function Login({ status, canResetPassword }) {
 
     return (
         <GuestLayout>
-            <Head title="Log in" />
+            <Head title={t('Log in')} />
 
             {status && (
                 <Alert
@@ -75,7 +77,7 @@ export default function Login({ status, canResetPassword }) {
                         autoComplete="off"
                     >
                         <Form.Item
-                            label="Email"
+                            label={t('Email')}
                             validateStatus={
                                 (touched.email && errors.email) ||
                                 serverErrors.email
@@ -93,7 +95,7 @@ export default function Login({ status, canResetPassword }) {
                                 type="email"
                                 size="large"
                                 prefix={<MailOutlined />}
-                                placeholder="Enter your email"
+                                placeholder={t('Enter your email')}
                                 value={values.email}
                                 onChange={handleChange}
                                 onBlur={handleBlur}
@@ -103,7 +105,7 @@ export default function Login({ status, canResetPassword }) {
                         </Form.Item>
 
                         <Form.Item
-                            label="Password"
+                            label={t('Password')}
                             validateStatus={
                                 (touched.password && errors.password) ||
                                 serverErrors.password
@@ -120,7 +122,7 @@ export default function Login({ status, canResetPassword }) {
                                 name="password"
                                 size="large"
                                 prefix={<LockOutlined />}
-                                placeholder="Enter your password"
+                                placeholder={t('Enter your password')}
                                 value={values.password}
                                 onChange={handleChange}
                                 onBlur={handleBlur}
@@ -136,7 +138,7 @@ export default function Login({ status, canResetPassword }) {
                                     setFieldValue('remember', e.target.checked)
                                 }
                             >
-                                Remember me
+                                {t('Remember me')}
                             </Checkbox>
                         </Form.Item>
 
@@ -147,7 +149,7 @@ export default function Login({ status, canResetPassword }) {
                                         href={route('password.request')}
                                         className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                                     >
-                                        Forgot your password?
+                                        {t('Forgot your password?')}
                                     </Link>
                                 )}
 
@@ -158,7 +160,7 @@ export default function Login({ status, canResetPassword }) {
                                     loading={processing}
                                     className="ms-4"
                                 >
-                                    Log in
+                                    {t('Log in')}
                                 </Button>
                             </div>
                         </Form.Item>
