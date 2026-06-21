@@ -76,7 +76,7 @@ return new class extends Migration
                 $table->boolean('is_system_generated')->default(false);
             }
             if (!Schema::hasColumn('users', 'user_add_id')) {
-                $table->foreignUuid('user_add_id')->nullable()->constrained('users')->nullOnDelete();
+                $table->foreignId('user_add_id')->nullable()->constrained('users')->nullOnDelete();
             }
         });
     }

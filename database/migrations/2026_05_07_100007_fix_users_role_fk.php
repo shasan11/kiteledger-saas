@@ -58,7 +58,7 @@ return new class extends Migration
                 "weekly_holiday_id" varchar,
                 "active" tinyint(1) not null default \'1\',
                 "is_system_generated" tinyint(1) not null default \'0\',
-                "user_add_id" varchar,
+                "user_add_id" integer,
                 foreign key("branch_id") references "branches"("id") on delete set null on update no action,
                 foreign key("employment_status_id") references "employment_statuses"("id") on delete set null,
                 foreign key("department_id") references "departments"("id") on delete set null,
