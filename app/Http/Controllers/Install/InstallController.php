@@ -58,14 +58,14 @@ class InstallController extends Controller
             'key' => 'vendor',
             'label' => 'Composer dependencies (vendor/)',
             'passed' => is_file(base_path('vendor/autoload.php')),
-            'hint' => 'vendor/autoload.php missing — re-upload the full package or run composer install --no-dev.',
+            'hint' => 'Composer dependencies are missing. If you installed from GitHub, run: composer install --no-dev --optimize-autoloader. If this is a packaged ZIP, make sure the vendor folder is included.',
         ];
 
         $checks[] = [
             'key' => 'build_assets',
             'label' => 'Compiled front-end assets (public/build/)',
             'passed' => is_file(public_path('build/manifest.json')),
-            'hint' => 'public/build/manifest.json missing — re-upload the full package or run npm run build.',
+            'hint' => 'Frontend build files are missing. Run: npm install && npm run build. For packaged ZIP, make sure public/build is included.',
         ];
 
         $checks[] = [
@@ -210,6 +210,11 @@ class InstallController extends Controller
 
             // 6. Lock.
             InstalledState::mark();
+
+            // 7. Now that .env is finalized and the database is fully set up,
+            // cache config/routes/views for production speed. Best-effort —
+            // a cache failure must never fail an otherwise-complete install.
+            $this->optimizeForProduction();
         } catch (Throwable $e) {
             // Do not mark installed on failure; surface a readable error.
             return response()->json([
@@ -473,6 +478,22 @@ class InstallController extends Controller
             $user->syncRoles([$role]);
         } catch (Throwable) {
             // Spatie not fully seeded — non-fatal; user still has credentials.
+        }
+    }
+
+    /**
+     * Cache config, routes and views for production. Only safe to call once
+     * .env is finalized and the database install has completed — never cache
+     * config before DB setup, or the app caches the placeholder credentials.
+     */
+    private function optimizeForProduction(): void
+    {
+        foreach (['config:cache', 'route:cache', 'view:cache'] as $command) {
+            try {
+                Artisan::call($command);
+            } catch (Throwable) {
+                // Non-fatal; the app still runs without compiled caches.
+            }
         }
     }
 

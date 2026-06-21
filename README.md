@@ -7,33 +7,86 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
-## KiteLedger — Installation (CodeCanyon)
+## KiteLedger — Installation
 
-KiteLedger ships with a **web installer** so you can set it up from the browser — no command line or manual `.env` editing required. **See [INSTALL.md](INSTALL.md) for the full setup guide**, including shared-hosting specific notes. Quick version below.
+KiteLedger ships with a **web installer** at `/install` that handles the database, company profile, admin user and install lock from the browser. In **every** case the database is set up by the installer — **never** run `php artisan migrate` by hand before opening `/install`.
 
-### Requirements
+There are two ways to get the files onto your server. Pick the one that matches how you obtained KiteLedger:
+
+| | A. CodeCanyon / packaged ZIP | B. GitHub / developer clone |
+|---|---|---|
+| `vendor/` included? | ✅ Yes (pre-built) | ❌ No — you must run Composer |
+| `public/build/` included? | ✅ Yes (pre-built) | ❌ Usually no — you must run npm |
+| Composer needed? | ❌ No | ✅ Yes |
+| Node / npm needed? | ❌ No | ✅ Yes |
+
+> **See [INSTALL.md](INSTALL.md) for the full guide**, including shared-hosting, Nginx and FastPanel notes. Quick versions below.
+
+### Requirements (both modes)
 - PHP **8.3+** with extensions: `pdo`, `mbstring`, `openssl`, `tokenizer`, `json`, `curl`, `fileinfo`, `ctype`, `xml`, `bcmath`
 - MySQL 8 / MariaDB 10.4+ / PostgreSQL (or SQLite for evaluation)
 - Writable `storage/`, `storage/app/public/`, `bootstrap/cache/`, and project root (for `.env`)
 
-### Steps
-1. Upload/extract **the entire package as-is** to your hosting account's web root (e.g. `public_html/`). Do **not** move the `public/` folder out and do **not** change your document root — the included root `.htaccess` already forwards requests into `public/` for you, which is exactly what most shared hosting needs. (If you're on a VPS/control panel and prefer pointing the document root at `public/` directly, that also works — see INSTALL.md.)
-2. `vendor/` and `public/build/` ship pre-built inside the package, so most customers don't need to run Composer or npm at all.
-3. Visit **`https://your-domain.com/install`** in a browser and follow the wizard:
-   - **Welcome → Requirements** (PHP version, extensions, vendor/build presence, writable paths, rewrite support)
-   - **Database** — enter DB credentials and click *Test Connection*
-   - **Application** — app name, URL (auto-detected), timezone, default currency
-   - **Company** — company name, legal name, email, phone, address, country, website
-   - **Branch** — your company's first (head office) branch
-   - **Administrator** — name, email, password (becomes your Super Admin login)
-   - **Language** — choose which languages to enable and your default (English, Spanish, French ship pre-translated; Nepali and Arabic are also included)
-   - **Install** — writes `.env`, runs migrations and a production-safe seed set (no demo data or sample logins), creates your branch, currency, fiscal year, company profile, Super Admin user, and disabled Stripe/PayPal/Razorpay gateway rows, then attempts `storage:link`.
-4. On the **Finish** screen, click **Go to Login** and sign in.
+---
+
+### A. CodeCanyon / packaged ZIP installation
+
+The ZIP already contains `vendor/` and `public/build/`, so **no Composer and no npm are required**.
+
+1. **Upload/extract** the entire package as-is to your hosting account.
+2. **Document root:** on shared hosting (cPanel/Plesk), extract into your web root and leave `public/` where it is — the bundled root `.htaccess` forwards requests into `public/`. On a VPS/Nginx/FastPanel, point the document root at the **`public/`** folder.
+3. **Make writable:** `storage/` and `bootstrap/cache/` (and the project root so the installer can write `.env`).
+4. Open **`https://your-domain.com/install`**.
+5. Enter your **database details** and **admin details** in the wizard.
+6. **Finish** — click *Go to Login* and sign in.
+
+---
+
+### B. GitHub / developer installation
+
+The repo does **not** include `vendor/`, and `public/build/` may be absent — so Composer and Node are required. Use the bundled fast-install script:
+
+```bash
+git clone https://github.com/shasan11/kiteledger-saas.git kiteledger
+cd kiteledger
+chmod +x scripts/install-fast.sh
+./scripts/install-fast.sh
+```
+
+On Windows use `scripts\install-fast.bat` instead.
+
+The script runs `composer install`, copies `.env.example` → `.env` (only if missing), generates `APP_KEY`, runs `npm install && npm run build`, links storage, and clears caches. It **does not** run migrations.
+
+Then open:
+
+```
+https://your-domain.com/install
+```
+
+and complete the wizard (DB + admin). The installer writes the DB credentials into `.env` and runs migrations for you.
+
+**Important:**
+- Do **not** run `php artisan migrate` manually before `/install` — the database isn't configured yet.
+- Do **not** use `composer setup` for a production DB install; `composer setup` only builds the app, it does not touch the database.
+- FastPanel/Nginx document root should point to **`/public`**.
+
+---
+
+### The wizard (both modes)
+- **Welcome → Requirements** (PHP version, extensions, vendor/build presence, writable paths, rewrite support)
+- **Database** — enter DB credentials and click *Test Connection*
+- **Application** — app name, URL (auto-detected), timezone, default currency
+- **Company / Branch / Administrator** — your company profile, head-office branch, and Super Admin login
+- **Language** — English, Spanish, French ship pre-translated; Nepali and Arabic are also included
+- **Install** — writes `.env`, runs migrations and a production-safe seed set (no demo data or sample logins), creates your branch/currency/fiscal year/company profile/Super Admin/disabled gateway rows, attempts `storage:link`, then caches config/routes/views for production.
+
+### Health check
+Run `php artisan kiteledger:doctor` at any time to verify the deployment (vendor, `.env`, `APP_KEY`, writable paths, `public/build`, DB connection, install lock).
 
 ### After installation
 - The installer creates `storage/app/installed` (the install lock). While it exists, `/install` is blocked and redirects to the dashboard.
 - To re-run the installer (e.g. a staging reset), delete `storage/app/installed`.
-- Configure payment gateways under **Settings → Online Payments** (Stripe / PayPal / Razorpay) and your cheque layout under **Settings → Cheque Format Editor**.
+- Configure payment gateways under **Settings → Online Payments** and your cheque layout under **Settings → Cheque Format Editor**.
 
 ### Notes
 - The system is never marked installed unless every step completes successfully; failures show a readable error and leave it un-installed.

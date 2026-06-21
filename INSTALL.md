@@ -1,6 +1,15 @@
 # KiteLedger — Installation Guide
 
-This guide walks through deploying KiteLedger on shared hosting (cPanel, Plesk, etc.) or a VPS. No coding experience required — the web installer does the heavy lifting.
+This guide walks through deploying KiteLedger on shared hosting (cPanel, Plesk, etc.) or a VPS. The web installer at `/install` does the database/admin setup in every case.
+
+## 0. Two installation modes — read this first
+
+How you obtained KiteLedger decides whether you need Composer/npm:
+
+- **A. CodeCanyon / packaged ZIP** — the ZIP **includes `vendor/` and `public/build/`**, so you do **not** need Composer or npm. Upload, set permissions, open `/install`. Composer is *only* unnecessary because the `vendor/` folder is already inside the ZIP.
+- **B. GitHub clone (developers)** — the repo **does not include `vendor/`**, and `public/build/` may also be absent. You **must** run `composer install` (and `npm install && npm run build`) before the app will boot. See [§9](#9-github-clone-developer-install).
+
+In **both** modes the **web installer handles database migrations** — do **not** run `php artisan migrate` manually before opening `/install`.
 
 ## 1. Server requirements
 
@@ -11,9 +20,11 @@ This guide walks through deploying KiteLedger on shared hosting (cPanel, Plesk, 
 
 The installer checks all of this for you on the **Requirements** step and tells you exactly what's missing.
 
-## 2. Upload the files
+## 2. Upload the files (packaged ZIP / mode A)
 
-The package already includes everything needed to run — `vendor/` (Composer dependencies) and `public/build/` (compiled CSS/JS) are pre-built, so you do **not** need to run `composer install` or `npm run build` on the server.
+> Installing from a **GitHub clone**? Skip to [§9](#9-github-clone-developer-install) first to build the app, then come back to run the installer.
+
+The **CodeCanyon package** already includes everything needed to run — `vendor/` (Composer dependencies) and `public/build/` (compiled CSS/JS) are pre-built, so you do **not** need to run `composer install` or `npm run build` on the server. (This is only true because the ZIP bundles the `vendor/` folder.)
 
 **Do not move or rename any folder.** Upload/extract the entire package exactly as it is into your hosting account's web root.
 
@@ -118,3 +129,54 @@ Each branch can have its own default language and its own restricted set of enab
 5. English (final fallback)
 
 Leave a branch's "Enabled Language Codes" field blank to let users at that branch choose from every language installed company-wide.
+
+## 9. GitHub clone (developer install)
+
+The GitHub repository **does not ship `vendor/`** (it's git-ignored), and `public/build/` may also be absent. So unlike the CodeCanyon ZIP, **Composer is required** here — Laravel cannot boot without `vendor/autoload.php`.
+
+```bash
+git clone https://github.com/shasan11/kiteledger-saas.git kiteledger
+cd kiteledger
+chmod +x scripts/install-fast.sh
+./scripts/install-fast.sh
+```
+
+On Windows: run `scripts\install-fast.bat`.
+
+The fast-install script:
+1. Checks PHP, Composer, Node and npm are installed.
+2. `composer install --no-dev --optimize-autoloader`
+3. Copies `.env.example` → `.env` (only if `.env` doesn't already exist).
+4. Runs `php artisan key:generate` (only if `APP_KEY` is empty).
+5. `npm install && npm run build`
+6. `php artisan storage:link`, sets `775` permissions on `storage/` and `bootstrap/cache/`, and clears caches.
+
+It **deliberately does not** run `php artisan migrate` or `db:seed` — the database is not configured yet. After it finishes, open `https://your-domain.com/install` and complete the wizard; the installer writes your DB credentials into `.env` and runs the migrations.
+
+> Prefer to do it by hand? Run `composer install --no-dev --optimize-autoloader`, then `npm install && npm run build`, then open `/install`. Do **not** run `composer setup` for a production DB install — `composer setup` only builds the app and never touches the database.
+
+**Verify the deployment any time:**
+```bash
+php artisan kiteledger:doctor
+```
+It reports PASS/FAIL for PHP version, `vendor/autoload.php`, `.env`, `APP_KEY`, writable `storage/` and `bootstrap/cache/`, `public/build`, the DB connection (once configured), the install lock and Node.
+
+## 10. FastPanel / Nginx setup
+
+**Recommended document root:**
+```
+/path/to/kiteledger/public
+```
+Point the site's document root at the **`public/`** folder (not the project root). Nginx does not read `.htaccess`, so exposing the project root there would serve internal files.
+
+**Required PHP version:** PHP **8.3** (or whatever satisfies `composer.json`).
+
+**Required Node** (only to build assets from a GitHub clone): **Node 22.12+** or **Node 20.19+** — Vite requires it.
+
+**Required writable paths:**
+```
+storage/
+bootstrap/cache/
+```
+
+**Never expose the Laravel project root publicly** if Nginx does not support `.htaccess` — always serve from `public/`. If your host forces the document root at the project root, use the `try_files` rewrite in [§6](#6-nginx-users).
