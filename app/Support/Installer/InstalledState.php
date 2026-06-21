@@ -4,6 +4,7 @@ namespace App\Support\Installer;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 class InstalledState
 {
@@ -27,6 +28,7 @@ class InstalledState
         try {
             if (config('app.key') && Schema::hasTable('users') && DB::table('users')->exists()) {
                 self::mark();
+
                 return true;
             }
         } catch (\Throwable) {
@@ -38,7 +40,25 @@ class InstalledState
 
     public static function mark(): void
     {
-        @file_put_contents(self::lockPath(), 'installed_at=' . date('c') . PHP_EOL);
+        $path = self::lockPath();
+        $directory = dirname($path);
+
+        if (! is_dir($directory) && ! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
+            throw new RuntimeException("Could not create install lock directory: {$directory}");
+        }
+
+        if (! is_writable($directory)) {
+            throw new RuntimeException("Install lock directory is not writable: {$directory}");
+        }
+
+        $contents = 'installed_at='.date('c').PHP_EOL;
+        $bytes = @file_put_contents($path, $contents, LOCK_EX);
+
+        if ($bytes === false || $bytes < strlen($contents)) {
+            $error = error_get_last()['message'] ?? 'unknown write error';
+
+            throw new RuntimeException("Could not write install lock at {$path}: {$error}");
+        }
     }
 
     public static function clear(): void

@@ -82,13 +82,22 @@ class InstallController extends Controller
             'storage/framework' => storage_path('framework'),
             'storage/logs' => storage_path('logs'),
             'bootstrap/cache' => base_path('bootstrap/cache'),
-            '.env (project root)' => base_path(),
             'public (for storage symlink)' => public_path(),
         ];
 
         foreach ($writable as $label => $path) {
             $checks[] = ['key' => 'writable_'.$label, 'label' => "Writable: $label", 'passed' => is_dir($path) ? is_writable($path) : false, 'hint' => $path];
         }
+
+        $envPath = base_path('.env');
+        $checks[] = [
+            'key' => 'writable_env',
+            'label' => 'Writable: .env',
+            'passed' => is_file($envPath) ? is_writable($envPath) : is_writable(base_path()),
+            'hint' => is_file($envPath)
+                ? $envPath
+                : 'Missing .env; the project root must be writable so the installer can create it.',
+        ];
 
         return response()->json([
             'passed' => collect($checks)->every(fn ($c) => $c['passed'] || $c['key'] === 'htaccess'),

@@ -2,6 +2,8 @@
 
 namespace App\Support\Installer;
 
+use RuntimeException;
+
 class EnvWriter
 {
     /**
@@ -72,27 +74,52 @@ AI_SSL_VERIFY=false
 
 ENV;
 
-        file_put_contents(base_path('.env'), $env);
+        self::writeFile(base_path('.env'), $env);
 
         return $appKey;
     }
 
     public static function generateKey(): string
     {
-        return 'base64:' . base64_encode(random_bytes(32));
+        return 'base64:'.base64_encode(random_bytes(32));
     }
 
     private static function quote(string $value): string
     {
-        if ($value === '' ) {
+        if ($value === '') {
             return '';
         }
 
         // Wrap in quotes when the value contains characters that break dotenv parsing.
         if (preg_match('/\s|#|"|\'|=/', $value)) {
-            return '"' . str_replace('"', '\"', $value) . '"';
+            return '"'.str_replace('"', '\"', $value).'"';
         }
 
         return $value;
+    }
+
+    private static function writeFile(string $path, string $contents): void
+    {
+        $directory = dirname($path);
+
+        if (! is_dir($directory)) {
+            throw new RuntimeException("The application directory does not exist: {$directory}");
+        }
+
+        if (is_file($path) && ! is_writable($path)) {
+            throw new RuntimeException("The .env file is not writable: {$path}");
+        }
+
+        if (! is_file($path) && ! is_writable($directory)) {
+            throw new RuntimeException("The application directory is not writable, so .env cannot be created: {$directory}");
+        }
+
+        $bytes = @file_put_contents($path, $contents, LOCK_EX);
+
+        if ($bytes === false || $bytes < strlen($contents)) {
+            $error = error_get_last()['message'] ?? 'unknown write error';
+
+            throw new RuntimeException("Could not write .env at {$path}: {$error}");
+        }
     }
 }
