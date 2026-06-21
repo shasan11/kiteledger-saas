@@ -11,9 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class SetLocale
 {
-    public function __construct(private readonly LocalizationService $localization)
-    {
-    }
+    public function __construct(private readonly LocalizationService $localization) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -29,7 +27,7 @@ class SetLocale
     private function resolveLocale(Request $request): string
     {
         $candidates = [
-            $request->session()->get('locale'),
+            $request->hasSession() ? $request->session()->get('locale') : null,
             $this->userLocale($request),
             $this->branchLocale($request),
             $this->appSettingLocale(),
@@ -51,7 +49,7 @@ class SetLocale
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return null;
         }
 
@@ -70,7 +68,7 @@ class SetLocale
     {
         $user = $request->user();
 
-        if (!$user || !$user->branch_id) {
+        if (! $user || ! $user->branch_id) {
             return null;
         }
 

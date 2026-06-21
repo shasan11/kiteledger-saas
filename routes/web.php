@@ -6,8 +6,13 @@ use App\Http\Controllers\Install\InstallController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Middleware\RedirectIfInstalled;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 
 /*
@@ -18,6 +23,13 @@ use Inertia\Inertia;
 */
 Route::prefix('install')
     ->middleware(RedirectIfInstalled::class)
+    ->withoutMiddleware([
+        EncryptCookies::class,
+        AddQueuedCookiesToResponse::class,
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        PreventRequestForgery::class,
+    ])
     ->group(function () {
         Route::get('/', [InstallController::class, 'index'])->name('install.index');
         Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.requirements');

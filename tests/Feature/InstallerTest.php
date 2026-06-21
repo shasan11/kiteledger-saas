@@ -30,6 +30,15 @@ class InstallerTest extends TestCase
             ->assertSee('Installer', false);
     }
 
+    public function test_install_page_is_accessible_before_app_key_exists(): void
+    {
+        config(['app.key' => '']);
+
+        $this->get('/install')
+            ->assertOk()
+            ->assertSee('Installer', false);
+    }
+
     public function test_requirements_endpoint_returns_checks(): void
     {
         $response = $this->getJson('/install/requirements')->assertOk();
