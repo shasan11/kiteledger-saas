@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentInRecordShow-6mm8jLUj.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Quotation`,endpoint:`/api/quotations/`,backRoute:`payment-in.quotations.index`,backLabel:`Back to Quotations`,documentType:`quotation`,editRoute:`payment-in.quotations.edit`})}export{r as default};

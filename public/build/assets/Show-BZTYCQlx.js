@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentOutRecordShow-D4aU-S4F.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Purchase Bill`,endpoint:`/api/purchase-bills/`,backRoute:`payment-out.purchase-bills.index`,backLabel:`Back to Purchase Bills`,documentType:`purchase_bill`,editRoute:`payment-out.purchase-bills.edit`})}export{r as default};
