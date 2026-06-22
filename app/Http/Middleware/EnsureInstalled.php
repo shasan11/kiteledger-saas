@@ -16,8 +16,22 @@ class EnsureInstalled
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $this->hasAppKey() && $request->is('install', 'install/*')) {
-            return $this->handleInstallerWithoutAppKey($request);
+        $path = trim($request->path(), '/');
+        $isSetup = $path === 'install/setup' || str_starts_with($path, 'install/setup/');
+        $isFroidenIntro = ! $isSetup && ($path === 'install' || str_starts_with($path, 'install/'));
+
+        // Our engine (/install/setup) strips session middleware and runs fine
+        // without an APP_KEY. The Froiden intro screens use the session-backed
+        // web stack, which needs a key. So when no key exists yet, serve the
+        // engine directly and skip the Froiden screens entirely.
+        if (! $this->hasAppKey()) {
+            if ($isSetup) {
+                return $this->handleSetupWithoutAppKey($request);
+            }
+
+            if ($isFroidenIntro) {
+                return redirect('/install/setup');
+            }
         }
 
         // Never gate the automated test suite (fresh DBs have no users/lock).
@@ -29,8 +43,9 @@ class EnsureInstalled
             return $next($request);
         }
 
-        // Let the installer, health check and static assets through.
-        if ($request->is('install', 'install/*', 'up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
+        // Let the installer (Froiden intro + our engine), health check and
+        // static assets through.
+        if ($isFroidenIntro || $isSetup || $request->is('up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
             return $next($request);
         }
 
@@ -46,16 +61,20 @@ class EnsureInstalled
         return filled((string) config('app.key'));
     }
 
-    private function handleInstallerWithoutAppKey(Request $request): Response
+    /**
+     * Serve the /install/setup engine directly when no APP_KEY exists yet,
+     * bypassing the session/cookie middleware that would otherwise fail.
+     */
+    private function handleSetupWithoutAppKey(Request $request): Response
     {
         $controller = app(InstallController::class);
         $path = trim($request->path(), '/');
 
         $result = match ([$request->method(), $path]) {
-            ['GET', 'install'] => $controller->index($request),
-            ['GET', 'install/requirements'] => $controller->requirements(),
-            ['POST', 'install/database'] => $controller->testDatabase($request),
-            ['POST', 'install/run'] => $controller->run($request),
+            ['GET', 'install/setup'] => $controller->index($request),
+            ['GET', 'install/setup/requirements'] => $controller->requirements(),
+            ['POST', 'install/setup/database'] => $controller->testDatabase($request),
+            ['POST', 'install/setup/run'] => $controller->run($request),
             default => abort(404),
         };
 

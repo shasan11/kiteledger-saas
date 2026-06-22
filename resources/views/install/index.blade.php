@@ -159,7 +159,7 @@
             </div>
             <div id="dbMsg" class="msg"></div>
             <div class="actions">
-                <button type="button" class="ghost" onclick="go(1)">&larr; Back</button>
+                <button type="button" class="ghost" onclick="window.location.href='{{ url('/install/permissions') }}'">&larr; Back</button>
                 <span>
                     <button type="button" class="ghost" onclick="testDb()">Test Connection</button>
                     <button type="button" onclick="go(3)">Next &rarr;</button>
@@ -383,7 +383,7 @@
         const el = document.getElementById('reqList');
         el.innerHTML = '<span class="spinner"></span> Checking...';
         try {
-            const res = await fetch('{{ url('/install/requirements') }}', { headers: { 'Accept': 'application/json' } });
+            const res = await fetch('{{ url('/install/setup/requirements') }}', { headers: { 'Accept': 'application/json' } });
             const data = await res.json();
             el.innerHTML = data.checks.map((check) =>
                 `<div class="check"><span>${check.label}${check.hint ? ` <span class="hint">${check.hint}</span>` : ''}</span>
@@ -415,7 +415,7 @@
     async function testDb() {
         if (!validateStep(2)) return;
         msg('dbMsg', 'Testing...', true);
-        const { ok, data } = await post('{{ url('/install/database') }}', dbPayload());
+        const { ok, data } = await post('{{ url('/install/setup/database') }}', dbPayload());
         msg('dbMsg', data.message || (ok ? 'Connection successful.' : 'Connection failed.'), ok);
     }
 
@@ -505,7 +505,7 @@
 
         let ok = false, data = {};
         try {
-            ({ ok, data } = await post('{{ url('/install/run') }}', payload));
+            ({ ok, data } = await post('{{ url('/install/setup/run') }}', payload));
         } catch (e) {
             stopProgress(false);
             btn.disabled = false;
@@ -536,7 +536,9 @@
         document.getElementById('db_port').value = event.target.value === 'sqlite' ? '' : port;
     });
 
-    show(0);
+    // Hybrid: Froiden serves welcome → requirements → permissions at /install,
+    // then hands off here. Start at the Database step so those aren't repeated.
+    show(2);
 </script>
 </body>
 </html>

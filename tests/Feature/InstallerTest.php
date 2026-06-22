@@ -24,7 +24,7 @@ class InstallerTest extends TestCase
 
     public function test_install_page_is_accessible_when_not_installed(): void
     {
-        $this->get('/install')
+        $this->get('/install/setup')
             ->assertOk()
             ->assertSee('Installer', false);
     }
@@ -33,14 +33,14 @@ class InstallerTest extends TestCase
     {
         config(['app.key' => '']);
 
-        $this->get('/install')
+        $this->get('/install/setup')
             ->assertOk()
             ->assertSee('Installer', false);
     }
 
     public function test_requirements_endpoint_returns_checks(): void
     {
-        $response = $this->getJson('/install/requirements')->assertOk();
+        $response = $this->getJson('/install/setup/requirements')->assertOk();
 
         $this->assertIsArray($response->json('checks'));
         $this->assertNotEmpty($response->json('checks'));
@@ -51,7 +51,7 @@ class InstallerTest extends TestCase
     public function test_database_test_endpoint_validates_input(): void
     {
         // Missing required db fields → validation error.
-        $this->postJson('/install/database', [])->assertStatus(422);
+        $this->postJson('/install/setup/database', [])->assertStatus(422);
     }
 
     public function test_installer_is_blocked_once_installed(): void
@@ -61,8 +61,8 @@ class InstallerTest extends TestCase
         // count as installed).
         InstalledState::mark();
 
-        $this->get('/install')->assertRedirect('/');
-        $this->postJson('/install/run', [])->assertStatus(403);
+        $this->get('/install/setup')->assertRedirect('/');
+        $this->postJson('/install/setup/run', [])->assertStatus(403);
     }
 
     /**
@@ -73,7 +73,7 @@ class InstallerTest extends TestCase
      */
     public function test_run_validates_branch_fields_before_writing_env(): void
     {
-        $response = $this->postJson('/install/run', [
+        $response = $this->postJson('/install/setup/run', [
             'db_connection' => 'sqlite',
             'db_database' => 'database/this_file_need_not_exist.sqlite',
             'app_name' => 'KiteLedger',
@@ -97,7 +97,7 @@ class InstallerTest extends TestCase
 
     public function test_run_rejects_unsupported_language_code(): void
     {
-        $response = $this->postJson('/install/run', [
+        $response = $this->postJson('/install/setup/run', [
             'db_connection' => 'sqlite',
             'db_database' => 'database/this_file_need_not_exist.sqlite',
             'app_name' => 'KiteLedger',

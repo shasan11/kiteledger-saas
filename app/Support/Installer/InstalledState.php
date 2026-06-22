@@ -12,6 +12,17 @@ class InstalledState
     }
 
     /**
+     * The Froiden installer's lock file. Its canInstall middleware 404s /install
+     * (the welcome/requirements/permissions screens) when this exists. We keep
+     * it in sync with our own lock so a finished install blocks both the Froiden
+     * intro screens and our /install/setup engine.
+     */
+    public static function froidenLockPath(): string
+    {
+        return storage_path('installed');
+    }
+
+    /**
      * Installed === the lock file exists. Nothing else.
      *
      * We deliberately do NOT infer "installed" from the database having users:
@@ -48,12 +59,17 @@ class InstalledState
 
             throw new RuntimeException("Could not write install lock at {$path}: {$error}");
         }
+
+        // Mirror to the Froiden lock so its /install screens lock too.
+        @file_put_contents(self::froidenLockPath(), $contents, LOCK_EX);
     }
 
     public static function clear(): void
     {
-        if (is_file(self::lockPath())) {
-            @unlink(self::lockPath());
+        foreach ([self::lockPath(), self::froidenLockPath()] as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
         }
     }
 }

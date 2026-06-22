@@ -82,7 +82,7 @@ class InstallerFullRunTest extends TestCase
             $this->markTestSkipped('Requires a file-based or networked test database, not :memory: sqlite.');
         }
 
-        $response = $this->postJson('/install/run', $payload);
+        $response = $this->postJson('/install/setup/run', $payload);
 
         $response->assertOk();
         $response->assertJson(['success' => true]);

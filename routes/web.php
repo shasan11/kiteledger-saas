@@ -15,12 +15,15 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 
 /*
-| Web installer (/install). Runs only when the app is not installed.
-| Protected by RedirectIfInstalled; install POST routes are CSRF-exempt
-| (see bootstrap/app.php) since the wizard runs before login/session setup.
-| Requires a valid APP_KEY in .env — copy .env.example to .env first.
+| Web installer engine (/install/setup). The Froiden package owns the intro
+| screens at /install (welcome → requirements → permissions); its permissions
+| "Next" hands off here for the DB + company + branch + admin + run that the
+| stock Froiden installer cannot do. Mounted under /install/setup so it never
+| collides with Froiden's /install, /install/requirements, /install/database.
+| Protected by RedirectIfInstalled; POST routes are CSRF-exempt (see
+| bootstrap/app.php) since the wizard runs before login/session setup.
 */
-Route::prefix('install')
+Route::prefix('install/setup')
     ->middleware(RedirectIfInstalled::class)
     ->withoutMiddleware([
         EncryptCookies::class,
@@ -30,10 +33,10 @@ Route::prefix('install')
         PreventRequestForgery::class,
     ])
     ->group(function () {
-        Route::get('/', [InstallController::class, 'index'])->name('install.index');
-        Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.requirements');
-        Route::post('/database', [InstallController::class, 'testDatabase'])->name('install.database');
-        Route::post('/run', [InstallController::class, 'run'])->name('install.run');
+        Route::get('/', [InstallController::class, 'index'])->name('install.setup.index');
+        Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.setup.requirements');
+        Route::post('/database', [InstallController::class, 'testDatabase'])->name('install.setup.database');
+        Route::post('/run', [InstallController::class, 'run'])->name('install.setup.run');
     });
 
 // Note: GET /storage/{path} is served by Laravel's built-in route (named
