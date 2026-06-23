@@ -61,9 +61,10 @@ class AppServiceProvider extends ServiceProvider
     private function ensureWritableStorage(): void
     {
         $views = storage_path('framework/views');
+        $logs = storage_path('logs');
 
         // Fast path: already usable on a healthy install.
-        if (is_dir($views) && is_writable($views)) {
+        if (is_dir($views) && is_writable($views) && is_dir($logs) && is_writable($logs)) {
             return;
         }
 
@@ -71,7 +72,7 @@ class AppServiceProvider extends ServiceProvider
             $views,
             storage_path('framework/cache/data'),
             storage_path('framework/sessions'),
-            storage_path('logs'),
+            $logs,
             storage_path('app/public'),
             base_path('bootstrap/cache'),
         ] as $dir) {
@@ -83,7 +84,8 @@ class AppServiceProvider extends ServiceProvider
             }
         }
 
-        // Last resort: compile to a writable temp dir unique to this install.
+        // If the view cache still isn't writable (host-owned dir we can't chmod),
+        // compile Blade views to a writable temp dir so pages still render.
         if (! is_dir($views) || ! is_writable($views)) {
             $fallback = sys_get_temp_dir().DIRECTORY_SEPARATOR.'kiteledger-views-'.substr(md5(base_path()), 0, 12);
 
@@ -94,6 +96,13 @@ class AppServiceProvider extends ServiceProvider
             if (is_dir($fallback) && is_writable($fallback)) {
                 config(['view.compiled' => $fallback]);
             }
+        }
+
+        // If logs still aren't writable, send logging to PHP's error log instead
+        // of the file — otherwise Monolog's StreamHandler throws while trying to
+        // open laravel.log and escalates any error into a 500.
+        if (! is_dir($logs) || ! is_writable($logs)) {
+            config(['logging.default' => 'errorlog']);
         }
     }
 

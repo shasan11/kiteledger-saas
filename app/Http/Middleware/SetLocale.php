@@ -26,23 +26,38 @@ class SetLocale
 
     private function resolveLocale(Request $request): string
     {
-        $candidates = [
-            $request->hasSession() ? $request->session()->get('locale') : null,
-            $this->userLocale($request),
-            $this->branchLocale($request),
-            $this->appSettingLocale(),
-            config('app.locale'),
-            $this->localization->defaultLocale(),
-            LocalizationService::FALLBACK_LOCALE,
-        ];
+        // Any locale candidate may hit the database (user, branch, app settings,
+        // languages table). Before install those credentials are placeholders
+        // and the query throws — which must NOT 500 the installer. Wrap it all
+        // and fall back to the statically-configured locale on any failure.
+        try {
+            $candidates = [
+                $request->hasSession() ? $request->session()->get('locale') : null,
+                $this->userLocale($request),
+                $this->branchLocale($request),
+                $this->appSettingLocale(),
+                config('app.locale'),
+                $this->localization->defaultLocale(),
+                LocalizationService::FALLBACK_LOCALE,
+            ];
 
-        foreach ($candidates as $candidate) {
-            if ($this->localization->isSupported($candidate)) {
-                return $candidate;
+            foreach ($candidates as $candidate) {
+                if ($this->localization->isSupported($candidate)) {
+                    return $candidate;
+                }
             }
+        } catch (\Throwable) {
+            // A transient DB problem must never take down every page over locale.
         }
 
-        return LocalizationService::FALLBACK_LOCALE;
+        return $this->staticLocale();
+    }
+
+    private function staticLocale(): string
+    {
+        $configured = (string) config('app.locale');
+
+        return $configured !== '' ? $configured : LocalizationService::FALLBACK_LOCALE;
     }
 
     private function userLocale(Request $request): ?string
