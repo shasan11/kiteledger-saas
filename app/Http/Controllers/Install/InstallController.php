@@ -153,6 +153,16 @@ class InstallController extends Controller
         @ini_set('memory_limit', '512M');
         ignore_user_abort(true);
 
+        // This endpoint returns JSON. With APP_DEBUG=true, Laravel both echoes
+        // PHP warnings and promotes them to exceptions — so a benign warning
+        // like PHP 8.4's "tempnam(): file created in the system's temporary
+        // directory" (tight temp permissions on some hosts) would otherwise be
+        // reported as "Installation failed: tempnam()...". Keep warnings/notices
+        // out of this request; real errors/exceptions still surface and are
+        // logged. (Does not change the persisted APP_DEBUG.)
+        @ini_set('display_errors', '0');
+        error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
+
         $db = $this->validateDatabase($request);
 
         $data = Validator::make($request->all(), [

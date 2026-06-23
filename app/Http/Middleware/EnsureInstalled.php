@@ -28,6 +28,15 @@ class EnsureInstalled
         $isSetup = $path === 'install/setup' || str_starts_with($path, 'install/setup/');
         $isFroidenIntro = ! $isSetup && ($path === 'install' || str_starts_with($path, 'install/'));
 
+        // During the install screens, keep benign PHP warnings (e.g. PHP 8.4's
+        // tempnam temp-dir notice on tight-permission hosts) from being echoed
+        // into responses or promoted to exceptions by Laravel's debug handler.
+        // Real errors/exceptions still surface.
+        if (($isSetup || $isFroidenIntro) && ! app()->environment('testing')) {
+            @ini_set('display_errors', '0');
+            error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
+        }
+
         // Our engine (/install/setup) strips session middleware and runs fine
         // without an APP_KEY. The Froiden intro screens use the session-backed
         // web stack, which needs a key. So when no key exists yet, serve the
@@ -85,6 +94,14 @@ class EnsureInstalled
             return;
         }
 
+        // Make the runtime cache dirs writable on first boot. Laravel writes the
+        // package manifest and real-time facade cache via tempnam(dirname)+rename;
+        // if those dirs aren't writable (common when a buyer just unzips and
+        // opens the URL without running chmod), PHP 8.4+ warns "tempnam(): file
+        // created in the system's temporary directory" and the cross-device
+        // rename can fail. Creating + chmod-ing them here prevents that.
+        $this->ensureWritableRuntimeDirs();
+
         $envPath = base_path('.env');
 
         try {
@@ -120,6 +137,39 @@ class EnsureInstalled
             }
         } catch (Throwable) {
             // Never let bootstrapping break the request; fall back to key-free.
+        }
+    }
+
+    /**
+     * Create and make writable the runtime directories Laravel writes to during
+     * boot (cache, sessions, views, logs, bootstrap/cache). Best-effort and
+     * cheap; a no-op once the app is installed. Stops the PHP 8.4+ tempnam
+     * warning at its source on hosts where the web user can chmod its own files.
+     */
+    private function ensureWritableRuntimeDirs(): void
+    {
+        // Only relevant before/during install; skip the work afterwards.
+        if (is_file(InstalledState::lockPath())) {
+            return;
+        }
+
+        $dirs = [
+            storage_path('framework/cache/data'),
+            storage_path('framework/views'),
+            storage_path('framework/sessions'),
+            storage_path('logs'),
+            storage_path('app/public'),
+            base_path('bootstrap/cache'),
+        ];
+
+        foreach ($dirs as $dir) {
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+
+            if (is_dir($dir) && ! is_writable($dir)) {
+                @chmod($dir, 0775);
+            }
         }
     }
 

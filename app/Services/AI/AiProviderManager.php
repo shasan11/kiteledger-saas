@@ -83,6 +83,80 @@ class AiProviderManager
         }
     }
 
+    /**
+     * Generate an embedding vector for a single string. Reuses the same provider
+     * config/credentials as chat. Throws AiProviderException on any failure.
+     *
+     * @return array<int, float>
+     */
+    public function embedOne(string $text): array
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return [];
+        }
+
+        return $this->embed([$text])[0] ?? [];
+    }
+
+    /**
+     * Generate embedding vectors for many strings (one request each — universally
+     * supported across providers, incl. Ollama).
+     *
+     * @param  array<int, string>  $texts
+     * @return array<int, array<int, float>>
+     */
+    public function embed(array $texts): array
+    {
+        $provider = strtolower((string) $this->settings->provider());
+
+        if (! $this->settings->enabled()) {
+            $this->throwError('AI_DISABLED', 'AI is disabled in settings.');
+        }
+        if (! $this->settings->supportsEmbeddings()) {
+            $this->throwError('AI_EMBEDDINGS_UNSUPPORTED', "Provider '{$provider}' does not support embeddings. Use OpenAI, Gemini, Ollama, or OpenRouter.");
+        }
+        if ($provider !== 'ollama' && ! $this->settings->hasApiKey()) {
+            $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
+        }
+
+        $model = $this->settings->embeddingModel();
+        $timeout = $this->settings->timeoutSeconds();
+        $connectTimeout = $this->settings->connectTimeoutSeconds();
+
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($timeout + 20);
+        }
+
+        $out = [];
+
+        foreach ($texts as $text) {
+            $text = trim((string) $text);
+            if ($text === '') {
+                $out[] = [];
+                continue;
+            }
+
+            try {
+                $response = Prism::embeddings()
+                    ->using($this->providerEnum($provider), $model)
+                    ->usingProviderConfig($this->providerConfig($provider))
+                    ->withClientOptions($this->clientOptions($timeout, $connectTimeout))
+                    ->fromInput($text)
+                    ->asEmbeddings();
+
+                $vector = $response->embeddings[0]->embedding ?? [];
+                $out[] = array_map('floatval', $vector);
+            } catch (PrismException $e) {
+                $this->throwMappedError($provider, $model, $e);
+            } catch (Throwable $e) {
+                $this->throwMappedError($provider, $model, $e);
+            }
+        }
+
+        return $out;
+    }
+
     public function testConnection(): array
     {
         $timeout = $this->settings->provider() === 'ollama'

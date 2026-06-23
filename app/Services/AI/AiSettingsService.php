@@ -230,6 +230,32 @@ class AiSettingsService
         ];
     }
 
+    /** Providers Prism can generate embeddings with (RAG). Groq has none. */
+    public function supportsEmbeddings(): bool
+    {
+        return in_array($this->provider(), ['openai', 'gemini', 'ollama', 'openrouter'], true);
+    }
+
+    public function embeddingModel(): string
+    {
+        $m = $this->db->string('ai_embedding_model', '', self::GROUP);
+        if ($m) {
+            return $m;
+        }
+
+        return $this->defaultEmbeddingModelFor($this->provider());
+    }
+
+    private function defaultEmbeddingModelFor(string $provider): string
+    {
+        return match ($provider) {
+            'gemini' => 'text-embedding-004',
+            'ollama' => 'nomic-embed-text',
+            'openrouter' => 'openai/text-embedding-3-small',
+            default => 'text-embedding-3-small', // openai
+        };
+    }
+
     private function defaultModelFor(string $provider): string
     {
         return match ($provider) {

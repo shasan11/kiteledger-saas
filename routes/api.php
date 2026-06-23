@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Documents\DocumentExtractionController;
 use App\Http\Controllers\Api\Documents\DocumentProposalController;
 use App\Http\Controllers\Api\Documents\DocumentUploadController;
 use App\Http\Controllers\Api\AI\AiAssistantController;
+use App\Http\Controllers\Api\AI\AiSemanticSearchController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
 use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\Reports\ReportAiSummaryController;
@@ -1156,6 +1157,9 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
     Route::get('health',                              [AiAssistantController::class, 'health']);
     Route::post('chat',                              [AiAssistantController::class, 'chat']);
+
+    // RAG semantic search over accounting text (invoice notes, journal narrations).
+    Route::post('search',                            AiSemanticSearchController::class);
 
     // Focused AI report summarizer and settings.
     Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize']);
