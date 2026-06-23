@@ -13,50 +13,92 @@ use Throwable;
 
 class WebDatabaseInstaller
 {
-    public function run(callable $progress): array
+    /** Ordered phases. Each is short enough to run inside one HTTP poll. */
+    public function steps(): array
+    {
+        return ['schema', 'seed', 'finalize'];
+    }
+
+    /** Run a single phase (used by the poll-driven web installer). */
+    public function runStep(string $step, callable $progress): void
     {
         @set_time_limit(0);
         @ini_set('memory_limit', '-1');
 
+        match ($step) {
+            'schema' => $this->stepSchema($progress),
+            'seed' => $this->stepSeed($progress),
+            'finalize' => $this->stepFinalize($progress),
+            default => null,
+        };
+    }
+
+    /** Run the whole install in one go (used by the CLI fallback). */
+    public function run(callable $progress): array
+    {
+        foreach ($this->steps() as $step) {
+            $this->runStep($step, $progress);
+        }
+
+        return [
+            'status' => 'success',
+            'message' => 'Application has been successfully installed.',
+        ];
+    }
+
+    private function usesDump(): bool
+    {
+        $driver = DB::connection()->getDriverName();
+
+        return in_array($driver, ['mysql', 'mariadb'], true)
+            && is_file(database_path('sql/mysql_install.sql'));
+    }
+
+    private function stepSchema(callable $progress): void
+    {
         $progress('Preparing the configured database connection.', 'Preparing database');
         $this->ensureSqliteDatabaseExists();
 
-        $driver = DB::connection()->getDriverName();
-        $dumpPath = database_path('sql/mysql_install.sql');
-
-        if (in_array($driver, ['mysql', 'mariadb'], true) && is_file($dumpPath)) {
+        if ($this->usesDump()) {
             $progress('Importing database/sql/mysql_install.sql.', 'Importing SQL dump');
             $this->dropAllTables($progress);
-            $this->importDump($dumpPath);
+            $this->importDump(database_path('sql/mysql_install.sql'));
 
+            return;
+        }
+
+        $progress('Running database migrations.', 'Running migrations');
+        $this->callArtisan('migrate:fresh', ['--force' => true, '--no-interaction' => true]);
+    }
+
+    private function stepSeed(callable $progress): void
+    {
+        if ($this->usesDump()) {
             $progress('Ensuring the administrator account exists.', 'Seeding administrator');
             $this->callArtisan('db:seed', [
                 '--force' => true,
                 '--no-interaction' => true,
                 '--class' => FullPermissionUserSeeder::class,
             ]);
-        } else {
-            $progress('Running migrations. This can take several minutes on shared hosting.', 'Running migrations');
-            $this->callArtisan('migrate:fresh', ['--force' => true, '--no-interaction' => true]);
 
-            $progress('Seeding production defaults and the administrator account.', 'Seeding database');
-            $this->callArtisan('db:seed', [
-                '--force' => true,
-                '--no-interaction' => true,
-                '--class' => DatabaseSeeder::class,
-            ]);
+            return;
         }
 
+        $progress('Seeding configuration defaults and the administrator account.', 'Seeding database');
+        $this->callArtisan('db:seed', [
+            '--force' => true,
+            '--no-interaction' => true,
+            '--class' => DatabaseSeeder::class,
+        ]);
+    }
+
+    private function stepFinalize(callable $progress): void
+    {
         $progress('Creating the public storage link when the host allows it.', 'Linking storage');
         $this->callOptionalArtisan('storage:link', ['--force' => true, '--no-interaction' => true]);
 
         $progress('Clearing cached framework files.', 'Clearing caches');
         $this->callOptionalArtisan('optimize:clear', ['--no-interaction' => true]);
-
-        return [
-            'status' => 'success',
-            'message' => 'Application has been successfully installed.',
-        ];
     }
 
     private function ensureSqliteDatabaseExists(): void

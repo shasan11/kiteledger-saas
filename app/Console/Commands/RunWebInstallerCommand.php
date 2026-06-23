@@ -8,21 +8,27 @@ use App\Support\Installer\WebInstallStatus;
 use Illuminate\Console\Command;
 use Throwable;
 
+/**
+ * CLI install — runs the same migrate + seed the web installer does, but with
+ * no HTTP timeout. Use this if the browser install is interrupted:
+ *
+ *   php artisan install:run-web
+ */
 class RunWebInstallerCommand extends Command
 {
-    protected $signature = 'install:run-web {--token= : Worker token from the installer status file}';
+    protected $signature = 'install:run-web';
 
-    protected $description = 'Run the web installer database step outside the HTTP request.';
+    protected $description = 'Run the database install (migrate + seed) from the command line.';
 
     public function handle(WebDatabaseInstaller $installer, WebInstallStatus $status): int
     {
-        $token = (string) $this->option('token');
+        if (InstalledState::isInstalled()) {
+            $this->warn('Already installed (storage/installed exists). Delete it to reinstall.');
 
-        if ($token === '' || ! $status->tokenMatches($token)) {
-            $this->error('Installer token is missing, stale, or already finished.');
-
-            return self::FAILURE;
+            return self::SUCCESS;
         }
+
+        $status->begin($installer->steps());
 
         try {
             $result = $installer->run(function (string $message, ?string $step = null) use ($status): void {
@@ -30,7 +36,6 @@ class RunWebInstallerCommand extends Command
                 $this->line($message);
             });
 
-            $status->progress('Writing the installation lock.', 'Finalizing');
             InstalledState::mark();
             $status->succeeded($result['message']);
             $this->info($result['message']);

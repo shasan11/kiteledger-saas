@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Installer;
 
 use App\Http\Controllers\Controller;
+use App\Services\Installer\WebDatabaseInstaller;
 use App\Support\Installer\InstalledState;
-use App\Support\Installer\WebInstallLauncher;
 use App\Support\Installer\WebInstallStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -12,24 +12,32 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Throwable;
 
+/**
+ * Poll-driven web installer. Migrate + seed are split into phases that run one
+ * per status poll, so no single request exceeds the web server's proxy timeout
+ * and no fragile background process is needed (works on shared/FastPanel hosts).
+ */
 class WebInstallController extends Controller
 {
-    public function database(Request $request, WebInstallStatus $status, WebInstallLauncher $launcher): View|RedirectResponse
+    public function database(Request $request, WebInstallStatus $status): View|RedirectResponse
     {
         $this->forceEnglish();
 
         if (InstalledState::isInstalled()) {
-            return redirect('/login');
+            return redirect('/install/final');
         }
 
-        $state = $this->startInstallerWhenNeeded($status, $launcher, $request->boolean('reset'));
+        if ($request->boolean('reset')) {
+            $status->reset();
+        }
 
+        // Render fast — the work happens in the status polls below.
         return view('vendor.installer.database-progress', [
-            'status' => $state,
+            'status' => $status->read(),
         ]);
     }
 
-    public function status(WebInstallStatus $status, WebInstallLauncher $launcher): JsonResponse
+    public function status(WebInstallStatus $status, WebDatabaseInstaller $installer): JsonResponse
     {
         $this->forceEnglish();
 
@@ -42,17 +50,30 @@ class WebInstallController extends Controller
             ]);
         }
 
-        return response()->json($this->startInstallerWhenNeeded($status, $launcher));
+        @set_time_limit(0);
+        @ini_set('memory_limit', '-1');
+        @ini_set('display_errors', '0');
+
+        $state = $status->read();
+
+        if (($state['state'] ?? 'idle') === 'idle') {
+            $state = $status->begin($installer->steps());
+        }
+
+        // Another poll is already executing a phase — just report progress.
+        if (($state['state'] ?? null) === 'running' && ! $status->isLocked($state)) {
+            $this->runNextPhase($status, $installer, $state);
+        }
+
+        return response()->json($status->read());
     }
 
     public function final(WebInstallStatus $status): View|RedirectResponse
     {
         $this->forceEnglish();
 
-        $state = $status->read();
-
         if (! InstalledState::isInstalled()) {
-            if (($state['state'] ?? null) !== 'succeeded') {
+            if (($status->read()['state'] ?? null) !== 'succeeded') {
                 return redirect('/install/database');
             }
 
@@ -67,51 +88,42 @@ class WebInstallController extends Controller
         return view('vendor.installer.finished');
     }
 
+    private function runNextPhase(WebInstallStatus $status, WebDatabaseInstaller $installer, array $state): void
+    {
+        $steps = $installer->steps();
+        $phase = (int) ($state['phase'] ?? 0);
+
+        // All phases done → write the install lock and finish.
+        if ($phase >= count($steps)) {
+            InstalledState::mark();
+            $status->succeeded('Application has been successfully installed.');
+
+            return;
+        }
+
+        $status->lock();
+
+        try {
+            $installer->runStep($steps[$phase], function (string $message, ?string $step = null) use ($status): void {
+                $status->progress($message, $step);
+            });
+
+            $status->advance();
+            $status->unlock();
+
+            // If that was the last phase, finish now.
+            if (($phase + 1) >= count($steps)) {
+                InstalledState::mark();
+                $status->succeeded('Application has been successfully installed.');
+            }
+        } catch (Throwable $e) {
+            $status->failed($e->getMessage() ?: 'Installation failed.');
+        }
+    }
+
     private function forceEnglish(): void
     {
         app()->setLocale('en');
         config(['app.locale' => 'en']);
-    }
-
-    private function startInstallerWhenNeeded(WebInstallStatus $status, WebInstallLauncher $launcher, bool $reset = false): array
-    {
-        if ($reset) {
-            $status->reset();
-        }
-
-        $state = $status->read();
-
-        if (($state['state'] ?? null) === 'succeeded') {
-            $status->reset();
-            $state = $status->read();
-        }
-
-        if ($status->isStale($state)) {
-            $status->failed('The previous installer worker stopped updating. Start the install again.');
-
-            return $status->read();
-        }
-
-        if (($state['state'] ?? null) !== 'idle') {
-            return $state;
-        }
-
-        $state = $status->start();
-
-        if (app()->environment('testing')) {
-            $status->failed('Installer worker is disabled during automated tests.');
-
-            return $status->read();
-        }
-
-        try {
-            $launcher->launch((string) $state['token']);
-        } catch (Throwable $e) {
-            $status->failed($e->getMessage());
-
-            return $status->read();
-        }
-
-        return $state;
     }
 }
