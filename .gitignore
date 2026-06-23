@@ -18,8 +18,11 @@ Thumbs.db
 
 auth.json
 
-node_modules/
-vendor/
+# Anchored to repo root with a leading slash — an unanchored "vendor/" also
+# matches resources/views/vendor/ (the published installer views) and would
+# silently drop them from the package, breaking /install with "view not found".
+/node_modules/
+/vendor/
 
 
 
