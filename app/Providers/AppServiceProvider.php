@@ -69,15 +69,21 @@ class AppServiceProvider extends ServiceProvider
      */
     private function ensureWritableStorage(): void
     {
+        $app = storage_path('app');
         $views = storage_path('framework/views');
         $logs = storage_path('logs');
 
         // Fast path: already usable on a healthy install.
-        if (is_dir($views) && is_writable($views) && is_dir($logs) && is_writable($logs)) {
+        if (
+            is_dir($app) && is_writable($app)
+            && is_dir($views) && is_writable($views)
+            && is_dir($logs) && is_writable($logs)
+        ) {
             return;
         }
 
         foreach ([
+            $app,
             $views,
             storage_path('framework/cache/data'),
             storage_path('framework/sessions'),

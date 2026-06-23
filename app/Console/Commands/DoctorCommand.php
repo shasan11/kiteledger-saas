@@ -73,6 +73,12 @@ class DoctorCommand extends Command
             'storage/ is not writable. Run: chmod -R 775 storage'
         );
 
+        $this->check(
+            is_dir(storage_path('app')) && is_writable(storage_path('app')),
+            'storage/app/ is writable',
+            'storage/app/ is not writable. Run: chmod -R 775 storage/app'
+        );
+
         // bootstrap/cache writable
         $this->check(
             is_dir(base_path('bootstrap/cache')) && is_writable(base_path('bootstrap/cache')),

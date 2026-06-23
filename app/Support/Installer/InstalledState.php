@@ -31,7 +31,7 @@ class InstalledState
      * as "installed" would permanently block /install with "already installed"
      * and make the failure unrecoverable from the browser. The lock is written
      * only after a fully successful install, so its presence is the one true
-     * signal. To re-run the installer, delete storage/app/installed.
+     * signal. To re-run the installer, delete the install lock files.
      */
     public static function isInstalled(): bool
     {
@@ -42,28 +42,46 @@ class InstalledState
 
     public static function mark(): void
     {
-        $path = self::lockPath();
+        $contents = 'installed_at='.date('c').PHP_EOL;
+        $errors = [];
+
+        $wroteAppLock = self::writeLock(self::lockPath(), $contents, $errors);
+        $wroteFroidenLock = self::writeLock(self::froidenLockPath(), $contents, $errors);
+
+        if (! $wroteAppLock && ! $wroteFroidenLock) {
+            throw new RuntimeException(
+                'Could not write install lock. Make storage/app and storage writable by the PHP/web-server user. '
+                .implode(' ', $errors)
+            );
+        }
+    }
+
+    private static function writeLock(string $path, string $contents, array &$errors): bool
+    {
         $directory = dirname($path);
 
         if (! is_dir($directory) && ! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
-            throw new RuntimeException("Could not create install lock directory: {$directory}");
+            $errors[] = "Could not create install lock directory: {$directory}.";
+
+            return false;
         }
 
         if (! is_writable($directory)) {
-            throw new RuntimeException("Install lock directory is not writable: {$directory}");
+            $errors[] = "Install lock directory is not writable: {$directory}.";
+
+            return false;
         }
 
-        $contents = 'installed_at='.date('c').PHP_EOL;
         $bytes = @file_put_contents($path, $contents, LOCK_EX);
 
         if ($bytes === false || $bytes < strlen($contents)) {
             $error = error_get_last()['message'] ?? 'unknown write error';
+            $errors[] = "Could not write install lock at {$path}: {$error}.";
 
-            throw new RuntimeException("Could not write install lock at {$path}: {$error}");
+            return false;
         }
 
-        // Mirror to the Froiden lock so its /install screens lock too.
-        @file_put_contents(self::froidenLockPath(), $contents, LOCK_EX);
+        return true;
     }
 
     public static function clear(): void
