@@ -77,7 +77,7 @@
         <div class="kl-field"><label>Email</label><input id="admin_email" type="email" placeholder="admin@acme.com"></div>
     </div>
     <div class="kl-row">
-        <div class="kl-field"><label>Password</label><input id="admin_password" type="password"><span class="kl-hint">Min 8 characters.</span></div>
+        <div class="kl-field"><label>Password</label><input id="admin_password" type="password"><span class="kl-hint">Auto-filled with a strong password — shown again after install. Edit to set your own.</span></div>
         <div class="kl-field"><label>Confirm password</label><input id="admin_password_confirmation" type="password"></div>
     </div>
 
@@ -93,7 +93,12 @@
 <div id="klSuccess">
     <div class="tick">&#10003;</div>
     <h2 style="margin:0 0 8px">Installation complete</h2>
-    <p style="color:#374151;margin:0 0 6px">Your application is ready. Sign in with the administrator account you just created.</p>
+    <p style="color:#374151;margin:0 0 14px">Your application is ready. Use the administrator credentials below to sign in.</p>
+    <div style="max-width:420px;margin:0 auto 16px;text-align:left;background:#f9fafb;border:1px solid #e5e7eb;border-radius:9px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0"><span class="kl-hint">Admin email</span><strong id="klCredEmail" style="font-family:monospace"></strong></div>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:4px 0"><span class="kl-hint">Password</span><strong id="klCredPass" style="font-family:monospace"></strong></div>
+        <p class="kl-hint" style="margin:8px 0 0">Save these now — copy them somewhere safe. You can change the password after logging in.</p>
+    </div>
     <p id="klStorageNote" class="kl-hint" style="margin:0 0 20px"></p>
     <a id="klLogin" href="/login"><button type="button" class="button">Go to login &rarr;</button></a>
 </div>
@@ -164,6 +169,9 @@
         if (ok && data.success) {
             if (data.login_url) document.getElementById('klLogin').href = data.login_url;
             if (data.storage && data.storage.message) document.getElementById('klStorageNote').textContent = data.storage.message;
+            // Show the exact admin credentials that were just created.
+            document.getElementById('klCredEmail').textContent = payload.admin_email;
+            document.getElementById('klCredPass').textContent = payload.admin_password;
             document.getElementById('klForm').style.display = 'none';
             document.getElementById('klSuccess').style.display = 'block';
         } else {
@@ -176,5 +184,27 @@
         var p = e.target.value === 'pgsql' ? '5432' : '3306';
         document.getElementById('db_port').value = e.target.value === 'sqlite' ? '' : p;
     });
+
+    // Default every non-database field — including a strong admin password — so a
+    // quick install only needs the database details. Everything stays editable,
+    // and the password is shown on the finish screen.
+    (function klPrefill() {
+        function setIfEmpty(id, val) { var el = document.getElementById(id); if (el && !el.value) el.value = val; }
+        function genPassword() {
+            var c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            var s = ''; for (var i = 0; i < 10; i++) s += c.charAt(Math.floor(Math.random() * c.length));
+            return s + '@' + (Math.floor(Math.random() * 90) + 10);
+        }
+        var host = (location.hostname || 'app').replace(/^www\./, '');
+        setIfEmpty('company_name', 'My Company');
+        setIfEmpty('admin_name', 'Administrator');
+        setIfEmpty('admin_email', 'admin@' + host);
+        var pw = document.getElementById('admin_password');
+        if (pw && !pw.value) {
+            var p = genPassword();
+            pw.value = p;
+            document.getElementById('admin_password_confirmation').value = p;
+        }
+    })();
 </script>
 @stop
