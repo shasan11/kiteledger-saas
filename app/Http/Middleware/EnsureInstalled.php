@@ -94,13 +94,9 @@ class EnsureInstalled
             return;
         }
 
-        // Make the runtime cache dirs writable on first boot. Laravel writes the
-        // package manifest and real-time facade cache via tempnam(dirname)+rename;
-        // if those dirs aren't writable (common when a buyer just unzips and
-        // opens the URL without running chmod), PHP 8.4+ warns "tempnam(): file
-        // created in the system's temporary directory" and the cross-device
-        // rename can fail. Creating + chmod-ing them here prevents that.
-        $this->ensureWritableRuntimeDirs();
+        // Runtime writable dirs (storage/framework/*, bootstrap/cache) are
+        // ensured even earlier in AppServiceProvider::register(), so they exist
+        // before any view renders — including Laravel's own error page.
 
         $envPath = base_path('.env');
 
@@ -137,39 +133,6 @@ class EnsureInstalled
             }
         } catch (Throwable) {
             // Never let bootstrapping break the request; fall back to key-free.
-        }
-    }
-
-    /**
-     * Create and make writable the runtime directories Laravel writes to during
-     * boot (cache, sessions, views, logs, bootstrap/cache). Best-effort and
-     * cheap; a no-op once the app is installed. Stops the PHP 8.4+ tempnam
-     * warning at its source on hosts where the web user can chmod its own files.
-     */
-    private function ensureWritableRuntimeDirs(): void
-    {
-        // Only relevant before/during install; skip the work afterwards.
-        if (is_file(InstalledState::lockPath())) {
-            return;
-        }
-
-        $dirs = [
-            storage_path('framework/cache/data'),
-            storage_path('framework/views'),
-            storage_path('framework/sessions'),
-            storage_path('logs'),
-            storage_path('app/public'),
-            base_path('bootstrap/cache'),
-        ];
-
-        foreach ($dirs as $dir) {
-            if (! is_dir($dir)) {
-                @mkdir($dir, 0775, true);
-            }
-
-            if (is_dir($dir) && ! is_writable($dir)) {
-                @chmod($dir, 0775);
-            }
         }
     }
 

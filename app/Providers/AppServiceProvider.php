@@ -41,8 +41,60 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->ensureWritableStorage();
+
         $this->app->singleton(\App\Services\SmsService::class);
         $this->app->alias(\App\Services\SmsService::class, 'sms');
+    }
+
+    /**
+     * Guarantee Blade can compile views even on a misconfigured host.
+     *
+     * Runs at provider registration — before any view (including Laravel's own
+     * error page) is rendered. It creates the runtime dirs and tries to make
+     * them writable; if storage/framework/views still can't be written (e.g. the
+     * web user can't chmod a host-owned directory), it redirects compiled Blade
+     * views to a writable temp dir. Without this, a non-writable view-cache dir
+     * makes EVERY page — and even the exception page — fail with
+     * "File does not exist at path .../storage/framework/views/<hash>.php".
+     */
+    private function ensureWritableStorage(): void
+    {
+        $views = storage_path('framework/views');
+
+        // Fast path: already usable on a healthy install.
+        if (is_dir($views) && is_writable($views)) {
+            return;
+        }
+
+        foreach ([
+            $views,
+            storage_path('framework/cache/data'),
+            storage_path('framework/sessions'),
+            storage_path('logs'),
+            storage_path('app/public'),
+            base_path('bootstrap/cache'),
+        ] as $dir) {
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            if (is_dir($dir) && ! is_writable($dir)) {
+                @chmod($dir, 0775);
+            }
+        }
+
+        // Last resort: compile to a writable temp dir unique to this install.
+        if (! is_dir($views) || ! is_writable($views)) {
+            $fallback = sys_get_temp_dir().DIRECTORY_SEPARATOR.'kiteledger-views-'.substr(md5(base_path()), 0, 12);
+
+            if (! is_dir($fallback)) {
+                @mkdir($fallback, 0775, true);
+            }
+
+            if (is_dir($fallback) && is_writable($fallback)) {
+                config(['view.compiled' => $fallback]);
+            }
+        }
     }
 
     public function boot(): void
