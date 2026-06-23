@@ -6,14 +6,11 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * The INSTALL seed (this is what stock Froiden's `db:seed` runs).
+ * Minimal install seed.
  *
- * Deliberately LEAN: all configuration/lookup data + roles/permissions
- * (ProductionSeeder) plus a default admin login (FullPermissionUserSeeder).
- * It does NOT seed the heavy demo business records (products, ~5,000 sample
- * transactions, bulk accounting volume) — those take minutes and cause the
- * installer to hit the web-server's 504 gateway timeout. For a demo dataset,
- * run `php artisan db:seed --class=DemoSeeder` separately.
+ * Froiden's web installer runs `php artisan db:seed`, so this list must stay
+ * small for shared hosting/cPanel installs. It does not seed optional module
+ * lookup tables, print templates, HRM/tax/product setup, or demo records.
  */
 class DatabaseSeeder extends Seeder
 {
@@ -22,7 +19,18 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            ProductionSeeder::class,
+            BranchSeeder::class,
+            MasterCurrencySeeder::class,
+            FiscalYearSeeder::class,
+            MasterApplicationSettingsSeeder::class,
+            AppSettingSeeder::class,
+            LanguageSeeder::class,
+            ApplicationSettingSeeder::class,
+            GeneralSettingSeeder::class,
+            MasterDocumentNumberingSeeder::class,
+            DocumentNumberingSeeder::class,
+            MasterChartOfAccountSeeder::class,
+            AccountingConfigurationSeeder::class,
             FullPermissionUserSeeder::class,
         ]);
     }

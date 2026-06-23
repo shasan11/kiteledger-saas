@@ -6,14 +6,11 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * Used by the web installer for real customer deployments.
+ * Optional full production seed.
  *
- * Mirrors DatabaseSeeder's call list but excludes seeders that create
- * demo/sample business records or backdoor user accounts with hardcoded
- * passwords (MainBranchSeeder, ProductSeeder, FullPermissionUserSeeder,
- * TransactionalRecordSeeder, AccountingTransactionVolumeSeeder). Only
- * structural/configuration/lookup data is loaded; the installer's own
- * createSuperAdmin() is the only login created.
+ * The cPanel web installer intentionally uses DatabaseSeeder's smaller list.
+ * Run this manually after install when the app needs the full module lookup
+ * and configuration dataset.
  */
 class ProductionSeeder extends Seeder
 {

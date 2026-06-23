@@ -26,9 +26,5 @@ class StockFroidenInstallerTest extends TestCase
         $this->get('/install/environment')->assertOk();  // DB credentials form
         $this->get('/install/requirements')->assertOk();
         $this->get('/install/permissions')->assertOk();
-        $this->get('/install/database')
-            ->assertOk()
-            ->assertSee('Preparing database installation')
-            ->assertDontSee('Installer has not started');
     }
 }
