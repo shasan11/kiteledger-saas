@@ -139,11 +139,18 @@ class LocalizationService
 
     private function hasLanguageTable(): bool
     {
-        return Cache::remember(
-            'localization.language-table',
-            now()->addMinute(),
-            fn () => Schema::hasTable('languages'),
-        );
+        try {
+            return Cache::remember(
+                'localization.language-table',
+                now()->addMinute(),
+                fn () => Schema::hasTable('languages'),
+            );
+        } catch (\Throwable) {
+            // Before install (placeholder DB credentials) or during a DB outage
+            // the connection check itself throws — fall back to the bundled JSON
+            // language files instead of 500-ing every page, including /install.
+            return false;
+        }
     }
 
     /**
