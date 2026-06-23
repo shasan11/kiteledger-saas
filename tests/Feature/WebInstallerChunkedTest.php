@@ -53,7 +53,7 @@ class WebInstallerChunkedTest extends TestCase
         $this->assertStringContainsString('Background command launched', implode("\n", $payload['log'] ?? []));
     }
 
-    public function test_status_endpoint_only_reads_status_and_does_not_run_installer_work(): void
+    public function test_status_endpoint_does_not_run_installer_work(): void
     {
         app(WebInstallStatus::class)->begin();
         app(WebInstallStatus::class)->workerStarted('fake install worker');
@@ -71,6 +71,24 @@ class WebInstallerChunkedTest extends TestCase
 
         $this->assertSame('running', $payload['state'] ?? null);
         $this->assertStringNotContainsString('Schema started', implode("\n", $payload['log'] ?? []));
+    }
+
+    public function test_status_endpoint_bootstraps_worker_for_stale_cached_frontend(): void
+    {
+        $this->app->instance(WebInstallLauncher::class, new class extends WebInstallLauncher {
+            public function launch(): string
+            {
+                return 'fake install worker';
+            }
+        });
+
+        $payload = $this->getJson('/install/database/status')
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('running', $payload['state'] ?? null);
+        $this->assertNotSame('Installer has not started.', $payload['message'] ?? null);
+        $this->assertStringContainsString('Background command launched', implode("\n", $payload['log'] ?? []));
     }
 
     public function test_start_endpoint_does_not_launch_duplicate_running_worker(): void

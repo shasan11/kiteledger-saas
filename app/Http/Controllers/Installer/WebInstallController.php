@@ -55,23 +55,30 @@ class WebInstallController extends Controller
             return response()->json($state);
         }
 
-        if (($state['state'] ?? 'idle') === 'idle') {
-            $state = $status->begin();
-        }
-
-        try {
-            $command = $launcher->launch();
-            $status->workerStarted($command);
-        } catch (Throwable $e) {
-            $status->failed($e->getMessage() ?: 'The installer worker could not be started.');
-        }
+        $this->launchWorker($status, $launcher, $state);
 
         return response()->json($status->read());
     }
 
-    public function status(WebInstallStatus $status): JsonResponse
+    public function status(WebInstallStatus $status, WebInstallLauncher $launcher): JsonResponse
     {
         $this->forceEnglish();
+
+        if (InstalledState::isInstalled()) {
+            $status->succeeded('Application has been successfully installed.');
+
+            return response()->json($status->read());
+        }
+
+        $state = $status->read();
+
+        // cPanel can serve stale compiled Blade/JS that polls status directly.
+        // Keep this endpoint free of migration/seed work, but allow it to
+        // bootstrap the detached CLI worker so old JS cannot loop forever on
+        // the idle "Installer has not started" payload.
+        if (($state['state'] ?? 'idle') === 'idle') {
+            $this->launchWorker($status, $launcher, $state);
+        }
 
         return response()->json($status->read());
     }
@@ -100,5 +107,23 @@ class WebInstallController extends Controller
     {
         app()->setLocale('en');
         config(['app.locale' => 'en']);
+    }
+
+    private function launchWorker(WebInstallStatus $status, WebInstallLauncher $launcher, array $state): void
+    {
+        if (($state['state'] ?? null) === 'running' && $status->hasWorkerStarted($state)) {
+            return;
+        }
+
+        if (($state['state'] ?? 'idle') === 'idle') {
+            $status->begin();
+        }
+
+        try {
+            $command = $launcher->launch();
+            $status->workerStarted($command);
+        } catch (Throwable $e) {
+            $status->failed($e->getMessage() ?: 'The installer worker could not be started.');
+        }
     }
 }
