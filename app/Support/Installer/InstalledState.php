@@ -35,7 +35,9 @@ class InstalledState
      */
     public static function isInstalled(): bool
     {
-        return is_file(self::lockPath());
+        // Stock Froiden writes storage/installed at its final step; honour that
+        // too so an install completed through Froiden is recognised everywhere.
+        return is_file(self::lockPath()) || is_file(self::froidenLockPath());
     }
 
     public static function mark(): void

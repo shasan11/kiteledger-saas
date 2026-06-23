@@ -2,8 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Http\Controllers\Install\InstallController;
-use App\Support\Installer\EnvWriter;
 use App\Support\Installer\InstalledState;
 use Closure;
 use Illuminate\Http\Request;
@@ -11,47 +9,30 @@ use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 /**
- * Funnels an un-installed deployment to the web installer. A no-op for any
- * already-installed system (the common case), so it is safe on the web group.
+ * Funnels an un-installed deployment to the Froiden web installer (/install).
+ * A no-op once installed (the common case), so it is safe on the web group.
+ * Also auto-creates .env + APP_KEY on first boot so the app can be unzipped and
+ * opened without a shell step.
  */
 class EnsureInstalled
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // First boot on a fresh server: create .env + APP_KEY automatically so
-        // the user can just upload the files and open the URL — no shell step
-        // required. Best-effort; if the filesystem is read-only the installer
-        // engine still runs key-free.
+        // First boot on a fresh server: create .env + APP_KEY automatically.
         $this->bootstrapEnvironment($request);
 
         $path = trim($request->path(), '/');
-        $isSetup = $path === 'install/setup' || str_starts_with($path, 'install/setup/');
-        $isFroidenIntro = ! $isSetup && ($path === 'install' || str_starts_with($path, 'install/'));
+        $isInstall = $path === 'install' || str_starts_with($path, 'install/');
 
-        // During the install screens, keep benign PHP warnings (e.g. PHP 8.4's
-        // tempnam temp-dir notice on tight-permission hosts) from being echoed
-        // into responses or promoted to exceptions by Laravel's debug handler.
-        // Real errors/exceptions still surface.
-        if (($isSetup || $isFroidenIntro) && ! app()->environment('testing')) {
+        // On the install screens, keep benign PHP warnings (e.g. PHP 8.4's
+        // tempnam temp-dir notice on tight-permission hosts) out of the response
+        // and from being promoted to exceptions. Real errors still surface.
+        if ($isInstall && ! app()->environment('testing')) {
             @ini_set('display_errors', '0');
             error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
         }
 
-        // Our engine (/install/setup) strips session middleware and runs fine
-        // without an APP_KEY. The Froiden intro screens use the session-backed
-        // web stack, which needs a key. So when no key exists yet, serve the
-        // engine directly and skip the Froiden screens entirely.
-        if (! $this->hasAppKey()) {
-            if ($isSetup) {
-                return $this->handleSetupWithoutAppKey($request);
-            }
-
-            if ($isFroidenIntro) {
-                return redirect('/install/setup');
-            }
-        }
-
-        // Never gate the automated test suite (fresh DBs have no users/lock).
+        // Never gate the automated test suite (fresh DBs have no lock).
         if (app()->environment('testing')) {
             return $next($request);
         }
@@ -60,9 +41,8 @@ class EnsureInstalled
             return $next($request);
         }
 
-        // Let the installer (Froiden intro + our engine), health check and
-        // static assets through.
-        if ($isFroidenIntro || $isSetup || $request->is('up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
+        // Let the installer, health check and static assets through.
+        if ($isInstall || $request->is('up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
             return $next($request);
         }
 
@@ -82,10 +62,9 @@ class EnsureInstalled
      * Ensure a usable .env with an APP_KEY exists on first boot.
      *
      * Laravel loads .env before any middleware, so a freshly uploaded app boots
-     * with no environment and no key. Here, on the first web request, we create
-     * .env from .env.example (or a minimal default) and generate APP_KEY, then
-     * push the key into the running config so THIS request can already use it.
-     * Subsequent requests boot normally from the written file.
+     * with no environment and no key. On the first web request we create .env
+     * from .env.example (or a minimal default) and generate APP_KEY, then push
+     * the key into the running config so THIS request can already use it.
      */
     private function bootstrapEnvironment(Request $request): void
     {
@@ -93,10 +72,6 @@ class EnsureInstalled
         if (app()->environment('testing')) {
             return;
         }
-
-        // Runtime writable dirs (storage/framework/*, bootstrap/cache) are
-        // ensured even earlier in AppServiceProvider::register(), so they exist
-        // before any view renders — including Laravel's own error page.
 
         $envPath = base_path('.env');
 
@@ -107,20 +82,19 @@ class EnsureInstalled
                     ? (string) file_get_contents($example)
                     : "APP_NAME=KiteLedger\nAPP_ENV=production\nAPP_KEY=\nAPP_DEBUG=false\nAPP_URL=\n";
 
-                // Point APP_URL at the actual host so the installer's assets
-                // (Froiden CSS, etc.) resolve before the user confirms the URL.
+                // Point APP_URL at the actual host so the installer assets resolve.
                 $host = rtrim($request->getSchemeAndHttpHost(), '/');
                 $contents = $this->setEnvValue($contents, 'APP_URL', $host);
 
                 if (@file_put_contents($envPath, $contents, LOCK_EX) === false) {
-                    return; // read-only filesystem — engine still runs key-free
+                    return; // read-only filesystem
                 }
 
                 config(['app.url' => $host]);
             }
 
             if (! $this->hasAppKey()) {
-                $key = EnvWriter::generateKey();
+                $key = 'base64:'.base64_encode(random_bytes(32));
                 $current = is_file($envPath) ? (string) file_get_contents($envPath) : '';
                 $updated = $this->setEnvValue($current, 'APP_KEY', $key);
 
@@ -132,7 +106,7 @@ class EnsureInstalled
                 }
             }
         } catch (Throwable) {
-            // Never let bootstrapping break the request; fall back to key-free.
+            // Never let bootstrapping break the request.
         }
     }
 
@@ -148,25 +122,5 @@ class EnsureInstalled
         }
 
         return rtrim($contents, "\r\n")."\n".$line."\n";
-    }
-
-    /**
-     * Serve the /install/setup engine directly when no APP_KEY exists yet,
-     * bypassing the session/cookie middleware that would otherwise fail.
-     */
-    private function handleSetupWithoutAppKey(Request $request): Response
-    {
-        $controller = app(InstallController::class);
-        $path = trim($request->path(), '/');
-
-        $result = match ([$request->method(), $path]) {
-            ['GET', 'install/setup'] => $controller->index($request),
-            ['GET', 'install/setup/requirements'] => $controller->requirements(),
-            ['POST', 'install/setup/database'] => $controller->testDatabase($request),
-            ['POST', 'install/setup/run'] => $controller->run($request),
-            default => abort(404),
-        };
-
-        return $result instanceof Response ? $result : response($result);
     }
 }

@@ -2,42 +2,14 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Documents\DocumentUploadPageController;
-use App\Http\Controllers\Install\InstallController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Middleware\RedirectIfInstalled;
-use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
-use Illuminate\Cookie\Middleware\EncryptCookies;
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
-use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
-use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 
-/*
-| Web installer engine (/install/setup). The Froiden package owns the intro
-| screens at /install (welcome → requirements → permissions); its permissions
-| "Next" hands off here for the DB + company + branch + admin + run that the
-| stock Froiden installer cannot do. Mounted under /install/setup so it never
-| collides with Froiden's /install, /install/requirements, /install/database.
-| Protected by RedirectIfInstalled; POST routes are CSRF-exempt (see
-| bootstrap/app.php) since the wizard runs before login/session setup.
-*/
-Route::prefix('install/setup')
-    ->middleware(RedirectIfInstalled::class)
-    ->withoutMiddleware([
-        EncryptCookies::class,
-        AddQueuedCookiesToResponse::class,
-        StartSession::class,
-        ShareErrorsFromSession::class,
-        PreventRequestForgery::class,
-    ])
-    ->group(function () {
-        Route::get('/', [InstallController::class, 'index'])->name('install.setup.index');
-        Route::get('/requirements', [InstallController::class, 'requirements'])->name('install.setup.requirements');
-        Route::post('/database', [InstallController::class, 'testDatabase'])->name('install.setup.database');
-        Route::post('/run', [InstallController::class, 'run'])->name('install.setup.run');
-    });
+// The web installer is the Froiden package (routes registered by its service
+// provider under /install). EnsureInstalled (bootstrap/app.php) redirects an
+// un-installed deployment there.
 
 // Note: GET /storage/{path} is served by Laravel's built-in route (named
 // storage.public, registered because the "public" disk has 'serve' => true in
