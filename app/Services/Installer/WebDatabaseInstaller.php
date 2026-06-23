@@ -13,32 +13,15 @@ use Throwable;
 
 class WebDatabaseInstaller
 {
-    /** Ordered phases. Each is short enough to run inside one HTTP poll. */
-    public function steps(): array
-    {
-        return ['schema', 'seed', 'finalize'];
-    }
-
-    /** Run a single phase (used by the poll-driven web installer). */
-    public function runStep(string $step, callable $progress): void
+    /** Run the whole install in one go from the CLI worker. */
+    public function run(callable $progress): array
     {
         @set_time_limit(0);
         @ini_set('memory_limit', '-1');
 
-        match ($step) {
-            'schema' => $this->stepSchema($progress),
-            'seed' => $this->stepSeed($progress),
-            'finalize' => $this->stepFinalize($progress),
-            default => null,
-        };
-    }
-
-    /** Run the whole install in one go (used by the CLI fallback). */
-    public function run(callable $progress): array
-    {
-        foreach ($this->steps() as $step) {
-            $this->runStep($step, $progress);
-        }
+        $this->stepSchema($progress);
+        $this->stepSeed($progress);
+        $this->stepFinalize($progress);
 
         return [
             'status' => 'success',
@@ -56,6 +39,7 @@ class WebDatabaseInstaller
 
     private function stepSchema(callable $progress): void
     {
+        $progress('Schema started.', 'Running schema');
         $progress('Preparing the configured database connection.', 'Preparing database');
         $this->ensureSqliteDatabaseExists();
 
@@ -73,6 +57,8 @@ class WebDatabaseInstaller
 
     private function stepSeed(callable $progress): void
     {
+        $progress('Seed started.', 'Seeding database');
+
         if ($this->usesDump()) {
             $progress('Ensuring the administrator account exists.', 'Seeding administrator');
             $this->callArtisan('db:seed', [
@@ -94,6 +80,7 @@ class WebDatabaseInstaller
 
     private function stepFinalize(callable $progress): void
     {
+        $progress('Finalize started.', 'Finalizing');
         $progress('Creating the public storage link when the host allows it.', 'Linking storage');
         $this->callOptionalArtisan('storage:link', ['--force' => true, '--no-interaction' => true]);
 

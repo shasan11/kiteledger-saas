@@ -13,6 +13,7 @@ use Inertia\Inertia;
 // un-installed deployment there.
 Route::prefix('install')->name('LaravelInstaller::')->group(function () {
     Route::get('database', [WebInstallController::class, 'database'])->name('database');
+    Route::match(['get', 'post'], 'database/start', [WebInstallController::class, 'start'])->name('database.start');
     Route::get('database/status', [WebInstallController::class, 'status'])->name('database.status');
     Route::get('final', [WebInstallController::class, 'final'])->name('final');
 });
