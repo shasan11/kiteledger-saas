@@ -13,13 +13,12 @@ use Illuminate\View\View;
 use Throwable;
 
 /**
- * Poll-driven web installer. Migrate + seed are split into phases that run one
- * per status poll, so no single request exceeds the web server's proxy timeout
- * and no fragile background process is needed (works on shared/FastPanel hosts).
+ * Poll-driven web installer. The first page request creates a visible running
+ * status immediately; later status polls advance the database work.
  */
 class WebInstallController extends Controller
 {
-    public function database(Request $request, WebInstallStatus $status): View|RedirectResponse
+    public function database(Request $request, WebInstallStatus $status, WebDatabaseInstaller $installer): View|RedirectResponse
     {
         $this->forceEnglish();
 
@@ -31,9 +30,10 @@ class WebInstallController extends Controller
             $status->reset();
         }
 
-        // Render fast — the work happens in the status polls below.
+        $state = $this->startStatusIfNeeded($status, $installer);
+
         return view('vendor.installer.database-progress', [
-            'status' => $status->read(),
+            'status' => $state,
         ]);
     }
 
@@ -54,13 +54,8 @@ class WebInstallController extends Controller
         @ini_set('memory_limit', '-1');
         @ini_set('display_errors', '0');
 
-        $state = $status->read();
+        $state = $this->startStatusIfNeeded($status, $installer);
 
-        if (($state['state'] ?? 'idle') === 'idle') {
-            $state = $status->begin($installer->steps());
-        }
-
-        // Another poll is already executing a phase — just report progress.
         if (($state['state'] ?? null) === 'running' && ! $status->isLocked($state)) {
             $this->runNextPhase($status, $installer, $state);
         }
@@ -93,7 +88,6 @@ class WebInstallController extends Controller
         $steps = $installer->steps();
         $phase = (int) ($state['phase'] ?? 0);
 
-        // All phases done → write the install lock and finish.
         if ($phase >= count($steps)) {
             InstalledState::mark();
             $status->succeeded('Application has been successfully installed.');
@@ -111,7 +105,6 @@ class WebInstallController extends Controller
             $status->advance();
             $status->unlock();
 
-            // If that was the last phase, finish now.
             if (($phase + 1) >= count($steps)) {
                 InstalledState::mark();
                 $status->succeeded('Application has been successfully installed.');
@@ -119,6 +112,17 @@ class WebInstallController extends Controller
         } catch (Throwable $e) {
             $status->failed($e->getMessage() ?: 'Installation failed.');
         }
+    }
+
+    private function startStatusIfNeeded(WebInstallStatus $status, WebDatabaseInstaller $installer): array
+    {
+        $state = $status->read();
+
+        if (($state['state'] ?? 'idle') === 'idle') {
+            return $status->begin($installer->steps());
+        }
+
+        return $state;
     }
 
     private function forceEnglish(): void

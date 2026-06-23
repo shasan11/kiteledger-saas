@@ -14,11 +14,21 @@ class StockFroidenInstallerTest extends TestCase
         InstalledState::clear();
     }
 
+    protected function tearDown(): void
+    {
+        InstalledState::clear();
+        parent::tearDown();
+    }
+
     public function test_stock_froiden_screens_render(): void
     {
         $this->get('/install')->assertOk();              // welcome
         $this->get('/install/environment')->assertOk();  // DB credentials form
         $this->get('/install/requirements')->assertOk();
         $this->get('/install/permissions')->assertOk();
+        $this->get('/install/database')
+            ->assertOk()
+            ->assertSee('Preparing database installation')
+            ->assertDontSee('Installer has not started');
     }
 }
