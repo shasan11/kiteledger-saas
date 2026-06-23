@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Branch;
+use App\Models\Currency;
 use App\Models\Language;
 use App\Models\User;
 use App\Support\Installer\InstalledState;
@@ -112,5 +114,24 @@ class InstallerFullRunTest extends TestCase
         // No demo/backdoor accounts from the excluded seeders.
         $this->assertNull(User::query()->where('email', 'admin@kiteledger.test')->first());
         $this->assertSame(1, User::query()->count(), 'Only the real admin created by the installer should exist.');
+
+        // Company name the user entered must win over the seeded demo rows, and
+        // there must be exactly ONE settings row (the seeders create two).
+        $this->assertSame(1, AppSetting::query()->count(), 'Duplicate app_settings rows must be collapsed to one.');
+        $settings = AppSetting::query()->orderBy('created_at')->first();
+        $this->assertSame('Acme Inc', $settings->company_name);
+        $this->assertNull($settings->tax_number, 'Demo identity fields must be cleared.');
+
+        // Exactly one base currency = the chosen one, rate 1, and it is the
+        // company default currency.
+        $base = Currency::query()->where('is_base', true)->get();
+        $this->assertCount(1, $base, 'There must be exactly one base currency.');
+        $this->assertSame('USD', $base->first()->code);
+        $this->assertEquals(1.0, (float) $base->first()->exchange_rate);
+        $this->assertSame($base->first()->id, $settings->default_currency_id);
+
+        // The admin can authenticate with the credentials entered in the form.
+        $admin = User::query()->where('email', 'owner@acme.test')->first();
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('password123', $admin->password));
     }
 }

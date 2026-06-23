@@ -393,16 +393,28 @@ class InstallController extends Controller
             ]);
         }
 
-        // Make it the single base currency.
+        // Make it the single base currency. The base must have exchange_rate 1
+        // (an already-seeded currency may carry a non-1 rate), and take the
+        // symbol the user entered if any.
         Currency::query()->where('id', '!=', $currency->id)->update(['is_base' => false]);
-        $currency->forceFill(['is_base' => true, 'active' => true])->save();
+        $currency->forceFill([
+            'is_base' => true,
+            'active' => true,
+            'exchange_rate' => 1,
+            'symbol' => ($data['currency_symbol'] ?? null) ?: $currency->symbol,
+        ])->save();
 
         return $currency;
     }
 
     private function applyCompanySettings(array $data, Currency $currency, ?FiscalYear $fiscalYear): void
     {
-        $settings = AppSetting::query()->first() ?? new AppSetting;
+        // The seeders create more than one app_settings row; the app reads the
+        // singleton as orderBy('created_at')->first() (see AppSettingController),
+        // so target that exact row — otherwise the company name/currency the user
+        // typed can land on a row the app never shows (it would display demo data
+        // instead). Then collapse to a single row so there is one source of truth.
+        $settings = AppSetting::query()->orderBy('created_at')->first() ?? new AppSetting;
 
         $settings->fill([
             'company_name' => $data['company_name'],
@@ -415,9 +427,24 @@ class InstallController extends Controller
             'default_currency_id' => $currency->id,
             'fiscal_year_id' => $fiscalYear?->id,
             'timezone' => $data['timezone'],
+            // Clear demo-only identity fields the installer doesn't collect so no
+            // sample data (PAN/VAT numbers, Nepali address, tagline) ships into a
+            // real install. All editable later in Settings → Company Profile.
+            'registration_number' => null,
+            'tax_number' => null,
+            'vat_number' => null,
+            'tag_line' => null,
+            'address_line_1' => null,
+            'address_line_2' => null,
+            'city' => null,
+            'state' => null,
+            'postal_code' => null,
         ]);
 
         $settings->save();
+
+        // Remove any duplicate settings rows the seeders created.
+        AppSetting::query()->where('id', '!=', $settings->getKey())->delete();
     }
 
     private function applyBranch(array $data): Branch
