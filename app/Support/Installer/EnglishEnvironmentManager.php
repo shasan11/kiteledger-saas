@@ -32,7 +32,7 @@ class EnglishEnvironmentManager extends EnvironmentManager
         return (string) file_get_contents($this->envPath);
     }
 
-    public function saveFile(Request $input): string
+    public function saveFile(Request $input)
     {
         $env = $this->getEnvContent();
         $dbName = (string) $input->get('database');
