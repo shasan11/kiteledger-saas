@@ -1,6 +1,6 @@
 <?php
 
-use Database\Seeders\ProductionSeeder;
+use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -35,10 +35,10 @@ Artisan::command('install:build-sql {--path=database/sql/mysql_install.sql} {--f
         return 1;
     }
 
-    $this->warn('Rebuilding the current database with migrations and ProductionSeeder...');
+    $this->warn('Rebuilding the current database with migrations and DatabaseSeeder...');
     Artisan::call('migrate:fresh', ['--force' => true]);
     $this->output->write(Artisan::output());
-    Artisan::call('db:seed', ['--force' => true, '--class' => ProductionSeeder::class]);
+    Artisan::call('db:seed', ['--force' => true, '--class' => DatabaseSeeder::class]);
     $this->output->write(Artisan::output());
 
     $config = $connection->getConfig();

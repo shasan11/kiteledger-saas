@@ -68,7 +68,7 @@ class InstalledState
 
     public static function clear(): void
     {
-        foreach ([self::lockPath(), self::froidenLockPath()] as $path) {
+        foreach ([self::lockPath(), self::froidenLockPath(), storage_path('app/install/status.json')] as $path) {
             if (is_file($path)) {
                 @unlink($path);
             }

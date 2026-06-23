@@ -1,9 +1,9 @@
 @extends('vendor.installer.layouts.master')
 
-@section('title', trans('installer_messages.welcome.title'))
+@section('title', 'Welcome To The Installer')
 @section('container')
-    <p class="paragraph" style="text-align: center;">{{ trans('installer_messages.welcome.message') }}</p>
+    <p class="paragraph" style="text-align: center;">Welcome to the setup wizard.</p>
     <div class="buttons">
-        <a href="{{ route('LaravelInstaller::environment') }}" class="button">{{ trans('installer_messages.next') }}</a>
+        <a href="{{ route('LaravelInstaller::environment') }}" class="button">Next Step</a>
     </div>
 @stop

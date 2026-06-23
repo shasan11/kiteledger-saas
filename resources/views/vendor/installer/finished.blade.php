@@ -1,6 +1,6 @@
 @extends('vendor.installer.layouts.master')
 
-@section('title', trans('installer_messages.final.title'))
+@section('title', 'Finished')
 @section('container')
     <p class="paragraph" style="text-align: center;">{{ data_get(session('message'), 'message') ?: 'Installation complete.' }}</p>
 

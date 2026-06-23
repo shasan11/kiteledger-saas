@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Documents\DocumentUploadPageController;
+use App\Http\Controllers\Installer\WebInstallController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -10,6 +11,11 @@ use Inertia\Inertia;
 // The web installer is the Froiden package (routes registered by its service
 // provider under /install). EnsureInstalled (bootstrap/app.php) redirects an
 // un-installed deployment there.
+Route::prefix('install')->name('LaravelInstaller::')->group(function () {
+    Route::get('database', [WebInstallController::class, 'database'])->name('database');
+    Route::get('database/status', [WebInstallController::class, 'status'])->name('database.status');
+    Route::get('final', [WebInstallController::class, 'final'])->name('final');
+});
 
 // Note: GET /storage/{path} is served by Laravel's built-in route (named
 // storage.public, registered because the "public" disk has 'serve' => true in
