@@ -43,6 +43,15 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->ensureWritableStorage();
 
+        $this->app->bind(
+            \Froiden\LaravelInstaller\Helpers\InstalledFileManager::class,
+            \App\Support\Installer\FroidenInstalledFileManager::class,
+        );
+        $this->app->bind(
+            \Froiden\LaravelInstaller\Helpers\DatabaseManager::class,
+            \App\Support\Installer\FroidenDatabaseManager::class,
+        );
+
         $this->app->singleton(\App\Services\SmsService::class);
         $this->app->alias(\App\Services\SmsService::class, 'sms');
     }

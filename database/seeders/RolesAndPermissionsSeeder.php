@@ -70,6 +70,13 @@ class RolesAndPermissionsSeeder extends Seeder
 
         DB::transaction(function () {
             $permissionNames = $this->buildPermissionNames();
+            $roles = $this->roles();
+
+            if ($this->canBulkSeedFreshInstall()) {
+                $this->bulkSeedFreshInstall($permissionNames, $roles);
+
+                return;
+            }
 
             $this->pruneUnsupportedPermissions($permissionNames);
 
@@ -77,8 +84,6 @@ class RolesAndPermissionsSeeder extends Seeder
             foreach ($permissionNames as $permissionName) {
                 $permissionIds[$permissionName] = $this->upsertPermission($permissionName);
             }
-
-            $roles = $this->roles();
 
             $roleIds = [];
             foreach ($roles as $roleName => $config) {
@@ -104,6 +109,180 @@ class RolesAndPermissionsSeeder extends Seeder
 
         if (class_exists(\Spatie\Permission\PermissionRegistrar::class)) {
             app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        }
+    }
+
+    private function canBulkSeedFreshInstall(): bool
+    {
+        if (! Schema::hasTable('permissions') || ! Schema::hasTable('roles')) {
+            return false;
+        }
+
+        return DB::table('permissions')->count() === 0
+            && DB::table('roles')->count() === 0;
+    }
+
+    private function bulkSeedFreshInstall(array $permissionNames, array $roles): void
+    {
+        $now = now();
+        $permissionColumns = array_flip(Schema::getColumnListing('permissions'));
+        $roleColumns = array_flip(Schema::getColumnListing('roles'));
+        $permissionIds = [];
+        $roleIds = [];
+        $permissionRows = [];
+        $roleRows = [];
+
+        foreach ($permissionNames as $permissionName) {
+            $id = (string) Str::uuid();
+            $permissionIds[$permissionName] = $id;
+
+            $row = [
+                'id' => $id,
+                'name' => $permissionName,
+            ];
+
+            if (isset($permissionColumns['guard_name'])) {
+                $row['guard_name'] = $this->guard;
+            }
+            if (isset($permissionColumns['module'])) {
+                $row['module'] = Str::before($permissionName, '.');
+            }
+            if (isset($permissionColumns['description'])) {
+                $row['description'] = Str::headline(str_replace(['.', '_', '-'], ' ', $permissionName));
+            }
+            if (isset($permissionColumns['branch_id'])) {
+                $row['branch_id'] = null;
+            }
+            if (isset($permissionColumns['active'])) {
+                $row['active'] = true;
+            }
+            if (isset($permissionColumns['is_system_generated'])) {
+                $row['is_system_generated'] = true;
+            }
+            if (isset($permissionColumns['user_add_id'])) {
+                $row['user_add_id'] = null;
+            }
+            if (isset($permissionColumns['created_at'])) {
+                $row['created_at'] = $now;
+            }
+            if (isset($permissionColumns['updated_at'])) {
+                $row['updated_at'] = $now;
+            }
+
+            $permissionRows[] = $row;
+        }
+
+        foreach ($roles as $roleName => $config) {
+            $id = (string) Str::uuid();
+            $roleIds[$roleName] = $id;
+
+            $row = [
+                'id' => $id,
+                'name' => $roleName,
+            ];
+
+            if (isset($roleColumns['guard_name'])) {
+                $row['guard_name'] = $this->guard;
+            }
+            if (isset($roleColumns['description'])) {
+                $row['description'] = $this->roleDescription($roleName);
+            }
+            if (isset($roleColumns['branch_id'])) {
+                $row['branch_id'] = null;
+            }
+            if (isset($roleColumns['active'])) {
+                $row['active'] = true;
+            }
+            if (isset($roleColumns['is_system_generated'])) {
+                $row['is_system_generated'] = true;
+            }
+            if (isset($roleColumns['user_add_id'])) {
+                $row['user_add_id'] = null;
+            }
+            if (isset($roleColumns['created_at'])) {
+                $row['created_at'] = $now;
+            }
+            if (isset($roleColumns['updated_at'])) {
+                $row['updated_at'] = $now;
+            }
+
+            $roleRows[] = $row;
+        }
+
+        foreach (array_chunk($permissionRows, 500) as $chunk) {
+            DB::table('permissions')->insert($chunk);
+        }
+
+        foreach (array_chunk($roleRows, 100) as $chunk) {
+            DB::table('roles')->insert($chunk);
+        }
+
+        $this->bulkSeedRolePermissions($permissionNames, $permissionIds, $roles, $roleIds, $now);
+        $this->assignSuperAdminToFirstUser($roleIds['Super Admin'] ?? null);
+    }
+
+    private function bulkSeedRolePermissions(
+        array $permissionNames,
+        array $permissionIds,
+        array $roles,
+        array $roleIds,
+        mixed $now
+    ): void {
+        if (Schema::hasTable('role_permissions')) {
+            $rolePermissionColumns = array_flip(Schema::getColumnListing('role_permissions'));
+            $rows = [];
+
+            foreach ($roles as $roleName => $config) {
+                $matchedPermissionNames = $this->matchPermissions(
+                    $permissionNames,
+                    $config['allow'] ?? [],
+                    $config['deny'] ?? []
+                );
+
+                foreach ($matchedPermissionNames as $permissionName) {
+                    $row = [
+                        'id' => (string) Str::uuid(),
+                        'role_id' => $roleIds[$roleName],
+                        'permission_id' => $permissionIds[$permissionName],
+                    ];
+
+                    if (isset($rolePermissionColumns['created_at'])) {
+                        $row['created_at'] = $now;
+                    }
+                    if (isset($rolePermissionColumns['updated_at'])) {
+                        $row['updated_at'] = $now;
+                    }
+
+                    $rows[] = $row;
+                }
+            }
+
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('role_permissions')->insert($chunk);
+            }
+        }
+
+        if (Schema::hasTable('role_has_permissions')) {
+            $rows = [];
+
+            foreach ($roles as $roleName => $config) {
+                $matchedPermissionNames = $this->matchPermissions(
+                    $permissionNames,
+                    $config['allow'] ?? [],
+                    $config['deny'] ?? []
+                );
+
+                foreach ($matchedPermissionNames as $permissionName) {
+                    $rows[] = [
+                        'role_id' => $roleIds[$roleName],
+                        'permission_id' => $permissionIds[$permissionName],
+                    ];
+                }
+            }
+
+            foreach (array_chunk($rows, 500) as $chunk) {
+                DB::table('role_has_permissions')->insert($chunk);
+            }
         }
     }
 
