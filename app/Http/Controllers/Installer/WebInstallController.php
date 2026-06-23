@@ -22,48 +22,27 @@ class WebInstallController extends Controller
             return redirect('/login');
         }
 
-        if ($request->boolean('reset')) {
-            $status->reset();
-        }
-
-        $state = $status->read();
-
-        if (($state['state'] ?? null) === 'succeeded') {
-            $status->reset();
-            $state = $status->read();
-        }
-
-        if ($status->isStale($state)) {
-            $status->failed('The previous installer worker stopped updating. Start the install again.');
-            $state = $status->read();
-        }
-
-        if (! in_array($state['state'], ['running', 'succeeded'], true)) {
-            $state = $status->start();
-
-            if (app()->environment('testing')) {
-                $status->failed('Installer worker is disabled during automated tests.');
-                $state = $status->read();
-            } else {
-                try {
-                    $launcher->launch((string) $state['token']);
-                } catch (Throwable $e) {
-                    $status->failed($e->getMessage());
-                    $state = $status->read();
-                }
-            }
-        }
+        $state = $this->startInstallerWhenNeeded($status, $launcher, $request->boolean('reset'));
 
         return view('vendor.installer.database-progress', [
             'status' => $state,
         ]);
     }
 
-    public function status(WebInstallStatus $status): JsonResponse
+    public function status(WebInstallStatus $status, WebInstallLauncher $launcher): JsonResponse
     {
         $this->forceEnglish();
 
-        return response()->json($status->read());
+        if (InstalledState::isInstalled()) {
+            return response()->json([
+                ...$status->read(),
+                'state' => 'succeeded',
+                'step' => 'Finished',
+                'message' => 'Application has been successfully installed.',
+            ]);
+        }
+
+        return response()->json($this->startInstallerWhenNeeded($status, $launcher));
     }
 
     public function final(WebInstallStatus $status): View|RedirectResponse
@@ -92,5 +71,47 @@ class WebInstallController extends Controller
     {
         app()->setLocale('en');
         config(['app.locale' => 'en']);
+    }
+
+    private function startInstallerWhenNeeded(WebInstallStatus $status, WebInstallLauncher $launcher, bool $reset = false): array
+    {
+        if ($reset) {
+            $status->reset();
+        }
+
+        $state = $status->read();
+
+        if (($state['state'] ?? null) === 'succeeded') {
+            $status->reset();
+            $state = $status->read();
+        }
+
+        if ($status->isStale($state)) {
+            $status->failed('The previous installer worker stopped updating. Start the install again.');
+
+            return $status->read();
+        }
+
+        if (($state['state'] ?? null) !== 'idle') {
+            return $state;
+        }
+
+        $state = $status->start();
+
+        if (app()->environment('testing')) {
+            $status->failed('Installer worker is disabled during automated tests.');
+
+            return $status->read();
+        }
+
+        try {
+            $launcher->launch((string) $state['token']);
+        } catch (Throwable $e) {
+            $status->failed($e->getMessage());
+
+            return $status->read();
+        }
+
+        return $state;
     }
 }
