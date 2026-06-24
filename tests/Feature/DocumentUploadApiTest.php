@@ -60,7 +60,12 @@ class DocumentUploadApiTest extends TestCase
                 'file' => $file,
             ]);
 
-        $resp->assertOk()->assertJson(['ok' => true]);
+        $resp->assertOk()
+            ->assertJson(['ok' => true])
+            ->assertJsonMissingPath('document.file_path')
+            ->assertJsonMissingPath('document.file_hash')
+            ->assertJsonMissingPath('document.uploaded_by');
+
         $this->assertDatabaseHas('document_uploads', [
             'label' => 'Acme bill',
             'status' => 'uploaded',
@@ -68,17 +73,35 @@ class DocumentUploadApiTest extends TestCase
         ]);
     }
 
+    public function test_user_can_upload_supported_docx_document(): void
+    {
+        $user = $this->userWith(['document_upload.create']);
+        $file = UploadedFile::fake()->create(
+            'supplier-bill.docx',
+            50,
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+
+        $this->actingAs($user)
+            ->post('/api/document-uploads', [
+                'label' => 'Supplier bill DOCX',
+                'file' => $file,
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+    }
+
     public function test_upload_rejects_invalid_file_type(): void
     {
         $user = $this->userWith(['document_upload.create']);
-        $file = UploadedFile::fake()->create('malware.exe', 10, 'application/octet-stream');
+        $file = UploadedFile::fake()->create('bad.exe', 10, 'application/octet-stream');
 
         $this->actingAs($user)
             ->post('/api/document-uploads', ['label' => 'Bad', 'file' => $file])
             ->assertStatus(422);
     }
 
-    public function test_list_returns_documents(): void
+    public function test_list_returns_documents_without_storage_internals(): void
     {
         $user = $this->userWith(['document_upload.view']);
         DocumentUpload::create([
@@ -87,13 +110,68 @@ class DocumentUploadApiTest extends TestCase
             'file_path' => 'documents/a.pdf',
             'mime_type' => 'application/pdf',
             'file_size' => 100,
+            'file_hash' => hash('sha256', 'demo'),
             'status' => 'uploaded',
             'document_type' => 'unknown',
         ]);
+
         $this->actingAs($user)
             ->getJson('/api/document-uploads')
             ->assertOk()
-            ->assertJsonStructure(['data', 'total']);
+            ->assertJsonStructure(['data', 'total'])
+            ->assertJsonMissingPath('data.0.file_path')
+            ->assertJsonMissingPath('data.0.file_hash');
+    }
+
+    public function test_preview_uses_private_no_store_headers(): void
+    {
+        $user = $this->userWith(['document_upload.view']);
+        Storage::disk('local')->put('documents/a.pdf', 'fake-pdf');
+
+        $doc = DocumentUpload::create([
+            'label' => 'Preview',
+            'original_file_name' => 'a.pdf',
+            'file_path' => 'documents/a.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 8,
+            'status' => 'uploaded',
+            'document_type' => 'unknown',
+        ]);
+
+        $this->actingAs($user)
+            ->get("/api/document-uploads/{$doc->id}/preview")
+            ->assertOk()
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('Cache-Control', 'private, no-store, max-age=0');
+    }
+
+    public function test_extraction_response_hides_raw_ai_text(): void
+    {
+        $user = $this->userWith(['document_upload.extract.view']);
+        $doc = DocumentUpload::create([
+            'label' => 'X',
+            'original_file_name' => 'a.pdf',
+            'file_path' => 'documents/a.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 1,
+            'status' => 'extracted',
+        ]);
+
+        DocumentExtraction::create([
+            'document_upload_id' => $doc->id,
+            'status' => 'completed',
+            'raw_text' => 'sensitive provider output',
+            'extracted_json' => ['raw' => 'payload'],
+            'normalized_json' => ['document_type' => 'expense_receipt'],
+        ]);
+
+        $this->actingAs($user)
+            ->getJson("/api/document-uploads/{$doc->id}/extraction")
+            ->assertOk()
+            ->assertJsonMissingPath('extraction.raw_text')
+            ->assertJsonMissingPath('extraction.extracted_json')
+            ->assertJsonMissingPath('document.file_path')
+            ->assertJsonMissingPath('document.file_hash');
     }
 
     public function test_scan_endpoint_requires_permission(): void
@@ -120,7 +198,6 @@ class DocumentUploadApiTest extends TestCase
             'mime_type' => 'application/pdf', 'file_size' => 1, 'status' => 'needs_review',
         ]);
 
-        // simulate completed extraction with line + totals
         DocumentExtraction::create([
             'document_upload_id' => $doc->id,
             'status' => 'completed',
@@ -149,14 +226,12 @@ class DocumentUploadApiTest extends TestCase
         $proposalId = $resp->json('proposal.id');
         $this->assertNotEmpty($proposalId);
 
-        // No contact required for expense — should convert directly
         $convertResp = $this->actingAs($user)
             ->postJson("/api/document-uploads/{$doc->id}/proposals/{$proposalId}/convert")
             ->assertOk()
             ->assertJsonPath('ok', true)
             ->assertJsonPath('transaction_type', 'expense');
 
-        // Draft expense exists, approved=false
         $recordId = $convertResp->json('record_id');
         $this->assertDatabaseHas('expenses', [
             'id' => $recordId,
@@ -164,13 +239,11 @@ class DocumentUploadApiTest extends TestCase
             'status' => 'draft',
         ]);
 
-        // Document link created
         $this->assertDatabaseHas('document_links', [
             'document_upload_id' => $doc->id,
             'linkable_id' => $recordId,
         ]);
 
-        // Document status updated to converted
         $this->assertSame('converted', $doc->fresh()->status);
     }
 
