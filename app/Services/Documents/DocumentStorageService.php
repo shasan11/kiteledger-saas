@@ -14,9 +14,11 @@ class DocumentStorageService
         'image/jpeg',
         'image/png',
         'image/webp',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/zip',
     ];
 
-    public const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+    public const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'docx'];
 
     public function maxFileSizeBytes(): int
     {
@@ -35,18 +37,18 @@ class DocumentStorageService
             throw new RuntimeException('Invalid uploaded file.');
         }
 
-        $ext = strtolower($file->getClientOriginalExtension());
-        if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
-            throw new RuntimeException('Unsupported file type. Allowed: pdf, jpg, jpeg, png, webp.');
-        }
-
-        $mime = $file->getMimeType();
-        if ($mime && !in_array($mime, self::ALLOWED_MIMES, true)) {
-            throw new RuntimeException('Unsupported MIME type: ' . $mime);
-        }
-
         if ($file->getSize() > $this->maxFileSizeBytes()) {
             throw new RuntimeException('File exceeds maximum size of ' . config('documents.max_upload_mb', 10) . ' MB.');
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+            throw new RuntimeException('Unsupported file type. Allowed: pdf, jpg, jpeg, png, webp, docx.');
+        }
+
+        $mime = strtolower((string) $file->getMimeType());
+        if ($mime && !in_array($mime, self::ALLOWED_MIMES, true)) {
+            throw new RuntimeException('Unsupported MIME type: ' . $mime);
         }
     }
 
@@ -79,13 +81,7 @@ class DocumentStorageService
 
     public function previewUrl(DocumentUpload $doc): string
     {
-        // Private disk: serve via signed route. Public disk: direct URL.
-        $disk = Storage::disk($this->disk());
-        try {
-            return $disk->url($doc->file_path);
-        } catch (\Throwable $e) {
-            return route('api.document-uploads.preview', ['id' => $doc->id]);
-        }
+        return route('api.document-uploads.preview', ['id' => $doc->id]);
     }
 
     public function streamResponse(DocumentUpload $doc)
@@ -94,9 +90,16 @@ class DocumentStorageService
         if (!$disk->exists($doc->file_path)) {
             throw new RuntimeException('Document file is missing.');
         }
-        return $disk->response($doc->file_path, $doc->original_file_name, [
+
+        $response = $disk->response($doc->file_path, $doc->original_file_name, [
             'Content-Type' => $doc->mime_type,
         ]);
+
+        $response->headers->set('X-Content-Type-Options', 'nosniff');
+        $response->headers->set('Cache-Control', 'private, no-store, max-age=0');
+        $response->headers->set('Pragma', 'no-cache');
+
+        return $response;
     }
 
     public function delete(DocumentUpload $doc): void
