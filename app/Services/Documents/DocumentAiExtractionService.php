@@ -10,6 +10,8 @@ use ZipArchive;
 
 class DocumentAiExtractionService
 {
+    private const MAX_TEXT_CHARS = 30000;
+
     public function __construct(
         protected DocumentStorageService $storage,
         protected DocumentAiClient $ai,
@@ -20,10 +22,33 @@ class DocumentAiExtractionService
     {
         $extraction = DocumentExtraction::create([
             'document_upload_id' => $doc->id,
+            'status' => 'queued',
+        ]);
+
+        return $this->process($doc, $extraction);
+    }
+
+    public function process(DocumentUpload $doc, DocumentExtraction $extraction): DocumentExtraction
+    {
+        if (! $this->storage->exists($doc)) {
+            $message = 'Document file is missing.';
+            $extraction->update([
+                'status' => 'failed',
+                'error_message' => $message,
+                'completed_at' => now(),
+            ]);
+            $doc->update(['status' => 'failed']);
+
+            throw new RuntimeException($message);
+        }
+
+        $extraction->update([
             'status' => 'processing',
             'provider' => $this->ai->provider(),
             'model' => $this->ai->model(),
             'started_at' => now(),
+            'completed_at' => null,
+            'error_message' => null,
         ]);
 
         $doc->update(['status' => 'processing']);
@@ -57,16 +82,18 @@ class DocumentAiExtractionService
 
             return $extraction;
         } catch (\Throwable $e) {
+            $message = $this->safeErrorMessage($e);
+
             Log::error('Document extraction failed', [
                 'document_upload_id' => $doc->id,
                 'file_name' => $doc->original_file_name ?? null,
                 'mime_type' => $doc->mime_type ?? null,
-                'error' => $e->getMessage(),
+                'error' => $message,
             ]);
 
             $extraction->update([
                 'status' => 'failed',
-                'error_message' => $e->getMessage(),
+                'error_message' => $message,
                 'completed_at' => now(),
             ]);
 
@@ -80,7 +107,7 @@ class DocumentAiExtractionService
     {
         $base64 = $this->storage->readBase64($doc);
 
-        if (!$base64) {
+        if (! $base64) {
             throw new RuntimeException('Uploaded file could not be read.');
         }
 
@@ -102,7 +129,7 @@ class DocumentAiExtractionService
                 throw new RuntimeException('Word file could not be decoded.');
             }
 
-            $text = $this->extractTextFromDocxBinary($binary);
+            $text = $this->sanitizeDocumentText($this->extractTextFromDocxBinary($binary));
 
             if (trim($text) === '') {
                 throw new RuntimeException('No readable text was found inside the Word document.');
@@ -116,13 +143,22 @@ class DocumentAiExtractionService
             ];
         }
 
+        if ($this->isImage($mime, $extension)) {
+            return [
+                'base64' => $base64,
+                'mime' => $mime,
+                'user_prompt' => DocumentExtractionPrompt::user()
+                    . "\n\nThe uploaded document is an image. Extract visible accounting/document data from the image.",
+            ];
+        }
+
         if ($this->isOldDoc($mime, $extension)) {
             throw new RuntimeException(
                 'Old .doc Word files are not supported by this scanner. Please upload the file as .docx.'
             );
         }
 
-        throw new RuntimeException('Invalid file type. Only PDF and DOCX files are supported.');
+        throw new RuntimeException('Invalid file type. Only PDF, DOCX, JPG, PNG, and WEBP files are supported.');
     }
 
     private function detectMimeType(DocumentUpload $doc): string
@@ -139,6 +175,9 @@ class DocumentAiExtractionService
             'pdf' => 'application/pdf',
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'doc' => 'application/msword',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
             default => 'application/octet-stream',
         };
     }
@@ -184,15 +223,21 @@ class DocumentAiExtractionService
             ], true);
     }
 
+    private function isImage(string $mime, string $extension): bool
+    {
+        return in_array($extension, ['jpg', 'jpeg', 'png', 'webp'], true)
+            || in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true);
+    }
+
     private function extractTextFromDocxBinary(string $binary): string
     {
-        if (!class_exists(ZipArchive::class)) {
+        if (! class_exists(ZipArchive::class)) {
             throw new RuntimeException('PHP Zip extension is required to read DOCX files.');
         }
 
         $tempFile = tempnam(sys_get_temp_dir(), 'docx_');
 
-        if (!$tempFile) {
+        if (! $tempFile) {
             throw new RuntimeException('Could not create temporary file for DOCX processing.');
         }
 
@@ -281,5 +326,28 @@ class DocumentAiExtractionService
             'warnings' => ['AI response was not valid JSON.'],
             'raw' => mb_substr($text, 0, 2000),
         ];
+    }
+
+    private function sanitizeDocumentText(string $text): string
+    {
+        $text = preg_replace('/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/s', '[redacted private key]', $text) ?? $text;
+
+        foreach ([
+            '/Bearer\s+[A-Za-z0-9._\-]+/i',
+            '/api[_-]?key\s*[:=]\s*\S+/i',
+            '/password\s*[:=]\s*\S+/i',
+            '/sk-[A-Za-z0-9_\-]{12,}/',
+        ] as $pattern) {
+            $text = preg_replace($pattern, '[redacted]', $text) ?? $text;
+        }
+
+        return mb_substr($text, 0, self::MAX_TEXT_CHARS);
+    }
+
+    private function safeErrorMessage(\Throwable $e): string
+    {
+        $message = $e->getMessage() ?: 'Document AI extraction failed.';
+
+        return mb_substr($this->sanitizeDocumentText($message), 0, 500);
     }
 }

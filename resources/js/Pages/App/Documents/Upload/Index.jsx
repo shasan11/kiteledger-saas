@@ -48,6 +48,7 @@ const { RangePicker } = DatePicker;
 
 const STATUS_COLORS = {
     uploaded: 'default',
+    queued: 'processing',
     processing: 'processing',
     extracted: 'cyan',
     needs_review: 'gold',
@@ -58,6 +59,7 @@ const STATUS_COLORS = {
 
 const STATUS_LABELS = {
     uploaded: 'Uploaded',
+    queued: 'Queued',
     processing: 'Processing',
     extracted: 'Extracted',
     needs_review: 'Needs Review',
@@ -120,6 +122,10 @@ const EXCLUDED_EXTRACTION_KEYS = [
 
 function hasPerm(perms, key) {
     return !!(perms && perms[key]);
+}
+
+function docKey(doc) {
+    return doc?.public_id;
 }
 
 function isUuidLike(value) {
@@ -381,6 +387,7 @@ function optionLabel(row) {
         || row.email
         || row.number
         || row.reference
+        || row.original_name
         || row.original_file_name
         || 'Record';
 }
@@ -433,7 +440,7 @@ export default function DocumentUploadIndex() {
 
         return {
             uploaded: list.filter((doc) => doc.status === 'uploaded').length,
-            processing: list.filter((doc) => doc.status === 'processing').length,
+            processing: list.filter((doc) => ['queued', 'processing'].includes(doc.status)).length,
             needs_review: list.filter((doc) => doc.status === 'needs_review').length,
             converted: list.filter((doc) => doc.status === 'converted').length,
             failed: list.filter((doc) => doc.status === 'failed').length,
@@ -556,22 +563,49 @@ export default function DocumentUploadIndex() {
     };
 
     const scanDoc = async (doc) => {
+        const key = docKey(doc);
+        if (!key) return;
+
         try {
-            const { data } = await axios.post(`/api/document-uploads/${doc.id}/scan-ai`, { sync: true });
-            antMessage.success(data.message || 'Scan completed.');
+            const { data } = await axios.post(`/api/document-uploads/${key}/scan-ai`);
+            antMessage.success(data.message || 'Scan queued.');
             fetchDocs();
+            pollExtractionStatus(key);
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Scan failed');
         }
     };
 
+    const pollExtractionStatus = (key, attempt = 0) => {
+        if (!key || attempt > 24) return;
+
+        window.setTimeout(async () => {
+            try {
+                const { data } = await axios.get(`/api/document-uploads/${key}/extraction`);
+                const status = data?.extraction?.status;
+
+                if (['completed', 'failed'].includes(status)) {
+                    fetchDocs();
+                    return;
+                }
+
+                pollExtractionStatus(key, attempt + 1);
+            } catch {
+                if (attempt < 3) pollExtractionStatus(key, attempt + 1);
+            }
+        }, 2500);
+    };
+
     const openExtraction = async (doc) => {
+        const key = docKey(doc);
+        if (!key) return;
+
         setExtractDoc(doc);
         setExtractData(null);
         setExtractLoading(true);
 
         try {
-            const { data } = await axios.get(`/api/document-uploads/${doc.id}/extraction`);
+            const { data } = await axios.get(`/api/document-uploads/${key}/extraction`);
             setExtractData(data);
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Failed to load extraction');
@@ -581,12 +615,15 @@ export default function DocumentUploadIndex() {
     };
 
     const openMatch = async (doc) => {
+        const key = docKey(doc);
+        if (!key) return;
+
         setMatchDoc(doc);
         setMatchData([]);
         setMatchLoading(true);
 
         try {
-            const { data } = await axios.post(`/api/document-uploads/${doc.id}/match-entities`);
+            const { data } = await axios.post(`/api/document-uploads/${key}/match-entities`);
             setMatchData(data.matches || []);
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Match failed');
@@ -619,7 +656,7 @@ export default function DocumentUploadIndex() {
         setSavingEdit(true);
 
         try {
-            await axios.patch(`/api/document-uploads/${editDoc.id}`, values);
+            await axios.patch(`/api/document-uploads/${docKey(editDoc)}`, values);
             antMessage.success('Document updated.');
             setEditOpen(false);
             setEditDoc(null);
@@ -639,7 +676,7 @@ export default function DocumentUploadIndex() {
             okText: 'Delete',
             onOk: async () => {
                 try {
-                    await axios.delete(`/api/document-uploads/${doc.id}`);
+                    await axios.delete(`/api/document-uploads/${docKey(doc)}`);
                     antMessage.success('Document removed.');
                     fetchDocs();
                 } catch (e) {
@@ -659,17 +696,18 @@ export default function DocumentUploadIndex() {
 
         try {
             let data;
+            const key = docKey(doc);
 
             if (createNew || !doc.proposals_count) {
-                ({ data } = await axios.post(`/api/document-uploads/${doc.id}/proposals`, { transaction_type: type }));
+                ({ data } = await axios.post(`/api/document-uploads/${key}/proposals`, { transaction_type: type }));
             } else {
-                const proposalsResp = await axios.get(`/api/document-uploads/${doc.id}/proposals`);
+                const proposalsResp = await axios.get(`/api/document-uploads/${key}/proposals`);
                 const proposal = proposalsResp.data.proposals?.find((item) => item.status !== 'converted') || proposalsResp.data.proposals?.[0];
 
                 if (proposal) {
-                    ({ data } = await axios.get(`/api/document-uploads/${doc.id}/proposals/${proposal.id}/review`));
+                    ({ data } = await axios.get(`/api/document-uploads/${key}/proposals/${proposal.id}/review`));
                 } else {
-                    ({ data } = await axios.post(`/api/document-uploads/${doc.id}/proposals`, { transaction_type: type }));
+                    ({ data } = await axios.post(`/api/document-uploads/${key}/proposals`, { transaction_type: type }));
                 }
             }
 
@@ -689,7 +727,7 @@ export default function DocumentUploadIndex() {
         setReviewLoading(true);
 
         try {
-            const { data } = await axios.post(`/api/document-uploads/${reviewDoc.id}/proposals`, {
+            const { data } = await axios.post(`/api/document-uploads/${docKey(reviewDoc)}/proposals`, {
                 transaction_type: reviewType,
             });
 
@@ -710,7 +748,7 @@ export default function DocumentUploadIndex() {
 
         try {
             const { data } = await axios.put(
-                `/api/document-uploads/${reviewDoc.id}/proposals/${reviewData.proposal.id}/review`,
+                `/api/document-uploads/${docKey(reviewDoc)}/proposals/${reviewData.proposal.id}/review`,
                 { review_values: values },
             );
 
@@ -743,7 +781,7 @@ export default function DocumentUploadIndex() {
 
         try {
             const { data } = await axios.post(
-                `/api/document-uploads/${reviewDoc.id}/proposals/${dataForConvert.proposal.id}/convert`,
+                `/api/document-uploads/${docKey(reviewDoc)}/proposals/${dataForConvert.proposal.id}/convert`,
                 { override_duplicate: overrideDuplicate },
             );
 
@@ -783,7 +821,7 @@ export default function DocumentUploadIndex() {
                 <Space direction="vertical" size={0}>
                     <Text strong>{value || 'Untitled Document'}</Text>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                        {record.original_file_name || '-'}
+                        {record.original_name || '-'}
                     </Text>
                 </Space>
             ),
@@ -813,7 +851,7 @@ export default function DocumentUploadIndex() {
         },
         {
             title: 'File Size',
-            dataIndex: 'file_size',
+            dataIndex: 'size',
             width: 120,
             render: fileSize,
         },
@@ -840,7 +878,7 @@ export default function DocumentUploadIndex() {
                     onMatch={() => openMatch(record)}
                     onReview={() => openReview(record)}
                     onCreateProposal={() => openReview(record, true)}
-                    onDownload={() => window.open(`/api/document-uploads/${record.id}/preview`, '_blank')}
+                    onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
                     onDelete={() => deleteDoc(record)}
                 />
             ),
@@ -966,7 +1004,7 @@ export default function DocumentUploadIndex() {
                 <Card size="small" style={styles.card}>
                     <Table
                         size="small"
-                        rowKey="id"
+                        rowKey="public_id"
                         loading={loading}
                         dataSource={documents.data || []}
                         columns={columns}
@@ -974,7 +1012,7 @@ export default function DocumentUploadIndex() {
                         pagination={{
                             current: page,
                             pageSize,
-                            total: documents.total || 0,
+                            total: documents.meta?.total || documents.total || 0,
                             showSizeChanger: true,
                             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
                             onChange: (nextPage, nextPageSize) => {
@@ -1291,7 +1329,7 @@ function ReviewField({ schema, form, doc, onFkCreated }) {
         };
 
         try {
-            const { data } = await axios.post(`/api/document-uploads/${doc.id}/create-missing-fk`, {
+            const { data } = await axios.post(`/api/document-uploads/${docKey(doc)}/create-missing-fk`, {
                 match_id: schema.match_id,
                 fields,
             });
@@ -1525,10 +1563,10 @@ function DocumentReviewDrawer({
                             <Card size="small" title="Document Details" style={styles.card}>
                                 <Descriptions size="small" column={3}>
                                     <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
-                                    <Descriptions.Item label="Original File">{safeDisplay(document.original_file_name)}</Descriptions.Item>
+                                    <Descriptions.Item label="Original File">{safeDisplay(document.original_name)}</Descriptions.Item>
                                     <Descriptions.Item label="Status">{humanize(document.status || '-')}</Descriptions.Item>
                                     <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
-                                    <Descriptions.Item label="File Size">{fileSize(document.file_size)}</Descriptions.Item>
+                                    <Descriptions.Item label="File Size">{fileSize(document.size)}</Descriptions.Item>
                                     <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1855,6 +1893,13 @@ function UploadModal({
             onCancel={onCancel}
             destroyOnClose
         >
+            <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="Uploaded documents may be processed by the configured AI provider."
+            />
+
             <Form form={form} layout="vertical" initialValues={{ document_type: 'unknown' }}>
                 <Form.Item
                     label="Label"
@@ -1945,7 +1990,7 @@ function PreviewModal({ doc, styles, onClose }) {
         >
             {doc && (
                 <iframe
-                    src={`/api/document-uploads/${doc.id}/preview`}
+                    src={`/api/document-uploads/${docKey(doc)}/preview`}
                     style={styles.iframe}
                     title={doc.label || 'Document Preview'}
                 />
@@ -1980,10 +2025,10 @@ function ExtractionModal({ doc, data, loading, styles, onClose }) {
                     <Card size="small" title="Document Details" style={styles.card}>
                         <Descriptions size="small" column={3}>
                             <Descriptions.Item label="Label">{safeDisplay(document.label)}</Descriptions.Item>
-                            <Descriptions.Item label="Original File">{safeDisplay(document.original_file_name)}</Descriptions.Item>
+                            <Descriptions.Item label="Original File">{safeDisplay(document.original_name)}</Descriptions.Item>
                             <Descriptions.Item label="Document Type">{humanize(document.document_type || normalized.document_type || 'unknown')}</Descriptions.Item>
                             <Descriptions.Item label="Uploaded">{document.created_at ? dayjs(document.created_at).format('DD MMM YYYY, HH:mm') : '-'}</Descriptions.Item>
-                            <Descriptions.Item label="File Size">{fileSize(document.file_size)}</Descriptions.Item>
+                            <Descriptions.Item label="File Size">{fileSize(document.size)}</Descriptions.Item>
                             <Descriptions.Item label="Notes">{safeDisplay(document.notes)}</Descriptions.Item>
                         </Descriptions>
                     </Card>
@@ -2024,7 +2069,7 @@ function MatchModal({ doc, data, loading, onClose }) {
             ) : (
                 <Table
                     size="small"
-                    rowKey={(record, index) => record.id || index}
+                    rowKey={(record, index) => record.public_id || index}
                     pagination={false}
                     dataSource={data || []}
                     columns={[

@@ -3,8 +3,13 @@
 namespace App\Services\AI\Rag;
 
 use App\Models\AiEmbedding;
+use App\Models\Contact;
+use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\JournalVoucher;
+use App\Models\Product;
+use App\Models\PurchaseBill;
+use App\Models\Quotation;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiSettingsService;
 
@@ -42,6 +47,36 @@ class AiEmbeddingIndexer
                 'branch' => 'branch_id',
                 'text' => fn ($m) => $this->joinText([$m->reference ?? null, $m->narration ?? null]),
                 'label' => fn ($m) => 'Journal '.($m->voucher_no ?? $m->getKey()),
+            ],
+            'quotation' => [
+                'model' => Quotation::class,
+                'branch' => 'branch_id',
+                'text' => fn ($m) => $this->joinText([$m->reference ?? null, $m->notes ?? null, $m->remarks ?? null, $m->terms_and_conditions ?? null]),
+                'label' => fn ($m) => 'Quotation '.($m->quotation_no ?? $m->getKey()),
+            ],
+            'purchase_bill' => [
+                'model' => PurchaseBill::class,
+                'branch' => 'branch_id',
+                'text' => fn ($m) => $this->joinText([$m->reference ?? null, $m->notes ?? null, $m->remarks ?? null]),
+                'label' => fn ($m) => 'Purchase Bill '.($m->bill_no ?? $m->getKey()),
+            ],
+            'expense' => [
+                'model' => Expense::class,
+                'branch' => 'branch_id',
+                'text' => fn ($m) => $this->joinText([$m->reference ?? null, $m->notes ?? null, $m->remarks ?? null]),
+                'label' => fn ($m) => 'Expense '.($m->expense_no ?? $m->getKey()),
+            ],
+            'product' => [
+                'model' => Product::class,
+                'branch' => 'branch_id',
+                'text' => fn ($m) => $this->joinText([$m->name ?? null, $m->description ?? null]),
+                'label' => fn ($m) => 'Product '.($m->name ?? $m->code ?? $m->getKey()),
+            ],
+            'contact' => [
+                'model' => Contact::class,
+                'branch' => null,
+                'text' => fn ($m) => $this->joinText([$m->name ?? null, $m->address ?? null, $m->pan ?? null]),
+                'label' => fn ($m) => 'Contact '.($m->name ?? $m->getKey()),
             ],
         ];
     }

@@ -33,18 +33,20 @@ import axios from 'axios';
 import AiToolBlocks from '@/Components/AI/AiToolBlocks';
 import AiMessageRenderer from '@/Components/AI/AiMessageRenderer';
 import AiSuggestedQuestions from '@/Components/AI/AiSuggestedQuestions';
+import AiPendingActionCard from '@/Components/AI/AiPendingActionCard';
+import AiSourceCards from '@/Components/AI/AiSourceCards';
 
 const { Title, Paragraph, Text } = Typography;
 
 const SUGGESTED_PROMPTS = [
-    'Open the sales report',
-    'Explain this report',
+    'What is total sales this month?',
+    'Which product is most expensive?',
+    'Show overdue receivables',
+    'Find invoices related to ABC Trading',
     'Show trial balance report',
-    'Open receivables report',
-    'Summarize inventory report',
-    'Show profit and loss report',
-    'Open tax report',
-    'Find payroll report',
+    'Create a quotation for ABC Trading',
+    'What is my cash balance?',
+    'Search documents mentioning VAT',
 ];
 
 function hasAnyPermission(perms = [], required = []) {
@@ -76,7 +78,7 @@ function HeaderTitle({ token }) {
                     AI Assistant
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                    Ask it to find, explain, and summarize reports.
+                    Search records, get exact numbers, and prepare actions for approval.
                 </Text>
             </div>
         </Space>
@@ -115,7 +117,7 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
     );
 }
 
-function MessageBubble({ message, token, onCopy, onFollowup }) {
+function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, onApprove, onReject }) {
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
     const isSystem = message.role === 'system';
@@ -172,6 +174,21 @@ function MessageBubble({ message, token, onCopy, onFollowup }) {
 
                 <AiMessageRenderer message={message} onFollowup={onFollowup} />
                 <AiToolBlocks message={message} />
+
+                {Array.isArray(message.sources) && message.sources.length > 0 && (
+                    <AiSourceCards sources={message.sources} />
+                )}
+
+                {Array.isArray(message.actions) &&
+                    message.actions.map((action) => (
+                        <AiPendingActionCard
+                            key={action.id}
+                            action={action}
+                            state={actionStates[action.id] || {}}
+                            onApprove={onApprove}
+                            onReject={onReject}
+                        />
+                    ))}
 
                 {isAssistant && (
                     <div
@@ -244,6 +261,7 @@ export default function Assistant() {
     const [sending, setSending] = useState(false);
     const [conversationId, setConversationId] = useState(null);
     const [error, setError] = useState(null);
+    const [actionStates, setActionStates] = useState({});
 
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
@@ -386,7 +404,6 @@ export default function Assistant() {
                     context_type: 'auto',
                     context_payload: {
                         url: page.url,
-                        module: 'reports',
                     },
                     cache: true,
                 },
@@ -412,6 +429,7 @@ export default function Assistant() {
                     model: res.data?.model,
                     cached: res.data?.cached,
                     actions: res.data?.actions || [],
+                    sources: res.data?.sources || [],
                     results: hasDisplay ? [] : (res.data?.results || []),
                     mode: res.data?.mode,
                     tool: res.data?.tool,
@@ -478,6 +496,72 @@ export default function Assistant() {
         setMessages([]);
         setConversationId(null);
         setError(null);
+        setActionStates({});
+    };
+
+    const patchActionInMessages = (actionId, patch) => {
+        setMessages((prev) =>
+            prev.map((m) =>
+                Array.isArray(m.actions)
+                    ? {
+                          ...m,
+                          actions: m.actions.map((a) =>
+                              a.id === actionId ? { ...a, ...patch } : a
+                          ),
+                      }
+                    : m
+            )
+        );
+    };
+
+    const approveAction = async (action, confirmationText) => {
+        const id = action.id;
+        setActionStates((prev) => ({ ...prev, [id]: { ...prev[id], loading: true, error: null } }));
+
+        try {
+            const res = await axios.post(`/api/ai/actions/${id}/approve`, {
+                confirmation_text: confirmationText || undefined,
+            });
+
+            setActionStates((prev) => ({
+                ...prev,
+                [id]: { loading: false, status: 'executed', result: res.data?.result || null },
+            }));
+            patchActionInMessages(id, { status: 'executed' });
+            antMessage.success(res.data?.message || 'AI action executed.');
+        } catch (err) {
+            const data = err.response?.data;
+            const msg =
+                data?.code === 'AI_CONFIRMATION_REQUIRED'
+                    ? data.message
+                    : data?.message || 'Could not complete the action.';
+
+            setActionStates((prev) => ({
+                ...prev,
+                [id]: { loading: false, status: data?.status || 'failed', error: msg },
+            }));
+
+            if (data?.status === 'failed') {
+                patchActionInMessages(id, { status: 'failed' });
+            }
+            antMessage.error(msg);
+        }
+    };
+
+    const rejectAction = async (action) => {
+        const id = action.id;
+        setActionStates((prev) => ({ ...prev, [id]: { ...prev[id], loading: true, error: null } }));
+
+        try {
+            await axios.post(`/api/ai/actions/${id}/reject`);
+            setActionStates((prev) => ({ ...prev, [id]: { loading: false, status: 'rejected' } }));
+            patchActionInMessages(id, { status: 'rejected' });
+            antMessage.info('AI action rejected.');
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Could not reject the action.';
+            setActionStates((prev) => ({ ...prev, [id]: { loading: false, error: msg } }));
+            antMessage.error(msg);
+        }
     };
 
     if (!canUseAi) {
@@ -666,6 +750,9 @@ export default function Assistant() {
                                             token={token}
                                             onCopy={copy}
                                             onFollowup={send}
+                                            actionStates={actionStates}
+                                            onApprove={approveAction}
+                                            onReject={rejectAction}
                                         />
                                     )}
                                 />

@@ -54,9 +54,19 @@ class AiPermissionSeeder extends Seeder
             }
         }
 
-        // Normal user roles get baseline AI use permissions
+        // Normal user roles get baseline AI use permissions: they can chat,
+        // search, view their own actions, and PROPOSE drafts — but approving and
+        // executing remain restricted to admin/approver roles above.
         $userBaseline = [
             'ai.view',
+            'ai.use',
+            'ai.chat',
+            'ai.semantic_search',
+            'ai.conversations.view',
+            'ai.records.search',
+            'ai.records.show',
+            'ai.actions.view',
+            'ai.actions.propose',
         ];
         foreach (['User', 'Standard User', 'Branch User', 'Staff'] as $roleName) {
             $role = Role::where('name', $roleName)->first();

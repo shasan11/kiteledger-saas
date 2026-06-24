@@ -45,11 +45,52 @@ abstract class BaseDraftAction
             'risk_level' => $this->riskLevel,
             'risk_reasons' => $this->riskReasons,
             'status' => 'pending',
-            'metadata' => [
+            'metadata' => array_merge([
                 'missing_fields' => $missing,
                 'requires_approval' => true,
-            ],
+                'requires_confirmation' => $this->requiresConfirmation(),
+                'preview' => $this->previewData($message, $payload),
+            ], $this->requiresConfirmation() ? ['confirmation_text' => $this->confirmationText($payload)] : []),
         ]);
+    }
+
+    /**
+     * High/critical-risk actions require the user to type an explicit phrase
+     * before they can be executed (spec §12).
+     */
+    protected function requiresConfirmation(): bool
+    {
+        return in_array($this->riskLevel, ['high', 'critical'], true);
+    }
+
+    protected function confirmationText(array $payload): string
+    {
+        $verb = strtoupper(trim(str_replace(['create_', 'update_', '_draft', '_'], ['', '', '', ' '], $this->actionType)));
+
+        return 'CONFIRM ' . $verb;
+    }
+
+    /**
+     * Structured, human-reviewable preview of the proposed record. Surfaced to
+     * the approval UI; numbers shown are the planner's calculations, recomputed
+     * server-side on execution.
+     *
+     * @return array<string, mixed>
+     */
+    protected function previewData(string $message, array $payload): array
+    {
+        return array_filter([
+            'action_type' => $this->actionType,
+            'module' => $this->module,
+            'risk_level' => $this->riskLevel,
+            'summary' => $this->summaryFor($message, $payload),
+            'customer' => $payload['contact_name'] ?? null,
+            'amount' => $payload['amount'] ?? null,
+            'items' => $payload['items'] ?? null,
+            'subtotal' => $payload['subtotal'] ?? null,
+            'tax' => $payload['tax'] ?? null,
+            'total' => $payload['total'] ?? null,
+        ], fn ($value) => $value !== null && $value !== []);
     }
 
     protected function payload(Request $request, string $message, array $contextPayload): array

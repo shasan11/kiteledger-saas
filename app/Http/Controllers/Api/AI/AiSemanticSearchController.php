@@ -30,7 +30,7 @@ class AiSemanticSearchController extends Controller
     {
         $user = $request->user();
 
-        if (! $this->permissions->hasAny($user, ['ai.use', 'ai.chat', 'ai.manage'])) {
+        if (! $this->permissions->canSemanticSearch($user)) {
             return response()->json(['ok' => false, 'message' => 'You do not have access to AI search.'], 403);
         }
 

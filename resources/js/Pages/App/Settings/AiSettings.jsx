@@ -61,6 +61,7 @@ const SAFE_DEFAULTS = {
     ai_financial_assistant_enabled: false,
     ai_document_assistant_enabled: false,
     ai_write_actions_enabled: false,
+    ai_assistant_mode: 'full',
     ai_fallback_provider: '',
 };
 
@@ -168,6 +169,7 @@ export default function AiSettings() {
             ai_financial_assistant_enabled: false,
             ai_document_assistant_enabled: false,
             ai_write_actions_enabled: false,
+            ai_assistant_mode: 'full',
             ai_allow_developer_details: false,
             ai_fallback_provider: '',
         };
@@ -368,6 +370,33 @@ export default function AiSettings() {
                                 <Col xs={24} md={8}>
                                     <Form.Item name="ai_connect_timeout_seconds" label="Connect Timeout (s)">
                                         <InputNumber min={2} max={60} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+
+                            <Row gutter={16}>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        name="ai_assistant_mode"
+                                        label="Assistant Mode"
+                                        tooltip="Full = complete ERP agent (search, exact numbers, action proposals). Reports only = restrict chat to report Q&A."
+                                    >
+                                        <Select
+                                            options={[
+                                                { value: 'full', label: 'Full ERP assistant (recommended)' },
+                                                { value: 'reports_only', label: 'Reports only (read-only Q&A)' },
+                                            ]}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col xs={24} md={12}>
+                                    <Form.Item
+                                        name="ai_write_actions_enabled"
+                                        label="Allow AI to prepare create/update drafts"
+                                        valuePropName="checked"
+                                        tooltip="When off, the assistant can only read and summarize. When on, it can prepare drafts that still require explicit human approval before anything is written."
+                                    >
+                                        <Switch />
                                     </Form.Item>
                                 </Col>
                             </Row>

@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\DocumentUpload;
+use App\Policies\DocumentUploadPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
@@ -123,6 +125,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Gate::policy(DocumentUpload::class, DocumentUploadPolicy::class);
+
         if (! $this->app->runningInConsole() && request()->is('install*')) {
             app()->setLocale('en');
             config(['app.locale' => 'en']);

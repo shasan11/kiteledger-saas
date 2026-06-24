@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\AI;
 
+use App\Http\Resources\AiConversationResource;
+use App\Http\Resources\AiMessageResource;
 use App\Models\AiConversation;
 use App\Services\AI\AiPromptBuilder;
 use Illuminate\Http\JsonResponse;
@@ -20,20 +22,16 @@ class AiAssistantController extends AiAgentChatController
             'cache' => 'nullable|boolean',
         ]);
 
-        if (!$this->isReportRequest($data['message'], $data['context_payload'] ?? [])) {
+        // Full ERP agent by default (RAG, deterministic tools, action proposals).
+        // Deployments can still pin the assistant to report-only Q&A via the
+        // `ai_assistant_mode` setting without losing any of the wiring below.
+        if ($this->settings->reportsOnly() && !$this->isReportRequest($data['message'], $data['context_payload'] ?? [])) {
             return response()->json([
                 'ok' => false,
                 'code' => 'AI_REPORTS_ONLY',
-                'message' => 'AI Assistant is limited to report questions for now. Ask it to open, explain, summarize, or analyze a report.',
+                'message' => 'AI Assistant is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full assistant in AI Settings.',
             ], 422);
         }
-
-        $request->merge([
-            'context_type' => 'reports',
-            'context_payload' => array_merge($data['context_payload'] ?? [], [
-                'assistant_scope' => 'reports_only',
-            ]),
-        ]);
 
         return parent::chat($request);
     }
@@ -54,7 +52,10 @@ class AiAssistantController extends AiAgentChatController
             'stream_enabled' => $this->settings->streamEnabled(),
             'cache_enabled' => $this->settings->cacheEnabled(),
             'fast_mode' => $this->settings->fastMode(),
-            'scope' => 'reports_only',
+            'scope' => $this->settings->assistantMode(),
+            'assistant_mode' => $this->settings->assistantMode(),
+            'write_actions_enabled' => $this->settings->writeActionsEnabled(),
+            'semantic_search_available' => $this->settings->enabled() && $this->settings->supportsEmbeddings(),
             'permissions' => $this->permissions->summary($user),
         ]);
     }
@@ -77,7 +78,7 @@ class AiAssistantController extends AiAgentChatController
         }
 
         return response()->json([
-            'conversations' => $query->get(['id', 'title', 'module', 'status', 'updated_at']),
+            'conversations' => AiConversationResource::collection($query->get()),
         ]);
     }
 
@@ -92,8 +93,8 @@ class AiAssistantController extends AiAgentChatController
         }
 
         return response()->json([
-            'conversation' => $conversation,
-            'messages' => $conversation->messages()->orderBy('created_at')->get(),
+            'conversation' => new AiConversationResource($conversation),
+            'messages' => AiMessageResource::collection($conversation->messages()->orderBy('created_at')->get()),
         ]);
     }
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Documents\DocumentEntityMatchController;
 use App\Http\Controllers\Api\Documents\DocumentExtractionController;
 use App\Http\Controllers\Api\Documents\DocumentProposalController;
 use App\Http\Controllers\Api\Documents\DocumentUploadController;
+use App\Http\Controllers\Api\AI\AiActionApprovalController;
 use App\Http\Controllers\Api\AI\AiAssistantController;
 use App\Http\Controllers\Api\AI\AiSemanticSearchController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
@@ -255,7 +256,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('reports/registry', [ReportRegistryController::class, 'registry']);
     Route::post('reports/soft-query', [ReportRegistryController::class, 'softQueryEndpoint']);
-    Route::post('reports/summarize', [ReportAiSummaryController::class, 'summarize']);
+    Route::post('reports/summarize', [ReportAiSummaryController::class, 'summarize'])->middleware('throttle:20,1');
     Route::get('reports/options/{type}', [ReportRegistryController::class, 'options'])
         ->where('type', '[a-z0-9\-]+');
     Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
@@ -1156,13 +1157,26 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
     Route::get('health',                              [AiAssistantController::class, 'health']);
-    Route::post('chat',                              [AiAssistantController::class, 'chat']);
+    Route::post('chat',                              [AiAssistantController::class, 'chat'])->middleware('throttle:20,1');
 
     // RAG semantic search over accounting text (invoice notes, journal narrations).
-    Route::post('search',                            AiSemanticSearchController::class);
+    Route::post('search',                            AiSemanticSearchController::class)->middleware('throttle:30,1');
+
+    // Conversation history
+    Route::get('conversations',                         [AiAssistantController::class, 'conversations']);
+    Route::get('conversations/{id}',                    [AiAssistantController::class, 'showConversation']);
+    Route::delete('conversations/{id}',                 [AiAssistantController::class, 'deleteConversation']);
+
+    // Pending action approval workflow (propose -> approve/confirm -> execute).
+    Route::get('actions',                               [AiActionApprovalController::class, 'index']);
+    Route::get('actions/{id}',                          [AiActionApprovalController::class, 'show']);
+    Route::get('actions/{id}/audit',                    [AiActionApprovalController::class, 'audit']);
+    Route::post('actions/{id}/approve',                 [AiActionApprovalController::class, 'approve'])->middleware('throttle:10,1');
+    Route::post('actions/{id}/reject',                  [AiActionApprovalController::class, 'reject'])->middleware('throttle:10,1');
+    Route::post('actions/{id}/execute',                 [AiActionApprovalController::class, 'execute'])->middleware('throttle:10,1');
 
     // Focused AI report summarizer and settings.
-    Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize']);
+    Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize'])->middleware('throttle:20,1');
 
     // Settings (DB-backed via GeneralSetting group=ai)
     Route::get('settings',                              [AiSettingsController::class, 'show']);
@@ -1227,28 +1241,28 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('document-uploads')->name('api.document-uploads.')->group(function () {
     Route::get('/', [DocumentUploadController::class, 'index'])->name('index');
-    Route::post('/', [DocumentUploadController::class, 'store'])->name('store');
-    Route::get('{id}', [DocumentUploadController::class, 'show'])->name('show');
-    Route::patch('{id}', [DocumentUploadController::class, 'update'])->name('update');
-    Route::delete('{id}', [DocumentUploadController::class, 'destroy'])->name('destroy');
-    Route::get('{id}/preview', [DocumentUploadController::class, 'preview'])->name('preview');
-    Route::post('{id}/archive', [DocumentUploadController::class, 'archive'])->name('archive');
+    Route::post('/', [DocumentUploadController::class, 'store'])->middleware('throttle:20,1')->name('store');
+    Route::get('{publicId}', [DocumentUploadController::class, 'show'])->name('show');
+    Route::patch('{publicId}', [DocumentUploadController::class, 'update'])->name('update');
+    Route::delete('{publicId}', [DocumentUploadController::class, 'destroy'])->name('destroy');
+    Route::get('{publicId}/preview', [DocumentUploadController::class, 'preview'])->name('preview');
+    Route::post('{publicId}/archive', [DocumentUploadController::class, 'archive'])->name('archive');
 
     // Extraction / AI
-    Route::post('{id}/scan-ai', [DocumentExtractionController::class, 'scan'])->name('scan');
-    Route::get('{id}/extraction', [DocumentExtractionController::class, 'show'])->name('extraction.show');
+    Route::post('{publicId}/scan-ai', [DocumentExtractionController::class, 'scan'])->middleware('throttle:5,1')->name('scan');
+    Route::get('{publicId}/extraction', [DocumentExtractionController::class, 'show'])->name('extraction.show');
 
     // Entity matching
-    Route::post('{id}/match-entities', [DocumentEntityMatchController::class, 'match'])->name('match');
+    Route::post('{publicId}/match-entities', [DocumentEntityMatchController::class, 'match'])->name('match');
     Route::post('matches/{matchId}/choose', [DocumentEntityMatchController::class, 'chooseMatch'])->name('match.choose');
-    Route::post('{id}/create-missing-fk', [DocumentEntityMatchController::class, 'createFk'])->name('fk.create');
+    Route::post('{publicId}/create-missing-fk', [DocumentEntityMatchController::class, 'createFk'])->name('fk.create');
 
     // Proposals
-    Route::get('{id}/proposals', [DocumentProposalController::class, 'index'])->name('proposals.index');
-    Route::post('{id}/proposals', [DocumentProposalController::class, 'store'])->name('proposals.store');
-    Route::get('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'review'])->name('proposals.review');
-    Route::put('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.save');
-    Route::patch('{id}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.patch');
-    Route::patch('{id}/proposals/{proposalId}', [DocumentProposalController::class, 'update'])->name('proposals.update');
-    Route::post('{id}/proposals/{proposalId}/convert', [DocumentProposalController::class, 'convert'])->name('proposals.convert');
+    Route::get('{publicId}/proposals', [DocumentProposalController::class, 'index'])->name('proposals.index');
+    Route::post('{publicId}/proposals', [DocumentProposalController::class, 'store'])->name('proposals.store');
+    Route::get('{publicId}/proposals/{proposalId}/review', [DocumentProposalController::class, 'review'])->name('proposals.review');
+    Route::put('{publicId}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.save');
+    Route::patch('{publicId}/proposals/{proposalId}/review', [DocumentProposalController::class, 'saveReview'])->name('proposals.review.patch');
+    Route::patch('{publicId}/proposals/{proposalId}', [DocumentProposalController::class, 'update'])->name('proposals.update');
+    Route::post('{publicId}/proposals/{proposalId}/convert', [DocumentProposalController::class, 'convert'])->name('proposals.convert');
 });

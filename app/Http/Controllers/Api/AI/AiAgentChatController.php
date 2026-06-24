@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Api\AI;
 use App\Http\Controllers\Controller;
 use App\Models\AiConversation;
 use App\Models\AiMessage;
+use App\Models\AiPendingAction;
+use App\Models\AiToolCall;
 use App\Services\AI\Agent\AiActionProposalService;
 use App\Services\AI\Agent\AiAgentIntentService;
+use App\Services\AI\Agent\AiAnswerComposer;
 use App\Services\AI\Agent\AiDeterministicAnswerService;
 use App\Services\AI\Agent\AiRecordSearchService;
 use App\Services\AI\Agent\AiReportResolver;
@@ -17,6 +20,7 @@ use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
+use App\Services\AI\Rag\AiRagRetriever;
 use App\Services\AI\Tools\AiToolRouter;
 use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Assistant\AiFinancialAnswerService;
@@ -41,6 +45,8 @@ class AiAgentChatController extends Controller
         protected AiDeterministicAnswerService $deterministicAnswers,
         protected AiToolRouter $toolRouter,
         protected AiFinancialAnswerService $financialAnswers,
+        protected AiRagRetriever $rag,
+        protected AiAnswerComposer $answerComposer,
     ) {}
 
     public function chat(Request $request): JsonResponse
@@ -128,23 +134,36 @@ class AiAgentChatController extends Controller
 
         if (($toolClassification['type'] ?? null) === 'query') {
             $toolRequest = $request->merge(['message' => $message]);
+            $started = microtime(true);
             $result = $this->toolRouter->runQuery($toolRequest, $toolClassification);
             $reply = $this->toolRouter->explainToolResult($result);
+            $this->logToolCall($conversation, $user, $toolClassification['tool'] ?? 'query', ['message' => $message], ['record_count' => count($result['records'] ?? [])], 'completed', $started);
 
             return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
         }
 
         if (($toolClassification['type'] ?? null) === 'report') {
+            $started = microtime(true);
             $result = $this->toolRouter->runReport($request, $toolClassification, $message);
             $reply = $this->toolRouter->explainToolResult($result);
+            $this->logToolCall($conversation, $user, $toolClassification['tool'] ?? 'report', ['message' => $message], ['report_key' => $result['report_key'] ?? null], 'completed', $started);
 
             return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
         }
 
         if (($toolClassification['type'] ?? null) === 'action') {
-            $action = $this->toolRouter->proposeAction($request, $conversation, $toolClassification, $message, $payload);
+            // Dangerous / disabled writes never become a pending action — explain
+            // the safe path instead (spec §12).
+            if (($toolClassification['tool'] ?? null) === 'action.blocked') {
+                $this->logToolCall($conversation, $user, 'action.blocked', ['message' => $message], ['reason' => $toolClassification['reason'] ?? null], 'blocked');
 
-            return $this->storeAndRespond($conversation, 'I prepared an action for your approval.', $toolClassification, $contextType, $branchScope, [$this->formatAction($action)], []);
+                return $this->storeAndRespond($conversation, $this->blockedActionReply($message, $toolClassification), array_merge($toolClassification, ['name' => 'blocked_action']), $contextType, $branchScope, [], []);
+            }
+
+            $action = $this->toolRouter->proposeAction($request, $conversation, $toolClassification, $message, $payload);
+            $this->logToolCall($conversation, $user, $toolClassification['tool'] ?? 'action', ['message' => $message], ['pending_action_id' => $action->id, 'risk_level' => $action->risk_level], 'completed');
+
+            return $this->storeAndRespond($conversation, $this->actionReply($action), $toolClassification, $contextType, $branchScope, [$this->formatAction($action)], []);
         }
 
         if ($deterministic = $this->deterministicAnswers->answer($request, $message)) {
@@ -171,7 +190,31 @@ class AiAgentChatController extends Controller
 
         if (in_array($intent['name'] ?? '', ['create_record', 'update_record'], true)) {
             $action = $this->proposalService->propose($request, $conversation, $intent, $message, $payload);
-            return $this->storeAndRespond($conversation, 'I prepared an action for your approval.', $intent, $contextType, $branchScope, [$this->formatAction($action)], []);
+            $this->logToolCall($conversation, $user, $action->action_type, ['message' => $message], ['pending_action_id' => $action->id, 'risk_level' => $action->risk_level], 'completed');
+
+            return $this->storeAndRespond($conversation, $this->actionReply($action), $intent, $contextType, $branchScope, [$this->formatAction($action)], []);
+        }
+
+        // RAG / semantic search over indexed record text (invoice notes, journal
+        // narrations). Deterministic tools always win first; this only runs when
+        // no tool matched and the message reads like a search.
+        if ($this->shouldUseRag($message, $toolClassification, $intent)) {
+            $sources = $this->rag->retrieve($user, $message, [
+                'branch_id' => $branchScope['branch_id'] ?? $user?->branch_id,
+            ]);
+
+            if (! empty($sources)) {
+                $reply = $this->answerComposer->composeFromSources($message, $sources);
+                $this->logToolCall($conversation, $user, 'rag.semantic_search', ['query' => $message], ['count' => count($sources)], 'completed');
+                $ragIntent = array_merge($intent, [
+                    'type' => 'rag_query',
+                    'name' => 'semantic_search',
+                    'source' => 'rag',
+                    'module' => $intent['module'] ?? 'records',
+                ]);
+
+                return $this->storeAndRespond($conversation, $reply, $ragIntent, $contextType, $branchScope, [], [], [], $sources);
+            }
         }
 
         $cacheKey = $this->cache->key($user?->id, $branchScope['branch_id'] ?? null, $message, $context);
@@ -259,23 +302,25 @@ class AiAgentChatController extends Controller
         return response()->json($response);
     }
 
-    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = []): JsonResponse
+    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = [], array $sources = []): JsonResponse
     {
         AiMessage::create([
             'ai_conversation_id' => $conversation->id,
             'role' => 'assistant',
             'content' => $reply,
-            'context' => ['type' => $contextType, 'intent' => $intent, 'actions' => count($actions), 'results' => count($results), 'display' => $display],
+            'context' => ['type' => $contextType, 'intent' => $intent, 'actions' => count($actions), 'results' => count($results), 'sources' => count($sources), 'display' => $display],
         ]);
 
-        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results), [], $display));
+        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results), [], $display, $sources));
     }
 
-    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = [], array $display = []): array
+    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = [], array $display = [], array $sources = []): array
     {
         $mode = 'chat';
         if (!empty($actions)) {
             $mode = 'pending_action';
+        } elseif (!empty($sources)) {
+            $mode = 'rag';
         } elseif (!empty($results)) {
             $mode = ($results[0]['type'] ?? null) === 'report' ? 'report' : 'tool_query';
         }
@@ -293,6 +338,7 @@ class AiAgentChatController extends Controller
             'context' => ['type' => $contextType, 'packs' => [$contextType]],
             'actions' => $actions,
             'results' => $results,
+            'sources' => $sources,
             'display' => $display,
             'answer_type' => $display['answer_type'] ?? null,
             'cards' => $display['cards'] ?? [],
@@ -303,6 +349,122 @@ class AiAgentChatController extends Controller
             'branch_scope' => $branchScope,
             'cached' => false,
         ], $extra);
+    }
+
+    /**
+     * Whether to fall back to RAG semantic search. Deterministic tools always
+     * take priority; this only triggers when no tool matched and the message
+     * reads like a search/lookup over record text.
+     */
+    private function shouldUseRag(string $message, array $toolClassification, array $intent): bool
+    {
+        if (! $this->rag->available()) {
+            return false;
+        }
+
+        if (in_array($toolClassification['type'] ?? null, ['query', 'report', 'action'], true)) {
+            return false;
+        }
+
+        if (in_array($intent['name'] ?? null, ['create_record', 'update_record', 'show_report'], true)) {
+            return false;
+        }
+
+        $m = mb_strtolower($message);
+
+        foreach (['find', 'search', 'show me', 'related to', 'about ', 'mentioning', 'mention', 'referenc', 'notes', 'document', 'look up', 'lookup', 'similar', 'anything on'] as $needle) {
+            if (str_contains($m, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Persist a deterministic tool / action / RAG invocation for traceability.
+     */
+    private function logToolCall(AiConversation $conversation, $user, string $tool, array $input, array $output, string $status = 'completed', ?float $startedAt = null): void
+    {
+        try {
+            AiToolCall::create([
+                'ai_conversation_id' => $conversation->id,
+                'user_id' => $user?->id,
+                'tool_name' => $tool,
+                'input' => $input,
+                'output' => $output,
+                'status' => $status,
+                'duration_ms' => $startedAt ? (int) round((microtime(true) - $startedAt) * 1000) : null,
+            ]);
+        } catch (Throwable) {
+            // Tool-call logging must never break the chat response.
+        }
+    }
+
+    private function actionReply(AiPendingAction $action): string
+    {
+        if (! empty($action->metadata['missing_fields'])) {
+            return $this->clarificationReply($action);
+        }
+
+        if (in_array($action->risk_level, ['high', 'critical'], true)) {
+            $phrase = $action->metadata['confirmation_text'] ?? 'CONFIRM';
+
+            return "This is a {$action->risk_level}-risk action that changes financial data. Review it carefully, then type \"{$phrase}\" to confirm before I apply it.";
+        }
+
+        return 'I prepared a draft for your approval. Please review and approve before I create it.';
+    }
+
+    /**
+     * Friendly explanation for a blocked dangerous/disabled write (spec §12).
+     */
+    private function blockedActionReply(string $message, array $classification): string
+    {
+        $reason = (string) ($classification['reason'] ?? '');
+
+        if (str_contains($reason, 'disabled')) {
+            return 'AI write actions are turned off in AI Settings, so I can only read and summarize data right now. Ask an administrator to enable them if you need me to prepare drafts.';
+        }
+
+        $m = mb_strtolower($message);
+
+        if (str_contains($m, 'delete') || str_contains($m, 'remove')) {
+            return 'I can’t delete records — that would damage your accounting history. If your permissions allow it, I can prepare a void/reversal instead. Want me to do that?';
+        }
+
+        if (str_contains($m, 'void')) {
+            return 'Voiding is a high-risk action I won’t do automatically. Open the record and use the void workflow, or ask an approver to prepare a void with explicit confirmation.';
+        }
+
+        if (str_contains($m, 'mark paid') || str_contains($m, 'paid')) {
+            return 'I won’t mark invoices paid automatically — that posts money movements. I can prepare a customer-payment draft for your review instead. Shall I?';
+        }
+
+        if (str_contains($m, 'approve') || str_contains($m, 'post ')) {
+            return 'Approving/posting is a controlled step I won’t perform automatically. Please approve it through the normal workflow so the right validations and audit trail apply.';
+        }
+
+        if (str_contains($m, 'fiscal year')) {
+            return 'Closing or reopening a fiscal year is a critical action I won’t perform. Please use the fiscal-year settings with the appropriate permissions.';
+        }
+
+        return 'That’s a high-risk operation I can’t perform directly. I can help you prepare a safer draft or open the relevant screen instead.';
+    }
+
+    private function clarificationReply(AiPendingAction $action): string
+    {
+        $first = $action->metadata['missing_fields'][0] ?? null;
+        $reason = is_array($first) ? ($first['reason'] ?? null) : null;
+        $options = is_array($first) ? ($first['options'] ?? []) : [];
+
+        if (! empty($options)) {
+            $names = collect($options)->pluck('name')->filter()->take(6)->implode(', ');
+
+            return trim(($reason ? $reason . ' ' : '') . 'Which one should I use? ' . $names);
+        }
+
+        return $reason ?: 'I need a little more detail before I can prepare this. What should I fill in?';
     }
 
     private function compatToolName(?string $intent, ?string $tool): ?string
@@ -345,8 +507,10 @@ class AiAgentChatController extends Controller
         ];
     }
 
-    private function formatAction($action): array
+    private function formatAction(AiPendingAction $action): array
     {
+        $metadata = is_array($action->metadata) ? $action->metadata : [];
+
         return [
             'id' => $action->id,
             'action_type' => $action->action_type,
@@ -354,9 +518,12 @@ class AiAgentChatController extends Controller
             'title' => $action->title,
             'summary' => $action->summary,
             'payload' => $action->payload,
+            'preview' => $metadata['preview'] ?? null,
             'risk_level' => $action->risk_level,
             'risk_reasons' => $action->risk_reasons ?? [],
-            'missing_fields' => $action->metadata['missing_fields'] ?? [],
+            'missing_fields' => $metadata['missing_fields'] ?? [],
+            'requires_confirmation' => $metadata['requires_confirmation'] ?? in_array($action->risk_level, ['high', 'critical'], true),
+            'confirmation_text' => $metadata['confirmation_text'] ?? null,
             'status' => $action->status,
             'requires_approval' => true,
         ];

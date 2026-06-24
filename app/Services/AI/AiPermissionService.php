@@ -11,6 +11,7 @@ class AiPermissionService
         'ai.view',
         'ai.use',
         'ai.chat',
+        'ai.semantic_search',
         'reports.ai_summary',
         'ai.report_summary',
         'ai.business_insight',
@@ -18,8 +19,11 @@ class AiPermissionService
         'ai.conversations.delete',
         'ai.settings.view',
         'ai.settings.update',
+        'ai.admin_settings',
         'ai.actions.view',
+        'ai.actions.propose',
         'ai.actions.approve',
+        'ai.actions.execute',
         'ai.actions.reject',
         'ai.records.search',
         'ai.records.show',
@@ -68,6 +72,11 @@ class AiPermissionService
     public function canChat(?User $user): bool
     {
         return $this->hasAny($user, ['ai.chat', 'ai.use', 'ai.manage']);
+    }
+
+    public function canSemanticSearch(?User $user): bool
+    {
+        return $this->hasAny($user, ['ai.semantic_search', 'ai.use', 'ai.chat', 'ai.manage']);
     }
 
     public function canManage(?User $user): bool

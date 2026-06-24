@@ -2,6 +2,7 @@
 
 namespace App\Services\AI\Agent;
 
+use App\Models\AiActionAuditLog;
 use App\Models\AiPendingAction;
 use App\Services\AI\AiPermissionService;
 use App\Services\AppContextService;
@@ -37,9 +38,12 @@ class AiSafeActionExecutor
         'contacts' => ['table' => 'contacts', 'url' => '/actors/contacts'],
     ];
 
-    public function execute(AiPendingAction $action, int|string|null $approvedBy): array
+    /**
+     * @param  array{ip?:string|null, user_agent?:string|null}  $context
+     */
+    public function execute(AiPendingAction $action, int|string|null $approvedBy, array $context = []): array
     {
-        if (!$action->isPending()) {
+        if (!in_array($action->status, ['pending', 'approved'], true)) {
             throw ValidationException::withMessages(['action' => 'AI action is not pending.']);
         }
 
@@ -48,7 +52,7 @@ class AiSafeActionExecutor
         }
 
         $user = $approvedBy ? \App\Models\User::query()->find($approvedBy) : null;
-        if (!$this->permissions->hasAny($user, ['ai.actions.approve', 'ai.manage'])) {
+        if (!$this->permissions->hasAny($user, ['ai.actions.approve', 'ai.actions.execute', 'ai.manage'])) {
             throw ValidationException::withMessages(['permission' => 'You do not have permission to approve AI actions.']);
         }
 
@@ -56,7 +60,7 @@ class AiSafeActionExecutor
             $this->branchScope->assertCanAccessBranch($user, (string) $action->branch_id);
         }
 
-        return DB::transaction(function () use ($action, $approvedBy) {
+        return DB::transaction(function () use ($action, $approvedBy, $context) {
             $action->forceFill([
                 'status' => 'approved',
                 'approved_by' => $approvedBy,
@@ -70,8 +74,8 @@ class AiSafeActionExecutor
             }
 
             $result = str_starts_with($action->action_type, 'update_')
-                ? $this->executeUpdate($action, $config)
-                : $this->executeCreateDraft($action, $config);
+                ? $this->executeUpdate($action, $config, $context)
+                : $this->executeCreateDraft($action, $config, $context);
 
             $action->forceFill([
                 'status' => 'executed',
@@ -83,7 +87,7 @@ class AiSafeActionExecutor
         });
     }
 
-    public function reject(AiPendingAction $action, int|string|null $rejectedBy): AiPendingAction
+    public function reject(AiPendingAction $action, int|string|null $rejectedBy, array $context = []): AiPendingAction
     {
         if (!$action->isPending()) {
             throw ValidationException::withMessages(['action' => 'Only pending AI actions can be rejected.']);
@@ -95,10 +99,23 @@ class AiSafeActionExecutor
             'approved_at' => now(),
         ])->save();
 
+        $this->writeAudit($action, 'rejected', null, null, $context);
+
         return $action->fresh();
     }
 
-    private function executeCreateDraft(AiPendingAction $action, array $config): array
+    /**
+     * Record a failed execution attempt (called from the controller after the
+     * transaction has rolled back, so the audit row survives).
+     *
+     * @param  array{ip?:string|null, user_agent?:string|null}  $context
+     */
+    public function recordFailure(AiPendingAction $action, string $message, array $context = []): void
+    {
+        $this->writeAudit($action, 'failed', null, ['error' => Str::limit($message, 200)], $context);
+    }
+
+    private function executeCreateDraft(AiPendingAction $action, array $config, array $context = []): array
     {
         $table = $config['table'];
         $payload = $action->payload ?? [];
@@ -168,6 +185,8 @@ class AiSafeActionExecutor
 
         DB::table($table)->insert($data);
 
+        $this->writeAudit($action, 'executed', null, $this->publicSnapshot($data), $context);
+
         return [
             'id' => $data['id'] ?? $id,
             'status' => 'draft',
@@ -176,7 +195,7 @@ class AiSafeActionExecutor
         ];
     }
 
-    private function executeUpdate(AiPendingAction $action, array $config): array
+    private function executeUpdate(AiPendingAction $action, array $config, array $context = []): array
     {
         $table = $config['table'];
         $targetId = $action->target_id ?: ($action->payload['target_id'] ?? null);
@@ -217,7 +236,20 @@ class AiSafeActionExecutor
             throw ValidationException::withMessages(['changes' => 'No safe update fields were provided.']);
         }
 
+        $before = [];
+        foreach (array_keys($safe) as $column) {
+            if ($column === 'updated_at') {
+                continue;
+            }
+            $before[$column] = $record->{$column} ?? null;
+        }
+
         DB::table($table)->where('id', $targetId)->update($safe);
+
+        $after = $safe;
+        unset($after['updated_at']);
+
+        $this->writeAudit($action, 'executed', $this->publicSnapshot($before), $this->publicSnapshot($after), $context);
 
         return [
             'id' => $targetId,
@@ -225,6 +257,51 @@ class AiSafeActionExecutor
             'open_url' => $config['url'] . '/' . $targetId,
             'message' => 'Draft record updated.',
         ];
+    }
+
+    /**
+     * Persist an immutable audit row for an AI action. Never throws — auditing
+     * must not break the action itself.
+     *
+     * @param  array<string, mixed>|null  $before
+     * @param  array<string, mixed>|null  $after
+     * @param  array{ip?:string|null, user_agent?:string|null}  $context
+     */
+    private function writeAudit(AiPendingAction $action, string $status, ?array $before, ?array $after, array $context = []): void
+    {
+        try {
+            AiActionAuditLog::create([
+                'ai_pending_action_id' => $action->id,
+                'user_id' => $action->approved_by ?? $action->user_id,
+                'action_type' => $action->action_type,
+                'module' => $action->module,
+                'target_type' => $action->target_type,
+                'target_id' => $action->target_id,
+                'before_values' => $before,
+                'after_values' => $after,
+                'status' => $status,
+                'ip_address' => $context['ip'] ?? null,
+                'user_agent' => isset($context['user_agent']) ? Str::limit((string) $context['user_agent'], 480, '') : null,
+            ]);
+        } catch (\Throwable) {
+            // Auditing is best-effort; never block the underlying action.
+        }
+    }
+
+    /**
+     * Strip internal/scope columns from an audit snapshot so the audit trail
+     * carries business fields, not tenant internals.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function publicSnapshot(array $data): array
+    {
+        $hidden = ['id', 'branch_id', 'fiscal_year_id', 'user_add_id', 'user_edit_id', 'created_at', 'updated_at'];
+
+        return collect($data)
+            ->reject(fn ($value, $key) => in_array($key, $hidden, true))
+            ->all();
     }
 
     private function dateColumn(string $table): ?string

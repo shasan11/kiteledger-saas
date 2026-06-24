@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Documents;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\DocumentExtractionResource;
+use App\Http\Resources\DocumentUploadResource;
 use App\Models\DocumentTransactionProposal;
 use App\Models\DocumentUpload;
 use App\Services\Documents\DocumentAuditService;
@@ -28,19 +30,19 @@ class DocumentProposalController extends Controller
         protected BranchScopeService $branchScope,
     ) {}
 
-    public function index(Request $request, string $id)
+    public function index(Request $request, string $publicId)
     {
         $this->perms->authorize($request->user(), 'document_upload.view');
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = $this->findDocument($publicId);
         $this->assertDocumentAccess($request, $doc);
         return response()->json(['ok' => true, 'proposals' => $doc->proposals()->latest()->get()]);
     }
 
-    public function store(Request $request, string $id)
+    public function store(Request $request, string $publicId)
     {
         $this->perms->authorize($request->user(), 'document_upload.proposal.create');
 
-        $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $doc = $this->findDocument($publicId, ['extraction']);
         $this->assertDocumentAccess($request, $doc);
 
         $data = $request->validate([
@@ -73,26 +75,26 @@ class DocumentProposalController extends Controller
         return response()->json($this->reviewPayload($doc, $proposal->fresh()));
     }
 
-    public function review(Request $request, string $id, string $proposalId)
+    public function review(Request $request, string $publicId, string $proposalId)
     {
         $this->perms->authorize($request->user(), 'document_upload.view');
 
-        $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $doc = $this->findDocument($publicId, ['extraction']);
         $this->assertDocumentAccess($request, $doc);
-        $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
+        $proposal = DocumentTransactionProposal::where('document_upload_id', $doc->id)
             ->where('id', $proposalId)
             ->firstOrFail();
 
         return response()->json($this->reviewPayload($doc, $proposal));
     }
 
-    public function saveReview(Request $request, string $id, string $proposalId)
+    public function saveReview(Request $request, string $publicId, string $proposalId)
     {
         $this->perms->authorize($request->user(), 'document_upload.proposal.update');
 
-        $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $doc = $this->findDocument($publicId, ['extraction']);
         $this->assertDocumentAccess($request, $doc);
-        $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
+        $proposal = DocumentTransactionProposal::where('document_upload_id', $doc->id)
             ->where('id', $proposalId)
             ->firstOrFail();
 
@@ -118,12 +120,12 @@ class DocumentProposalController extends Controller
         return response()->json($this->reviewPayload($doc, $proposal));
     }
 
-    public function update(Request $request, string $id, string $proposalId)
+    public function update(Request $request, string $publicId, string $proposalId)
     {
         $this->perms->authorize($request->user(), 'document_upload.proposal.update');
-        $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
+        $doc = $this->findDocument($publicId, ['extraction']);
+        $proposal = DocumentTransactionProposal::where('document_upload_id', $doc->id)
             ->where('id', $proposalId)->firstOrFail();
-        $doc = $proposal->documentUpload()->with('extraction')->firstOrFail();
         $this->assertDocumentAccess($request, $doc);
         $data = $request->validate([
             'payload' => ['required', 'array'],
@@ -139,13 +141,13 @@ class DocumentProposalController extends Controller
         return response()->json(['ok' => true, 'proposal' => $proposal]);
     }
 
-    public function convert(Request $request, string $id, string $proposalId)
+    public function convert(Request $request, string $publicId, string $proposalId)
     {
         $this->perms->authorize($request->user(), 'document_upload.convert');
-        $proposal = DocumentTransactionProposal::where('document_upload_id', $id)
+        $doc = $this->findDocument($publicId);
+        $proposal = DocumentTransactionProposal::where('document_upload_id', $doc->id)
             ->where('id', $proposalId)->firstOrFail();
 
-        $doc = $proposal->documentUpload;
         $this->assertDocumentAccess($request, $doc);
         $validation = $this->validator->validateForConversion($proposal->transaction_type, $proposal->payload ?? []);
 
@@ -217,8 +219,8 @@ class DocumentProposalController extends Controller
 
         return [
             'ok' => true,
-            'document' => $doc->fresh(['extraction', 'entityMatches']),
-            'extraction' => $doc->extraction,
+            'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
+            'extraction' => $doc->extraction ? new DocumentExtractionResource($doc->extraction->load('documentUpload')) : null,
             'proposal' => $proposal,
             'transaction_type' => $proposal->transaction_type,
             'initial_values' => $review['initial_values'],
@@ -229,6 +231,14 @@ class DocumentProposalController extends Controller
             'review_schema' => $review['review_schema'],
             'can_convert' => empty($review['missing_fields']),
         ];
+    }
+
+    private function findDocument(string $publicId, array $with = []): DocumentUpload
+    {
+        return DocumentUpload::query()
+            ->with($with)
+            ->where('public_id', $publicId)
+            ->firstOrFail();
     }
 
     private function assertDocumentAccess(Request $request, DocumentUpload $doc): void

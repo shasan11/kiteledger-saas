@@ -159,6 +159,42 @@ return new class extends Migration
             $table->index(['user_id', 'module', 'created_at'], 'ai_usage_logs_user_id_module_created_at_index');
         });
 
+        Schema::create('ai_action_audit_logs', function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->uuid('ai_pending_action_id')->nullable();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('action_type', 120);
+            $table->string('module', 120)->nullable();
+            $table->string('target_type', 120)->nullable();
+            $table->string('target_id')->nullable();
+            $table->json('before_values')->nullable();
+            $table->json('after_values')->nullable();
+            $table->string('status', 40)->default('executed');
+            $table->string('ip_address', 60)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->timestamps();
+            $table->index(['action_type', 'status'], 'ai_audit_action_status_idx');
+            $table->index(['user_id', 'created_at'], 'ai_audit_user_created_idx');
+            $table->index(['ai_pending_action_id'], 'ai_audit_pending_action_idx');
+        });
+
+        Schema::create('ai_tool_calls', function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->uuid('ai_conversation_id')->nullable();
+            $table->uuid('ai_message_id')->nullable();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('tool_name', 120);
+            $table->json('input')->nullable();
+            $table->json('output')->nullable();
+            $table->string('status', 40)->default('completed');
+            $table->text('error_message')->nullable();
+            $table->integer('duration_ms')->nullable();
+            $table->timestamps();
+            $table->index(['tool_name', 'status'], 'ai_tool_calls_name_status_idx');
+            $table->index(['user_id', 'created_at'], 'ai_tool_calls_user_created_idx');
+            $table->index(['ai_conversation_id'], 'ai_tool_calls_conversation_idx');
+        });
+
         Schema::create('alert_types', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('name', 150);
@@ -1447,6 +1483,7 @@ return new class extends Migration
 
         Schema::create('document_extractions', function (Blueprint $table): void {
             $table->uuid('id')->primary();
+            $table->uuid('public_id')->unique();
             $table->uuid('document_upload_id');
             $table->string('provider', 60)->nullable();
             $table->string('model', 120)->nullable();
@@ -1515,6 +1552,7 @@ return new class extends Migration
 
         Schema::create('document_uploads', function (Blueprint $table): void {
             $table->uuid('id')->primary();
+            $table->uuid('public_id')->unique();
             $table->string('label');
             $table->string('original_file_name');
             $table->string('file_path');
@@ -5819,6 +5857,8 @@ return new class extends Migration
         Schema::dropIfExists('app_settings');
         Schema::dropIfExists('announcements');
         Schema::dropIfExists('alert_types');
+        Schema::dropIfExists('ai_tool_calls');
+        Schema::dropIfExists('ai_action_audit_logs');
         Schema::dropIfExists('ai_usage_logs');
         Schema::dropIfExists('ai_pending_actions');
         Schema::dropIfExists('ai_messages');

@@ -73,6 +73,7 @@ class AiSettingsController extends Controller
             'ai_financial_assistant_enabled' => 'nullable|boolean',
             'ai_document_assistant_enabled' => 'nullable|boolean',
             'ai_write_actions_enabled' => 'nullable|boolean',
+            'ai_assistant_mode' => ['nullable', Rule::in(['full', 'reports_only'])],
             'ai_fallback_provider' => ['nullable', Rule::in(['', 'openai', 'groq', 'gemini', 'openrouter', 'ollama'])],
         ]);
 

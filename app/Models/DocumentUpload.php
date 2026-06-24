@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 class DocumentUpload extends Model
 {
     use HasFactory, HasUuids;
 
     protected $fillable = [
+        'public_id',
         'label',
         'original_file_name',
         'file_path',
@@ -29,13 +31,37 @@ class DocumentUpload extends Model
         'metadata',
     ];
 
+    protected $hidden = [
+        'id',
+        'file_path',
+        'file_hash',
+        'uploaded_by',
+        'branch_id',
+        'fiscal_year_id',
+        'company_id',
+        'tenant_id',
+        'deleted_at',
+        'metadata',
+    ];
+
     protected function casts(): array
     {
         return [
             'file_size' => 'integer',
             'uploaded_by' => 'integer',
             'metadata' => 'array',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (DocumentUpload $document): void {
+            if (blank($document->public_id)) {
+                $document->public_id = (string) Str::uuid();
+            }
+        });
     }
 
     public function branch(): BelongsTo

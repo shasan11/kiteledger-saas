@@ -26,10 +26,10 @@ class DocumentEntityMatchController extends Controller
         protected BranchScopeService $branchScope,
     ) {}
 
-    public function match(Request $request, string $id)
+    public function match(Request $request, string $publicId)
     {
         $this->perms->authorize($request->user(), 'document_upload.entity_match');
-        $doc = DocumentUpload::with('extraction')->findOrFail($id);
+        $doc = $this->findDocument($publicId, ['extraction']);
         $this->assertDocumentAccess($request, $doc);
         if (!$doc->extraction || !is_array($doc->extraction->normalized_json)) {
             return response()->json(['ok' => false, 'message' => 'No extraction available.', 'code' => 'NO_EXTRACTION'], 422);
@@ -61,10 +61,10 @@ class DocumentEntityMatchController extends Controller
     /**
      * Create missing FK record (contact, product, currency, warehouse) after user approval.
      */
-    public function createFk(Request $request, string $id)
+    public function createFk(Request $request, string $publicId)
     {
         $this->perms->authorize($request->user(), 'document_upload.create_fk');
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = $this->findDocument($publicId);
         $this->assertDocumentAccess($request, $doc);
 
         $data = $request->validate([
@@ -147,6 +147,14 @@ class DocumentEntityMatchController extends Controller
             if ($proposal->status === 'converted') continue;
             $this->proposalService->refreshProposalMatches($proposal);
         }
+    }
+
+    private function findDocument(string $publicId, array $with = []): DocumentUpload
+    {
+        return DocumentUpload::query()
+            ->with($with)
+            ->where('public_id', $publicId)
+            ->firstOrFail();
     }
 
     private function assertDocumentAccess(Request $request, DocumentUpload $doc): void

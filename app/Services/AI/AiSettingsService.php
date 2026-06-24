@@ -31,6 +31,9 @@ class AiSettingsService
         'ai_document_assistant_enabled' => true,
         'ai_write_actions_enabled' => true,
         'ai_fallback_provider' => '',
+        // 'full' = complete ERP agent (RAG, deterministic tools, action proposals);
+        // 'reports_only' = restrict chat to report questions (legacy conservative mode).
+        'ai_assistant_mode' => 'full',
     ];
 
     public function __construct(protected DatabaseSettingService $db) {}
@@ -167,6 +170,18 @@ class AiSettingsService
         return $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP);
     }
 
+    public function assistantMode(): string
+    {
+        $mode = strtolower(trim($this->db->string('ai_assistant_mode', self::DEFAULTS['ai_assistant_mode'], self::GROUP)));
+
+        return in_array($mode, ['full', 'reports_only'], true) ? $mode : 'full';
+    }
+
+    public function reportsOnly(): bool
+    {
+        return $this->assistantMode() === 'reports_only';
+    }
+
     public function setApiKey(string $key): void
     {
         $encrypted = Crypt::encryptString($key);
@@ -227,6 +242,7 @@ class AiSettingsService
             'ai_document_assistant_enabled' => $this->db->bool('ai_document_assistant_enabled', (bool) self::DEFAULTS['ai_document_assistant_enabled'], self::GROUP),
             'ai_write_actions_enabled' => $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP),
             'ai_fallback_provider' => $this->db->string('ai_fallback_provider', self::DEFAULTS['ai_fallback_provider'], self::GROUP),
+            'ai_assistant_mode' => $this->assistantMode(),
         ];
     }
 

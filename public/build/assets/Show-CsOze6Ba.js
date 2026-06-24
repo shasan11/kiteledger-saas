@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./ManufacturingShow-C7iF8jNb.js";var n=e();function r({id:e,...r}){return(0,n.jsx)(t,{id:e,documentType:`production_journal`,...r})}export{r as default};

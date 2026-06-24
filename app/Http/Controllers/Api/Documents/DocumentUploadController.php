@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Documents;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\DocumentUploadResource;
 use App\Models\DocumentUpload;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
@@ -22,7 +23,7 @@ class DocumentUploadController extends Controller
 
     public function index(Request $request)
     {
-        $this->perms->authorize($request->user(), 'document_upload.view');
+        $this->authorize('viewAny', DocumentUpload::class);
 
         $q = DocumentUpload::query()
             ->with(['extraction', 'uploader:id,name'])
@@ -37,19 +38,30 @@ class DocumentUploadController extends Controller
                   ->orWhere('original_file_name', 'like', "%{$search}%");
             });
         }
-        if ($status = $request->get('status')) $q->where('status', $status);
-        if ($type = $request->get('document_type')) $q->where('document_type', $type);
+        if ($status = $request->get('status')) {
+            $q->where('status', $status);
+        }
+        if ($type = $request->get('document_type')) {
+            $q->where('document_type', $type);
+        }
         $perPage = min((int) $request->get('per_page', 20), 100);
-        return response()->json($q->paginate($perPage));
+
+        return DocumentUploadResource::collection($q->paginate($perPage));
     }
 
     public function store(Request $request)
     {
-        $this->perms->authorize($request->user(), 'document_upload.create');
+        $this->authorize('create', DocumentUpload::class);
 
         $validator = Validator::make($request->all(), [
             'label' => ['required', 'string', 'max:255'],
-            'file' => ['required', 'file', 'mimes:pdf,doc,docx,xlsx,jpg,png'], // only allowed types
+            'file' => [
+                'required',
+                'file',
+                'max:10240',
+                'mimes:pdf,docx,jpg,jpeg,png,webp',
+                'mimetypes:application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp',
+            ],
             'document_type' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string'],
             'branch_id' => ['nullable', 'uuid'],
@@ -99,27 +111,32 @@ class DocumentUploadController extends Controller
 
         $this->audit->log('document.uploaded', ['document_upload_id' => $doc->id, 'label' => $doc->label]);
 
-        return response()->json(['ok' => true, 'document' => $doc->fresh()]);
-    }
-
-    public function show(Request $request, string $id)
-    {
-        $this->perms->authorize($request->user(), 'document_upload.view');
-        $doc = DocumentUpload::query()
-            ->with(['extraction', 'entityMatches', 'proposals', 'uploader:id,name'])
-            ->findOrFail($id);
-        $this->assertDocumentAccess($request, $doc);
         return response()->json([
             'ok' => true,
-            'document' => $doc,
-            'preview_url' => route('api.document-uploads.preview', ['id' => $doc->id]),
+            'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
         ]);
     }
 
-    public function update(Request $request, string $id)
+    public function show(Request $request, string $publicId)
     {
-        $this->perms->authorize($request->user(), 'document_upload.update');
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = DocumentUpload::query()
+            ->with(['extraction', 'entityMatches', 'proposals', 'uploader:id,name'])
+            ->where('public_id', $publicId)
+            ->firstOrFail();
+        $this->authorize('view', $doc);
+        $this->assertDocumentAccess($request, $doc);
+
+        return response()->json([
+            'ok' => true,
+            'document' => new DocumentUploadResource($doc),
+            'preview_url' => route('api.document-uploads.preview', ['publicId' => $doc->public_id]),
+        ]);
+    }
+
+    public function update(Request $request, string $publicId)
+    {
+        $doc = $this->findByPublicId($publicId);
+        $this->authorize('update', $doc);
         $this->assertDocumentAccess($request, $doc);
         $data = $request->validate([
             'label' => ['nullable', 'string', 'max:255'],
@@ -127,45 +144,56 @@ class DocumentUploadController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
         $doc->update(array_filter($data, fn ($v) => $v !== null));
-        return response()->json(['ok' => true, 'document' => $doc->fresh()]);
+
+        return response()->json([
+            'ok' => true,
+            'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
+        ]);
     }
 
-    public function destroy(Request $request, string $id)
+    public function destroy(Request $request, string $publicId)
     {
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = $this->findByPublicId($publicId);
         $this->assertDocumentAccess($request, $doc);
         $hasConverted = $doc->proposals()->where('status', 'converted')->exists();
 
         if ($hasConverted) {
             $this->perms->authorize($request->user(), 'document_upload.archive');
+            $this->authorize('update', $doc);
             $doc->update(['status' => 'archived']);
             $this->audit->log('document.archived', ['document_upload_id' => $doc->id]);
             return response()->json(['ok' => true, 'message' => 'Document archived (linked transactions exist).']);
         }
 
-        $this->perms->authorize($request->user(), 'document_upload.delete');
+        $this->authorize('delete', $doc);
         $this->storage->delete($doc);
         $doc->delete();
-        $this->audit->log('document.deleted', ['document_upload_id' => $id]);
+        $this->audit->log('document.deleted', ['document_upload_id' => $doc->id]);
         return response()->json(['ok' => true]);
     }
 
-    public function preview(Request $request, string $id)
+    public function preview(Request $request, string $publicId)
     {
-        $this->perms->authorize($request->user(), 'document_upload.view');
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = $this->findByPublicId($publicId);
+        $this->authorize('preview', $doc);
         $this->assertDocumentAccess($request, $doc);
+
         return $this->storage->streamResponse($doc);
     }
 
-    public function archive(Request $request, string $id)
+    public function archive(Request $request, string $publicId)
     {
         $this->perms->authorize($request->user(), 'document_upload.archive');
-        $doc = DocumentUpload::findOrFail($id);
+        $doc = $this->findByPublicId($publicId);
+        $this->authorize('update', $doc);
         $this->assertDocumentAccess($request, $doc);
         $doc->update(['status' => 'archived']);
         $this->audit->log('document.archived', ['document_upload_id' => $doc->id]);
-        return response()->json(['ok' => true, 'document' => $doc->fresh()]);
+
+        return response()->json([
+            'ok' => true,
+            'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
+        ]);
     }
 
     private function assertDocumentAccess(Request $request, DocumentUpload $doc): void
@@ -206,5 +234,12 @@ class DocumentUploadController extends Controller
                 $inner->orWhereIn('branch_id', $branchIds);
             }
         });
+    }
+
+    private function findByPublicId(string $publicId): DocumentUpload
+    {
+        return DocumentUpload::query()
+            ->where('public_id', $publicId)
+            ->firstOrFail();
     }
 }
