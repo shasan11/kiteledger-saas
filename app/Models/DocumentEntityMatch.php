@@ -24,6 +24,13 @@ class DocumentEntityMatch extends Model
         'created_record_id',
     ];
 
+    protected $hidden = [
+        'document_upload_id',
+        'document_extraction_id',
+        'matched_model',
+        'created_record_id',
+    ];
+
     protected function casts(): array
     {
         return [
