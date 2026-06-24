@@ -25,6 +25,15 @@ class DocumentExtraction extends Model
         'completed_at',
     ];
 
+    /**
+     * Raw provider text can contain full document contents and should not be returned by default.
+     */
+    protected $hidden = [
+        'document_upload_id',
+        'raw_text',
+        'extracted_json',
+    ];
+
     protected function casts(): array
     {
         return [
