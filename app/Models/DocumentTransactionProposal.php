@@ -29,6 +29,15 @@ class DocumentTransactionProposal extends Model
         'error_message',
     ];
 
+    protected $hidden = [
+        'document_upload_id',
+        'document_extraction_id',
+        'created_record_type',
+        'created_record_id',
+        'created_by',
+        'approved_by',
+    ];
+
     protected function casts(): array
     {
         return [
