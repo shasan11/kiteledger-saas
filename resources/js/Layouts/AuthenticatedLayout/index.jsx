@@ -12,6 +12,7 @@ import {
     InfoCircleOutlined,
     ProfileOutlined,
     ProjectOutlined,
+    RobotOutlined,
     SettingOutlined,
     ShopOutlined,
     SwapOutlined,
@@ -101,6 +102,16 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
+            ...(['ai.view', 'ai.use', 'ai.chat', 'ai.manage'].some((permission) => can(permission))
+                ? [
+                      {
+                          key: 'ai-assistant',
+                          icon: <RobotOutlined />,
+                          label: 'AI Assistant',
+                          onClick: () => visit('ai.assistant', '/ai/assistant'),
+                      },
+                  ]
+                : []),
             ...(can('document_upload.view')
                 ? [
                       {
