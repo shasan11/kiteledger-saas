@@ -39,6 +39,8 @@ class DocumentUploadController extends Controller
         }
         if ($status = $request->get('status')) $q->where('status', $status);
         if ($type = $request->get('document_type')) $q->where('document_type', $type);
+        if ($dateFrom = $request->get('date_from')) $q->whereDate('created_at', '>=', $dateFrom);
+        if ($dateTo = $request->get('date_to')) $q->whereDate('created_at', '<=', $dateTo);
         $perPage = min((int) $request->get('per_page', 20), 100);
         return response()->json($q->paginate($perPage));
     }
@@ -47,9 +49,10 @@ class DocumentUploadController extends Controller
     {
         $this->perms->authorize($request->user(), 'document_upload.create');
 
+        $maxKb = max(1, (int) config('documents.max_upload_mb', 10)) * 1024;
         $validator = Validator::make($request->all(), [
             'label' => ['required', 'string', 'max:255'],
-            'file' => ['required', 'file', 'mimes:pdf,doc,docx,xlsx,jpg,png'], // only allowed types
+            'file' => ['required', 'file', 'max:' . $maxKb, 'mimes:pdf,docx,jpg,jpeg,png,webp'],
             'document_type' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string'],
             'branch_id' => ['nullable', 'uuid'],
