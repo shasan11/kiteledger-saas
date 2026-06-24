@@ -29,6 +29,19 @@ class DocumentUpload extends Model
         'metadata',
     ];
 
+    /**
+     * Do not expose storage internals or tenant/accounting scope keys in default API JSON.
+     * Controllers can still use these values server-side for authorization and streaming.
+     */
+    protected $hidden = [
+        'file_path',
+        'file_hash',
+        'branch_id',
+        'fiscal_year_id',
+        'uploaded_by',
+        'metadata',
+    ];
+
     protected function casts(): array
     {
         return [
