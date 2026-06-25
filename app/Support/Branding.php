@@ -3,7 +3,7 @@
 namespace App\Support;
 
 use App\Models\AppSetting;
-use Illuminate\Support\Facades\Storage;
+use App\Services\Media\MediaStorageService;
 
 class Branding
 {
@@ -22,7 +22,50 @@ class Branding
             return asset('favicon.ico');
         }
 
-        return self::publicFileUrl($favicon) ?? asset('favicon.ico');
+        // Uploaded favicon → drop-in public/branding/favicon.png → shipped favicon.ico.
+        return self::publicFileUrl($favicon)
+            ?? (is_file(public_path('branding/favicon.png')) ? asset('branding/favicon.png') : null)
+            ?? asset('favicon.ico');
+    }
+
+    /**
+     * Active light-logo URL: the uploaded App Settings logo, else the drop-in
+     * default at public/branding/logo.png, else null (UI shows its built-in SVG).
+     */
+    public static function logoUrl(): ?string
+    {
+        return self::brandUrl('logo', 'branding/logo.png');
+    }
+
+    /** Active dark-logo URL with the same fallback chain as {@see logoUrl()}. */
+    public static function darkLogoUrl(): ?string
+    {
+        return self::brandUrl('dark_logo', 'branding/dark_logo.png');
+    }
+
+    /**
+     * Resolve an App Settings image field, falling back to a bundled default
+     * file in public/branding/ when nothing has been uploaded.
+     */
+    private static function brandUrl(string $field, string $defaultPublicPath): ?string
+    {
+        try {
+            $uploaded = self::publicFileUrl(
+                AppSetting::query()->orderBy('created_at')->value($field)
+            );
+        } catch (\Throwable) {
+            $uploaded = null;
+        }
+
+        if ($uploaded) {
+            return $uploaded;
+        }
+
+        if (is_file(public_path($defaultPublicPath))) {
+            return asset($defaultPublicPath);
+        }
+
+        return null;
     }
 
     public static function publicFileUrl(?string $path): ?string
@@ -50,11 +93,7 @@ class Branding
             $path = substr($path, 8);
         }
 
-        if (!Storage::disk('public')->exists($path)) {
-            return null;
-        }
-
-        return asset('storage/' . $path);
+        return app(MediaStorageService::class)->url($path);
     }
 
     public static function faviconMimeType(?string $url): ?string

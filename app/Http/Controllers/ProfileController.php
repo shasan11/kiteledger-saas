@@ -3,12 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\Media\MediaStorageService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -66,7 +66,7 @@ class ProfileController extends Controller
 
         if ($request->hasFile('image')) {
             $this->deleteStoredImage($user->image);
-            $user->image = $request->file('image')->store('profile-photos', 'public');
+            $user->image = app(MediaStorageService::class)->store($request->file('image'), 'profile-photos');
         }
 
         $user->save();
@@ -104,7 +104,7 @@ class ProfileController extends Controller
         $normalized = str($path)->replaceStart('/storage/', '')->toString();
 
         if ($normalized !== $path || !str_starts_with($path, 'http')) {
-            Storage::disk('public')->delete($normalized);
+            app(MediaStorageService::class)->delete($normalized);
         }
     }
 }

@@ -16,7 +16,7 @@
 
     <div class="buttons">
         @if ( ! isset($permissions['errors']))
-            <a class="button" href="{{ route('LaravelInstaller::database') }}">
+            <a class="button" href="{{ route('kiteledger.install.type') }}">
                 Next Step
             </a>
         @else

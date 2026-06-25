@@ -174,7 +174,7 @@ class ProductionJournalController extends BaseCrudApiController
     {
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
         if (empty($parentData['code']) || strtoupper((string) $parentData['code']) === 'DRAFT') {
-            $parentData['code'] = '#draft-production-journal-' . strtolower((string) \Illuminate\Support\Str::uuid());
+            $parentData['code'] = app(\App\Services\DocumentNumberingService::class)->generateDraft($this->newModelInstance());
         }
 
         return $parentData;

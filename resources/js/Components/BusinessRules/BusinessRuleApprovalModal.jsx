@@ -2,9 +2,18 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Modal, Skeleton, notification } from 'antd';
 import BusinessRuleSummary from './BusinessRuleSummary';
+import { stripUuids } from '../Transactions/entityDisplay';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
+
+const GENERIC_ERROR = 'Unable to preview business rules.';
+
+// Backend messages can embed raw ids; never surface those to the user.
+const safeError = (message) => {
+  const cleaned = stripUuids(message);
+  return cleaned && cleaned.length > 2 ? cleaned : GENERIC_ERROR;
+};
 
 export default function BusinessRuleApprovalModal({
   open,
@@ -41,7 +50,7 @@ export default function BusinessRuleApprovalModal({
       .catch((error) => {
         if (!active) return;
         notification.error({
-          message: error?.response?.data?.message || 'Unable to preview business rules.',
+          message: safeError(error?.response?.data?.message),
         });
         setResult({ can_proceed: false, has_errors: true, checks: [] });
       })

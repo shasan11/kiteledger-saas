@@ -16,6 +16,7 @@ use App\Models\Quotation;
 use App\Models\SalesOrder;
 use App\Models\SalesReturn;
 use App\Models\SupplierPayment;
+use App\Services\Media\MediaStorageService;
 use App\Services\SmsService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -23,7 +24,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 
 class ContactController extends BaseCrudApiController
 {
@@ -220,10 +220,10 @@ class ContactController extends BaseCrudApiController
 
         if ($request && $request->hasFile('image')) {
             if ($record instanceof Contact && $record->image) {
-                Storage::disk('public')->delete($record->image);
+                app(MediaStorageService::class)->delete($record->image);
             }
 
-            $parentData['image'] = $request->file('image')->store('contacts/images', 'public');
+            $parentData['image'] = app(MediaStorageService::class)->store($request->file('image'), 'contacts/images');
 
             return $parentData;
         }
@@ -233,7 +233,7 @@ class ContactController extends BaseCrudApiController
 
         if ($removeImage && $record instanceof Contact) {
             if ($record->image) {
-                Storage::disk('public')->delete($record->image);
+                app(MediaStorageService::class)->delete($record->image);
             }
             $parentData['image'] = null;
         }
@@ -261,7 +261,7 @@ class ContactController extends BaseCrudApiController
         $data['payable_account_summary'] = null;
         $data['account_chart'] = [];
         $imageUrl = ($record instanceof Contact && $record->image)
-            ? Storage::disk('public')->url($record->image)
+            ? app(MediaStorageService::class)->url($record->image)
             : null;
         $data['image_url'] = $imageUrl;
         $data['image'] = $imageUrl;

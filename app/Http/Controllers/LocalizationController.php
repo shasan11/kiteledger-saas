@@ -51,7 +51,7 @@ class LocalizationController extends Controller
         $this->authorizeManagement($request);
 
         $validated = $request->validate([
-            'code' => ['required', 'string', 'max:12', 'regex:/^[a-z]{2,3}(?:-[A-Z]{2})?$/', 'unique:languages,code'],
+            'code' => ['required', 'string', 'max:12', 'regex:/^[a-z]{2,3}(?:-[A-Z]{2})?$/', 'not_in:ne', 'unique:languages,code'],
             'name' => ['required', 'string', 'max:80'],
             'native_name' => ['required', 'string', 'max:80'],
             'direction' => ['required', Rule::in(['ltr', 'rtl'])],
@@ -108,6 +108,7 @@ class LocalizationController extends Controller
                 'string',
                 'max:12',
                 'regex:/^[a-z]{2,3}(?:-[A-Z]{2})?$/',
+                'not_in:ne',
                 Rule::unique('languages', 'code')->ignore($language->id),
             ],
             'name' => ['sometimes', 'required', 'string', 'max:80'],

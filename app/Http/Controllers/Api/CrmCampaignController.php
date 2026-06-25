@@ -11,6 +11,7 @@ use App\Models\CampaignSmsRecipient;
 use App\Models\Contact;
 use App\Models\CrmCampaign;
 use App\Services\CampaignCmsService;
+use App\Services\Media\MediaStorageService;
 use App\Services\SmsService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -443,7 +444,7 @@ class CrmCampaignController extends BaseCrudApiController
 
         $created = [];
         foreach ($data['files'] as $file) {
-            $path = $file->store("campaigns/{$id}/email/{$messageId}", 'public');
+            $path = app(MediaStorageService::class)->store($file, "campaigns/{$id}/email/{$messageId}");
             $created[] = CampaignEmailAttachment::query()->create([
                 'campaign_id' => $id,
                 'campaign_email_message_id' => $messageId,
@@ -476,9 +477,10 @@ class CrmCampaignController extends BaseCrudApiController
     {
         $this->campaign($id);
         $attachment = CampaignEmailAttachment::query()->where('campaign_id', $id)->findOrFail($attachmentId);
-        abort_unless(Storage::disk('public')->exists($attachment->file_path), 404);
+        $disk = app(MediaStorageService::class)->disk();
+        abort_unless(Storage::disk($disk)->exists($attachment->file_path), 404);
 
-        return Storage::disk('public')->download($attachment->file_path, $attachment->original_name);
+        return Storage::disk($disk)->download($attachment->file_path, $attachment->original_name);
     }
 
     public function deleteAttachment(Request $request, string $id, string $attachmentId): JsonResponse
@@ -855,9 +857,10 @@ class CrmCampaignController extends BaseCrudApiController
         if ($copyAttachments) {
             foreach ($message->attachments()->where('is_active', true)->get() as $attachment) {
                 $newPath = $attachment->file_path;
-                if (Storage::disk('public')->exists($attachment->file_path)) {
+                $disk = app(MediaStorageService::class)->disk();
+                if (Storage::disk($disk)->exists($attachment->file_path)) {
                     $newPath = 'campaigns/' . $campaign->id . '/email/' . $copy->id . '/' . Str::uuid() . '-' . $attachment->file_name;
-                    Storage::disk('public')->copy($attachment->file_path, $newPath);
+                    Storage::disk($disk)->copy($attachment->file_path, $newPath);
                 }
 
                 $newAttachment = $attachment->replicate();

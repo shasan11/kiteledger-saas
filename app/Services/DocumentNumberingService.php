@@ -4,13 +4,23 @@ namespace App\Services;
 
 use App\Models\DocumentNumbering;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class DocumentNumberingService
 {
+    /**
+     * Draft placeholder numbers must fit the smallest document-number column.
+     * Every approval-required number column is at least varchar(40), so the
+     * placeholder is capped to 40 characters. It keeps the "#draft" marker that
+     * isDraftNumber()/looksLikeDraft() rely on, plus enough random token to
+     * stay unique on the column's unique index.
+     */
+    private const DRAFT_MAX_LENGTH = 40;
+    private const DRAFT_MARKER = '#draft-';
+    private const DRAFT_MIN_TOKEN = 12;
+
     protected array $modelMapping = [
         'Invoice' => ['document_type' => 'invoice', 'field' => 'invoice_no', 'approval_required' => true, 'accounting_impact' => true],
         'CustomerPayment' => ['document_type' => 'receipt', 'field' => 'payment_no', 'approval_required' => true, 'accounting_impact' => true],
@@ -135,12 +145,24 @@ class DocumentNumberingService
 
     public function generateDraft(Model|string $model, mixed $date = null): string
     {
-        $modelClass = is_string($model) ? class_basename($model) : class_basename($model);
+        $modelClass = class_basename($model);
         $mapping = $this->modelMapping[$modelClass] ?? null;
         $documentType = $mapping['document_type'] ?? 'document';
         $prefix = strtoupper(str_replace('_', '-', (string) $documentType));
-        $stamp = Carbon::parse($date ?: now())->format('Ymd');
 
-        return sprintf('#draft-%s-%s-%s', $prefix, $stamp, strtolower((string) Str::uuid()));
+        // A dash-stripped UUID is the uniqueness guarantee. The previous format
+        // ("#draft-{TYPE}-{Ymd}-{uuid}") ran to ~60 chars and overflowed the
+        // varchar(40) number columns on MySQL (SQLite never enforced the length,
+        // so it only failed in production). Keep the document-type prefix only
+        // when a healthy token still fits; otherwise fall back to the bare
+        // marker so the suffix keeps its full entropy. Always capped at 40.
+        $token = str_replace('-', '', (string) Str::uuid());
+        $head = self::DRAFT_MARKER . $prefix . '-';
+
+        if (strlen($head) + self::DRAFT_MIN_TOKEN > self::DRAFT_MAX_LENGTH) {
+            $head = self::DRAFT_MARKER;
+        }
+
+        return substr($head . $token, 0, self::DRAFT_MAX_LENGTH);
     }
 }

@@ -30,6 +30,10 @@ class AiAgentSafetyTest extends TestCase
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        // Write actions are disabled by default now; this suite exercises the
+        // draft pipeline, so opt in explicitly.
+        app(\App\Services\AI\AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
     }
 
     public function test_execute_endpoint_creates_draft_and_writes_audit_log(): void

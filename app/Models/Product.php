@@ -13,7 +13,6 @@ class Product extends Model
     use HasFactory, HasUuids;
 
     protected $fillable = [
-        'branch_id',
         'parent_id',
         'product_category_id',
         'product_tax_category_id',

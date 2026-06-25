@@ -1,5 +1,6 @@
 import React from 'react';
 import { Alert, Descriptions, Empty, Table, Tag, Tooltip, Typography } from 'antd';
+import { entityLabel, sanitizeDisplayDetails } from '../Transactions/entityDisplay';
 
 const { Text } = Typography;
 
@@ -18,7 +19,18 @@ const humanize = (value = '') =>
 const formatValue = (value) => {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'number') return value.toLocaleString('en-NP', { maximumFractionDigits: 4 });
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => (item && typeof item === 'object' ? entityLabel(item) : formatValue(item)));
+    return parts.filter((p) => p && p !== '-').join(', ') || '-';
+  }
+  if (typeof value === 'object') return entityLabel(value);
   return String(value);
+};
+
+// Drop ids/UUIDs and collapse entity objects into readable labels before render.
+const safeDetails = (details) => {
+  const cleaned = sanitizeDisplayDetails(details);
+  return cleaned && typeof cleaned === 'object' && !Array.isArray(cleaned) ? cleaned : {};
 };
 
 export default function BusinessRuleSummary({ result }) {
@@ -75,16 +87,20 @@ export default function BusinessRuleSummary({ result }) {
           },
         ]}
         expandable={{
-          rowExpandable: (row) => row.details && Object.keys(row.details).length > 0,
-          expandedRowRender: (row) => (
-            <Descriptions size="small" column={2} bordered>
-              {Object.entries(row.details || {}).map(([key, value]) => (
-                <Descriptions.Item key={key} label={humanize(key)}>
-                  {formatValue(value)}
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          ),
+          // Only expandable once ids/UUIDs are stripped and something safe remains.
+          rowExpandable: (row) => Object.keys(safeDetails(row.details)).length > 0,
+          expandedRowRender: (row) => {
+            const details = safeDetails(row.details);
+            return (
+              <Descriptions size="small" column={2} bordered>
+                {Object.entries(details).map(([key, value]) => (
+                  <Descriptions.Item key={key} label={humanize(key)}>
+                    {formatValue(value)}
+                  </Descriptions.Item>
+                ))}
+              </Descriptions>
+            );
+          },
         }}
       />
     </div>

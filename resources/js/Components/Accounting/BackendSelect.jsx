@@ -45,6 +45,40 @@ const buildPhoneValue = (code, number) => {
     return cleanNumber ? `${code || '+977'} ${cleanNumber}` : '';
 };
 
+function isUuid(value) {
+    return typeof value === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+const currencyLabel = (row) => {
+    if (!row || typeof row !== 'object') return null;
+    const code = row.code ? String(row.code).trim() : '';
+    const name = row.name ? String(row.name).trim() : '';
+    const symbol = row.symbol ? String(row.symbol).trim() : '';
+    if (!code && !name) return null;
+    return `${code}${code && name ? ' - ' : ''}${name}${symbol ? ` (${symbol})` : ''}`;
+};
+
+const safeLabel = (row, value, labelKey, labelFn) => {
+    const fromFn = typeof labelFn === 'function' ? labelFn(row) : null;
+    const label = fromFn
+        ?? row?.label
+        ?? currencyLabel(row)
+        ?? row?.[labelKey]
+        ?? row?.name
+        ?? row?.code
+        ?? row?.display_name
+        ?? row?.account_name
+        ?? row?.bank_name
+        ?? row?.title;
+
+    if (label !== undefined && label !== null && String(label).trim() !== '' && !isUuid(String(label))) {
+        return String(label);
+    }
+
+    return isUuid(String(value)) ? 'Selected currency' : String(value ?? 'Selected item');
+};
+
 export default function BackendSelect({
     value,
     onChange,
@@ -94,10 +128,7 @@ export default function BackendSelect({
         if (!row || typeof row !== 'object') return null;
         const v = row[valueKey] ?? row.id ?? row.value;
         if (v === undefined || v === null || v === '') return null;
-        const label = typeof labelFn === 'function'
-            ? labelFn(row)
-            : row[labelKey] ?? row.name ?? row.code ?? String(v);
-        return { value: v, label: String(label ?? v), raw: row };
+        return { value: v, label: safeLabel(row, v, labelKey, labelFn), raw: row };
     };
 
     const fetchOptions = async (search = '') => {
@@ -167,7 +198,7 @@ export default function BackendSelect({
         if (found) return options;
         const ghost = detailValue && typeof detailValue === 'object'
             ? toOption(detailValue)
-            : { value, label: String(value), raw: null };
+            : { value, label: isUuid(String(value)) ? 'Selected currency' : String(value), raw: null };
         return ghost ? [ghost, ...options] : options;
     }, [options, value, detailValue]);
 

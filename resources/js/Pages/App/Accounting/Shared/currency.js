@@ -6,8 +6,8 @@ const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND}${path}`;
 
 const fallbackCurrency = {
-  code: 'NPR',
-  symbol: 'Rs.',
+  code: 'USD',
+  symbol: '$',
   decimal_places: 2,
 };
 

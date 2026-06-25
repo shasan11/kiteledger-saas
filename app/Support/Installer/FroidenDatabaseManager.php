@@ -49,21 +49,41 @@ class FroidenDatabaseManager extends DatabaseManager
     private function seed(): array
     {
         try {
-            Log::info('Web installer seed started.');
+            // The install-type step (InstallTypeController) records the user's
+            // choice. Demo data is only seeded when explicitly chosen — a fresh
+            // install always runs the lightweight default seeder.
+            $type = (string) session(\App\Http\Controllers\Installer\InstallTypeController::SESSION_KEY, 'fresh');
 
-            Artisan::call('db:seed', [
-                '--force' => true,
-            ]);
+            Log::info('Web installer seed started.', ['type' => $type]);
 
-            Log::info('Web installer seed finished.');
+            if ($type === 'quick') {
+                Artisan::call('db:seed', [
+                    '--class' => \Database\Seeders\DemoLiteSeeder::class,
+                    '--force' => true,
+                ]);
+            } else {
+                Artisan::call('db:seed', [
+                    '--force' => true,
+                ]);
+            }
 
-            return $this->response(trans('installer_messages.final.finished'), 'success');
+            Log::info('Web installer seed finished.', ['type' => $type]);
+
+            return $this->response(
+                $type === 'full'
+                    ? 'Full demo data cannot be seeded from browser installation. Please run: php artisan kiteledger:seed-demo --profile=full --force'
+                    : ($type === 'quick' ? 'Quick demo installation completed with sample data.' : 'Fresh installation completed.'),
+                'success'
+            );
         } catch (Throwable $e) {
             Log::error('Web installer seed failed.', [
                 'message' => $e->getMessage(),
             ]);
 
-            return $this->response($e->getMessage());
+            return $this->response(
+                'Demo data seeding failed. Installation completed, but demo records were not fully created. Retry with: php artisan kiteledger:seed-demo --profile=quick',
+                'success'
+            );
         }
     }
 

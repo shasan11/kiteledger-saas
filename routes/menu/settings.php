@@ -8,6 +8,7 @@ Route::prefix('settings')->name('settings.')->group(function () {
 
     Route::get('/company-profile', fn () => redirect()->route('settings.index', ['tab' => 'company-profile']))->name('company-profile');
     Route::get('/localization', fn () => redirect()->route('settings.index', ['tab' => 'localization']))->name('localization');
+    Route::get('/storage', fn () => redirect()->route('settings.index', ['tab' => 'storage-settings']))->name('storage');
     Route::get('/branches', fn () => redirect()->route('settings.index', ['tab' => 'branches']))->name('branches.index');
     Route::get('/fiscal-years', fn () => redirect()->route('settings.index', ['tab' => 'fiscal-years']))->name('fiscal-years.index');
     Route::get('/currencies', fn () => redirect()->route('settings.index', ['tab' => 'currencies']))->name('currencies.index');

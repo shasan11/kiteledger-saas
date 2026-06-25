@@ -130,7 +130,14 @@ class AiRagRetriever
 
         return collect($hits)
             ->when($sourceTypeFilter, fn ($c) => $c->where('source_type', $sourceTypeFilter))
-            ->map(fn ($hit) => $this->toSourceCard($hit))
+            ->map(fn ($hit) => $this->toSourceCard($hit, $branchId))
+            // Drop any hit whose underlying record could not be confirmed inside
+            // the caller's branch scope (defence-in-depth: see lookupRecord()).
+            ->filter(fn ($card) => ($card['_scoped'] ?? true) === true)
+            ->map(function ($card) {
+                unset($card['_scoped']);
+                return $card;
+            })
             ->values()
             ->all();
     }
@@ -139,11 +146,13 @@ class AiRagRetriever
      * @param  array{source_type:string, source_id:string, snippet:string, score:float}  $hit
      * @return array<string, mixed>
      */
-    private function toSourceCard(array $hit): array
+    private function toSourceCard(array $hit, ?string $branchId = null): array
     {
         $type = $hit['source_type'];
         $map = $this->sourceMap[$type] ?? null;
-        $record = $map ? $this->lookupRecord($map, $hit['source_id']) : null;
+        $lookup = $map ? $this->lookupRecord($map, $hit['source_id'], $branchId) : null;
+        $record = $lookup['record'] ?? null;
+        $scoped = !($lookup['out_of_scope'] ?? false);
 
         $displayNumber = $record['number'] ?? null;
         $title = $displayNumber
@@ -163,6 +172,7 @@ class AiRagRetriever
                 'date' => $record['date'] ?? null,
                 'route' => $map ? $map['route'].'/'.$hit['source_id'] : null,
             ],
+            '_scoped' => $scoped,
         ];
     }
 
@@ -170,25 +180,45 @@ class AiRagRetriever
      * Best-effort lookup of display fields for a source record. Defensive about
      * missing tables/columns (dev SQLite vs prod MySQL).
      *
+     * Branch scope is re-asserted HERE, not just at search time: if the record
+     * carries a branch_id and a caller branch is known, the lookup is filtered
+     * by it. A hit that resolves to another branch is flagged out_of_scope so
+     * the caller drops it — defence-in-depth against any cross-branch leak in
+     * the vector index.
+     *
      * @param  array<string, mixed>  $map
-     * @return array{number: ?string, status: ?string, date: ?string}|null
+     * @return array{record: array{number: ?string, status: ?string, date: ?string}|null, out_of_scope?: bool}|null
      */
-    private function lookupRecord(array $map, string $id): ?array
+    private function lookupRecord(array $map, string $id, ?string $branchId = null): ?array
     {
         try {
             if (! Schema::hasTable($map['table'])) {
                 return null;
             }
 
-            $row = DB::table($map['table'])->where('id', $id)->first();
+            $scopeByBranch = $branchId && Schema::hasColumn($map['table'], 'branch_id');
+
+            $query = DB::table($map['table'])->where('id', $id);
+            if ($scopeByBranch) {
+                $query->where('branch_id', $branchId);
+            }
+            $row = $query->first();
+
             if (! $row) {
+                // The record exists but in a different branch → treat as a leak.
+                if ($scopeByBranch && DB::table($map['table'])->where('id', $id)->exists()) {
+                    return ['record' => null, 'out_of_scope' => true];
+                }
+
                 return null;
             }
 
             return [
-                'number' => $this->firstColumn($map['table'], (array) $map['number'], $row),
-                'status' => Schema::hasColumn($map['table'], $map['status']) ? ($row->{$map['status']} ?? null) : null,
-                'date' => $this->firstColumn($map['table'], (array) $map['date'], $row),
+                'record' => [
+                    'number' => $this->firstColumn($map['table'], (array) $map['number'], $row),
+                    'status' => Schema::hasColumn($map['table'], $map['status']) ? ($row->{$map['status']} ?? null) : null,
+                    'date' => $this->firstColumn($map['table'], (array) $map['date'], $row),
+                ],
             ];
         } catch (Throwable) {
             return null;

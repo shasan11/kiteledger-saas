@@ -30,6 +30,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demo Mode
+    |--------------------------------------------------------------------------
+    |
+    | When true, the database seeder loads the FULL demo dataset (DemoSeeder:
+    | products, sample customers/suppliers, invoices, bills, payments, POS,
+    | accounting volume, etc.) so the app looks realistic right after install.
+    | When false (the default), only the lightweight master/setup seed runs —
+    | which is what shared-hosting / CodeCanyon installs must use.
+    |
+    | Accepts either APP_DEMO or the DEMO_MODE alias from the .env file.
+    |
+    */
+
+    'demo' => (bool) filter_var(
+        env('APP_DEMO', env('DEMO_MODE', false)),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------
     |

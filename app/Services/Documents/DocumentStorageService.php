@@ -3,6 +3,7 @@
 namespace App\Services\Documents;
 
 use App\Models\DocumentUpload;
+use App\Services\Media\MediaStorageService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -35,7 +36,7 @@ class DocumentStorageService
 
     public function disk(): string
     {
-        return (string) config('documents.disk', 'local');
+        return app(MediaStorageService::class)->disk();
     }
 
     public function validateFile(UploadedFile $file): void

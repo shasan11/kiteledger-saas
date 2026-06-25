@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\ProductUnit;
+use App\Models\User;
 use Database\Seeders\MasterDocumentNumberingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -13,11 +14,16 @@ class ProductSkuGenerationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->seed(MasterDocumentNumberingSeeder::class);
+
+        // Product routes live inside the ['web','auth','verified'] group.
+        $this->user = User::factory()->create(['email_verified_at' => now()]);
     }
 
     public function test_service_sku_is_generated_when_missing(): void
@@ -32,7 +38,7 @@ class ProductSkuGenerationTest extends TestCase
             'active' => true,
         ]);
 
-        $response = $this->postJson('/api/products', [
+        $response = $this->actingAs($this->user)->postJson('/api/products', [
             'name' => 'Implementation Service',
             'product_type' => 'service',
             'product_category_id' => $category->id,
@@ -65,7 +71,7 @@ class ProductSkuGenerationTest extends TestCase
             'active' => true,
         ]);
 
-        $response = $this->postJson('/api/products', [
+        $response = $this->actingAs($this->user)->postJson('/api/products', [
             'name' => 'Implementation Service',
             'product_type' => 'service',
             'track_inventory' => false,

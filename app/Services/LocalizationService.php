@@ -23,6 +23,8 @@ class LocalizationService
 
                 $languages = $query->get();
 
+                $languages = $languages->reject(fn (Language $language) => $language->code === 'ne')->values();
+
                 if ($languages->isNotEmpty()) {
                     return $languages;
                 }
@@ -219,13 +221,12 @@ class LocalizationService
             'en' => ['name' => 'English', 'native_name' => 'English', 'direction' => 'ltr'],
             'es' => ['name' => 'Spanish', 'native_name' => 'Español', 'direction' => 'ltr'],
             'fr' => ['name' => 'French', 'native_name' => 'Français', 'direction' => 'ltr'],
-            'ne' => ['name' => 'Nepali', 'native_name' => 'नेपाली', 'direction' => 'ltr'],
             'ar' => ['name' => 'Arabic', 'native_name' => 'العربية', 'direction' => 'rtl'],
         ];
         $paths = glob(resource_path('lang/*.json')) ?: [];
         $codes = collect($paths)
             ->map(fn (string $path) => pathinfo($path, PATHINFO_FILENAME))
-            ->filter(fn (string $code) => preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/', $code))
+            ->filter(fn (string $code) => $code !== 'ne' && preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/', $code))
             ->unique()
             ->values();
 

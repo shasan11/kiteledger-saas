@@ -140,6 +140,7 @@ use App\Http\Controllers\Api\Reports\ReportRegistryController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectTeamMemberController;
 use App\Http\Controllers\Api\SettingsConfigurationController;
+use App\Http\Controllers\Api\StorageSettingController;
 use App\Http\Controllers\Api\Payroll\AttendanceSummaryController;
 use App\Http\Controllers\Api\Payroll\BenefitRuleController;
 use App\Http\Controllers\Api\Payroll\EmployeeAdditionController;
@@ -153,6 +154,12 @@ use App\Http\Controllers\Api\Payroll\PayslipLineController;
 use App\Http\Controllers\Api\Payroll\SalaryComponentController;
 use App\Http\Controllers\Api\Payroll\SalaryStructureController;
 use App\Http\Controllers\Api\Payroll\TaxSlabController;
+
+// Public branding — guest screens (login) need the logo without auth. Returns
+// only name + logo/favicon URLs; the full app-settings endpoint stays gated.
+Route::get('brand', [AppSettingController::class, 'brand'])
+    ->middleware('throttle:60,1')
+    ->name('api.brand');
 
 Route::middleware(['web', 'auth', 'verified'])->get('global-search', GlobalSearchController::class)
     ->name('api.global-search');
@@ -219,6 +226,9 @@ Route::delete('currencies/bulk', [CurrencyController::class, 'bulkDestroy']);
 Route::apiResource('currencies', CurrencyController::class);
 
 Route::get('settings/dashboard', [SettingsConfigurationController::class, 'dashboard']);
+Route::get('settings/storage', [StorageSettingController::class, 'show']);
+Route::put('settings/storage', [StorageSettingController::class, 'update']);
+Route::post('settings/storage/test', [StorageSettingController::class, 'test']);
 Route::get('settings/configurations/{area}', [SettingsConfigurationController::class, 'show']);
 Route::put('settings/configurations/{area}', [SettingsConfigurationController::class, 'update']);
 Route::patch('settings/configurations/{area}', [SettingsConfigurationController::class, 'update']);
@@ -1181,8 +1191,9 @@ Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () 
     // Settings (DB-backed via GeneralSetting group=ai)
     Route::get('settings',                              [AiSettingsController::class, 'show']);
     Route::put('settings',                              [AiSettingsController::class, 'update']);
-    Route::post('settings/test',                        [AiSettingsController::class, 'test']);
-    Route::post('settings/test-connection',             [AiSettingsController::class, 'testConnection']);
+    // Connection tests hit the upstream provider — throttle to curb abuse / cost.
+    Route::post('settings/test',                        [AiSettingsController::class, 'test'])->middleware('throttle:10,1');
+    Route::post('settings/test-connection',             [AiSettingsController::class, 'testConnection'])->middleware('throttle:10,1');
 
     // Usage logs
     Route::get('usage-logs',                            [AiUsageLogController::class, 'index']);

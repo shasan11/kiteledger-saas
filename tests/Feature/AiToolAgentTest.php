@@ -25,6 +25,10 @@ class AiToolAgentTest extends TestCase
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        // Write actions are disabled by default now; this suite exercises the
+        // draft pipeline, so opt in explicitly.
+        app(\App\Services\AI\AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
     }
 
     public function test_product_most_expensive_query_returns_real_product(): void

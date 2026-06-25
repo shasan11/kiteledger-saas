@@ -11,6 +11,14 @@ use Inertia\Inertia;
 // provider under /install). EnsureInstalled (bootstrap/app.php) redirects an
 // un-installed deployment there.
 
+// Extra installer step: choose Fresh vs Demo data. Inserted between the Froiden
+// "permissions" and "database" steps (see permissions.blade.php). Uses Froiden's
+// 'install' middleware so it is only reachable while the app is not yet installed.
+Route::middleware(['web', 'install'])->prefix('install')->name('kiteledger.install.')->group(function () {
+    Route::get('type', [\App\Http\Controllers\Installer\InstallTypeController::class, 'show'])->name('type');
+    Route::post('type', [\App\Http\Controllers\Installer\InstallTypeController::class, 'store'])->name('type.store');
+});
+
 // Note: GET /storage/{path} is served by Laravel's built-in route (named
 // storage.public, registered because the "public" disk has 'serve' => true in
 // config/filesystems.php). That makes uploaded images work even when the

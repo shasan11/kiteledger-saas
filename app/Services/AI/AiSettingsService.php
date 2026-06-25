@@ -29,7 +29,9 @@ class AiSettingsService
         'ai_allow_developer_details' => false,
         'ai_financial_assistant_enabled' => true,
         'ai_document_assistant_enabled' => true,
-        'ai_write_actions_enabled' => true,
+        // Secure by default: the AI may PROPOSE drafts, but creating them is an
+        // explicit opt-in. Accounting deployments should consciously enable this.
+        'ai_write_actions_enabled' => false,
         'ai_fallback_provider' => '',
         // 'full' = complete ERP agent (RAG, deterministic tools, action proposals);
         // 'reports_only' = restrict chat to report questions (legacy conservative mode).

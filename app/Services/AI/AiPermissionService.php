@@ -17,6 +17,7 @@ class AiPermissionService
         'ai.business_insight',
         'ai.conversations.view',
         'ai.conversations.delete',
+        'ai.conversations.manage',
         'ai.settings.view',
         'ai.settings.update',
         'ai.admin_settings',
@@ -25,6 +26,7 @@ class AiPermissionService
         'ai.actions.approve',
         'ai.actions.execute',
         'ai.actions.reject',
+        'ai.actions.manage',
         'ai.records.search',
         'ai.records.show',
         'ai.manage',
@@ -79,9 +81,29 @@ class AiPermissionService
         return $this->hasAny($user, ['ai.semantic_search', 'ai.use', 'ai.chat', 'ai.manage']);
     }
 
+    /**
+     * Settings/config management (view + edit provider, model, keys, modes).
+     * Granted by ai.settings.update or full ai.manage. This is CONFIG access and
+     * must NOT, by itself, expose other users' conversations or actions.
+     */
     public function canManage(?User $user): bool
     {
         return $this->hasAny($user, ['ai.manage', 'ai.settings.update']);
+    }
+
+    /**
+     * Org-wide visibility into OTHER users' conversations and pending actions.
+     * Deliberately NOT granted by ai.settings.update — configuring the provider
+     * is not the same as reading everyone's financial AI history. Requires the
+     * full ai.manage capability (or an admin role), or the granular data-manage
+     * permissions. Normal users only ever see their own records.
+     */
+    public function canManageData(?User $user): bool
+    {
+        if (!$user) return false;
+        if ($this->canBypass($user)) return true;
+        return $this->hasDirect($user, 'ai.conversations.manage')
+            || $this->hasDirect($user, 'ai.actions.manage');
     }
 
     public function canViewSettings(?User $user): bool

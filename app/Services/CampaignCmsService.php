@@ -9,6 +9,7 @@ use App\Models\CampaignSendLog;
 use App\Models\CampaignSmsMessage;
 use App\Models\CampaignSmsRecipient;
 use App\Models\Contact;
+use App\Services\Media\MediaStorageService;
 use App\Models\ContactGroup;
 use App\Models\CrmCampaign;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -339,9 +340,13 @@ class CampaignCmsService
                     }
 
                     foreach ($message->attachments()->where('is_active', true)->get() as $attachment) {
-                        $path = Storage::disk('public')->path($attachment->file_path);
-                        if (is_file($path)) {
-                            $mail->attach($path, ['as' => $attachment->original_name, 'mime' => $attachment->mime_type]);
+                        $disk = app(MediaStorageService::class)->disk();
+                        if (Storage::disk($disk)->exists($attachment->file_path)) {
+                            $mail->attachData(
+                                Storage::disk($disk)->get($attachment->file_path),
+                                $attachment->original_name,
+                                ['mime' => $attachment->mime_type]
+                            );
                         }
                     }
                 });

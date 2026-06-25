@@ -8,7 +8,6 @@ use App\Models\BillOfMaterialExpense;
 use App\Models\BillOfMaterialRawMaterial;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class BillOfMaterialController extends BaseCrudApiController
@@ -146,7 +145,7 @@ class BillOfMaterialController extends BaseCrudApiController
         unset($parentData['bom_number']);
 
         if (empty($parentData['code']) || strtoupper((string) $parentData['code']) === 'DRAFT') {
-            $parentData['code'] = '#draft-bom-' . strtolower((string) Str::uuid());
+            $parentData['code'] = app(\App\Services\DocumentNumberingService::class)->generateDraft($this->newModelInstance());
         }
 
         // Auto-approve if approved flag is set

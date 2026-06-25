@@ -38,7 +38,7 @@ class AppSettingSeeder extends Seeder
                 'postal_code' => '44600',
                 'country' => 'Nepal',
 
-                'default_currency_id' => Currency::query()->where('code', 'NPR')->value('id'),
+                'default_currency_id' => Currency::query()->where('code', 'USD')->value('id'),
                 'fiscal_year_id' => FiscalYear::query()->where('is_current', true)->value('id'),
 
                 'timezone' => 'Asia/Kathmandu',

@@ -96,7 +96,6 @@ class ProductController extends BaseCrudApiController
     protected string $defaultSort = '-created_at';
 
     protected array $storeRules = [
-        'branch_id' => ['nullable', 'uuid', 'exists:branches,id'],
         'parent_id' => ['nullable', 'uuid', 'exists:products,id'],
         'product_category_id' => ['nullable', 'uuid', 'exists:product_categories,id'],
         'product_tax_category_id' => ['nullable', 'uuid', 'exists:product_tax_categories,id'],
@@ -183,7 +182,17 @@ class ProductController extends BaseCrudApiController
 
         $record = DB::transaction(function () use ($record, $validated) {
             [$productData, $variantPayload] = $this->splitVariantPayload($validated);
-            $productData = array_merge($record->only(array_keys($this->storeRules)), $productData);
+            // Backfill only real product columns. array_keys($this->storeRules)
+            // also contains nested validation keys (variant_groups.*.variant_id,
+            // variant_children.*.sku, ...) and the virtual variant_groups/
+            // variant_children arrays; feeding those to forceFill() would emit
+            // them as column names and break the UPDATE SQL.
+            $columnKeys = array_filter(
+                array_keys($this->storeRules),
+                fn (string $key) => !str_contains($key, '.')
+                    && !in_array($key, ['variant_groups', 'variant_children'], true)
+            );
+            $productData = array_merge($record->only($columnKeys), $productData);
             $productData = $this->normalizeByProductType($productData);
             $productData = $this->assignSkuIfMissing($productData, $record);
             $this->validateProductRules($productData, $record);

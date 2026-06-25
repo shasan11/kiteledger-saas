@@ -4,15 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\AppSetting;
 use App\Services\LocalizationService;
+use App\Services\Media\MediaStorageService;
 use App\Support\Branding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 class AppSettingController extends BaseCrudApiController
 {
+    public function __construct(private ?MediaStorageService $mediaStorage = null)
+    {
+    }
+
     protected string $modelClass = AppSetting::class;
 
     protected ?string $permissionPrefix = null;
@@ -120,6 +124,26 @@ class AppSettingController extends BaseCrudApiController
         }
 
         return response()->json($this->serializeAppSetting($record));
+    }
+
+    /**
+     * Public, unauthenticated branding endpoint.
+     *
+     * Returns ONLY the brand essentials (name + logo/favicon URLs) so guest
+     * screens — chiefly the login page — render the same logo as the rest of the
+     * app. The full singletonShow() stays auth-protected; this leaks no
+     * sensitive configuration.
+     */
+    public function brand()
+    {
+        $record = AppSetting::query()->orderBy('created_at')->first();
+
+        return response()->json([
+            'app_name' => $record?->company_name ?: config('app.name'),
+            'logo_url' => $record ? $this->makePublicFileUrl($record->logo) : null,
+            'dark_logo_url' => $record ? $this->makePublicFileUrl($record->dark_logo) : null,
+            'favicon_url' => $record ? $this->makePublicFileUrl($record->favicon) : null,
+        ]);
     }
 
     public function singletonUpsert(Request $request)
@@ -266,9 +290,7 @@ class AppSettingController extends BaseCrudApiController
             if ($request->hasFile($field)) {
                 $this->deletePublicFile($record->{$field});
 
-                $record->{$field} = $request
-                    ->file($field)
-                    ->store($config['directory'], 'public');
+                $record->{$field} = $this->media()->store($request->file($field), $config['directory']);
             }
         }
     }
@@ -315,9 +337,12 @@ class AppSettingController extends BaseCrudApiController
             $path = substr($path, 8);
         }
 
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
-        }
+        $this->media()->delete($path);
+    }
+
+    private function media(): MediaStorageService
+    {
+        return $this->mediaStorage ??= app(MediaStorageService::class);
     }
 
     protected function normalizeBooleanFields(Request $request): void

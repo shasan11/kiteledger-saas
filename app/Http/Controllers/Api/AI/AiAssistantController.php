@@ -43,12 +43,16 @@ class AiAssistantController extends AiAgentChatController
             return $this->denied('ai.use');
         }
 
-        return response()->json([
+        // Provider/model/base_url are infrastructure config. Normal users only
+        // need to know the assistant is ready — not which vendor powers it.
+        $canSeeProvider = $this->permissions->canViewSettings($user);
+
+        return response()->json(array_filter([
             'ok' => true,
             'ai_enabled' => $this->settings->enabled(),
             'provider_configured' => $this->settings->hasApiKey() || $this->settings->provider() === 'ollama',
-            'provider' => $this->settings->provider(),
-            'model' => $this->settings->model(),
+            'provider' => $canSeeProvider ? $this->settings->provider() : null,
+            'model' => $canSeeProvider ? $this->settings->model() : null,
             'stream_enabled' => $this->settings->streamEnabled(),
             'cache_enabled' => $this->settings->cacheEnabled(),
             'fast_mode' => $this->settings->fastMode(),
@@ -57,7 +61,7 @@ class AiAssistantController extends AiAgentChatController
             'write_actions_enabled' => $this->settings->writeActionsEnabled(),
             'semantic_search_available' => $this->settings->enabled() && $this->settings->supportsEmbeddings(),
             'permissions' => $this->permissions->summary($user),
-        ]);
+        ], fn ($v) => $v !== null));
     }
 
     public function stream(Request $request): JsonResponse
@@ -73,7 +77,7 @@ class AiAssistantController extends AiAgentChatController
         }
 
         $query = AiConversation::query()->orderByDesc('updated_at')->limit(50);
-        if (!$this->permissions->canManage($user)) {
+        if (!$this->permissions->canManageData($user)) {
             $query->where('user_id', $user->id);
         }
 
@@ -88,7 +92,7 @@ class AiAssistantController extends AiAgentChatController
         $conversation = AiConversation::query()->where('id', $id)->first();
         if (!$conversation) abort(404);
 
-        if ($conversation->user_id !== $user->id && !$this->permissions->canManage($user)) {
+        if ($conversation->user_id !== $user->id && !$this->permissions->canManageData($user)) {
             return $this->denied('ai.conversations.view');
         }
 
@@ -105,7 +109,7 @@ class AiAssistantController extends AiAgentChatController
         if (!$conversation) abort(404);
 
         $isOwner = $conversation->user_id === $user->id;
-        if (!$this->permissions->canManage($user) && (!$isOwner || !$this->permissions->has($user, 'ai.conversations.delete'))) {
+        if (!$this->permissions->canManageData($user) && (!$isOwner || !$this->permissions->has($user, 'ai.conversations.delete'))) {
             return $this->denied('ai.conversations.delete');
         }
 

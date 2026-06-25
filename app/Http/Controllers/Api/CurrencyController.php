@@ -24,7 +24,7 @@ class CurrencyController extends BaseCrudApiController
         'name'                => ['required', 'string', 'max:80'],
         'symbol'              => ['nullable', 'string', 'max:10'],
         'decimal_places'      => ['nullable', 'integer', 'min:0', 'max:8'],
-        'exchange_rate_to_npr'=> ['nullable', 'numeric', 'min:0'],
+        'exchange_rate'=> ['nullable', 'numeric', 'min:0'],
         'is_base'             => ['nullable', 'boolean'],
         'active'              => ['nullable', 'boolean'],
         'is_system_generated' => ['nullable', 'boolean'],
@@ -38,11 +38,26 @@ class CurrencyController extends BaseCrudApiController
             'name'                => ['sometimes', 'required', 'string', 'max:80'],
             'symbol'              => ['sometimes', 'nullable', 'string', 'max:10'],
             'decimal_places'      => ['sometimes', 'nullable', 'integer', 'min:0', 'max:8'],
-            'exchange_rate_to_npr'=> ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'exchange_rate'=> ['sometimes', 'nullable', 'numeric', 'min:0'],
             'is_base'             => ['sometimes', 'nullable', 'boolean'],
             'active'              => ['sometimes', 'nullable', 'boolean'],
             'is_system_generated' => ['sometimes', 'nullable', 'boolean'],
             'user_add_id'         => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
         ];
+    }
+
+    protected function mutateSerializedRecord(array $data, Model $record): array
+    {
+        $label = trim(sprintf(
+            '%s - %s%s',
+            (string) ($record->code ?? ''),
+            (string) ($record->name ?? ''),
+            filled($record->symbol) ? ' ('.$record->symbol.')' : ''
+        ));
+
+        $data['label'] = $label !== '-' ? $label : 'Selected currency';
+        $data['value'] = $record->getKey();
+
+        return $data;
     }
 }

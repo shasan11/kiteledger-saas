@@ -822,7 +822,6 @@ export default function CompanyProfile() {
                     <Select
                       options={[
                         { value: 'en', label: 'English' },
-                        { value: 'ne', label: 'Nepali' },
                         { value: 'hi', label: 'Hindi' },
                       ]}
                     />

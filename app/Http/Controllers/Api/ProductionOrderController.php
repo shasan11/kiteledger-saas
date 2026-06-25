@@ -10,7 +10,6 @@ use App\Services\Manufacturing\ProductionCostingService;
 use App\Services\Manufacturing\ProductionPostingService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class ProductionOrderController extends BaseCrudApiController
 {
@@ -170,7 +169,7 @@ class ProductionOrderController extends BaseCrudApiController
         $parentData = parent::mutateParentDataBeforeCreate($parentData, $nestedData);
 
         if (empty($parentData['code']) || strtoupper((string) $parentData['code']) === 'DRAFT') {
-            $parentData['code'] = '#draft-production-order-' . strtolower((string) Str::uuid());
+            $parentData['code'] = app(\App\Services\DocumentNumberingService::class)->generateDraft($this->newModelInstance());
         }
 
         return $parentData;

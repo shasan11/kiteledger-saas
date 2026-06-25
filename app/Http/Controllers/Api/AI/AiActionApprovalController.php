@@ -28,7 +28,7 @@ class AiActionApprovalController extends Controller
         }
 
         $query = AiPendingAction::query()->orderByDesc('created_at')->limit(100);
-        if (!$this->permissions->canManage($user)) {
+        if (!$this->permissions->canManageData($user)) {
             $query->where('user_id', $user->id);
         }
 
@@ -171,7 +171,7 @@ class AiActionApprovalController extends Controller
 
     private function canAccess($user, AiPendingAction $action): bool
     {
-        return $action->user_id === $user->id || $this->permissions->canManage($user);
+        return $action->user_id === $user->id || $this->permissions->canManageData($user);
     }
 
     private function auditContext(Request $request): array

@@ -5,10 +5,18 @@ import {
     subscribeToBrandSettings,
 } from '@/brandSettings';
 
+// Drop-in default brand files (see public/branding/README.md). Used when no
+// logo has been uploaded in App Settings. If these files are absent the <img>
+// onError handler falls through to the built-in <DefaultLogo> SVG.
+const DEFAULT_LOGO_URL = '/branding/logo.png';
+const DEFAULT_DARK_LOGO_URL = '/branding/dark_logo.png';
+
 const cachedLogoUrls = {
     light: undefined,
     dark: undefined,
 };
+
+const defaultFor = (dark) => (dark ? DEFAULT_DARK_LOGO_URL : DEFAULT_LOGO_URL);
 
 const fetchApplicationLogo = async (dark = false) => {
     const cacheKey = dark ? 'dark' : 'light';
@@ -19,9 +27,9 @@ const fetchApplicationLogo = async (dark = false) => {
 
     const data = await fetchBrandSettings().catch(() => null);
 
-    const logoUrl = resolveMediaUrl(
-        dark ? data?.dark_logo_url : data?.logo_url
-    );
+    const logoUrl =
+        resolveMediaUrl(dark ? data?.dark_logo_url : data?.logo_url) ||
+        defaultFor(dark);
 
     cachedLogoUrls[cacheKey] = logoUrl;
 
@@ -29,8 +37,8 @@ const fetchApplicationLogo = async (dark = false) => {
 };
 
 const syncLogoCache = (settings) => {
-    cachedLogoUrls.light = resolveMediaUrl(settings?.logo_url);
-    cachedLogoUrls.dark = resolveMediaUrl(settings?.dark_logo_url);
+    cachedLogoUrls.light = resolveMediaUrl(settings?.logo_url) || DEFAULT_LOGO_URL;
+    cachedLogoUrls.dark = resolveMediaUrl(settings?.dark_logo_url) || DEFAULT_DARK_LOGO_URL;
 };
 
 function DefaultLogo(props) {

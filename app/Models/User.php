@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use App\Services\Media\MediaStorageService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -115,7 +115,7 @@ class User extends Authenticatable
             return $this->image;
         }
 
-        return Storage::disk('public')->url($this->image);
+        return app(MediaStorageService::class)->url($this->image);
     }
 
     public function branch(): BelongsTo

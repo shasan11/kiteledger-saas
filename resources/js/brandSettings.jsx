@@ -58,8 +58,18 @@ export const storeBrandSettings = (settings) => {
 };
 
 export const fetchBrandSettings = async () => {
-  const response = await axios.get(api('/api/app-settings/current'));
-  const settings = response.data || {};
+  let settings;
+
+  try {
+    // Authenticated screens get the full app-settings record.
+    const response = await axios.get(api('/api/app-settings/current'));
+    settings = response.data || {};
+  } catch (error) {
+    // Guests (e.g. the login page) can't read the gated endpoint — fall back to
+    // the public brand endpoint so the logo/favicon still render.
+    const response = await axios.get(api('/api/brand'));
+    settings = response.data || {};
+  }
 
   storeBrandSettings(settings);
 

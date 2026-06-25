@@ -33,6 +33,7 @@ import {
   RobotOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
+  CloudOutlined,
   TagsOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -43,6 +44,7 @@ const { useBreakpoint } = Grid;
 
 const CompanyProfile = lazy(() => import('./CompanyProfile'));
 const Localization = lazy(() => import('./Localization'));
+const StorageSettings = lazy(() => import('./StorageSettings'));
 
 const Branches = lazy(() => import('../Master/Branches/Index'));
 const FiscalYears = lazy(() => import('./FiscalYears'));
@@ -91,6 +93,14 @@ const SETTINGS_TABS = [
     description: 'Language, region and display preferences.',
     icon: <GlobalOutlined />,
     component: Localization,
+    props: {},
+  },
+  {
+    key: 'storage-settings',
+    label: 'Storage Settings',
+    description: 'Media upload storage and AWS S3 configuration.',
+    icon: <CloudOutlined />,
+    component: StorageSettings,
     props: {},
   },
   {

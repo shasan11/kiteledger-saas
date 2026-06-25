@@ -8,7 +8,6 @@ use App\Models\Contact;
 use App\Models\DocumentNumbering;
 use App\Models\PosTerminal;
 use App\Models\Warehouse;
-use App\Services\AccountProvisioningService;
 use Illuminate\Database\Seeder;
 
 class PosSeeder extends Seeder
@@ -47,28 +46,10 @@ class PosSeeder extends Seeder
 
     private function seedWalkInCustomer(): Contact
     {
-        $walkIn = Contact::updateOrCreate(
-            ['code' => 'WALK-IN'],
-            [
-                'contact_type' => 'customer',
-                'name' => 'Walk-in Customer',
-                'phone' => null,
-                'email' => null,
-                'accept_purchase' => false,
-                'credit_limit' => 0,
-                'active' => true,
-                'is_system_generated' => true,
-            ]
-        );
+        // Single source of truth — also used by the lightweight normal install.
+        $this->call(WalkInCustomerSeeder::class);
 
-        // Ensure the Walk-in customer is linked to a receivable account so POS
-        // sales can post to accounting. Reuses the standard provisioning service
-        // so the account follows the same conventions as any other customer.
-        if (! $walkIn->account_id) {
-            app(AccountProvisioningService::class)->createForContact($walkIn->fresh());
-        }
-
-        return $walkIn->fresh();
+        return Contact::query()->where('code', WalkInCustomerSeeder::CODE)->firstOrFail()->fresh();
     }
 
     private function seedTerminals(Contact $walkInCustomer): void

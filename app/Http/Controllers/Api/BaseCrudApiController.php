@@ -2266,7 +2266,16 @@ abstract class BaseCrudApiController extends Controller
 
         $data = method_exists($model, 'toArray') ? $model->toArray() : [];
 
-        $label =
+        $label = $model instanceof \App\Models\Currency
+            ? trim(sprintf(
+                '%s - %s%s',
+                (string) data_get($model, 'code'),
+                (string) data_get($model, 'name'),
+                filled(data_get($model, 'symbol')) ? ' ('.data_get($model, 'symbol').')' : ''
+            ))
+            : null;
+
+        $label = $label ?:
             data_get($model, 'display_name') ?:
             data_get($model, 'name') ?:
             data_get($model, 'account_name') ?:
