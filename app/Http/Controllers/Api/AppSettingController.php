@@ -13,9 +13,7 @@ use Illuminate\Validation\Rule;
 
 class AppSettingController extends BaseCrudApiController
 {
-    public function __construct(private ?MediaStorageService $mediaStorage = null)
-    {
-    }
+    public function __construct(private ?MediaStorageService $mediaStorage = null) {}
 
     protected string $modelClass = AppSetting::class;
 
@@ -119,7 +117,7 @@ class AppSettingController extends BaseCrudApiController
             ->orderBy('created_at')
             ->first();
 
-        if (!$record) {
+        if (! $record) {
             return response()->json(null);
         }
 
@@ -140,9 +138,9 @@ class AppSettingController extends BaseCrudApiController
 
         return response()->json([
             'app_name' => $record?->company_name ?: config('app.name'),
-            'logo_url' => $record ? $this->makePublicFileUrl($record->logo) : null,
-            'dark_logo_url' => $record ? $this->makePublicFileUrl($record->dark_logo) : null,
-            'favicon_url' => $record ? $this->makePublicFileUrl($record->favicon) : null,
+            'logo_url' => Branding::logoUrl($record?->logo),
+            'dark_logo_url' => Branding::darkLogoUrl($record?->dark_logo),
+            'favicon_url' => Branding::faviconUrl($record?->favicon),
         ]);
     }
 
@@ -164,8 +162,8 @@ class AppSettingController extends BaseCrudApiController
 
         $this->removeUploadOnlyFields($validated);
 
-        if (!$record) {
-            $record = new AppSetting();
+        if (! $record) {
+            $record = new AppSetting;
         }
 
         $record->fill($validated);
@@ -192,7 +190,7 @@ class AppSettingController extends BaseCrudApiController
 
         $this->removeUploadOnlyFields($validated);
 
-        $record = new AppSetting();
+        $record = new AppSetting;
         $record->fill($validated);
 
         $this->handleBrandingUploads($request, $record);
@@ -253,13 +251,13 @@ class AppSettingController extends BaseCrudApiController
 
     protected function mutateSerializedRecord(array $data, Model $record): array
     {
-        if (!$record instanceof AppSetting) {
+        if (! $record instanceof AppSetting) {
             return $data;
         }
 
-        $data['logo_url'] = $this->makePublicFileUrl($record->logo);
-        $data['dark_logo_url'] = $this->makePublicFileUrl($record->dark_logo);
-        $data['favicon_url'] = $this->makePublicFileUrl($record->favicon);
+        $data['logo_url'] = Branding::logoUrl($record->logo);
+        $data['dark_logo_url'] = Branding::darkLogoUrl($record->dark_logo);
+        $data['favicon_url'] = Branding::faviconUrl($record->favicon);
 
         return $data;
     }
@@ -314,7 +312,7 @@ class AppSettingController extends BaseCrudApiController
 
     protected function deletePublicFile(?string $path): void
     {
-        if (!$path) {
+        if (! $path) {
             return;
         }
 
@@ -355,7 +353,7 @@ class AppSettingController extends BaseCrudApiController
             'remove_dark_logo',
             'remove_favicon',
         ] as $field) {
-            if (!$request->has($field)) {
+            if (! $request->has($field)) {
                 continue;
             }
 

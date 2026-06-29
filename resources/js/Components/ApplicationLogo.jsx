@@ -8,8 +8,8 @@ import {
 // Drop-in default brand files (see public/branding/README.md). Used when no
 // logo has been uploaded in App Settings. If these files are absent the <img>
 // onError handler falls through to the built-in <DefaultLogo> SVG.
-const DEFAULT_LOGO_URL = '/branding/logo.png';
-const DEFAULT_DARK_LOGO_URL = '/branding/dark_logo.png';
+const DEFAULT_LOGO_URL = '/branding/logo.svg';
+const DEFAULT_DARK_LOGO_URL = '/branding/dark_logo.svg';
 
 const cachedLogoUrls = {
     light: undefined,

@@ -35,7 +35,7 @@ export const resolveMediaUrl = (url) => {
     path = path.slice('public/'.length);
   }
 
-  if (!path.startsWith('storage/') && !path.startsWith('build/') && !path.startsWith('images/')) {
+  if (!path.startsWith('storage/') && !path.startsWith('build/') && !path.startsWith('images/') && !path.startsWith('branding/')) {
     path = `storage/${path}`;
   }
 

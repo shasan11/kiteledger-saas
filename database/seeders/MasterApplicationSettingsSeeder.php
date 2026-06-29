@@ -11,11 +11,10 @@ class MasterApplicationSettingsSeeder extends Seeder
 {
     public function run(): void
     {
-        // Public-disk paths. Put the files under storage/app/public/... and run
-        // php artisan storage:link so they are served from /storage/...
-        $lightLogoPath = 'company/logos/light_logo.png';
-        $darkLogoPath = 'company/logos/dark_logo.png';
-        $faviconPath = 'company/favicons/favicon.png';
+        // Null values intentionally use the shipped public/branding fallbacks.
+        $lightLogoPath = null;
+        $darkLogoPath = null;
+        $faviconPath = null;
 
         AppSetting::updateOrCreate(
             ['company_name' => 'Demo Company Pvt. Ltd.'],

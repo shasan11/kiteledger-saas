@@ -61,21 +61,7 @@ Artisan::command('install:build-sql {--path=database/sql/mysql_install.sql} {--f
     ];
 
     $password = $config['password'] ?? null;
-
-    if ($password !== null && $password !== '') {
-        $arguments[] = '--password='.$password;
-    }
-
     $arguments[] = $database;
-
-    $dump = new Process($arguments, base_path(), null, null, 300);
-    $dump->run();
-
-    if (! $dump->isSuccessful()) {
-        $this->error($dump->getErrorOutput() ?: 'mysqldump failed.');
-
-        return 1;
-    }
 
     $path = base_path($this->option('path'));
     $directory = dirname($path);
@@ -86,16 +72,44 @@ Artisan::command('install:build-sql {--path=database/sql/mysql_install.sql} {--f
         return 1;
     }
 
-    $sql = implode(PHP_EOL, [
-        'SET NAMES utf8mb4;',
-        'SET FOREIGN_KEY_CHECKS=0;',
-        $dump->getOutput(),
-        'SET FOREIGN_KEY_CHECKS=1;',
-        '',
-    ]);
-
-    if (file_put_contents($path, $sql, LOCK_EX) === false) {
+    $temporaryPath = $path.'.tmp';
+    $handle = fopen($temporaryPath, 'wb');
+    if ($handle === false) {
         $this->error("Could not write install SQL dump: {$path}");
+
+        return 1;
+    }
+
+    fwrite($handle, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n");
+    $environment = ($password !== null && $password !== '') ? ['MYSQL_PWD' => $password] : null;
+    $dump = new Process($arguments, base_path(), $environment, null, 300);
+    $dump->run(function (string $type, string $buffer) use ($handle): void {
+        if ($type === Process::OUT) {
+            fwrite($handle, $buffer);
+        }
+    });
+
+    if (! $dump->isSuccessful()) {
+        fclose($handle);
+        @unlink($temporaryPath);
+        $this->error($dump->getErrorOutput() ?: 'mysqldump failed.');
+
+        return 1;
+    }
+
+    fwrite($handle, "\nSET FOREIGN_KEY_CHECKS=1;\n");
+    fclose($handle);
+
+    if (is_file($path) && ! unlink($path)) {
+        @unlink($temporaryPath);
+        $this->error("Could not replace existing install SQL dump: {$path}");
+
+        return 1;
+    }
+
+    if (! rename($temporaryPath, $path)) {
+        @unlink($temporaryPath);
+        $this->error("Could not finalize install SQL dump: {$path}");
 
         return 1;
     }

@@ -45,4 +45,6 @@ Homestead.yaml
 /storage/app/installed
 /public/storage
 /public/hot
+/public/build/
 /bootstrap/ssr
+/dist/

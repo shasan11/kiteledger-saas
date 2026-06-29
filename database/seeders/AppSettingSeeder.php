@@ -11,12 +11,6 @@ class AppSettingSeeder extends Seeder
 {
     public function run(): void
     {
-        // Public-disk paths. Put the files under storage/app/public/... and run
-        // php artisan storage:link so they are served from /storage/...
-        $lightLogoPath = 'company/logos/light_logo.png';
-        $darkLogoPath = 'company/logos/dark_logo.png';
-        $faviconPath = 'company/favicons/favicon.png';
-
         AppSetting::query()->updateOrCreate(
             ['company_name' => 'KiteLedger Pvt. Ltd.'],
             [
@@ -52,9 +46,9 @@ class AppSettingSeeder extends Seeder
 
                 'footer' => 'Thank you for your business.',
 
-                'logo' => $lightLogoPath,
-                'dark_logo' => $darkLogoPath,
-                'favicon' => $faviconPath,
+                'logo' => null,
+                'dark_logo' => null,
+                'favicon' => null,
 
                 'brand_primary_color' => '#10b981',
                 'brand_secondary_color' => '#10233f',

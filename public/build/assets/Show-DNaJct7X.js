@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentInRecordShow-mBNQngF-.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Payment`,endpoint:`/api/customer-payments/`,backRoute:`payment-in.payments.index`,backLabel:`Back to Payments`,documentType:`customer_payment`,editRoute:`payment-in.payments.edit`})}export{r as default};

@@ -5,29 +5,13 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+/** A deliberately small add-on seeded only after the base installation. */
 class DemoLiteSeeder extends Seeder
 {
     use WithoutModelEvents;
 
     public function run(): void
     {
-        $this->call([
-            BranchSeeder::class,
-            MasterCurrencySeeder::class,
-            FiscalYearSeeder::class,
-            MasterApplicationSettingsSeeder::class,
-            AppSettingSeeder::class,
-            LanguageSeeder::class,
-            ApplicationSettingSeeder::class,
-            GeneralSettingSeeder::class,
-            MasterDocumentNumberingSeeder::class,
-            DocumentNumberingSeeder::class,
-            MasterChartOfAccountSeeder::class,
-            AccountingConfigurationSeeder::class,
-            MasterProductDataSeeder::class,
-            WalkInCustomerSeeder::class,
-            FullPermissionUserSeeder::class,
-            ProductSeeder::class,
-        ]);
+        $this->call(ProductSeeder::class);
     }
 }
