@@ -618,7 +618,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 'reports.hrm.view',
                 'reports.system.view',
                 'reports.analytics.view',
-            ].some((permission) => permissions.includes(permission))
+            ].some((permission) => can(permission))
                 ? [
                       {
                           key: 'reports',
@@ -635,7 +635,7 @@ export default function AuthenticatedLayout({ header, children }) {
                 onClick: () => visit('settings.index', '/settings'),
             },
         ]),
-        [page.url, permissions, t],
+        [page.url, permissions, canBypass, t],
     );
 
     const selectedKeys = useMemo(() => {
