@@ -64,11 +64,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     require __DIR__.'/menu/tax.php';
     require __DIR__.'/menu/settings.php';
 
-    // AI module — canonical assistant page. The page self-guards (shows a
-    // no-permission state) and every AI API it calls enforces ai.* permissions
-    // server-side, so a plain authenticated render is safe.
-    Route::get('/ai/assistant', fn () => Inertia::render('App/AI/Assistant'))->name('ai.assistant');
-
     // Document Upload module
     Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');
 });

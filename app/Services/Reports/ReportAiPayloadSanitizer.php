@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 
 class ReportAiPayloadSanitizer
 {
-    private const MAX_COLUMNS = 20;
+    private const MAX_COLUMNS = 30;
     private const MAX_TOTALS = 30;
     private const MAX_TEXT_LENGTH = 500;
 
@@ -27,18 +27,30 @@ class ReportAiPayloadSanitizer
         $columns = $this->columns($payload['columns'] ?? []);
         $rows = $this->rows($payload['rows'] ?? [], $columns);
 
+        $reportedRowCount = max(
+            count($payload['rows'] ?? []),
+            (int) ($payload['metadata']['row_count'] ?? 0),
+        );
+
         return [
             'category' => $this->text($payload['category'] ?? 'report', 80),
             'report_key' => $this->text($payload['report_key'] ?? '', 120),
-            'title' => $this->text($payload['title'] ?? 'Report', 200),
+            'report_title' => $this->text($payload['report_title'] ?? 'Report', 200),
             'filters' => $this->cleanAssoc($payload['filters'] ?? [], 25),
             'columns' => $columns,
             'rows' => $rows,
-            'row_count' => is_array($payload['rows'] ?? null) ? count($payload['rows']) : 0,
             'totals' => $this->cleanAssoc($payload['totals'] ?? [], self::MAX_TOTALS),
-            'summary_blocks' => $this->summaryBlocks($payload['summary_blocks'] ?? $payload['summary'] ?? []),
-            'chart_data' => $this->chartData($payload['chart_data'] ?? []),
-            'generated_at' => $this->text($payload['generated_at'] ?? now()->toDateTimeString(), 80),
+            'summary_cards' => $this->summaryBlocks($payload['summary_cards'] ?? []),
+            'metadata' => [
+                'currency' => $this->text($payload['metadata']['currency'] ?? '', 20),
+                'branch' => $this->text($payload['metadata']['branch'] ?? '', 120),
+                'fiscal_year' => $this->text($payload['metadata']['fiscal_year'] ?? '', 120),
+                'generated_at' => $this->text($payload['metadata']['generated_at'] ?? now()->toIso8601String(), 80),
+                'row_count' => $reportedRowCount,
+                'sampled_row_count' => count($rows),
+                'omitted_row_count' => max(0, $reportedRowCount - count($rows)),
+                'sampled' => $reportedRowCount > count($rows),
+            ],
         ];
     }
 
@@ -78,7 +90,7 @@ class ReportAiPayloadSanitizer
     {
         $out = [];
         $allowed = collect($columns)->pluck('label', 'key')->all();
-        $limit = min(50, $this->settings->reportSummaryMaxRows());
+        $limit = min(100, $this->settings->reportSummaryMaxRows());
 
         foreach (array_slice($rows, 0, $limit) as $row) {
             if (!is_array($row)) {
@@ -116,6 +128,9 @@ class ReportAiPayloadSanitizer
             if ($label === null && $value === null) {
                 continue;
             }
+            if (is_array($label) || is_object($label) || is_array($value) || is_object($value)) {
+                continue;
+            }
 
             $out[] = [
                 'label' => $this->text($label ?? 'Summary', 120),
@@ -126,23 +141,12 @@ class ReportAiPayloadSanitizer
         return array_slice($out, 0, self::MAX_TOTALS);
     }
 
-    private function chartData(array $chartData): array
+    private function cleanAssoc(array $values, int $limit, int $depth = 0): array
     {
-        $out = [];
-
-        foreach (array_slice($chartData, 0, 20) as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-
-            $out[] = $this->cleanAssoc($item, 8);
+        if ($depth >= 3) {
+            return [];
         }
 
-        return $out;
-    }
-
-    private function cleanAssoc(array $values, int $limit): array
-    {
         $out = [];
 
         foreach ($values as $key => $value) {
@@ -152,7 +156,7 @@ class ReportAiPayloadSanitizer
             }
 
             if (is_array($value)) {
-                $out[$this->humanize($key)] = $this->cleanAssoc($value, 10);
+                $out[$this->humanize($key)] = $this->cleanAssoc($value, 10, $depth + 1);
             } elseif (!is_object($value)) {
                 $out[$this->humanize($key)] = $this->scalar($value);
             }
@@ -189,7 +193,8 @@ class ReportAiPayloadSanitizer
         $lower = strtolower($key);
 
         foreach (self::SENSITIVE_KEYS as $needle) {
-            if ($lower === $needle || str_ends_with($lower, '_' . $needle) || str_contains($lower, $needle)) {
+            $containsSensitiveTerm = $needle !== 'id' && str_contains($lower, $needle);
+            if ($lower === $needle || str_ends_with($lower, '_'.$needle) || $containsSensitiveTerm) {
                 return true;
             }
         }

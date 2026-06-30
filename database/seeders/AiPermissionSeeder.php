@@ -20,19 +20,13 @@ class AiPermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
 
-        // Prune obsolete legacy AI permissions if they exist.
-        Permission::query()->where('guard_name', 'web')->whereIn('name', [
-            'ai.settings.manage',
-            'ai.logs.view',
-            'ai.global_command.use',
-            'ai.transaction_review.use',
-            'ai.invoice_assistant.use',
-            'ai.report_explainer.use',
-            'ai.accounting_copilot.use',
-            'ai.crm_assistant.use',
-            'ai.payment_collection.use',
-            'ai.inventory_insight.use',
-        ])->delete();
+        // Assistant permissions belong to the future add-on. Keep only generic
+        // provider settings plus the core report-summary permission.
+        Permission::query()
+            ->where('guard_name', 'web')
+            ->where('name', 'like', 'ai.%')
+            ->whereNotIn('name', ['ai.settings.view', 'ai.settings.update'])
+            ->delete();
 
         // Permission names are resolved through Spatie's cache when assigning
         // them to roles. Refresh it after creating and pruning permissions so
@@ -56,27 +50,6 @@ class AiPermissionSeeder extends Seeder
             $role = Role::where('name', $roleName)->first();
             if ($role) {
                 $role->givePermissionTo($permissions);
-            }
-        }
-
-        // Normal user roles get baseline AI use permissions: they can chat,
-        // search, view their own actions, and PROPOSE drafts — but approving and
-        // executing remain restricted to admin/approver roles above.
-        $userBaseline = [
-            'ai.view',
-            'ai.use',
-            'ai.chat',
-            'ai.semantic_search',
-            'ai.conversations.view',
-            'ai.records.search',
-            'ai.records.show',
-            'ai.actions.view',
-            'ai.actions.propose',
-        ];
-        foreach (['User', 'Standard User', 'Branch User', 'Staff'] as $roleName) {
-            $role = Role::where('name', $roleName)->first();
-            if ($role) {
-                $role->givePermissionTo($userBaseline);
             }
         }
 

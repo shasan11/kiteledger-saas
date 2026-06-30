@@ -29,6 +29,7 @@ import {
   ReloadOutlined,
 } from '@ant-design/icons';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
+import ReportSummaryButton from '@/Components/Reports/ReportSummaryButton.jsx';
 
 const BACKEND_BASE = import.meta.env.VITE_APP_BACKEND_URL || '';
 const api = (path) => `${BACKEND_BASE}${path}`;
@@ -153,6 +154,8 @@ export default function ReportPage() {
   const { token } = theme.useToken();
   const page = usePage();
   const permissions = page.props.auth?.permissions || [];
+  const canBypass = !!page.props.auth?.canBypassPermissions;
+  const can = (permissionName) => canBypass || permissions.includes(permissionName);
   const branchContext = page.props.branchContext || {};
 
   const pageCategory = page.props.reportCategory;
@@ -171,8 +174,9 @@ export default function ReportPage() {
   const category = pageCategory;
   const reportKey = pageReportKey;
 
-  const canView = permissions.includes('reports.view') || (permission && permissions.includes(permission));
-  const canExport = permissions.includes('reports.export');
+  const canView = can('reports.view') || (permission && can(permission));
+  const canExport = can('reports.export');
+  const canSummarize = can('reports.ai_summary');
   const defaultBranchId = branchContext.selectedBranchId || page.props.auth?.currentBranchId;
 
   const baseDefaults = useMemo(() => ({
@@ -619,6 +623,24 @@ export default function ReportPage() {
                 <Button icon={<ReloadOutlined />} onClick={handleReset}>
                   Reset
                 </Button>
+                {canSummarize && (
+                  <ReportSummaryButton
+                    category={category}
+                    reportKey={reportKey}
+                    reportTitle={title}
+                    filters={generatedFilters || filters}
+                    columns={state.data?.columns || []}
+                    rows={state.data?.rows || []}
+                    totals={state.data?.totals || {}}
+                    summaryCards={state.data?.summary || []}
+                    metadata={{
+                      currency: state.data?.currency?.code || page.props.defaultCurrency?.code || '',
+                      branch: currentBranchLabel,
+                      generated_at: generatedAt,
+                    }}
+                    disabled={!hasGenerated || state.loading || filtersDirty}
+                  />
+                )}
                 <Button
                   icon={<FileExcelOutlined />}
                   disabled={!canExportNow}

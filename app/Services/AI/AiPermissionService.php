@@ -8,29 +8,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class AiPermissionService
 {
     public const ALL = [
-        'ai.view',
-        'ai.use',
-        'ai.chat',
-        'ai.semantic_search',
         'reports.ai_summary',
-        'ai.report_summary',
-        'ai.business_insight',
-        'ai.conversations.view',
-        'ai.conversations.delete',
-        'ai.conversations.manage',
         'ai.settings.view',
         'ai.settings.update',
-        'ai.debug.view',
-        'ai.admin_settings',
-        'ai.actions.view',
-        'ai.actions.propose',
-        'ai.actions.approve',
-        'ai.actions.execute',
-        'ai.actions.reject',
-        'ai.actions.manage',
-        'ai.records.search',
-        'ai.records.show',
-        'ai.manage',
     ];
 
     public function canBypass(?User $user): bool
@@ -52,7 +32,7 @@ class AiPermissionService
         } catch (\Throwable) {
         }
 
-        return $this->hasDirect($user, 'ai.manage');
+        return false;
     }
 
     public function has(?User $user, string $permission): bool
@@ -106,7 +86,7 @@ class AiPermissionService
      */
     public function canManage(?User $user): bool
     {
-        return $this->hasAny($user, ['ai.manage', 'ai.settings.update']);
+        return $this->has($user, 'ai.settings.update');
     }
 
     /**
@@ -131,7 +111,7 @@ class AiPermissionService
 
     public function canViewSettings(?User $user): bool
     {
-        return $this->hasAny($user, ['ai.settings.view', 'ai.manage']);
+        return $this->hasAny($user, ['ai.settings.view', 'ai.settings.update']);
     }
 
     public function canViewDebug(?User $user): bool
@@ -141,7 +121,7 @@ class AiPermissionService
 
     public function canSummarizeReports(?User $user): bool
     {
-        return $this->hasAny($user, ['reports.ai_summary', 'ai.report_summary', 'ai.manage']);
+        return $this->has($user, 'reports.ai_summary');
     }
 
     public function canBusinessInsight(?User $user): bool

@@ -333,7 +333,7 @@ const SETTINGS_TABS = [
   {
     key: 'ai-settings',
     label: 'AI Settings',
-    description: 'Configure AI features, provider, API keys, and modules.',
+    description: 'Configure the provider used for AI report summaries.',
     icon: <RobotOutlined />,
     component: AiSettings,
     props: {},

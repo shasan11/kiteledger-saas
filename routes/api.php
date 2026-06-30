@@ -10,11 +10,7 @@ use App\Http\Controllers\Api\Documents\DocumentEntityMatchController;
 use App\Http\Controllers\Api\Documents\DocumentExtractionController;
 use App\Http\Controllers\Api\Documents\DocumentProposalController;
 use App\Http\Controllers\Api\Documents\DocumentUploadController;
-use App\Http\Controllers\Api\AI\AiActionApprovalController;
-use App\Http\Controllers\Api\AI\AiAssistantController;
-use App\Http\Controllers\Api\AI\AiSemanticSearchController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
-use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\Reports\ReportAiSummaryController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
@@ -266,7 +262,9 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('reports/registry', [ReportRegistryController::class, 'registry']);
     Route::post('reports/soft-query', [ReportRegistryController::class, 'softQueryEndpoint']);
-    Route::post('reports/summarize', [ReportAiSummaryController::class, 'summarize'])->middleware('throttle:20,1');
+    Route::post('reports/{category}/{report_key}/ai-summary', [ReportAiSummaryController::class, 'summarize'])
+        ->where(['category' => '[a-z0-9\-]+', 'report_key' => '[a-z0-9\-]+'])
+        ->middleware('throttle:20,1');
     Route::get('reports/options/{type}', [ReportRegistryController::class, 'options'])
         ->where('type', '[a-z0-9\-]+');
     Route::get('reports/{category}/{report_key}', [ReportController::class, 'index']);
@@ -1166,37 +1164,13 @@ Route::get('tax-country-options',   [TaxDashboardController::class, 'countryOpti
 |--------------------------------------------------------------------------
 */
 Route::middleware(['web', 'auth', 'verified'])->prefix('ai')->group(function () {
-    Route::get('health',                              [AiAssistantController::class, 'health']);
-    Route::post('chat',                              [AiAssistantController::class, 'chat'])->middleware('throttle:20,1');
-
-    // RAG semantic search over accounting text (invoice notes, journal narrations).
-    Route::post('search',                            AiSemanticSearchController::class)->middleware('throttle:30,1');
-
-    // Conversation history
-    Route::get('conversations',                         [AiAssistantController::class, 'conversations']);
-    Route::get('conversations/{id}',                    [AiAssistantController::class, 'showConversation']);
-    Route::delete('conversations/{id}',                 [AiAssistantController::class, 'deleteConversation']);
-
-    // Pending action approval workflow (propose -> approve/confirm -> execute).
-    Route::get('actions',                               [AiActionApprovalController::class, 'index']);
-    Route::get('actions/{id}',                          [AiActionApprovalController::class, 'show']);
-    Route::get('actions/{id}/audit',                    [AiActionApprovalController::class, 'audit']);
-    Route::post('actions/{id}/approve',                 [AiActionApprovalController::class, 'approve'])->middleware('throttle:10,1');
-    Route::post('actions/{id}/reject',                  [AiActionApprovalController::class, 'reject'])->middleware('throttle:10,1');
-    Route::post('actions/{id}/execute',                 [AiActionApprovalController::class, 'execute'])->middleware('throttle:10,1');
-
-    // Focused AI report summarizer and settings.
-    Route::post('report-summary',                       [ReportAiSummaryController::class, 'summarize'])->middleware('throttle:20,1');
-
-    // Settings (DB-backed via GeneralSetting group=ai)
+    // Provider settings retained for report summarization. The general AI
+    // assistant, conversation, semantic-search, and action APIs are add-on code.
     Route::get('settings',                              [AiSettingsController::class, 'show']);
     Route::put('settings',                              [AiSettingsController::class, 'update']);
     // Connection tests hit the upstream provider — throttle to curb abuse / cost.
     Route::post('settings/test',                        [AiSettingsController::class, 'test'])->middleware('throttle:10,1');
     Route::post('settings/test-connection',             [AiSettingsController::class, 'testConnection'])->middleware('throttle:10,1');
-
-    // Usage logs
-    Route::get('usage-logs',                            [AiUsageLogController::class, 'index']);
 });
 
 });

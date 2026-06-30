@@ -88,6 +88,8 @@ class PermissionSeeder extends Seeder
             'reports.hrm.view',
             'reports.system.view',
             'reports.analytics.view',
+            'ai.settings.view',
+            'ai.settings.update',
             'campaign.view',
             'campaign.create',
             'campaign.update',

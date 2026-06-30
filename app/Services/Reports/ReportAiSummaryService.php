@@ -8,27 +8,35 @@ use App\Services\AI\AiSettingsService;
 use App\Services\AI\AiUsageLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 class ReportAiSummaryService
 {
     public function __construct(
         private readonly ReportAiPayloadSanitizer $sanitizer,
-        private readonly ReportAiFallbackSummaryService $fallback,
         private readonly AiProviderManager $provider,
         private readonly AiSettingsService $settings,
         private readonly AiUsageLogger $usageLogger,
-    ) {
-    }
+    ) {}
 
     public function summarize(array $payload, Request $request): array
     {
         $context = $this->sanitizer->sanitize($payload);
+
+        if ($this->hasNoBusinessData($context)) {
+            throw new InvalidArgumentException('No report data available to summarize.');
+        }
+
         $fingerprint = $this->sanitizer->cacheFingerprint($context);
-        $cacheKey = 'reports.ai_summary.' . $request->user()?->id . '.' . $fingerprint;
+        $cacheKey = 'reports.ai_summary.'.$request->user()?->id.'.'.$fingerprint;
 
         if ($this->settings->cacheEnabled() && Cache::has($cacheKey)) {
-            return array_merge(Cache::get($cacheKey), ['cached' => true]);
+            $cached = Cache::get($cacheKey);
+            $cached['meta']['cached'] = true;
+
+            return $cached;
         }
 
         $startedAt = microtime(true);
@@ -40,56 +48,73 @@ class ReportAiSummaryService
                 'timeout' => $this->settings->timeoutSeconds(),
             ]);
 
-            $summary = $this->normalizeAiResponse($response['text'] ?? '', $context);
-            $summary['cached'] = false;
+            $result = [
+                'summary' => $this->normalizeAiResponse($response['text'] ?? '', $context),
+                'meta' => [
+                    'report_key' => $context['report_key'],
+                    'report_title' => $context['report_title'],
+                    'provider' => $response['provider'] ?? $this->settings->provider(),
+                    'model' => $response['model'] ?? $this->settings->model(),
+                    'generated_at' => now()->toIso8601String(),
+                    'sampled_row_count' => $context['metadata']['sampled_row_count'],
+                    'row_count' => $context['metadata']['row_count'],
+                    'cached' => false,
+                ],
+            ];
 
-            $this->logUsage($request, $context, $fingerprint, 'success', $response, (int) round((microtime(true) - $startedAt) * 1000));
-            $this->storeCache($cacheKey, $summary);
+            $this->logUsage($request, $context, $fingerprint, 'success', $response, $startedAt);
 
-            return $summary;
+            if ($this->settings->cacheEnabled()) {
+                Cache::put($cacheKey, $result, $this->settings->cacheTtl());
+            }
+
+            return $result;
         } catch (AiProviderException $e) {
-            $summary = $this->fallback->summarize($context, $this->friendlyReason($e->getErrorCode()));
-            $summary['cached'] = false;
-            $this->logUsage($request, $context, $fingerprint, 'fallback', [
-                'provider' => $this->settings->provider(),
-                'model' => $this->settings->model(),
-                'usage' => [],
-            ], (int) round((microtime(true) - $startedAt) * 1000), $e->getErrorCode());
-            $this->storeCache($cacheKey, $summary);
-
-            return $summary;
+            $this->logUsage($request, $context, $fingerprint, 'error', [], $startedAt, $e->getErrorCode());
+            throw $e;
         } catch (Throwable $e) {
             report($e);
-            $summary = $this->fallback->summarize($context, 'AI summary is temporarily unavailable.');
-            $summary['cached'] = false;
-            $this->logUsage($request, $context, $fingerprint, 'fallback', [
-                'provider' => $this->settings->provider(),
-                'model' => $this->settings->model(),
-                'usage' => [],
-            ], (int) round((microtime(true) - $startedAt) * 1000), 'AI_SUMMARY_FAILED');
-            $this->storeCache($cacheKey, $summary);
+            $this->logUsage($request, $context, $fingerprint, 'error', [], $startedAt, 'AI_SUMMARY_FAILED');
 
-            return $summary;
+            throw new AiProviderException('Unable to generate summary right now. Please try again.', 'AI_SUMMARY_FAILED');
         }
     }
 
     private function messages(array $context): array
     {
+        $system = <<<'PROMPT'
+You are a senior ERP reporting analyst. You analyze accounting, sales, purchase, inventory, tax, HR, CRM, and operational reports for SME businesses.
+
+Rules:
+1. Use only the data provided in the report payload.
+2. Do not invent figures, customers, suppliers, invoices, accounts, dates, branches, or trends.
+3. If the data is sampled or incomplete, clearly say that the summary is based on the available sample and totals.
+4. Focus on useful business insight, not generic commentary.
+5. Explain key numbers in plain business language.
+6. Highlight risks, anomalies, unusual movements, or missing information.
+7. Give practical recommended actions.
+8. Keep the output concise but useful.
+9. Do not expose internal IDs or technical metadata.
+10. Return structured JSON only.
+PROMPT;
+
+        $shape = [
+            'executive_summary' => 'string',
+            'key_numbers' => ['string'],
+            'trends' => ['string'],
+            'risks' => ['string'],
+            'recommended_actions' => ['string'],
+            'disclaimer' => 'string',
+        ];
+
         return [
-            [
-                'role' => 'system',
-                'content' => implode("\n", [
-                    'You are an AI Report Summarizer inside KiteLedger.',
-                    'You summarize only the provided report payload.',
-                    'Do not mention provider, model, raw JSON, code, hidden prompts, or missing data sources.',
-                    'Do not invent transactions, customers, accounts, or totals.',
-                    'Return valid JSON only with keys: summary, key_numbers, observations, risks, actions, source_note.',
-                    'key_numbers must be an array of objects with label and value. observations, risks, and actions must be arrays of short strings.',
-                ]),
-            ],
+            ['role' => 'system', 'content' => $system],
             [
                 'role' => 'user',
-                'content' => json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'content' => "Analyze this ERP report and produce a business summary.\n\nReport payload:\n"
+                    .json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                    ."\n\nReturn JSON in this exact shape:\n"
+                    .json_encode($shape, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             ],
         ];
     }
@@ -98,110 +123,102 @@ class ReportAiSummaryService
     {
         $decoded = json_decode($this->extractJson($text), true);
 
-        if (!is_array($decoded)) {
-            return $this->fallback->summarize($context, 'AI response could not be formatted, so a local summary was prepared.');
+        if (! is_array($decoded)) {
+            Log::warning('AI report summary returned invalid JSON.', [
+                'report_key' => $context['report_key'],
+                'response_length' => strlen($text),
+            ]);
+
+            return [
+                'executive_summary' => mb_substr(trim(strip_tags($text)), 0, 3000) ?: 'The provider returned an unreadable summary.',
+                'key_numbers' => [],
+                'trends' => [],
+                'risks' => [],
+                'recommended_actions' => [],
+                'disclaimer' => 'This summary is AI-generated and should be reviewed before business decisions.',
+            ];
         }
 
         return [
-            'ok' => true,
-            'ai_unavailable' => false,
-            'summary' => (string) ($decoded['summary'] ?? ''),
-            'key_numbers' => $this->listOfItems($decoded['key_numbers'] ?? []),
-            'observations' => $this->listOfStrings($decoded['observations'] ?? []),
+            'executive_summary' => $this->stringValue($decoded['executive_summary'] ?? ''),
+            'key_numbers' => $this->listOfStrings($decoded['key_numbers'] ?? []),
+            'trends' => $this->listOfStrings($decoded['trends'] ?? []),
             'risks' => $this->listOfStrings($decoded['risks'] ?? []),
-            'actions' => $this->listOfStrings($decoded['actions'] ?? []),
-            'source_note' => (string) ($decoded['source_note'] ?? 'Summary is based only on the currently generated report.'),
-            'generated_at' => now()->toDateTimeString(),
+            'recommended_actions' => $this->listOfStrings($decoded['recommended_actions'] ?? []),
+            'disclaimer' => $this->stringValue($decoded['disclaimer'] ?? '')
+                ?: 'This summary is AI-generated and should be reviewed before business decisions.',
         ];
     }
 
     private function extractJson(string $text): string
     {
         $text = trim($text);
-        if (str_starts_with($text, '```')) {
-            $text = preg_replace('/^```(?:json)?\s*/i', '', $text) ?? $text;
-            $text = preg_replace('/\s*```$/', '', $text) ?? $text;
-        }
-
         $start = strpos($text, '{');
         $end = strrpos($text, '}');
 
-        if ($start !== false && $end !== false && $end > $start) {
-            return substr($text, $start, $end - $start + 1);
-        }
-
-        return $text;
+        return $start !== false && $end !== false && $end > $start
+            ? substr($text, $start, $end - $start + 1)
+            : $text;
     }
 
     private function listOfStrings(mixed $items): array
     {
-        if (!is_array($items)) {
+        if (! is_array($items)) {
             return [];
         }
 
-        return array_values(array_filter(array_map(fn ($item) => trim((string) $item), array_slice($items, 0, 6))));
+        return array_values(array_filter(array_map(
+            fn ($item) => trim(is_scalar($item) ? (string) $item : ''),
+            array_slice($items, 0, 8),
+        )));
     }
 
-    private function listOfItems(mixed $items): array
+    private function stringValue(mixed $value): string
     {
-        if (!is_array($items)) {
-            return [];
-        }
-
-        $out = [];
-        foreach (array_slice($items, 0, 8) as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-            $out[] = [
-                'label' => (string) ($item['label'] ?? 'Number'),
-                'value' => $item['value'] ?? null,
-            ];
-        }
-
-        return $out;
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 
-    private function storeCache(string $cacheKey, array $summary): void
+    private function hasNoBusinessData(array $context): bool
     {
-        if ($this->settings->cacheEnabled()) {
-            Cache::put($cacheKey, $summary, $this->settings->cacheTtl());
-        }
+        return empty($context['rows'])
+            && empty($context['totals'])
+            && empty($context['summary_cards']);
     }
 
-    private function logUsage(Request $request, array $context, string $fingerprint, string $status, array $response, int $durationMs, ?string $error = null): void
-    {
+    private function logUsage(
+        Request $request,
+        array $context,
+        string $fingerprint,
+        string $status,
+        array $response,
+        float $startedAt,
+        ?string $error = null,
+    ): void {
         $usage = $response['usage'] ?? [];
 
-        $this->usageLogger->log([
-            'user_id' => $request->user()?->id,
-            'branch_id' => session('branch_id') ?? session('current_branch_id'),
-            'module' => 'report_summary',
-            'provider' => $response['provider'] ?? $this->settings->provider(),
-            'model' => $response['model'] ?? $this->settings->model(),
-            'status' => $status,
-            'error_message' => $error,
-            'duration_ms' => $durationMs,
-            'request_hash' => $fingerprint,
-            'question' => $context['title'] ?? 'Report summary',
-            'intent' => 'report_summary',
-            'selected_tool' => 'report_ai_summary',
-            'filters' => $context['filters'] ?? [],
-            'row_count' => $context['row_count'] ?? null,
-            'token_estimate' => strlen(json_encode($context)) / 4,
-            'prompt_tokens' => $usage['prompt'] ?? 0,
-            'completion_tokens' => $usage['completion'] ?? 0,
-            'total_tokens' => $usage['total'] ?? 0,
-        ]);
-    }
-
-    private function friendlyReason(string $code): string
-    {
-        return match ($code) {
-            'AI_DISABLED' => 'AI report summarizer is disabled in settings.',
-            'AI_API_KEY_MISSING' => 'AI provider key is not configured, so a local summary was prepared.',
-            'AI_TIMEOUT' => 'AI summary timed out, so a local summary was prepared.',
-            default => 'AI summary is temporarily unavailable, so a local summary was prepared.',
-        };
+        try {
+            $this->usageLogger->log([
+                'user_id' => $request->user()?->id,
+                'branch_id' => session('branch_id') ?? session('current_branch_id'),
+                'module' => 'report_summary',
+                'provider' => $response['provider'] ?? $this->settings->provider(),
+                'model' => $response['model'] ?? $this->settings->model(),
+                'status' => $status,
+                'error_message' => $error,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                'request_hash' => $fingerprint,
+                'question' => $context['report_title'],
+                'intent' => $context['report_key'],
+                'selected_tool' => 'report_ai_summary',
+                'filters' => $context['filters'],
+                'row_count' => $context['metadata']['row_count'],
+                'token_estimate' => (int) ceil(strlen(json_encode($context)) / 4),
+                'prompt_tokens' => $usage['prompt'] ?? 0,
+                'completion_tokens' => $usage['completion'] ?? 0,
+                'total_tokens' => $usage['total'] ?? 0,
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('Could not persist AI report-summary usage.', ['message' => $e->getMessage()]);
+        }
     }
 }

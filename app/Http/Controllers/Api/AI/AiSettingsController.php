@@ -68,13 +68,6 @@ class AiSettingsController extends Controller
             'ai_context_max_rows' => 'nullable|integer|min:1|max:500',
             'ai_context_max_chars' => 'nullable|integer|min:500|max:200000',
             'ai_fast_mode' => 'nullable|boolean',
-            'ai_default_financial_date_scope' => ['nullable', Rule::in(['current_fiscal_year', 'this_month', 'last_30_days'])],
-            'ai_allow_developer_details' => 'nullable|boolean',
-            'ai_financial_assistant_enabled' => 'nullable|boolean',
-            'ai_document_assistant_enabled' => 'nullable|boolean',
-            'ai_write_actions_enabled' => 'nullable|boolean',
-            'ai_assistant_mode' => ['nullable', Rule::in(['full', 'reports_only'])],
-            'ai_fallback_provider' => ['nullable', Rule::in(['', 'openai', 'groq', 'gemini', 'openrouter', 'ollama'])],
         ]);
 
         if (isset($validated['ai_api_key'])) {

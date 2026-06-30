@@ -5,6 +5,7 @@ namespace Tests\Feature\Reports;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiPermissionService;
+use App\Services\Reports\ReportAiSummaryService;
 use App\Services\Reports\ReportRegistry;
 use App\Services\Reports\ReportSoftQueryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -159,28 +160,47 @@ class ReportMatrixTest extends TestCase
         }
     }
 
-    public function test_ai_report_response_is_clean_and_requires_report_permission(): void
+    public function test_report_summary_endpoint_is_isolated_from_the_removed_assistant(): void
     {
-        $unauthorized = $this->userWith(['ai.chat', 'ai.report_summary']);
-        $this->actingAs($unauthorized)
-            ->postJson('/api/ai/chat', ['message' => 'Show trial balance'])
-            ->assertForbidden();
+        $this->mock(ReportAiSummaryService::class)
+            ->shouldReceive('summarize')
+            ->once()
+            ->andReturn([
+                'summary' => [
+                    'executive_summary' => 'The trial balance is balanced.',
+                    'key_numbers' => ['Total debit and credit are 100.'],
+                    'trends' => [],
+                    'risks' => [],
+                    'recommended_actions' => [],
+                    'disclaimer' => 'AI-generated.',
+                ],
+                'meta' => [
+                    'report_key' => 'trial-balance',
+                    'report_title' => 'Trial Balance',
+                ],
+            ]);
 
-        $user = $this->userWith(['ai.chat', 'ai.report_summary', 'reports.financial.view']);
-        $response = $this->actingAs($user)
+        $viewer = $this->userWith(['reports.financial.view']);
+        $this->actingAs($viewer)
             ->postJson('/api/ai/chat', ['message' => 'Show trial balance'])
+            ->assertNotFound();
+
+        $this->actingAs($viewer)
+            ->postJson('/api/reports/accounting/trial-balance/ai-summary', [
+                'summary_cards' => [['label' => 'Balance', 'value' => 100]],
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('success', false);
+
+        $user = $this->userWith(['reports.ai_summary', 'reports.financial.view']);
+        $this->actingAs($user)
+            ->postJson('/api/reports/accounting/trial-balance/ai-summary', [
+                'summary_cards' => [['label' => 'Balance', 'value' => 100]],
+            ])
             ->assertOk()
-            ->assertJsonPath('mode', 'report')
-            ->assertJsonPath('answer.headline', 'Trial Balance')
-            ->assertJsonPath('sources.0.route', '/reports/accounting/trial-balance')
-            ->assertJsonMissingPath('results')
-            ->assertJsonMissingPath('intent');
-
-        $json = $response->getContent();
-        $this->assertStringNotContainsString('Filters:', $json);
-        $this->assertStringNotContainsString('fiscal_year_id', $json);
-        $this->assertStringNotContainsString('provider', $json);
-        $this->assertDoesNotMatchRegularExpression('/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i', $json);
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.meta.report_key', 'trial-balance')
+            ->assertJsonPath('data.summary.executive_summary', 'The trial balance is balanced.');
     }
 
     private function userWith(array $permissions, ?string $branchId = null): User

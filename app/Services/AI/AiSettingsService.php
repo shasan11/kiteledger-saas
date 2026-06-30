@@ -25,17 +25,15 @@ class AiSettingsService
         'ai_context_max_rows' => 15,
         'ai_context_max_chars' => 5000,
         'ai_fast_mode' => true,
+        // Compatibility defaults for the unregistered add-on candidate. These
+        // are intentionally excluded from the core settings API and UI.
         'ai_default_financial_date_scope' => 'current_fiscal_year',
         'ai_allow_developer_details' => false,
-        'ai_financial_assistant_enabled' => true,
-        'ai_document_assistant_enabled' => true,
-        // Secure by default: the AI may PROPOSE drafts, but creating them is an
-        // explicit opt-in. Accounting deployments should consciously enable this.
+        'ai_financial_assistant_enabled' => false,
+        'ai_document_assistant_enabled' => false,
         'ai_write_actions_enabled' => false,
         'ai_fallback_provider' => '',
-        // 'full' = complete ERP agent (RAG, deterministic tools, action proposals);
-        // 'reports_only' = restrict chat to report questions (legacy conservative mode).
-        'ai_assistant_mode' => 'full',
+        'ai_assistant_mode' => 'reports_only',
     ];
 
     public function __construct(protected DatabaseSettingService $db) {}
@@ -149,7 +147,7 @@ class AiSettingsService
 
     public function reportSummaryMaxRows(): int
     {
-        return max(1, min(50, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
+        return max(1, min(100, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
     }
 
     public function contextMaxChars(): int
@@ -238,13 +236,6 @@ class AiSettingsService
             'ai_context_max_rows' => $this->contextMaxRows(),
             'ai_context_max_chars' => $this->contextMaxChars(),
             'ai_fast_mode' => $this->fastMode(),
-            'ai_default_financial_date_scope' => $this->db->string('ai_default_financial_date_scope', self::DEFAULTS['ai_default_financial_date_scope'], self::GROUP),
-            'ai_allow_developer_details' => $this->db->bool('ai_allow_developer_details', (bool) self::DEFAULTS['ai_allow_developer_details'], self::GROUP),
-            'ai_financial_assistant_enabled' => $this->financialAssistantEnabled(),
-            'ai_document_assistant_enabled' => $this->db->bool('ai_document_assistant_enabled', (bool) self::DEFAULTS['ai_document_assistant_enabled'], self::GROUP),
-            'ai_write_actions_enabled' => $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP),
-            'ai_fallback_provider' => $this->db->string('ai_fallback_provider', self::DEFAULTS['ai_fallback_provider'], self::GROUP),
-            'ai_assistant_mode' => $this->assistantMode(),
         ];
     }
 

@@ -11,9 +11,10 @@ class ReportUiContractTest extends TestCase
         $source = file_get_contents(dirname(__DIR__, 2).'/resources/js/Pages/App/Reports/Shared/ReportPage.jsx');
 
         $this->assertStringContainsString('useCallback, useEffect', $source);
-        $this->assertStringContainsString("permissions.includes('reports.export')", $source);
-        $this->assertStringNotContainsString("permissions.includes('reports.export') || permissions.includes('reports.view')", $source);
+        $this->assertStringContainsString("can('reports.export')", $source);
         $this->assertStringContainsString('Failed to load report.', $source);
         $this->assertStringContainsString('hasGenerated', $source);
+        $this->assertStringContainsString("can('reports.ai_summary')", $source);
+        $this->assertStringContainsString('<ReportSummaryButton', $source);
     }
 }

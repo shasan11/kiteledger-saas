@@ -56,13 +56,6 @@ const SAFE_DEFAULTS = {
     ai_context_max_rows: 15,
     ai_context_max_chars: 5000,
     ai_fast_mode: false,
-    ai_default_financial_date_scope: 'current_fiscal_year',
-    ai_allow_developer_details: false,
-    ai_financial_assistant_enabled: false,
-    ai_document_assistant_enabled: false,
-    ai_write_actions_enabled: false,
-    ai_assistant_mode: 'full',
-    ai_fallback_provider: '',
 };
 
 function hasAnyPermission(perms = [], required = []) {
@@ -86,8 +79,8 @@ export default function AiSettings() {
     const page = usePage();
     const permissions = page.props?.auth?.permissions || [];
     const canBypass = !!page.props?.auth?.canBypassPermissions;
-    const canView = canBypass || hasAnyPermission(permissions, ['ai.settings.view', 'ai.manage']);
-    const canManage = canBypass || hasAnyPermission(permissions, ['ai.manage', 'ai.settings.update']);
+    const canView = canBypass || hasAnyPermission(permissions, ['ai.settings.view', 'ai.settings.update']);
+    const canManage = canBypass || hasAnyPermission(permissions, ['ai.settings.update']);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -130,7 +123,7 @@ export default function AiSettings() {
                     ...SAFE_DEFAULTS,
                     ...res.data.settings,
                     ai_api_key: '',
-                    ai_context_max_rows: Math.min(50, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
+                    ai_context_max_rows: Math.min(100, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
                 });
             })
             .catch((err) => {
@@ -166,19 +159,13 @@ export default function AiSettings() {
             ai_stream_enabled: false,
             ai_fast_mode: false,
             ai_context_max_chars: 5000,
-            ai_financial_assistant_enabled: false,
-            ai_document_assistant_enabled: false,
-            ai_write_actions_enabled: false,
-            ai_assistant_mode: 'full',
-            ai_allow_developer_details: false,
-            ai_fallback_provider: '',
         };
 
         if (!payload.ai_api_key || String(payload.ai_api_key).trim() === '') {
             delete payload.ai_api_key;
         }
 
-        payload.ai_context_max_rows = Math.min(50, Number(payload.ai_context_max_rows || 15));
+        payload.ai_context_max_rows = Math.min(100, Number(payload.ai_context_max_rows || 15));
 
         return payload;
     };
@@ -196,7 +183,7 @@ export default function AiSettings() {
             ...SAFE_DEFAULTS,
             ...res.data.settings,
             ai_api_key: '',
-            ai_context_max_rows: Math.min(50, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
+            ai_context_max_rows: Math.min(100, res.data.settings?.ai_context_max_rows || SAFE_DEFAULTS.ai_context_max_rows),
         });
 
         if (showMessage) antMessage.success('AI report summarizer settings saved.');
@@ -267,7 +254,7 @@ export default function AiSettings() {
                     type="warning"
                     showIcon
                     message="You do not have permission to view AI Settings."
-                    description="Required permission: ai.settings.view or ai.manage."
+                    description="Required permission: ai.settings.view."
                 />
             </div>
         );
@@ -351,7 +338,7 @@ export default function AiSettings() {
                                 </Col>
                                 <Col xs={24} md={8}>
                                     <Form.Item name="ai_context_max_rows" label="Max Report Rows for Summary">
-                                        <InputNumber min={1} max={50} style={{ width: '100%' }} />
+                                        <InputNumber min={1} max={100} style={{ width: '100%' }} />
                                     </Form.Item>
                                 </Col>
                             </Row>
@@ -370,33 +357,6 @@ export default function AiSettings() {
                                 <Col xs={24} md={8}>
                                     <Form.Item name="ai_connect_timeout_seconds" label="Connect Timeout (s)">
                                         <InputNumber min={2} max={60} style={{ width: '100%' }} />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-
-                            <Row gutter={16}>
-                                <Col xs={24} md={12}>
-                                    <Form.Item
-                                        name="ai_assistant_mode"
-                                        label="Assistant Mode"
-                                        tooltip="Full = complete ERP agent (search, exact numbers, action proposals). Reports only = restrict chat to report Q&A."
-                                    >
-                                        <Select
-                                            options={[
-                                                { value: 'full', label: 'Full ERP assistant (recommended)' },
-                                                { value: 'reports_only', label: 'Reports only (read-only Q&A)' },
-                                            ]}
-                                        />
-                                    </Form.Item>
-                                </Col>
-                                <Col xs={24} md={12}>
-                                    <Form.Item
-                                        name="ai_write_actions_enabled"
-                                        label="Allow AI to prepare create/update drafts"
-                                        valuePropName="checked"
-                                        tooltip="When off, the assistant can only read and summarize. When on, it can prepare drafts that still require explicit human approval before anything is written."
-                                    >
-                                        <Switch />
                                     </Form.Item>
                                 </Col>
                             </Row>

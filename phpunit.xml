@@ -7,9 +7,19 @@
     <testsuites>
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
+            <!-- Retained with the dormant assistant add-on candidate. -->
+            <exclude>tests/Unit/AiAssistantUiContractTest.php</exclude>
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <!-- Assistant/chat tests are preserved for future plugin extraction,
+                 but are not part of the core report-summary product suite. -->
+            <exclude>tests/Feature/AiAssistantApiTest.php</exclude>
+            <exclude>tests/Feature/AiToolAgentTest.php</exclude>
+            <exclude>tests/Feature/Ai/AiAgentSafetyTest.php</exclude>
+            <exclude>tests/Feature/Ai/AiRagRetrieverTest.php</exclude>
+            <exclude>tests/Feature/Ai/AiSecurityHardeningTest.php</exclude>
+            <exclude>tests/Feature/Ai/AiSemanticSearchTest.php</exclude>
         </testsuite>
     </testsuites>
     <source>
