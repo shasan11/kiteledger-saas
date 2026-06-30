@@ -10,6 +10,9 @@
 The marketplace package includes `vendor/` and `public/build/`; buyers do not
 need Composer, Node.js, or npm.
 
+Never upload `public/hot`. It is a local Vite development marker and would make
+a hosted site attempt to load JavaScript from the visitor's localhost port 5173.
+
 ## Browser installer
 
 Extract the package, point the document root to `public/`, and open `/install`.

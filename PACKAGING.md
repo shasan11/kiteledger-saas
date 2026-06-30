@@ -24,6 +24,8 @@ creates `dist/kiteledger-marketplace.zip`. It does not delete developer files.
 The ZIP excludes `.env`, Git/editor metadata, `node_modules`, tests, local
 databases, logs, caches, install locks, storage links, and Vite hot files. It
 includes `vendor/`, `public/build/`, shipped branding, and any prepared SQL dump.
+The installer also removes any stale `public/hot` marker and switches `.env` to
+`APP_ENV=production` with `APP_DEBUG=false` when installation finishes.
 
 Extract the ZIP into a clean directory and verify `/install`, login,
 `php artisan route:list`, and `php artisan kiteledger:doctor` before release.

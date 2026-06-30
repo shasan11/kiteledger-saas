@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Models\DebitNote;
 use App\Models\PurchaseBill;
+use App\Models\SupplierPayment;
 use App\Models\SupplierPaymentLine;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class PayableReportService extends BaseReportService
         $query = PurchaseBill::query()->with('contact');
         $this->applyBranchFilter($query, $filters);
         $this->applyStatusApprovalFilters($query, $filters);
-        if (!empty($filters['supplier_id'])) {
+        if (! empty($filters['supplier_id'])) {
             $query->where('contact_id', $filters['supplier_id']);
         }
 
@@ -36,17 +37,21 @@ class PayableReportService extends BaseReportService
     protected function supplierPayableSummary(string $reportKey, array $filters, array $meta): array
     {
         $bills = $this->billBase($filters)->whereDate('bill_date', '<=', $filters['as_of_date'])->get();
-        $rows = $bills->groupBy('contact_id')->map(function ($group) {
+        $payments = $this->paymentsByBill($bills->pluck('id')->all(), $filters, $filters['as_of_date']);
+        $debitNotes = $this->debitNotesBySupplier($bills->pluck('contact_id')->unique()->all(), $filters, $filters['as_of_date']);
+        $rows = $bills->groupBy('contact_id')->map(function ($group) use ($payments, $debitNotes) {
             $contact = $group->first()->contact;
             $billTotal = $this->toFloat($group->sum('total'));
-            $paidTotal = $this->toFloat($group->sum('paid_total'));
+            $paidTotal = $this->toFloat($group->sum(fn ($bill) => $payments[$bill->id] ?? 0));
+            $debitNoteTotal = $this->toFloat($debitNotes[$group->first()->contact_id] ?? 0);
+
             return [
                 'supplier_code' => $contact?->code,
                 'supplier_name' => $contact?->name,
                 'bill_total' => $billTotal,
                 'paid_total' => $paidTotal,
-                'debit_note_total' => 0,
-                'balance_due' => round($billTotal - $paidTotal, 2),
+                'debit_note_total' => $debitNoteTotal,
+                'balance_due' => round($billTotal - $paidTotal - $debitNoteTotal, 2),
             ];
         })->filter(fn ($row) => $filters['include_zero_balance'] || abs($row['balance_due']) > 0.0001)->values()->all();
 
@@ -57,7 +62,12 @@ class PayableReportService extends BaseReportService
             ['title' => 'Paid Total', 'key' => 'paid_total'],
             ['title' => 'Debit Note Total', 'key' => 'debit_note_total'],
             ['title' => 'Balance Due', 'key' => 'balance_due'],
-        ], $rows);
+        ], $rows, [], [
+            'bill_total' => $this->total($rows, 'bill_total'),
+            'paid_total' => $this->total($rows, 'paid_total'),
+            'debit_note_total' => $this->total($rows, 'debit_note_total'),
+            'balance_due' => $this->total($rows, 'balance_due'),
+        ]);
     }
 
     protected function supplierAgeingSummary(string $reportKey, array $filters, array $meta): array
@@ -69,6 +79,7 @@ class PayableReportService extends BaseReportService
                 foreach ($items as $item) {
                     $buckets[$item['age_bucket']] += (float) $item['balance_due'];
                 }
+
                 return [
                     'supplier' => $supplier,
                     'not_due' => round($buckets['Not Due'], 2),
@@ -96,18 +107,21 @@ class PayableReportService extends BaseReportService
     protected function purchaseBillAge(string $reportKey, array $filters, array $meta): array
     {
         $bills = $this->billBase($filters)->whereDate('bill_date', '<=', $filters['ageing_as_of_date'])->get();
+        $payments = $this->paymentsByBill($bills->pluck('id')->all(), $filters, $filters['ageing_as_of_date']);
         $asOf = Carbon::parse($filters['ageing_as_of_date']);
-        $rows = $bills->map(function ($bill) use ($asOf) {
-            $balanceDue = round($this->toFloat($bill->total) - $this->toFloat($bill->paid_total), 2);
+        $rows = $bills->map(function ($bill) use ($asOf, $payments) {
+            $paidTotal = $this->toFloat($payments[$bill->id] ?? 0);
+            $balanceDue = round($this->toFloat($bill->total) - $paidTotal, 2);
             $dueDate = Carbon::parse($bill->due_date ?: $bill->bill_date);
             $ageDays = $dueDate->diffInDays($asOf, false);
+
             return [
                 'bill_no' => $bill->bill_no,
                 'bill_date' => $bill->bill_date?->format('Y-m-d'),
                 'due_date' => $bill->due_date?->format('Y-m-d') ?: $bill->bill_date?->format('Y-m-d'),
                 'supplier' => $bill->contact?->name,
                 'bill_total' => $this->toFloat($bill->total),
-                'paid_total' => $this->toFloat($bill->paid_total),
+                'paid_total' => $paidTotal,
                 'balance_due' => $balanceDue,
                 'age_days' => max($ageDays, 0),
                 'age_bucket' => $this->ageingBucket($ageDays),
@@ -131,7 +145,9 @@ class PayableReportService extends BaseReportService
     {
         $supplierId = $filters['supplier_id'] ?: $filters['contact_id'];
         $openingBills = $this->billBase([...$filters, 'supplier_id' => $supplierId])->whereDate('bill_date', '<', $filters['date_from'])->get();
-        $opening = round($this->toFloat($openingBills->sum('total')) - $this->toFloat($openingBills->sum('paid_total')), 2);
+        $openingPayments = $this->supplierPaymentBase($filters, $supplierId)->whereDate('payment_date', '<', $filters['date_from'])->sum('amount');
+        $openingDebitNotes = $this->debitNoteBase($filters, $supplierId)->whereDate('debit_note_date', '<', $filters['date_from'])->sum('total');
+        $opening = round($this->toFloat($openingBills->sum('total')) - $this->toFloat($openingPayments) - $this->toFloat($openingDebitNotes), 2);
         $running = $opening;
         $rows = [[
             'date' => $filters['date_from'],
@@ -143,16 +159,34 @@ class PayableReportService extends BaseReportService
             'balance' => $opening,
         ]];
 
+        $events = [];
         foreach ($this->billBase([...$filters, 'supplier_id' => $supplierId])->whereBetween('bill_date', [$filters['date_from'], $filters['date_to']])->get() as $bill) {
-            $running += $this->toFloat($bill->total);
+            $events[] = [
+                'date' => $bill->bill_date?->format('Y-m-d'), 'document_type' => 'Purchase Bill',
+                'document_no' => $bill->bill_no, 'reference' => $bill->reference,
+                'debit' => 0, 'credit' => $this->toFloat($bill->total), 'amount' => $this->toFloat($bill->total),
+            ];
+        }
+        foreach ($this->supplierPaymentBase($filters, $supplierId)->whereBetween('payment_date', [$filters['date_from'], $filters['date_to']])->get() as $payment) {
+            $events[] = [
+                'date' => $payment->payment_date?->format('Y-m-d'), 'document_type' => 'Supplier Payment',
+                'document_no' => $payment->payment_no, 'reference' => $payment->reference,
+                'debit' => $this->toFloat($payment->amount), 'credit' => 0, 'amount' => -$this->toFloat($payment->amount),
+            ];
+        }
+        foreach ($this->debitNoteBase($filters, $supplierId)->whereBetween('debit_note_date', [$filters['date_from'], $filters['date_to']])->get() as $note) {
+            $events[] = [
+                'date' => $note->debit_note_date?->format('Y-m-d'), 'document_type' => 'Debit Note',
+                'document_no' => $note->debit_note_no, 'reference' => $note->reference,
+                'debit' => $this->toFloat($note->total), 'credit' => 0, 'amount' => -$this->toFloat($note->total),
+            ];
+        }
+        foreach (collect($events)->sortBy('date') as $event) {
+            $running += (float) $event['amount'];
+            unset($event['amount']);
+            $event['balance'] = round($running, 2);
             $rows[] = [
-                'date' => $bill->bill_date?->format('Y-m-d'),
-                'document_type' => 'Purchase Bill',
-                'document_no' => $bill->bill_no,
-                'reference' => $bill->reference,
-                'debit' => 0,
-                'credit' => $this->toFloat($bill->total),
-                'balance' => round($running, 2),
+                ...$event,
             ];
         }
 
@@ -165,5 +199,49 @@ class PayableReportService extends BaseReportService
             ['title' => 'Credit', 'key' => 'credit'],
             ['title' => 'Balance', 'key' => 'balance'],
         ], $rows);
+    }
+
+    private function paymentsByBill(array $billIds, array $filters, string $asOf): array
+    {
+        return SupplierPaymentLine::query()
+            ->join('supplier_payments', 'supplier_payments.id', '=', 'supplier_payment_lines.supplier_payment_id')
+            ->select('supplier_payment_lines.purchase_bill_id', DB::raw('SUM(supplier_payment_lines.allocated_amount) as paid_total'))
+            ->whereIn('supplier_payment_lines.purchase_bill_id', $billIds)
+            ->whereDate('supplier_payments.payment_date', '<=', $asOf)
+            ->where(fn ($query) => $query->where('supplier_payments.void', false)->orWhereNull('supplier_payments.void'))
+            ->when(empty($filters['include_draft']), fn ($query) => $query->where('supplier_payments.approved', true)->where('supplier_payments.status', '!=', 'draft'))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('supplier_payments.branch_id', $filters['branch_id']))
+            ->groupBy('supplier_payment_lines.purchase_bill_id')
+            ->pluck('paid_total', 'purchase_bill_id')
+            ->map(fn ($value) => $this->toFloat($value))
+            ->all();
+    }
+
+    private function debitNotesBySupplier(array $contactIds, array $filters, string $asOf): array
+    {
+        $query = DebitNote::query()->select('contact_id', DB::raw('SUM(total) as total'))
+            ->whereIn('contact_id', $contactIds)->whereDate('debit_note_date', '<=', $asOf)->groupBy('contact_id');
+        $this->applyBranchFilter($query, $filters);
+        $this->applyStatusApprovalFilters($query, $filters);
+
+        return $query->pluck('total', 'contact_id')->map(fn ($value) => $this->toFloat($value))->all();
+    }
+
+    private function supplierPaymentBase(array $filters, ?string $supplierId)
+    {
+        $query = SupplierPayment::query()->where('contact_id', $supplierId);
+        $this->applyBranchFilter($query, $filters);
+        $this->applyStatusApprovalFilters($query, $filters);
+
+        return $query;
+    }
+
+    private function debitNoteBase(array $filters, ?string $supplierId)
+    {
+        $query = DebitNote::query()->where('contact_id', $supplierId);
+        $this->applyBranchFilter($query, $filters);
+        $this->applyStatusApprovalFilters($query, $filters);
+
+        return $query;
     }
 }

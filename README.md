@@ -33,3 +33,20 @@ npm run build
 
 Then open `/install` or run `php artisan kiteledger:install`. Use
 `php artisan kiteledger:doctor` to check a deployment.
+
+## AI knowledge indexes
+
+KiteLedger's AI Assistant uses exact, keyword, metadata, and optional embedding
+ranking. The exact and keyword paths work on normal MySQL/MariaDB hosting without
+an external vector database.
+
+```bash
+php artisan ai:index-app
+php artisan ai:index-business
+php artisan ai:index-all
+php artisan ai:index-status
+```
+
+Use `--no-embeddings` with the indexing commands when provider embeddings are
+not configured. Re-run indexing after adding routes/help documentation or after
+material business-data changes; it is idempotent and skips unchanged chunks.

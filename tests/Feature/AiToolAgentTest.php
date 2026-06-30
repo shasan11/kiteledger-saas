@@ -6,6 +6,7 @@ use App\Models\AiPendingAction;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -23,32 +24,41 @@ class AiToolAgentTest extends TestCase
         foreach (AiPermissionService::ALL as $permission) {
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
+        Permission::firstOrCreate(['name' => 'reports.financial.view', 'guard_name' => 'web']);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Write actions are disabled by default now; this suite exercises the
         // draft pipeline, so opt in explicitly.
-        app(\App\Services\AI\AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
+        app(AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
     }
 
-    public function test_product_most_expensive_query_returns_real_product(): void
+    public function test_cheapest_product_query_returns_a_clean_non_technical_answer(): void
     {
         $user = $this->userWith(['ai.chat']);
-        $this->insertProduct('Basic Mouse', 500);
-        $topId = $this->insertProduct('iPhone 15 Pro', 185000);
+        $cheapestId = $this->insertProduct('Medium Packaging Box', 55);
+        $this->insertProduct('Premium Packaging Box', 185);
 
-        $this->actingAs($user)
-            ->postJson('/api/ai/chat', ['message' => 'Which product is most expensive?'])
+        $response = $this->actingAs($user)
+            ->postJson('/api/ai/chat', ['message' => 'What is the cheapest product?'])
             ->assertOk()
             ->assertJsonPath('mode', 'tool_query')
-            ->assertJsonPath('tool.name', 'product.most_expensive')
-            ->assertJsonPath('results.0.records.0.id', $topId)
-            ->assertJsonPath('results.0.records.0.name', 'iPhone 15 Pro');
+            ->assertJsonPath('answer.headline', 'Cheapest product')
+            ->assertJsonPath('answer.body', 'Medium Packaging Box is the cheapest product with selling price 55.00.')
+            ->assertJsonPath('message.content', 'Medium Packaging Box is the cheapest product with selling price 55.00.')
+            ->assertJsonMissingPath('intent')
+            ->assertJsonMissingPath('results');
+
+        $publicJson = $response->getContent();
+        $this->assertStringNotContainsString('Filters:', $publicJson);
+        $this->assertStringNotContainsString('fiscal_year_id', $publicJson);
+        $this->assertStringNotContainsString('Open:', $publicJson);
+        $this->assertStringNotContainsString($cheapestId, $publicJson);
     }
 
     public function test_product_most_expensive_returns_empty_result_if_no_products_exist(): void
     {
-        $user = $this->userWith(['ai.chat']);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view']);
 
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'Most expensive product'])
@@ -61,14 +71,14 @@ class AiToolAgentTest extends TestCase
     public function test_bank_account_most_transactions_uses_journal_voucher_lines(): void
     {
         [$branch, $currency] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $branch);
         [$bankOne] = $this->bankAccountWithJournalLines($branch, $currency, 'Nabil Bank', 3);
         $this->bankAccountWithJournalLines($branch, $currency, 'Everest Bank', 1);
 
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'Which bank account has the most transactions?'])
             ->assertOk()
-            ->assertJsonPath('tool.name', 'bank_account.most_transactions')
+            ->assertJsonPath('intent.tool', 'bank_account.most_transactions')
             ->assertJsonPath('results.0.records.0.bank_account_id', $bankOne)
             ->assertJsonPath('results.0.records.0.transaction_count', 3);
     }
@@ -76,7 +86,7 @@ class AiToolAgentTest extends TestCase
     public function test_cash_balance_uses_approved_non_void_journal_voucher_lines(): void
     {
         [$branch, $currency] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $branch);
         $account = $this->account('Cash in Hand', 'cash');
         $coa = $this->chartOfAccount($account, $branch);
         $this->journalVoucher($branch, $currency, $account, $coa, 100, 20, true, false);
@@ -86,14 +96,14 @@ class AiToolAgentTest extends TestCase
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'What is my cash balance?'])
             ->assertOk()
-            ->assertJsonPath('tool.name', 'journal_voucher.cash_balance')
+            ->assertJsonPath('intent.tool', 'journal_voucher.cash_balance')
             ->assertJsonPath('results.0.records.0.balance', 80);
     }
 
     public function test_report_resolver_returns_correct_report_url(): void
     {
         [$branch] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view', 'ai.report_summary', 'reports.financial.view'], $branch);
 
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'Show trial balance'])
@@ -183,7 +193,7 @@ class AiToolAgentTest extends TestCase
     {
         [$ownBranch, $currency] = $this->branchAndCurrency('OWN');
         [$otherBranch] = $this->branchAndCurrency('OTHER');
-        $user = $this->userWith(['ai.chat'], $ownBranch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $ownBranch);
         $this->bankAccountWithJournalLines($otherBranch, $currency, 'Other Branch Bank', 2);
 
         $this->actingAs($user)
@@ -198,6 +208,7 @@ class AiToolAgentTest extends TestCase
         foreach ($permissions as $permission) {
             $user->givePermissionTo($permission);
         }
+
         return $user->fresh();
     }
 
@@ -206,18 +217,18 @@ class AiToolAgentTest extends TestCase
         $branchId = (string) Str::uuid();
         DB::table('branches')->insert([
             'id' => $branchId,
-            'code' => $code . '-' . substr($branchId, 0, 4),
-            'name' => $code . ' Branch',
+            'code' => $code.'-'.substr($branchId, 0, 4),
+            'name' => $code.' Branch',
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         $currencyId = DB::table('currencies')->value('id') ?: (string) Str::uuid();
-        if (!DB::table('currencies')->where('id', $currencyId)->exists()) {
+        if (! DB::table('currencies')->where('id', $currencyId)->exists()) {
             DB::table('currencies')->insert([
                 'id' => $currencyId,
-                'code' => 'NPR' . substr($currencyId, 0, 2),
+                'code' => 'NPR'.substr($currencyId, 0, 2),
                 'name' => 'Nepalese Rupee',
                 'symbol' => 'NPR',
                 'active' => true,
@@ -242,6 +253,7 @@ class AiToolAgentTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
         return $id;
     }
 
@@ -249,13 +261,15 @@ class AiToolAgentTest extends TestCase
     {
         $id = (string) Str::uuid();
         DB::table('accounts')->insert(['id' => $id, 'name' => $name, 'nature' => $nature, 'active' => true, 'created_at' => now(), 'updated_at' => now()]);
+
         return $id;
     }
 
     private function chartOfAccount(string $account, string $branch): string
     {
         $id = (string) Str::uuid();
-        DB::table('chart_of_accounts')->insert(['id' => $id, 'account_id' => $account, 'branch_id' => $branch, 'name' => 'COA ' . substr($id, 0, 4), 'active' => true, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('chart_of_accounts')->insert(['id' => $id, 'account_id' => $account, 'branch_id' => $branch, 'name' => 'COA '.substr($id, 0, 4), 'active' => true, 'created_at' => now(), 'updated_at' => now()]);
+
         return $id;
     }
 
@@ -290,7 +304,7 @@ class AiToolAgentTest extends TestCase
         DB::table('journal_vouchers')->insert([
             'id' => $jv,
             'branch_id' => $branch,
-            'voucher_no' => 'JV-' . substr($jv, 0, 8),
+            'voucher_no' => 'JV-'.substr($jv, 0, 8),
             'voucher_date' => now()->toDateString(),
             'currency_id' => $currency,
             'status' => 'posted',
@@ -317,6 +331,7 @@ class AiToolAgentTest extends TestCase
     {
         $id = (string) Str::uuid();
         DB::table('contacts')->insert(['id' => $id, 'name' => $name, 'contact_type' => 'customer', 'active' => true, 'created_at' => now(), 'updated_at' => now()]);
+
         return $id;
     }
 
@@ -326,9 +341,9 @@ class AiToolAgentTest extends TestCase
         DB::table('invoices')->insert([
             'id' => $id,
             'branch_id' => $branch,
-            'invoice_no' => 'INV-' . substr($id, 0, 8),
+            'invoice_no' => 'INV-'.substr($id, 0, 8),
             'invoice_date' => now()->toDateString(),
-            'contact_id' => $this->contact('Customer ' . substr($id, 0, 4)),
+            'contact_id' => $this->contact('Customer '.substr($id, 0, 4)),
             'status' => $approved ? 'posted' : 'draft',
             'active' => true,
             'approved' => $approved,
@@ -338,6 +353,7 @@ class AiToolAgentTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
         return $id;
     }
 

@@ -29,7 +29,7 @@ class SalesReportService extends BaseReportService
         $this->applyStatusApprovalFilters($query, $filters);
         $query->whereBetween('invoice_date', [$filters['date_from'], $filters['date_to']]);
 
-        if (!empty($filters['customer_id'])) {
+        if (! empty($filters['customer_id'])) {
             $query->where('contact_id', $filters['customer_id']);
         }
 
@@ -46,6 +46,7 @@ class SalesReportService extends BaseReportService
             $tax = $group->sum(fn ($invoice) => $invoice->invoiceLines->sum('tax_amount'));
             $grossWithoutTax = $group->sum(fn ($invoice) => $invoice->invoiceLines->sum(fn ($line) => (float) $line->qty * (float) $line->unit_price));
             $discount = round($grossWithoutTax - ($subtotal - $tax), 2);
+
             return [
                 'customer' => $contact?->name,
                 'invoice_count' => $invoiceCount,
@@ -74,13 +75,16 @@ class SalesReportService extends BaseReportService
 
     protected function salesByItem(string $reportKey, array $filters, array $meta): array
     {
-        $rows = InvoiceLine::query()
+        $query = InvoiceLine::query()
             ->join('invoices', 'invoices.id', '=', 'invoice_lines.invoice_id')
             ->leftJoin('products', 'products.id', '=', 'invoice_lines.product_id')
             ->whereBetween('invoices.invoice_date', [$filters['date_from'], $filters['date_to']])
-            ->when(!empty($filters['product_id']), fn ($query) => $query->where('invoice_lines.product_id', $filters['product_id']))
-            ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('invoices.branch_id', $filters['branch_id']))
-            ->groupBy('invoice_lines.product_id', 'products.code', 'products.name', 'invoice_lines.product_name')
+            ->when(! empty($filters['product_id']), fn ($query) => $query->where('invoice_lines.product_id', $filters['product_id']))
+            ->when(! empty($filters['customer_id']), fn ($query) => $query->where('invoices.contact_id', $filters['customer_id']))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('invoices.branch_id', $filters['branch_id']))
+            ->groupBy('invoice_lines.product_id', 'products.code', 'products.name', 'invoice_lines.product_name');
+        $this->scopeJoinedDocuments($query, 'invoices', $filters);
+        $rows = $query
             ->get([
                 'products.code as product_code',
                 'products.name as product_name',
@@ -123,14 +127,21 @@ class SalesReportService extends BaseReportService
     protected function monthlyPivot(string $reportKey, array $filters, array $meta, string $mode): array
     {
         $query = $mode === 'customer'
-            ? Invoice::query()->with('contact')->whereYear('invoice_date', $filters['year'])
+            ? Invoice::query()->with('contact')->whereBetween('invoice_date', [$filters['date_from'], $filters['date_to']])
             : InvoiceLine::query()
                 ->join('invoices', 'invoices.id', '=', 'invoice_lines.invoice_id')
                 ->leftJoin('products', 'products.id', '=', 'invoice_lines.product_id')
-                ->whereYear('invoices.invoice_date', $filters['year']);
+                ->whereBetween('invoices.invoice_date', [$filters['date_from'], $filters['date_to']]);
 
-        if (!empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
+        if (! empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
             $query->where($mode === 'customer' ? 'branch_id' : 'invoices.branch_id', $filters['branch_id']);
+        }
+        if ($mode === 'customer') {
+            $this->applyStatusApprovalFilters($query, $filters);
+            $query->when(! empty($filters['customer_id']), fn ($builder) => $builder->where('contact_id', $filters['customer_id']));
+        } else {
+            $this->scopeJoinedDocuments($query, 'invoices', $filters);
+            $query->when(! empty($filters['product_id']), fn ($builder) => $builder->where('invoice_lines.product_id', $filters['product_id']));
         }
 
         $data = $query->get();
@@ -151,6 +162,7 @@ class SalesReportService extends BaseReportService
                 $total += $monthTotal;
             }
             $row['total'] = round($total, 2);
+
             return $row;
         })->values()->all();
 
@@ -167,6 +179,7 @@ class SalesReportService extends BaseReportService
     {
         $rows = $this->invoiceQuery($filters)->get()->map(function ($invoice) {
             $tax = $invoice->invoiceLines->sum('tax_amount');
+
             return [
                 'invoice_no' => $invoice->invoice_no,
                 'invoice_date' => $invoice->invoice_date?->format('Y-m-d'),
@@ -237,5 +250,15 @@ class SalesReportService extends BaseReportService
             ['label' => 'Sales Return', 'value' => 0],
             ['label' => 'Net Sales', 'value' => $totalSales],
         ]);
+    }
+
+    private function scopeJoinedDocuments($query, string $table, array $filters): void
+    {
+        if (! empty($filters['status'])) {
+            $query->where("{$table}.status", $filters['status']);
+        } elseif (empty($filters['include_draft'])) {
+            $query->where("{$table}.status", '!=', 'draft')->where("{$table}.approved", true);
+        }
+        $query->where(fn ($builder) => $builder->where("{$table}.void", false)->orWhereNull("{$table}.void"));
     }
 }

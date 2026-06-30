@@ -18,7 +18,7 @@ class SystemReportService extends BaseReportService
 
     protected function activityLog(string $reportKey, array $filters, array $meta): array
     {
-        if (!Schema::hasTable('activity_logs')) {
+        if (! Schema::hasTable('activity_logs')) {
             return $this->response($meta['title'], $meta['category_label'], $reportKey, $filters, [
                 ['title' => 'Date/Time', 'key' => 'date_time'],
                 ['title' => 'User', 'key' => 'user'],
@@ -33,9 +33,10 @@ class SystemReportService extends BaseReportService
         $rows = DB::table('activity_logs')
             ->leftJoin('users', 'users.id', '=', 'activity_logs.user_id')
             ->select('activity_logs.*', 'users.name as user_name')
-            ->when(!empty($filters['module']), fn ($query) => $query->where('activity_logs.module', $filters['module']))
-            ->when(!empty($filters['action']), fn ($query) => $query->where('activity_logs.action', $filters['action']))
-            ->whereBetween('activity_logs.created_at', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
+            ->when(! empty($filters['module']), fn ($query) => $query->where('activity_logs.module', $filters['module']))
+            ->when(! empty($filters['action']), fn ($query) => $query->where('activity_logs.action', $filters['action']))
+            ->when(! empty($filters['user_id']), fn ($query) => $query->where('activity_logs.user_id', $filters['user_id']))
+            ->whereBetween('activity_logs.created_at', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
             ->get()
             ->map(fn ($row) => [
                 'date_time' => $row->created_at,
@@ -60,7 +61,7 @@ class SystemReportService extends BaseReportService
 
     protected function userLog(string $reportKey, array $filters, array $meta): array
     {
-        if (!Schema::hasTable('user_logs')) {
+        if (! Schema::hasTable('user_logs')) {
             return $this->response($meta['title'], $meta['category_label'], $reportKey, $filters, [
                 ['title' => 'Date/Time', 'key' => 'date_time'],
                 ['title' => 'User', 'key' => 'user'],
@@ -76,7 +77,9 @@ class SystemReportService extends BaseReportService
             ->leftJoin('users', 'users.id', '=', 'user_logs.user_id')
             ->leftJoin('branches', 'branches.id', '=', 'user_logs.branch_id')
             ->select('user_logs.*', 'users.name as user_name', 'branches.name as branch_name')
-            ->whereBetween('user_logs.created_at', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
+            ->when(! empty($filters['user_id']), fn ($query) => $query->where('user_logs.user_id', $filters['user_id']))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('user_logs.branch_id', $filters['branch_id']))
+            ->whereBetween('user_logs.created_at', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
             ->get()
             ->map(fn ($row) => [
                 'date_time' => $row->created_at,

@@ -27,9 +27,10 @@ class PurchaseReportService extends BaseReportService
         $this->applyBranchFilter($query, $filters);
         $this->applyStatusApprovalFilters($query, $filters);
         $query->whereBetween('bill_date', [$filters['date_from'], $filters['date_to']]);
-        if (!empty($filters['supplier_id'])) {
+        if (! empty($filters['supplier_id'])) {
             $query->where('contact_id', $filters['supplier_id']);
         }
+
         return $query;
     }
 
@@ -40,6 +41,7 @@ class PurchaseReportService extends BaseReportService
             $qty = $group->sum(fn ($bill) => $bill->purchaseBillLines->sum('qty'));
             $gross = $group->sum(fn ($bill) => $bill->purchaseBillLines->sum(fn ($line) => (float) $line->qty * (float) $line->unit_price));
             $tax = $group->sum(fn ($bill) => $bill->purchaseBillLines->sum('tax_amount'));
+
             return [
                 'supplier' => $contact?->name,
                 'bill_count' => $group->count(),
@@ -68,12 +70,16 @@ class PurchaseReportService extends BaseReportService
 
     protected function purchaseByItem(string $reportKey, array $filters, array $meta): array
     {
-        $rows = PurchaseBillLine::query()
+        $query = PurchaseBillLine::query()
             ->join('purchase_bills', 'purchase_bills.id', '=', 'purchase_bill_lines.purchase_bill_id')
             ->leftJoin('products', 'products.id', '=', 'purchase_bill_lines.product_id')
             ->whereBetween('purchase_bills.bill_date', [$filters['date_from'], $filters['date_to']])
-            ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('purchase_bills.branch_id', $filters['branch_id']))
-            ->groupBy('purchase_bill_lines.product_id', 'products.code', 'products.name', 'purchase_bill_lines.product_name')
+            ->when(! empty($filters['product_id']), fn ($query) => $query->where('purchase_bill_lines.product_id', $filters['product_id']))
+            ->when(! empty($filters['supplier_id']), fn ($query) => $query->where('purchase_bills.contact_id', $filters['supplier_id']))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('purchase_bills.branch_id', $filters['branch_id']))
+            ->groupBy('purchase_bill_lines.product_id', 'products.code', 'products.name', 'purchase_bill_lines.product_name');
+        $this->scopeJoinedDocuments($query, 'purchase_bills', $filters);
+        $rows = $query
             ->get([
                 'products.code as product_code',
                 'products.name as product_name',
@@ -106,14 +112,21 @@ class PurchaseReportService extends BaseReportService
     protected function purchaseMonthly(string $reportKey, array $filters, array $meta, string $mode): array
     {
         $query = $mode === 'supplier'
-            ? PurchaseBill::query()->with('contact')->whereYear('bill_date', $filters['year'])
+            ? PurchaseBill::query()->with('contact')->whereBetween('bill_date', [$filters['date_from'], $filters['date_to']])
             : PurchaseBillLine::query()
                 ->join('purchase_bills', 'purchase_bills.id', '=', 'purchase_bill_lines.purchase_bill_id')
                 ->leftJoin('products', 'products.id', '=', 'purchase_bill_lines.product_id')
-                ->whereYear('purchase_bills.bill_date', $filters['year']);
+                ->whereBetween('purchase_bills.bill_date', [$filters['date_from'], $filters['date_to']]);
 
-        if (!empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
+        if (! empty($filters['branch_id']) && $filters['branch_id'] !== 'all') {
             $query->where($mode === 'supplier' ? 'branch_id' : 'purchase_bills.branch_id', $filters['branch_id']);
+        }
+        if ($mode === 'supplier') {
+            $this->applyStatusApprovalFilters($query, $filters);
+            $query->when(! empty($filters['supplier_id']), fn ($builder) => $builder->where('contact_id', $filters['supplier_id']));
+        } else {
+            $this->scopeJoinedDocuments($query, 'purchase_bills', $filters);
+            $query->when(! empty($filters['product_id']), fn ($builder) => $builder->where('purchase_bill_lines.product_id', $filters['product_id']));
         }
 
         $rows = $query->get()->groupBy(function ($row) use ($mode) {
@@ -131,6 +144,7 @@ class PurchaseReportService extends BaseReportService
                 $total += $value;
             }
             $row['total'] = round($total, 2);
+
             return $row;
         })->values()->all();
 
@@ -139,6 +153,7 @@ class PurchaseReportService extends BaseReportService
             $columns[] = ['title' => Carbon::create()->month($month)->format('M'), 'key' => strtolower(Carbon::create()->month($month)->format('M'))];
         }
         $columns[] = ['title' => 'Total', 'key' => 'total'];
+
         return $this->response($meta['title'], $meta['category_label'], $reportKey, $filters, $columns, $rows);
     }
 
@@ -146,6 +161,7 @@ class PurchaseReportService extends BaseReportService
     {
         $rows = $this->billQuery($filters)->get()->map(function ($bill) {
             $tax = $bill->purchaseBillLines->sum('tax_amount');
+
             return [
                 'bill_no' => $bill->bill_no,
                 'bill_date' => $bill->bill_date?->format('Y-m-d'),
@@ -178,5 +194,15 @@ class PurchaseReportService extends BaseReportService
             ['title' => 'Paid Total', 'key' => 'paid_total'],
             ['title' => 'Balance Due', 'key' => 'balance_due'],
         ], $rows);
+    }
+
+    private function scopeJoinedDocuments($query, string $table, array $filters): void
+    {
+        if (! empty($filters['status'])) {
+            $query->where("{$table}.status", $filters['status']);
+        } elseif (empty($filters['include_draft'])) {
+            $query->where("{$table}.status", '!=', 'draft')->where("{$table}.approved", true);
+        }
+        $query->where(fn ($builder) => $builder->where("{$table}.void", false)->orWhereNull("{$table}.void"));
     }
 }

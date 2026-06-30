@@ -4,13 +4,14 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Crypt;
 
 class AiConversationResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => 'conv_'.Crypt::encryptString((string) $this->id),
             'title' => $this->title,
             'module' => $this->module,
             'status' => $this->status,

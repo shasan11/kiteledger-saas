@@ -8,8 +8,11 @@ use App\Models\AiUsageLog;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiAssistantContext;
+use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
@@ -22,7 +25,7 @@ class AiAssistantApiTest extends TestCase
         parent::setUp();
 
         // Seed canonical AI permissions
-        foreach (\App\Services\AI\AiPermissionService::ALL as $p) {
+        foreach (AiPermissionService::ALL as $p) {
             Permission::firstOrCreate(['name' => $p, 'guard_name' => 'web']);
         }
         app(PermissionRegistrar::class)->forgetCachedPermissions();
@@ -34,6 +37,7 @@ class AiAssistantApiTest extends TestCase
         foreach ($permissions as $p) {
             $user->givePermissionTo($p);
         }
+
         return $user->fresh();
     }
 
@@ -44,7 +48,9 @@ class AiAssistantApiTest extends TestCase
         $this->actingAs($user)
             ->getJson('/api/ai/health')
             ->assertOk()
-            ->assertJsonStructure(['ok', 'ai_enabled', 'provider', 'model']);
+            ->assertJsonStructure(['ok', 'ai_enabled', 'provider_configured'])
+            ->assertJsonMissing(['provider' => 'openai'])
+            ->assertJsonMissing(['model' => 'gpt-4o-mini']);
     }
 
     public function test_health_returns_403_for_user_without_permission(): void
@@ -96,15 +102,15 @@ class AiAssistantApiTest extends TestCase
             ->assertJsonPath('ok', true)
             ->assertJsonPath('message.content', 'Hello back');
 
-        $convId = $res->json('conversation_id');
-        $this->assertNotNull($convId);
+        $conversationToken = $res->json('conversation_id');
+        $this->assertStringStartsWith('conv_', $conversationToken);
 
-        $conv = AiConversation::find($convId);
+        $conv = AiConversation::query()->latest('created_at')->first();
         $this->assertNotNull($conv);
         $this->assertEquals($user->id, $conv->user_id);
         $this->assertEquals('hi', $conv->title);
 
-        $this->assertEquals(2, AiMessage::where('ai_conversation_id', $convId)->count());
+        $this->assertEquals(2, AiMessage::where('ai_conversation_id', $conv->id)->count());
         $this->assertEquals(1, AiUsageLog::where('user_id', $user->id)->where('status', 'success')->count());
     }
 
@@ -114,7 +120,7 @@ class AiAssistantApiTest extends TestCase
 
         $this->mock(AiProviderManager::class, function ($mock) {
             $mock->shouldReceive('chat')->andThrow(
-                new \App\Services\AI\AiProviderException('boom', 'AI_TIMEOUT')
+                new AiProviderException('boom', 'AI_TIMEOUT')
             );
         });
 
@@ -170,7 +176,7 @@ class AiAssistantApiTest extends TestCase
         // The schema has invoices table normally; force a missing-table path by
         // building context for an unknown type — should return general note.
         $ctx = app(AiAssistantContext::class);
-        $request = \Illuminate\Http\Request::create('/api/ai/chat');
+        $request = Request::create('/api/ai/chat');
         $request->setUserResolver(fn () => $this->userWith(['ai.chat']));
 
         $built = $ctx->build($request, 'general');

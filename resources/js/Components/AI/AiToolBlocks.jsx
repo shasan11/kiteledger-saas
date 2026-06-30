@@ -18,7 +18,7 @@ export default function AiToolBlocks({ message = {}, onActionUpdated }) {
     return (
         <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 10 }}>
             {results.map((result, index) => (
-                <ToolResultCard key={`${result.tool || result.report_key || index}`} result={result} />
+                <ToolResultCard key={`business-result-${index}`} result={result} />
             ))}
 
             {actions.map((action) => (
@@ -62,7 +62,7 @@ function ToolResultCard({ result }) {
                     <Tag icon={isReport ? <FileTextOutlined /> : <DatabaseOutlined />} color={isReport ? 'purple' : 'blue'} bordered={false}>
                         {isReport ? 'Report' : 'Business data'}
                     </Tag>
-                    <Text strong>{result.title || result.report_key || result.tool}</Text>
+                    <Text strong>{result.title || (isReport ? 'KiteLedger report' : 'Business data')}</Text>
                 </Space>
 
                 {result.summary && <Text type="secondary" style={{ fontSize: 12 }}>{result.summary}</Text>}
@@ -74,7 +74,7 @@ function ToolResultCard({ result }) {
                 ) : records.length ? (
                     <Table
                         size="small"
-                        rowKey={(row, idx) => row.id || row.bank_account_id || row.contact_id || `${idx}`}
+                        rowKey={(_, idx) => `business-row-${idx}`}
                         columns={columns}
                         dataSource={records}
                         pagination={records.length > 5 ? { pageSize: 5, size: 'small' } : false}

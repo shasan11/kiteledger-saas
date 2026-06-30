@@ -44,6 +44,14 @@ class AiSemanticSearchService
 
         $query = AiEmbedding::query()->where('dims', $dims);
 
+        if (! empty($opts['model'])) {
+            $query->where('model', $opts['model']);
+        }
+
+        if (! empty($opts['source_types'])) {
+            $query->whereIn('source_type', (array) $opts['source_types']);
+        }
+
         if ($branchId) {
             $query->where(function ($w) use ($branchId) {
                 $w->where('branch_id', (string) $branchId)->orWhereNull('branch_id');
@@ -52,7 +60,13 @@ class AiSemanticSearchService
 
         $scored = [];
 
-        $query->chunk(200, function ($rows) use ($vector, &$scored, $minScore) {
+        // Bound the PHP cosine pool for ordinary shared hosting. Exact/keyword
+        // retrieval supplies the broad corpus; vectors rerank a recent subset.
+        $pool = $query->orderByDesc('updated_at')
+            ->limit(max(200, min(2000, (int) ($opts['candidate_pool'] ?? 800))))
+            ->get();
+
+        $pool->chunk(200)->each(function ($rows) use ($vector, &$scored, $minScore) {
             foreach ($rows as $row) {
                 $score = self::cosine($vector, $row->vector ?? []);
                 if ($score > $minScore) {

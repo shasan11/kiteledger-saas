@@ -8,6 +8,7 @@ use App\Models\Contact;
 use App\Models\FiscalYear;
 use App\Models\Product;
 use App\Models\Warehouse;
+use App\Services\BranchScopeService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -19,6 +20,8 @@ use Illuminate\Http\Request;
  */
 class ReportSoftQueryService
 {
+    public function __construct(private readonly BranchScopeService $branchScope) {}
+
     public function resolve(string $query, ?Request $request = null): array
     {
         $query = trim($query);
@@ -30,12 +33,12 @@ class ReportSoftQueryService
         $request ??= request();
 
         $match = $this->matchReport($lower);
-        if (!$match) {
+        if (! $match) {
             return $this->miss('No matching report found.', $this->suggestions($lower));
         }
 
         $meta = ReportRegistry::resolve($match['category'], $match['report_key']);
-        if (!$meta) {
+        if (! $meta) {
             return $this->miss('Matched report no longer exists.');
         }
 
@@ -75,6 +78,7 @@ class ReportSoftQueryService
             }
         }
         usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
+
         return array_slice($scored, 0, $limit);
     }
 
@@ -99,7 +103,7 @@ class ReportSoftQueryService
             }
         }
 
-        if (!$best || $best['score'] < 0.45) {
+        if (! $best || $best['score'] < 0.45) {
             return null;
         }
 
@@ -136,7 +140,7 @@ class ReportSoftQueryService
             $reason = "Query contains report title '{$report['title']}'.";
         } elseif (str_contains($title, $lower) && mb_strlen($lower) >= 4) {
             $score = max($score, 0.7);
-            $reason = "Report title contains query phrase.";
+            $reason = 'Report title contains query phrase.';
         }
 
         foreach ($aliases as $alias) {
@@ -199,17 +203,20 @@ class ReportSoftQueryService
 
         if (str_contains($lower, 'today')) {
             $d = $today->toDateString();
+
             return ['date_from' => $d, 'date_to' => $d, 'as_of' => $d];
         }
 
         if (str_contains($lower, 'yesterday')) {
             $d = $today->copy()->subDay()->toDateString();
+
             return ['date_from' => $d, 'date_to' => $d, 'as_of' => $d];
         }
 
         if (str_contains($lower, 'last week')) {
             $start = $today->copy()->subWeek()->startOfWeek();
             $end = $today->copy()->subWeek()->endOfWeek();
+
             return ['date_from' => $start->toDateString(), 'date_to' => $end->toDateString(), 'as_of' => $end->toDateString()];
         }
 
@@ -223,6 +230,7 @@ class ReportSoftQueryService
 
         if (str_contains($lower, 'last month')) {
             $ref = $today->copy()->subMonthNoOverflow();
+
             return [
                 'date_from' => $ref->copy()->startOfMonth()->toDateString(),
                 'date_to' => $ref->copy()->endOfMonth()->toDateString(),
@@ -240,6 +248,7 @@ class ReportSoftQueryService
 
         if (str_contains($lower, 'last quarter')) {
             $ref = $today->copy()->subQuarterNoOverflow();
+
             return [
                 'date_from' => $ref->copy()->startOfQuarter()->toDateString(),
                 'date_to' => $ref->copy()->endOfQuarter()->toDateString(),
@@ -265,6 +274,7 @@ class ReportSoftQueryService
 
         if (str_contains($lower, 'last year')) {
             $ref = $today->copy()->subYear();
+
             return [
                 'date_from' => $ref->copy()->startOfYear()->toDateString(),
                 'date_to' => $ref->copy()->endOfYear()->toDateString(),
@@ -296,12 +306,20 @@ class ReportSoftQueryService
         $filters = [];
         $mode = $meta['default_date_mode'] ?? ReportRegistry::DATE_MODE_PERIOD;
         if ($mode === ReportRegistry::DATE_MODE_PERIOD) {
-            if ($period['date_from']) $filters['date_from'] = $period['date_from'];
-            if ($period['date_to']) $filters['date_to'] = $period['date_to'];
+            if ($period['date_from']) {
+                $filters['date_from'] = $period['date_from'];
+            }
+            if ($period['date_to']) {
+                $filters['date_to'] = $period['date_to'];
+            }
         } elseif ($mode === ReportRegistry::DATE_MODE_AS_OF) {
-            if ($period['as_of']) $filters['as_of_date'] = $period['as_of'];
+            if ($period['as_of']) {
+                $filters['as_of_date'] = $period['as_of'];
+            }
         } elseif ($mode === ReportRegistry::DATE_MODE_AGEING) {
-            if ($period['as_of']) $filters['ageing_as_of_date'] = $period['as_of'];
+            if ($period['as_of']) {
+                $filters['ageing_as_of_date'] = $period['as_of'];
+            }
         }
 
         $schema = $meta['filter_schema'] ?? [];
@@ -314,32 +332,44 @@ class ReportSoftQueryService
 
         if (in_array('customer_id', $keys, true)) {
             $id = $this->detectContact($lower, 'customer');
-            if ($id) $filters['customer_id'] = $id;
+            if ($id) {
+                $filters['customer_id'] = $id;
+            }
         }
 
         if (in_array('supplier_id', $keys, true)) {
             $id = $this->detectContact($lower, 'supplier');
-            if ($id) $filters['supplier_id'] = $id;
+            if ($id) {
+                $filters['supplier_id'] = $id;
+            }
         }
 
         if (in_array('product_id', $keys, true)) {
             $id = $this->detectProduct($lower);
-            if ($id) $filters['product_id'] = $id;
+            if ($id) {
+                $filters['product_id'] = $id;
+            }
         }
 
         if (in_array('warehouse_id', $keys, true)) {
             $id = $this->detectWarehouse($lower);
-            if ($id) $filters['warehouse_id'] = $id;
+            if ($id) {
+                $filters['warehouse_id'] = $id;
+            }
         }
 
         if (in_array('chart_of_account_id', $keys, true)) {
             $id = $this->detectAccount($lower);
-            if ($id) $filters['chart_of_account_id'] = $id;
+            if ($id) {
+                $filters['chart_of_account_id'] = $id;
+            }
         }
 
         if (in_array('group_by', $keys, true)) {
             $groupBy = $this->detectGroupBy($lower, $meta['category']);
-            if ($groupBy) $filters['group_by'] = $groupBy;
+            if ($groupBy) {
+                $filters['group_by'] = $groupBy;
+            }
         }
 
         return $filters;
@@ -347,13 +377,12 @@ class ReportSoftQueryService
 
     protected function detectBranch(string $lower, Request $request, bool $branchAllowed): ?string
     {
-        if (!$branchAllowed) return null;
+        if (! $branchAllowed) {
+            return null;
+        }
 
         $user = $request->user();
-        $canAll = false;
-        if ($user) {
-            try { $canAll = $user->can('branch.view_all'); } catch (\Throwable) {}
-        }
+        $canAll = $this->branchScope->canViewAllBranches($user);
 
         // Mentions "all branches" – only honour if user is allowed.
         if (str_contains($lower, 'all branches') || str_contains($lower, 'every branch')) {
@@ -366,27 +395,30 @@ class ReportSoftQueryService
             $name = mb_strtolower($b->name);
             $code = $b->code ? mb_strtolower($b->code) : null;
             if ($name && $name !== '' && str_contains($lower, $name)) {
-                if (!$canAll && $user && (string)($user->current_branch_id ?? $user->branch_id) !== (string)$b->id) {
+                if (! $canAll && $user && (string) ($user->current_branch_id ?? $user->branch_id) !== (string) $b->id) {
                     // user not allowed to switch — fall through to default
                     break;
                 }
+
                 return (string) $b->id;
             }
             if ($code && str_contains($lower, $code)) {
-                if (!$canAll && $user && (string)($user->current_branch_id ?? $user->branch_id) !== (string)$b->id) {
+                if (! $canAll && $user && (string) ($user->current_branch_id ?? $user->branch_id) !== (string) $b->id) {
                     break;
                 }
+
                 return (string) $b->id;
             }
         }
 
         // Default = current branch
-        if ($user && !empty($user->current_branch_id)) {
+        if ($user && ! empty($user->current_branch_id)) {
             return (string) $user->current_branch_id;
         }
-        if ($user && !empty($user->branch_id)) {
+        if ($user && ! empty($user->branch_id)) {
             return (string) $user->branch_id;
         }
+
         return null;
     }
 
@@ -405,6 +437,7 @@ class ReportSoftQueryService
                 return (string) $c->id;
             }
         }
+
         return null;
     }
 
@@ -417,6 +450,7 @@ class ReportSoftQueryService
                 return (string) $p->id;
             }
         }
+
         return null;
     }
 
@@ -429,6 +463,7 @@ class ReportSoftQueryService
                 return (string) $w->id;
             }
         }
+
         return null;
     }
 
@@ -441,17 +476,31 @@ class ReportSoftQueryService
                 return (string) $a->id;
             }
         }
+
         return null;
     }
 
     protected function detectGroupBy(string $lower, string $category): ?string
     {
-        if (str_contains($lower, 'by customer')) return 'customer';
-        if (str_contains($lower, 'by supplier')) return 'supplier';
-        if (str_contains($lower, 'by branch')) return 'branch';
-        if (str_contains($lower, 'by month') || str_contains($lower, 'monthly')) return 'month';
-        if (str_contains($lower, 'by week') || str_contains($lower, 'weekly')) return 'week';
-        if (str_contains($lower, 'by day') || str_contains($lower, 'daily')) return 'day';
+        if (str_contains($lower, 'by customer')) {
+            return 'customer';
+        }
+        if (str_contains($lower, 'by supplier')) {
+            return 'supplier';
+        }
+        if (str_contains($lower, 'by branch')) {
+            return 'branch';
+        }
+        if (str_contains($lower, 'by month') || str_contains($lower, 'monthly')) {
+            return 'month';
+        }
+        if (str_contains($lower, 'by week') || str_contains($lower, 'weekly')) {
+            return 'week';
+        }
+        if (str_contains($lower, 'by day') || str_contains($lower, 'daily')) {
+            return 'day';
+        }
+
         return null;
     }
 
@@ -460,7 +509,8 @@ class ReportSoftQueryService
         if (empty($filters)) {
             return $routePath;
         }
-        return $routePath . '?' . http_build_query($filters);
+
+        return $routePath.'?'.http_build_query($filters);
     }
 
     protected function miss(string $message, array $suggestions = []): array

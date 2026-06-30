@@ -25,12 +25,10 @@ import {
     CopyOutlined,
     DeleteOutlined,
     SettingOutlined,
-    ThunderboltOutlined,
     CheckCircleOutlined,
     ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
-import AiToolBlocks from '@/Components/AI/AiToolBlocks';
 import AiMessageRenderer from '@/Components/AI/AiMessageRenderer';
 import AiSuggestedQuestions from '@/Components/AI/AiSuggestedQuestions';
 import AiPendingActionCard from '@/Components/AI/AiPendingActionCard';
@@ -39,14 +37,14 @@ import AiSourceCards from '@/Components/AI/AiSourceCards';
 const { Title, Paragraph, Text } = Typography;
 
 const SUGGESTED_PROMPTS = [
-    'What is total sales this month?',
-    'Which product is most expensive?',
-    'Show overdue receivables',
-    'Find invoices related to ABC Trading',
-    'Show trial balance report',
-    'Create a quotation for ABC Trading',
-    'What is my cash balance?',
-    'Search documents mentioning VAT',
+    'How do I create an invoice?',
+    'Where can I configure cheque format?',
+    'What does trial balance show?',
+    'Show invoices related to VAT.',
+    'Explain customer ABC Trading.',
+    'What reports are available for receivables?',
+    'How do I configure a payment gateway?',
+    'Explain inventory value.',
 ];
 
 function hasAnyPermission(perms = [], required = []) {
@@ -78,7 +76,7 @@ function HeaderTitle({ token }) {
                     AI Assistant
                 </Title>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                    Search records, get exact numbers, and prepare actions for approval.
+                    Ask about your business data or how to use KiteLedger.
                 </Text>
             </div>
         </Space>
@@ -123,7 +121,7 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
     const isSystem = message.role === 'system';
 
     const bubbleStyle = {
-        maxWidth: 'min(760px, 86%)',
+        maxWidth: isUser ? 'min(680px, 82%)' : 'min(860px, 94%)',
         borderRadius: isUser
             ? `${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px ${token.borderRadiusXL}px`
             : `${token.borderRadiusXL}px ${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px`,
@@ -173,8 +171,6 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
                 )}
 
                 <AiMessageRenderer message={message} onFollowup={onFollowup} />
-                <AiToolBlocks message={message} />
-
                 {Array.isArray(message.sources) && message.sources.length > 0 && (
                     <AiSourceCards sources={message.sources} />
                 )}
@@ -209,17 +205,6 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
                                 </Tag>
                             )}
 
-                            {message.provider && (
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {message.provider}
-                                </Text>
-                            )}
-
-                            {message.model && (
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    / {message.model}
-                                </Text>
-                            )}
                         </Space>
 
                         <Tooltip title="Copy reply">
@@ -417,28 +402,22 @@ export default function Assistant() {
 
             setConversationId(res.data?.conversation_id || conversationId);
 
-            const hasDisplay = Boolean((res.data?.cards || []).length || (res.data?.tables || []).length);
-
             setMessages((prev) => [
                 ...prev,
                 {
                     role: 'assistant',
                     content: reply,
                     id: `${Date.now()}-assistant`,
-                    provider: res.data?.provider,
-                    model: res.data?.model,
                     cached: res.data?.cached,
                     actions: res.data?.actions || [],
                     sources: res.data?.sources || [],
-                    results: hasDisplay ? [] : (res.data?.results || []),
-                    mode: res.data?.mode,
-                    tool: res.data?.tool,
                     cards: res.data?.cards || [],
                     tables: res.data?.tables || [],
                     warnings: res.data?.warnings || [],
                     source_note: res.data?.source_note || null,
                     followups: res.data?.followups || [],
                     answer_type: res.data?.answer_type || null,
+                    answer: res.data?.answer || null,
                 },
             ]);
         } catch (err) {
@@ -463,7 +442,7 @@ export default function Assistant() {
                 }
 
                 if (code === 'AI_PERMISSION_DENIED' && data?.required_permission) {
-                    msg = `${data.message} Required permission: ${data.required_permission}`;
+                    msg = data.message || 'You do not have permission to use AI Assistant.';
                 }
 
                 setError({ message: msg, code });
@@ -574,7 +553,7 @@ export default function Assistant() {
                         type="warning"
                         showIcon
                         message="You do not have permission to use AI Assistant."
-                        description="Required permission: ai.use. Please contact your administrator."
+                        description="Please contact your administrator if you need access."
                     />
                 </div>
             </AuthenticatedLayout>
@@ -593,11 +572,7 @@ export default function Assistant() {
                                 type="error"
                                 showIcon
                                 message={healthError.message}
-                                description={
-                                    healthError.required_permission
-                                        ? `Required permission: ${healthError.required_permission}`
-                                        : null
-                                }
+                                description="Please contact your administrator or try again."
                             />
                         )}
 
@@ -645,7 +620,6 @@ export default function Assistant() {
                                 showIcon
                                 closable
                                 message={error.message}
-                                description={error.code ? `Code: ${error.code}` : null}
                                 onClose={() => setError(null)}
                             />
                         )}
@@ -706,7 +680,7 @@ export default function Assistant() {
                                             description={
                                                 <Space direction="vertical" size={4}>
                                                     <Title level={4} style={{ margin: 0 }}>
-                                                        Ask about reports
+                                                        Ask anything about your business data or how to use KiteLedger.
                                                     </Title>
                                                     <Paragraph
                                                         type="secondary"
@@ -715,8 +689,8 @@ export default function Assistant() {
                                                             maxWidth: 460,
                                                         }}
                                                     >
-                                                        Use it to open, explain, and summarize reports while the
-                                                        broader assistant is paused.
+                                                        Get source-backed help with invoices, reports, customers,
+                                                        inventory, settings, workflows, and business records.
                                                     </Paragraph>
                                                 </Space>
                                             }
@@ -762,7 +736,7 @@ export default function Assistant() {
                                 <div style={{ padding: '8px 0' }}>
                                     <Space>
                                         <Spin size="small" />
-                                        <Text type="secondary">Thinking...</Text>
+                                        <Text type="secondary">Searching your data and preparing an answer...</Text>
                                     </Space>
                                 </div>
                             )}
@@ -775,7 +749,7 @@ export default function Assistant() {
                                     onChange={(e) => setInput(e.target.value)}
                                     placeholder={
                                         aiReady
-                                            ? 'Ask about reports...'
+                                            ? 'Ask about invoices, reports, customers, inventory, settings, or how to use KiteLedger...'
                                             : 'AI assistant is not ready.'
                                     }
                                     autoSize={{ minRows: 1, maxRows: 5 }}

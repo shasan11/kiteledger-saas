@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 112" role="img" aria-labelledby="title">
-  <title id="title">KiteLedger</title>
-  <path fill="#10b981" d="M55 5 103 53 55 101 7 53 55 5Zm0 17L24 53l31 31 31-31L55 22Z"/>
-  <path fill="#10233f" d="m55 53 48 48H82L55 74l-12 12v21H27V53h28Z"/>
-  <text x="122" y="72" fill="#10233f" font-family="Arial,Helvetica,sans-serif" font-size="44" font-weight="700">KiteLedger</text>
-</svg>

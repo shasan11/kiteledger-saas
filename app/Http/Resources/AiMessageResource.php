@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\AI\Rag\AiSourceSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,14 +15,9 @@ class AiMessageResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $context = is_array($this->context) ? $this->context : [];
-
         return [
-            'id' => $this->id,
             'role' => $this->role,
-            'content' => $this->content,
-            'intent' => $context['intent']['name'] ?? null,
-            'mode' => $context['mode'] ?? null,
+            'content' => app(AiSourceSanitizer::class)->sanitizeText((string) $this->content),
             'created_at' => optional($this->created_at)->toIso8601String(),
         ];
     }

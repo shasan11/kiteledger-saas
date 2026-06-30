@@ -4,8 +4,8 @@ namespace App\Services\AI\Tools;
 
 use App\Models\AiConversation;
 use App\Models\AiPendingAction;
-use App\Services\AI\AiUsageLogger;
 use App\Services\AI\AiSettingsService;
+use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Tools\Actions\CreateCashTransferDraftAction;
 use App\Services\AI\Tools\Actions\CreateContactDraftAction;
 use App\Services\AI\Tools\Actions\CreateCustomerPaymentDraftAction;
@@ -121,22 +121,22 @@ class AiToolRouter
         'action.create_contact_draft' => [CreateContactDraftAction::class, 'contacts'],
     ];
 
-    public function __construct(private AiUsageLogger $usage, private AiSettingsService $settings)
-    {
-    }
+    public function __construct(private AiUsageLogger $usage, private AiSettingsService $settings) {}
 
     public function classify(string $message, array $payload = []): array
     {
         $m = mb_strtolower(trim($message));
+        $instructional = (bool) preg_match('/\b(how (do|can|should) i|how to|where (do|can) i|explain|what is|what does|difference between)\b/', $m);
 
         if ($this->containsAny($m, ['delete ', 'remove ', 'void ', 'approve ', 'post ', 'mark paid', 'closed fiscal year'])) {
             return $this->classification('action', 'action.blocked', 0.98, true, 'blocked', 'User requested a blocked write operation.');
         }
 
-        if ($tool = $this->actionTool($m, $payload)) {
+        if (! $instructional && $tool = $this->actionTool($m, $payload)) {
             if (! $this->settings->writeActionsEnabled()) {
                 return $this->classification('action', 'action.blocked', 0.98, true, 'blocked', 'AI write actions are disabled in settings.');
             }
+
             return $this->classification('action', $tool, 0.88, true, $this->actionTools[$tool][1], 'User asked for a create/update action.');
         }
 
@@ -146,6 +146,7 @@ class AiToolRouter
 
         if ($tool = $this->queryTool($m)) {
             $module = $this->queryTools[$tool][2] ?? explode('.', $tool)[0];
+
             return $this->classification('query', $tool, 0.9, false, $module, 'User asked a factual business question that must use a database tool.');
         }
 
@@ -160,7 +161,7 @@ class AiToolRouter
     {
         $tool = $classification['tool'];
         $config = $this->queryTools[$tool] ?? null;
-        if (!$config) {
+        if (! $config) {
             throw ValidationException::withMessages(['tool' => 'Unsupported AI query tool.']);
         }
 
@@ -174,6 +175,7 @@ class AiToolRouter
                 'status' => 'success',
                 'duration_ms' => (int) round((microtime(true) - $started) * 1000),
             ]);
+
             return $result;
         } catch (\Throwable $e) {
             $this->usage->log([
@@ -200,7 +202,7 @@ class AiToolRouter
         }
 
         $config = $this->actionTools[$tool] ?? null;
-        if (!$config) {
+        if (! $config) {
             throw ValidationException::withMessages(['tool' => 'Unsupported AI action tool.']);
         }
 
@@ -209,20 +211,16 @@ class AiToolRouter
 
     public function explainToolResult(array $result): string
     {
+        if (($result['type'] ?? null) === 'report' && ! empty($result['matched'])) {
+            return 'I found the '.($result['title'] ?? 'requested').' report. Open it to review the latest data with your permitted branch scope.';
+        }
+
         $summary = trim((string) ($result['summary'] ?? ''));
         if ($summary === '' && empty($result['records'])) {
             $summary = 'No data was found.';
         }
         if ($summary === '') {
-            $summary = ($result['title'] ?? 'The tool') . ' returned ' . count($result['records'] ?? []) . ' record(s).';
-        }
-
-        if (!empty($result['filters'])) {
-            $summary .= ' Filters: ' . collect($result['filters'])->map(fn ($v, $k) => $k . '=' . $v)->implode(', ') . '.';
-        }
-
-        if (!empty($result['open_url'])) {
-            $summary .= ' Open: ' . $result['open_url'];
+            $summary = ($result['title'] ?? 'The tool').' returned '.count($result['records'] ?? []).' record(s).';
         }
 
         return $summary;
@@ -230,68 +228,178 @@ class AiToolRouter
 
     private function queryTool(string $m): ?string
     {
-        if ($this->containsAny($m, ['which bank account has the most transactions', 'bank account has most transactions'])) return 'bank_account.most_transactions';
-        if (str_contains($m, 'bank account') && str_contains($m, 'debit')) return 'bank_account.highest_debit_movement';
-        if (str_contains($m, 'bank account') && str_contains($m, 'credit')) return 'bank_account.highest_credit_movement';
-        if (str_contains($m, 'bank account') && str_contains($m, 'balance')) return 'bank_account.balance_summary';
-        if (str_contains($m, 'recent') && str_contains($m, 'bank')) return 'bank_account.recent_transactions';
-        if ($this->containsAny($m, ['cash balance', 'cash in hand'])) return 'journal_voucher.cash_balance';
-        if ($this->containsAny($m, ['bank balance'])) return 'journal_voucher.bank_balance';
-        if (str_contains($m, 'highest debit')) return 'journal_voucher.highest_debit_movement';
-        if (str_contains($m, 'highest credit')) return 'journal_voucher.highest_credit_movement';
-        if (str_contains($m, 'expense') && str_contains($m, 'highest')) return 'journal_voucher.highest_expense_this_month';
-        if ($this->containsAny($m, ['income account', 'revenue account']) && str_contains($m, 'highest')) return 'journal_voucher.highest_income_this_month';
-        if (str_contains($m, 'unbalanced') && $this->containsAny($m, ['jv', 'journal'])) return 'journal_voucher.unbalanced';
-        if (str_contains($m, 'auto-generated') && $this->containsAny($m, ['jv', 'journal'])) return 'journal_voucher.auto_generated_this_month';
-        if (str_contains($m, 'source module') && $this->containsAny($m, ['jv', 'journal'])) return 'journal_voucher.source_modules_most_jvs';
-        if (str_contains($m, 'abnormal movement')) return 'journal_voucher.abnormal_movement';
-        if ($this->containsAny($m, ['most expensive product', 'costliest product']) || (str_contains($m, 'product') && str_contains($m, 'most expensive'))) return 'product.most_expensive';
-        if ($this->containsAny($m, ['cheapest product', 'lowest priced product', 'lowest price product'])) return 'product.cheapest';
-        if (str_contains($m, 'highest purchase price')) return 'product.highest_purchase_price';
-        if (str_contains($m, 'highest selling price')) return 'product.highest_selling_price';
-        if (str_contains($m, 'product') && str_contains($m, 'without price')) return 'product.without_price';
-        if (str_contains($m, 'product') && $this->containsAny($m, ['without cost', 'without purchase cost'])) return 'product.without_cost';
-        if (str_contains($m, 'low stock')) return 'inventory.low_stock';
-        if (str_contains($m, 'negative stock')) return 'inventory.negative_stock';
-        if (str_contains($m, 'inventory value')) return 'inventory.value';
-        if (str_contains($m, 'warehouse') && str_contains($m, 'stock')) return 'inventory.warehouse_wise_stock';
-        if (str_contains($m, 'fast moving')) return 'inventory.fast_moving_products';
-        if (str_contains($m, 'highest receivable') || str_contains($m, 'customer has highest receivable')) return 'receivable.highest_customer_balance';
-        if (str_contains($m, 'total receivable')) return 'receivable.total';
-        if (str_contains($m, 'overdue receivable')) return 'receivable.overdue';
-        if (str_contains($m, 'unpaid invoice')) return str_contains($m, 'sales') ? 'sales.unpaid_invoices' : 'receivable.unpaid_invoices';
-        if (str_contains($m, 'partially paid invoice')) return 'receivable.partially_paid_invoices';
-        if (str_contains($m, 'highest payable') || str_contains($m, 'supplier has highest payable')) return 'payable.highest_supplier_balance';
-        if (str_contains($m, 'total payable')) return 'payable.total';
-        if (str_contains($m, 'overdue payable')) return 'payable.overdue';
-        if (str_contains($m, 'unpaid bill')) return 'payable.unpaid_bills';
-        if (str_contains($m, 'partially paid bill')) return 'payable.partially_paid_bills';
-        if ($this->containsAny($m, ['sales today', "today's sales"])) return 'sales.today';
-        if (str_contains($m, 'sales this month')) return 'sales.this_month';
-        if (str_contains($m, 'top customer') && str_contains($m, 'sales')) return 'sales.top_customer';
-        if (str_contains($m, 'top invoice')) return 'sales.top_invoice';
-        if (str_contains($m, 'draft invoice')) return 'sales.draft_invoices';
-        if (str_contains($m, 'approved invoice')) return 'sales.approved_invoices';
-        if (str_contains($m, 'sales by product')) return 'sales.by_product';
-        if (str_contains($m, 'sales by branch')) return 'sales.by_branch';
-        if (str_contains($m, 'sales by status')) return 'sales.by_status';
-        if ($this->containsAny($m, ['purchases today', "today's purchases", 'purchase today'])) return 'purchase.today';
-        if (str_contains($m, 'purchase this month') || str_contains($m, 'purchases this month')) return 'purchase.this_month';
-        if (str_contains($m, 'top supplier') && $this->containsAny($m, ['purchase', 'purchases'])) return 'purchase.top_supplier';
-        if (str_contains($m, 'top bill')) return 'purchase.top_bill';
-        if (str_contains($m, 'draft purchase bill')) return 'purchase.draft_bills';
-        if (str_contains($m, 'approved purchase bill')) return 'purchase.approved_bills';
-        if (str_contains($m, 'purchase by product')) return 'purchase.by_product';
-        if (str_contains($m, 'purchase by branch')) return 'purchase.by_branch';
-        if (str_contains($m, 'purchase by status')) return 'purchase.by_status';
-        if ($this->containsAny($m, ['find customer', 'find supplier', 'search contact', 'show contact'])) return 'contact.search';
+        if ($this->containsAny($m, ['which bank account has the most transactions', 'bank account has most transactions'])) {
+            return 'bank_account.most_transactions';
+        }
+        if (str_contains($m, 'bank account') && str_contains($m, 'debit')) {
+            return 'bank_account.highest_debit_movement';
+        }
+        if (str_contains($m, 'bank account') && str_contains($m, 'credit')) {
+            return 'bank_account.highest_credit_movement';
+        }
+        if (str_contains($m, 'bank account') && str_contains($m, 'balance')) {
+            return 'bank_account.balance_summary';
+        }
+        if (str_contains($m, 'recent') && str_contains($m, 'bank')) {
+            return 'bank_account.recent_transactions';
+        }
+        if ($this->containsAny($m, ['cash balance', 'cash in hand'])) {
+            return 'journal_voucher.cash_balance';
+        }
+        if ($this->containsAny($m, ['bank balance'])) {
+            return 'journal_voucher.bank_balance';
+        }
+        if (str_contains($m, 'highest debit')) {
+            return 'journal_voucher.highest_debit_movement';
+        }
+        if (str_contains($m, 'highest credit')) {
+            return 'journal_voucher.highest_credit_movement';
+        }
+        if (str_contains($m, 'expense') && str_contains($m, 'highest')) {
+            return 'journal_voucher.highest_expense_this_month';
+        }
+        if ($this->containsAny($m, ['income account', 'revenue account']) && str_contains($m, 'highest')) {
+            return 'journal_voucher.highest_income_this_month';
+        }
+        if (str_contains($m, 'unbalanced') && $this->containsAny($m, ['jv', 'journal'])) {
+            return 'journal_voucher.unbalanced';
+        }
+        if (str_contains($m, 'auto-generated') && $this->containsAny($m, ['jv', 'journal'])) {
+            return 'journal_voucher.auto_generated_this_month';
+        }
+        if (str_contains($m, 'source module') && $this->containsAny($m, ['jv', 'journal'])) {
+            return 'journal_voucher.source_modules_most_jvs';
+        }
+        if (str_contains($m, 'abnormal movement')) {
+            return 'journal_voucher.abnormal_movement';
+        }
+        if ($this->containsAny($m, ['most expensive product', 'costliest product']) || (str_contains($m, 'product') && str_contains($m, 'most expensive'))) {
+            return 'product.most_expensive';
+        }
+        if ($this->containsAny($m, ['cheapest product', 'lowest priced product', 'lowest price product'])) {
+            return 'product.cheapest';
+        }
+        if (str_contains($m, 'highest purchase price')) {
+            return 'product.highest_purchase_price';
+        }
+        if (str_contains($m, 'highest selling price')) {
+            return 'product.highest_selling_price';
+        }
+        if (str_contains($m, 'product') && str_contains($m, 'without price')) {
+            return 'product.without_price';
+        }
+        if (str_contains($m, 'product') && $this->containsAny($m, ['without cost', 'without purchase cost'])) {
+            return 'product.without_cost';
+        }
+        if (str_contains($m, 'low stock')) {
+            return 'inventory.low_stock';
+        }
+        if (str_contains($m, 'negative stock')) {
+            return 'inventory.negative_stock';
+        }
+        if (str_contains($m, 'inventory value')) {
+            return 'inventory.value';
+        }
+        if (str_contains($m, 'warehouse') && str_contains($m, 'stock')) {
+            return 'inventory.warehouse_wise_stock';
+        }
+        if (str_contains($m, 'fast moving')) {
+            return 'inventory.fast_moving_products';
+        }
+        if (str_contains($m, 'highest receivable') || str_contains($m, 'customer has highest receivable')) {
+            return 'receivable.highest_customer_balance';
+        }
+        if (str_contains($m, 'total receivable')) {
+            return 'receivable.total';
+        }
+        if (str_contains($m, 'overdue receivable')) {
+            return 'receivable.overdue';
+        }
+        if (str_contains($m, 'unpaid invoice')) {
+            return str_contains($m, 'sales') ? 'sales.unpaid_invoices' : 'receivable.unpaid_invoices';
+        }
+        if (str_contains($m, 'partially paid invoice')) {
+            return 'receivable.partially_paid_invoices';
+        }
+        if (str_contains($m, 'highest payable') || str_contains($m, 'supplier has highest payable')) {
+            return 'payable.highest_supplier_balance';
+        }
+        if (str_contains($m, 'total payable')) {
+            return 'payable.total';
+        }
+        if (str_contains($m, 'overdue payable')) {
+            return 'payable.overdue';
+        }
+        if (str_contains($m, 'unpaid bill')) {
+            return 'payable.unpaid_bills';
+        }
+        if (str_contains($m, 'partially paid bill')) {
+            return 'payable.partially_paid_bills';
+        }
+        if ($this->containsAny($m, ['sales today', "today's sales"])) {
+            return 'sales.today';
+        }
+        if (str_contains($m, 'sales this month')) {
+            return 'sales.this_month';
+        }
+        if (str_contains($m, 'top customer') && str_contains($m, 'sales')) {
+            return 'sales.top_customer';
+        }
+        if (str_contains($m, 'top invoice')) {
+            return 'sales.top_invoice';
+        }
+        if (str_contains($m, 'draft invoice')) {
+            return 'sales.draft_invoices';
+        }
+        if (str_contains($m, 'approved invoice')) {
+            return 'sales.approved_invoices';
+        }
+        if (str_contains($m, 'sales by product')) {
+            return 'sales.by_product';
+        }
+        if (str_contains($m, 'sales by branch')) {
+            return 'sales.by_branch';
+        }
+        if (str_contains($m, 'sales by status')) {
+            return 'sales.by_status';
+        }
+        if ($this->containsAny($m, ['purchases today', "today's purchases", 'purchase today'])) {
+            return 'purchase.today';
+        }
+        if (str_contains($m, 'purchase this month') || str_contains($m, 'purchases this month')) {
+            return 'purchase.this_month';
+        }
+        if (str_contains($m, 'top supplier') && $this->containsAny($m, ['purchase', 'purchases'])) {
+            return 'purchase.top_supplier';
+        }
+        if (str_contains($m, 'top bill')) {
+            return 'purchase.top_bill';
+        }
+        if (str_contains($m, 'draft purchase bill')) {
+            return 'purchase.draft_bills';
+        }
+        if (str_contains($m, 'approved purchase bill')) {
+            return 'purchase.approved_bills';
+        }
+        if (str_contains($m, 'purchase by product')) {
+            return 'purchase.by_product';
+        }
+        if (str_contains($m, 'purchase by branch')) {
+            return 'purchase.by_branch';
+        }
+        if (str_contains($m, 'purchase by status')) {
+            return 'purchase.by_status';
+        }
+        if ($this->containsAny($m, ['find customer', 'find supplier', 'search contact', 'show contact'])) {
+            return 'contact.search';
+        }
 
         return null;
     }
 
     private function reportTool(string $m): ?string
     {
-        if (!$this->containsAny($m, ['report', 'trial balance', 'general ledger', 'income statement', 'profit and loss', 'balance sheet', 'cash flow', 'ageing', 'aging', 'vat summary', 'inventory position'])) {
+        if (! $this->containsAny($m, ['report', 'trial balance', 'general ledger', 'income statement', 'profit and loss', 'balance sheet', 'cash flow', 'ageing', 'aging', 'vat summary', 'inventory position'])) {
             return null;
         }
 
@@ -306,7 +414,7 @@ class AiToolRouter
             }
         }
 
-        if (!$this->containsAny($m, ['create ', 'make ', 'add ', 'prepare ', 'draft ', 'new '])) {
+        if (! $this->containsAny($m, ['create ', 'make ', 'add ', 'prepare ', 'draft ', 'new '])) {
             return null;
         }
 

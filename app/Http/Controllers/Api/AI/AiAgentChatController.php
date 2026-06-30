@@ -20,12 +20,15 @@ use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
-use App\Services\AI\Rag\AiRagRetriever;
-use App\Services\AI\Tools\AiToolRouter;
 use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Assistant\AiFinancialAnswerService;
+use App\Services\AI\Rag\AiGroundedAnswerService;
+use App\Services\AI\Rag\AiRagRetriever;
+use App\Services\AI\Rag\AiSourceSanitizer;
+use App\Services\AI\Tools\AiToolRouter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Throwable;
 
 class AiAgentChatController extends Controller
@@ -47,12 +50,14 @@ class AiAgentChatController extends Controller
         protected AiFinancialAnswerService $financialAnswers,
         protected AiRagRetriever $rag,
         protected AiAnswerComposer $answerComposer,
+        protected AiGroundedAnswerService $groundedAnswers,
+        protected AiSourceSanitizer $sourceSanitizer,
     ) {}
 
     public function chat(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->canChat($user)) {
+        if (! $this->permissions->canChat($user)) {
             return $this->denied('ai.chat');
         }
 
@@ -139,7 +144,16 @@ class AiAgentChatController extends Controller
             $reply = $this->toolRouter->explainToolResult($result);
             $this->logToolCall($conversation, $user, $toolClassification['tool'] ?? 'query', ['message' => $message], ['record_count' => count($result['records'] ?? [])], 'completed', $started);
 
-            return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
+            return $this->storeAndRespond(
+                $conversation,
+                $reply,
+                $toolClassification,
+                $contextType,
+                $branchScope,
+                [],
+                [$result],
+                $this->deterministicDisplay($result, $reply),
+            );
         }
 
         if (($toolClassification['type'] ?? null) === 'report') {
@@ -148,7 +162,26 @@ class AiAgentChatController extends Controller
             $reply = $this->toolRouter->explainToolResult($result);
             $this->logToolCall($conversation, $user, $toolClassification['tool'] ?? 'report', ['message' => $message], ['report_key' => $result['report_key'] ?? null], 'completed', $started);
 
-            return $this->storeAndRespond($conversation, $reply, $toolClassification, $contextType, $branchScope, [], [$result]);
+            $reportSources = empty($result['matched']) ? [] : [[
+                'key' => 'report-'.($result['report_key'] ?? 'result'),
+                'label' => $result['title'] ?? 'Report',
+                'type' => 'Report',
+                'module' => $result['category'] ?? 'Reports',
+                'route' => strtok((string) ($result['open_url'] ?? '/reports'), '?'),
+                'match_label' => 'Exact match',
+            ]];
+
+            return $this->storeAndRespond(
+                $conversation,
+                $reply,
+                $toolClassification,
+                $contextType,
+                $branchScope,
+                [],
+                [$result],
+                $this->deterministicDisplay($result, $reply),
+                $reportSources,
+            );
         }
 
         if (($toolClassification['type'] ?? null) === 'action') {
@@ -180,11 +213,13 @@ class AiAgentChatController extends Controller
 
         if (($intent['name'] ?? null) === 'search_records') {
             $result = $this->recordSearch->search($request, $intent['module'] ?? 'records', $message);
+
             return $this->storeAndRespond($conversation, 'Here are the matching records.', $intent, $contextType, $branchScope, [], array_filter([$result]));
         }
 
         if (($intent['name'] ?? null) === 'show_report') {
             $result = $this->reportResolver->resolve($request, $message);
+
             return $this->storeAndRespond($conversation, 'Here is the report I found.', $intent, $contextType, $branchScope, [], [$result]);
         }
 
@@ -195,25 +230,48 @@ class AiAgentChatController extends Controller
             return $this->storeAndRespond($conversation, $this->actionReply($action), $intent, $contextType, $branchScope, [$this->formatAction($action)], []);
         }
 
-        // RAG / semantic search over indexed record text (invoice notes, journal
-        // narrations). Deterministic tools always win first; this only runs when
-        // no tool matched and the message reads like a search.
+        // Every read-only ERP question gets hybrid retrieval unless a
+        // deterministic tool already supplied the complete answer.
         if ($this->shouldUseRag($message, $toolClassification, $intent)) {
-            $sources = $this->rag->retrieve($user, $message, [
+            $retrieval = $this->rag->retrieveWithContext($user, $message, [
                 'branch_id' => $branchScope['branch_id'] ?? $user?->branch_id,
+                'fiscal_year_id' => $branchScope['fiscal_year_id'] ?? null,
+                'context_payload' => $payload,
+                'embedding_model' => $this->settings->embeddingModel(),
             ]);
 
-            if (! empty($sources)) {
-                $reply = $this->answerComposer->composeFromSources($message, $sources);
-                $this->logToolCall($conversation, $user, 'rag.semantic_search', ['query' => $message], ['count' => count($sources)], 'completed');
+            if ($retrieval['understanding']['use_retrieval'] ?? false) {
+                $answer = $this->groundedAnswers->answer($message, $retrieval);
+                $reply = trim($answer['body'] ?: $answer['headline']);
+                $this->logToolCall($conversation, $user, 'rag.hybrid_retrieval', ['query' => $message], ['count' => count($retrieval['sources'])], 'completed');
                 $ragIntent = array_merge($intent, [
                     'type' => 'rag_query',
-                    'name' => 'semantic_search',
+                    'name' => $retrieval['understanding']['intent'],
                     'source' => 'rag',
                     'module' => $intent['module'] ?? 'records',
                 ]);
 
-                return $this->storeAndRespond($conversation, $reply, $ragIntent, $contextType, $branchScope, [], [], [], $sources);
+                $debug = $this->permissions->canViewDebug($user) ? [
+                    'provider' => $this->settings->provider(),
+                    'model' => $this->settings->model(),
+                    'embedding_model' => $this->settings->embeddingModel(),
+                    'query_plan' => $retrieval['understanding'],
+                    'retrieval_ms' => $retrieval['duration_ms'],
+                    'candidates' => $this->sourceSanitizer->debug($retrieval['candidates']),
+                ] : null;
+
+                return $this->storeAndRespond(
+                    $conversation,
+                    $reply,
+                    $ragIntent,
+                    $contextType,
+                    $branchScope,
+                    [],
+                    [],
+                    ['answer' => $answer, 'followups' => $answer['followups']],
+                    $retrieval['sources'],
+                    $debug,
+                );
             }
         }
 
@@ -243,7 +301,7 @@ class AiAgentChatController extends Controller
                 'provider' => $this->settings->provider(),
                 'model' => $this->settings->model(),
                 'status' => 'error',
-                'error_message' => $e->getErrorCode() . ': ' . $e->getMessage(),
+                'error_message' => $e->getErrorCode().': '.$e->getMessage(),
                 'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
             ]);
 
@@ -251,15 +309,16 @@ class AiAgentChatController extends Controller
                 'ok' => false,
                 'message' => $e->getMessage(),
                 'code' => $e->getErrorCode(),
-                'conversation_id' => $conversation->id,
+                'conversation_id' => $this->conversationToken($conversation),
             ], 422);
         } catch (Throwable $e) {
             report($e);
+
             return response()->json([
                 'ok' => false,
                 'message' => 'AI request failed unexpectedly. Please try again.',
                 'code' => 'AI_PROVIDER_ERROR',
-                'conversation_id' => $conversation->id,
+                'conversation_id' => $this->conversationToken($conversation),
             ], 500);
         }
 
@@ -279,10 +338,11 @@ class AiAgentChatController extends Controller
             'request_hash' => $cacheKey,
         ]);
 
-        $response = $this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, [], [], [
+        $debug = $this->permissions->canViewDebug($user) ? [
             'provider' => $providerResult['provider'] ?? null,
             'model' => $providerResult['model'] ?? null,
-        ]);
+        ] : null;
+        $response = $this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, [], [], [], [], [], $debug);
 
         AiMessage::create([
             'ai_conversation_id' => $conversation->id,
@@ -302,7 +362,7 @@ class AiAgentChatController extends Controller
         return response()->json($response);
     }
 
-    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = [], array $sources = []): JsonResponse
+    private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = [], array $sources = [], ?array $debug = null): JsonResponse
     {
         AiMessage::create([
             'ai_conversation_id' => $conversation->id,
@@ -311,50 +371,64 @@ class AiAgentChatController extends Controller
             'context' => ['type' => $contextType, 'intent' => $intent, 'actions' => count($actions), 'results' => count($results), 'sources' => count($sources), 'display' => $display],
         ]);
 
-        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results), [], $display, $sources));
+        return response()->json($this->responsePayload($conversation, $reply, $intent, $contextType, $branchScope, $actions, array_values($results), [], $display, $sources, $debug));
     }
 
-    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = [], array $display = [], array $sources = []): array
+    private function responsePayload(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $extra = [], array $display = [], array $sources = [], ?array $debug = null): array
     {
         $mode = 'chat';
-        if (!empty($actions)) {
+        if (! empty($actions)) {
             $mode = 'pending_action';
-        } elseif (!empty($sources)) {
-            $mode = 'rag';
-        } elseif (!empty($results)) {
+        } elseif (! empty($results)) {
             $mode = ($results[0]['type'] ?? null) === 'report' ? 'report' : 'tool_query';
+        } elseif (! empty($sources)) {
+            $mode = 'rag';
         }
 
-        return array_merge([
+        $answer = $display['answer'] ?? [
+            'headline' => $this->headline($reply),
+            'body' => $reply,
+            'bullets' => [],
+            'limitations' => [],
+            'confidence' => 'medium',
+            'confidence_label' => 'Medium confidence',
+        ];
+        $canDebug = $this->permissions->canViewDebug(request()->user());
+        $publicDisplay = $canDebug ? $display : $this->sanitizePublicData($display);
+
+        $payload = [
             'ok' => true,
             'mode' => $mode,
-            'conversation_id' => $conversation->id,
+            'conversation_id' => $this->conversationToken($conversation),
             'message' => ['role' => 'assistant', 'content' => $reply],
-            'tool' => !empty($results) || !empty($actions) ? [
-                'name' => $intent['tool'] ?? $intent['name'] ?? null,
-                'source' => $results[0]['source'] ?? (!empty($actions) ? 'action' : null),
-            ] : null,
-            'intent' => $intent,
-            'context' => ['type' => $contextType, 'packs' => [$contextType]],
+            'answer' => $canDebug ? $answer : $this->sanitizePublicData($answer),
             'actions' => $actions,
-            'results' => $results,
-            'sources' => $sources,
-            'display' => $display,
-            'answer_type' => $display['answer_type'] ?? null,
-            'cards' => $display['cards'] ?? [],
-            'tables' => $display['tables'] ?? [],
-            'warnings' => $display['warnings'] ?? [],
-            'source_note' => $display['source_note'] ?? null,
-            'followups' => $display['followups'] ?? [],
-            'branch_scope' => $branchScope,
+            'sources' => $canDebug ? $sources : $this->sanitizePublicData($sources),
+            'display' => $publicDisplay,
+            'answer_type' => $publicDisplay['answer_type'] ?? null,
+            'cards' => $publicDisplay['cards'] ?? [],
+            'tables' => $publicDisplay['tables'] ?? [],
+            'warnings' => $publicDisplay['warnings'] ?? [],
+            'source_note' => $publicDisplay['source_note'] ?? null,
+            'followups' => $publicDisplay['followups'] ?? [],
             'cached' => false,
-        ], $extra);
+            'debug' => $canDebug ? $debug : null,
+        ];
+
+        if ($canDebug) {
+            $payload['debug'] = array_merge($debug ?? [], ['conversation_id' => $conversation->id]);
+            $payload['intent'] = $intent;
+            $payload['context'] = ['type' => $contextType, 'packs' => [$contextType]];
+            $payload['results'] = $results;
+            $payload['branch_scope'] = $branchScope;
+        }
+
+        return array_merge($payload, $extra);
     }
 
     /**
-     * Whether to fall back to RAG semantic search. Deterministic tools always
-     * take priority; this only triggers when no tool matched and the message
-     * reads like a search/lookup over record text.
+     * Deterministic tools take priority. Remaining read-only questions retrieve
+     * first; greetings and clearly unrelated requests are classified downstream.
      */
     private function shouldUseRag(string $message, array $toolClassification, array $intent): bool
     {
@@ -370,15 +444,60 @@ class AiAgentChatController extends Controller
             return false;
         }
 
-        $m = mb_strtolower($message);
+        return trim($message) !== '';
+    }
 
-        foreach (['find', 'search', 'show me', 'related to', 'about ', 'mentioning', 'mention', 'referenc', 'notes', 'document', 'look up', 'lookup', 'similar', 'anything on'] as $needle) {
-            if (str_contains($m, $needle)) {
-                return true;
-            }
+    private function headline(string $reply): string
+    {
+        $line = trim(strtok($reply, "\n") ?: $reply);
+
+        return mb_strlen($line) > 140 ? mb_substr($line, 0, 137).'...' : $line;
+    }
+
+    private function deterministicDisplay(array $result, string $reply): array
+    {
+        return [
+            'answer' => [
+                'headline' => trim((string) ($result['title'] ?? 'KiteLedger result')),
+                'body' => $this->sourceSanitizer->sanitizeText($reply),
+                'bullets' => [],
+                'limitations' => [],
+                'confidence' => 'high',
+                'confidence_label' => 'Verified from your data',
+            ],
+        ];
+    }
+
+    private function sanitizePublicData(mixed $value, ?string $key = null): mixed
+    {
+        if ($key && (
+            $key === 'id' || str_ends_with($key, '_id') ||
+            in_array($key, ['provider', 'model', 'tool', 'source_public_id', 'embedding', 'vector', 'raw'], true)
+        )) {
+            return null;
         }
 
-        return false;
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $childKey => $childValue) {
+                $sanitized = $this->sanitizePublicData($childValue, is_string($childKey) ? $childKey : null);
+                if ($sanitized !== null) {
+                    $clean[$childKey] = $sanitized;
+                }
+            }
+
+            return $clean;
+        }
+
+        if (is_string($value)) {
+            if (in_array($key, ['route', 'open_url', 'url'], true) && $this->sourceSanitizer->containsUuid($value)) {
+                return null;
+            }
+
+            return $this->sourceSanitizer->sanitizeText($value);
+        }
+
+        return $value;
     }
 
     /**
@@ -461,7 +580,7 @@ class AiAgentChatController extends Controller
         if (! empty($options)) {
             $names = collect($options)->pluck('name')->filter()->take(6)->implode(', ');
 
-            return trim(($reason ? $reason . ' ' : '') . 'Which one should I use? ' . $names);
+            return trim(($reason ? $reason.' ' : '').'Which one should I use? '.$names);
         }
 
         return $reason ?: 'I need a little more detail before I can prepare this. What should I fill in?';
@@ -532,6 +651,7 @@ class AiAgentChatController extends Controller
     private function contextTypeForIntent(array $intent): string
     {
         $module = $intent['module'] ?? 'general';
+
         return match ($module) {
             'invoices', 'quotations', 'sales_orders', 'customer_payments', 'credit_notes' => 'sales',
             'purchase_orders', 'purchase_bills', 'supplier_payments', 'debit_notes', 'expenses' => 'purchase',
@@ -544,8 +664,11 @@ class AiAgentChatController extends Controller
     private function resolveConversation(?string $id, $user, ?string $module, ?string $branchId, ?string $firstMessage): AiConversation
     {
         if ($id) {
-            $existing = AiConversation::query()->where('id', $id)->where('user_id', $user->id)->first();
-            if ($existing) return $existing;
+            $internalId = $this->decodeConversationToken($id);
+            $existing = $internalId ? AiConversation::query()->where('id', $internalId)->where('user_id', $user->id)->first() : null;
+            if ($existing) {
+                return $existing;
+            }
         }
 
         return AiConversation::create([
@@ -555,6 +678,25 @@ class AiAgentChatController extends Controller
             'title' => $firstMessage ? mb_substr(trim(preg_replace('/\s+/', ' ', $firstMessage)), 0, 80) : null,
             'status' => 'active',
         ]);
+    }
+
+    protected function conversationToken(AiConversation $conversation): string
+    {
+        return 'conv_'.Crypt::encryptString((string) $conversation->id);
+    }
+
+    protected function decodeConversationToken(string $token): ?string
+    {
+        if (str_starts_with($token, 'conv_')) {
+            try {
+                return Crypt::decryptString(substr($token, 5));
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        // Backward compatibility for conversations opened before this upgrade.
+        return preg_match('/^[0-9a-f-]{36}$/i', $token) ? $token : null;
     }
 
     protected function denied(string $perm): JsonResponse

@@ -4,11 +4,14 @@ namespace App\Services\Reports;
 
 use App\Models\Branch;
 use App\Models\FiscalYear;
+use App\Services\BranchScopeService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class ReportFilterService
 {
+    public function __construct(private readonly BranchScopeService $branchScope) {}
+
     public function normalize(Request $request): array
     {
         $branchId = $request->query('branch_id');
@@ -21,7 +24,7 @@ class ReportFilterService
             ? min($today->toDateString(), $fiscalYear->end_date?->toDateString() ?? $today->toDateString())
             : $today->toDateString();
 
-        if (!$canViewAllBranches || $branchId === null || $branchId === '') {
+        if (! $canViewAllBranches || $branchId === null || $branchId === '') {
             $branchId = $currentBranchId;
         }
 
@@ -79,11 +82,11 @@ class ReportFilterService
     {
         $user = $request->user();
 
-        if (!empty($user?->current_branch_id)) {
+        if (! empty($user?->current_branch_id)) {
             return (string) $user->current_branch_id;
         }
 
-        if (!empty($user?->branch_id)) {
+        if (! empty($user?->branch_id)) {
             return (string) $user->branch_id;
         }
 
@@ -92,16 +95,6 @@ class ReportFilterService
 
     public function canViewAllBranches(Request $request): bool
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return false;
-        }
-
-        try {
-            return $user->can('branch.view_all');
-        } catch (\Throwable) {
-            return false;
-        }
+        return $this->branchScope->canViewAllBranches($request->user());
     }
 }

@@ -92,7 +92,7 @@ abstract class BaseReportService
 
     protected function applyBranchFilter(Builder $query, array $filters, ?string $column = 'branch_id'): Builder
     {
-        if (!$column || empty($filters['branch_id']) || $filters['branch_id'] === 'all') {
+        if (! $column || empty($filters['branch_id']) || $filters['branch_id'] === 'all') {
             return $query;
         }
 
@@ -101,9 +101,9 @@ abstract class BaseReportService
 
     protected function applyStatusApprovalFilters(Builder $query, array $filters): Builder
     {
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
-        } elseif (array_key_exists('include_draft', $filters) && !$filters['include_draft']) {
+        } elseif (array_key_exists('include_draft', $filters) && ! $filters['include_draft']) {
             $query->where(function (Builder $builder) {
                 $builder->where('status', '!=', 'draft')->orWhereNull('status');
             });
@@ -111,7 +111,7 @@ abstract class BaseReportService
 
         if ($filters['approved'] !== null && $filters['approved'] !== '') {
             $query->where('approved', filter_var($filters['approved'], FILTER_VALIDATE_BOOL));
-        } elseif ($query->getModel()->isFillable('approved')) {
+        } elseif (empty($filters['include_draft']) && $query->getModel()->isFillable('approved')) {
             $query->where(function (Builder $builder) {
                 $builder->where('approved', true)->orWhereNull('approved');
             });

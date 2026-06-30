@@ -13,17 +13,20 @@ use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\BranchScopeService;
 use App\Services\Reports\ReportRegistry;
 use App\Services\Reports\ReportSoftQueryService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ReportRegistryController extends Controller
 {
-    public function __construct(protected readonly ReportSoftQueryService $softQuery)
-    {
-    }
+    public function __construct(
+        protected readonly ReportSoftQueryService $softQuery,
+        protected readonly BranchScopeService $branchScope,
+    ) {}
 
     public function registry(Request $request): JsonResponse
     {
@@ -66,7 +69,7 @@ class ReportRegistryController extends Controller
 
         // Permission check on resolved report.
         $meta = ReportRegistry::resolve($result['category'], $result['report_key']);
-        if ($meta && !($user->can('reports.view') || $user->can($meta['permission']))) {
+        if ($meta && ! ($user->can('reports.view') || $user->can($meta['permission']))) {
             return response()->json([
                 'ok' => false,
                 'matched' => false,
@@ -112,13 +115,10 @@ class ReportRegistryController extends Controller
     protected function branches(Request $request, string $search, int $limit, $selectedId): array
     {
         $user = $request->user();
-        $canAll = false;
-        if ($user) {
-            try { $canAll = $user->can('branch.view_all'); } catch (\Throwable) {}
-        }
+        $canAll = $this->branchScope->canViewAllBranches($user);
 
         $query = Branch::query()->where('active', true);
-        if (!$canAll && $user) {
+        if (! $canAll && $user) {
             $branchId = $user->current_branch_id ?? $user->branch_id;
             if ($branchId) {
                 $query->where('id', $branchId);
@@ -146,6 +146,7 @@ class ReportRegistryController extends Controller
                 $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('code'), $selectedId, $limit, fn ($c) => [
             'id' => $c->id,
             'label' => "{$c->code} - {$c->name}",
@@ -166,6 +167,7 @@ class ReportRegistryController extends Controller
                     ->orWhere('pan', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($c) => [
             'id' => $c->id,
             'label' => $c->code ? "{$c->code} - {$c->name}" : $c->name,
@@ -185,6 +187,7 @@ class ReportRegistryController extends Controller
                     ->orWhere('barcode', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($p) => [
             'id' => $p->id,
             'label' => $p->code ? "{$p->code} - {$p->name}" : $p->name,
@@ -200,6 +203,7 @@ class ReportRegistryController extends Controller
         if ($search !== '') {
             $query->where('name', 'like', "%{$search}%");
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($c) => [
             'id' => $c->id,
             'label' => $c->name,
@@ -211,13 +215,10 @@ class ReportRegistryController extends Controller
     {
         $query = Warehouse::query()->where('active', true);
         $user = $request->user();
-        $canAll = false;
-        if ($user) {
-            try { $canAll = $user->can('branch.view_all'); } catch (\Throwable) {}
-        }
-        if (!$canAll && $user) {
+        $canAll = $this->branchScope->canViewAllBranches($user);
+        if (! $canAll && $user) {
             $branchId = $user->current_branch_id ?? $user->branch_id;
-            if ($branchId && \Illuminate\Support\Facades\Schema::hasColumn('warehouses', 'branch_id')) {
+            if ($branchId && Schema::hasColumn('warehouses', 'branch_id')) {
                 $query->where('branch_id', $branchId);
             }
         }
@@ -226,6 +227,7 @@ class ReportRegistryController extends Controller
                 $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($w) => [
             'id' => $w->id,
             'label' => $w->code ? "{$w->code} - {$w->name}" : $w->name,
@@ -242,6 +244,7 @@ class ReportRegistryController extends Controller
                 $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('code'), $selectedId, $limit, fn ($a) => [
             'id' => $a->id,
             'label' => $a->code ? "{$a->code} - {$a->name}" : $a->name,
@@ -257,6 +260,7 @@ class ReportRegistryController extends Controller
         if ($search !== '') {
             $query->where('name', 'like', "%{$search}%");
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($d) => [
             'id' => $d->id,
             'label' => $d->name,
@@ -272,6 +276,7 @@ class ReportRegistryController extends Controller
                 $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
             });
         }
+
         return $this->finalise($query->orderBy('name'), $selectedId, $limit, fn ($u) => [
             'id' => $u->id,
             'label' => $u->name,
@@ -288,10 +293,11 @@ class ReportRegistryController extends Controller
                     ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%"));
             });
         }
+
         return $this->finalise($query, $selectedId, $limit, fn ($e) => [
             'id' => $e->id,
             'label' => $e->employee_id
-                ? "{$e->employee_id} - " . ($e->user?->name ?? 'Unknown')
+                ? "{$e->employee_id} - ".($e->user?->name ?? 'Unknown')
                 : ($e->user?->name ?? (string) $e->id),
             'name' => $e->user?->name,
             'code' => $e->employee_id,
@@ -305,10 +311,12 @@ class ReportRegistryController extends Controller
     {
         $rows = (clone $query)->limit($limit)->get($columns);
 
-        if ($selectedId && !$rows->contains('id', $selectedId)) {
-            $extra = (clone $query)->newQuery()
-                ->getModel()
-                ->newQuery()
+        if ($selectedId && ! $rows->contains('id', $selectedId)) {
+            // Keep every branch/type/active constraint from the original
+            // query. Rebuilding from the model here previously allowed a
+            // selected UUID to bypass report-option scoping.
+            $extra = (clone $query)
+                ->reorder()
                 ->whereKey($selectedId)
                 ->first($columns);
             if ($extra) {

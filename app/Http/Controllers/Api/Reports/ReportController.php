@@ -36,8 +36,7 @@ class ReportController extends Controller
         protected readonly HrReportService $hr,
         protected readonly SystemReportService $system,
         protected readonly AnalyticsReportService $analytics,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request, string $category, string $report_key): JsonResponse
     {
@@ -49,6 +48,7 @@ class ReportController extends Controller
             $data = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
         } catch (\Throwable $e) {
             report($e);
+
             return response()->json([
                 'title' => $meta['title'] ?? 'Report',
                 'report_key' => $report_key,
@@ -70,10 +70,11 @@ class ReportController extends Controller
         $meta = ReportRegistry::resolve($category, $report_key);
         abort_unless($meta, 404);
         $this->authorizePermission($request, $meta['permission']);
-        $this->authorizePermission($request, 'reports.export');
+        $this->authorizeExport($request);
 
         try {
             $report = $this->serviceFor($category)->build($report_key, $this->filters->normalize($request), $meta);
+
             return $this->exportService->export($report, $request->query('format', 'csv'));
         } catch (\Throwable $e) {
             report($e);
@@ -86,6 +87,13 @@ class ReportController extends Controller
         $user = $request->user();
         abort_unless($user, 401);
         abort_unless($user->can('reports.view') || $user->can($permission), 403);
+    }
+
+    protected function authorizeExport(Request $request): void
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+        abort_unless($user->can('reports.export'), 403);
     }
 
     protected function serviceFor(string $category): mixed

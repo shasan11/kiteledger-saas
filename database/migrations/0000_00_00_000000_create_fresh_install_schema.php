@@ -93,6 +93,27 @@ return new class extends Migration
             $table->unique(['source_type', 'source_id'], 'ai_emb_source_unique');
         });
 
+        Schema::create('ai_knowledge_chunks', function (Blueprint $table): void {
+            $table->id();
+            $table->string('source_type', 80);
+            $table->string('source_id', 191);
+            $table->string('module', 100)->nullable();
+            $table->string('title', 255);
+            $table->longText('content');
+            $table->string('route', 500)->nullable();
+            $table->string('permission', 160)->nullable();
+            $table->json('keywords')->nullable();
+            $table->json('metadata')->nullable();
+            $table->string('branch_id', 64)->nullable();
+            $table->string('fiscal_year_id', 64)->nullable();
+            $table->char('content_hash', 64);
+            $table->timestamps();
+            $table->unique(['source_type', 'source_id'], 'ai_knowledge_source_unique');
+            $table->index(['source_type', 'module'], 'ai_knowledge_type_module_idx');
+            $table->index(['branch_id', 'fiscal_year_id'], 'ai_knowledge_scope_idx');
+            $table->index(['updated_at'], 'ai_knowledge_updated_idx');
+        });
+
         Schema::create('ai_messages', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('ai_conversation_id')->nullable();
@@ -5862,6 +5883,7 @@ return new class extends Migration
         Schema::dropIfExists('ai_usage_logs');
         Schema::dropIfExists('ai_pending_actions');
         Schema::dropIfExists('ai_messages');
+        Schema::dropIfExists('ai_knowledge_chunks');
         Schema::dropIfExists('ai_embeddings');
         Schema::dropIfExists('ai_conversations');
         Schema::dropIfExists('activity_logs');

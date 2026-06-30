@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -172,7 +172,7 @@ export default function ReportPage() {
   const reportKey = pageReportKey;
 
   const canView = permissions.includes('reports.view') || (permission && permissions.includes(permission));
-  const canExport = permissions.includes('reports.export') || permissions.includes('reports.view');
+  const canExport = permissions.includes('reports.export');
   const defaultBranchId = branchContext.selectedBranchId || page.props.auth?.currentBranchId;
 
   const baseDefaults = useMemo(() => ({

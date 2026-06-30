@@ -2,42 +2,90 @@
 
 namespace App\Providers;
 
+use App\Models\BankAccount;
+use App\Models\Branch;
+use App\Models\CashTransfer;
+use App\Models\CashTransferLine;
+use App\Models\ChartOfAccount;
+use App\Models\ChequeRegister;
+use App\Models\Contact;
+use App\Models\Currency;
+use App\Models\CustomerPayment;
+use App\Models\Deal;
+use App\Models\DebitNote;
 use App\Models\DocumentUpload;
+use App\Models\Expense;
+use App\Models\InventoryAdjustment;
+use App\Models\Invoice;
+use App\Models\JournalVoucher;
+use App\Models\JournalVoucherLine;
+use App\Models\Lead;
+use App\Models\LoanAccount;
+use App\Models\LoanCharge;
+use App\Models\LoanTopUp;
+use App\Models\PosCashMovement;
+use App\Models\PosReturn;
+use App\Models\PosSale;
+use App\Models\PosShift;
+use App\Models\Product;
+use App\Models\ProductionJournal;
+use App\Models\ProductionOrder;
+use App\Models\ProformaInvoice;
+use App\Models\PurchaseBill;
+use App\Models\PurchaseOrder;
+use App\Models\Quotation;
+use App\Models\SalesOrder;
+use App\Models\SalesReturn;
+use App\Models\SupplierPayment;
+use App\Models\SupplierPaymentLine;
+use App\Models\WarehouseTransfer;
+use App\Observers\AssignsDefaultBranchObserver;
+use App\Observers\BankAccountObserver;
+use App\Observers\BranchObserver;
+use App\Observers\CashTransferLineObserver;
+use App\Observers\CashTransferObserver;
+use App\Observers\ChartOfAccountObserver;
+use App\Observers\ChequeRegisterObserver;
+use App\Observers\ContactObserver;
+use App\Observers\CurrencyObserver;
+use App\Observers\CustomerPaymentObserver;
+use App\Observers\DealObserver;
+use App\Observers\DebitNoteObserver;
+use App\Observers\ExpenseObserver;
+use App\Observers\InventoryAdjustmentObserver;
+use App\Observers\InvoiceObserver;
+use App\Observers\JournalVoucherLineObserver;
+use App\Observers\JournalVoucherObserver;
+use App\Observers\LeadObserver;
+use App\Observers\LoanAccountObserver;
+use App\Observers\LoanChargeObserver;
+use App\Observers\LoanTopUpObserver;
+use App\Observers\PosCashMovementObserver;
+use App\Observers\PosReturnObserver;
+use App\Observers\PosSaleObserver;
+use App\Observers\PosShiftObserver;
+use App\Observers\ProductionJournalObserver;
+use App\Observers\ProductionOrderObserver;
+use App\Observers\ProductObserver;
+use App\Observers\ProformaInvoiceObserver;
+use App\Observers\PurchaseBillObserver;
+use App\Observers\PurchaseOrderObserver;
+use App\Observers\QuotationObserver;
+use App\Observers\SalesOrderObserver;
+use App\Observers\SalesReturnObserver;
+use App\Observers\SubsequentJournalVoucherObserver;
+use App\Observers\SupplierPaymentLineObserver;
+use App\Observers\SupplierPaymentObserver;
 use App\Policies\DocumentUploadPolicy;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\View;
+use App\Services\SmsService;
 use App\Support\Branding;
-
-use App\Models\{
-    Branch, ChartOfAccount, BankAccount, CashTransfer, CashTransferLine, Currency,
-    JournalVoucher, JournalVoucherLine, ChequeRegister,
-    LoanAccount, LoanTopUp, LoanCharge,
-    Invoice, CustomerPayment, PurchaseBill, SupplierPayment, SupplierPaymentLine,
-    Expense, SalesReturn, DebitNote, InventoryAdjustment,
-    Quotation, SalesOrder, PurchaseOrder, ProformaInvoice,
-    Contact, Product, Lead, Deal,
-    PosCashMovement, PosReturn, PosSale, PosShift,
-    ProductionOrder, ProductionJournal, WarehouseTransfer
-};
-
-use App\Observers\{
-    BranchObserver, ChartOfAccountObserver, BankAccountObserver, CurrencyObserver,
-    CashTransferObserver, CashTransferLineObserver,
-    JournalVoucherObserver, JournalVoucherLineObserver,
-    ChequeRegisterObserver,
-    LoanAccountObserver, LoanTopUpObserver, LoanChargeObserver,
-    InvoiceObserver, CustomerPaymentObserver,
-    PurchaseBillObserver, SupplierPaymentObserver, SupplierPaymentLineObserver,
-    ExpenseObserver, SalesReturnObserver, DebitNoteObserver,
-    InventoryAdjustmentObserver, QuotationObserver,
-    SalesOrderObserver, PurchaseOrderObserver, ProformaInvoiceObserver,
-    ContactObserver, ProductObserver, LeadObserver, DealObserver,
-    PosCashMovementObserver, PosReturnObserver, PosSaleObserver, PosShiftObserver,
-    SubsequentJournalVoucherObserver,
-    ProductionOrderObserver, ProductionJournalObserver,
-    AssignsDefaultBranchObserver
-};
+use App\Support\Installer\FroidenDatabaseManager;
+use App\Support\Installer\FroidenInstalledFileManager;
+use Froiden\LaravelInstaller\Helpers\DatabaseManager;
+use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -46,16 +94,16 @@ class AppServiceProvider extends ServiceProvider
         $this->ensureWritableStorage();
 
         $this->app->bind(
-            \Froiden\LaravelInstaller\Helpers\InstalledFileManager::class,
-            \App\Support\Installer\FroidenInstalledFileManager::class,
+            InstalledFileManager::class,
+            FroidenInstalledFileManager::class,
         );
         $this->app->bind(
-            \Froiden\LaravelInstaller\Helpers\DatabaseManager::class,
-            \App\Support\Installer\FroidenDatabaseManager::class,
+            DatabaseManager::class,
+            FroidenDatabaseManager::class,
         );
 
-        $this->app->singleton(\App\Services\SmsService::class);
-        $this->app->alias(\App\Services\SmsService::class, 'sms');
+        $this->app->singleton(SmsService::class);
+        $this->app->alias(SmsService::class, 'sms');
     }
 
     /**
@@ -142,11 +190,11 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::before(function ($user, string $ability) {
-            if (!empty($user->is_super_admin)) {
+            if (! empty($user->is_super_admin)) {
                 return true;
             }
 
-            if (!method_exists($user, 'hasAnyRole')) {
+            if (! method_exists($user, 'hasAnyRole')) {
                 return null;
             }
 

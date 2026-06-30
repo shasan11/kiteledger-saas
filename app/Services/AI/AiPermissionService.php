@@ -20,6 +20,7 @@ class AiPermissionService
         'ai.conversations.manage',
         'ai.settings.view',
         'ai.settings.update',
+        'ai.debug.view',
         'ai.admin_settings',
         'ai.actions.view',
         'ai.actions.propose',
@@ -34,8 +35,12 @@ class AiPermissionService
 
     public function canBypass(?User $user): bool
     {
-        if (!$user) return false;
-        if (!empty($user->is_super_admin)) return true;
+        if (! $user) {
+            return false;
+        }
+        if (! empty($user->is_super_admin)) {
+            return true;
+        }
 
         try {
             if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole([
@@ -44,25 +49,38 @@ class AiPermissionService
             ])) {
                 return true;
             }
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
 
         return $this->hasDirect($user, 'ai.manage');
     }
 
     public function has(?User $user, string $permission): bool
     {
-        if (!$user) return false;
-        if ($this->canBypass($user)) return true;
+        if (! $user) {
+            return false;
+        }
+        if ($this->canBypass($user)) {
+            return true;
+        }
+
         return $this->hasDirect($user, $permission);
     }
 
     public function hasAny(?User $user, array $permissions): bool
     {
-        if (!$user) return false;
-        if ($this->canBypass($user)) return true;
-        foreach ($permissions as $p) {
-            if ($this->hasDirect($user, $p)) return true;
+        if (! $user) {
+            return false;
         }
+        if ($this->canBypass($user)) {
+            return true;
+        }
+        foreach ($permissions as $p) {
+            if ($this->hasDirect($user, $p)) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -100,8 +118,13 @@ class AiPermissionService
      */
     public function canManageData(?User $user): bool
     {
-        if (!$user) return false;
-        if ($this->canBypass($user)) return true;
+        if (! $user) {
+            return false;
+        }
+        if ($this->canBypass($user)) {
+            return true;
+        }
+
         return $this->hasDirect($user, 'ai.conversations.manage')
             || $this->hasDirect($user, 'ai.actions.manage');
     }
@@ -109,6 +132,11 @@ class AiPermissionService
     public function canViewSettings(?User $user): bool
     {
         return $this->hasAny($user, ['ai.settings.view', 'ai.manage']);
+    }
+
+    public function canViewDebug(?User $user): bool
+    {
+        return $this->hasAny($user, ['ai.debug.view', 'ai.manage']);
     }
 
     public function canSummarizeReports(?User $user): bool
@@ -123,7 +151,7 @@ class AiPermissionService
 
     public function authorize(?User $user, string $permission): void
     {
-        if (!$this->has($user, $permission)) {
+        if (! $this->has($user, $permission)) {
             throw new HttpException(403, json_encode([
                 'message' => 'You do not have permission to use AI report summaries.',
                 'code' => 'AI_PERMISSION_DENIED',
@@ -134,7 +162,7 @@ class AiPermissionService
 
     public function authorizeAny(?User $user, array $permissions, string $required = 'ai.use'): void
     {
-        if (!$this->hasAny($user, $permissions)) {
+        if (! $this->hasAny($user, $permissions)) {
             throw new HttpException(403, json_encode([
                 'message' => 'You do not have permission to use AI report summaries.',
                 'code' => 'AI_PERMISSION_DENIED',
@@ -149,6 +177,7 @@ class AiPermissionService
         foreach (self::ALL as $permission) {
             $out[$permission] = $this->has($user, $permission);
         }
+
         return $out;
     }
 
@@ -158,7 +187,9 @@ class AiPermissionService
             if (method_exists($user, 'hasPermissionTo')) {
                 return $user->hasPermissionTo($permission);
             }
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
+
         return false;
     }
 }

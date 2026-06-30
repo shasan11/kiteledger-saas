@@ -6,6 +6,7 @@ use App\Http\Resources\AiConversationResource;
 use App\Http\Resources\AiMessageResource;
 use App\Models\AiConversation;
 use App\Services\AI\AiPromptBuilder;
+use App\Services\AI\AiProviderException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -25,7 +26,7 @@ class AiAssistantController extends AiAgentChatController
         // Full ERP agent by default (RAG, deterministic tools, action proposals).
         // Deployments can still pin the assistant to report-only Q&A via the
         // `ai_assistant_mode` setting without losing any of the wiring below.
-        if ($this->settings->reportsOnly() && !$this->isReportRequest($data['message'], $data['context_payload'] ?? [])) {
+        if ($this->settings->reportsOnly() && ! $this->isReportRequest($data['message'], $data['context_payload'] ?? [])) {
             return response()->json([
                 'ok' => false,
                 'code' => 'AI_REPORTS_ONLY',
@@ -39,7 +40,7 @@ class AiAssistantController extends AiAgentChatController
     public function health(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->canUseAi($user)) {
+        if (! $this->permissions->canUseAi($user)) {
             return $this->denied('ai.use');
         }
 
@@ -72,12 +73,12 @@ class AiAssistantController extends AiAgentChatController
     public function conversations(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->hasAny($user, ['ai.conversations.view', 'ai.use', 'ai.manage'])) {
+        if (! $this->permissions->hasAny($user, ['ai.conversations.view', 'ai.use', 'ai.manage'])) {
             return $this->denied('ai.conversations.view');
         }
 
         $query = AiConversation::query()->orderByDesc('updated_at')->limit(50);
-        if (!$this->permissions->canManageData($user)) {
+        if (! $this->permissions->canManageData($user)) {
             $query->where('user_id', $user->id);
         }
 
@@ -89,10 +90,14 @@ class AiAssistantController extends AiAgentChatController
     public function showConversation(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        $conversation = AiConversation::query()->where('id', $id)->first();
-        if (!$conversation) abort(404);
+        $conversation = ($internalId = $this->decodeConversationToken($id))
+            ? AiConversation::query()->where('id', $internalId)->first()
+            : null;
+        if (! $conversation) {
+            abort(404);
+        }
 
-        if ($conversation->user_id !== $user->id && !$this->permissions->canManageData($user)) {
+        if ($conversation->user_id !== $user->id && ! $this->permissions->canManageData($user)) {
             return $this->denied('ai.conversations.view');
         }
 
@@ -105,11 +110,15 @@ class AiAssistantController extends AiAgentChatController
     public function deleteConversation(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        $conversation = AiConversation::query()->where('id', $id)->first();
-        if (!$conversation) abort(404);
+        $conversation = ($internalId = $this->decodeConversationToken($id))
+            ? AiConversation::query()->where('id', $internalId)->first()
+            : null;
+        if (! $conversation) {
+            abort(404);
+        }
 
         $isOwner = $conversation->user_id === $user->id;
-        if (!$this->permissions->canManageData($user) && (!$isOwner || !$this->permissions->has($user, 'ai.conversations.delete'))) {
+        if (! $this->permissions->canManageData($user) && (! $isOwner || ! $this->permissions->has($user, 'ai.conversations.delete'))) {
             return $this->denied('ai.conversations.delete');
         }
 
@@ -122,7 +131,7 @@ class AiAssistantController extends AiAgentChatController
     public function reportSummary(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->canSummarizeReports($user)) {
+        if (! $this->permissions->canSummarizeReports($user)) {
             return $this->denied('ai.report_summary');
         }
 
@@ -136,7 +145,7 @@ class AiAssistantController extends AiAgentChatController
 
         $branch = $this->contextBuilder->branchScope($request, $user);
         $reportContext = [
-            'title' => $data['title'] ?? ($data['category'] . ' / ' . $data['report_key']),
+            'title' => $data['title'] ?? ($data['category'].' / '.$data['report_key']),
             'category' => $data['category'],
             'report_key' => $data['report_key'],
             'filters' => $data['filters'] ?? [],
@@ -149,7 +158,7 @@ class AiAssistantController extends AiAgentChatController
 
         try {
             $result = $this->provider->chat($messages);
-        } catch (\App\Services\AI\AiProviderException $e) {
+        } catch (AiProviderException $e) {
             return response()->json($e->toArray() + ['ok' => false], 422);
         }
 
@@ -169,7 +178,7 @@ class AiAssistantController extends AiAgentChatController
     public function businessInsight(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->canBusinessInsight($user)) {
+        if (! $this->permissions->canBusinessInsight($user)) {
             return $this->denied('ai.business_insight');
         }
 
@@ -197,12 +206,12 @@ class AiAssistantController extends AiAgentChatController
         $messages = [
             ['role' => 'system', 'content' => AiPromptBuilder::SYSTEM_PROMPT],
             ['role' => 'system', 'content' => 'Return business insights as concise JSON with keys: summary, key_numbers, risks, actions. JSON only.'],
-            ['role' => 'user', 'content' => "Business snapshot:\n" . $this->prompts->compressContext($snapshot, $this->settings->contextMaxChars())],
+            ['role' => 'user', 'content' => "Business snapshot:\n".$this->prompts->compressContext($snapshot, $this->settings->contextMaxChars())],
         ];
 
         try {
             $result = $this->provider->chat($messages);
-        } catch (\App\Services\AI\AiProviderException $e) {
+        } catch (AiProviderException $e) {
             return response()->json($e->toArray() + ['ok' => false], 422);
         }
 
@@ -220,7 +229,9 @@ class AiAssistantController extends AiAgentChatController
 
     private function compressReportData(array $reportData): array
     {
-        if (empty($reportData)) return [];
+        if (empty($reportData)) {
+            return [];
+        }
 
         foreach (['rows', 'data', 'items'] as $key) {
             if (isset($reportData[$key]) && is_array($reportData[$key])) {
@@ -239,6 +250,7 @@ class AiAssistantController extends AiAgentChatController
         $text = preg_replace('/^```(?:json)?\s*/i', '', $text);
         $text = preg_replace('/\s*```$/', '', $text);
         $decoded = json_decode($text, true);
+
         return is_array($decoded) ? $decoded : null;
     }
 

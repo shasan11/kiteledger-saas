@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Models\CustomerPayment;
 use App\Models\CustomerPaymentLine;
 use App\Models\Invoice;
 use App\Models\SalesReturn;
@@ -27,29 +28,35 @@ class ReceivableReportService extends BaseReportService
         $this->applyBranchFilter($query, $filters);
         $this->applyStatusApprovalFilters($query, $filters);
 
-        if (!empty($filters['customer_id'])) {
+        if (! empty($filters['customer_id'])) {
             $query->where('contact_id', $filters['customer_id']);
         }
 
         return $query;
     }
 
-    protected function paymentsByInvoice(array $invoiceIds): array
+    protected function paymentsByInvoice(array $invoiceIds, array $filters, string $asOf): array
     {
         return CustomerPaymentLine::query()
-            ->select('invoice_id', DB::raw('SUM(allocated_amount) as paid_total'))
-            ->whereIn('invoice_id', $invoiceIds)
-            ->groupBy('invoice_id')
+            ->join('customer_payments', 'customer_payments.id', '=', 'customer_payment_lines.customer_payment_id')
+            ->select('customer_payment_lines.invoice_id', DB::raw('SUM(customer_payment_lines.allocated_amount) as paid_total'))
+            ->whereIn('customer_payment_lines.invoice_id', $invoiceIds)
+            ->whereDate('customer_payments.payment_date', '<=', $asOf)
+            ->where(fn ($query) => $query->where('customer_payments.void', false)->orWhereNull('customer_payments.void'))
+            ->when(empty($filters['include_draft']), fn ($query) => $query->where('customer_payments.approved', true)->where('customer_payments.status', '!=', 'draft'))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('customer_payments.branch_id', $filters['branch_id']))
+            ->groupBy('customer_payment_lines.invoice_id')
             ->pluck('paid_total', 'invoice_id')
             ->map(fn ($value) => $this->toFloat($value))
             ->all();
     }
 
-    protected function returnsByCustomer(array $contactIds, array $filters): array
+    protected function returnsByCustomer(array $contactIds, array $filters, string $asOf): array
     {
         $query = SalesReturn::query()
             ->select('contact_id', DB::raw('SUM(total) as total'))
             ->whereIn('contact_id', $contactIds)
+            ->whereDate('sales_return_date', '<=', $asOf)
             ->groupBy('contact_id');
 
         $this->applyBranchFilter($query, $filters);
@@ -66,13 +73,13 @@ class ReceivableReportService extends BaseReportService
             ->whereDate('invoice_date', '<=', $filters['as_of_date'])
             ->get();
 
-        $payments = $this->paymentsByInvoice($invoices->pluck('id')->all());
-        $returns = $this->returnsByCustomer($invoices->pluck('contact_id')->unique()->all(), $filters);
+        $payments = $this->paymentsByInvoice($invoices->pluck('id')->all(), $filters, $filters['as_of_date']);
+        $returns = $this->returnsByCustomer($invoices->pluck('contact_id')->unique()->all(), $filters, $filters['as_of_date']);
 
         $rows = $invoices->groupBy('contact_id')->map(function ($group) use ($payments, $returns) {
             $contact = $group->first()->contact;
             $invoiceTotal = $this->toFloat($group->sum('total'));
-            $paidTotal = $this->toFloat($group->sum(fn ($invoice) => $payments[$invoice->id] ?? $invoice->paid_total ?? 0));
+            $paidTotal = $this->toFloat($group->sum(fn ($invoice) => $payments[$invoice->id] ?? 0));
             $creditTotal = $this->toFloat($returns[$group->first()->contact_id] ?? 0);
 
             return [
@@ -143,11 +150,11 @@ class ReceivableReportService extends BaseReportService
             ->whereDate('invoice_date', '<=', $filters['ageing_as_of_date'])
             ->get();
 
-        $payments = $this->paymentsByInvoice($invoices->pluck('id')->all());
+        $payments = $this->paymentsByInvoice($invoices->pluck('id')->all(), $filters, $filters['ageing_as_of_date']);
         $asOf = Carbon::parse($filters['ageing_as_of_date']);
 
         $rows = $invoices->map(function ($invoice) use ($payments, $asOf) {
-            $paidTotal = $this->toFloat($payments[$invoice->id] ?? $invoice->paid_total ?? 0);
+            $paidTotal = $this->toFloat($payments[$invoice->id] ?? 0);
             $balanceDue = round($this->toFloat($invoice->total) - $paidTotal, 2);
             $dueDate = Carbon::parse($invoice->due_date ?: $invoice->invoice_date);
             $ageDays = $dueDate->diffInDays($asOf, false);
@@ -184,7 +191,11 @@ class ReceivableReportService extends BaseReportService
         $customerId = $filters['customer_id'] ?: $filters['contact_id'];
         $invoiceQuery = $this->invoiceBase([...$filters, 'customer_id' => $customerId]);
         $invoices = $invoiceQuery->whereDate('invoice_date', '<', $filters['date_from'])->get();
-        $opening = round($this->toFloat($invoices->sum('total')) - $this->toFloat($invoices->sum('paid_total')), 2);
+        $openingPayments = $this->customerPaymentBase($filters, $customerId)
+            ->whereDate('payment_date', '<', $filters['date_from'])->sum('amount');
+        $openingReturns = $this->salesReturnBase($filters, $customerId)
+            ->whereDate('sales_return_date', '<', $filters['date_from'])->sum('total');
+        $opening = round($this->toFloat($invoices->sum('total')) - $this->toFloat($openingPayments) - $this->toFloat($openingReturns), 2);
 
         $statementRows = [];
         $running = $opening;
@@ -194,7 +205,6 @@ class ReceivableReportService extends BaseReportService
             ->get();
 
         foreach ($periodInvoices as $invoice) {
-            $running += $this->toFloat($invoice->total);
             $statementRows[] = [
                 'date' => $invoice->invoice_date?->format('Y-m-d'),
                 'document_type' => 'Invoice',
@@ -202,9 +212,32 @@ class ReceivableReportService extends BaseReportService
                 'reference' => $invoice->reference,
                 'debit' => $this->toFloat($invoice->total),
                 'credit' => 0,
-                'balance' => round($running, 2),
+                'amount' => $this->toFloat($invoice->total),
             ];
         }
+
+        foreach ($this->customerPaymentBase($filters, $customerId)->whereBetween('payment_date', [$filters['date_from'], $filters['date_to']])->get() as $payment) {
+            $statementRows[] = [
+                'date' => $payment->payment_date?->format('Y-m-d'), 'document_type' => 'Customer Payment',
+                'document_no' => $payment->payment_no, 'reference' => $payment->reference,
+                'debit' => 0, 'credit' => $this->toFloat($payment->amount), 'amount' => -$this->toFloat($payment->amount),
+            ];
+        }
+        foreach ($this->salesReturnBase($filters, $customerId)->whereBetween('sales_return_date', [$filters['date_from'], $filters['date_to']])->get() as $return) {
+            $statementRows[] = [
+                'date' => $return->sales_return_date?->format('Y-m-d'), 'document_type' => 'Sales Return',
+                'document_no' => $return->sales_return_no, 'reference' => $return->reference,
+                'debit' => 0, 'credit' => $this->toFloat($return->total), 'amount' => -$this->toFloat($return->total),
+            ];
+        }
+
+        $statementRows = collect($statementRows)->sortBy('date')->values()->map(function (array $row) use (&$running): array {
+            $running += (float) $row['amount'];
+            unset($row['amount']);
+            $row['balance'] = round($running, 2);
+
+            return $row;
+        })->all();
 
         return $this->response($meta['title'], $meta['category_label'], $reportKey, $filters, [
             ['title' => 'Date', 'key' => 'date'],
@@ -223,5 +256,23 @@ class ReceivableReportService extends BaseReportService
             'credit' => null,
             'balance' => $opening,
         ]], $statementRows));
+    }
+
+    private function customerPaymentBase(array $filters, ?string $customerId)
+    {
+        $query = CustomerPayment::query()->where('contact_id', $customerId);
+        $this->applyBranchFilter($query, $filters);
+        $this->applyStatusApprovalFilters($query, $filters);
+
+        return $query;
+    }
+
+    private function salesReturnBase(array $filters, ?string $customerId)
+    {
+        $query = SalesReturn::query()->where('contact_id', $customerId);
+        $this->applyBranchFilter($query, $filters);
+        $this->applyStatusApprovalFilters($query, $filters);
+
+        return $query;
     }
 }

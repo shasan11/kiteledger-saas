@@ -10,17 +10,17 @@ class Branding
 {
     public static function logoUrl(?string $uploaded = null): string
     {
-        return self::brandUrl('logo', $uploaded, ['branding/logo.svg', 'branding/logo.png']);
+        return self::brandUrl('logo', $uploaded, ['branding/light_logo.png']);
     }
 
     public static function darkLogoUrl(?string $uploaded = null): string
     {
-        return self::brandUrl('dark_logo', $uploaded, ['branding/dark_logo.svg', 'branding/dark_logo.png']);
+        return self::brandUrl('dark_logo', $uploaded, ['branding/dark_logo.png']);
     }
 
     public static function faviconUrl(?string $uploaded = null): string
     {
-        return self::brandUrl('favicon', $uploaded, ['branding/favicon.svg', 'branding/favicon.png', 'favicon.ico']);
+        return self::brandUrl('favicon', $uploaded, ['branding/favicon.png', 'favicon.ico']);
     }
 
     private static function brandUrl(string $field, ?string $uploaded, array $defaults): string

@@ -32,10 +32,11 @@ class HrReportService extends BaseReportService
     {
         return EmployeeProfile::query()
             ->with(['user', 'branch', 'department', 'designation', 'employmentStatus', 'shift', 'leavePolicy'])
-            ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('branch_id', $filters['branch_id']))
-            ->when(!empty($filters['department_id']), fn ($query) => $query->where('department_id', $filters['department_id']))
-            ->when(!empty($filters['designation_id']), fn ($query) => $query->where('designation_id', $filters['designation_id']))
-            ->when(!empty($filters['employment_status_id']), fn ($query) => $query->where('employment_status_id', $filters['employment_status_id']))
+            ->when(! empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('branch_id', $filters['branch_id']))
+            ->when(! empty($filters['department_id']), fn ($query) => $query->where('department_id', $filters['department_id']))
+            ->when(! empty($filters['designation_id']), fn ($query) => $query->where('designation_id', $filters['designation_id']))
+            ->when(! empty($filters['employment_status_id']), fn ($query) => $query->where('employment_status_id', $filters['employment_status_id']))
+            ->when(! empty($filters['employee_id']), fn ($query) => $query->whereKey($filters['employee_id']))
             ->when($filters['active'] !== null && $filters['active'] !== '', fn ($query) => $query->where('active', filter_var($filters['active'], FILTER_VALIDATE_BOOL)));
     }
 
@@ -73,13 +74,13 @@ class HrReportService extends BaseReportService
     protected function attendanceSummary(string $reportKey, array $filters, array $meta): array
     {
         $attendances = Attendance::query()->with(['user.department', 'user.branch'])
-            ->whereBetween('in_time', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
-            ->when(!empty($filters['branch_id']) && $filters['branch_id'] !== 'all', fn ($query) => $query->where('branch_id', $filters['branch_id']))
-            ->when(!empty($filters['user_id']), fn ($query) => $query->where('user_id', $filters['user_id']))
+            ->whereBetween('in_time', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
+            ->whereIn('user_id', $this->employeeUserIds($filters))
             ->get();
 
         $rows = $attendances->groupBy('user_id')->map(function ($items) {
             $user = $items->first()->user;
+
             return [
                 'employee' => $user?->display_name ?: $user?->name,
                 'department' => $user?->department?->name,
@@ -107,7 +108,8 @@ class HrReportService extends BaseReportService
     protected function attendanceDetail(string $reportKey, array $filters, array $meta): array
     {
         $rows = Attendance::query()->with('user')
-            ->whereBetween('in_time', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
+            ->whereBetween('in_time', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
+            ->whereIn('user_id', $this->employeeUserIds($filters))
             ->get()->map(fn ($attendance) => [
                 'date' => $attendance->in_time?->format('Y-m-d'),
                 'employee' => $attendance->user?->display_name ?: $attendance->user?->name,
@@ -136,7 +138,8 @@ class HrReportService extends BaseReportService
     protected function lateAttendance(string $reportKey, array $filters, array $meta): array
     {
         $rows = Attendance::query()->with(['user.department', 'user.branch'])->where('in_time_status', 'late')
-            ->whereBetween('in_time', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
+            ->whereBetween('in_time', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
+            ->whereIn('user_id', $this->employeeUserIds($filters))
             ->get()->map(fn ($attendance) => [
                 'date' => $attendance->in_time?->format('Y-m-d'),
                 'employee' => $attendance->user?->display_name ?: $attendance->user?->name,
@@ -162,19 +165,21 @@ class HrReportService extends BaseReportService
     {
         $profiles = $this->employeeProfiles($filters)->get();
         $attendanceUserIds = Attendance::query()
-            ->whereBetween('in_time', [$filters['date_from'] . ' 00:00:00', $filters['date_to'] . ' 23:59:59'])
+            ->whereBetween('in_time', [$filters['date_from'].' 00:00:00', $filters['date_to'].' 23:59:59'])
+            ->whereIn('user_id', $profiles->pluck('user_id'))
             ->pluck('user_id')
             ->unique();
         $leaveUsers = LeaveApplication::query()
             ->where('status', 'APPROVED')
             ->whereDate('leave_from', '<=', $filters['date_to'])
             ->whereDate('leave_to', '>=', $filters['date_from'])
+            ->whereIn('user_id', $profiles->pluck('user_id'))
             ->pluck('user_id')
             ->unique();
 
-        $rows = $profiles->filter(fn ($profile) => !$attendanceUserIds->contains($profile->user_id))
+        $rows = $profiles->filter(fn ($profile) => ! $attendanceUserIds->contains($profile->user_id))
             ->map(fn ($profile) => [
-                'date' => $filters['date_from'] . ' - ' . $filters['date_to'],
+                'date' => $filters['date_from'].' - '.$filters['date_to'],
                 'employee' => $profile->user?->display_name ?: $profile->user?->name,
                 'department' => $profile->department?->name,
                 'branch' => $profile->branch?->name,
@@ -195,9 +200,11 @@ class HrReportService extends BaseReportService
         $rows = LeaveApplication::query()->with('user')
             ->whereDate('leave_from', '<=', $filters['date_to'])
             ->whereDate('leave_to', '>=', $filters['date_from'])
-            ->get()->groupBy(fn ($leave) => $leave->user_id . '|' . $leave->leave_type)
+            ->whereIn('user_id', $this->employeeUserIds($filters))
+            ->get()->groupBy(fn ($leave) => $leave->user_id.'|'.$leave->leave_type)
             ->map(function ($items) {
                 $leave = $items->first();
+
                 return [
                     'employee' => $leave->user?->display_name ?: $leave->user?->name,
                     'leave_type' => $leave->leave_type,
@@ -224,14 +231,22 @@ class HrReportService extends BaseReportService
     {
         $rows = $this->employeeProfiles($filters)->get()->map(function ($profile) {
             $used = LeaveApplication::query()->where('user_id', $profile->user_id)->where('status', 'APPROVED')->sum('leave_duration');
-            $entitlement = 0;
+            $entitlement = (float) ($profile->leavePolicy?->paid_leave_count ?? 0);
+            $unpaidUsed = LeaveApplication::query()
+                ->where('user_id', $profile->user_id)
+                ->where('status', 'APPROVED')
+                ->where(function ($query) {
+                    $query->whereRaw('LOWER(leave_type) LIKE ?', ['%unpaid%'])
+                        ->orWhereHas('leaveTypeRecord', fn ($type) => $type->where('is_paid', false));
+                })->sum('leave_duration');
+
             return [
                 'employee' => $profile->user?->display_name ?: $profile->user?->name,
                 'leave_policy' => $profile->leavePolicy?->name,
                 'paid_leave_entitlement' => $entitlement,
                 'paid_leave_used' => $used,
                 'paid_leave_balance' => round($entitlement - $used, 2),
-                'unpaid_leave_used' => 0,
+                'unpaid_leave_used' => $unpaidUsed,
             ];
         })->all();
 
@@ -252,7 +267,10 @@ class HrReportService extends BaseReportService
 
     protected function payslipRegister(string $reportKey, array $filters, array $meta, bool $summaryMode = false): array
     {
-        $payslips = Payslip::query()->with(['user', 'branch'])->get();
+        $payslips = Payslip::query()->with(['user', 'branch'])
+            ->whereIn('user_id', $this->employeeUserIds($filters))
+            ->get()
+            ->filter(fn ($payslip) => $this->payslipInPeriod($payslip, $filters));
         $rows = $payslips->map(fn ($payslip) => [
             'salary_month' => $payslip->salary_month,
             'salary_year' => $payslip->salary_year,
@@ -310,7 +328,11 @@ class HrReportService extends BaseReportService
 
     protected function departmentWiseCost(string $reportKey, array $filters, array $meta): array
     {
-        $rows = Payslip::query()->with('user.department')->get()->groupBy(fn ($payslip) => $payslip->user?->department?->name ?: 'Unassigned')
+        $rows = Payslip::query()->with('user.department')
+            ->whereIn('user_id', $this->employeeUserIds($filters))
+            ->get()
+            ->filter(fn ($payslip) => $this->payslipInPeriod($payslip, $filters))
+            ->groupBy(fn ($payslip) => $payslip->user?->department?->name ?: 'Unassigned')
             ->map(fn ($items, $department) => [
                 'department' => $department,
                 'employee_count' => $items->pluck('user_id')->unique()->count(),
@@ -338,11 +360,12 @@ class HrReportService extends BaseReportService
         while ($from <= $to) {
             $monthStart = $from->copy()->startOfMonth();
             $monthEnd = $from->copy()->endOfMonth();
-            $opening = EmployeeProfile::query()->whereDate('join_date', '<', $monthStart)->where(function ($query) use ($monthStart) {
+            $base = $this->employeeProfiles($filters);
+            $opening = (clone $base)->whereDate('join_date', '<', $monthStart)->where(function ($query) use ($monthStart) {
                 $query->whereNull('leave_date')->orWhereDate('leave_date', '>=', $monthStart);
             })->count();
-            $joined = EmployeeProfile::query()->whereBetween('join_date', [$monthStart, $monthEnd])->count();
-            $left = EmployeeProfile::query()->whereBetween('leave_date', [$monthStart, $monthEnd])->count();
+            $joined = (clone $base)->whereBetween('join_date', [$monthStart, $monthEnd])->count();
+            $left = (clone $base)->whereBetween('leave_date', [$monthStart, $monthEnd])->count();
             $closing = $opening + $joined - $left;
             $avg = ($opening + $closing) / 2;
             $rows[] = [
@@ -364,5 +387,20 @@ class HrReportService extends BaseReportService
             ['title' => 'Closing Employees', 'key' => 'closing_employees'],
             ['title' => 'Turnover %', 'key' => 'turnover_percent'],
         ], $rows);
+    }
+
+    private function employeeUserIds(array $filters)
+    {
+        return $this->employeeProfiles($filters)->pluck('user_id')->filter()->values();
+    }
+
+    private function payslipInPeriod(Payslip $payslip, array $filters): bool
+    {
+        $month = Carbon::create((int) $payslip->salary_year, (int) $payslip->salary_month, 1);
+
+        return $month->betweenIncluded(
+            Carbon::parse($filters['date_from'])->startOfMonth(),
+            Carbon::parse($filters['date_to'])->startOfMonth(),
+        );
     }
 }

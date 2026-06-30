@@ -34,6 +34,11 @@ class AiPermissionSeeder extends Seeder
             'ai.inventory_insight.use',
         ])->delete();
 
+        // Permission names are resolved through Spatie's cache when assigning
+        // them to roles. Refresh it after creating and pruning permissions so
+        // this seeder is safe on both fresh and already-installed databases.
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         // Admin / Super Admin / Owner roles get every AI permission
         $adminRoleNames = [
             'Full Access User',

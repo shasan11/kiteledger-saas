@@ -9,6 +9,7 @@ class AiAgentIntentService
         $text = trim($message);
         $m = mb_strtolower($text);
         $module = $this->moduleFromText($m, $payload);
+        $instructional = (bool) preg_match('/\b(how (do|can|should) i|how to|where (do|can) i|explain|what is|what does|difference between)\b/', $m);
 
         if ($this->containsAny($m, ['show report', 'generate report', 'open report', 'trial balance', 'profit and loss', 'income statement', 'balance sheet', 'cash flow', 'ageing', 'aging', 'general ledger'])) {
             return $this->intent('show_report', $module ?: 'reports', true, false, 0.82);
@@ -18,11 +19,11 @@ class AiAgentIntentService
             return $this->intent('search_records', $module ?: 'records', true, false, 0.78);
         }
 
-        if ($this->containsAny($m, ['update ', 'change ', 'modify ', 'edit ', 'set '])) {
+        if (! $instructional && $this->containsAny($m, ['update ', 'change ', 'modify ', 'edit ', 'set '])) {
             return $this->intent('update_record', $module ?: ($payload['module'] ?? 'records'), true, true, 0.76);
         }
 
-        if ($this->containsAny($m, ['create ', 'make ', 'add ', 'prepare ', 'draft ', 'new '])) {
+        if (! $instructional && $this->containsAny($m, ['create ', 'make ', 'add ', 'prepare ', 'draft ', 'new '])) {
             return $this->intent('create_record', $module ?: 'records', true, true, 0.76);
         }
 
@@ -47,7 +48,7 @@ class AiAgentIntentService
     private function moduleFromText(string $m, array $payload): ?string
     {
         $url = mb_strtolower((string) ($payload['url'] ?? ''));
-        $haystack = trim($m . ' ' . $url . ' ' . mb_strtolower((string) ($payload['module'] ?? '')));
+        $haystack = trim($m.' '.$url.' '.mb_strtolower((string) ($payload['module'] ?? '')));
 
         $rules = [
             'quotations' => ['quotation', 'quote'],

@@ -104,6 +104,7 @@ class AiEmbeddingIndexer
 
                     if ($text === '') {
                         $stats['empty']++;
+
                         continue;
                     }
 
@@ -117,12 +118,14 @@ class AiEmbeddingIndexer
 
                     if ($existing && $existing->content_hash === $hash && $existing->model === $model) {
                         $stats['skipped']++;
+
                         continue;
                     }
 
                     $vector = $this->provider->embedOne($text);
                     if ($vector === []) {
                         $stats['empty']++;
+
                         continue;
                     }
 
