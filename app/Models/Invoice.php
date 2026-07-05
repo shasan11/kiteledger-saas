@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasFiscalYear;
 use App\Models\Concerns\HasReportingTags;
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Invoice extends Model
 {
     use HasFactory, HasFiscalYear, HasReportingTags, HasUuids;
+    use RequiresTenantConnection;
 
     /**
      * The attributes that are mass assignable.
@@ -139,7 +141,7 @@ class Invoice extends Model
         return $this->hasMany(InvoicePaymentLink::class);
     }
 
-    public function paymentLink(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function paymentLink(): HasOne
     {
         return $this->hasOne(InvoicePaymentLink::class)->where('active', true)->latest();
     }
@@ -197,7 +199,7 @@ class Invoice extends Model
 
     public static function recalculatePaymentTotalsForContact(?string $contactId): void
     {
-        if (!$contactId) {
+        if (! $contactId) {
             return;
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class TaxSettings extends Model
 {
     use HasFactory, SoftDeletes;
+    use RequiresTenantConnection;
 
     protected $table = 'tax_settings';
 
@@ -54,18 +56,18 @@ class TaxSettings extends Model
     protected function casts(): array
     {
         return [
-            'is_tax_registered'          => 'boolean',
-            'sales_tax_enabled'          => 'boolean',
-            'purchase_tax_enabled'       => 'boolean',
-            'purchase_tax_recoverable'   => 'boolean',
-            'show_tax_on_invoice'        => 'boolean',
-            'allow_sales_tax_override'   => 'boolean',
+            'is_tax_registered' => 'boolean',
+            'sales_tax_enabled' => 'boolean',
+            'purchase_tax_enabled' => 'boolean',
+            'purchase_tax_recoverable' => 'boolean',
+            'show_tax_on_invoice' => 'boolean',
+            'allow_sales_tax_override' => 'boolean',
             'allow_purchase_tax_override' => 'boolean',
-            'show_tax_summary_on_bill'   => 'boolean',
-            'advanced_mode'              => 'boolean',
-            'wizard_completed'           => 'boolean',
-            'sales_tax_rate_percent'     => 'decimal:4',
-            'purchase_tax_rate_percent'  => 'decimal:4',
+            'show_tax_summary_on_bill' => 'boolean',
+            'advanced_mode' => 'boolean',
+            'wizard_completed' => 'boolean',
+            'sales_tax_rate_percent' => 'decimal:4',
+            'purchase_tax_rate_percent' => 'decimal:4',
             'registration_effective_date' => 'date',
         ];
     }

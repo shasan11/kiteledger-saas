@@ -4,20 +4,10 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Documents\DocumentUploadPageController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Tenant\BillingController;
+use App\Http\Controllers\Tenant\ImpersonationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-
-// The web installer is the Froiden package (routes registered by its service
-// provider under /install). EnsureInstalled (bootstrap/app.php) redirects an
-// un-installed deployment there.
-
-// Extra installer step: choose Fresh vs Demo data. Inserted between the Froiden
-// "permissions" and "database" steps (see permissions.blade.php). Uses Froiden's
-// 'install' middleware so it is only reachable while the app is not yet installed.
-Route::middleware(['web', 'install'])->prefix('install')->name('kiteledger.install.')->group(function () {
-    Route::get('type', [\App\Http\Controllers\Installer\InstallTypeController::class, 'show'])->name('type');
-    Route::post('type', [\App\Http\Controllers\Installer\InstallTypeController::class, 'store'])->name('type.store');
-});
 
 // Note: GET /storage/{path} is served by Laravel's built-in route (named
 // storage.public, registered because the "public" disk has 'serve' => true in
@@ -27,14 +17,21 @@ Route::middleware(['web', 'install'])->prefix('install')->name('kiteledger.insta
 
 Route::redirect('/', '/dashboard')->name('home');
 
+Route::get('/impersonate/{token}', [ImpersonationController::class, 'enter'])->middleware('tenant.active')->name('impersonation.enter');
+Route::post('/impersonation/exit', [ImpersonationController::class, 'exit'])->middleware('auth')->name('impersonation.exit');
+
 Route::post('/locale/change', [LocalizationController::class, 'change'])
     ->name('locale.change');
 
+Route::middleware(['auth', 'verified'])->prefix('billing')->name('tenant.billing.')->group(function () {
+    Route::get('/', BillingController::class)->name('index');
+});
+
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->name('dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
     Route::prefix('localization')->name('localization.')->group(function () {
         Route::get('/languages', [LocalizationController::class, 'index'])->name('languages.index');
         Route::post('/languages', [LocalizationController::class, 'store'])->name('languages.store');
@@ -68,7 +65,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -83,7 +80,7 @@ Route::prefix('pay/invoice')->name('pay.invoice.')->group(function () {
 });
 
 // Admin: payment gateway settings page
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
     Route::get('/settings/payment-gateways', fn () => Inertia::render('App/Settings/PaymentGateways/Index'))->name('settings.payment-gateways.index');
     Route::get('/payments/online', fn () => Inertia::render('App/Payments/OnlinePayments/Index'))->name('payments.online.index');
     Route::get('/payments/online/{id}', fn ($id) => Inertia::render('App/Payments/OnlinePayments/Show', ['id' => $id]))->name('payments.online.show');

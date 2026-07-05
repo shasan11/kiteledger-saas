@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 class AccountingConfiguration extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'default_cash_account_id', 'default_bank_account_id', 'accounts_receivable_id',

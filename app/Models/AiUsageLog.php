@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 class AiUsageLog extends Model
 {
     use HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'user_id', 'branch_id', 'module', 'provider', 'model',
@@ -17,14 +19,14 @@ class AiUsageLog extends Model
     ];
 
     protected $casts = [
-        'prompt_tokens'      => 'integer',
-        'completion_tokens'  => 'integer',
-        'total_tokens'       => 'integer',
-        'estimated_cost'     => 'float',
-        'duration_ms'        => 'integer',
-        'filters'            => 'array',
-        'date_range'         => 'array',
-        'row_count'          => 'integer',
-        'token_estimate'     => 'integer',
+        'prompt_tokens' => 'integer',
+        'completion_tokens' => 'integer',
+        'total_tokens' => 'integer',
+        'estimated_cost' => 'float',
+        'duration_ms' => 'integer',
+        'filters' => 'array',
+        'date_range' => 'array',
+        'row_count' => 'integer',
+        'token_estimate' => 'integer',
     ];
 }

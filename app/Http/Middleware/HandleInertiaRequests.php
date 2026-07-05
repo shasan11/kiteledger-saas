@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AppSetting;
 use App\Services\BranchScopeService;
 use App\Services\LocalizationService;
 use Illuminate\Http\Request;
@@ -32,6 +33,15 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        if (! tenancy()->initialized && ! (app()->environment('testing') && config('saas.allow_uninitialized_tenant_models'))) {
+            return [
+                ...parent::share($request),
+                'auth' => ['user' => $request->user('central'), 'permissions' => []],
+                'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
+                'translations' => [],
+            ];
+        }
+
         $user = $request->user();
         $scope = app(BranchScopeService::class);
         $localization = app(LocalizationService::class);
@@ -58,6 +68,7 @@ class HandleInertiaRequests extends Middleware
                 'dir' => $dir,
             ],
             'translations' => fn () => $localization->translationsFor($locale),
+            'impersonation' => fn () => $request->session()->get('impersonation'),
         ];
     }
 
@@ -69,10 +80,10 @@ class HandleInertiaRequests extends Middleware
     protected function defaultCurrencyPayload(): ?array
     {
         try {
-            $setting = \App\Models\AppSetting::query()->with('defaultCurrency')->first();
+            $setting = AppSetting::query()->with('defaultCurrency')->first();
             $currency = $setting?->defaultCurrency;
 
-            if (!$currency) {
+            if (! $currency) {
                 return null;
             }
 
@@ -113,15 +124,15 @@ class HandleInertiaRequests extends Middleware
 
     protected function canBypassPermissions($user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
-        if (!empty($user->is_super_admin)) {
+        if (! empty($user->is_super_admin)) {
             return true;
         }
 
-        if (!method_exists($user, 'hasAnyRole')) {
+        if (! method_exists($user, 'hasAnyRole')) {
             return false;
         }
 

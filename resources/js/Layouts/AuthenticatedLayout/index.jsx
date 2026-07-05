@@ -19,7 +19,7 @@ import {
     UserOutlined,
     WalletOutlined,
 } from '@ant-design/icons';
-import { Grid, Layout, theme } from 'antd';
+import { Alert, Button, Grid, Layout, theme } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
 import AppNavbar from './partials/AppNavbar';
@@ -892,6 +892,15 @@ export default function AuthenticatedLayout({ header, children }) {
     return (
         <AppContextProvider initialContext={branchContext}>
         <Layout style={{ minHeight: '100vh', background: colorBgLayout }}>
+            {page.props.impersonation && (
+                <Alert
+                    banner
+                    type="warning"
+                    showIcon
+                    message="You are impersonating this tenant. Sensitive central actions are unavailable."
+                    action={<Button danger size="small" onClick={() => router.post(route('impersonation.exit'))}>Exit impersonation</Button>}
+                />
+            )}
             <AppNavbar
                 branchContext={branchContext}
                 quickAddSections={quickAddSections}

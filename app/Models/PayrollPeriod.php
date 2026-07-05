@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PayrollPeriod extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = ['month', 'year', 'start_date', 'end_date', 'branch_id', 'status', 'locked_at', 'locked_by'];
+
     protected $appends = ['name', 'salary_month', 'salary_year', 'locked', 'active'];
 
     protected function casts(): array
@@ -50,7 +53,7 @@ class PayrollPeriod extends Model
     {
         $month = $this->month ? now()->month((int) $this->month)->format('F') : 'Payroll';
 
-        return trim($month . ' ' . ($this->year ?: ''));
+        return trim($month.' '.($this->year ?: ''));
     }
 
     public function getSalaryMonthAttribute(): ?int

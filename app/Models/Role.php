@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Permission\Models\Role as SpatieRole;
@@ -9,6 +10,7 @@ use Spatie\Permission\Models\Role as SpatieRole;
 class Role extends SpatieRole
 {
     use HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'branch_id', 'name', 'guard_name', 'description', 'active', 'is_system_generated', 'user_add_id',
@@ -17,8 +19,8 @@ class Role extends SpatieRole
     protected function casts(): array
     {
         return [
-            'active'               => 'boolean',
-            'is_system_generated'  => 'boolean',
+            'active' => 'boolean',
+            'is_system_generated' => 'boolean',
         ];
     }
 

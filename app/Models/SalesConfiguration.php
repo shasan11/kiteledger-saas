@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 class SalesConfiguration extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'default_customer_account_id', 'default_sales_tax_id', 'quotation_validity_days',

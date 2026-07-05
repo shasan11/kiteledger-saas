@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,15 +11,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class SmsConfig extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     public const PROVIDER_TWILIO = 'twilio';
+
     public const PROVIDER_INFOBIP = 'infobip';
+
     public const PROVIDER_SPARROW = 'sparrow_sms';
+
     public const PROVIDER_SMS_GLOBAL = 'sms_global';
+
     public const PROVIDER_MESSAGE_BIRD = 'message_bird';
+
     public const PROVIDER_VONAGE = 'vonage';
+
     public const PROVIDER_CUSTOM_HTTP = 'custom_http';
+
     public const PROVIDER_CUSTOM_POST = 'custom_post';
+
     public const PROVIDER_CUSTOM_GET = 'custom_get';
 
     protected $fillable = [

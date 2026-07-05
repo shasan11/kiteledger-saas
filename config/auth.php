@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Central\CentralAdmin;
 use App\Models\User;
 
 return [
@@ -42,6 +43,7 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'central' => ['driver' => 'session', 'provider' => 'central_admins'],
     ],
 
     /*
@@ -66,6 +68,7 @@ return [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
         ],
+        'central_admins' => ['driver' => 'eloquent', 'model' => CentralAdmin::class],
 
         // 'users' => [
         //     'driver' => 'database',

@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\SaaS\BackupManager;
+use App\Contracts\SaaS\FeatureResolver;
+use App\Contracts\SaaS\QuotaManager;
+use App\Contracts\SaaS\SubscriptionLifecycle;
+use App\Http\Controllers\Installer\DatabaseController;
+use App\Http\Controllers\Installer\FinalController;
 use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\CashTransfer;
@@ -77,11 +83,19 @@ use App\Observers\SubsequentJournalVoucherObserver;
 use App\Observers\SupplierPaymentLineObserver;
 use App\Observers\SupplierPaymentObserver;
 use App\Policies\DocumentUploadPolicy;
+use App\Services\SaaS\AtomicQuotaManager;
+use App\Services\SaaS\NativeBackupManager;
+use App\Services\SaaS\PlanFeatureResolver;
+use App\Services\SaaS\SubscriptionService;
 use App\Services\SmsService;
 use App\Support\Branding;
 use App\Support\Installer\FroidenDatabaseManager;
+use App\Support\Installer\FroidenEnvironmentManager;
 use App\Support\Installer\FroidenInstalledFileManager;
+use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
+use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
 use Froiden\LaravelInstaller\Helpers\DatabaseManager;
+use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
@@ -101,9 +115,25 @@ class AppServiceProvider extends ServiceProvider
             DatabaseManager::class,
             FroidenDatabaseManager::class,
         );
+        $this->app->bind(
+            EnvironmentManager::class,
+            FroidenEnvironmentManager::class,
+        );
+        $this->app->bind(
+            PackageDatabaseController::class,
+            DatabaseController::class,
+        );
+        $this->app->bind(
+            PackageFinalController::class,
+            FinalController::class,
+        );
 
         $this->app->singleton(SmsService::class);
         $this->app->alias(SmsService::class, 'sms');
+        $this->app->singleton(FeatureResolver::class, PlanFeatureResolver::class);
+        $this->app->singleton(QuotaManager::class, AtomicQuotaManager::class);
+        $this->app->singleton(SubscriptionLifecycle::class, SubscriptionService::class);
+        $this->app->singleton(BackupManager::class, NativeBackupManager::class);
     }
 
     /**

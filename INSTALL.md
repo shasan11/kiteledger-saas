@@ -4,7 +4,7 @@
 
 - PHP 8.3+ with PDO, mbstring, OpenSSL, tokenizer, JSON, cURL, fileinfo, ctype,
   XML, and bcmath
-- MySQL/MariaDB, PostgreSQL, or SQLite
+- MySQL/MariaDB or PostgreSQL for production database-per-tenant provisioning
 - Writable `storage/`, `bootstrap/cache/`, and project root
 
 The marketplace package includes `vendor/` and `public/build/`; buyers do not
@@ -15,16 +15,21 @@ a hosted site attempt to load JavaScript from the visitor's localhost port 5173.
 
 ## Browser installer
 
-Extract the package, point the document root to `public/`, and open `/install`.
+Extract the package, point the document root to `public/`, configure wildcard
+DNS plus `CENTRAL_DOMAINS`/`SAAS_BASE_DOMAIN`, and open `/install` on a central host.
 On compatible Apache shared hosting, the root `.htaccess` forwards traffic.
 
-- **Fresh:** imports the packaged MySQL dump when available; otherwise runs
-  fresh migrations and the production-safe base seed.
-- **Quick Demo:** Fresh, followed by the small `DemoLiteSeeder` dataset.
-- **Full Demo:** Fresh only. Heavy demo transactions never run over HTTP. Run
-  the command shown on the completion screen afterward.
+The wizard checks PHP requirements and writable folders, securely collects the
+MySQL host/port/database credentials, central and tenant domains, and the first
+platform administrator. It then creates the database when needed, migrates and
+seeds the central platform, and disables `/install` after successful completion.
 
-PostgreSQL and SQLite always use migrations because the dump is MySQL-specific.
+- **Fresh:** installs the central SaaS schema and central seed data.
+- **Quick/Full Demo:** retained for installer compatibility. ERP demo records
+  are now applied only to an explicitly created demo tenant.
+
+The installer no longer creates one fixed company. Create tenants afterward at
+`/admin/tenants`; provisioning creates and seeds each isolated ERP database.
 
 ## CLI installer
 
@@ -47,9 +52,12 @@ php artisan kiteledger:install --no-interaction --force \
 migration tables. After installation, run `php artisan storage:link` and
 `php artisan kiteledger:doctor`.
 
-Uploaded branding overrides the shipped defaults in `public/branding/`. Full
-demo data is CLI-only:
+Start the queue and scheduler after installation:
 
 ```bash
-php artisan kiteledger:seed-demo --profile=full --force
+php artisan queue:work --queue=provisioning,default
+php artisan schedule:work
 ```
+
+See `docs/TENANCY_SETUP.md` and `docs/TENANT_PROVISIONING.md` for database
+privileges, wildcard TLS, cPanel/Nginx configuration, and operational commands.

@@ -76,7 +76,7 @@ class LocalizationService
 
     public function language(?string $locale): ?Language
     {
-        if (!$locale) {
+        if (! $locale) {
             return null;
         }
 
@@ -160,7 +160,7 @@ class LocalizationService
      */
     private function databaseTranslations(string $locale): array
     {
-        if (!$this->hasLanguageTable()) {
+        if (! $this->hasLanguageTable()) {
             return [];
         }
 
@@ -173,7 +173,7 @@ class LocalizationService
                 $translations = json_decode($translations, true);
             }
 
-            if (!is_array($translations)) {
+            if (! is_array($translations)) {
                 return [];
             }
 
@@ -194,14 +194,14 @@ class LocalizationService
     {
         $path = resource_path("lang/{$locale}.json");
 
-        if (!is_file($path) || !is_readable($path)) {
+        if (! is_file($path) || ! is_readable($path)) {
             return [];
         }
 
         try {
             $decoded = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
 
-            if (!is_array($decoded)) {
+            if (! is_array($decoded)) {
                 return [];
             }
 

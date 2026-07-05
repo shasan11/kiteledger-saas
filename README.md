@@ -1,6 +1,9 @@
 # KiteLedger
 
-KiteLedger is an installable Laravel accounting and operations application.
+KiteLedger is a database-per-tenant Laravel/Inertia SaaS platform. The central
+application owns plans, subscriptions, billing, website content and tenant
+provisioning; each company gets an isolated database containing the existing
+ERP and its branches.
 
 ## Packaged installation
 
@@ -9,10 +12,13 @@ A marketplace ZIP contains `vendor/`, `public/build/`, and preferably
 
 1. Extract the ZIP and point the web root to `public/`.
 2. Make `storage/`, `bootstrap/cache/`, and the project root writable.
-3. Open `/install` and choose Fresh, Quick Demo, or Full Demo.
+3. Configure `CENTRAL_DOMAINS` and `SAAS_BASE_DOMAIN` in `.env`.
+4. Open `/install`. Installation creates the central platform only.
+5. Start a queue worker and create companies from `/admin/tenants`.
 
-Fresh installs safe base data. Quick Demo adds a small product set. Full Demo
-installs base data in the browser, then displays this CLI-only command:
+The previous demo choices are retained for installer compatibility, but ERP
+sample data is now selected as a tenant default-data template during tenant
+provisioning.
 
 ```bash
 php artisan kiteledger:seed-demo --profile=full --force
@@ -20,6 +26,10 @@ php artisan kiteledger:seed-demo --profile=full --force
 
 See [INSTALL.md](INSTALL.md) for deployment details and [PACKAGING.md](PACKAGING.md)
 for release builds.
+
+SaaS operations are documented in [docs/SAAS_ARCHITECTURE.md](docs/SAAS_ARCHITECTURE.md),
+[docs/TENANCY_SETUP.md](docs/TENANCY_SETUP.md), and
+[docs/TENANT_PROVISIONING.md](docs/TENANT_PROVISIONING.md).
 
 ## Developer setup
 

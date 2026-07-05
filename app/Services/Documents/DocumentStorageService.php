@@ -3,7 +3,6 @@
 namespace App\Services\Documents;
 
 use App\Models\DocumentUpload;
-use App\Services\Media\MediaStorageService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -31,32 +30,33 @@ class DocumentStorageService
     public function maxFileSizeBytes(): int
     {
         $mb = (int) config('documents.max_upload_mb', 10);
+
         return max(1, $mb) * 1024 * 1024;
     }
 
     public function disk(): string
     {
-        return app(MediaStorageService::class)->disk();
+        return (string) config('documents.disk', 'local');
     }
 
     public function validateFile(UploadedFile $file): void
     {
-        if (!$file->isValid()) {
+        if (! $file->isValid()) {
             throw new RuntimeException('Invalid uploaded file.');
         }
 
         $ext = strtolower($file->getClientOriginalExtension());
-        if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
+        if (! in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
             throw new RuntimeException('Unsupported file type. Allowed: pdf, docx, jpg, jpeg, png, webp.');
         }
 
         $mime = $file->getMimeType();
-        if ($mime && !in_array($mime, self::ALLOWED_MIMES, true)) {
-            throw new RuntimeException('Unsupported MIME type: ' . $mime);
+        if ($mime && ! in_array($mime, self::ALLOWED_MIMES, true)) {
+            throw new RuntimeException('Unsupported MIME type: '.$mime);
         }
 
         if ($file->getSize() > $this->maxFileSizeBytes()) {
-            throw new RuntimeException('File exceeds maximum size of ' . config('documents.max_upload_mb', 10) . ' MB.');
+            throw new RuntimeException('File exceeds maximum size of '.config('documents.max_upload_mb', 10).' MB.');
         }
     }
 
@@ -71,7 +71,7 @@ class DocumentStorageService
         $folder = 'documents/'.date('Y');
         $path = $file->storeAs($folder, $storageName, $this->disk());
 
-        if (!$path) {
+        if (! $path) {
             throw new RuntimeException('Could not store uploaded document.');
         }
 
@@ -90,6 +90,7 @@ class DocumentStorageService
         if ($excludeId) {
             $q->where('id', '!=', $excludeId);
         }
+
         return $q->first();
     }
 
@@ -101,7 +102,7 @@ class DocumentStorageService
     public function streamResponse(DocumentUpload $doc)
     {
         $disk = Storage::disk($this->disk());
-        if (!$disk->exists($doc->file_path)) {
+        if (! $disk->exists($doc->file_path)) {
             throw new RuntimeException('Document file is missing.');
         }
         $mime = (string) ($doc->mime_type ?: $disk->mimeType($doc->file_path) ?: 'application/octet-stream');
@@ -130,6 +131,7 @@ class DocumentStorageService
     {
         $disk = Storage::disk($this->disk());
         $contents = $disk->get($doc->file_path);
+
         return base64_encode($contents);
     }
 

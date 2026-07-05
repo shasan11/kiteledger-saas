@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\AppSetting;
 use App\Services\LocalizationService;
+use App\Support\Installer\InstalledState;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -15,6 +16,15 @@ class SetLocale
 
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->is('install', 'install/*') || ! InstalledState::isInstalled()) {
+            $locale = $this->staticLocale();
+            App::setLocale($locale);
+            $request->attributes->set('locale', $locale);
+            $request->attributes->set('locale_dir', 'ltr');
+
+            return $next($request);
+        }
+
         $locale = $this->resolveLocale($request);
 
         App::setLocale($locale);

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
+
 /**
  * Backward-compatible alias for older code paths.
  *
@@ -9,4 +11,5 @@ namespace App\Models;
  */
 class PayrollRun extends Payroll
 {
+    use RequiresTenantConnection;
 }

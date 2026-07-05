@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class TaxSystem extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'country_code',
@@ -26,7 +28,7 @@ class TaxSystem extends Model
     protected function casts(): array
     {
         return [
-            'active'              => 'boolean',
+            'active' => 'boolean',
             'is_system_generated' => 'boolean',
         ];
     }

@@ -2,8 +2,7 @@
 
 namespace App\Services\Installer;
 
-use Database\Seeders\DatabaseSeeder;
-use Database\Seeders\DemoLiteSeeder;
+use Database\Seeders\CentralDatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -80,15 +79,13 @@ class InstallerDatabaseService
         Artisan::call('migrate:fresh', ['--force' => true]);
         Log::info('Fresh migration finished.');
         Log::info('Production-safe seed started.');
-        Artisan::call('db:seed', ['--class' => DatabaseSeeder::class, '--force' => true]);
+        Artisan::call('db:seed', ['--class' => CentralDatabaseSeeder::class, '--force' => true]);
         Log::info('Production-safe seed finished.');
     }
 
     public function runQuickDemoSeed(): void
     {
-        Log::info('Quick demo seed started.');
-        Artisan::call('db:seed', ['--class' => DemoLiteSeeder::class, '--force' => true]);
-        Log::info('Quick demo seed finished.');
+        Log::info('Quick demo mode is tenant-scoped and will be available when a demo tenant is provisioned.');
     }
 
     private function installBaseData(): void
@@ -109,7 +106,7 @@ class InstallerDatabaseService
 
     private function dumpPath(): string
     {
-        return database_path('sql/mysql_install.sql');
+        return database_path('sql/mysql_central_install.sql');
     }
 
     /** @param resource $handle @return \Generator<int, string> */

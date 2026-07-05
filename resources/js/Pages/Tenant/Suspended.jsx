@@ -1,0 +1,3 @@
+import { Head } from '@inertiajs/react';
+import { Button, Result, Typography } from 'antd';
+export default function Suspended({tenant}){return <><Head title="Company unavailable"/><Result status="warning" title={`${tenant.company_name} is ${tenant.status}`} subTitle={tenant.reason||'Access to the ERP is temporarily unavailable. Please contact your account administrator or KiteLedger support.'} extra={<><Button type="primary" href="mailto:support@kiteledger.com">Contact support</Button><Typography.Paragraph style={{marginTop:16}}>Your data remains safely isolated and has not been deleted.</Typography.Paragraph></>}/></>}

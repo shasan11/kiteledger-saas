@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Models\User;
+use App\Models\Central\CentralAdmin;
 use App\Services\Installer\InstallerDatabaseService;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
 use Illuminate\Console\Command;
@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Throwable;
 
 class InstallCommand extends Command
@@ -115,13 +114,13 @@ class InstallCommand extends Command
 
     private function updateAdministrator(array $values): void
     {
-        $user = User::query()->where('email', 'admin@kiteledger.test')->first() ?? User::query()->orderBy('id')->firstOrFail();
-        $user->forceFill([
+        $admin = CentralAdmin::query()->orderBy('id')->firstOrFail();
+        $admin->forceFill([
             'name' => $values['admin_name'],
             'email' => $values['admin_email'],
-            'username' => Str::slug(Str::before($values['admin_email'], '@'), '_') ?: 'admin',
             'password' => Hash::make($values['admin_password']),
-            'email_verified_at' => now(),
+            'role' => 'super_admin',
+            'is_active' => true,
         ])->save();
     }
 

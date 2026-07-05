@@ -1,0 +1,4 @@
+import CentralLayout from '@/Layouts/CentralLayout';
+import { Link } from '@inertiajs/react';
+import { Button, Card, Col, Row, Space, Tag, Typography } from 'antd';
+export default function Index({plans}){return <CentralLayout title="Plans"><div style={{textAlign:'right',marginBottom:16}}><Link href={route('central.plans.create')}><Button type="primary">Create plan</Button></Link></div><Row gutter={[16,16]}>{plans.map(p=><Col xs={24} md={12} xl={8} key={p.id}><Card title={<Space>{p.name}{p.is_featured&&<Tag color="gold">Featured</Tag>}</Space>} extra={<Link href={route('central.plans.edit',p.id)}>Edit</Link>}><Typography.Title level={2}>{p.currency} {p.price_monthly}<Typography.Text>/month</Typography.Text></Typography.Title><p>{p.description}</p><p>{p.max_users??'Unlimited'} users · {p.max_branches??'Unlimited'} branches</p><Tag color={p.is_active?'green':'default'}>{p.is_active?'Active':'Disabled'}</Tag></Card></Col>)}</Row></CentralLayout>}

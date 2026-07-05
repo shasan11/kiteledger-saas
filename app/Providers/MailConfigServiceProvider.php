@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\EmailConfig;
+use App\Support\Installer\InstalledState;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
@@ -26,9 +27,15 @@ class MailConfigServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
+        // A fresh upload has placeholder DB credentials. Querying here would
+        // make every installer page wait for the connection timeout.
+        if (! InstalledState::isInstalled()) {
+            return;
+        }
+
         try {
             $config = $this->resolveActiveConfig();
-            if (!$config) {
+            if (! $config) {
                 return;
             }
 
@@ -48,7 +55,7 @@ class MailConfigServiceProvider extends ServiceProvider
     private function resolveActiveConfig(): ?EmailConfig
     {
         // Guard against running before migrations have created the table.
-        if (!Schema::hasTable('email_configs')) {
+        if (! Schema::hasTable('email_configs')) {
             return null;
         }
 

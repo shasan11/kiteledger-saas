@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +12,7 @@ use Illuminate\Support\Facades\Crypt;
 class PaymentGatewaySetting extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'provider',
@@ -40,7 +43,7 @@ class PaymentGatewaySetting extends Model
         return static::query()->where('provider', $provider)->first();
     }
 
-    public static function allEnabled(): \Illuminate\Database\Eloquent\Collection
+    public static function allEnabled(): Collection
     {
         return static::query()
             ->where('enabled', true)
@@ -50,7 +53,7 @@ class PaymentGatewaySetting extends Model
 
     public function getCredentials(): array
     {
-        if (!$this->encrypted_credentials) {
+        if (! $this->encrypted_credentials) {
             return [];
         }
         try {
@@ -75,6 +78,7 @@ class PaymentGatewaySetting extends Model
         if (strlen($value) <= 8) {
             return str_repeat('*', strlen($value));
         }
-        return substr($value, 0, 4) . str_repeat('*', max(0, strlen($value) - 8)) . substr($value, -4);
+
+        return substr($value, 0, 4).str_repeat('*', max(0, strlen($value) - 8)).substr($value, -4);
     }
 }

@@ -12,20 +12,47 @@ class RazorpayGateway implements PaymentGatewayInterface
 {
     public function __construct(protected PaymentGatewaySetting $setting) {}
 
-    public function getName(): string { return 'razorpay'; }
-    public function getDisplayName(): string { return $this->setting->display_name ?? 'Razorpay'; }
-    public function getSupportedCurrencies(): array { return $this->setting->allowed_currencies ?? ['INR', 'USD']; }
-    public function getRequiredCredentials(): array { return ['key_id', 'key_secret']; }
-    public function supportsPartialPayments(): bool { return true; }
-    public function supportsWebhook(): bool { return true; }
-    public function supportsRefund(): bool { return true; }
+    public function getName(): string
+    {
+        return 'razorpay';
+    }
+
+    public function getDisplayName(): string
+    {
+        return $this->setting->display_name ?? 'Razorpay';
+    }
+
+    public function getSupportedCurrencies(): array
+    {
+        return $this->setting->allowed_currencies ?? ['INR', 'USD'];
+    }
+
+    public function getRequiredCredentials(): array
+    {
+        return ['key_id', 'key_secret'];
+    }
+
+    public function supportsPartialPayments(): bool
+    {
+        return true;
+    }
+
+    public function supportsWebhook(): bool
+    {
+        return true;
+    }
+
+    public function supportsRefund(): bool
+    {
+        return true;
+    }
 
     public function createPayment(Invoice $invoice, array $payload): array
     {
         $keyId = $this->setting->getCredential('key_id');
         $keySecret = $this->setting->getCredential('key_secret');
 
-        if (!$keyId || !$keySecret) {
+        if (! $keyId || ! $keySecret) {
             throw new \RuntimeException('Razorpay credentials are not configured.');
         }
 
@@ -49,7 +76,7 @@ class RazorpayGateway implements PaymentGatewayInterface
             'amount' => $amountPaise,
             'currency' => $currency,
             'name' => $payload['company_name'] ?? 'Invoice Payment',
-            'description' => 'Invoice ' . ($invoice->invoice_no ?? $invoice->id),
+            'description' => 'Invoice '.($invoice->invoice_no ?? $invoice->id),
             'redirect_url' => null, // Razorpay uses JS checkout, not redirect
             'checkout_mode' => 'razorpay_js',
             'raw' => $order,
@@ -63,13 +90,13 @@ class RazorpayGateway implements PaymentGatewayInterface
         $razorpayPaymentId = $payload['razorpay_payment_id'] ?? '';
         $razorpaySignature = $payload['razorpay_signature'] ?? '';
 
-        if (!$razorpayOrderId || !$razorpayPaymentId || !$razorpaySignature) {
+        if (! $razorpayOrderId || ! $razorpayPaymentId || ! $razorpaySignature) {
             return ['success' => false, 'reason' => 'Missing Razorpay payment fields'];
         }
 
-        $expectedSignature = hash_hmac('sha256', $razorpayOrderId . '|' . $razorpayPaymentId, $keySecret);
+        $expectedSignature = hash_hmac('sha256', $razorpayOrderId.'|'.$razorpayPaymentId, $keySecret);
 
-        if (!hash_equals($expectedSignature, $razorpaySignature)) {
+        if (! hash_equals($expectedSignature, $razorpaySignature)) {
             return ['success' => false, 'reason' => 'Signature verification failed'];
         }
 
@@ -91,7 +118,7 @@ class RazorpayGateway implements PaymentGatewayInterface
         if ($webhookSecret) {
             $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
             $receivedSignature = $request->header('X-Razorpay-Signature', '');
-            if (!hash_equals($expectedSignature, $receivedSignature)) {
+            if (! hash_equals($expectedSignature, $receivedSignature)) {
                 throw new \RuntimeException('Razorpay webhook signature verification failed.');
             }
         }
@@ -153,7 +180,7 @@ class RazorpayGateway implements PaymentGatewayInterface
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_USERPWD => $keyId . ':' . $keySecret,
+            CURLOPT_USERPWD => $keyId.':'.$keySecret,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         ]);
 
@@ -170,7 +197,7 @@ class RazorpayGateway implements PaymentGatewayInterface
 
         if ($httpCode >= 400) {
             $msg = $decoded['error']['description'] ?? 'Razorpay API error';
-            throw new \RuntimeException('Razorpay error: ' . $msg);
+            throw new \RuntimeException('Razorpay error: '.$msg);
         }
 
         return $decoded;

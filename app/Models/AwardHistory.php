@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AwardHistory extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'user_id',
@@ -24,11 +26,11 @@ class AwardHistory extends Model
     protected function casts(): array
     {
         return [
-            'user_id'              => 'integer',
-            'awarded_date'         => 'datetime',
-            'active'               => 'boolean',
-            'is_system_generated'  => 'boolean',
-            'user_add_id'          => 'integer',
+            'user_id' => 'integer',
+            'awarded_date' => 'datetime',
+            'active' => 'boolean',
+            'is_system_generated' => 'boolean',
+            'user_add_id' => 'integer',
         ];
     }
 

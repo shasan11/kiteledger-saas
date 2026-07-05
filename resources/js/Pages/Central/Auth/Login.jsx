@@ -1,0 +1,4 @@
+import GuestLayout from '@/Layouts/GuestLayout';
+import { Head, useForm } from '@inertiajs/react';
+import { Alert, Button, Form, Input, Typography } from 'antd';
+export default function Login(){const form=useForm({email:'',password:''}); return <GuestLayout><Head title="Central admin login"/><Typography.Title level={3}>Central Super Admin</Typography.Title>{form.errors.email&&<Alert type="error" message={form.errors.email} className="mb-4"/>}<Form layout="vertical" onFinish={()=>form.post(route('central.login.store'))}><Form.Item label="Email"><Input type="email" value={form.data.email} onChange={e=>form.setData('email',e.target.value)} autoFocus/></Form.Item><Form.Item label="Password"><Input.Password value={form.data.password} onChange={e=>form.setData('password',e.target.value)}/></Form.Item><Button block size="large" type="primary" htmlType="submit" loading={form.processing}>Sign in</Button></Form></GuestLayout>}

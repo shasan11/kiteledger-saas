@@ -20,17 +20,17 @@ class PaymentGatewayManager
     {
         $setting = PaymentGatewaySetting::forProvider($provider);
 
-        if (!$setting) {
+        if (! $setting) {
             throw new \RuntimeException("Payment gateway '{$provider}' is not configured.");
         }
 
-        if (!$setting->enabled) {
+        if (! $setting->enabled) {
             throw new \RuntimeException("Payment gateway '{$provider}' is not enabled.");
         }
 
         $driverClass = $this->driverMap[$provider] ?? null;
 
-        if (!$driverClass) {
+        if (! $driverClass) {
             throw new \RuntimeException("Payment gateway driver '{$provider}' is not supported.");
         }
 
@@ -66,6 +66,7 @@ class PaymentGatewayManager
                 'webhook_enabled' => $setting?->webhook_enabled ?? false,
             ];
         }
+
         return $infos;
     }
 }

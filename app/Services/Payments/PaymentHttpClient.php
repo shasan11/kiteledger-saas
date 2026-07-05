@@ -22,9 +22,9 @@ class PaymentHttpClient
         $configured = trim((string) config('services.payment_gateways.ca_bundle', ''));
 
         if ($configured !== '') {
-            if (!is_file($configured) || !is_readable($configured)) {
+            if (! is_file($configured) || ! is_readable($configured)) {
                 throw new \RuntimeException(
-                    'The configured payment gateway CA bundle is missing or unreadable: ' . $configured
+                    'The configured payment gateway CA bundle is missing or unreadable: '.$configured
                 );
             }
 
@@ -41,10 +41,10 @@ class PaymentHttpClient
             getenv('CURL_CA_BUNDLE'),
             getenv('SSL_CERT_FILE'),
             $opensslLocations['default_cert_file'] ?? null,
-            $phpDirectory . '/extras/ssl/cacert.pem',
+            $phpDirectory.'/extras/ssl/cacert.pem',
             'C:/laragon/etc/ssl/cacert.pem',
-            $programFiles . '/Git/mingw64/etc/ssl/certs/ca-bundle.crt',
-            $programFiles . '/Git/usr/ssl/certs/ca-bundle.crt',
+            $programFiles.'/Git/mingw64/etc/ssl/certs/ca-bundle.crt',
+            $programFiles.'/Git/usr/ssl/certs/ca-bundle.crt',
             '/etc/ssl/certs/ca-certificates.crt',
             '/etc/pki/tls/certs/ca-bundle.crt',
         ];

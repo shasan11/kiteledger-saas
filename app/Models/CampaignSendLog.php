@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,20 +11,32 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CampaignSendLog extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     public const CHANNEL_EMAIL = 'email';
+
     public const CHANNEL_SMS = 'sms';
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_QUEUED = 'queued';
+
     public const STATUS_SENT = 'sent';
+
     public const STATUS_DELIVERED = 'delivered';
+
     public const STATUS_FAILED = 'failed';
+
     public const STATUS_BOUNCED = 'bounced';
+
     public const STATUS_OPENED = 'opened';
+
     public const STATUS_CLICKED = 'clicked';
+
     public const STATUS_UNSUBSCRIBED = 'unsubscribed';
+
     public const STATUS_SKIPPED = 'skipped';
+
     public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [

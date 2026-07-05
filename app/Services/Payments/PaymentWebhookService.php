@@ -57,7 +57,7 @@ class PaymentWebhookService
 
             return ['received' => true];
         } catch (\Throwable $e) {
-            Log::error("Webhook processing error [{$provider}]: " . $e->getMessage());
+            Log::error("Webhook processing error [{$provider}]: ".$e->getMessage());
 
             if ($logEnabled && $log) {
                 $log->forceFill([
@@ -91,7 +91,7 @@ class PaymentWebhookService
             // Find the online payment record
             $onlinePayment = $this->findOnlinePayment($provider, $result);
 
-            if (!$onlinePayment) {
+            if (! $onlinePayment) {
                 return;
             }
 
@@ -111,7 +111,7 @@ class PaymentWebhookService
     {
         $onlinePayment = $this->findOnlinePayment($provider, $result);
 
-        if (!$onlinePayment || $onlinePayment->isSucceeded()) {
+        if (! $onlinePayment || $onlinePayment->isSucceeded()) {
             return;
         }
 
@@ -133,19 +133,25 @@ class PaymentWebhookService
 
         if ($paymentId) {
             $match = (clone $query)->where('provider_payment_id', $paymentId)->first();
-            if ($match) return $match;
+            if ($match) {
+                return $match;
+            }
         }
 
         if ($orderId) {
             $match = (clone $query)->where('provider_order_id', $orderId)
                 ->orWhere('provider_session_id', $orderId)
                 ->first();
-            if ($match) return $match;
+            if ($match) {
+                return $match;
+            }
         }
 
         if ($publicToken) {
             $match = (clone $query)->where('public_token', $publicToken)->latest()->first();
-            if ($match) return $match;
+            if ($match) {
+                return $match;
+            }
         }
 
         if ($invoiceId) {
@@ -153,7 +159,9 @@ class PaymentWebhookService
                 ->whereIn('status', [OnlinePayment::STATUS_PENDING, OnlinePayment::STATUS_PROCESSING])
                 ->latest()
                 ->first();
-            if ($match) return $match;
+            if ($match) {
+                return $match;
+            }
         }
 
         return null;

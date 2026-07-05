@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class TaxJurisdiction extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     /**
      * The attributes that are mass assignable.
@@ -45,7 +47,7 @@ class TaxJurisdiction extends Model
         ];
     }
 
-    public function taxSystem(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function taxSystem(): BelongsTo
     {
         return $this->belongsTo(TaxSystem::class);
     }

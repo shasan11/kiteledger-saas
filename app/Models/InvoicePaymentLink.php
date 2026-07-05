@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +12,7 @@ use Illuminate\Support\Str;
 class InvoicePaymentLink extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'invoice_id',
@@ -46,7 +48,7 @@ class InvoicePaymentLink extends Model
 
     public function isUsable(): bool
     {
-        return $this->active && !$this->isExpired();
+        return $this->active && ! $this->isExpired();
     }
 
     public function touchAccess(): void

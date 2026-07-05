@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasFiscalYear;
 use App\Models\Concerns\HasReportingTags;
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class ProductionOrder extends Model
 {
     use HasFactory, HasFiscalYear, HasReportingTags, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'branch_id',
@@ -50,18 +52,60 @@ class ProductionOrder extends Model
         ];
     }
 
-    public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
-    public function finishedProduct(): BelongsTo { return $this->belongsTo(Product::class, 'finished_product_id'); }
-    public function warehouse(): BelongsTo { return $this->belongsTo(Warehouse::class); }
-    public function productUnit(): BelongsTo { return $this->belongsTo(ProductUnit::class); }
-    public function approvedBy(): BelongsTo { return $this->belongsTo(User::class, 'approved_by_id'); }
-    public function voidedBy(): BelongsTo { return $this->belongsTo(User::class, 'voided_by_id'); }
-    public function userAdd(): BelongsTo { return $this->belongsTo(User::class, 'user_add_id'); }
-    public function journalVoucher(): BelongsTo { return $this->belongsTo(JournalVoucher::class); }
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
 
-    public function rawMaterials(): HasMany { return $this->hasMany(ProductionOrderRawMaterial::class); }
-    public function byproducts(): HasMany { return $this->hasMany(ProductionOrderByproduct::class); }
-    public function expenses(): HasMany { return $this->hasMany(ProductionOrderExpense::class); }
+    public function finishedProduct(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'finished_product_id');
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+
+    public function productUnit(): BelongsTo
+    {
+        return $this->belongsTo(ProductUnit::class);
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by_id');
+    }
+
+    public function userAdd(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_add_id');
+    }
+
+    public function journalVoucher(): BelongsTo
+    {
+        return $this->belongsTo(JournalVoucher::class);
+    }
+
+    public function rawMaterials(): HasMany
+    {
+        return $this->hasMany(ProductionOrderRawMaterial::class);
+    }
+
+    public function byproducts(): HasMany
+    {
+        return $this->hasMany(ProductionOrderByproduct::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(ProductionOrderExpense::class);
+    }
 
     public function inventoryLedgers(): HasMany
     {

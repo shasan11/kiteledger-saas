@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class SupportTicket extends Model
 {
     use HasFactory, HasUuids, SoftDeletes;
+    use RequiresTenantConnection;
 
     public const STATUSES = [
         'open',
@@ -148,6 +150,6 @@ class SupportTicket extends Model
     {
         return $this->due_at
             && $this->due_at->isPast()
-            && !in_array($this->status, ['resolved', 'closed']);
+            && ! in_array($this->status, ['resolved', 'closed']);
     }
 }

@@ -7,20 +7,47 @@ use App\Models\OnlinePayment;
 use App\Models\PaymentGatewaySetting;
 use App\Services\Payments\Contracts\PaymentGatewayInterface;
 use App\Services\Payments\PaymentHttpClient;
-use Illuminate\Http\Request;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Request;
 
 class StripeGateway implements PaymentGatewayInterface
 {
     public function __construct(protected PaymentGatewaySetting $setting) {}
 
-    public function getName(): string { return 'stripe'; }
-    public function getDisplayName(): string { return $this->setting->display_name ?? 'Stripe'; }
-    public function getSupportedCurrencies(): array { return $this->setting->allowed_currencies ?? ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'INR']; }
-    public function getRequiredCredentials(): array { return ['publishable_key', 'secret_key', 'webhook_secret']; }
-    public function supportsPartialPayments(): bool { return true; }
-    public function supportsWebhook(): bool { return true; }
-    public function supportsRefund(): bool { return true; }
+    public function getName(): string
+    {
+        return 'stripe';
+    }
+
+    public function getDisplayName(): string
+    {
+        return $this->setting->display_name ?? 'Stripe';
+    }
+
+    public function getSupportedCurrencies(): array
+    {
+        return $this->setting->allowed_currencies ?? ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'INR'];
+    }
+
+    public function getRequiredCredentials(): array
+    {
+        return ['publishable_key', 'secret_key', 'webhook_secret'];
+    }
+
+    public function supportsPartialPayments(): bool
+    {
+        return true;
+    }
+
+    public function supportsWebhook(): bool
+    {
+        return true;
+    }
+
+    public function supportsRefund(): bool
+    {
+        return true;
+    }
 
     public function createPayment(Invoice $invoice, array $payload): array
     {
@@ -41,14 +68,14 @@ class StripeGateway implements PaymentGatewayInterface
                 'price_data' => [
                     'currency' => $currency,
                     'product_data' => [
-                        'name' => 'Invoice ' . ($invoice->invoice_no ?? $invoice->id),
+                        'name' => 'Invoice '.($invoice->invoice_no ?? $invoice->id),
                     ],
                     'unit_amount' => $amountCents,
                 ],
                 'quantity' => 1,
             ]],
             'mode' => 'payment',
-            'success_url' => $successUrl . (str_contains($successUrl, '?') ? '&' : '?') . 'session_id={CHECKOUT_SESSION_ID}',
+            'success_url' => $successUrl.(str_contains($successUrl, '?') ? '&' : '?').'session_id={CHECKOUT_SESSION_ID}',
             'cancel_url' => $cancelUrl,
             'metadata' => [
                 'invoice_id' => $invoice->id,
@@ -59,7 +86,7 @@ class StripeGateway implements PaymentGatewayInterface
         $sessionId = $response['id'] ?? null;
         $redirectUrl = $response['url'] ?? null;
 
-        if (!$sessionId || !$redirectUrl) {
+        if (! $sessionId || ! $redirectUrl) {
             throw new \RuntimeException(
                 'Stripe did not return a valid Checkout Session. Verify that the secret key is valid and Checkout is enabled for this account.'
             );
@@ -77,7 +104,7 @@ class StripeGateway implements PaymentGatewayInterface
     {
         $secretKey = $this->setting->getCredential('secret_key');
         $sessionId = $payload['session_id'] ?? null;
-        if (!$sessionId) {
+        if (! $sessionId) {
             return ['success' => false, 'reason' => 'Missing session_id'];
         }
 
@@ -143,7 +170,7 @@ class StripeGateway implements PaymentGatewayInterface
     {
         $secretKey = $this->setting->getCredential('secret_key');
         $paymentIntentId = $payment->provider_payment_id;
-        if (!$paymentIntentId) {
+        if (! $paymentIntentId) {
             return ['success' => false, 'reason' => 'No payment intent ID'];
         }
 
@@ -169,15 +196,19 @@ class StripeGateway implements PaymentGatewayInterface
 
         foreach ($parts as $part) {
             [$key, $value] = explode('=', $part, 2);
-            if ($key === 't') $timestamp = $value;
-            if ($key === 'v1') $signatures[] = $value;
+            if ($key === 't') {
+                $timestamp = $value;
+            }
+            if ($key === 'v1') {
+                $signatures[] = $value;
+            }
         }
 
-        if (!$timestamp || empty($signatures)) {
+        if (! $timestamp || empty($signatures)) {
             throw new \RuntimeException('Invalid Stripe webhook signature.');
         }
 
-        $expectedSig = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
+        $expectedSig = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
         foreach ($signatures as $sig) {
             if (hash_equals($expectedSig, $sig)) {
                 return;
@@ -209,10 +240,10 @@ class StripeGateway implements PaymentGatewayInterface
                 ? ($decoded['error']['message'] ?? $decoded['error']['code'] ?? null)
                 : null;
 
-            throw new \RuntimeException('Stripe error: ' . ($errorMsg ?: "HTTP {$response->status()}"));
+            throw new \RuntimeException('Stripe error: '.($errorMsg ?: "HTTP {$response->status()}"));
         }
 
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             throw new \RuntimeException('Stripe returned an invalid response.');
         }
 
@@ -230,6 +261,7 @@ class StripeGateway implements PaymentGatewayInterface
                 $result[$fullKey] = $value;
             }
         }
+
         return $result;
     }
 }

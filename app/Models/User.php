@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
-use Database\Factories\UserFactory;
+use App\Models\Concerns\RequiresTenantConnection;
+use App\Services\BranchScopeService;
 use App\Services\Media\MediaStorageService;
+use App\Services\Payroll\PayrollAccountSyncService;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,7 +18,9 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, HasRoles, Notifiable;
+
+    use RequiresTenantConnection;
 
     protected $fillable = [
         // Core auth
@@ -87,7 +92,7 @@ class User extends Authenticatable
 
             if ($name === '') {
                 $name = trim(
-                    ((string) $user->first_name) . ' ' . ((string) $user->last_name)
+                    ((string) $user->first_name).' '.((string) $user->last_name)
                 );
             }
 
@@ -101,7 +106,7 @@ class User extends Authenticatable
 
     public function getDisplayNameAttribute(): string
     {
-        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''))
+        return trim(($this->first_name ?? '').' '.($this->last_name ?? ''))
             ?: ($this->username ?? $this->name ?? '');
     }
 
@@ -225,7 +230,7 @@ class User extends Authenticatable
 
     public function shouldSyncPayrollAccount(): bool
     {
-        return app(\App\Services\Payroll\PayrollAccountSyncService::class)->shouldSyncPayrollAccount($this);
+        return app(PayrollAccountSyncService::class)->shouldSyncPayrollAccount($this);
     }
 
     public function awardHistories(): HasMany
@@ -245,7 +250,7 @@ class User extends Authenticatable
 
     public function canViewAllBranches(): bool
     {
-        return app(\App\Services\BranchScopeService::class)->canViewAllBranches($this);
+        return app(BranchScopeService::class)->canViewAllBranches($this);
     }
 
     public function isMainBranchAdminOrAbove(): bool
@@ -255,16 +260,16 @@ class User extends Authenticatable
 
     public function isBranchLimited(): bool
     {
-        return !$this->canViewAllBranches();
+        return ! $this->canViewAllBranches();
     }
 
     public function assignedBranchIds(): array
     {
-        return app(\App\Services\BranchScopeService::class)->assignedBranchIds($this);
+        return app(BranchScopeService::class)->assignedBranchIds($this);
     }
 
     public function canAccessBranch(?string $branchId): bool
     {
-        return app(\App\Services\BranchScopeService::class)->canAccessBranch($this, $branchId);
+        return app(BranchScopeService::class)->canAccessBranch($this, $branchId);
     }
 }

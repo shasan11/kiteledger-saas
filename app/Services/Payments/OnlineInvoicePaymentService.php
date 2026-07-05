@@ -10,7 +10,6 @@ use App\Models\OnlinePayment;
 use App\Models\OnlinePaymentSetting;
 use App\Services\TransactionApprovalService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class OnlineInvoicePaymentService
 {
@@ -57,7 +56,7 @@ class OnlineInvoicePaymentService
             ->where('active', true)
             ->first();
 
-        if (!$link || !$link->isUsable()) {
+        if (! $link || ! $link->isUsable()) {
             return null;
         }
 
@@ -129,7 +128,7 @@ class OnlineInvoicePaymentService
                 'total' => $fresh->amount,
                 'payment_method' => 'online',
                 'reference' => $gatewayResult['payment_id'] ?? $fresh->provider_payment_id ?? $fresh->id,
-                'notes' => strtoupper($fresh->provider) . ' online payment | Ref: ' . ($gatewayResult['payment_id'] ?? ''),
+                'notes' => strtoupper($fresh->provider).' online payment | Ref: '.($gatewayResult['payment_id'] ?? ''),
                 'status' => 'draft',
                 'active' => true,
                 'approved' => false,
@@ -172,18 +171,18 @@ class OnlineInvoicePaymentService
             throw new \RuntimeException('This invoice has no outstanding balance.');
         }
 
-        if (!$settings->allow_partial_invoice_payment && $amount < $balanceDue) {
-            throw new \RuntimeException('Partial payments are not allowed. Please pay the full amount: ' . number_format($balanceDue, 2));
+        if (! $settings->allow_partial_invoice_payment && $amount < $balanceDue) {
+            throw new \RuntimeException('Partial payments are not allowed. Please pay the full amount: '.number_format($balanceDue, 2));
         }
 
         if ($settings->allow_partial_invoice_payment && $settings->minimum_partial_payment_amount) {
             if ($amount < (float) $settings->minimum_partial_payment_amount) {
-                throw new \RuntimeException('Minimum payment amount is ' . number_format((float) $settings->minimum_partial_payment_amount, 2));
+                throw new \RuntimeException('Minimum payment amount is '.number_format((float) $settings->minimum_partial_payment_amount, 2));
             }
         }
 
-        if (!$settings->allow_invoice_overpayment && $amount > round($balanceDue + 0.01, 2)) {
-            throw new \RuntimeException('Payment amount cannot exceed the invoice balance due: ' . number_format($balanceDue, 2));
+        if (! $settings->allow_invoice_overpayment && $amount > round($balanceDue + 0.01, 2)) {
+            throw new \RuntimeException('Payment amount cannot exceed the invoice balance due: '.number_format($balanceDue, 2));
         }
     }
 }

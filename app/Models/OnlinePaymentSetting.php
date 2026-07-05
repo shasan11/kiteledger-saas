@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Crypt;
 class OnlinePaymentSetting extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     protected $fillable = [
         'enable_online_payment',
@@ -61,7 +63,7 @@ class OnlinePaymentSetting extends Model
 
     public function getGoogleClientSecret(): ?string
     {
-        if (!$this->google_client_secret_encrypted) {
+        if (! $this->google_client_secret_encrypted) {
             return null;
         }
         try {

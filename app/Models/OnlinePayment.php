@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,13 +12,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class OnlinePayment extends Model
 {
     use HasFactory, HasUuids;
+    use RequiresTenantConnection;
 
     const STATUS_PENDING = 'pending';
+
     const STATUS_PROCESSING = 'processing';
+
     const STATUS_SUCCEEDED = 'succeeded';
+
     const STATUS_FAILED = 'failed';
+
     const STATUS_CANCELLED = 'cancelled';
+
     const STATUS_REFUNDED = 'refunded';
+
     const STATUS_PARTIALLY_REFUNDED = 'partially_refunded';
 
     protected $fillable = [

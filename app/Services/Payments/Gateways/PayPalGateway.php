@@ -7,20 +7,47 @@ use App\Models\OnlinePayment;
 use App\Models\PaymentGatewaySetting;
 use App\Services\Payments\Contracts\PaymentGatewayInterface;
 use App\Services\Payments\PaymentHttpClient;
-use Illuminate\Http\Request;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Request;
 
 class PayPalGateway implements PaymentGatewayInterface
 {
     public function __construct(protected PaymentGatewaySetting $setting) {}
 
-    public function getName(): string { return 'paypal'; }
-    public function getDisplayName(): string { return $this->setting->display_name ?? 'PayPal'; }
-    public function getSupportedCurrencies(): array { return $this->setting->allowed_currencies ?? ['USD', 'EUR', 'GBP', 'CAD', 'AUD']; }
-    public function getRequiredCredentials(): array { return ['client_id', 'client_secret']; }
-    public function supportsPartialPayments(): bool { return true; }
-    public function supportsWebhook(): bool { return true; }
-    public function supportsRefund(): bool { return true; }
+    public function getName(): string
+    {
+        return 'paypal';
+    }
+
+    public function getDisplayName(): string
+    {
+        return $this->setting->display_name ?? 'PayPal';
+    }
+
+    public function getSupportedCurrencies(): array
+    {
+        return $this->setting->allowed_currencies ?? ['USD', 'EUR', 'GBP', 'CAD', 'AUD'];
+    }
+
+    public function getRequiredCredentials(): array
+    {
+        return ['client_id', 'client_secret'];
+    }
+
+    public function supportsPartialPayments(): bool
+    {
+        return true;
+    }
+
+    public function supportsWebhook(): bool
+    {
+        return true;
+    }
+
+    public function supportsRefund(): bool
+    {
+        return true;
+    }
 
     private function baseUrl(): string
     {
@@ -43,7 +70,7 @@ class PayPalGateway implements PaymentGatewayInterface
             $response = PaymentHttpClient::request()
                 ->withBasicAuth($clientId, $clientSecret)
                 ->asForm()
-                ->post($this->baseUrl() . '/v1/oauth2/token', [
+                ->post($this->baseUrl().'/v1/oauth2/token', [
                     'grant_type' => 'client_credentials',
                 ]);
         } catch (ConnectionException $e) {
@@ -56,14 +83,14 @@ class PayPalGateway implements PaymentGatewayInterface
         $decoded = $response->json();
         $accessToken = is_array($decoded) ? ($decoded['access_token'] ?? null) : null;
 
-        if ($response->failed() || !$accessToken) {
+        if ($response->failed() || ! $accessToken) {
             $reason = is_array($decoded)
                 ? ($decoded['error_description'] ?? $decoded['message'] ?? $decoded['error'] ?? null)
                 : null;
 
             throw new \RuntimeException(
-                "PayPal {$mode} authentication failed: " . ($reason ?: "HTTP {$response->status()}")
-                . '. Confirm that the credentials belong to the selected mode.'
+                "PayPal {$mode} authentication failed: ".($reason ?: "HTTP {$response->status()}")
+                .'. Confirm that the credentials belong to the selected mode.'
             );
         }
 
@@ -80,7 +107,7 @@ class PayPalGateway implements PaymentGatewayInterface
             'intent' => 'CAPTURE',
             'purchase_units' => [[
                 'reference_id' => $invoice->id,
-                'description' => 'Invoice ' . ($invoice->invoice_no ?? $invoice->id),
+                'description' => 'Invoice '.($invoice->invoice_no ?? $invoice->id),
                 'amount' => ['currency_code' => $currency, 'value' => $amount],
             ]],
             'application_context' => [
@@ -92,7 +119,7 @@ class PayPalGateway implements PaymentGatewayInterface
         $approvalUrl = collect($order['links'] ?? [])->firstWhere('rel', 'approve')['href'] ?? null;
         $orderId = $order['id'] ?? null;
 
-        if (!$orderId || !$approvalUrl) {
+        if (! $orderId || ! $approvalUrl) {
             throw new \RuntimeException(
                 'PayPal did not return a valid approval URL. Verify the app credentials and account status.'
             );
@@ -109,7 +136,7 @@ class PayPalGateway implements PaymentGatewayInterface
     public function verifyPayment(array $payload): array
     {
         $orderId = $payload['order_id'] ?? $payload['token'] ?? null;
-        if (!$orderId) {
+        if (! $orderId) {
             return ['success' => false, 'reason' => 'Missing order ID'];
         }
 
@@ -125,13 +152,13 @@ class PayPalGateway implements PaymentGatewayInterface
         }
 
         if ($status !== 'APPROVED') {
-            return ['success' => false, 'reason' => 'Order is not ready to capture (status: ' . ($status ?: 'unknown') . ').'];
+            return ['success' => false, 'reason' => 'Order is not ready to capture (status: '.($status ?: 'unknown').').'];
         }
 
         try {
             // PayPal-Request-Id makes the capture idempotent against retries.
             $capture = $this->paypalRequest('POST', "/v2/checkout/orders/{$orderId}/capture", $token, [], [
-                'PayPal-Request-Id: capture-' . $orderId,
+                'PayPal-Request-Id: capture-'.$orderId,
             ]);
 
             return $this->extractCaptureResult($capture, $orderId);
@@ -139,6 +166,7 @@ class PayPalGateway implements PaymentGatewayInterface
             // Lost a race with another capture (webhook/redirect): re-read and accept.
             if (str_contains($e->getMessage(), 'ORDER_ALREADY_CAPTURED')) {
                 $order = $this->paypalRequest('GET', "/v2/checkout/orders/{$orderId}", $token);
+
                 return $this->extractCaptureResult($order, $orderId);
             }
             throw $e;
@@ -213,7 +241,7 @@ class PayPalGateway implements PaymentGatewayInterface
             $result['order_id'] = $resource['supplementary_data']['related_ids']['order_id'] ?? null;
             $result['payment_id'] = $resource['id'] ?? null;
             $result['status'] = 'failed';
-            $result['reason'] = 'PayPal reported the capture as ' . strtolower(str_replace('PAYMENT.CAPTURE.', '', $eventType)) . '.';
+            $result['reason'] = 'PayPal reported the capture as '.strtolower(str_replace('PAYMENT.CAPTURE.', '', $eventType)).'.';
         } elseif ($eventType === 'PAYMENT.CAPTURE.REFUNDED') {
             $result['payment_id'] = $resource['id'] ?? null;
             $result['status'] = 'refunded';
@@ -232,7 +260,7 @@ class PayPalGateway implements PaymentGatewayInterface
     {
         $webhookId = $this->setting->getCredential('webhook_id');
 
-        if (!$webhookId) {
+        if (! $webhookId) {
             // Cannot cryptographically verify without a webhook id.
             return false;
         }
@@ -284,10 +312,10 @@ class PayPalGateway implements PaymentGatewayInterface
 
             if ($method === 'POST') {
                 $response = empty($data)
-                    ? $client->withBody('{}', 'application/json')->post($this->baseUrl() . $path)
-                    : $client->post($this->baseUrl() . $path, $data);
+                    ? $client->withBody('{}', 'application/json')->post($this->baseUrl().$path)
+                    : $client->post($this->baseUrl().$path, $data);
             } else {
-                $response = $client->get($this->baseUrl() . $path);
+                $response = $client->get($this->baseUrl().$path);
             }
         } catch (ConnectionException $e) {
             throw new \RuntimeException(
@@ -303,10 +331,10 @@ class PayPalGateway implements PaymentGatewayInterface
                 ? ($decoded['message'] ?? $decoded['details'][0]['description'] ?? $decoded['name'] ?? null)
                 : null;
 
-            throw new \RuntimeException('PayPal error: ' . ($msg ?: "HTTP {$response->status()}"));
+            throw new \RuntimeException('PayPal error: '.($msg ?: "HTTP {$response->status()}"));
         }
 
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             throw new \RuntimeException('PayPal returned an invalid response.');
         }
 
@@ -318,7 +346,7 @@ class PayPalGateway implements PaymentGatewayInterface
         $normalized = [];
 
         foreach ($headers as $header) {
-            if (!str_contains($header, ':')) {
+            if (! str_contains($header, ':')) {
                 continue;
             }
 

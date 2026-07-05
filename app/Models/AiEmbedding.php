@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\RequiresTenantConnection;
 use Illuminate\Database\Eloquent\Model;
 
 class AiEmbedding extends Model
 {
+    use RequiresTenantConnection;
+
     protected $fillable = [
         'source_type',
         'source_id',
