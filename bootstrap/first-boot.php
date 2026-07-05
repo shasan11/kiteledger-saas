@@ -10,6 +10,15 @@ $basePath = dirname(__DIR__);
 $environmentPath = $basePath.DIRECTORY_SEPARATOR.'.env';
 $examplePath = $basePath.DIRECTORY_SEPARATOR.'.env.example';
 $environmentExists = is_file($environmentPath);
+
+// Some LiteSpeed/cPanel configurations execute web PHP under a different
+// group from the shell user that extracted the package. The root .htaccess
+// blocks HTTP access to dotfiles, so 0644 remains safe while ensuring PHP can
+// read the generated environment on those hosts.
+if ($environmentExists) {
+    @chmod($environmentPath, 0644);
+}
+
 $contents = $environmentExists
     ? file_get_contents($environmentPath)
     : (is_file($examplePath) ? file_get_contents($examplePath) : false);
@@ -113,7 +122,7 @@ if ($environmentExists) {
         return false;
     }
 
-    @chmod($environmentPath, 0640);
+    @chmod($environmentPath, 0644);
 
     return true;
 }
@@ -153,6 +162,6 @@ if (! $written) {
     return false;
 }
 
-@chmod($environmentPath, 0640);
+@chmod($environmentPath, 0644);
 
 return true;
