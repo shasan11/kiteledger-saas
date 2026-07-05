@@ -10,6 +10,10 @@
 The marketplace package includes `vendor/` and `public/build/`; buyers do not
 need Composer, Node.js, or npm.
 
+The first web request automatically creates `.env` from `.env.example` and
+generates a unique `APP_KEY`. The application root must be writable by PHP for
+that first request; `.env` is then created with mode `0640` where supported.
+
 Never upload `public/hot`. It is a local Vite development marker and would make
 a hosted site attempt to load JavaScript from the visitor's localhost port 5173.
 

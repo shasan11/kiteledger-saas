@@ -5,6 +5,14 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
+// A marketplace installation must boot even when the uploaded archive did not
+// contain the normally git-ignored .env file.
+if (require __DIR__.'/../bootstrap/first-boot.php' !== true) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit("KiteLedger could not create .env. Make the application root writable, then reload /install.\n");
+}
+
 // Determine if the application is in maintenance mode...
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;
