@@ -41,6 +41,14 @@ class EnsureInstalled
             return $next($request);
         }
 
+        // StartSession runs after this prepended middleware. Force filesystem
+        // runtime services until migrations have created their database tables.
+        config([
+            'session.driver' => 'file',
+            'cache.default' => 'file',
+            'queue.default' => 'sync',
+        ]);
+
         // Let the installer, health check and static assets through.
         if ($isInstall || $request->is('up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
             return $next($request);

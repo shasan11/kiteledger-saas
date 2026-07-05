@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Enums\DomainStatus;
 use App\Models\Central\Domain;
+use App\Support\Installer\InstalledState;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -12,6 +13,14 @@ class InitializeTenancyByVerifiedDomain
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // An unconfigured central domain can otherwise fall through to tenant
+        // routing and query the domains table before the installer creates it.
+        if (! InstalledState::isInstalled()) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Application is not installed.'], 503)
+                : redirect('/install');
+        }
+
         $host = strtolower(rtrim($request->getHost(), '.'));
         if (in_array($host, array_map('strtolower', config('tenancy.central_domains', [])), true)) {
             return $this->notFound($request);

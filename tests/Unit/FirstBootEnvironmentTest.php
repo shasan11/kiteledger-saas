@@ -51,6 +51,11 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString('APP_ENV=production', $contents);
         $this->assertStringContainsString('APP_DEBUG=false', $contents);
         $this->assertStringContainsString('APP_URL=https://vedanica.com', $contents);
+        $this->assertStringContainsString('CENTRAL_DOMAINS=vedanica.com', $contents);
+        $this->assertStringContainsString('SAAS_BASE_DOMAIN=vedanica.com', $contents);
+        $this->assertStringContainsString('SESSION_DRIVER=file', $contents);
+        $this->assertStringContainsString('CACHE_STORE=file', $contents);
+        $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
 
         $original = $contents;
         $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');

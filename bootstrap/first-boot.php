@@ -58,7 +58,16 @@ if ($host !== '' && preg_match('/^[A-Za-z0-9.:-]+$/', $host)) {
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
     $scheme = ($https !== '' && $https !== 'off') || $forwardedProto === 'https' ? 'https' : 'http';
     $contents = $setValue($contents, 'APP_URL', $scheme.'://'.$host);
+
+    $domain = strtolower((string) preg_replace('/:\d+$/', '', $host));
+    $contents = $setValue($contents, 'CENTRAL_DOMAINS', $domain);
+    $contents = $setValue($contents, 'SAAS_BASE_DOMAIN', $domain);
 }
+
+// Nothing may depend on migrated tables until the wizard has finished.
+$contents = $setValue($contents, 'SESSION_DRIVER', 'file');
+$contents = $setValue($contents, 'CACHE_STORE', 'file');
+$contents = $setValue($contents, 'QUEUE_CONNECTION', 'sync');
 
 // Exclusive creation prevents concurrent first requests from overwriting one
 // another. If another request won the race, its complete .env is accepted.

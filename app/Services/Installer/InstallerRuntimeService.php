@@ -14,6 +14,9 @@ class InstallerRuntimeService
         $this->writeEnvironmentValues([
             'APP_ENV' => 'production',
             'APP_DEBUG' => 'false',
+            'SESSION_DRIVER' => 'database',
+            'CACHE_STORE' => 'database',
+            'QUEUE_CONNECTION' => 'database',
         ]);
 
         Artisan::call('optimize:clear');

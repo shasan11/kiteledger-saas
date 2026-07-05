@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use App\Support\Installer\FroidenDatabaseManager;
 use App\Support\Installer\FroidenEnvironmentManager;
 use App\Support\Installer\FroidenInstalledFileManager;
@@ -9,6 +10,7 @@ use App\Support\Installer\InstalledState;
 use Froiden\LaravelInstaller\Helpers\DatabaseManager;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
+use Illuminate\Http\Request;
 use Mockery;
 use Tests\TestCase;
 
@@ -47,6 +49,17 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertNotNull($route);
         $this->assertContains('POST', $route->methods());
         $this->assertNull($route->getDomain());
+    }
+
+    public function test_unconfigured_tenant_host_does_not_query_database_before_installation(): void
+    {
+        $response = (new InitializeTenancyByVerifiedDomain)->handle(
+            Request::create('https://setup.customer.test/'),
+            fn () => $this->fail('The tenant request must not continue before installation.'),
+        );
+
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertStringEndsWith('/install', (string) $response->headers->get('Location'));
     }
 
     public function test_froiden_final_step_writes_both_install_locks(): void
