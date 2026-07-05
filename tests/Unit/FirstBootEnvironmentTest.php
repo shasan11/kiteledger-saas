@@ -62,6 +62,32 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertSame($original, file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'));
     }
 
+    public function test_incomplete_existing_environment_is_repaired_automatically(): void
+    {
+        file_put_contents($this->directory.DIRECTORY_SEPARATOR.'.env', implode(PHP_EOL, [
+            'APP_KEY=',
+            'APP_ENV=local',
+            'APP_DEBUG=true',
+            'DB_CONNECTION=sqlite',
+            'SESSION_DRIVER=database',
+            'CACHE_STORE=database',
+            'QUEUE_CONNECTION=database',
+            '',
+        ]));
+
+        $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
+
+        $contents = file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env');
+        $this->assertIsString($contents);
+        $this->assertMatchesRegularExpression('/^APP_KEY=base64:.+$/m', $contents);
+        $this->assertStringContainsString('APP_ENV=production', $contents);
+        $this->assertStringContainsString('APP_DEBUG=false', $contents);
+        $this->assertStringContainsString('DB_CONNECTION=mysql', $contents);
+        $this->assertStringContainsString('SESSION_DRIVER=file', $contents);
+        $this->assertStringContainsString('CACHE_STORE=file', $contents);
+        $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
+    }
+
     private function restoreServerValue(string $key, ?string $value): void
     {
         if ($value === null) {

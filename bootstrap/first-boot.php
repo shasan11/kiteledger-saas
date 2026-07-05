@@ -8,13 +8,11 @@
  */
 $basePath = dirname(__DIR__);
 $environmentPath = $basePath.DIRECTORY_SEPARATOR.'.env';
-
-if (is_file($environmentPath)) {
-    return true;
-}
-
 $examplePath = $basePath.DIRECTORY_SEPARATOR.'.env.example';
-$contents = is_file($examplePath) ? file_get_contents($examplePath) : false;
+$environmentExists = is_file($environmentPath);
+$contents = $environmentExists
+    ? file_get_contents($environmentPath)
+    : (is_file($examplePath) ? file_get_contents($examplePath) : false);
 
 if ($contents === false) {
     $contents = implode(PHP_EOL, [
@@ -42,18 +40,60 @@ $setValue = static function (string $source, string $key, string $value): string
         : rtrim($source, "\r\n").PHP_EOL.$line.PHP_EOL;
 };
 
-try {
-    $key = 'base64:'.base64_encode(random_bytes(32));
-} catch (Throwable) {
-    return false;
+$getValue = static function (string $source, string $key): string {
+    if (! preg_match('/^'.preg_quote($key, '/').'=(.*)$/m', $source, $matches)) {
+        return '';
+    }
+
+    return trim(trim($matches[1]), "\"'");
+};
+
+$originalContents = $contents;
+$installed = is_file($basePath.'/storage/installed') || is_file($basePath.'/storage/app/installed');
+
+if ($getValue($contents, 'APP_KEY') === '') {
+    try {
+        $contents = $setValue($contents, 'APP_KEY', 'base64:'.base64_encode(random_bytes(32)));
+    } catch (Throwable) {
+        return false;
+    }
 }
 
-$contents = $setValue($contents, 'APP_KEY', $key);
-$contents = $setValue($contents, 'APP_ENV', 'production');
-$contents = $setValue($contents, 'APP_DEBUG', 'false');
+if (! $installed) {
+    $contents = $setValue($contents, 'APP_ENV', 'production');
+    $contents = $setValue($contents, 'APP_DEBUG', 'false');
+
+    // Nothing may depend on migrated tables until the wizard has finished.
+    $contents = $setValue($contents, 'SESSION_DRIVER', 'file');
+    $contents = $setValue($contents, 'CACHE_STORE', 'file');
+    $contents = $setValue($contents, 'QUEUE_CONNECTION', 'sync');
+
+    if (in_array(strtolower($getValue($contents, 'DB_CONNECTION')), ['', 'sqlite'], true)) {
+        $contents = $setValue($contents, 'DB_CONNECTION', 'mysql');
+    }
+
+    foreach ([
+        'DB_HOST' => '127.0.0.1',
+        'DB_PORT' => '3306',
+        'DB_DATABASE' => 'kiteledger',
+        'DB_USERNAME' => 'root',
+        'DB_PASSWORD' => '',
+    ] as $key => $default) {
+        if ($getValue($contents, $key) === '') {
+            $contents = $setValue($contents, $key, $default);
+        }
+    }
+
+    // A packaged config cache can retain an empty key or SQLite defaults and
+    // prevent Laravel from seeing the environment created above.
+    $configCache = $basePath.'/bootstrap/cache/config.php';
+    if (is_file($configCache)) {
+        @unlink($configCache);
+    }
+}
 
 $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-if ($host !== '' && preg_match('/^[A-Za-z0-9.:-]+$/', $host)) {
+if (! $installed && $host !== '' && preg_match('/^[A-Za-z0-9.:-]+$/', $host)) {
     $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
     $scheme = ($https !== '' && $https !== 'off') || $forwardedProto === 'https' ? 'https' : 'http';
@@ -64,10 +104,19 @@ if ($host !== '' && preg_match('/^[A-Za-z0-9.:-]+$/', $host)) {
     $contents = $setValue($contents, 'SAAS_BASE_DOMAIN', $domain);
 }
 
-// Nothing may depend on migrated tables until the wizard has finished.
-$contents = $setValue($contents, 'SESSION_DRIVER', 'file');
-$contents = $setValue($contents, 'CACHE_STORE', 'file');
-$contents = $setValue($contents, 'QUEUE_CONNECTION', 'sync');
+if ($environmentExists) {
+    if ($contents === $originalContents) {
+        return true;
+    }
+
+    if (@file_put_contents($environmentPath, $contents, LOCK_EX) === false) {
+        return false;
+    }
+
+    @chmod($environmentPath, 0640);
+
+    return true;
+}
 
 // Exclusive creation prevents concurrent first requests from overwriting one
 // another. If another request won the race, its complete .env is accepted.
