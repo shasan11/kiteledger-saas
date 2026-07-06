@@ -15,7 +15,9 @@ return [
     |
     */
 
-    'default' => env('CACHE_STORE', 'database'),
+    // Cache maintenance must remain available before database setup and while
+    // recovering invalid credentials.
+    'default' => env('CACHE_STORE', 'file'),
 
     /*
     |--------------------------------------------------------------------------

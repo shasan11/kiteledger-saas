@@ -17,7 +17,9 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    // The marketplace installer provisions MySQL/MariaDB only. Falling back
+    // to SQLite before .env exists produces a misleading missing-file error.
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------
