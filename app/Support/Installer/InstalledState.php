@@ -22,22 +22,113 @@ class InstalledState
         return storage_path('installed');
     }
 
-    /**
-     * Installed === the lock file exists. Nothing else.
-     *
-     * We deliberately do NOT infer "installed" from the database having users:
-     * the installer runs migrate:fresh + seed BEFORE it writes the lock, so a
-     * run that fails partway leaves users in the DB with no lock. Treating that
-     * as "installed" would permanently block /install with "already installed"
-     * and make the failure unrecoverable from the browser. The lock is written
-     * only after a fully successful install, so its presence is the one true
-     * signal. To re-run the installer, delete the install lock files.
-     */
+    public static function recoveryMarkerPath(): string
+    {
+        return storage_path('app/install/recovery-required');
+    }
+
+    public static function hasInstallLock(): bool
+    {
+        return is_file(self::lockPath()) || is_file(self::froidenLockPath());
+    }
+
+    public static function requiresRecovery(): bool
+    {
+        $values = self::environmentValues();
+
+        return is_file(self::recoveryMarkerPath())
+            || filter_var($values['INSTALL_RECOVERY_REQUIRED'] ?? false, FILTER_VALIDATE_BOOL);
+    }
+
+    public static function hasValidAppKey(): bool
+    {
+        if (app()->environment('testing')) {
+            return filled((string) config('app.key'));
+        }
+
+        $values = self::environmentValues();
+
+        return filled($values['APP_KEY'] ?? null) && filled((string) config('app.key'));
+    }
+
+    public static function hasUsableDatabaseConfig(): bool
+    {
+        $connection = (string) config('database.default');
+        $runtime = (array) config("database.connections.{$connection}", []);
+
+        if (app()->environment('testing')) {
+            if ($connection === 'sqlite') {
+                return filled($runtime['database'] ?? null);
+            }
+
+            $database = trim((string) ($runtime['database'] ?? ''));
+            $username = trim((string) ($runtime['username'] ?? ''));
+            $password = (string) ($runtime['password'] ?? '');
+
+            return $database !== ''
+                && strtolower($database) !== 'laravel'
+                && $username !== ''
+                && ! (strtolower($username) === 'root' && $password === '');
+        }
+
+        $values = self::environmentValues();
+        $database = trim((string) ($values['DB_DATABASE'] ?? ''));
+        $username = trim((string) ($values['DB_USERNAME'] ?? ''));
+        $password = (string) ($values['DB_PASSWORD'] ?? '');
+        $runtimeDatabase = trim((string) ($runtime['database'] ?? ''));
+        $runtimeUsername = trim((string) ($runtime['username'] ?? ''));
+        $runtimePassword = (string) ($runtime['password'] ?? '');
+
+        return $database !== ''
+            && strtolower($database) !== 'laravel'
+            && $username !== ''
+            && ! (strtolower($username) === 'root' && $password === '')
+            && $runtimeDatabase !== ''
+            && strtolower($runtimeDatabase) !== 'laravel'
+            && $runtimeUsername !== ''
+            && ! (strtolower($runtimeUsername) === 'root' && $runtimePassword === '');
+    }
+
+    public static function hasRequiredRuntimeFiles(): bool
+    {
+        return is_file(base_path('vendor/autoload.php'))
+            && is_file(public_path('build/manifest.json'))
+            && is_file(base_path('.env'));
+    }
+
     public static function isInstalled(): bool
     {
-        // Stock Froiden writes storage/installed at its final step; honour that
-        // too so an install completed through Froiden is recognised everywhere.
-        return is_file(self::lockPath()) || is_file(self::froidenLockPath());
+        return self::hasInstallLock()
+            && ! self::requiresRecovery()
+            && self::hasValidAppKey()
+            && self::hasUsableDatabaseConfig()
+            && self::hasRequiredRuntimeFiles();
+    }
+
+    /** @return array<int, string> */
+    public static function recoveryProblems(): array
+    {
+        $problems = [];
+        if (self::requiresRecovery()) {
+            $problems[] = 'The previous lock was found with an incomplete environment and requires installer recovery.';
+        }
+        if (! is_file(base_path('.env'))) {
+            $problems[] = '.env is missing.';
+        }
+        if (! self::hasValidAppKey()) {
+            $problems[] = 'APP_KEY is missing or stale.';
+        }
+        if (! self::hasUsableDatabaseConfig()) {
+            $problems[] = 'Database configuration is missing, invalid, or still using Laravel defaults.';
+        }
+        if (! is_file(base_path('vendor/autoload.php'))) {
+            $problems[] = 'Vendor dependencies are missing.';
+        }
+        if (! is_file(public_path('build/manifest.json'))) {
+            $problems[] = 'Frontend build assets are missing.';
+        }
+
+        return $problems;
     }
 
     public static function mark(): void
@@ -54,6 +145,8 @@ class InstalledState
                 .implode(' ', $errors)
             );
         }
+
+        self::clearRecoveryRequirement();
     }
 
     private static function writeLock(string $path, string $contents, array &$errors): bool
@@ -86,10 +179,48 @@ class InstalledState
 
     public static function clear(): void
     {
-        foreach ([self::lockPath(), self::froidenLockPath(), storage_path('app/install/status.json')] as $path) {
+        foreach ([self::lockPath(), self::froidenLockPath(), storage_path('app/install/status.json'), self::recoveryMarkerPath()] as $path) {
             if (is_file($path)) {
                 @unlink($path);
             }
         }
+        self::clearRecoveryRequirement();
+    }
+
+    private static function clearRecoveryRequirement(): void
+    {
+        if (is_file(self::recoveryMarkerPath())) {
+            @unlink(self::recoveryMarkerPath());
+        }
+
+        $path = base_path('.env');
+        $contents = @file_get_contents($path);
+        if ($contents === false || ! preg_match('/^INSTALL_RECOVERY_REQUIRED=/m', $contents)) {
+            return;
+        }
+
+        $updated = (string) preg_replace('/^INSTALL_RECOVERY_REQUIRED=.*$/m', 'INSTALL_RECOVERY_REQUIRED=false', $contents, 1);
+        @file_put_contents($path, $updated, LOCK_EX);
+    }
+
+    /** @return array<string, string> */
+    private static function environmentValues(): array
+    {
+        $contents = @file_get_contents(base_path('.env'));
+        if ($contents === false) {
+            return [];
+        }
+
+        $values = [];
+        foreach (preg_split('/\R/', $contents) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '' || str_starts_with($line, '#') || ! str_contains($line, '=')) {
+                continue;
+            }
+            [$key, $value] = explode('=', $line, 2);
+            $values[trim($key)] = trim(trim($value), "\"'");
+        }
+
+        return $values;
     }
 }

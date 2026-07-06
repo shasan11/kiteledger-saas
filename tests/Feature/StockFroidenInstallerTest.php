@@ -140,11 +140,11 @@ class StockFroidenInstallerTest extends TestCase
         $diagnostics = app(InstallerDiagnosticsService::class);
         $method = new \ReflectionMethod($diagnostics, 'fileCheck');
 
-        $manifest = $method->invoke($diagnostics, 'Compiled frontend manifest', base_path('missing-manifest.json'), 'This is a source-code package, not a marketplace package. Build the marketplace ZIP first using scripts/build-marketplace-package.sh.');
+        $manifest = $method->invoke($diagnostics, 'Compiled frontend manifest', base_path('missing-manifest.json'), 'Frontend build assets are missing. Upload the marketplace package, not the GitHub source ZIP.');
         $vendor = $method->invoke($diagnostics, 'Composer vendor dependencies', base_path('missing-autoload.php'), 'Vendor dependencies are missing. Upload the marketplace package, not the GitHub source ZIP.');
 
         $this->assertFalse($manifest['ok']);
-        $this->assertStringContainsString('source-code package', $manifest['detail']);
+        $this->assertStringContainsString('Frontend build assets are missing', $manifest['detail']);
         $this->assertFalse($vendor['ok']);
         $this->assertStringContainsString('Vendor dependencies are missing', $vendor['detail']);
     }

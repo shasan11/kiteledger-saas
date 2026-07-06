@@ -20,6 +20,12 @@ generates a unique `APP_KEY`. The application root must be writable by PHP for
 that first request; `.env` is then created with a cPanel-compatible mode while
 the included web-server rules block direct access to dotfiles.
 
+If an old install lock exists while `.env`, `APP_KEY`, database settings, or
+runtime package files are invalid, KiteLedger opens `/install/recover` instead
+of booting tenant/database middleware. The recovery action removes installer
+lock/status files only; it never deletes database data. Invalid install mode
+also clears stale Laravel config, route, package, and service cache files.
+
 Never upload `public/hot`. It is a local Vite development marker and would make
 a hosted site attempt to load JavaScript from the visitor's localhost port 5173.
 

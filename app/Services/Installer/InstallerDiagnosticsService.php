@@ -46,13 +46,23 @@ class InstallerDiagnosticsService
         $checks[] = $this->fileCheck(
             'Compiled frontend manifest',
             public_path('build/manifest.json'),
-            'This is a source-code package, not a marketplace package. Build the marketplace ZIP first using scripts/build-marketplace-package.sh.',
+            'Frontend build assets are missing. Upload the marketplace package, not the GitHub source ZIP.',
         );
         $checks[] = $this->fileCheck(
             'Composer vendor dependencies',
             base_path('vendor/autoload.php'),
             'Vendor dependencies are missing. Upload the marketplace package, not the GitHub source ZIP.',
         );
+        $checks[] = $this->fileCheck(
+            'Environment template',
+            base_path('.env.example'),
+            '.env.example is missing. Upload a complete marketplace package.',
+        );
+        $checks[] = [
+            'label' => 'Vite development marker',
+            'ok' => ! is_file(public_path('hot')),
+            'detail' => is_file(public_path('hot')) ? 'Remove public/hot before deployment.' : 'Not present',
+        ];
 
         return $checks;
     }

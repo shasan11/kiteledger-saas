@@ -16,6 +16,8 @@ use Throwable;
  */
 class EnsureInstalled
 {
+    private bool $environmentWasRecovered = false;
+
     public function handle(Request $request, Closure $next): Response
     {
         // First boot on a fresh server: create .env + APP_KEY automatically.
@@ -32,13 +34,21 @@ class EnsureInstalled
             error_reporting(error_reporting() & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
         }
 
-        // Never gate the automated test suite (fresh DBs have no lock).
-        if (app()->environment('testing')) {
+        // Most feature tests use isolated databases and do not exercise setup.
+        if (app()->environment('testing') && ! config('installer.enforce_state_in_tests', false)) {
             return $next($request);
+        }
+
+        if (! app()->environment('testing') && $this->environmentWasRecovered && $this->clearInstallerCaches()) {
+            return redirect()->to($request->fullUrl());
         }
 
         if (InstalledState::isInstalled()) {
             return $next($request);
+        }
+
+        if (! app()->environment('testing') && $this->clearInstallerCaches()) {
+            return redirect()->to($request->fullUrl());
         }
 
         // StartSession runs after this prepended middleware. Force filesystem
@@ -48,6 +58,17 @@ class EnsureInstalled
             'cache.default' => 'file',
             'queue.default' => 'sync',
         ]);
+
+        $isRecovery = $path === 'install/recover';
+        if (InstalledState::hasInstallLock()) {
+            if ($isRecovery) {
+                return $next($request);
+            }
+
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Application installation is incomplete.', 'recovery_url' => url('/install/recover')], 503)
+                : redirect('/install/recover');
+        }
 
         // Let the installer, health check and static assets through.
         if ($isInstall || $request->is('up', 'build/*', 'storage/*', 'vendor/*', 'favicon.ico')) {
@@ -99,19 +120,24 @@ class EnsureInstalled
                 }
 
                 config(['app.url' => $host]);
+                $this->environmentWasRecovered = true;
             }
 
-            if (! $this->hasAppKey()) {
+            $current = is_file($envPath) ? (string) file_get_contents($envPath) : '';
+            $key = $this->envValue($current, 'APP_KEY');
+            if ($key === '') {
                 $key = 'base64:'.base64_encode(random_bytes(32));
-                $current = is_file($envPath) ? (string) file_get_contents($envPath) : '';
                 $updated = $this->setEnvValue($current, 'APP_KEY', $key);
 
                 if (@file_put_contents($envPath, $updated, LOCK_EX) !== false) {
-                    // Make the key live for the rest of this request, and reset
-                    // the already-resolved encrypter so it picks up the new key.
                     config(['app.key' => $key]);
                     app()->forgetInstance('encrypter');
+                    $this->environmentWasRecovered = true;
                 }
+            } elseif (! $this->hasAppKey()) {
+                config(['app.key' => $key]);
+                app()->forgetInstance('encrypter');
+                $this->environmentWasRecovered = true;
             }
         } catch (Throwable) {
             // Never let bootstrapping break the request.
@@ -130,5 +156,27 @@ class EnsureInstalled
         }
 
         return rtrim($contents, "\r\n")."\n".$line."\n";
+    }
+
+    private function envValue(string $contents, string $key): string
+    {
+        if (! preg_match('/^'.preg_quote($key, '/').'=(.*)$/m', $contents, $matches)) {
+            return '';
+        }
+
+        return trim(trim($matches[1]), "\"'");
+    }
+
+    private function clearInstallerCaches(): bool
+    {
+        $deleted = false;
+        foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $file) {
+            $path = base_path('bootstrap/cache/'.$file);
+            if (is_file($path) && @unlink($path)) {
+                $deleted = true;
+            }
+        }
+
+        return $deleted;
     }
 }

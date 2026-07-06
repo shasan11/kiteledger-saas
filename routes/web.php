@@ -9,6 +9,7 @@ use App\Http\Controllers\Central\TenantController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
+use App\Http\Controllers\Installer\RecoveryController;
 use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
 use Froiden\LaravelInstaller\Controllers\EnvironmentController as PackageEnvironmentController;
 use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
@@ -19,6 +20,9 @@ use Illuminate\Support\Facades\Route;
 
 // Keep setup routes host-agnostic. Before installation the customer may be
 // visiting by an IP address or a domain that has not been written to .env yet.
+Route::get('install/recover', [RecoveryController::class, 'show'])->name('kiteledger.install.recover');
+Route::post('install/recover', [RecoveryController::class, 'reset'])->name('kiteledger.install.recover.reset');
+
 Route::middleware('install')->prefix('install')->name('kiteledger.install.')->group(function (): void {
     Route::post('environment/save', InstallerEnvironmentController::class)->name('environment.save');
     Route::get('type', [InstallTypeController::class, 'show'])->name('type');

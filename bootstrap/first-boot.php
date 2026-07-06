@@ -58,7 +58,8 @@ $getValue = static function (string $source, string $key): string {
 };
 
 $originalContents = $contents;
-$installed = is_file($basePath.'/storage/installed') || is_file($basePath.'/storage/app/installed');
+$hasLock = is_file($basePath.'/storage/installed') || is_file($basePath.'/storage/app/installed');
+$originalKeyMissing = $getValue($contents, 'APP_KEY') === '';
 
 if ($getValue($contents, 'APP_KEY') === '') {
     try {
@@ -67,6 +68,26 @@ if ($getValue($contents, 'APP_KEY') === '') {
         return false;
     }
 }
+
+$database = $getValue($contents, 'DB_DATABASE');
+$username = $getValue($contents, 'DB_USERNAME');
+$password = $getValue($contents, 'DB_PASSWORD');
+$configurationValid = $getValue($contents, 'APP_KEY') !== ''
+    && $database !== ''
+    && strtolower($database) !== 'laravel'
+    && $username !== ''
+    && ! (strtolower($username) === 'root' && $password === '');
+$recoveryMarker = $basePath.'/storage/app/install/recovery-required';
+$needsRecovery = $hasLock && (! $environmentExists || $originalKeyMissing || ! $configurationValid);
+if ($needsRecovery) {
+    $contents = $setValue($contents, 'INSTALL_RECOVERY_REQUIRED', 'true');
+    $recoveryDirectory = dirname($recoveryMarker);
+    if ((is_dir($recoveryDirectory) || @mkdir($recoveryDirectory, 0775, true)) && is_writable($recoveryDirectory)) {
+        @file_put_contents($recoveryMarker, 'recovery_required_at='.date('c').PHP_EOL, LOCK_EX);
+    }
+}
+$recoveryFlag = filter_var($getValue($contents, 'INSTALL_RECOVERY_REQUIRED'), FILTER_VALIDATE_BOOL);
+$installed = $hasLock && $configurationValid && ! $needsRecovery && ! $recoveryFlag && ! is_file($recoveryMarker);
 
 if (! $installed) {
     $contents = $setValue($contents, 'APP_ENV', 'production');
@@ -92,12 +113,17 @@ if (! $installed) {
             $contents = $setValue($contents, $key, $default);
         }
     }
+    if (strtolower($getValue($contents, 'DB_DATABASE')) === 'laravel') {
+        $contents = $setValue($contents, 'DB_DATABASE', 'kiteledger');
+    }
 
     // A packaged config cache can retain an empty key or SQLite defaults and
     // prevent Laravel from seeing the environment created above.
-    $configCache = $basePath.'/bootstrap/cache/config.php';
-    if (is_file($configCache)) {
-        @unlink($configCache);
+    foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $cacheFile) {
+        $cachePath = $basePath.'/bootstrap/cache/'.$cacheFile;
+        if (is_file($cachePath)) {
+            @unlink($cachePath);
+        }
     }
 }
 

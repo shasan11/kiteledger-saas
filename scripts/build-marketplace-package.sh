@@ -24,7 +24,7 @@ rsync -a ./ "$STAGE/" \
   --exclude='dist/' --exclude='database/*.sqlite*' \
   --exclude='storage/logs/*' --exclude='storage/framework/cache/*' \
   --exclude='storage/framework/sessions/*' --exclude='storage/framework/views/*' \
-  --exclude='storage/app/installed' --exclude='public/storage' \
+  --exclude='storage/app/installed' --exclude='storage/app/install/' --exclude='public/storage' \
   --exclude='public/hot' --exclude='bootstrap/cache/*.php'
 
 composer install --working-dir="$STAGE" --no-dev --prefer-dist \

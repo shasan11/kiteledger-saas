@@ -21,6 +21,8 @@
     @php
         $requestHost = request()->getHost();
         $defaultUrl = request()->getSchemeAndHttpHost();
+        $configuredDatabase = (string) env('DB_DATABASE', 'kiteledger');
+        $defaultDatabase = blank($configuredDatabase) || strtolower($configuredDatabase) === 'laravel' ? 'kiteledger' : $configuredDatabase;
     @endphp
     <form method="post" action="{{ route('kiteledger.install.environment.save') }}" id="env-form">
         @csrf
@@ -55,7 +57,7 @@
         <div class="form-group">
             <label class="col-sm-2 control-label">Database</label>
             <div class="col-sm-10">
-                <input type="text" name="database" class="form-control" value="{{ env('DB_DATABASE', 'kiteledger') }}" required>
+                <input type="text" name="database" class="form-control" value="{{ $defaultDatabase }}" required>
             </div>
         </div>
 

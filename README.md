@@ -21,6 +21,9 @@ Do not distribute or upload the GitHub source ZIP. Build the buyer package with
 5. Finish setup and copy both cron commands from the final screen.
 6. Log in to `/admin/login` and create the first company at `/admin/tenants`.
 
+A stale lock with a missing key or unsafe default database configuration is
+sent to `/install/recover`; it is never treated as a completed installation.
+
 The previous demo choices are retained for installer compatibility, but ERP
 sample data is now selected as a tenant default-data template during tenant
 provisioning.

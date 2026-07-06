@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Middleware\BindSessionToTenant;
+use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
@@ -34,5 +35,8 @@ class TenancyServiceProvider extends ServiceProvider
         });
 
         $this->app[Kernel::class]->prependToMiddlewarePriority(InitializeTenancyByVerifiedDomain::class);
+        // When both middleware are present, installation validation must run
+        // before tenant lookup, sessions, or any domains-table query.
+        $this->app[Kernel::class]->prependToMiddlewarePriority(EnsureInstalled::class);
     }
 }
