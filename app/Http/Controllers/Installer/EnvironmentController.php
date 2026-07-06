@@ -24,6 +24,12 @@ class EnvironmentController extends Controller
             'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email:rfc', 'max:255'],
             'admin_password' => ['required', 'string', 'min:12', 'max:255', 'confirmed'],
+            'provisioning_mode' => ['required', 'in:automatic,cpanel_uapi,pool'],
+            'cpanel_host' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'url:http,https', 'max:255'],
+            'cpanel_port' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'integer', 'between:1,65535'],
+            'cpanel_username' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:128'],
+            'cpanel_api_token' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:1024'],
+            'cpanel_database_user' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:128'],
         ]);
 
         if ($validator->fails()) {

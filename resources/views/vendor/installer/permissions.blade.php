@@ -2,20 +2,22 @@
 
 @section('title', 'Permissions')
 @section('container')
-    @if (isset($permissions['errors']))
+    @php($hasErrors = collect($checks)->contains(fn ($check) => ! $check['ok']))
+    @if ($hasErrors)
         <div class="alert alert-danger">Please fix the errors below, then click Check Permission Again.</div>
     @endif
     <ul class="list">
-        @foreach($permissions['permissions'] as $permission)
-        <li class="list__item list__item--permissions {{ $permission['isSet'] ? 'success' : 'error' }}">
-            {{ $permission['folder'] }}<span>{{ $permission['permission'] }}</span>
+        @foreach($checks as $check)
+        <li class="list__item list__item--permissions {{ $check['ok'] ? 'success' : 'error' }}" style="display:block;">
+            <strong>{{ $check['label'] }}</strong>
+            <div style="font-size:12px;margin-top:4px;word-break:break-word;">{{ $check['detail'] }}</div>
         </li>
         @endforeach
     </ul>
 
 
     <div class="buttons">
-        @if ( ! isset($permissions['errors']))
+        @if (! $hasErrors)
             <a class="button" href="{{ route('kiteledger.install.type') }}">
                 Next Step
             </a>

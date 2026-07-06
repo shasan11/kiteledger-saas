@@ -17,6 +17,14 @@ class InstallerRuntimeService
             'SESSION_DRIVER' => 'database',
             'CACHE_STORE' => 'database',
             'QUEUE_CONNECTION' => 'database',
+            'CENTRAL_ADMIN_PASSWORD' => '',
+        ]);
+        config([
+            'app.env' => 'production',
+            'app.debug' => false,
+            'session.driver' => 'database',
+            'cache.default' => 'database',
+            'queue.default' => 'database',
         ]);
 
         Artisan::call('optimize:clear');

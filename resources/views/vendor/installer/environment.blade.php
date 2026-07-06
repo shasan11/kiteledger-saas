@@ -88,6 +88,38 @@
                 <input type="text" name="admin_name" class="form-control" value="KiteLedger Administrator" required autocomplete="name">
             </div>
         </div>
+
+        <h3>Company Database Setup</h3>
+        <p style="font-size:13px;color:#6b7280;">KiteLedger uses a separate database for every company. Single-database mode is not available.</p>
+        <div class="form-group">
+            <label class="col-sm-2 control-label">Provisioning mode</label>
+            <div class="col-sm-10">
+                <select name="provisioning_mode" id="provisioning_mode" class="form-control" style="height:34px;" required>
+                    <option value="automatic" selected>Automatic database creation (recommended)</option>
+                    <option value="cpanel_uapi">cPanel UAPI</option>
+                    <option value="pool">Pre-created database pool (advanced)</option>
+                </select>
+                <small>Automatic mode is tested for CREATE DATABASE privilege when you continue.</small>
+            </div>
+        </div>
+        <div id="cpanel_fields" style="display:none;border-left:3px solid #e5e7eb;padding-left:10px;">
+            @foreach ([
+                ['cpanel_host', 'cPanel host', 'url', 'https://server.example.com'],
+                ['cpanel_port', 'cPanel port', 'number', '2083'],
+                ['cpanel_username', 'cPanel username', 'text', ''],
+                ['cpanel_api_token', 'cPanel API token', 'password', ''],
+                ['cpanel_database_user', 'cPanel database user', 'text', ''],
+            ] as [$name, $label, $type, $placeholder])
+                <div class="form-group">
+                    <label class="col-sm-2 control-label">{{ $label }}</label>
+                    <div class="col-sm-10"><input type="{{ $type }}" name="{{ $name }}" class="form-control" placeholder="{{ $placeholder }}" autocomplete="off"></div>
+                </div>
+            @endforeach
+            <small>The cPanel connection is tested when you click Next Step. The API token is never displayed again.</small>
+        </div>
+        <div id="pool_warning" class="alert alert-warning" style="display:none;">
+            Company creation will fail until at least one tenant database is added to the pool.
+        </div>
         <div class="form-group">
             <label class="col-sm-2 control-label">Email</label>
             <div class="col-sm-10">
@@ -124,6 +156,15 @@
                 messagePosition: "inline"
             });
         }
+        function updateProvisioningFields() {
+            var mode = $('#provisioning_mode').val();
+            $('#cpanel_fields').toggle(mode === 'cpanel_uapi');
+            $('#pool_warning').toggle(mode === 'pool');
+        }
+        document.addEventListener('DOMContentLoaded', function () {
+            $('#provisioning_mode').on('change', updateProvisioningFields);
+            updateProvisioningFields();
+        });
     </script>
 @stop
 @section('scripts')

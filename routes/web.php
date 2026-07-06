@@ -9,6 +9,12 @@ use App\Http\Controllers\Central\TenantController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
+use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
+use Froiden\LaravelInstaller\Controllers\EnvironmentController as PackageEnvironmentController;
+use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
+use Froiden\LaravelInstaller\Controllers\PermissionsController as PackagePermissionsController;
+use Froiden\LaravelInstaller\Controllers\RequirementsController as PackageRequirementsController;
+use Froiden\LaravelInstaller\Controllers\WelcomeController as PackageWelcomeController;
 use Illuminate\Support\Facades\Route;
 
 // Keep setup routes host-agnostic. Before installation the customer may be
@@ -17,6 +23,17 @@ Route::middleware('install')->prefix('install')->name('kiteledger.install.')->gr
     Route::post('environment/save', InstallerEnvironmentController::class)->name('environment.save');
     Route::get('type', [InstallTypeController::class, 'show'])->name('type');
     Route::post('type', [InstallTypeController::class, 'store'])->name('type.store');
+});
+
+// Register package screens explicitly instead of loading its legacy GET save
+// route. Installer credentials are accepted by the POST route above only.
+Route::middleware('install')->prefix('install')->name('LaravelInstaller::')->group(function (): void {
+    Route::get('/', [PackageWelcomeController::class, 'welcome'])->name('welcome');
+    Route::get('environment', [PackageEnvironmentController::class, 'environment'])->name('environment');
+    Route::get('requirements', [PackageRequirementsController::class, 'requirements'])->name('requirements');
+    Route::get('permissions', [PackagePermissionsController::class, 'permissions'])->name('permissions');
+    Route::get('database', [PackageDatabaseController::class, 'database'])->name('database');
+    Route::get('final', [PackageFinalController::class, 'finish'])->name('final');
 });
 
 $centralRoutes = function (): void {
@@ -46,12 +63,12 @@ $centralRoutes = function (): void {
             Route::post('tenants/{tenant}/impersonate', [TenantController::class, 'impersonate'])->middleware('central.admin:impersonate')->name('tenants.impersonate');
             Route::resource('plans', PlanController::class)->except(['show', 'destroy']);
 
-            foreach (['subscriptions', 'invoices', 'payments', 'gateways', 'website-pages', 'website-sections', 'website-menus', 'website-faqs', 'website-testimonials', 'blog-posts', 'default-templates', 'platform-settings', 'provisioning-logs', 'usage'] as $resource) {
+            foreach (['subscriptions', 'invoices', 'payments', 'gateways', 'website-pages', 'website-sections', 'website-menus', 'website-faqs', 'website-testimonials', 'blog-posts', 'default-templates', 'platform-settings', 'provisioning-logs', 'tenant-databases', 'usage'] as $resource) {
                 $permission = match (true) {
                     in_array($resource, ['subscriptions', 'invoices', 'payments'], true) => 'billing.manage',
                     $resource === 'gateways' => 'gateway.manage',
                     str_starts_with($resource, 'website-') || $resource === 'blog-posts' => 'cms.manage',
-                    in_array($resource, ['platform-settings', 'default-templates'], true) => 'settings.manage',
+                    in_array($resource, ['platform-settings', 'default-templates', 'tenant-databases'], true) => 'settings.manage',
                     default => 'tenant.view',
                 };
                 Route::get($resource, [ResourceController::class, 'index'])->defaults('resource', $resource)->name($resource.'.index');

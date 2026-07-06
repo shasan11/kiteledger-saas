@@ -13,6 +13,7 @@ use App\Http\Middleware\EnsureSubscriptionIsValid;
 use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
+use Froiden\LaravelInstaller\Middleware\canInstall;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -56,6 +57,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'quota.enforce' => EnforceTenantQuotas::class,
             'feature.enforce' => EnforceTenantModuleAccess::class,
             'tenant.session' => BindSessionToTenant::class,
+            'install' => canInstall::class,
         ]);
 
         // The installer posts before APP_KEY/session exist.

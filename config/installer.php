@@ -39,8 +39,12 @@ return [
     |
     */
     'permissions' => [
+        './'                     => '775',
         'storage/app/'           => '775',
         'storage/framework/'     => '775',
+        'storage/framework/cache/' => '775',
+        'storage/framework/sessions/' => '775',
+        'storage/framework/views/' => '775',
         'storage/logs/'          => '775',
         'bootstrap/cache/'       => '775'
     ]

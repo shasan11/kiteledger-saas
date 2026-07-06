@@ -10,11 +10,16 @@ ERP and its branches.
 A marketplace ZIP contains `vendor/`, `public/build/`, and preferably
 `database/sql/mysql_install.sql`. Customers do not need Composer or Node.js.
 
+Do not distribute or upload the GitHub source ZIP. Build the buyer package with
+`./scripts/build-marketplace-package.sh`; release builds should use
+`STRICT_MARKETPLACE_BUILD=1`.
+
 1. Extract the ZIP and point the web root to `public/`.
 2. Make `storage/`, `bootstrap/cache/`, and the project root writable.
-3. Configure `CENTRAL_DOMAINS` and `SAAS_BASE_DOMAIN` in `.env`.
-4. Open `/install`. Installation creates the central platform only.
-5. Start a queue worker and create companies from `/admin/tenants`.
+3. Make the project root, `storage/`, and `bootstrap/cache/` writable.
+4. Open `/install` and enter database, admin, domain, and company-database details.
+5. Finish setup and copy both cron commands from the final screen.
+6. Log in to `/admin/login` and create the first company at `/admin/tenants`.
 
 The previous demo choices are retained for installer compatibility, but ERP
 sample data is now selected as a tenant default-data template during tenant

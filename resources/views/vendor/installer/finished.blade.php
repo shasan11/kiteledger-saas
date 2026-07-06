@@ -1,21 +1,68 @@
 @extends('vendor.installer.layouts.master')
 
-@section('title', 'Finished')
+@section('title', 'Installation Complete')
 @section('container')
-    <p class="paragraph" style="text-align: center;">{{ data_get(session('message'), 'message') ?: 'Installation complete.' }}</p>
+    <style>
+        .finish-card{max-width:760px;margin:14px auto;text-align:left;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px}
+        .finish-card h3{margin:0 0 10px}.finish-card code{display:block;white-space:pre-wrap;word-break:break-all;background:#111827;color:#f9fafb;padding:10px;border-radius:5px;margin:7px 0}
+        .diagnostic{padding:6px 0;border-bottom:1px solid #e5e7eb}.diagnostic:last-child{border:0}.ok{color:#047857}.bad{color:#b91c1c}
+    </style>
 
-    <div style="max-width:420px;margin:14px auto;text-align:left;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;">
-        <p style="margin:0 0 8px;font-weight:600;">Administrator login</p>
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;">
-            <span>Email</span><strong style="font-family:monospace;">{{ env('CENTRAL_ADMIN_EMAIL', 'admin@kiteledger.test') }}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;">
-            <span>Password</span><strong style="font-family:monospace;">The password you entered</strong>
-        </div>
-        <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Sign in, then change this password from your profile.</p>
+    <p class="paragraph" style="text-align:center;">{{ data_get(session('message'), 'message') ?: 'Installation complete.' }}</p>
+
+    <div class="finish-card">
+        <h3>Administrator login</h3>
+        <p><strong>URL:</strong> <a href="{{ $adminLoginUrl }}">{{ $adminLoginUrl }}</a><br>
+        <strong>Email:</strong> {{ $adminEmail }}<br>
+        <strong>Password:</strong> Use the password you entered during setup.</p>
     </div>
 
-    <div class="buttons">
-        <a href="{{ url('/'.trim(config('saas.admin_path', 'admin'), '/').'/login') }}" class="button">Go to admin login</a>
+    <div class="finish-card">
+        <h3>Company database setup</h3>
+        <p><strong>Mode:</strong> {{ str_replace('_', ' ', $provisioningMode) }}</p>
+        <p>{{ $provisioningStatus }}</p>
+        @if ($provisioningMode === 'pool')
+            <p class="bad"><strong>Company creation will fail until at least one tenant database is added to the pool.</strong></p>
+            <p>After login, open <strong>Tenant Databases</strong>, add a pre-created database, and let KiteLedger validate it before creating a company.</p>
+        @endif
     </div>
+
+    <div class="finish-card">
+        <h3>System diagnostics</h3>
+        @foreach ($diagnostics as $check)
+            <div class="diagnostic">
+                <strong class="{{ $check['ok'] ? 'ok' : 'bad' }}">{{ $check['ok'] ? 'PASS' : 'ACTION NEEDED' }}</strong>
+                — {{ $check['label'] }}: {{ $check['detail'] }}
+            </div>
+        @endforeach
+    </div>
+
+    <div class="finish-card">
+        <h3>Cron Jobs Setup</h3>
+        <ol>
+            <li>Open <strong>cPanel → Advanced → Cron Jobs</strong>.</li>
+            <li>Choose <strong>Once Per Minute</strong>, or enter <code>* * * * *</code></li>
+            <li>Add the scheduler command:<code>cd {{ $projectPath }} &amp;&amp; /usr/local/bin/php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code></li>
+            <li>Add the queue worker command:<code>cd {{ $projectPath }} &amp;&amp; /usr/local/bin/php artisan queue:work --queue=provisioning,default --stop-when-empty &gt;&gt; /dev/null 2&gt;&amp;1</code></li>
+            <li>To find the project path, open the uploaded folder in cPanel File Manager and use the folder containing <code>artisan</code>. It often looks like <code>/home/USERNAME/kiteledger</code> or <code>/home/USERNAME/public_html</code>.</li>
+            <li>Try <code>/usr/local/bin/php</code> first. If it fails, ask your host for the PHP CLI path. Common alternatives are <code>/usr/bin/php</code> and <code>/opt/cpanel/ea-php83/root/usr/bin/php</code>.</li>
+        </ol>
+        <p><strong>Detected command examples:</strong></p>
+        <code>cd {{ $projectPath }} &amp;&amp; {{ $phpBinary }} artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code>
+        <code>cd {{ $projectPath }} &amp;&amp; {{ $phpBinary }} artisan queue:work --queue=provisioning,default --stop-when-empty &gt;&gt; /dev/null 2&gt;&amp;1</code>
+        <p><code>schedule:run</code> runs billing checks, quota cleanup, subscription checks, invoices, and recurring jobs. The queue worker processes tenant/company provisioning and exits safely when the queue is empty, which suits shared hosting.</p>
+        <p class="bad"><strong>Without the queue cron, company creation can remain pending. Without the scheduler cron, subscriptions, cleanup, invoices, and recurring automation may not run.</strong></p>
+    </div>
+
+    <div class="finish-card">
+        <h3>Domain and security checklist</h3>
+        <ul>
+            <li>Point the root domain to this application.</li>
+            <li>If tenant subdomains are used, point <code>*.{{ config('saas.base_domain') }}</code> to the same application and enable wildcard TLS.</li>
+            <li><code>/install</code> is now locked.</li>
+            <li>Delete uploaded ZIPs and installation backups from public directories.</li>
+        </ul>
+    </div>
+
+    <div class="buttons"><a href="{{ $adminLoginUrl }}" class="button">Go to admin login</a></div>
 @stop

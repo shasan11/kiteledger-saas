@@ -6,6 +6,7 @@ use Database\Seeders\CentralDatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
 
@@ -90,9 +91,15 @@ class InstallerDatabaseService
 
     private function installBaseData(): void
     {
+        $this->assertDatabaseIsEmpty();
+
         if ($this->hasMysqlInstallDump()) {
             Log::info('Installer selected packaged SQL dump.', ['used_sql_dump' => true]);
             $this->importMysqlInstallDump();
+            // The packaged dump deliberately contains no buyer credentials.
+            // Re-run the idempotent central seeder so the administrator entered
+            // in the wizard is created after the dump has been imported.
+            Artisan::call('db:seed', ['--class' => CentralDatabaseSeeder::class, '--force' => true]);
 
             return;
         }
@@ -106,7 +113,22 @@ class InstallerDatabaseService
 
     private function dumpPath(): string
     {
-        return database_path('sql/mysql_central_install.sql');
+        return database_path('sql/mysql_install.sql');
+    }
+
+    private function assertDatabaseIsEmpty(): void
+    {
+        $tables = Schema::getTableListing(DB::connection()->getDatabaseName(), false);
+
+        if ($tables === []) {
+            return;
+        }
+
+        if (in_array('migrations', $tables, true)) {
+            throw new RuntimeException('Recovery required: this database already contains Laravel migrations but no install lock exists. The browser installer will not erase it. Restore the missing install lock, select an empty database, or use the forced CLI installer only when you intend to replace all data.');
+        }
+
+        throw new RuntimeException('The selected database is not empty. The browser installer will not overwrite existing data. Select a new empty database and retry.');
     }
 
     /** @param resource $handle @return \Generator<int, string> */

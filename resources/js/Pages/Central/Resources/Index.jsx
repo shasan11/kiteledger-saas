@@ -26,7 +26,7 @@ export default function Index({ resource, rows, columns = [], editable = false, 
         if (field === 'status') return <Select options={['draft', 'active', 'published'].map((value) => ({ value }))}/>;
         if (field === 'type') return <Select options={['string', 'boolean', 'integer', 'json'].map((value) => ({ value }))}/>;
         if (field.includes('sort_order') || field.endsWith('_id')) return <InputNumber style={{ width: '100%' }}/>;
-        return <Input.TextArea autoSize={{ minRows: 1, maxRows: 5 }} type={field.includes('secret') || field.includes('key') ? 'password' : 'text'}/>;
+        return <Input.TextArea autoSize={{ minRows: 1, maxRows: 5 }} type={field.includes('secret') || field.includes('key') || field === 'password' ? 'password' : 'text'} autoComplete={field === 'password' ? 'new-password' : 'off'}/>;
     };
 
     return <CentralLayout title={resource.replaceAll('-', ' ')}><Card extra={editable && <Button type="primary" onClick={() => edit()}>Add</Button>}><Table rowKey="id" dataSource={rows.data || []} pagination={{ current: rows.current_page, total: rows.total, pageSize: rows.per_page, onChange: (page) => router.get(window.location.pathname, { page }, { preserveState: true }) }} columns={tableColumns}/></Card><Modal open={open} title={record ? 'Edit resource' : 'Add resource'} onCancel={() => setOpen(false)} onOk={() => form.submit()} destroyOnHidden><Form form={form} layout="vertical" onFinish={save}>{fields.map((field) => <Form.Item key={field} name={field} label={field.replaceAll('_', ' ')} valuePropName={field.startsWith('is_') ? 'checked' : 'value'}>{input(field)}</Form.Item>)}</Form></Modal></CentralLayout>;

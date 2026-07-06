@@ -8,6 +8,7 @@ use App\Contracts\SaaS\QuotaManager;
 use App\Contracts\SaaS\SubscriptionLifecycle;
 use App\Http\Controllers\Installer\DatabaseController;
 use App\Http\Controllers\Installer\FinalController;
+use App\Http\Controllers\Installer\PermissionsController;
 use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\CashTransfer;
@@ -94,6 +95,7 @@ use App\Support\Installer\FroidenEnvironmentManager;
 use App\Support\Installer\FroidenInstalledFileManager;
 use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
 use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
+use Froiden\LaravelInstaller\Controllers\PermissionsController as PackagePermissionsController;
 use Froiden\LaravelInstaller\Helpers\DatabaseManager;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
@@ -126,6 +128,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             PackageFinalController::class,
             FinalController::class,
+        );
+        $this->app->bind(
+            PackagePermissionsController::class,
+            PermissionsController::class,
         );
 
         $this->app->singleton(SmsService::class);

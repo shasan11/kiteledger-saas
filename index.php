@@ -15,6 +15,11 @@ if (file_exists($maintenance = __DIR__.'/storage/framework/maintenance.php')) {
     require $maintenance;
 }
 
+if (! is_file(__DIR__.'/vendor/autoload.php')) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit("Vendor dependencies are missing. Upload the marketplace package, not the GitHub source ZIP.\n");
+}
 require __DIR__.'/vendor/autoload.php';
 
 /** @var Application $app */

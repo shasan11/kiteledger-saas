@@ -6,6 +6,7 @@ use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -30,6 +31,19 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 (string) $request->input('password', ''),
             );
 
+            $mode = (string) $request->input('provisioning_mode');
+            $provisioningStatus = match ($mode) {
+                'automatic' => $this->testAutomaticProvisioning(
+                    (string) $request->input('hostname'),
+                    (int) $request->integer('port'),
+                    (string) $request->input('database'),
+                    (string) $request->input('username'),
+                    (string) $request->input('password', ''),
+                ),
+                'cpanel_uapi' => $this->testCpanel($request),
+                default => 'Pool mode selected. Company creation will fail until at least one tenant database is added to the pool.',
+            };
+
             $this->writeEnvironment([
                 'APP_URL' => rtrim((string) $request->input('app_url'), '/'),
                 'CENTRAL_DOMAINS' => $this->normalizeDomains((string) $request->input('central_domains')),
@@ -43,8 +57,19 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'CENTRAL_ADMIN_NAME' => (string) $request->input('admin_name'),
                 'CENTRAL_ADMIN_EMAIL' => strtolower((string) $request->input('admin_email')),
                 'CENTRAL_ADMIN_PASSWORD' => (string) $request->input('admin_password'),
+                'TENANT_DATABASE_PROVISIONING_MODE' => $mode,
+                'CPANEL_HOST' => $mode === 'cpanel_uapi' ? rtrim((string) $request->input('cpanel_host'), '/') : '',
+                'CPANEL_PORT' => $mode === 'cpanel_uapi' ? (string) $request->integer('cpanel_port') : '2083',
+                'CPANEL_USERNAME' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_username') : '',
+                'CPANEL_API_TOKEN' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_api_token') : '',
+                'CPANEL_DATABASE_USER' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_user') : '',
             ]);
             Artisan::call('config:clear');
+            session([
+                'kiteledger_provisioning_mode' => $mode,
+                'kiteledger_provisioning_status' => $provisioningStatus,
+                'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
+            ]);
 
             return Reply::redirect(
                 route('LaravelInstaller::requirements'),
@@ -52,6 +77,8 @@ class FroidenEnvironmentManager extends EnvironmentManager
             );
         } catch (PDOException $exception) {
             return Reply::error('Database connection failed: '.$exception->getMessage());
+        } catch (RuntimeException $exception) {
+            return Reply::error($exception->getMessage());
         } catch (Throwable $exception) {
             report($exception);
 
@@ -73,16 +100,63 @@ class FroidenEnvironmentManager extends EnvironmentManager
 
         if ($statement->fetchColumn() === false) {
             // The controller restricts names to a safe identifier character set.
-            $pdo->exec("CREATE DATABASE `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            try {
+                $pdo->exec("CREATE DATABASE `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            } catch (PDOException $exception) {
+                throw new RuntimeException('Database could not be created. Create the database manually in cPanel, assign user privileges, then retry.', 0, $exception);
+            }
         }
 
         // Confirm that the supplied account can actually use the selected DB.
-        new PDO(
+        $databasePdo = new PDO(
             "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4",
             $username,
             $password,
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         );
+
+        $tables = $databasePdo->query('SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '.$databasePdo->quote($database))->fetchAll(PDO::FETCH_COLUMN);
+        if ($tables !== []) {
+            $message = in_array('migrations', $tables, true)
+                ? 'Recovery required: the database contains Laravel migrations but the install lock is missing. The browser installer will not erase this database.'
+                : 'The selected database is not empty. The browser installer will not overwrite existing data. Select an empty database.';
+            throw new RuntimeException($message);
+        }
+    }
+
+    private function testAutomaticProvisioning(string $host, int $port, string $database, string $username, string $password): string
+    {
+        $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4", $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $probe = substr(preg_replace('/[^A-Za-z0-9_]/', '_', $database).'_kl_probe_'.bin2hex(random_bytes(4)), 0, 64);
+
+        try {
+            $pdo->exec("CREATE DATABASE `{$probe}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            $pdo->exec("DROP DATABASE `{$probe}`");
+        } catch (PDOException $exception) {
+            try {
+                $pdo->exec("DROP DATABASE IF EXISTS `{$probe}`");
+            } catch (Throwable) {
+                // The clear installer error below is safer than exposing SQL details.
+            }
+            throw new RuntimeException('Automatic company database creation is unavailable because this database user does not have the required CREATE/DROP DATABASE privileges. Choose cPanel UAPI or pool mode.');
+        }
+
+        return 'CREATE DATABASE and cleanup privileges tested successfully. Automatic company provisioning is available.';
+    }
+
+    private function testCpanel(Request $request): string
+    {
+        $host = (string) $request->input('cpanel_host');
+        $url = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/Mysql/list_databases';
+        $response = Http::acceptJson()->withHeaders([
+            'Authorization' => 'cpanel '.$request->input('cpanel_username').':'.$request->input('cpanel_api_token'),
+        ])->connectTimeout(10)->timeout(30)->get($url);
+
+        if (! $response->successful() || (int) $response->json('result.status', 0) !== 1) {
+            throw new RuntimeException('The cPanel UAPI connection test failed. Verify the host, port, username, API token, and database user.');
+        }
+
+        return 'cPanel UAPI connection tested successfully. The API token has been saved and will remain masked.';
     }
 
     /** @param array<string, string> $values */

@@ -13,7 +13,6 @@ use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
 use App\Services\SaaS\TenantUsageService;
 use Database\Seeders\CentralDatabaseSeeder;
-use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -51,11 +50,15 @@ Artisan::command('install:build-sql {--path=database/sql/mysql_install.sql} {--f
         return 1;
     }
 
-    $this->warn('Rebuilding the current database with migrations and DatabaseSeeder...');
+    $this->warn('Rebuilding the current database with migrations and CentralDatabaseSeeder...');
     Artisan::call('migrate:fresh', ['--force' => true]);
     $this->output->write(Artisan::output());
-    Artisan::call('db:seed', ['--force' => true, '--class' => DatabaseSeeder::class]);
+    Artisan::call('db:seed', ['--force' => true, '--class' => CentralDatabaseSeeder::class]);
     $this->output->write(Artisan::output());
+
+    // Buyer credentials must never be baked into a distributable SQL file.
+    // The browser installer recreates the central administrator after import.
+    CentralAdmin::withTrashed()->forceDelete();
 
     $config = $connection->getConfig();
     $database = $config['database'] ?? null;
