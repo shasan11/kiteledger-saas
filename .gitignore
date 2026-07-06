@@ -38,14 +38,10 @@ Homestead.yaml
 .env.*.local
 
 # Local dev database — must not ship in the repo or package
-/database/*.sqlite
-/database/*.sqlite-journal
+ 
 
 # Generated at runtime by the installer / Laravel
 /storage/app/installed
 /storage/app/install/
-/public/storage
-/public/hot
-/public/build/
-/bootstrap/ssr
+ 
 /dist/

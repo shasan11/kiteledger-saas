@@ -8,4 +8,5 @@ return [
     AppServiceProvider::class,
     MailConfigServiceProvider::class,
     TenancyServiceProvider::class,
+    Froiden\LaravelInstaller\Providers\LaravelInstallerServiceProvider::class,
 ];
