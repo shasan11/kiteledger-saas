@@ -87,7 +87,7 @@ class InstallerDiagnosticsService
 
         $queue = (string) config('queue.default');
         $checks[] = ['label' => 'Queue connection', 'ok' => $queue !== 'sync', 'detail' => $queue];
-        if ($queue === 'database') {
+        if (in_array($queue, ['database', 'central'], true)) {
             $checks[] = ['label' => 'Failed jobs table', 'ok' => Schema::hasTable('failed_jobs'), 'detail' => Schema::hasTable('failed_jobs') ? 'Available' : 'Missing'];
         }
 
@@ -100,8 +100,8 @@ class InstallerDiagnosticsService
         }
 
         if ($mode === 'pool' && Schema::hasTable('tenant_database_pool')) {
-            $count = TenantDatabasePool::query()->where('status', 'available')->count();
-            $checks[] = ['label' => 'Available pool database', 'ok' => $count > 0, 'detail' => (string) $count];
+            $count = TenantDatabasePool::query()->where('status', 'available')->whereNotNull('validated_at')->count();
+            $checks[] = ['label' => 'Available pool database', 'ok' => $count > 0, 'detail' => "{$count} validated"];
         }
 
         $linked = is_link(public_path('storage')) || is_dir(public_path('storage'));

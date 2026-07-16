@@ -20,6 +20,7 @@ use App\Models\Central\WebsiteSection;
 use App\Services\Payments\ManualPaymentService;
 use App\Services\Payments\PaymentManager;
 use App\Services\SaaS\CentralAuditService;
+use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseValidator;
 use App\Services\SaaS\SubscriptionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Model;
@@ -29,8 +30,6 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use PDO;
-use PDOException;
 
 class ResourceController extends Controller
 {
@@ -48,7 +47,7 @@ class ResourceController extends Controller
         'default-templates' => [DefaultDataTemplate::class, ['id', 'name', 'slug', 'country', 'industry', 'is_default', 'is_active'], true],
         'platform-settings' => [PlatformSetting::class, ['id', 'group', 'key', 'type', 'is_public', 'updated_at'], true],
         'provisioning-logs' => [ProvisioningLog::class, ['id', 'tenant_id', 'step', 'status', 'message', 'started_at', 'finished_at'], false],
-        'tenant-databases' => [TenantDatabasePool::class, ['id', 'database_name', 'status', 'validated_at', 'last_error'], true],
+        'tenant-databases' => [TenantDatabasePool::class, ['id', 'database_name', 'status', 'tenant_id', 'validated_at', 'allocated_at', 'last_error'], true],
         'usage' => [TenantUsageMetric::class, ['id', 'tenant_id', 'period_start', 'period_end', 'users_count', 'products_count', 'invoices_count', 'storage_mb', 'ai_requests_count'], false],
     ];
 
@@ -70,7 +69,14 @@ class ResourceController extends Controller
             });
         }
 
-        return Inertia::render('Central/Resources/Index', ['resource' => $request->route('resource'), 'rows' => $query->orderByDesc('id')->paginate(25)->withQueryString(), 'columns' => $columns, 'editable' => $editable, 'fields' => $editable ? array_keys($this->rules($request->route('resource'))) : []]);
+        return Inertia::render('Central/Resources/Index', [
+            'resource' => $request->route('resource'),
+            'rows' => $query->orderByDesc('id')->paginate(25)->withQueryString(),
+            'columns' => $columns,
+            'editable' => $editable,
+            'fields' => $editable ? array_keys($this->rules($request->route('resource'))) : [],
+            'summary' => $request->route('resource') === 'tenant-databases' ? $this->tenantDatabaseSummary() : null,
+        ]);
     }
 
     public function store(Request $request, CentralAuditService $audit)
@@ -96,7 +102,7 @@ class ResourceController extends Controller
         abort_unless($editable, 405);
         $model = $class::findOrFail($id);
         if ($model instanceof TenantDatabasePool) {
-            abort_unless($model->status === 'available', 409, 'Allocated tenant databases cannot be edited.');
+            $this->abortIfPoolDatabaseAllocated($model, 'Allocated tenant databases cannot be edited.');
         }
         $old = $model->getAttributes();
         $data = $request->validate($this->rules($request->route('resource'), $model));
@@ -127,12 +133,23 @@ class ResourceController extends Controller
         abort_unless($editable && ! in_array($request->route('resource'), ['gateways', 'platform-settings'], true), 405);
         $model = $class::findOrFail($id);
         if ($model instanceof TenantDatabasePool) {
-            abort_unless($model->status === 'available', 409, 'Allocated tenant databases cannot be removed.');
+            $this->abortIfPoolDatabaseAllocated($model, 'Allocated tenant databases cannot be removed.');
         }
         $audit->log($request, $request->route('resource').'.deleted', $model, $this->auditableAttributes($model));
         $model->delete();
 
         return back()->with('success', 'Resource removed.');
+    }
+
+    public function revalidateTenantDatabase(Request $request, int $id, CentralAuditService $audit)
+    {
+        $model = TenantDatabasePool::findOrFail($id);
+        $this->abortIfPoolDatabaseAllocated($model, 'Allocated tenant databases cannot be revalidated.');
+        $old = $model->getAttributes();
+        $model->update($this->validatedPoolDatabase($model->only(['database_name', 'username', 'password']), $model));
+        $audit->log($request, 'tenant-databases.revalidated', $model, $this->auditableAttributes($model, $old), $this->auditableAttributes($model));
+
+        return back()->with('success', 'Tenant database revalidated.');
     }
 
     public function subscriptionAction(Request $request, Subscription $subscription, SubscriptionService $service)
@@ -196,29 +213,28 @@ class ResourceController extends Controller
             'website-menus' => ['label' => ['required', 'string'], 'url' => ['nullable', 'string'], 'location' => ['required', Rule::in(['header', 'footer'])], 'target' => ['required', Rule::in(['same_tab', 'new_tab'])], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0']],
             'website-faqs', 'website-testimonials', 'blog-posts' => ['title' => ['required', 'string'], 'slug' => ['nullable', 'alpha_dash'], 'content' => ['nullable', 'string'], 'status' => ['required', Rule::in(['draft', 'active', 'published'])], 'sort_order' => ['integer', 'min:0']],
             'default-templates' => ['name' => ['required', 'string'], 'slug' => ['required', 'alpha_dash', Rule::unique('default_data_templates')->ignore($model)], 'description' => ['nullable', 'string'], 'country' => ['nullable', 'string', 'size:2'], 'industry' => ['nullable', 'string'], 'is_default' => ['boolean'], 'is_active' => ['boolean']],
-            'tenant-databases' => ['database_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_$-]+$/', Rule::unique('tenant_database_pool')->ignore($model)], 'username' => ['nullable', 'string', 'max:128'], 'password' => ['nullable', 'string', 'max:1024']],
+            'tenant-databases' => ['database_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenant_database_pool')->ignore($model)], 'username' => ['nullable', 'string', 'max:128'], 'password' => ['nullable', 'string', 'max:1024']],
             default => [],
         };
     }
 
     private function validatedPoolDatabase(array $data, ?TenantDatabasePool $model = null): array
     {
-        $connection = config('database.connections.'.config('tenancy.database.central_connection', 'mysql'));
-        $username = $data['username'] ?? $model?->username ?? $connection['username'] ?? '';
-        $password = $data['password'] ?? $model?->password ?? $connection['password'] ?? '';
-
         try {
-            new PDO(
-                'mysql:host='.($connection['host'] ?? '127.0.0.1').';port='.($connection['port'] ?? 3306).';dbname='.$data['database_name'].';charset=utf8mb4',
-                $username,
-                $password,
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
-            );
-        } catch (PDOException) {
-            throw ValidationException::withMessages(['database_name' => 'The tenant database connection failed. Create the database, assign this user full privileges, and verify the credentials.']);
-        }
+            return app(PoolDatabaseValidator::class)->validate([
+                'database_name' => $data['database_name'],
+                'username' => $data['username'] ?? $model?->username,
+                'password' => $data['password'] ?? $model?->password,
+            ]);
+        } catch (\RuntimeException $e) {
+            $message = match ($e->getMessage()) {
+                'central_database_rejected' => 'The central database cannot be registered as a tenant pool database.',
+                'pool_database_not_empty' => 'The tenant database must be empty before it can be added to the pool.',
+                default => 'The tenant database validation failed. Create the database, assign full table privileges, and verify the credentials.',
+            };
 
-        return $data + ['status' => 'available', 'validated_at' => now(), 'last_error' => null];
+            throw ValidationException::withMessages(['database_name' => $message]);
+        }
     }
 
     private function auditableAttributes(Model $model, ?array $attributes = null): array
@@ -228,5 +244,21 @@ class ResourceController extends Controller
         return $model instanceof TenantDatabasePool
             ? collect($attributes)->except(['username', 'password'])->all()
             : $attributes;
+    }
+
+    private function abortIfPoolDatabaseAllocated(TenantDatabasePool $database, string $message): void
+    {
+        abort_if($database->tenant_id !== null || $database->status === 'allocated', 409, $message);
+    }
+
+    /** @return array{available:int,allocated:int,failed:int,total:int} */
+    private function tenantDatabaseSummary(): array
+    {
+        return [
+            'available' => TenantDatabasePool::query()->where('status', 'available')->whereNotNull('validated_at')->count(),
+            'allocated' => TenantDatabasePool::query()->whereNotNull('tenant_id')->orWhere('status', 'allocated')->count(),
+            'failed' => TenantDatabasePool::query()->where('status', 'failed')->count(),
+            'total' => TenantDatabasePool::query()->count(),
+        ];
     }
 }

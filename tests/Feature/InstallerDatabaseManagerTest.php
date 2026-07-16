@@ -30,6 +30,26 @@ class InstallerDatabaseManagerTest extends TestCase
         $this->assertStringContainsString('database/sql/mysql_install.sql', $source);
     }
 
+    public function test_mysql_install_dump_contains_tenant_provisioning_metadata_schema(): void
+    {
+        $dump = file_get_contents(database_path('sql/mysql_install.sql'));
+
+        foreach ([
+            '2026_07_16_000000_persist_tenant_database_metadata',
+            '`database_provisioning_mode`',
+            '`database_server`',
+            '`database_username`',
+            '`database_password`',
+            '`database_ownership_id`',
+            '`provisioned_at`',
+            '`allocated_at`',
+            '`released_at`',
+            '`ownership_tenant_id`',
+        ] as $expected) {
+            $this->assertStringContainsString($expected, $dump);
+        }
+    }
+
     #[DataProvider('installTypes')]
     public function test_browser_install_routes_only_to_the_safe_service_method(string $type, string $method, string $message): void
     {

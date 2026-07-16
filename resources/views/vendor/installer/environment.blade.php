@@ -97,11 +97,11 @@
             <label class="col-sm-2 control-label">Provisioning mode</label>
             <div class="col-sm-10">
                 <select name="provisioning_mode" id="provisioning_mode" class="form-control" style="height:34px;" required>
-                    <option value="automatic" selected>Automatic database creation (recommended)</option>
+                    <option value="pool" selected>Pre-created database pool (recommended for shared hosting)</option>
                     <option value="cpanel_uapi">cPanel UAPI</option>
-                    <option value="pool">Pre-created database pool (advanced)</option>
+                    <option value="automatic">Automatic database creation</option>
                 </select>
-                <small>Automatic mode is tested for CREATE DATABASE privilege when you continue.</small>
+                <small>Pool mode works without CREATE DATABASE privileges and is safest on shared hosting.</small>
             </div>
         </div>
         <div id="cpanel_fields" style="display:none;border-left:3px solid #e5e7eb;padding-left:10px;">
@@ -111,6 +111,7 @@
                 ['cpanel_username', 'cPanel username', 'text', ''],
                 ['cpanel_api_token', 'cPanel API token', 'password', ''],
                 ['cpanel_database_user', 'cPanel database user', 'text', ''],
+                ['cpanel_database_password', 'Database user password', 'password', ''],
             ] as [$name, $label, $type, $placeholder])
                 <div class="form-group">
                     <label class="col-sm-2 control-label">{{ $label }}</label>
@@ -119,8 +120,31 @@
             @endforeach
             <small>The cPanel connection is tested when you click Next Step. The API token is never displayed again.</small>
         </div>
-        <div id="pool_warning" class="alert alert-warning" style="display:none;">
-            Company creation will fail until at least one tenant database is added to the pool.
+        <div id="pool_fields" style="border-left:3px solid #e5e7eb;padding-left:10px;">
+            <div class="alert alert-warning">
+                Create this empty tenant database in cPanel first and assign the application database user full table privileges.
+            </div>
+            <div id="pool_database_rows">
+                <div class="pool-database-row">
+                    @foreach ([
+                        ['database_name', 'Tenant database', 'text'],
+                        ['username', 'Tenant DB username', 'text'],
+                        ['password', 'Tenant DB password', 'password'],
+                    ] as [$name, $label, $type])
+                        <div class="form-group">
+                            <label class="col-sm-2 control-label">{{ $label }}</label>
+                            <div class="col-sm-10"><input type="{{ $type }}" name="pool_databases[0][{{ $name }}]" class="form-control" autocomplete="off"></div>
+                        </div>
+                    @endforeach
+                    <div class="form-group">
+                        <div class="col-sm-10 col-sm-offset-2"><button type="button" class="button remove-pool-row" style="display:none;">Remove database</button></div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="col-sm-10 col-sm-offset-2"><button type="button" class="button" id="add_pool_database">Add database</button></div>
+            </div>
+            <small>Leave the username and password blank when the tenant database uses the same credentials as the central database.</small>
         </div>
         <div class="form-group">
             <label class="col-sm-2 control-label">Email</label>
@@ -161,11 +185,31 @@
         function updateProvisioningFields() {
             var mode = $('#provisioning_mode').val();
             $('#cpanel_fields').toggle(mode === 'cpanel_uapi');
-            $('#pool_warning').toggle(mode === 'pool');
+            $('#pool_fields').toggle(mode === 'pool');
+        }
+        function reindexPoolRows() {
+            $('#pool_database_rows .pool-database-row').each(function (index) {
+                $(this).find('input').each(function () {
+                    var field = $(this).attr('name').match(/\]\[(.+)\]$/)[1];
+                    $(this).attr('name', 'pool_databases[' + index + '][' + field + ']');
+                });
+            });
+            $('.remove-pool-row').toggle($('#pool_database_rows .pool-database-row').length > 1);
         }
         document.addEventListener('DOMContentLoaded', function () {
             $('#provisioning_mode').on('change', updateProvisioningFields);
+            $('#add_pool_database').on('click', function () {
+                var row = $('#pool_database_rows .pool-database-row:first').clone();
+                row.find('input').val('');
+                $('#pool_database_rows').append(row);
+                reindexPoolRows();
+            });
+            $('#pool_database_rows').on('click', '.remove-pool-row', function () {
+                $(this).closest('.pool-database-row').remove();
+                reindexPoolRows();
+            });
             updateProvisioningFields();
+            reindexPoolRows();
         });
     </script>
 @stop

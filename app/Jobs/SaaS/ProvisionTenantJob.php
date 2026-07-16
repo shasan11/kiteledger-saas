@@ -39,6 +39,8 @@ class ProvisionTenantJob implements ShouldBeUnique, ShouldQueue
     public function __construct(public string $tenantId, public bool $retry = false)
     {
         $this->attemptId = (string) Str::uuid();
+        $this->onConnection('central');
+        $this->onQueue((string) config('saas.provisioning_queue', 'provisioning'));
     }
 
     public function uniqueId(): string
@@ -48,7 +50,9 @@ class ProvisionTenantJob implements ShouldBeUnique, ShouldQueue
 
     public function handle(DefaultTemplateService $templates, SubscriptionService $subscriptions, TenantDatabaseService $databases, TenantLifecycleService $lifecycle): void
     {
-        $tenant = Tenant::query()->findOrFail($this->tenantId);
+        $tenant = DB::connection(config('tenancy.database.central_connection'))->transaction(function (): Tenant {
+            return Tenant::query()->lockForUpdate()->findOrFail($this->tenantId);
+        });
         DB::connection(config('tenancy.database.central_connection'))->table('tenant_provisioning_attempts')->updateOrInsert(
             ['id' => $this->attemptId],
             ['tenant_id' => $tenant->id, 'status' => 'running', 'idempotency_key' => 'provision:'.$this->attemptId, 'started_at' => now(), 'updated_at' => now(), 'created_at' => now()],
@@ -140,7 +144,28 @@ class ProvisionTenantJob implements ShouldBeUnique, ShouldQueue
     private function safeErrorCode(\Throwable $e): string
     {
         $message = strtolower($e->getMessage());
-        foreach (['pool_exhausted', 'connection_failed', 'uapi_not_configured', 'uapi_request_failed', 'provisioner_unavailable', 'database_name_invalid'] as $code) {
+        foreach ([
+            'pool_exhausted',
+            'pool_database_invalid',
+            'central_database_rejected',
+            'database_connection_failed',
+            'database_name_invalid',
+            'database_name_collision',
+            'database_already_owned',
+            'ownership_marker_missing',
+            'ownership_marker_mismatch',
+            'automatic_privilege_unavailable',
+            'cpanel_not_configured',
+            'cpanel_authentication_failed',
+            'cpanel_database_create_failed',
+            'cpanel_privilege_assignment_failed',
+            'cpanel_connection_failed',
+            'tenant_migration_failed',
+            'tenant_seeding_failed',
+            'owner_creation_failed',
+            'queue_configuration_invalid',
+            'tenant_database_provisioner_unavailable',
+        ] as $code) {
             if (str_contains($message, $code)) {
                 return $code;
             }

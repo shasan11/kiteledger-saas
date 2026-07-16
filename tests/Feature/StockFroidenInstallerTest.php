@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Installer\EnvironmentController;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use App\Services\Installer\InstallerDiagnosticsService;
 use App\Support\Installer\FroidenDatabaseManager;
@@ -37,6 +38,8 @@ class StockFroidenInstallerTest extends TestCase
             ->assertOk()
             ->assertSee('method="post"', false)
             ->assertSee('Platform administrator')
+            ->assertSee('pool_databases[0][database_name]', false)
+            ->assertSee('Add database')
             ->assertDontSee('type: "GET"', false);
         $this->get('/install/requirements')->assertOk();
         $this->get('/install/permissions')->assertOk();
@@ -49,8 +52,45 @@ class StockFroidenInstallerTest extends TestCase
         $route = app('router')->getRoutes()->getByName('kiteledger.install.environment.save');
         $this->assertNotNull($route);
         $this->assertContains('POST', $route->methods());
+        $this->assertNotContains('GET', $route->methods());
         $this->assertNull($route->getDomain());
-        $this->get('/install/environment/save?password=must-not-be-accepted')->assertMethodNotAllowed();
+    }
+
+    public function test_pool_mode_requires_at_least_one_database_row_before_environment_save(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldNotReceive('save');
+
+        $response = app(EnvironmentController::class)(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
+                'provisioning_mode' => 'pool',
+            ])),
+            $manager,
+        );
+
+        $this->assertSame('fail', $response['status'] ?? null);
+    }
+
+    public function test_pool_mode_accepts_multiple_database_rows_before_environment_save(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldReceive('save')->once()->with(Mockery::on(function (Request $request): bool {
+            return $request->input('pool_databases.0.database_name') === 'cpuser_tenant_a'
+                && $request->input('pool_databases.1.database_name') === 'cpuser_tenant_b';
+        }))->andReturn(['status' => 'success']);
+
+        $response = app(EnvironmentController::class)(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
+                'provisioning_mode' => 'pool',
+                'pool_databases' => [
+                    ['database_name' => 'cpuser_tenant_a', 'username' => '', 'password' => ''],
+                    ['database_name' => 'cpuser_tenant_b', 'username' => 'tenant_b_user', 'password' => 'secret'],
+                ],
+            ])),
+            $manager,
+        );
+
+        $this->assertSame('success', $response['status'] ?? null);
     }
 
     public function test_unconfigured_tenant_host_does_not_query_database_before_installation(): void
@@ -126,7 +166,7 @@ class StockFroidenInstallerTest extends TestCase
         $response->assertOk()
             ->assertSee('Cron Jobs Setup')
             ->assertSee('artisan schedule:run')
-            ->assertSee('artisan queue:work --queue=provisioning,default --stop-when-empty')
+            ->assertSee('artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300')
             ->assertSee('buyer@example.com')
             ->assertDontSee(base64_encode(str_repeat('k', 32)))
             ->assertDontSee('db-secret-must-not-render')
@@ -147,5 +187,24 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertStringContainsString('Frontend build assets are missing', $manifest['detail']);
         $this->assertFalse($vendor['ok']);
         $this->assertStringContainsString('Vendor dependencies are missing', $vendor['detail']);
+    }
+
+    private function validEnvironmentPayload(array $overrides = []): array
+    {
+        return array_replace_recursive([
+            'hostname' => '127.0.0.1',
+            'port' => 3306,
+            'database' => 'kiteledger',
+            'username' => 'kiteledger',
+            'password' => 'secret',
+            'app_url' => 'https://example.test',
+            'central_domains' => 'example.test',
+            'saas_base_domain' => 'example.test',
+            'admin_name' => 'Admin',
+            'admin_email' => 'admin@example.test',
+            'admin_password' => 'VerySecure!123',
+            'admin_password_confirmation' => 'VerySecure!123',
+            'provisioning_mode' => 'automatic',
+        ], $overrides);
     }
 }

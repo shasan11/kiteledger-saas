@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentOutRecordShow-B3BZLG_9.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Expense`,endpoint:`/api/expenses/`,backRoute:`payment-out.expenses.index`,backLabel:`Back to Expenses`,documentType:`expense`,editRoute:`payment-out.expenses.edit`})}export{r as default};

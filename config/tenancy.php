@@ -48,5 +48,5 @@ return [
     'features' => [],
     'routes' => true,
     'migration_parameters' => ['--force' => true, '--path' => [database_path('migrations/tenant')], '--realpath' => true],
-    'seeder_parameters' => ['--class' => 'Database\\Seeders\\DatabaseSeeder', '--force' => true],
+    'seeder_parameters' => ['--class' => 'Database\\Seeders\\TenantDatabaseSeeder', '--force' => true],
 ];

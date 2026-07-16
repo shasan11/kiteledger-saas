@@ -17,10 +17,27 @@ Cloudflare must use Full (strict) TLS. Configure only known Cloudflare/cPanel pr
 Run central migrations once. Choose exactly one `TENANT_DATABASE_PROVISIONING_MODE`:
 
 - `pool` (recommended): pre-create prefixed databases in cPanel, grant the application user privileges, and register each database in the central pool.
-- `cpanel_uapi`: set the HTTPS cPanel host, account, API token, and fully prefixed database user. The provider must permit MySQL UAPI operations.
-- `automatic`: the configured MySQL account must have `CREATE DATABASE`; this is uncommon on shared hosting.
+- `cpanel_uapi`: set the HTTPS cPanel host, account, API token, database user, and `CPANEL_DATABASE_PASSWORD` when that user differs from `DB_USERNAME`. The provider must permit MySQL UAPI create, privilege, and delete operations.
+- `automatic`: the configured MySQL account must pass a real temporary create/drop database probe; this is uncommon on shared hosting.
 
 Identifiers must include the cPanel account prefix and remain at most 64 characters. KiteLedger never falls back to shared-table tenancy.
+
+## Pool-mode installation
+
+1. Create the central database and database user in cPanel.
+2. Grant the application user privileges on the central database.
+3. Create one or more empty tenant databases.
+4. Grant the same application user or database-specific users full table privileges on each tenant database.
+5. Open `/install`, enter central settings, and keep pool mode selected.
+6. Register the first empty tenant database in the installer. Password fields are never redisplayed.
+7. Complete installation, then add more pool databases from the central admin tenant-databases screen.
+8. Configure wildcard DNS and SSL before creating production tenants.
+
+Pool rows are allocated atomically, stored with encrypted credentials, and recycled only after the tenant ownership marker inside the database matches the tenant being deleted.
+
+## cPanel UAPI setup
+
+Create an API token that can manage MySQL databases for the cPanel account. Enter the HTTPS cPanel host, port `2083`, cPanel username, API token, database user, and database-user password when different from the central database password. The installer tests the full create, grant, connect, and cleanup workflow with a temporary probe database.
 
 ## Environment and runtime
 
@@ -34,15 +51,15 @@ Replace the PHP and application paths with the values shown by cPanel:
 
 ```cron
 * * * * * /usr/local/bin/php /home/account/kiteledger/artisan schedule:run >> /home/account/kiteledger/storage/logs/scheduler.log 2>&1
-* * * * * /usr/local/bin/php /home/account/kiteledger/artisan queue:work --stop-when-empty --tries=3 --timeout=300 >> /home/account/kiteledger/storage/logs/queue.log 2>&1
+* * * * * /usr/local/bin/php /home/account/kiteledger/artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300 >> /home/account/kiteledger/storage/logs/queue.log 2>&1
 ```
 
 Laravel overlap locks prevent duplicate scheduled work. `DB_QUEUE_RETRY_AFTER` must exceed the worker timeout. If queue cron is unavailable, set `TENANT_PROVISION_SYNC=true` only for controlled administrator provisioning; migrations may exceed web-request limits.
 
 ## Verification, updates, and rollback
 
-Run `php artisan saas:health`, `php artisan migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache`. Verify the central host, an active tenant subdomain, an unknown host, suspension, subscription expiry, mail, queue heartbeat, private uploads, and a test backup.
+Run `php artisan saas:health`, `php artisan migrate --force`, `php artisan tenants:migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache`. Verify the central host, an active tenant subdomain, an unknown host, suspension, subscription expiry, mail, queue heartbeat, private uploads, and a test backup. The queue heartbeat turns healthy only after the scheduler enqueues the heartbeat job and the `queue:work central --queue=provisioning,default` cron processes the `default` queue.
 
 Before updating, back up the central database, every tenant database, `.env`, and tenant files. Deploy code, install production Composer dependencies, run additive migrations, build assets, refresh caches, and process the queue. Roll back code only when migrations are backward compatible; restore databases from verified backups when necessary.
 
-For provisioning failures, check the selected provisioner, prefix/identifier limit, pool capacity or UAPI access, writable directories, queue heartbeat, and tenant migrations before retrying.
+For provisioning failures, check the selected provisioner, prefix/identifier limit, pool capacity or UAPI access, writable directories, queue heartbeat, and tenant migrations before retrying. If the install lock is missing but migrations exist, do not rerun browser installation against that database; restore the lock, use recovery, or point the installer at an empty central database. For pool exhaustion, add another empty validated tenant database. For wildcard DNS or SSL failures, verify both the DNS wildcard and cPanel wildcard virtual host point to the application public directory.

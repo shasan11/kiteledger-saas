@@ -12,7 +12,11 @@ use Illuminate\Support\Str;
 
 class TenantDeletionService
 {
-    public function __construct(private TenantLifecycleService $lifecycle, private DatabaseProvisionerManager $databases) {}
+    public function __construct(
+        private TenantLifecycleService $lifecycle,
+        private DatabaseProvisionerManager $databases,
+        private TenantFileDeletionService $files,
+    ) {}
 
     public function request(Tenant $tenant, int $adminId, string $reason, ?BackupManifest $backup, bool $waived): TenantDeletionRequest
     {
@@ -42,24 +46,10 @@ class TenantDeletionService
             } $locked->update(['status' => 'running']);
         });
         $tenant = Tenant::withTrashed()->findOrFail($request->tenant_id);
-        $this->databases->driver()->destroy($tenant);
-        $this->deleteTenantFiles($tenant);
+        $this->databases->driver($tenant->database_provisioning_mode)->destroy($tenant);
+        $this->files->delete($tenant);
         $tenant->domains()->update(['status' => 'disabled', 'disabled_at' => now()]);
         $tenant->delete();
         $request->update(['status' => 'completed']);
-    }
-
-    private function deleteTenantFiles(Tenant $tenant): void
-    {
-        $path = storage_path('tenant'.$tenant->id);
-        $root = realpath(storage_path());
-        $target = realpath($path);
-        if (! $target || ! $root || ! str_starts_with($target, $root.DIRECTORY_SEPARATOR)) {
-            return;
-        }
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($target, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($iterator as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        } rmdir($target);
     }
 }

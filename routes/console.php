@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\SaaS\RecordQueueHeartbeatJob;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\PaymentTransaction;
@@ -287,6 +288,9 @@ Artisan::command('templates:import {file}', function (): int {
 Schedule::call(function (): void {
     DB::connection(config('tenancy.database.central_connection'))->table('saas_heartbeats')->updateOrInsert(['name' => 'scheduler'], ['last_seen_at' => now(), 'metadata' => json_encode(['host' => gethostname()])]);
 })->everyMinute()->name('saas-heartbeat')->withoutOverlapping(5);
+Schedule::call(function (): void {
+    dispatch(new RecordQueueHeartbeatJob);
+})->everyMinute()->name('saas-queue-heartbeat')->withoutOverlapping(5);
 Schedule::call(function (): void {
     app(AtomicQuotaManager::class)->expireStale();
 })->everyFifteenMinutes()->name('quota-reservation-cleanup')->withoutOverlapping(10);

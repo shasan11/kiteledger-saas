@@ -422,7 +422,7 @@ CREATE TABLE `migrations` (
 
 LOCK TABLES `migrations` WRITE;
 /*!40000 ALTER TABLE `migrations` DISABLE KEYS */;
-INSERT INTO `migrations` VALUES (1,'2026_07_03_000000_create_saas_central_schema',1),(2,'2026_07_03_000001_load_tenant_schema_for_legacy_tests',1),(3,'2026_07_03_000002_create_legacy_migration_runs',1),(4,'2026_07_05_000000_harden_saas_foundations',1);
+INSERT INTO `migrations` VALUES (1,'2026_07_03_000000_create_saas_central_schema',1),(2,'2026_07_03_000001_load_tenant_schema_for_legacy_tests',1),(3,'2026_07_03_000002_create_legacy_migration_runs',1),(4,'2026_07_05_000000_harden_saas_foundations',1),(5,'2026_07_16_000000_persist_tenant_database_metadata',1);
 /*!40000 ALTER TABLE `migrations` ENABLE KEYS */;
 UNLOCK TABLES;
 DROP TABLE IF EXISTS `payment_gateways`;
@@ -729,6 +729,9 @@ CREATE TABLE `tenant_database_pool` (
   `status` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'available',
   `tenant_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `validated_at` timestamp NULL DEFAULT NULL,
+  `allocated_at` timestamp NULL DEFAULT NULL,
+  `released_at` timestamp NULL DEFAULT NULL,
+  `ownership_tenant_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `last_error` text COLLATE utf8mb4_unicode_ci,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1007,6 +1010,12 @@ CREATE TABLE `tenants` (
   `trial_ends_at` timestamp NULL DEFAULT NULL,
   `subscription_ends_at` timestamp NULL DEFAULT NULL,
   `database_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `database_provisioning_mode` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `database_server` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `database_username` text COLLATE utf8mb4_unicode_ci,
+  `database_password` text COLLATE utf8mb4_unicode_ci,
+  `database_ownership_id` char(36) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `provisioned_at` timestamp NULL DEFAULT NULL,
   `created_by` bigint unsigned DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1017,6 +1026,7 @@ CREATE TABLE `tenants` (
   KEY `tenants_plan_id_foreign` (`plan_id`),
   KEY `tenants_default_template_id_foreign` (`default_template_id`),
   KEY `tenants_created_by_foreign` (`created_by`),
+  KEY `tenants_database_provisioning_mode_index` (`database_provisioning_mode`),
   KEY `tenants_status_index` (`status`),
   CONSTRAINT `tenants_created_by_foreign` FOREIGN KEY (`created_by`) REFERENCES `central_admin_users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `tenants_default_template_id_foreign` FOREIGN KEY (`default_template_id`) REFERENCES `default_data_templates` (`id`) ON DELETE SET NULL,

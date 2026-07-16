@@ -84,6 +84,7 @@ $centralRoutes = function (): void {
             Route::post('invoices/{invoice}/manual-payment', [ResourceController::class, 'approveManualPayment'])->middleware('central.admin:billing.manage')->name('invoices.manual-payment');
             Route::get('invoices/{invoice}/pdf', [ResourceController::class, 'invoicePdf'])->middleware('central.admin:billing.manage')->name('invoices.pdf');
             Route::post('payments/{payment}/refund', [ResourceController::class, 'refund'])->middleware('central.admin:billing.manage')->name('payments.refund');
+            Route::post('tenant-databases/{id}/revalidate', [ResourceController::class, 'revalidateTenantDatabase'])->middleware('central.admin:settings.manage')->name('tenant-databases.revalidate');
         });
     });
 };

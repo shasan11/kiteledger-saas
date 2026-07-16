@@ -19,7 +19,7 @@ class InstallerRuntimeService
             // and lets recovery commands such as cache:clear remain usable
             // even when database configuration needs repair.
             'CACHE_STORE' => 'file',
-            'QUEUE_CONNECTION' => 'database',
+            'QUEUE_CONNECTION' => 'central',
             'CENTRAL_ADMIN_PASSWORD' => '',
         ]);
         config([
@@ -27,7 +27,7 @@ class InstallerRuntimeService
             'app.debug' => false,
             'session.driver' => 'database',
             'cache.default' => 'file',
-            'queue.default' => 'database',
+            'queue.default' => 'central',
         ]);
 
         Artisan::call('optimize:clear');

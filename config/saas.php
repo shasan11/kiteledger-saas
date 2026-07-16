@@ -18,6 +18,7 @@ return [
             'username' => env('CPANEL_USERNAME'),
             'token' => env('CPANEL_API_TOKEN'),
             'database_user' => env('CPANEL_DATABASE_USER'),
+            'database_password' => env('CPANEL_DATABASE_PASSWORD'),
         ],
     ],
     'reserved_subdomains' => ['www', 'admin', 'app', 'api', 'mail', 'smtp', 'support', 'help', 'docs', 'billing', 'cdn', 'assets', 'static', 'root', 'system'],

@@ -33,10 +33,21 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $centralUser = $request->user('central');
+
+        if ($centralUser && ! tenancy()->initialized) {
+            return [
+                ...parent::share($request),
+                'auth' => ['user' => $centralUser, 'permissions' => [], 'roles' => [], 'canBypassPermissions' => $centralUser->role === 'super_admin'],
+                'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
+                'translations' => [],
+            ];
+        }
+
         if (! tenancy()->initialized && ! (app()->environment('testing') && config('saas.allow_uninitialized_tenant_models'))) {
             return [
                 ...parent::share($request),
-                'auth' => ['user' => $request->user('central'), 'permissions' => []],
+                'auth' => ['user' => null, 'permissions' => []],
                 'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
                 'translations' => [],
             ];
@@ -52,7 +63,9 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
-                'permissions' => fn () => $user?->getAllPermissions()->pluck('name')->values()->all() ?? [],
+                'permissions' => fn () => $user && method_exists($user, 'getAllPermissions')
+                    ? $user->getAllPermissions()->pluck('name')->values()->all()
+                    : [],
                 'roles' => fn () => $user && method_exists($user, 'getRoleNames')
                     ? $user->getRoleNames()->values()->all()
                     : [],

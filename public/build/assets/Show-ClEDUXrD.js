@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentOutRecordShow-B3BZLG_9.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Debit Note`,endpoint:`/api/debit-notes/`,backRoute:`payment-out.debit-notes.index`,backLabel:`Back to Debit Notes`,documentType:`debit_note`,editRoute:`payment-out.debit-notes.edit`})}export{r as default};

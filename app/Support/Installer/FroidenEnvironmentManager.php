@@ -6,6 +6,7 @@ use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use PDO;
 use PDOException;
@@ -41,7 +42,7 @@ class FroidenEnvironmentManager extends EnvironmentManager
                     (string) $request->input('password', ''),
                 ),
                 'cpanel_uapi' => $this->testCpanel($request),
-                default => 'Pool mode selected. Company creation will fail until at least one tenant database is added to the pool.',
+                default => 'Pool mode selected. The initial tenant database will be validated and registered after central migrations complete.',
             };
 
             $this->writeEnvironment([
@@ -63,12 +64,21 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'CPANEL_USERNAME' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_username') : '',
                 'CPANEL_API_TOKEN' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_api_token') : '',
                 'CPANEL_DATABASE_USER' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_user') : '',
+                'CPANEL_DATABASE_PASSWORD' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_password', '') : '',
+                'QUEUE_CONNECTION' => 'central',
+                'DB_QUEUE_CONNECTION' => 'mysql',
+                'DB_QUEUE_RETRY_AFTER' => '330',
             ]);
             Artisan::call('config:clear');
+            $poolPayload = null;
+            if ($mode === 'pool') {
+                $poolPayload = Crypt::encryptString(json_encode($this->poolDatabases($request), JSON_THROW_ON_ERROR));
+            }
             session([
                 'kiteledger_provisioning_mode' => $mode,
                 'kiteledger_provisioning_status' => $provisioningStatus,
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
+                'kiteledger_initial_pool_databases' => $poolPayload,
             ]);
 
             return Reply::redirect(
@@ -76,13 +86,15 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'Database connection and application settings saved.',
             );
         } catch (PDOException $exception) {
-            return Reply::error('Database connection failed: '.$exception->getMessage());
+            report($exception);
+
+            return Reply::error('Database connection failed. Verify the central database host, name, username, password, and privileges.');
         } catch (RuntimeException $exception) {
             return Reply::error($exception->getMessage());
         } catch (Throwable $exception) {
             report($exception);
 
-            return Reply::error('Could not save the installation settings: '.$exception->getMessage());
+            return Reply::error('Could not save the installation settings. Check the application log for details, then retry.');
         }
     }
 
@@ -147,16 +159,90 @@ class FroidenEnvironmentManager extends EnvironmentManager
     private function testCpanel(Request $request): string
     {
         $host = (string) $request->input('cpanel_host');
-        $url = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/Mysql/list_databases';
-        $response = Http::acceptJson()->withHeaders([
+        $baseUrl = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/';
+        $account = (string) $request->input('cpanel_username');
+        $database = $this->cpanelIdentifier($account, 'klprobe_'.bin2hex(random_bytes(4)));
+        $databaseUser = $this->cpanelIdentifier($account, (string) $request->input('cpanel_database_user'));
+        $headers = [
             'Authorization' => 'cpanel '.$request->input('cpanel_username').':'.$request->input('cpanel_api_token'),
-        ])->connectTimeout(10)->timeout(30)->get($url);
+        ];
 
-        if (! $response->successful() || (int) $response->json('result.status', 0) !== 1) {
-            throw new RuntimeException('The cPanel UAPI connection test failed. Verify the host, port, username, API token, and database user.');
+        try {
+            $this->cpanelCall($baseUrl, $headers, 'Mysql/create_database', ['name' => $database]);
+            $this->cpanelCall($baseUrl, $headers, 'Mysql/set_privileges_on_database', [
+                'database' => $database,
+                'user' => $databaseUser,
+                'privileges' => 'ALL PRIVILEGES',
+            ]);
+            $databasePassword = (string) $request->input('cpanel_database_password', '');
+            if ($databasePassword === '' && $databaseUser === (string) $request->input('username')) {
+                $databasePassword = (string) $request->input('password', '');
+            }
+            new PDO(
+                'mysql:host='.(string) $request->input('hostname').';port='.(int) $request->integer('port').';dbname='.$database.';charset=utf8mb4',
+                $databaseUser,
+                $databasePassword,
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            );
+        } catch (Throwable $exception) {
+            try {
+                $this->cpanelCall($baseUrl, $headers, 'Mysql/delete_database', ['name' => $database]);
+            } catch (Throwable) {
+                //
+            }
+            throw new RuntimeException('The cPanel UAPI workflow test failed. Verify token permissions, database user privileges, host, and password.');
         }
 
-        return 'cPanel UAPI connection tested successfully. The API token has been saved and will remain masked.';
+        try {
+            $this->cpanelCall($baseUrl, $headers, 'Mysql/delete_database', ['name' => $database]);
+        } catch (Throwable) {
+            throw new RuntimeException('The cPanel probe database was created but cleanup failed. Remove it from cPanel before retrying.');
+        }
+
+        return 'cPanel UAPI create, grant, connect, and cleanup workflow tested successfully.';
+    }
+
+    /** @param array<string, string> $headers */
+    private function cpanelCall(string $baseUrl, array $headers, string $operation, array $query): array
+    {
+        $response = Http::acceptJson()->withHeaders($headers)->connectTimeout(10)->timeout(30)->get($baseUrl.$operation, $query);
+        if (! $response->successful() || (int) $response->json('result.status', 0) !== 1) {
+            throw new RuntimeException('cpanel_request_failed');
+        }
+
+        return (array) $response->json('result', []);
+    }
+
+    private function cpanelIdentifier(string $account, string $identifier): string
+    {
+        if ($account !== '' && ! str_starts_with($identifier, $account.'_')) {
+            return $account.'_'.$identifier;
+        }
+
+        return $identifier;
+    }
+
+    /** @return array<int, array{database_name:string,username:string,password:string}> */
+    private function poolDatabases(Request $request): array
+    {
+        $rows = $request->input('pool_databases');
+        if (! is_array($rows) || $rows === []) {
+            $rows = [[
+                'database_name' => $request->input('pool_database_name'),
+                'username' => $request->input('pool_database_username', ''),
+                'password' => $request->input('pool_database_password', ''),
+            ]];
+        }
+
+        return collect($rows)
+            ->map(fn (array $row): array => [
+                'database_name' => trim((string) ($row['database_name'] ?? '')),
+                'username' => trim((string) ($row['username'] ?? '')),
+                'password' => (string) ($row['password'] ?? ''),
+            ])
+            ->filter(fn (array $row): bool => $row['database_name'] !== '')
+            ->values()
+            ->all();
     }
 
     /** @param array<string, string> $values */

@@ -19,6 +19,7 @@ use App\Services\Payments\StripeGatewayService;
 use App\Services\SaaS\PlanFeatureResolver;
 use App\Services\SaaS\TenantDomainService;
 use App\Services\SaaS\TenantLifecycleService;
+use App\Support\Installer\InstalledState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +31,7 @@ class ProductionHardeningTest extends TestCase
 
     public function test_unverified_domain_fails_closed(): void
     {
+        InstalledState::mark();
         $tenant = Tenant::create(['id' => 'tenant-a', 'company_name' => 'A', 'owner_name' => 'A', 'owner_email' => 'a@test.invalid', 'status' => 'active']);
         Domain::create(['tenant_id' => $tenant->id, 'domain' => 'pending.test', 'status' => 'pending']);
         $request = Request::create('https://pending.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);

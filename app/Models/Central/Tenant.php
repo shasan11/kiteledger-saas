@@ -18,14 +18,16 @@ class Tenant extends BaseTenant implements TenantWithDatabase
 
     protected $guarded = [];
 
+    protected $hidden = ['database_username', 'database_password', 'data'];
+
     public static function getCustomColumns(): array
     {
-        return ['id', 'company_name', 'legal_name', 'owner_name', 'owner_email', 'owner_phone', 'country', 'address', 'timezone', 'currency', 'status', 'status_reason', 'plan_id', 'default_template_id', 'trial_ends_at', 'subscription_ends_at', 'database_name', 'created_by', 'created_at', 'updated_at', 'deleted_at'];
+        return ['id', 'company_name', 'legal_name', 'owner_name', 'owner_email', 'owner_phone', 'country', 'address', 'timezone', 'currency', 'status', 'status_reason', 'plan_id', 'default_template_id', 'trial_ends_at', 'subscription_ends_at', 'database_name', 'database_provisioning_mode', 'database_server', 'database_username', 'database_password', 'database_ownership_id', 'provisioned_at', 'created_by', 'created_at', 'updated_at', 'deleted_at'];
     }
 
     protected function casts(): array
     {
-        return ['is_internal' => 'boolean', 'trial_ends_at' => 'datetime', 'subscription_ends_at' => 'datetime', 'deleted_at' => 'datetime', 'data' => 'array'];
+        return ['is_internal' => 'boolean', 'trial_ends_at' => 'datetime', 'subscription_ends_at' => 'datetime', 'provisioned_at' => 'datetime', 'deleted_at' => 'datetime', 'database_username' => 'encrypted', 'database_password' => 'encrypted', 'data' => 'array'];
     }
 
     public function plan(): BelongsTo

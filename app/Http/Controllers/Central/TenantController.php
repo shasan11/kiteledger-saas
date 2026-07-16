@@ -89,7 +89,7 @@ class TenantController extends Controller
 
     public function backup(Tenant $tenant)
     {
-        dispatch((new BackupTenantJob($tenant->id))->onConnection('database')->onQueue('backups'));
+        dispatch((new BackupTenantJob($tenant->id))->onConnection('central')->onQueue('backups'));
 
         return back()->with('success', 'Tenant backup queued.');
     }

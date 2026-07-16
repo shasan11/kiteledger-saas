@@ -22,8 +22,7 @@
         <p><strong>Mode:</strong> {{ str_replace('_', ' ', $provisioningMode) }}</p>
         <p>{{ $provisioningStatus }}</p>
         @if ($provisioningMode === 'pool')
-            <p class="bad"><strong>Company creation will fail until at least one tenant database is added to the pool.</strong></p>
-            <p>After login, open <strong>Tenant Databases</strong>, add a pre-created database, and let KiteLedger validate it before creating a company.</p>
+            <p>Before creating companies, confirm the diagnostics below show at least one validated pool database. Add more from <strong>Tenant Databases</strong> as you grow.</p>
         @endif
     </div>
 
@@ -43,13 +42,13 @@
             <li>Open <strong>cPanel → Advanced → Cron Jobs</strong>.</li>
             <li>Choose <strong>Once Per Minute</strong>, or enter <code>* * * * *</code></li>
             <li>Add the scheduler command:<code>cd {{ $projectPath }} &amp;&amp; /usr/local/bin/php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code></li>
-            <li>Add the queue worker command:<code>cd {{ $projectPath }} &amp;&amp; /usr/local/bin/php artisan queue:work --queue=provisioning,default --stop-when-empty &gt;&gt; /dev/null 2&gt;&amp;1</code></li>
+            <li>Add the queue worker command:<code>cd {{ $projectPath }} &amp;&amp; /usr/local/bin/php artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300 &gt;&gt; /dev/null 2&gt;&amp;1</code></li>
             <li>To find the project path, open the uploaded folder in cPanel File Manager and use the folder containing <code>artisan</code>. It often looks like <code>/home/USERNAME/kiteledger</code> or <code>/home/USERNAME/public_html</code>.</li>
             <li>Try <code>/usr/local/bin/php</code> first. If it fails, ask your host for the PHP CLI path. Common alternatives are <code>/usr/bin/php</code> and <code>/opt/cpanel/ea-php83/root/usr/bin/php</code>.</li>
         </ol>
         <p><strong>Detected command examples:</strong></p>
         <code>cd {{ $projectPath }} &amp;&amp; {{ $phpBinary }} artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</code>
-        <code>cd {{ $projectPath }} &amp;&amp; {{ $phpBinary }} artisan queue:work --queue=provisioning,default --stop-when-empty &gt;&gt; /dev/null 2&gt;&amp;1</code>
+        <code>cd {{ $projectPath }} &amp;&amp; {{ $phpBinary }} artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300 &gt;&gt; /dev/null 2&gt;&amp;1</code>
         <p><code>schedule:run</code> runs billing checks, quota cleanup, subscription checks, invoices, and recurring jobs. The queue worker processes tenant/company provisioning and exits safely when the queue is empty, which suits shared hosting.</p>
         <p class="bad"><strong>Without the queue cron, company creation can remain pending. Without the scheduler cron, subscriptions, cleanup, invoices, and recurring automation may not run.</strong></p>
     </div>
