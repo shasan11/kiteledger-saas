@@ -62,6 +62,22 @@ class ProductionHardeningTest extends TestCase
         $this->assertNull(tenant());
     }
 
+    public function test_central_domain_cannot_enter_tenant_routes(): void
+    {
+        InstalledState::mark();
+        config(['tenancy.central_domains' => ['central.test']]);
+
+        $request = Request::create('https://central.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle(
+            $request,
+            fn () => $this->fail('Central domains must not reach tenant routes.'),
+        );
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
     public function test_disabled_domain_fails_closed(): void
     {
         InstalledState::mark();

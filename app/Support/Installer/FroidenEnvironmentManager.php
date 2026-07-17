@@ -81,6 +81,13 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
                 'kiteledger_initial_pool_databases' => $poolPayload,
             ]);
+            InstalledState::putInstallerStatus([
+                'provisioning_mode' => $mode,
+                'provisioning_status' => $provisioningStatus,
+                'admin_email' => strtolower((string) $request->input('admin_email')),
+                'initial_pool_databases' => $poolPayload,
+                'environment_saved_at' => now()->toIso8601String(),
+            ]);
 
             return Reply::redirect(
                 route('LaravelInstaller::requirements'),

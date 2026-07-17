@@ -175,6 +175,25 @@ class StockFroidenInstallerTest extends TestCase
         $this->get('/install')->assertNotFound();
     }
 
+    public function test_final_step_recovers_when_cpanel_session_handoff_is_lost(): void
+    {
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
+        InstalledState::putInstallerStatus([
+            'install_succeeded' => true,
+            'admin_email' => 'buyer@example.com',
+            'provisioning_mode' => 'pool',
+            'provisioning_status' => 'Pool mode selected.',
+        ]);
+
+        $this->get('/install/final')
+            ->assertOk()
+            ->assertSee('buyer@example.com')
+            ->assertSee('Pool mode selected.');
+
+        $this->assertFileDoesNotExist(InstalledState::installerStatusPath());
+        $this->assertFileExists(InstalledState::lockPath());
+    }
+
     public function test_preflight_reports_marketplace_package_errors_without_secrets(): void
     {
         $diagnostics = app(InstallerDiagnosticsService::class);

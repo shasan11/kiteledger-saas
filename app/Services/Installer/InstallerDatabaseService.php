@@ -4,6 +4,7 @@ namespace App\Services\Installer;
 
 use App\Models\Central\TenantDatabasePool;
 use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseValidator;
+use App\Support\Installer\InstalledState;
 use Database\Seeders\CentralDatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
@@ -140,7 +141,7 @@ class InstallerDatabaseService
 
     private function registerInitialPoolDatabases(): void
     {
-        $payload = session('kiteledger_initial_pool_databases');
+        $payload = $this->initialPoolPayload();
         if (! is_string($payload) || $payload === '') {
             return;
         }
@@ -163,6 +164,12 @@ class InstallerDatabaseService
                 $validated,
             );
         }
+    }
+
+    private function initialPoolPayload(): mixed
+    {
+        return session('kiteledger_initial_pool_databases')
+            ?: data_get(InstalledState::installerStatus(), 'initial_pool_databases');
     }
 
     /** @param resource $handle @return \Generator<int, string> */

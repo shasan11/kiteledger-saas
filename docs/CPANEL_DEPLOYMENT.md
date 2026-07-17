@@ -35,6 +35,13 @@ Identifiers must include the cPanel account prefix and remain at most 64 charact
 
 Pool rows are allocated atomically, stored with encrypted credentials, and recycled only after the tenant ownership marker inside the database matches the tenant being deleted.
 
+The browser installer stores its step handoff in both the Laravel session and
+`storage/app/install/status.json`. This protects cPanel/LiteSpeed installs where
+the session cookie or session file is lost between the environment, database,
+and final screens. If the wizard loops back after a successful database step,
+verify that `storage/app/install` and `storage/framework/sessions` are writable
+by the web PHP user, then retry the database step.
+
 ## cPanel UAPI setup
 
 Create an API token that can manage MySQL databases for the cPanel account. Enter the HTTPS cPanel host, port `2083`, cPanel username, API token, database user, and database-user password when different from the central database password. The installer tests the full create, grant, connect, and cleanup workflow with a temporary probe database.
