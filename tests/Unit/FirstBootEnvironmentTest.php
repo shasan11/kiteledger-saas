@@ -104,6 +104,8 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertNotFalse($autoload);
         $this->assertLessThan($autoload, $firstBoot);
         $this->assertStringContainsString("if (! is_file(__DIR__.'/.env')", $artisan);
+        $this->assertStringContainsString('$composerDiscovery', $artisan);
+        $this->assertStringContainsString('($argv[1] ?? null) === \'package:discover\'', $artisan);
     }
 
     public function test_installer_keeps_cache_recovery_independent_from_the_database(): void

@@ -9,9 +9,18 @@ define('LARAVEL_START', microtime(true));
 // Marketplace archives intentionally omit .env. Keep CLI commands as
 // self-bootstrapping as web requests so customers can run Artisan immediately
 // after extracting the package without creating configuration files by hand.
-if (! is_file(__DIR__.'/.env') && require __DIR__.'/bootstrap/first-boot.php' !== true) {
-    fwrite(STDERR, "Project root is not writable. Make the folder containing artisan writable temporarily so the installer can create .env.\n");
-    exit(1);
+if (! is_file(__DIR__.'/.env')) {
+    $firstBootReady = require __DIR__.'/bootstrap/first-boot.php';
+    $composerDiscovery = ($argv[1] ?? null) === 'package:discover';
+
+    if ($firstBootReady !== true && ! $composerDiscovery) {
+        fwrite(STDERR, "Project root is not writable. Make the folder containing artisan writable temporarily so the installer can create .env.\n");
+        exit(1);
+    }
+
+    if ($firstBootReady !== true) {
+        fwrite(STDERR, "Project root is not writable yet; continuing Composer package discovery without creating .env.\n");
+    }
 }
 
 // Register the Composer autoloader...
