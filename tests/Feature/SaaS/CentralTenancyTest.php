@@ -16,6 +16,7 @@ use App\Services\SaaS\TenantFileDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Mockery;
@@ -44,6 +45,45 @@ class CentralTenancyTest extends TestCase
         app(TenantProvisioningService::class)->create(['company_name' => 'Queued', 'owner_name' => 'Ada Owner', 'owner_email' => 'queue@example.test', 'timezone' => 'UTC', 'currency' => 'USD', 'subdomain' => 'queued', 'owner_password' => 'VerySecure!123']);
 
         Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->connection === 'central' && $job->queue === 'provisioning');
+    }
+
+    public function test_tenant_provisioning_job_dispatches_after_outer_central_transaction_commits(): void
+    {
+        Queue::fake();
+        config(['saas.provision_sync' => false, 'saas.provisioning_queue' => 'provisioning']);
+        $connection = DB::connection(config('tenancy.database.central_connection'));
+
+        $connection->beginTransaction();
+
+        try {
+            app(TenantProvisioningService::class)->create([
+                'company_name' => 'Deferred',
+                'owner_name' => 'Ada Owner',
+                'owner_email' => 'deferred@example.test',
+                'timezone' => 'UTC',
+                'currency' => 'USD',
+                'subdomain' => 'deferred',
+                'owner_password' => 'VerySecure!123',
+            ]);
+
+            Queue::assertNotPushed(ProvisionTenantJob::class);
+        } catch (\Throwable $e) {
+            $connection->rollBack();
+
+            throw $e;
+        }
+
+        $connection->commit();
+
+        Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->connection === 'central' && $job->queue === 'provisioning');
+    }
+
+    public function test_central_queue_connection_is_database_backed_and_after_commit(): void
+    {
+        $this->assertSame('database', config('queue.connections.central.driver'));
+        $this->assertSame(config('queue.connections.central.connection'), config('queue.failed.database'));
+        $this->assertTrue(config('queue.connections.central.after_commit'));
+        $this->assertGreaterThan(280, config('queue.connections.central.retry_after'));
     }
 
     public function test_automatic_mode_generates_database_name_when_tenant_is_created(): void

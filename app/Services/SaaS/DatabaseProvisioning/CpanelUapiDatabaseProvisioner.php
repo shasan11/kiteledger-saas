@@ -36,6 +36,8 @@ class CpanelUapiDatabaseProvisioner implements TenantDatabaseProvisioner
             try {
                 $this->call('Mysql/create_database', ['name' => $database]);
             } catch (\Throwable $e) {
+                $this->rethrowSafeApiError($e);
+
                 throw new \RuntimeException('cpanel_database_create_failed', previous: $e);
             }
         }
@@ -49,6 +51,8 @@ class CpanelUapiDatabaseProvisioner implements TenantDatabaseProvisioner
             if (! $existedBeforeProvisioning) {
                 $this->safeDelete($database);
             }
+            $this->rethrowSafeApiError($e);
+
             throw new \RuntimeException('cpanel_privilege_assignment_failed', previous: $e);
         }
 
@@ -105,13 +109,47 @@ class CpanelUapiDatabaseProvisioner implements TenantDatabaseProvisioner
     private function call(string $operation, array $query): array
     {
         $response = $this->client()->get(rtrim(config('saas.database.cpanel.host'), '/').':'.config('saas.database.cpanel.port').'/execute/'.$operation, $query);
+        if (in_array($response->status(), [401, 403], true)) {
+            throw new \RuntimeException('cpanel_authentication_failed');
+        }
+
         $response->throw();
         $result = $response->json('result');
         if (! is_array($result) || (int) ($result['status'] ?? 0) !== 1) {
+            if ($this->isAuthenticationFailure($result)) {
+                throw new \RuntimeException('cpanel_authentication_failed');
+            }
+
             throw new \RuntimeException('cpanel_uapi_request_failed');
         }
 
         return $result;
+    }
+
+    private function isAuthenticationFailure(?array $result): bool
+    {
+        if (! is_array($result)) {
+            return false;
+        }
+
+        try {
+            $messages = strtolower(json_encode($result['errors'] ?? $result['messages'] ?? [], JSON_THROW_ON_ERROR));
+        } catch (\JsonException) {
+            return false;
+        }
+
+        return str_contains($messages, 'auth')
+            || str_contains($messages, 'token')
+            || str_contains($messages, 'login')
+            || str_contains($messages, 'access denied')
+            || str_contains($messages, 'permission denied');
+    }
+
+    private function rethrowSafeApiError(\Throwable $e): void
+    {
+        if ($e->getMessage() === 'cpanel_authentication_failed') {
+            throw $e;
+        }
     }
 
     private function databaseExists(string $database): bool

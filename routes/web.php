@@ -40,13 +40,13 @@ Route::middleware('install')->prefix('install')->name('LaravelInstaller::')->gro
     Route::get('final', [PackageFinalController::class, 'finish'])->name('final');
 });
 
-$centralRoutes = function (): void {
-    Route::get('/', [WebsiteController::class, 'home'])->name('central.home');
-    Route::get('/pricing', [WebsiteController::class, 'pricing'])->name('central.pricing');
-    Route::get('/p/{slug}', [WebsiteController::class, 'page'])->name('central.page');
-    Route::post('/billing/webhooks/{gateway}', BillingWebhookController::class)->middleware('throttle:120,1')->name('central.billing.webhook');
+$centralRoutes = function (string $namePrefix = 'central.'): void {
+    Route::get('/', [WebsiteController::class, 'home'])->name($namePrefix.'home');
+    Route::get('/pricing', [WebsiteController::class, 'pricing'])->name($namePrefix.'pricing');
+    Route::get('/p/{slug}', [WebsiteController::class, 'page'])->name($namePrefix.'page');
+    Route::post('/billing/webhooks/{gateway}', BillingWebhookController::class)->middleware('throttle:120,1')->name($namePrefix.'billing.webhook');
 
-    Route::prefix(config('saas.admin_path', 'admin'))->name('central.')->group(function (): void {
+    Route::prefix(config('saas.admin_path', 'admin'))->name($namePrefix)->group(function (): void {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
         Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
         Route::get('/mfa/challenge', [AuthController::class, 'mfaChallenge'])->name('mfa.challenge');
@@ -92,6 +92,11 @@ $centralRoutes = function (): void {
 // Domain constraints keep identical tenant and central paths (/, /login, etc.)
 // from shadowing one another. Reverse registration keeps the first configured
 // domain as the URL-generation default while every configured host still works.
-foreach (array_reverse(config('tenancy.central_domains', [])) as $centralDomain) {
-    Route::domain($centralDomain)->middleware('central.domain')->group($centralRoutes);
+$centralDomains = array_values(array_unique(config('tenancy.central_domains', [])));
+$defaultCentralDomain = $centralDomains[0] ?? null;
+
+foreach (array_reverse($centralDomains, true) as $index => $centralDomain) {
+    $namePrefix = $centralDomain === $defaultCentralDomain ? 'central.' : 'central.hosts.'.($index + 1).'.';
+
+    Route::domain($centralDomain)->middleware('central.domain')->group(fn () => $centralRoutes($namePrefix));
 }

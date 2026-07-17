@@ -2,6 +2,7 @@
 
 namespace App\Services\SaaS\DatabaseProvisioning;
 
+use App\Models\Central\Tenant;
 use Illuminate\Support\Carbon;
 use PDO;
 use PDOException;
@@ -17,6 +18,10 @@ class PoolDatabaseValidator
     public function validate(array $data): array
     {
         $this->names->assertValid($data['database_name']);
+
+        if (Tenant::withTrashed()->where('database_name', $data['database_name'])->exists()) {
+            throw new \RuntimeException('database_already_owned');
+        }
 
         $connection = config('database.connections.'.config('tenancy.database.central_connection', 'mysql'));
         $username = $data['username'] ?? $connection['username'] ?? '';

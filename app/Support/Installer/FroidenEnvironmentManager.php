@@ -2,6 +2,7 @@
 
 namespace App\Support\Installer;
 
+use App\Services\SaaS\DatabaseProvisioning\CpanelIdentifierNormalizer;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
@@ -161,8 +162,9 @@ class FroidenEnvironmentManager extends EnvironmentManager
         $host = (string) $request->input('cpanel_host');
         $baseUrl = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/';
         $account = (string) $request->input('cpanel_username');
-        $database = $this->cpanelIdentifier($account, 'klprobe_'.bin2hex(random_bytes(4)));
-        $databaseUser = $this->cpanelIdentifier($account, (string) $request->input('cpanel_database_user'));
+        $normalizer = app(CpanelIdentifierNormalizer::class);
+        $database = $normalizer->normalizeDatabase('klprobe_'.bin2hex(random_bytes(4)), $account);
+        $databaseUser = $normalizer->normalizeUser((string) $request->input('cpanel_database_user'), $account);
         $headers = [
             'Authorization' => 'cpanel '.$request->input('cpanel_username').':'.$request->input('cpanel_api_token'),
         ];
@@ -211,15 +213,6 @@ class FroidenEnvironmentManager extends EnvironmentManager
         }
 
         return (array) $response->json('result', []);
-    }
-
-    private function cpanelIdentifier(string $account, string $identifier): string
-    {
-        if ($account !== '' && ! str_starts_with($identifier, $account.'_')) {
-            return $account.'_'.$identifier;
-        }
-
-        return $identifier;
     }
 
     /** @return array<int, array{database_name:string,username:string,password:string}> */

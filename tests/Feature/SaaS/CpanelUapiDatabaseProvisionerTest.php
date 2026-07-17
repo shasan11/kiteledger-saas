@@ -74,6 +74,66 @@ class CpanelUapiDatabaseProvisionerTest extends TestCase
         Http::assertSent(fn (Request $request) => str_contains($request->url(), 'Mysql/set_privileges_on_database'));
     }
 
+    public function test_cpanel_http_authentication_failure_uses_safe_error_code(): void
+    {
+        Http::fake([
+            'https://cpanel.test:2083/execute/Mysql/list_databases' => Http::response(['message' => 'Unauthorized'], 401),
+        ]);
+
+        $this->expectExceptionMessage('cpanel_authentication_failed');
+
+        try {
+            app(CpanelUapiDatabaseProvisioner::class)->provision($this->tenantWithDatabase('tenant_acme'));
+        } finally {
+            Http::assertNotSent(fn (Request $request) => str_contains($request->url(), 'Mysql/create_database'));
+        }
+    }
+
+    public function test_cpanel_uapi_authentication_failure_uses_safe_error_code(): void
+    {
+        Http::fake([
+            'https://cpanel.test:2083/execute/Mysql/list_databases' => Http::response(['result' => ['status' => 0, 'errors' => ['Invalid API token']]]),
+        ]);
+
+        $this->expectExceptionMessage('cpanel_authentication_failed');
+
+        try {
+            app(CpanelUapiDatabaseProvisioner::class)->provision($this->tenantWithDatabase('tenant_acme'));
+        } finally {
+            Http::assertNotSent(fn (Request $request) => str_contains($request->url(), 'Mysql/create_database'));
+        }
+    }
+
+    public function test_cpanel_create_authentication_failure_is_not_wrapped_as_create_failure(): void
+    {
+        Http::fake([
+            'https://cpanel.test:2083/execute/Mysql/list_databases' => Http::response(['result' => ['status' => 1, 'data' => []]]),
+            'https://cpanel.test:2083/execute/Mysql/create_database*' => Http::response(['result' => ['status' => 0, 'errors' => ['Invalid API token']]]),
+        ]);
+
+        $this->expectExceptionMessage('cpanel_authentication_failed');
+
+        app(CpanelUapiDatabaseProvisioner::class)->provision($this->tenantWithDatabase('tenant_acme'));
+    }
+
+    public function test_cpanel_privilege_authentication_failure_is_not_wrapped_as_privilege_failure(): void
+    {
+        Http::fake([
+            'https://cpanel.test:2083/execute/Mysql/list_databases' => Http::response(['result' => ['status' => 1, 'data' => []]]),
+            'https://cpanel.test:2083/execute/Mysql/create_database*' => Http::response(['result' => ['status' => 1]]),
+            'https://cpanel.test:2083/execute/Mysql/set_privileges_on_database*' => Http::response(['result' => ['status' => 0, 'errors' => ['Access denied']]]),
+            'https://cpanel.test:2083/execute/Mysql/delete_database*' => Http::response(['result' => ['status' => 0, 'errors' => ['Access denied']]]),
+        ]);
+
+        $this->expectExceptionMessage('cpanel_authentication_failed');
+
+        try {
+            app(CpanelUapiDatabaseProvisioner::class)->provision($this->tenantWithDatabase('tenant_acme'));
+        } finally {
+            Http::assertSent(fn (Request $request) => str_contains($request->url(), 'Mysql/delete_database'));
+        }
+    }
+
     public function test_new_cpanel_database_is_cleaned_up_when_privilege_assignment_fails(): void
     {
         $tenant = $this->tenantWithDatabase('tenant_acme');

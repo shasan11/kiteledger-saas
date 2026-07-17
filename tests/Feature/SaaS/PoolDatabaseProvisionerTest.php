@@ -5,6 +5,7 @@ namespace Tests\Feature\SaaS;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDatabasePool;
 use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseProvisioner;
+use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseValidator;
 use App\Services\SaaS\DatabaseProvisioning\TenantDatabaseConnectionVerifier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
@@ -53,6 +54,15 @@ class PoolDatabaseProvisionerTest extends TestCase
         $this->expectExceptionMessage('pool_exhausted');
 
         app(PoolDatabaseProvisioner::class)->provision($this->tenant('tenant-a'));
+    }
+
+    public function test_pool_database_registration_rejects_database_already_assigned_to_tenant(): void
+    {
+        $this->tenant('tenant-a', ['database_name' => 'tenant_claimed']);
+
+        $this->expectExceptionMessage('database_already_owned');
+
+        app(PoolDatabaseValidator::class)->validate(['database_name' => 'tenant_claimed']);
     }
 
     public function test_pool_cleanup_failure_marks_database_failed_and_does_not_release_it(): void

@@ -50,6 +50,33 @@ class InstallerDatabaseManagerTest extends TestCase
         }
     }
 
+    public function test_mysql_install_dump_contains_central_schema_only(): void
+    {
+        $dump = file_get_contents(database_path('sql/mysql_install.sql'));
+
+        $this->assertStringContainsString('CREATE TABLE `tenants`', $dump);
+        $this->assertStringContainsString('CREATE TABLE `tenant_database_pool`', $dump);
+
+        foreach ([
+            'users',
+            'roles',
+            'permissions',
+            'branches',
+            'contacts',
+            'products',
+            'chart_of_accounts',
+            'journal_vouchers',
+            'invoices',
+            'payments',
+            'purchase_bills',
+            'inventory_adjustments',
+            'pos_registers',
+            'documents',
+        ] as $tenantTable) {
+            $this->assertStringNotContainsString("CREATE TABLE `{$tenantTable}`", $dump);
+        }
+    }
+
     #[DataProvider('installTypes')]
     public function test_browser_install_routes_only_to_the_safe_service_method(string $type, string $method, string $message): void
     {

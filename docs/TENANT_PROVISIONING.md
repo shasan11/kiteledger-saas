@@ -48,3 +48,7 @@ For a long-running worker manager, Supervisor/systemd is preferred over per-minu
 Each tenant stores the provisioning mode, database name, optional encrypted credentials, ownership identifier, and provisioned timestamp. Retry, backup, health, deletion, and release use the tenant's stored mode rather than the current global setting.
 
 Before a database is deleted or recycled, KiteLedger verifies `kiteledger_tenant_identity` inside the tenant database. A missing or mismatched marker blocks destructive cleanup.
+
+## Manual mode verification
+
+The full cPanel shared-host acceptance checklist, cPanel UAPI probe procedure, and automatic-mode staging test are documented in `docs/CPANEL_DEPLOYMENT.md`. Run those checks after any hosting move, queue configuration change, provisioning-mode change, or upgrade that touches tenant migrations, seeders, deletion, or database credentials. Do not mark a tenant database safe for reuse unless the central tenant record, pool row, and `kiteledger_tenant_identity` marker all match the same tenant.

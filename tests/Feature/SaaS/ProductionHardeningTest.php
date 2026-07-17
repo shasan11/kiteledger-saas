@@ -3,8 +3,10 @@
 namespace Tests\Feature\SaaS;
 
 use App\Contracts\SaaS\QuotaManager;
+use App\Enums\DomainStatus;
 use App\Enums\TenantStatus;
 use App\Http\Middleware\EnsureSubscriptionIsValid;
+use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\CentralPermission;
@@ -22,12 +24,20 @@ use App\Services\SaaS\TenantLifecycleService;
 use App\Support\Installer\InstalledState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ProductionHardeningTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        InstalledState::clear();
+
+        parent::tearDown();
+    }
 
     public function test_unverified_domain_fails_closed(): void
     {
@@ -38,6 +48,64 @@ class ProductionHardeningTest extends TestCase
         $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
         $this->assertSame(404, $response->getStatusCode());
         $this->assertNull(tenant());
+    }
+
+    public function test_unknown_domain_fails_closed_after_installation(): void
+    {
+        InstalledState::mark();
+
+        $request = Request::create('https://unknown.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
+    public function test_disabled_domain_fails_closed(): void
+    {
+        InstalledState::mark();
+        $tenant = Tenant::create(['id' => 'tenant-disabled-domain', 'company_name' => 'Disabled Domain', 'owner_name' => 'Owner', 'owner_email' => 'disabled-domain@test.invalid', 'status' => 'active']);
+        Domain::create(['tenant_id' => $tenant->id, 'domain' => 'disabled.test', 'status' => DomainStatus::Disabled->value, 'verified_at' => now()]);
+
+        $request = Request::create('https://disabled.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
+    public function test_suspended_tenant_is_locked_after_domain_initialization(): void
+    {
+        $tenant = Tenant::create(['id' => 'tenant-suspended', 'company_name' => 'Suspended', 'owner_name' => 'Owner', 'owner_email' => 'suspended@test.invalid', 'status' => TenantStatus::Suspended->value]);
+        tenancy()->initialize($tenant);
+
+        try {
+            $request = Request::create('/api/products', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+            $response = app(EnsureTenantIsActive::class)->handle($request, fn () => response('unsafe'));
+
+            $this->assertSame(423, $response->getStatusCode());
+            $this->assertSame('tenant_locked', $response->getData(true)['code']);
+        } finally {
+            tenancy()->end();
+        }
+    }
+
+    public function test_sessions_remain_host_only_for_tenant_isolation(): void
+    {
+        $this->assertNull(config('session.domain'));
+        $this->assertTrue(config('session.http_only'));
+        $this->assertSame('lax', config('session.same_site'));
+    }
+
+    public function test_routes_are_cacheable_for_shared_host_deployments(): void
+    {
+        try {
+            $this->assertSame(0, Artisan::call('route:cache'));
+        } finally {
+            Artisan::call('route:clear');
+        }
     }
 
     public function test_missing_paid_subscription_returns_payment_required(): void

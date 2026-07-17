@@ -229,6 +229,7 @@ class ResourceController extends Controller
         } catch (\RuntimeException $e) {
             $message = match ($e->getMessage()) {
                 'central_database_rejected' => 'The central database cannot be registered as a tenant pool database.',
+                'database_already_owned' => 'This database is already assigned to a tenant and cannot be registered in the pool.',
                 'pool_database_not_empty' => 'The tenant database must be empty before it can be added to the pool.',
                 default => 'The tenant database validation failed. Create the database, assign full table privileges, and verify the credentials.',
             };

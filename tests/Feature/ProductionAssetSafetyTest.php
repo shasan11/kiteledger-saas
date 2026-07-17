@@ -12,7 +12,7 @@ class ProductionAssetSafetyTest extends TestCase
         file_put_contents($hotFile, 'http://[::1]:5173');
 
         try {
-            $response = $this->get('https://ledger.example.com/login');
+            $response = $this->get('https://central.test/admin/login');
 
             $response->assertOk();
             $response->assertDontSee('[::1]:5173', false);

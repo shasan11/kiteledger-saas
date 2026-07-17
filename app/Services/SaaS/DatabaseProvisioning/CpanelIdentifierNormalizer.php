@@ -4,19 +4,19 @@ namespace App\Services\SaaS\DatabaseProvisioning;
 
 class CpanelIdentifierNormalizer
 {
-    public function normalizeDatabase(string $database): string
+    public function normalizeDatabase(string $database, ?string $account = null): string
     {
-        return $this->normalize($database);
+        return $this->normalize($database, $account);
     }
 
-    public function normalizeUser(string $username): string
+    public function normalizeUser(string $username, ?string $account = null): string
     {
-        return $this->normalize($username);
+        return $this->normalize($username, $account);
     }
 
-    private function normalize(string $identifier): string
+    private function normalize(string $identifier, ?string $account = null): string
     {
-        $account = (string) config('saas.database.cpanel.username');
+        $account ??= (string) config('saas.database.cpanel.username');
         $prefix = $account !== '' ? $account.'_' : '';
 
         if ($prefix !== '' && ! str_starts_with($identifier, $prefix)) {
