@@ -170,7 +170,7 @@ class EnsureInstalled
     private function clearInstallerCaches(): bool
     {
         $deleted = false;
-        foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $file) {
+        foreach (['config.php', 'routes-v7.php'] as $file) {
             $path = base_path('bootstrap/cache/'.$file);
             if (is_file($path) && @unlink($path)) {
                 $deleted = true;

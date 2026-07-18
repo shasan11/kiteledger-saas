@@ -61,6 +61,16 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
 
         $original = $contents;
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'other-port.test:8017';
+
+        try {
+            $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
+        } finally {
+            $this->restoreServerValue('HTTP_HOST', $previousHost);
+        }
+
+        $this->assertSame($original, file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'));
         $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
         $this->assertSame($original, file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'));
     }

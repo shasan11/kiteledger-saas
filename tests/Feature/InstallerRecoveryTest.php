@@ -140,8 +140,11 @@ class InstallerRecoveryTest extends TestCase
             $this->assertMatchesRegularExpression('/^APP_KEY=base64:.+$/m', $contents);
             $this->assertStringContainsString('APP_URL=http://install.customer.test', $contents);
             $this->assertStringContainsString('DB_DATABASE=kiteledger', $contents);
-            foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $cacheFile) {
+            foreach (['config.php', 'routes-v7.php'] as $cacheFile) {
                 $this->assertFileDoesNotExist($root.DIRECTORY_SEPARATOR.'bootstrap'.DIRECTORY_SEPARATOR.'cache'.DIRECTORY_SEPARATOR.$cacheFile);
+            }
+            foreach (['packages.php', 'services.php'] as $manifestFile) {
+                $this->assertFileExists($root.DIRECTORY_SEPARATOR.'bootstrap'.DIRECTORY_SEPARATOR.'cache'.DIRECTORY_SEPARATOR.$manifestFile);
             }
         } finally {
             if ($oldHost === null) {

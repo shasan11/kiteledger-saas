@@ -117,9 +117,12 @@ if (! $installed) {
         $contents = $setValue($contents, 'DB_DATABASE', 'kiteledger');
     }
 
-    // A packaged config cache can retain an empty key or SQLite defaults and
-    // prevent Laravel from seeing the environment created above.
-    foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $cacheFile) {
+    // A packaged config/route cache can retain an empty key or SQLite defaults
+    // and prevent Laravel from seeing the environment created above. Do not
+    // delete packages.php or services.php here; Laravel needs them during boot
+    // and rebuilding them while the dev server serves concurrent requests can
+    // fail on locked shared filesystems.
+    foreach (['config.php', 'routes-v7.php'] as $cacheFile) {
         $cachePath = $basePath.'/bootstrap/cache/'.$cacheFile;
         if (is_file($cachePath)) {
             @unlink($cachePath);
@@ -132,11 +135,18 @@ if (! $installed && $host !== '' && preg_match('/^[A-Za-z0-9.:-]+$/', $host)) {
     $https = strtolower((string) ($_SERVER['HTTPS'] ?? ''));
     $forwardedProto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
     $scheme = ($https !== '' && $https !== 'off') || $forwardedProto === 'https' ? 'https' : 'http';
-    $contents = $setValue($contents, 'APP_URL', $scheme.'://'.$host);
-
+    $currentUrl = $getValue($contents, 'APP_URL');
     $domain = strtolower((string) preg_replace('/:\d+$/', '', $host));
-    $contents = $setValue($contents, 'CENTRAL_DOMAINS', $domain);
-    $contents = $setValue($contents, 'SAAS_BASE_DOMAIN', $domain);
+
+    if (! $environmentExists || in_array(strtolower($currentUrl), ['', 'http://localhost', 'https://example.com', 'http://example.com'], true)) {
+        $contents = $setValue($contents, 'APP_URL', $scheme.'://'.$host);
+    }
+    if (! $environmentExists || in_array(strtolower($getValue($contents, 'CENTRAL_DOMAINS')), ['', 'example.com', 'example.com,www.example.com'], true)) {
+        $contents = $setValue($contents, 'CENTRAL_DOMAINS', $domain);
+    }
+    if (! $environmentExists || in_array(strtolower($getValue($contents, 'SAAS_BASE_DOMAIN')), ['', 'example.com'], true)) {
+        $contents = $setValue($contents, 'SAAS_BASE_DOMAIN', $domain);
+    }
 }
 
 if ($environmentExists) {

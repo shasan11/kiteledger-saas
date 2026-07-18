@@ -1,4 +1,4 @@
-Options -Indexes
+<!-- Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
@@ -18,4 +18,4 @@ Options -Indexes
 
     # Internally serve every web request from Laravel's public directory.
     RewriteRule ^(.*)$ public/$1 [L]
-</IfModule>
+</IfModule> -->

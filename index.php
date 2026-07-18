@@ -5,7 +5,7 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
-if (require __DIR__.'/bootstrap/first-boot.php' !== true) {
+if ((require __DIR__.'/bootstrap/first-boot.php') !== true) {
     http_response_code(500);
     header('Content-Type: text/plain; charset=UTF-8');
     exit("Project root is not writable. Make the folder containing artisan writable temporarily so the installer can create .env.\n");
