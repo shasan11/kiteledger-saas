@@ -2,12 +2,8 @@
 
 namespace App\Services\Installer;
 
-use App\Models\Central\TenantDatabasePool;
-use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseValidator;
-use App\Support\Installer\InstalledState;
 use Database\Seeders\CentralDatabaseSeeder;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -17,8 +13,6 @@ use Throwable;
 class InstallerDatabaseService
 {
     public const FULL_DEMO_COMMAND = 'php artisan kiteledger:seed-demo --profile=full --force';
-
-    public function __construct(private PoolDatabaseValidator $poolDatabaseValidator) {}
 
     public function installFresh(): void
     {
@@ -106,8 +100,6 @@ class InstallerDatabaseService
             // Re-run the idempotent central seeder so the administrator entered
             // in the wizard is created after the dump has been imported.
             Artisan::call('db:seed', ['--class' => CentralDatabaseSeeder::class, '--force' => true]);
-            $this->registerInitialPoolDatabases();
-
             return;
         }
 
@@ -116,7 +108,6 @@ class InstallerDatabaseService
             'driver' => DB::connection()->getDriverName(),
         ]);
         $this->runFreshMigrationsAndSeed();
-        $this->registerInitialPoolDatabases();
     }
 
     private function dumpPath(): string
@@ -137,39 +128,6 @@ class InstallerDatabaseService
         }
 
         throw new RuntimeException('The selected database is not empty. The browser installer will not overwrite existing data. Select a new empty database and retry.');
-    }
-
-    private function registerInitialPoolDatabases(): void
-    {
-        $payload = $this->initialPoolPayload();
-        if (! is_string($payload) || $payload === '') {
-            return;
-        }
-
-        try {
-            $rows = json_decode(Crypt::decryptString($payload), true, flags: JSON_THROW_ON_ERROR);
-        } catch (Throwable $e) {
-            throw new RuntimeException('The initial tenant database pool payload could not be read. Restart the installer and submit the pool database again.', 0, $e);
-        }
-
-        foreach ($rows as $row) {
-            $validated = $this->poolDatabaseValidator->validate([
-                'database_name' => (string) ($row['database_name'] ?? ''),
-                'username' => filled($row['username'] ?? null) ? (string) $row['username'] : null,
-                'password' => filled($row['password'] ?? null) ? (string) $row['password'] : null,
-            ]);
-
-            TenantDatabasePool::query()->updateOrCreate(
-                ['database_name' => $validated['database_name']],
-                $validated,
-            );
-        }
-    }
-
-    private function initialPoolPayload(): mixed
-    {
-        return session('kiteledger_initial_pool_databases')
-            ?: data_get(InstalledState::installerStatus(), 'initial_pool_databases');
     }
 
     /** @param resource $handle @return \Generator<int, string> */

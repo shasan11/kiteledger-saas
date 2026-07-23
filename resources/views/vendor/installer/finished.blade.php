@@ -18,12 +18,8 @@
     </div>
 
     <div class="finish-card">
-        <h3>Company database setup</h3>
-        <p><strong>Mode:</strong> {{ str_replace('_', ' ', $provisioningMode) }}</p>
-        <p>{{ $provisioningStatus }}</p>
-        @if (in_array($provisioningMode, ['manual', 'pool'], true))
-            <p>Before creating companies, confirm the diagnostics below show at least one validated pool database. Add more from <strong>Tenant Databases</strong> as you grow.</p>
-        @endif
+        <h3>Next: create tenants</h3>
+        <p>Sign in to the superadmin panel, create each tenant database in your hosting panel, then enter and verify its database credentials in the tenant provisioning form.</p>
     </div>
 
     <div class="finish-card">

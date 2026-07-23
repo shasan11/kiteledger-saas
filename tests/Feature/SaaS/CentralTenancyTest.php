@@ -30,11 +30,11 @@ class CentralTenancyTest extends TestCase
     public function test_central_service_creates_tenant_and_domain_without_branch_confusion(): void
     {
         Queue::fake();
-        $tenant = app(TenantProvisioningService::class)->create(['company_name' => 'Acme', 'owner_name' => 'Ada Owner', 'owner_email' => 'ada@example.test', 'timezone' => 'UTC', 'currency' => 'USD', 'subdomain' => 'acme', 'owner_password' => 'VerySecure!123']);
+        $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Acme', 'acme', 'ada@example.test', 'tenant_acme'));
         $this->assertDatabaseHas('tenants', ['id' => $tenant->id, 'company_name' => 'Acme', 'status' => 'pending']);
         $this->assertDatabaseHas('domains', ['tenant_id' => $tenant->id, 'domain' => 'acme.test', 'type' => 'subdomain']);
-        $this->assertSame('pool', $tenant->database_provisioning_mode);
-        $this->assertNull($tenant->database_name);
+        $this->assertSame('manual', $tenant->database_provisioning_mode);
+        $this->assertSame('tenant_acme', $tenant->database_name);
     }
 
     public function test_tenant_provisioning_job_uses_central_queue_connection(): void
@@ -42,7 +42,7 @@ class CentralTenancyTest extends TestCase
         Queue::fake();
         config(['saas.provision_sync' => false, 'saas.provisioning_queue' => 'provisioning']);
 
-        app(TenantProvisioningService::class)->create(['company_name' => 'Queued', 'owner_name' => 'Ada Owner', 'owner_email' => 'queue@example.test', 'timezone' => 'UTC', 'currency' => 'USD', 'subdomain' => 'queued', 'owner_password' => 'VerySecure!123']);
+        app(TenantProvisioningService::class)->create($this->tenantPayload('Queued', 'queued', 'queue@example.test', 'tenant_queued'));
 
         Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->connection === 'central' && $job->queue === 'provisioning');
     }
@@ -56,15 +56,7 @@ class CentralTenancyTest extends TestCase
         $connection->beginTransaction();
 
         try {
-            app(TenantProvisioningService::class)->create([
-                'company_name' => 'Deferred',
-                'owner_name' => 'Ada Owner',
-                'owner_email' => 'deferred@example.test',
-                'timezone' => 'UTC',
-                'currency' => 'USD',
-                'subdomain' => 'deferred',
-                'owner_password' => 'VerySecure!123',
-            ]);
+            app(TenantProvisioningService::class)->create($this->tenantPayload('Deferred', 'deferred', 'deferred@example.test', 'tenant_deferred'));
 
             Queue::assertNotPushed(ProvisionTenantJob::class);
         } catch (\Throwable $e) {
@@ -86,16 +78,26 @@ class CentralTenancyTest extends TestCase
         $this->assertGreaterThan(280, config('queue.connections.central.retry_after'));
     }
 
-    public function test_automatic_mode_generates_database_name_when_tenant_is_created(): void
+    public function test_manual_mode_stores_admin_supplied_database_credentials(): void
     {
         Queue::fake();
-        config(['saas.database.mode' => 'automatic', 'tenancy.database.prefix' => 'kiteledger_tenant_', 'tenancy.database.suffix' => '']);
+        $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Acme', 'acme2', 'ada2@example.test', 'buyer_created_acme'));
 
-        $tenant = app(TenantProvisioningService::class)->create(['company_name' => 'Acme', 'owner_name' => 'Ada Owner', 'owner_email' => 'ada2@example.test', 'timezone' => 'UTC', 'currency' => 'USD', 'subdomain' => 'acme2', 'owner_password' => 'VerySecure!123']);
-
-        $this->assertSame('automatic', $tenant->database_provisioning_mode);
-        $this->assertMatchesRegularExpression('/^kiteledger_tenant_acme2_[a-z0-9]{12}$/', $tenant->database_name);
+        $this->assertSame('manual', $tenant->database_provisioning_mode);
+        $this->assertSame('buyer_created_acme', $tenant->database_name);
+        $this->assertNotSame('tenant-db-secret', $tenant->getRawOriginal('tenancy_db_password'));
         $this->assertArrayNotHasKey('data', $tenant->toArray());
+    }
+
+    private function tenantPayload(string $company, string $subdomain, string $email, string $database): array
+    {
+        return [
+            'company_name' => $company, 'owner_name' => 'Ada Owner', 'owner_email' => $email,
+            'timezone' => 'UTC', 'currency' => 'USD', 'subdomain' => $subdomain,
+            'owner_password' => 'VerySecure!123', 'tenancy_db_host' => '127.0.0.1',
+            'tenancy_db_port' => 3306, 'tenancy_db_name' => $database,
+            'tenancy_db_username' => 'tenant_user', 'tenancy_db_password' => 'tenant-db-secret',
+        ];
     }
 
     public function test_tenant_database_credentials_are_hidden_from_serialization(): void

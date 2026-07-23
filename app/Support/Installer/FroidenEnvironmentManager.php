@@ -2,13 +2,10 @@
 
 namespace App\Support\Installer;
 
-use App\Services\SaaS\DatabaseProvisioning\CpanelIdentifierNormalizer;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Http;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -33,20 +30,6 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 (string) $request->input('password', ''),
             );
 
-            $mode = (string) $request->input('provisioning_mode');
-            $provisioningStatus = match ($mode) {
-                'automatic', 'mysql' => $this->testAutomaticProvisioning(
-                    (string) $request->input('hostname'),
-                    (int) $request->integer('port'),
-                    (string) $request->input('database'),
-                    (string) $request->input('username'),
-                    (string) $request->input('password', ''),
-                ),
-                'cpanel_uapi', 'cpanel' => $this->testCpanel($request),
-                default => 'Manual mode selected. Supplied tenant databases will be validated before use.',
-            };
-            $canonicalMode = match ($mode) { 'automatic' => 'mysql', 'cpanel_uapi' => 'cpanel', 'pool' => 'manual', default => $mode };
-
             $this->writeEnvironment([
                 'APP_URL' => rtrim((string) $request->input('app_url'), '/'),
                 'CENTRAL_DOMAINS' => $this->normalizeDomains((string) $request->input('central_domains')),
@@ -62,42 +45,18 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'CENTRAL_ADMIN_NAME' => (string) $request->input('admin_name'),
                 'CENTRAL_ADMIN_EMAIL' => strtolower((string) $request->input('admin_email')),
                 'CENTRAL_ADMIN_PASSWORD' => (string) $request->input('admin_password'),
-                'TENANT_DB_PROVISIONING_MODE' => $canonicalMode,
-                'TENANT_DATABASE_PROVISIONING_MODE' => $canonicalMode,
-                'TENANT_DATABASE_PREFIX' => (string) $request->input('tenant_database_prefix', 'tenant_'),
-                'TENANT_DB_HOST' => (string) $request->input('hostname'),
-                'TENANT_DB_PORT' => (string) $request->integer('port'),
-                'TENANT_DB_USERNAME' => (string) $request->input('tenant_db_username', $request->input('username')),
-                'TENANT_DB_PASSWORD' => (string) $request->input('tenant_db_password', $request->input('password', '')),
-                'TENANT_DB_ADMIN_HOST' => $canonicalMode === 'mysql' ? (string) $request->input('hostname') : '',
-                'TENANT_DB_ADMIN_USERNAME' => $canonicalMode === 'mysql' ? (string) $request->input('username') : '',
-                'TENANT_DB_ADMIN_PASSWORD' => $canonicalMode === 'mysql' ? (string) $request->input('password', '') : '',
-                'CPANEL_HOST' => $canonicalMode === 'cpanel' ? rtrim((string) $request->input('cpanel_host'), '/') : '',
-                'CPANEL_PORT' => $canonicalMode === 'cpanel' ? (string) $request->integer('cpanel_port') : '2083',
-                'CPANEL_USERNAME' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_username') : '',
-                'CPANEL_API_TOKEN' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_api_token') : '',
-                'CPANEL_DATABASE_USER' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_database_user') : '',
-                'CPANEL_DATABASE_PASSWORD' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_database_password', '') : '',
+                'TENANT_DB_PROVISIONING_MODE' => 'manual',
+                'TENANT_DATABASE_PROVISIONING_MODE' => 'manual',
                 'QUEUE_CONNECTION' => 'central',
                 'DB_QUEUE_CONNECTION' => 'central',
                 'DB_QUEUE_RETRY_AFTER' => '330',
             ]);
             Artisan::call('config:clear');
-            $poolPayload = null;
-            if (in_array($mode, ['pool', 'manual'], true)) {
-                $poolPayload = Crypt::encryptString(json_encode($this->poolDatabases($request), JSON_THROW_ON_ERROR));
-            }
             session([
-                'kiteledger_provisioning_mode' => $canonicalMode,
-                'kiteledger_provisioning_status' => $provisioningStatus,
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
-                'kiteledger_initial_pool_databases' => $poolPayload,
             ]);
             InstalledState::putInstallerStatus([
-                'provisioning_mode' => $canonicalMode,
-                'provisioning_status' => $provisioningStatus,
                 'admin_email' => strtolower((string) $request->input('admin_email')),
-                'initial_pool_databases' => $poolPayload,
                 'environment_saved_at' => now()->toIso8601String(),
             ]);
 
@@ -154,107 +113,6 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 : 'The selected database is not empty. The browser installer will not overwrite existing data. Select an empty database.';
             throw new RuntimeException($message);
         }
-    }
-
-    private function testAutomaticProvisioning(string $host, int $port, string $database, string $username, string $password): string
-    {
-        $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4", $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-        $probe = substr(preg_replace('/[^A-Za-z0-9_]/', '_', $database).'_kl_probe_'.bin2hex(random_bytes(4)), 0, 64);
-
-        try {
-            $pdo->exec("CREATE DATABASE `{$probe}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $pdo->exec("DROP DATABASE `{$probe}`");
-        } catch (PDOException $exception) {
-            try {
-                $pdo->exec("DROP DATABASE IF EXISTS `{$probe}`");
-            } catch (Throwable) {
-                // The clear installer error below is safer than exposing SQL details.
-            }
-            throw new RuntimeException('Automatic company database creation is unavailable because this database user does not have the required CREATE/DROP DATABASE privileges. Choose cPanel UAPI or pool mode.');
-        }
-
-        return 'CREATE DATABASE and cleanup privileges tested successfully. Automatic company provisioning is available.';
-    }
-
-    private function testCpanel(Request $request): string
-    {
-        $host = (string) $request->input('cpanel_host');
-        $baseUrl = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/';
-        $account = (string) $request->input('cpanel_username');
-        $normalizer = app(CpanelIdentifierNormalizer::class);
-        $database = $normalizer->normalizeDatabase('klprobe_'.bin2hex(random_bytes(4)), $account);
-        $databaseUser = $normalizer->normalizeUser((string) $request->input('cpanel_database_user'), $account);
-        $headers = [
-            'Authorization' => 'cpanel '.$request->input('cpanel_username').':'.$request->input('cpanel_api_token'),
-        ];
-
-        try {
-            $this->cpanelCall($baseUrl, $headers, 'Mysql/create_database', ['name' => $database]);
-            $this->cpanelCall($baseUrl, $headers, 'Mysql/set_privileges_on_database', [
-                'database' => $database,
-                'user' => $databaseUser,
-                'privileges' => 'ALL PRIVILEGES',
-            ]);
-            $databasePassword = (string) $request->input('cpanel_database_password', '');
-            if ($databasePassword === '' && $databaseUser === (string) $request->input('username')) {
-                $databasePassword = (string) $request->input('password', '');
-            }
-            new PDO(
-                'mysql:host='.(string) $request->input('hostname').';port='.(int) $request->integer('port').';dbname='.$database.';charset=utf8mb4',
-                $databaseUser,
-                $databasePassword,
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
-            );
-        } catch (Throwable $exception) {
-            try {
-                $this->cpanelCall($baseUrl, $headers, 'Mysql/delete_database', ['name' => $database]);
-            } catch (Throwable) {
-                //
-            }
-            throw new RuntimeException('The cPanel UAPI workflow test failed. Verify token permissions, database user privileges, host, and password.');
-        }
-
-        try {
-            $this->cpanelCall($baseUrl, $headers, 'Mysql/delete_database', ['name' => $database]);
-        } catch (Throwable) {
-            throw new RuntimeException('The cPanel probe database was created but cleanup failed. Remove it from cPanel before retrying.');
-        }
-
-        return 'cPanel UAPI create, grant, connect, and cleanup workflow tested successfully.';
-    }
-
-    /** @param array<string, string> $headers */
-    private function cpanelCall(string $baseUrl, array $headers, string $operation, array $query): array
-    {
-        $response = Http::acceptJson()->withHeaders($headers)->connectTimeout(10)->timeout(30)->get($baseUrl.$operation, $query);
-        if (! $response->successful() || (int) $response->json('result.status', 0) !== 1) {
-            throw new RuntimeException('cpanel_request_failed');
-        }
-
-        return (array) $response->json('result', []);
-    }
-
-    /** @return array<int, array{database_name:string,username:string,password:string}> */
-    private function poolDatabases(Request $request): array
-    {
-        $rows = $request->input('pool_databases');
-        if (! is_array($rows) || $rows === []) {
-            $rows = [[
-                'database_name' => $request->input('pool_database_name'),
-                'username' => $request->input('pool_database_username', ''),
-                'password' => $request->input('pool_database_password', ''),
-            ]];
-        }
-
-        return collect($rows)
-            ->map(fn (array $row): array => [
-                'database_name' => trim((string) ($row['database_name'] ?? '')),
-                'username' => trim((string) ($row['username'] ?? '')),
-                'password' => (string) ($row['password'] ?? ''),
-            ])
-            ->filter(fn (array $row): bool => $row['database_name'] !== '')
-            ->values()
-            ->all();
     }
 
     /** @param array<string, string> $values */

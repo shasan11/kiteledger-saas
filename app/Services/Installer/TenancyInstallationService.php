@@ -3,9 +3,6 @@
 namespace App\Services\Installer;
 
 use App\Models\Central\CentralAdmin;
-use App\Services\SaaS\DatabaseProvisioning\CpanelUapiDatabaseProvisioner;
-use App\Services\SaaS\DatabaseProvisioning\ManualDatabaseProvisioner;
-use App\Services\SaaS\DatabaseProvisioning\MySqlDatabaseProvisioner;
 use App\Support\Installer\InstalledState;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -34,16 +31,6 @@ class TenancyInstallationService
         DB::connection(config('tenancy.database.central_connection'))->getPdo();
 
         return true;
-    }
-
-    public function testTenantProvisioning(string $mode, array $credentials = []): bool
-    {
-        return match ($mode) {
-            'manual' => (function () use ($credentials): bool { app(ManualDatabaseProvisioner::class)->verify($credentials); return true; })(),
-            'mysql' => app(MySqlDatabaseProvisioner::class)->available(),
-            'cpanel' => app(CpanelUapiDatabaseProvisioner::class)->available(),
-            default => false,
-        };
     }
 
     public function finalize(array $admin = []): void

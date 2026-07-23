@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Http\Controllers\Installer\InstallTypeController;
 use App\Services\Installer\InstallerDatabaseService;
 use App\Support\Installer\FroidenDatabaseManager;
-use App\Support\Installer\InstalledState;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionMethod;
@@ -75,22 +74,6 @@ class InstallerDatabaseManagerTest extends TestCase
             'documents',
         ] as $tenantTable) {
             $this->assertStringNotContainsString("CREATE TABLE `{$tenantTable}`", $dump);
-        }
-    }
-
-    public function test_initial_pool_payload_falls_back_to_persisted_installer_status(): void
-    {
-        InstalledState::clear();
-        InstalledState::putInstallerStatus(['initial_pool_databases' => 'encrypted-payload']);
-
-        try {
-            $payload = (new ReflectionMethod(InstallerDatabaseService::class, 'initialPoolPayload'))->invoke(
-                app(InstallerDatabaseService::class),
-            );
-
-            $this->assertSame('encrypted-payload', $payload);
-        } finally {
-            InstalledState::clear();
         }
     }
 

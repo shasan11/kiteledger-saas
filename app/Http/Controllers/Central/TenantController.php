@@ -58,7 +58,10 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant, CentralAuditService $audit)
     {
         $old = $tenant->getOriginal();
-        $tenant->update($request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id']]));
+        $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
+        if (blank($data['tenancy_db_password'] ?? null)) unset($data['tenancy_db_password']);
+        $tenant->update($data + ['database_name' => $data['tenancy_db_name'], 'database_provisioning_mode' => 'manual']);
+        $this->syncTenantDatabaseInternals($tenant);
         $audit->log($request, 'tenant.updated', $tenant, $old, $tenant->getChanges());
 
         return redirect()->route('central.tenants.show', $tenant);
@@ -163,7 +166,18 @@ class TenantController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_email' => ['required', 'email', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'subdomain' => ['required', 'string', 'max:63', Rule::notIn(config('saas.reserved_subdomains'))], 'owner_password' => ['required', 'string', 'min:12', 'confirmed']]);
+        return $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_email' => ['required', 'email', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'subdomain' => ['required', 'string', 'max:63', Rule::notIn(config('saas.reserved_subdomains'))], 'owner_password' => ['required', 'string', 'min:12', 'confirmed'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['present', 'nullable', 'string', 'max:1024']]);
+    }
+
+    private function syncTenantDatabaseInternals(Tenant $tenant): void
+    {
+        $tenant->setInternal('db_connection', 'tenant_template');
+        $tenant->setInternal('db_name', $tenant->tenancy_db_name);
+        $tenant->setInternal('db_host', $tenant->tenancy_db_host);
+        $tenant->setInternal('db_port', $tenant->tenancy_db_port);
+        $tenant->setInternal('db_username', $tenant->tenancy_db_username);
+        $tenant->setInternal('db_password', $tenant->tenancy_db_password);
+        $tenant->save();
     }
 
     private function options(): array

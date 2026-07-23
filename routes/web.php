@@ -33,7 +33,6 @@ Route::middleware('install')->prefix('install')->name('kiteledger.install.')->gr
     Route::prefix('tenancy')->name('tenancy.')->group(function (): void {
         Route::get('status', [InstallerTenancyController::class, 'status'])->name('status');
         Route::post('license', [InstallerTenancyController::class, 'license'])->name('license');
-        Route::post('tenant-provisioning', [InstallerTenancyController::class, 'tenantProvisioning'])->name('tenant-provisioning');
     });
 });
 

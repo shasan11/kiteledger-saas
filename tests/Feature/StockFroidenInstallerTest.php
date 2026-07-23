@@ -12,6 +12,7 @@ use App\Support\Installer\InstalledState;
 use Froiden\LaravelInstaller\Helpers\DatabaseManager;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
+use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Mockery;
 use Tests\TestCase;
@@ -37,9 +38,12 @@ class StockFroidenInstallerTest extends TestCase
         $this->get('/install/environment')
             ->assertOk()
             ->assertSee('method="post"', false)
+            ->assertSee('type="submit"', false)
             ->assertSee('Platform administrator')
-            ->assertSee('pool_databases[0][database_name]', false)
-            ->assertSee('Add database')
+            ->assertDontSee('checkEnv', false)
+            ->assertDontSee('provisioning_mode', false)
+            ->assertDontSee('pool_databases', false)
+            ->assertDontSee('cpanel_api_token', false)
             ->assertDontSee('type: "GET"', false);
         $this->get('/install/requirements')->assertOk();
         $this->get('/install/permissions')->assertOk();
@@ -56,37 +60,42 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertNull($route->getDomain());
     }
 
-    public function test_pool_mode_requires_at_least_one_database_row_before_environment_save(): void
+    public function test_environment_save_accepts_a_blank_central_database_password(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);
-        $manager->shouldNotReceive('save');
+        $manager->shouldReceive('save')->once()->andReturn(['status' => 'success']);
 
         $response = app(EnvironmentController::class)(
-            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
-                'provisioning_mode' => 'pool',
-            ])),
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload(['password' => ''])),
             $manager,
         );
 
-        $this->assertSame('fail', $response['status'] ?? null);
+        $this->assertSame('success', $response['status'] ?? null);
     }
 
-    public function test_pool_mode_accepts_multiple_database_rows_before_environment_save(): void
+    public function test_browser_environment_submission_redirects_without_javascript(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldReceive('save')->once()->with(Mockery::on(
+            fn (Request $request): bool => blank($request->input('password')),
+        ))->andReturn(Reply::redirect(route('LaravelInstaller::requirements'), 'Settings saved.'));
+        $this->app->instance(FroidenEnvironmentManager::class, $manager);
+
+        $this->post(route('kiteledger.install.environment.save'), $this->validEnvironmentPayload([
+            '_browser_submit' => '1',
+            'password' => '',
+        ]))->assertRedirect(route('LaravelInstaller::requirements'));
+    }
+
+    public function test_environment_save_does_not_require_or_process_tenant_database_rows(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);
         $manager->shouldReceive('save')->once()->with(Mockery::on(function (Request $request): bool {
-            return $request->input('pool_databases.0.database_name') === 'cpuser_tenant_a'
-                && $request->input('pool_databases.1.database_name') === 'cpuser_tenant_b';
+            return ! $request->has('provisioning_mode') && ! $request->has('pool_databases');
         }))->andReturn(['status' => 'success']);
 
         $response = app(EnvironmentController::class)(
-            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
-                'provisioning_mode' => 'pool',
-                'pool_databases' => [
-                    ['database_name' => 'cpuser_tenant_a', 'username' => '', 'password' => ''],
-                    ['database_name' => 'cpuser_tenant_b', 'username' => 'tenant_b_user', 'password' => 'secret'],
-                ],
-            ])),
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload()),
             $manager,
         );
 
@@ -159,8 +168,6 @@ class StockFroidenInstallerTest extends TestCase
         $response = $this->withSession([
             'kiteledger_install_succeeded' => true,
             'kiteledger_admin_email' => 'buyer@example.com',
-            'kiteledger_provisioning_mode' => 'pool',
-            'kiteledger_provisioning_status' => 'Pool mode selected.',
         ])->get('/install/final');
 
         $response->assertOk()
@@ -181,14 +188,12 @@ class StockFroidenInstallerTest extends TestCase
         InstalledState::putInstallerStatus([
             'install_succeeded' => true,
             'admin_email' => 'buyer@example.com',
-            'provisioning_mode' => 'pool',
-            'provisioning_status' => 'Pool mode selected.',
         ]);
 
         $this->get('/install/final')
             ->assertOk()
             ->assertSee('buyer@example.com')
-            ->assertSee('Pool mode selected.');
+            ->assertSee('create each tenant database');
 
         $this->assertFileDoesNotExist(InstalledState::installerStatusPath());
         $this->assertFileExists(InstalledState::lockPath());
@@ -223,7 +228,6 @@ class StockFroidenInstallerTest extends TestCase
             'admin_email' => 'admin@example.test',
             'admin_password' => 'VerySecure!123',
             'admin_password_confirmation' => 'VerySecure!123',
-            'provisioning_mode' => 'automatic',
         ], $overrides);
     }
 }

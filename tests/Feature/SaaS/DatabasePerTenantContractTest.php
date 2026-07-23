@@ -85,7 +85,8 @@ class DatabasePerTenantContractTest extends TestCase
     {
         $this->getJson('/install/tenancy/status')
             ->assertOk()
-            ->assertJsonStructure(['installed', 'requirements', 'permissions', 'tenant_provisioning_mode']);
+            ->assertJsonStructure(['installed', 'requirements', 'permissions'])
+            ->assertJsonMissing(['tenant_provisioning_mode' => 'manual']);
     }
 
     public function test_license_endpoint_is_valid_when_validation_is_disabled(): void

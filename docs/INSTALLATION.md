@@ -2,9 +2,9 @@
 
 1. Point the main domain and wildcard tenant DNS record at the application.
 2. Copy `.env.example` to `.env`, set `DB_CONNECTION=central`, configure the central database, `CENTRAL_DOMAINS`, and `TENANT_BASE_DOMAIN`.
-3. Choose `TENANT_DB_PROVISIONING_MODE=manual`, `mysql`, or `cpanel` and supply only the corresponding credentials.
-4. Open `/install`. The Froiden flow checks PHP requirements and permissions. The tenancy checks are exposed below `/install/tenancy`.
-5. Finalization runs only the central migrations and `Database\Seeders\CentralDatabaseSeeder`, creates the first central administrator, and writes `storage/installed`.
+3. Open `/install`. Froiden configures only the central platform database and the first platform administrator. It never asks for, creates, tests, migrates, or seeds a tenant database.
+4. Finalization runs only the central migrations and `Database\Seeders\CentralDatabaseSeeder`, creates the first central administrator, and writes `storage/installed`.
+5. Sign in at `/superadmin`, create each tenant database in cPanel or your hosting panel, assign its database user, and enter those credentials in the tenant provisioning form.
 
 For a CLI deployment:
 
