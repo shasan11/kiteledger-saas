@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentInRecordShow-BkWP5ww_.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Sales Order`,endpoint:`/api/sales-orders/`,backRoute:`payment-in.sales-orders.index`,backLabel:`Back to Sales Orders`,documentType:`sales_order`,editRoute:`payment-in.sales-orders.edit`})}export{r as default};

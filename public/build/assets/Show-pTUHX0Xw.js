@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./PaymentInRecordShow-ayBXPPEd.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Bill`,endpoint:`/api/invoices/`,backRoute:`payment-in.bills.index`,backLabel:`Back to Bills`,documentType:`invoice`,editRoute:`payment-in.bills.edit`})}export{r as default};

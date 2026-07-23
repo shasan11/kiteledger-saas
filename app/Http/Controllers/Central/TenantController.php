@@ -27,9 +27,23 @@ class TenantController extends Controller
 {
     public function index(Request $request)
     {
-        $tenants = Tenant::with(['plan', 'domains'])->when($request->search, fn ($q, $v) => $q->where(fn ($q) => $q->where('company_name', 'like', "%{$v}%")->orWhere('owner_email', 'like', "%{$v}%")))->when($request->status, fn ($q, $v) => $q->where('status', $v))->latest()->paginate(20)->withQueryString();
+        $tenants = Tenant::with(['plan', 'domains'])
+            ->when($request->search, fn ($q, $v) => $q->where(fn ($q) => $q->where('company_name', 'like', "%{$v}%")->orWhere('owner_email', 'like', "%{$v}%")))
+            ->when($request->status, fn ($q, $v) => $q->where('status', $v))
+            ->when($request->plan_id, fn ($q, $v) => $q->where('plan_id', $v))
+            ->latest()->paginate(20)->withQueryString();
 
-        return Inertia::render('Central/Tenants/Index', ['tenants' => $tenants, 'filters' => $request->only('search', 'status')]);
+        return Inertia::render('Central/Tenants/Index', [
+            'tenants' => $tenants,
+            'filters' => $request->only('search', 'status', 'plan_id'),
+            'plans' => Plan::orderBy('sort_order')->get(['id', 'name']),
+            'summary' => [
+                'total' => Tenant::count(),
+                'active' => Tenant::where('status', 'active')->count(),
+                'trialing' => Tenant::where('status', 'trialing')->count(),
+                'attention' => Tenant::whereIn('status', ['suspended', 'expired', 'provisioning_failed'])->count(),
+            ],
+        ]);
     }
 
     public function create()

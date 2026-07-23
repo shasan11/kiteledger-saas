@@ -1,11 +1,11 @@
 import { theme } from 'antd';
 
 const DEFAULT_BRAND = {
-  primary: '#10b981',
-  success: '#10b981',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#0ea5e9',
+  primary: '#0f766e',
+  success: '#16a34a',
+  warning: '#d97706',
+  error: '#dc2626',
+  info: '#2563eb',
 };
 
 const lightText = {
@@ -23,8 +23,8 @@ const darkText = {
 };
 
 const lightSurface = {
-  body: '#eef3f8',
-  layout: '#f4f7fb',
+  body: '#f6f7f9',
+  layout: '#f6f7f9',
   card: '#ffffff',
   elevated: '#ffffff',
   muted: '#f8fafc',
@@ -57,11 +57,11 @@ const darkBorder = {
 };
 
 const radius = {
-  xs: 3,
-  sm: 3,
-  md: 3,
-  lg: 3,
-  xl: 3,
+  xs: 6,
+  sm: 8,
+  md: 10,
+  lg: 14,
+  xl: 16,
   pill: 999,
 };
 
@@ -272,7 +272,7 @@ const createTheme = (mode = 'light', settings = null) => {
 
       lineWidth: 1,
 
-      fontSize: 13,
+      fontSize: 14,
       fontSizeSM: 13,
       fontSizeLG: 16,
       fontWeightStrong: 600,
@@ -325,7 +325,7 @@ const createTheme = (mode = 'light', settings = null) => {
       },
 
       Button: {
-        borderRadius: 5,
+        borderRadius: 10,
         fontWeight: 600,
 
         colorPrimary: brand.primary,
@@ -352,7 +352,7 @@ const createTheme = (mode = 'light', settings = null) => {
       },
 
       Card: {
-        borderRadius: 0,
+        borderRadius: 14,
         borderColor: border.base,
         headerBg: 'transparent',
         colorTextHeading: text.main,
@@ -522,7 +522,7 @@ const createTheme = (mode = 'light', settings = null) => {
       },
 
       Modal: {
-        borderRadiusLG: 3,
+        borderRadiusLG: 14,
         contentBg: surface.card,
         headerBg: surface.card,
         footerBg: surface.card,

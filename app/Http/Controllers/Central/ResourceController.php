@@ -80,6 +80,7 @@ class ResourceController extends Controller
             'editable' => $editable,
             'fields' => $editable ? array_keys($this->rules($request->route('resource'))) : [],
             'summary' => $request->route('resource') === 'tenant-databases' ? $this->tenantDatabaseSummary() : null,
+            'filters' => $request->only('search', 'status'),
         ]);
     }
 

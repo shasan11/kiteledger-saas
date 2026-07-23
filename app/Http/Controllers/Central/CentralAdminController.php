@@ -18,7 +18,7 @@ class CentralAdminController extends Controller
             'resource' => 'central-admins',
             'rows' => CentralAdmin::query()->select(['id', 'name', 'email', 'role', 'is_active', 'last_login_at', 'created_at'])->latest()->paginate(25),
             'columns' => ['id', 'name', 'email', 'role', 'is_active', 'last_login_at', 'created_at'],
-            'editable' => true, 'fields' => ['name', 'email', 'password', 'role', 'is_active'], 'summary' => null,
+            'editable' => true, 'fields' => ['name', 'email', 'password', 'role', 'is_active'], 'summary' => null, 'filters' => [],
         ]);
     }
 
