@@ -36,10 +36,15 @@ class InstallerDiagnosticsService
         ];
 
         foreach ($this->writablePaths() as $label => $path) {
+            $writable = is_dir($path) && is_writable($path);
             $checks[] = [
                 'label' => $label,
-                'ok' => is_dir($path) && is_writable($path),
-                'detail' => is_dir($path) ? (is_writable($path) ? 'Writable' : 'Not writable') : 'Missing',
+                'ok' => $writable,
+                'detail' => match (true) {
+                    ! is_dir($path) => "Missing directory: {$path}",
+                    $writable => "Writable: {$path}",
+                    default => "Not writable: {$path}. Make it writable by the PHP user (recommended permission: 775).",
+                },
             ];
         }
 

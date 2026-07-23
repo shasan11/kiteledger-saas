@@ -10,13 +10,13 @@ use App\Http\Controllers\Central\TenantController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
+use App\Http\Controllers\Installer\PermissionsController as InstallerPermissionsController;
 use App\Http\Controllers\Installer\RecoveryController;
 use App\Http\Controllers\Installer\TenancyController as InstallerTenancyController;
 use App\Http\Controllers\Installer\DatabaseController as InstallerDatabaseController;
 use Froiden\LaravelInstaller\Controllers\DatabaseController as PackageDatabaseController;
 use Froiden\LaravelInstaller\Controllers\EnvironmentController as PackageEnvironmentController;
 use Froiden\LaravelInstaller\Controllers\FinalController as PackageFinalController;
-use Froiden\LaravelInstaller\Controllers\PermissionsController as PackagePermissionsController;
 use Froiden\LaravelInstaller\Controllers\RequirementsController as PackageRequirementsController;
 use Froiden\LaravelInstaller\Controllers\WelcomeController as PackageWelcomeController;
 use Illuminate\Support\Facades\Route;
@@ -42,7 +42,7 @@ Route::middleware('install')->prefix('install')->name('LaravelInstaller::')->gro
     Route::get('/', [PackageWelcomeController::class, 'welcome'])->name('welcome');
     Route::get('environment', [PackageEnvironmentController::class, 'environment'])->name('environment');
     Route::get('requirements', [PackageRequirementsController::class, 'requirements'])->name('requirements');
-    Route::get('permissions', [PackagePermissionsController::class, 'permissions'])->name('permissions');
+    Route::get('permissions', [InstallerPermissionsController::class, 'permissions'])->name('permissions');
     Route::get('database', [InstallerDatabaseController::class, 'database'])->name('database');
 });
 

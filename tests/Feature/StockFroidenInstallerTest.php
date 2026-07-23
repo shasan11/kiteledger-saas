@@ -60,6 +60,24 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertNull($route->getDomain());
     }
 
+    public function test_permission_errors_are_highlighted_in_red_with_details(): void
+    {
+        $diagnostics = Mockery::mock(InstallerDiagnosticsService::class);
+        $diagnostics->shouldReceive('preflight')->once()->andReturn([
+            ['label' => 'storage/logs', 'ok' => false, 'detail' => 'Not writable: /var/www/app/storage/logs. Recommended permission: 775.'],
+            ['label' => 'bootstrap/cache', 'ok' => true, 'detail' => 'Writable'],
+        ]);
+        $this->app->instance(InstallerDiagnosticsService::class, $diagnostics);
+
+        $this->get('/install/permissions')
+            ->assertOk()
+            ->assertSee('permission-check--error', false)
+            ->assertSee('Permission check failed')
+            ->assertSee('storage/logs')
+            ->assertSee('Recommended permission: 775.')
+            ->assertSee('Error');
+    }
+
     public function test_apache_rewrites_support_public_and_project_root_document_roots(): void
     {
         $rootRules = file_get_contents(base_path('.htaccess'));

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-gigNY91P.js";import t from"./ManufacturingShow-ffPp6yCQ.js";var n=e();function r({id:e,...r}){return(0,n.jsx)(t,{id:e,documentType:`production_order`,...r})}export{r as default};
