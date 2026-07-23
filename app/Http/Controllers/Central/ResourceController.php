@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
 use App\Models\Central\DefaultDataTemplate;
+use App\Models\Central\Feature;
+use App\Models\Central\TenantFeatureOverride;
 use App\Models\Central\PaymentGateway;
 use App\Models\Central\PaymentRefund;
 use App\Models\Central\PaymentTransaction;
@@ -49,6 +51,8 @@ class ResourceController extends Controller
         'provisioning-logs' => [ProvisioningLog::class, ['id', 'tenant_id', 'step', 'status', 'message', 'started_at', 'finished_at'], false],
         'tenant-databases' => [TenantDatabasePool::class, ['id', 'database_name', 'status', 'tenant_id', 'validated_at', 'allocated_at', 'last_error'], true],
         'usage' => [TenantUsageMetric::class, ['id', 'tenant_id', 'period_start', 'period_end', 'users_count', 'products_count', 'invoices_count', 'storage_mb', 'ai_requests_count'], false],
+        'features' => [Feature::class, ['id', 'key', 'name', 'type', 'is_active', 'updated_at'], true],
+        'tenant-feature-overrides' => [TenantFeatureOverride::class, ['id', 'tenant_id', 'feature_id', 'enabled', 'limit_value', 'expires_at'], true],
     ];
 
     public function index(Request $request)
@@ -214,6 +218,8 @@ class ResourceController extends Controller
             'website-faqs', 'website-testimonials', 'blog-posts' => ['title' => ['required', 'string'], 'slug' => ['nullable', 'alpha_dash'], 'content' => ['nullable', 'string'], 'status' => ['required', Rule::in(['draft', 'active', 'published'])], 'sort_order' => ['integer', 'min:0']],
             'default-templates' => ['name' => ['required', 'string'], 'slug' => ['required', 'alpha_dash', Rule::unique('default_data_templates')->ignore($model)], 'description' => ['nullable', 'string'], 'country' => ['nullable', 'string', 'size:2'], 'industry' => ['nullable', 'string'], 'is_default' => ['boolean'], 'is_active' => ['boolean']],
             'tenant-databases' => ['database_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenant_database_pool')->ignore($model)], 'username' => ['nullable', 'string', 'max:128'], 'password' => ['nullable', 'string', 'max:1024']],
+            'features' => ['key' => ['required', 'alpha_dash', Rule::unique('features')->ignore($model)], 'name' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string'], 'type' => ['required', Rule::in(['boolean', 'limit'])], 'is_active' => ['boolean']],
+            'tenant-feature-overrides' => ['tenant_id' => ['required', 'exists:tenants,id'], 'feature_id' => ['required', 'exists:features,id'], 'enabled' => ['nullable', 'boolean'], 'limit_value' => ['nullable', 'integer', 'min:0'], 'expires_at' => ['nullable', 'date'], 'reason' => ['nullable', 'string']],
             default => [],
         };
     }

@@ -40,7 +40,7 @@ class TenantDatabaseService
     public function seed(Tenant $tenant): void
     {
         try {
-            $this->artisan('tenants:seed', ['--tenants' => [$tenant->id], '--force' => true]);
+            $this->artisan('tenants:seed', ['--tenants' => [$tenant->id], '--class' => 'Database\\Seeders\\TenantDatabaseSeeder', '--force' => true]);
         } catch (\Throwable $e) {
             throw new \RuntimeException('tenant_seeding_failed', previous: $e);
         }

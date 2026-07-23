@@ -19,7 +19,7 @@ return [
 
     // The marketplace installer provisions MySQL/MariaDB only. Falling back
     // to SQLite before .env exists produces a misleading missing-file error.
-    'default' => env('DB_CONNECTION', 'mysql'),
+    'default' => env('DB_CONNECTION', 'central'),
 
     /*
     |--------------------------------------------------------------------------
@@ -33,6 +33,52 @@ return [
     */
 
     'connections' => [
+
+        'central' => [
+            'driver' => env('DB_DRIVER', 'mysql'),
+            'url' => env('DB_URL'),
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'kiteledger'),
+            'username' => env('DB_USERNAME', 'root'),
+            'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
+        'tenant_template' => [
+            'driver' => env('TENANT_DB_DRIVER', 'mysql'),
+            'host' => env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('TENANT_DB_PORT', env('DB_PORT', '3306')),
+            'database' => null,
+            'username' => env('TENANT_DB_USERNAME'),
+            'password' => env('TENANT_DB_PASSWORD'),
+            'unix_socket' => env('TENANT_DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
+        'tenant_admin' => [
+            'driver' => env('TENANT_DB_ADMIN_DRIVER', 'mysql'),
+            'host' => env('TENANT_DB_ADMIN_HOST', env('TENANT_DB_HOST', env('DB_HOST', '127.0.0.1'))),
+            'port' => env('TENANT_DB_ADMIN_PORT', env('TENANT_DB_PORT', env('DB_PORT', '3306'))),
+            'database' => env('TENANT_DB_ADMIN_DATABASE', 'mysql'),
+            'username' => env('TENANT_DB_ADMIN_USERNAME'),
+            'password' => env('TENANT_DB_ADMIN_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+        ],
 
         'sqlite' => [
             'driver' => 'sqlite',

@@ -13,7 +13,7 @@ class EnvironmentController extends Controller
     public function __invoke(Request $request, FroidenEnvironmentManager $environment): array
     {
         $payload = $request->all();
-        if (($payload['provisioning_mode'] ?? null) === 'pool' && empty($payload['pool_databases']) && filled($payload['pool_database_name'] ?? null)) {
+        if (in_array(($payload['provisioning_mode'] ?? null), ['pool', 'manual'], true) && empty($payload['pool_databases']) && filled($payload['pool_database_name'] ?? null)) {
             $payload['pool_databases'] = [[
                 'database_name' => $payload['pool_database_name'],
                 'username' => $payload['pool_database_username'] ?? null,
@@ -34,14 +34,14 @@ class EnvironmentController extends Controller
             'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email:rfc', 'max:255'],
             'admin_password' => ['required', 'string', 'min:12', 'max:255', 'confirmed'],
-            'provisioning_mode' => ['required', 'in:automatic,cpanel_uapi,pool'],
-            'cpanel_host' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'url:http,https', 'max:255'],
-            'cpanel_port' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'integer', 'between:1,65535'],
-            'cpanel_username' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:128'],
-            'cpanel_api_token' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:1024'],
-            'cpanel_database_user' => ['nullable', 'required_if:provisioning_mode,cpanel_uapi', 'string', 'max:128'],
+            'provisioning_mode' => ['required', 'in:manual,mysql,cpanel,automatic,cpanel_uapi,pool'],
+            'cpanel_host' => ['nullable', 'required_if:provisioning_mode,cpanel,cpanel_uapi', 'url:http,https', 'max:255'],
+            'cpanel_port' => ['nullable', 'required_if:provisioning_mode,cpanel,cpanel_uapi', 'integer', 'between:1,65535'],
+            'cpanel_username' => ['nullable', 'required_if:provisioning_mode,cpanel,cpanel_uapi', 'string', 'max:128'],
+            'cpanel_api_token' => ['nullable', 'required_if:provisioning_mode,cpanel,cpanel_uapi', 'string', 'max:1024'],
+            'cpanel_database_user' => ['nullable', 'required_if:provisioning_mode,cpanel,cpanel_uapi', 'string', 'max:128'],
             'cpanel_database_password' => ['nullable', 'string', 'max:1024'],
-            'pool_databases' => ['nullable', 'required_if:provisioning_mode,pool', 'array', 'min:1', 'max:50'],
+            'pool_databases' => ['nullable', 'required_if:provisioning_mode,pool,manual', 'array', 'min:1', 'max:50'],
             'pool_databases.*.database_name' => ['required_with:pool_databases', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', 'distinct'],
             'pool_databases.*.username' => ['nullable', 'string', 'max:128'],
             'pool_databases.*.password' => ['nullable', 'string', 'max:1024'],

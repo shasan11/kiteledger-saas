@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\SaaS\BackupTenantJob;
+use App\Jobs\RunTenantMigrations;
+use App\Jobs\RunTenantSeeders;
 use App\Models\Central\BackupManifest;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ImpersonationToken;
@@ -16,6 +18,7 @@ use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -85,6 +88,39 @@ class TenantController extends Controller
         $service->retry($tenant);
 
         return back();
+    }
+
+    public function migrate(Request $request, Tenant $tenant, CentralAuditService $audit)
+    {
+        RunTenantMigrations::dispatch($tenant->id);
+        $audit->log($request, 'tenant.migrations.queued', $tenant, [], ['tenant_id' => $tenant->id]);
+
+        return back()->with('success', 'Tenant migrations queued.');
+    }
+
+    public function seed(Request $request, Tenant $tenant, CentralAuditService $audit)
+    {
+        RunTenantSeeders::dispatch($tenant->id);
+        $audit->log($request, 'tenant.seeders.queued', $tenant, [], ['tenant_id' => $tenant->id]);
+
+        return back()->with('success', 'Tenant seeders queued.');
+    }
+
+    public function health(Tenant $tenant)
+    {
+        try {
+            $result = $tenant->run(fn (): array => [
+                'database' => DB::connection()->getDatabaseName(),
+                'connected' => (bool) DB::connection()->getPdo(),
+                'migration_count' => DB::table('migrations')->count(),
+            ]);
+
+            return response()->json(['healthy' => true] + $result);
+        } catch (\Throwable) {
+            return response()->json(['healthy' => false, 'message' => 'Tenant database health check failed.'], 503);
+        } finally {
+            if (tenancy()->initialized) tenancy()->end();
+        }
     }
 
     public function backup(Tenant $tenant)

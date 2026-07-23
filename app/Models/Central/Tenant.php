@@ -2,37 +2,44 @@
 
 namespace App\Models\Central;
 
-use App\Enums\TenantStatus;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Stancl\Tenancy\Contracts\TenantWithDatabase;
-use Stancl\Tenancy\Database\Concerns\HasDatabase;
-use Stancl\Tenancy\Database\Concerns\HasDomains;
-use Stancl\Tenancy\Database\Models\Tenant as BaseTenant;
 
-class Tenant extends BaseTenant implements TenantWithDatabase
+/**
+ * Backwards-compatible namespace for the central admin module.
+ * Stancl resolves App\Models\Tenant directly.
+ */
+class Tenant extends \App\Models\Tenant
 {
-    use HasDatabase, HasDomains, SoftDeletes;
-
-    protected $guarded = [];
-
-    protected $hidden = ['database_username', 'database_password', 'data'];
+    public function domains(): HasMany
+    {
+        return $this->hasMany(Domain::class, 'tenant_id', $this->getTenantKeyName());
+    }
 
     public static function getCustomColumns(): array
     {
-        return ['id', 'company_name', 'legal_name', 'owner_name', 'owner_email', 'owner_phone', 'country', 'address', 'timezone', 'currency', 'status', 'status_reason', 'plan_id', 'default_template_id', 'trial_ends_at', 'subscription_ends_at', 'database_name', 'database_provisioning_mode', 'database_server', 'database_username', 'database_password', 'database_ownership_id', 'provisioned_at', 'created_by', 'created_at', 'updated_at', 'deleted_at'];
+        return array_values(array_unique(array_merge(parent::getCustomColumns(), [
+            'legal_name', 'owner_name', 'owner_email', 'owner_phone', 'country',
+            'address', 'timezone', 'currency', 'status_reason', 'default_template_id',
+            'trial_ends_at', 'subscription_ends_at', 'database_name',
+            'database_provisioning_mode', 'database_server', 'database_username',
+            'database_password', 'database_ownership_id', 'created_by', 'created_at',
+            'updated_at', 'is_internal', 'lifecycle_version',
+        ])));
     }
 
     protected function casts(): array
     {
-        return ['is_internal' => 'boolean', 'trial_ends_at' => 'datetime', 'subscription_ends_at' => 'datetime', 'provisioned_at' => 'datetime', 'deleted_at' => 'datetime', 'database_username' => 'encrypted', 'database_password' => 'encrypted', 'data' => 'array'];
-    }
-
-    public function plan(): BelongsTo
-    {
-        return $this->belongsTo(Plan::class);
+        return array_merge(parent::casts(), [
+            // Legacy central services compare string status values. Tenant requests
+            // resolved by Stancl use App\Models\Tenant and receive the enum cast.
+            'status' => 'string',
+            'is_internal' => 'boolean',
+            'trial_ends_at' => 'datetime',
+            'subscription_ends_at' => 'datetime',
+            'database_username' => 'encrypted',
+            'database_password' => 'encrypted',
+        ]);
     }
 
     public function subscription(): HasOne
@@ -57,6 +64,6 @@ class Tenant extends BaseTenant implements TenantWithDatabase
 
     public function isOperational(): bool
     {
-        return $this->status === TenantStatus::Active->value;
+        return $this->status === \App\Enums\TenantStatus::Active->value;
     }
 }

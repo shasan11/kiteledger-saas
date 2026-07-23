@@ -35,22 +35,25 @@ class FroidenEnvironmentManager extends EnvironmentManager
 
             $mode = (string) $request->input('provisioning_mode');
             $provisioningStatus = match ($mode) {
-                'automatic' => $this->testAutomaticProvisioning(
+                'automatic', 'mysql' => $this->testAutomaticProvisioning(
                     (string) $request->input('hostname'),
                     (int) $request->integer('port'),
                     (string) $request->input('database'),
                     (string) $request->input('username'),
                     (string) $request->input('password', ''),
                 ),
-                'cpanel_uapi' => $this->testCpanel($request),
-                default => 'Pool mode selected. The initial tenant database will be validated and registered after central migrations complete.',
+                'cpanel_uapi', 'cpanel' => $this->testCpanel($request),
+                default => 'Manual mode selected. Supplied tenant databases will be validated before use.',
             };
+            $canonicalMode = match ($mode) { 'automatic' => 'mysql', 'cpanel_uapi' => 'cpanel', 'pool' => 'manual', default => $mode };
 
             $this->writeEnvironment([
                 'APP_URL' => rtrim((string) $request->input('app_url'), '/'),
                 'CENTRAL_DOMAINS' => $this->normalizeDomains((string) $request->input('central_domains')),
                 'SAAS_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
-                'DB_CONNECTION' => 'mysql',
+                'TENANT_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
+                'DB_CONNECTION' => 'central',
+                'DB_DRIVER' => 'mysql',
                 'DB_HOST' => (string) $request->input('hostname'),
                 'DB_PORT' => (string) $request->integer('port'),
                 'DB_DATABASE' => (string) $request->input('database'),
@@ -59,30 +62,39 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'CENTRAL_ADMIN_NAME' => (string) $request->input('admin_name'),
                 'CENTRAL_ADMIN_EMAIL' => strtolower((string) $request->input('admin_email')),
                 'CENTRAL_ADMIN_PASSWORD' => (string) $request->input('admin_password'),
-                'TENANT_DATABASE_PROVISIONING_MODE' => $mode,
-                'CPANEL_HOST' => $mode === 'cpanel_uapi' ? rtrim((string) $request->input('cpanel_host'), '/') : '',
-                'CPANEL_PORT' => $mode === 'cpanel_uapi' ? (string) $request->integer('cpanel_port') : '2083',
-                'CPANEL_USERNAME' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_username') : '',
-                'CPANEL_API_TOKEN' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_api_token') : '',
-                'CPANEL_DATABASE_USER' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_user') : '',
-                'CPANEL_DATABASE_PASSWORD' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_password', '') : '',
+                'TENANT_DB_PROVISIONING_MODE' => $canonicalMode,
+                'TENANT_DATABASE_PROVISIONING_MODE' => $canonicalMode,
+                'TENANT_DATABASE_PREFIX' => (string) $request->input('tenant_database_prefix', 'tenant_'),
+                'TENANT_DB_HOST' => (string) $request->input('hostname'),
+                'TENANT_DB_PORT' => (string) $request->integer('port'),
+                'TENANT_DB_USERNAME' => (string) $request->input('tenant_db_username', $request->input('username')),
+                'TENANT_DB_PASSWORD' => (string) $request->input('tenant_db_password', $request->input('password', '')),
+                'TENANT_DB_ADMIN_HOST' => $canonicalMode === 'mysql' ? (string) $request->input('hostname') : '',
+                'TENANT_DB_ADMIN_USERNAME' => $canonicalMode === 'mysql' ? (string) $request->input('username') : '',
+                'TENANT_DB_ADMIN_PASSWORD' => $canonicalMode === 'mysql' ? (string) $request->input('password', '') : '',
+                'CPANEL_HOST' => $canonicalMode === 'cpanel' ? rtrim((string) $request->input('cpanel_host'), '/') : '',
+                'CPANEL_PORT' => $canonicalMode === 'cpanel' ? (string) $request->integer('cpanel_port') : '2083',
+                'CPANEL_USERNAME' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_username') : '',
+                'CPANEL_API_TOKEN' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_api_token') : '',
+                'CPANEL_DATABASE_USER' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_database_user') : '',
+                'CPANEL_DATABASE_PASSWORD' => $canonicalMode === 'cpanel' ? (string) $request->input('cpanel_database_password', '') : '',
                 'QUEUE_CONNECTION' => 'central',
-                'DB_QUEUE_CONNECTION' => 'mysql',
+                'DB_QUEUE_CONNECTION' => 'central',
                 'DB_QUEUE_RETRY_AFTER' => '330',
             ]);
             Artisan::call('config:clear');
             $poolPayload = null;
-            if ($mode === 'pool') {
+            if (in_array($mode, ['pool', 'manual'], true)) {
                 $poolPayload = Crypt::encryptString(json_encode($this->poolDatabases($request), JSON_THROW_ON_ERROR));
             }
             session([
-                'kiteledger_provisioning_mode' => $mode,
+                'kiteledger_provisioning_mode' => $canonicalMode,
                 'kiteledger_provisioning_status' => $provisioningStatus,
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
                 'kiteledger_initial_pool_databases' => $poolPayload,
             ]);
             InstalledState::putInstallerStatus([
-                'provisioning_mode' => $mode,
+                'provisioning_mode' => $canonicalMode,
                 'provisioning_status' => $provisioningStatus,
                 'admin_email' => strtolower((string) $request->input('admin_email')),
                 'initial_pool_databases' => $poolPayload,

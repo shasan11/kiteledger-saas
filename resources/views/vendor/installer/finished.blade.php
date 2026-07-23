@@ -21,7 +21,7 @@
         <h3>Company database setup</h3>
         <p><strong>Mode:</strong> {{ str_replace('_', ' ', $provisioningMode) }}</p>
         <p>{{ $provisioningStatus }}</p>
-        @if ($provisioningMode === 'pool')
+        @if (in_array($provisioningMode, ['manual', 'pool'], true))
             <p>Before creating companies, confirm the diagnostics below show at least one validated pool database. Add more from <strong>Tenant Databases</strong> as you grow.</p>
         @endif
     </div>

@@ -18,20 +18,20 @@ use Inertia\Inertia;
 Route::redirect('/', '/dashboard')->name('home');
 
 Route::get('/impersonate/{token}', [ImpersonationController::class, 'enter'])->middleware('tenant.active')->name('impersonation.enter');
-Route::post('/impersonation/exit', [ImpersonationController::class, 'exit'])->middleware('auth')->name('impersonation.exit');
+Route::post('/impersonation/exit', [ImpersonationController::class, 'exit'])->middleware('auth:tenant')->name('impersonation.exit');
 
 Route::post('/locale/change', [LocalizationController::class, 'change'])
     ->name('locale.change');
 
-Route::middleware(['auth', 'verified'])->prefix('billing')->name('tenant.billing.')->group(function () {
+Route::middleware(['auth:tenant', 'verified'])->prefix('billing')->name('tenant.billing.')->group(function () {
     Route::get('/', BillingController::class)->name('index');
 });
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->name('dashboard');
+})->middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.valid'])->name('dashboard');
 
-Route::middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
+Route::middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
     Route::prefix('localization')->name('localization.')->group(function () {
         Route::get('/languages', [LocalizationController::class, 'index'])->name('languages.index');
         Route::post('/languages', [LocalizationController::class, 'store'])->name('languages.store');
@@ -65,7 +65,7 @@ Route::middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->
     Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');
 });
 
-Route::middleware(['auth', 'tenant.active'])->group(function () {
+Route::middleware(['auth:tenant', 'tenant.active'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -80,7 +80,7 @@ Route::prefix('pay/invoice')->name('pay.invoice.')->group(function () {
 });
 
 // Admin: payment gateway settings page
-Route::middleware(['auth', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
+Route::middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
     Route::get('/settings/payment-gateways', fn () => Inertia::render('App/Settings/PaymentGateways/Index'))->name('settings.payment-gateways.index');
     Route::get('/payments/online', fn () => Inertia::render('App/Payments/OnlinePayments/Index'))->name('payments.online.index');
     Route::get('/payments/online/{id}', fn ($id) => Inertia::render('App/Payments/OnlinePayments/Show', ['id' => $id]))->name('payments.online.show');

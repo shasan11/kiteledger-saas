@@ -97,9 +97,9 @@
             <label class="col-sm-2 control-label">Provisioning mode</label>
             <div class="col-sm-10">
                 <select name="provisioning_mode" id="provisioning_mode" class="form-control" style="height:34px;" required>
-                    <option value="pool" selected>Pre-created database pool (recommended for shared hosting)</option>
-                    <option value="cpanel_uapi">cPanel UAPI</option>
-                    <option value="automatic">Automatic database creation</option>
+                    <option value="manual" selected>Manual / pre-created database (recommended for shared hosting)</option>
+                    <option value="cpanel">cPanel UAPI</option>
+                    <option value="mysql">Privileged MySQL database creation</option>
                 </select>
                 <small>Pool mode works without CREATE DATABASE privileges and is safest on shared hosting.</small>
             </div>
@@ -184,8 +184,8 @@
         }
         function updateProvisioningFields() {
             var mode = $('#provisioning_mode').val();
-            $('#cpanel_fields').toggle(mode === 'cpanel_uapi');
-            $('#pool_fields').toggle(mode === 'pool');
+            $('#cpanel_fields').toggle(mode === 'cpanel' || mode === 'cpanel_uapi');
+            $('#pool_fields').toggle(mode === 'manual' || mode === 'pool');
         }
         function reindexPoolRows() {
             $('#pool_database_rows .pool-database-row').each(function (index) {

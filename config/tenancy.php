@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Models\Central\Domain;
-use App\Models\Central\Tenant;
-use App\Tenancy\TenantCachePrefixBootstrapper;
+use App\Models\Domain;
+use App\Models\Tenant;
+use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\QueueTenancyBootstrapper;
@@ -20,14 +20,14 @@ return [
     'central_domains' => array_values(array_filter(array_map('trim', explode(',', (string) env('CENTRAL_DOMAINS', '127.0.0.1,localhost'))))),
     'bootstrappers' => [
         DatabaseTenancyBootstrapper::class,
-        TenantCachePrefixBootstrapper::class,
+        CacheTenancyBootstrapper::class,
         FilesystemTenancyBootstrapper::class,
         QueueTenancyBootstrapper::class,
     ],
     'database' => [
-        'central_connection' => env('DB_CONNECTION', 'mysql'),
-        'template_tenant_connection' => env('TENANT_DB_TEMPLATE_CONNECTION'),
-        'prefix' => env('TENANT_DB_PREFIX', 'kiteledger_tenant_'),
+        'central_connection' => env('DB_CONNECTION', 'central'),
+        'template_tenant_connection' => env('TENANT_DB_TEMPLATE_CONNECTION', 'tenant_template'),
+        'prefix' => env('TENANT_DATABASE_PREFIX', env('TENANT_DB_PREFIX', 'tenant_')),
         'suffix' => env('TENANT_DB_SUFFIX', ''),
         'managers' => [
             'sqlite' => SQLiteDatabaseManager::class,

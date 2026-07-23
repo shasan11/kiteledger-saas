@@ -52,3 +52,24 @@ Before a database is deleted or recycled, KiteLedger verifies `kiteledger_tenant
 ## Manual mode verification
 
 The full cPanel shared-host acceptance checklist, cPanel UAPI probe procedure, and automatic-mode staging test are documented in `docs/CPANEL_DEPLOYMENT.md`. Run those checks after any hosting move, queue configuration change, provisioning-mode change, or upgrade that touches tenant migrations, seeders, deletion, or database credentials. Do not mark a tenant database safe for reuse unless the central tenant record, pool row, and `kiteledger_tenant_identity` marker all match the same tenant.
+# Tenant provisioning
+
+Tenant provisioning is resumable and protected by a `tenant-provision:{slug}` cache lock. It creates the central record, provisions or verifies the database, runs tenant-only migrations and seeders, initializes tenancy to create the owner and company settings, attaches the default subdomain, and activates the tenant. A failure records only a sanitized message and the failed step.
+
+Supported modes:
+
+- `manual`: verifies supplied credentials with a temporary create/alter/drop table probe. The application never deletes this database.
+- `mysql`: creates a database through the privileged `tenant_admin` connection.
+- `cpanel`: creates the database through cPanel UAPI and assigns the configured database user.
+
+Commands:
+
+```bash
+php artisan tenant:create "Acme Ltd" acme owner@example.com --mode=manual
+php artisan tenant:retry {tenant}
+php artisan tenant:health {tenant}
+php artisan tenants:migrate --force
+php artisan tenants:seed --class=Database\\Seeders\\TenantDatabaseSeeder --force
+```
+
+Database deletion is denied unless `TENANT_ALLOW_DATABASE_DELETION=true`, the database is recorded as application-created, and the selected provisioner verifies the target.

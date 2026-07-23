@@ -47,5 +47,8 @@ return [
         'storage/framework/views/' => '775',
         'storage/logs/'          => '775',
         'bootstrap/cache/'       => '775'
-    ]
+    ],
+
+    'license_validation_enabled' => env('INSTALLER_LICENSE_VALIDATION_ENABLED', false),
+    'license_validation_endpoint' => env('INSTALLER_LICENSE_VALIDATION_ENDPOINT'),
 ];
