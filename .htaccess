@@ -1,21 +1,30 @@
-<!-- Options -Indexes
+Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Never allow web access to Laravel internals or project metadata.
-    RewriteRule "(^|/)\.(?!well-known(?:/|$))" - [F,L,NC]
-    RewriteRule "^(?:app|bootstrap|config|database|node_modules|resources|routes|scripts|storage|tests|vendor)(?:/|$)" - [F,L,NC]
-    RewriteRule "^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml|vite\.config\.js|webpack\.mix\.js|server\.php)(?:/|$)" - [F,L,NC]
+    # cPanel/AutoSSL validation files may live in the project document root.
+    RewriteRule ^\.well-known(?:/|$) - [L]
 
-    # Remove /public only when it was explicitly requested by the browser.
-    # THE_REQUEST prevents this redirect from firing after the internal rewrite below.
+    # Never expose Laravel internals or project metadata when cPanel cannot
+    # point the domain document root directly at the public directory.
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
+    RewriteRule ^(?:app|bootstrap|config|database|node_modules|resources|routes|scripts|tests|vendor)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml|vite\.config\.js|webpack\.mix\.js|server\.php)(?:/|$) - [F,L,NC]
+
+    # Public storage URLs must reach public/storage rather than Laravel's
+    # private storage directory at the project root.
+    RewriteRule ^storage(?:/(.*))?$ public/storage/$1 [L]
+
+    # Keep /public out of canonical URLs. THE_REQUEST ensures this redirect
+    # does not run for the internal public-directory rewrite below.
     RewriteCond %{THE_REQUEST} \s/+public(?:[/?\s]|$) [NC]
     RewriteRule ^public(?:/(.*))?$ /$1 [R=301,L,NE]
 
-    # Do not rewrite a request that is already being processed inside public.
+    # Avoid a rewrite loop after Apache reprocesses the internal request.
     RewriteRule ^public(?:/|$) - [L]
 
-    # Internally serve every web request from Laravel's public directory.
+    # Serve the application through the same public front controller used by
+    # `php artisan serve`.
     RewriteRule ^(.*)$ public/$1 [L]
-</IfModule> -->
+</IfModule>

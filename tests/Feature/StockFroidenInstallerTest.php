@@ -60,6 +60,21 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertNull($route->getDomain());
     }
 
+    public function test_apache_rewrites_support_public_and_project_root_document_roots(): void
+    {
+        $rootRules = file_get_contents(base_path('.htaccess'));
+        $publicRules = file_get_contents(public_path('.htaccess'));
+
+        $this->assertStringNotContainsString('<!--', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^(.*)$ public/$1 [L]', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^storage(?:/(.*))?$ public/storage/$1 [L]', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^\\.well-known(?:/|$) - [L]', $rootRules);
+        $this->assertStringContainsString('vendor', $rootRules);
+        $this->assertStringContainsString('DirectoryIndex index.php', $publicRules);
+        $this->assertStringContainsString('(?!well-known(?:/|$))', $publicRules);
+        $this->assertStringContainsString('RewriteRule ^ index.php [L]', $publicRules);
+    }
+
     public function test_environment_save_accepts_a_blank_central_database_password(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);

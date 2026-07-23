@@ -2,7 +2,13 @@
 
 ## Layout and upload
 
-Place the Laravel application outside `public_html`, for example `/home/account/kiteledger`. Copy only the contents of `kiteledger/public` into `public_html`, then update `public_html/index.php` so its autoloader and bootstrap paths point to the application directory. If cPanel allows a domain document root to target `/home/account/kiteledger/public`, use that instead. Never expose `.env`, `vendor`, `storage`, backups, database dumps, or source code.
+Preferred: place the complete Laravel application outside `public_html`, for example `/home/account/kiteledger`, and point the application domain plus wildcard tenant domain at `/home/account/kiteledger/public`. The bundled `public/.htaccess` serves assets and routes application requests through `public/index.php`.
+
+If the cPanel plan locks the domain document root, extract the complete package directly into that document root. The bundled project-root `.htaccess` blocks Laravel source and configuration paths and internally forwards requests into `public/`. Keep both `.htaccess` files, do not copy or move individual files out of `public/`, and never add `/public` to the application URL.
+
+Both layouts use the same unmodified codebase. Apache must have `mod_rewrite` enabled and allow `.htaccess` overrides. Laravel's `php artisan serve` command ignores the Apache files and serves the same `public/index.php` entry point directly.
+
+Never expose `.env`, `vendor`, `storage`, backups, database dumps, or source code.
 
 Use PHP 8.3 or newer with ctype, curl, DOM/XML, fileinfo, filter, intl, JSON, mbstring, OpenSSL, PDO MySQL, and tokenizer. Make `storage` and `bootstrap/cache` writable by the account user (normally `0755` or `0775`); never use `0777`.
 

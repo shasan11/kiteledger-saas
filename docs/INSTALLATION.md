@@ -1,5 +1,19 @@
 # Installation
 
+## Web root: cPanel and local development
+
+The preferred cPanel setup is to extract the complete package outside `public_html` and set the application domain's document root to the package's `public/` directory. Apache then uses `public/.htaccess` and exposes only public assets plus `index.php`.
+
+When shared hosting does not allow changing the document root, extract the complete package directly into the assigned document root. The project-root `.htaccess` blocks Laravel internals and internally forwards web requests into `public/`; do not move individual files out of `public/`.
+
+For local development, run:
+
+```bash
+php artisan serve
+```
+
+Laravel's development server serves `public/index.php` directly and does not use either `.htaccess` file. The application routes and installer URLs are otherwise identical.
+
 1. Point the main domain and wildcard tenant DNS record at the application.
 2. Copy `.env.example` to `.env`, set `DB_CONNECTION=central`, configure the central database, `CENTRAL_DOMAINS`, and `TENANT_BASE_DOMAIN`.
 3. Open `/install`. Froiden configures only the central platform database and the first platform administrator. It never asks for, creates, tests, migrates, or seeds a tenant database.
