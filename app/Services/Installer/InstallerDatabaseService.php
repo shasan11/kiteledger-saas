@@ -34,7 +34,8 @@ class InstallerDatabaseService
     public function hasMysqlInstallDump(): bool
     {
         return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)
-            && is_file($this->dumpPath());
+            && is_file($this->dumpPath())
+            && $this->dumpContainsAllCentralMigrations($this->dumpPath());
     }
 
     public function importMysqlInstallDump(): void
@@ -100,19 +101,38 @@ class InstallerDatabaseService
             // Re-run the idempotent central seeder so the administrator entered
             // in the wizard is created after the dump has been imported.
             Artisan::call('db:seed', ['--class' => CentralDatabaseSeeder::class, '--force' => true]);
+
             return;
         }
 
         Log::info('Installer selected migration fallback.', [
             'used_sql_dump' => false,
+            'dump_present' => is_file($this->dumpPath()),
             'driver' => DB::connection()->getDriverName(),
         ]);
         $this->runFreshMigrationsAndSeed();
     }
 
-    private function dumpPath(): string
+    protected function dumpPath(): string
     {
         return database_path('sql/mysql_install.sql');
+    }
+
+    private function dumpContainsAllCentralMigrations(string $path): bool
+    {
+        $dump = file_get_contents($path);
+
+        if ($dump === false) {
+            return false;
+        }
+
+        foreach (glob(database_path('migrations/*.php')) ?: [] as $migration) {
+            if (! str_contains($dump, pathinfo($migration, PATHINFO_FILENAME))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function assertDatabaseIsEmpty(): void

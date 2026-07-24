@@ -30,6 +30,38 @@ class InstallerDatabaseManagerTest extends TestCase
         $this->assertStringContainsString('database/sql/mysql_install.sql', $source);
     }
 
+    public function test_install_dump_must_include_every_current_central_migration(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'kiteledger-install-dump-');
+        $migrationNames = array_map(
+            fn (string $migration): string => pathinfo($migration, PATHINFO_FILENAME),
+            glob(database_path('migrations/*.php')) ?: [],
+        );
+        $method = new ReflectionMethod(InstallerDatabaseService::class, 'dumpContainsAllCentralMigrations');
+        $service = app(InstallerDatabaseService::class);
+
+        try {
+            file_put_contents($path, implode(PHP_EOL, $migrationNames));
+            $this->assertTrue($method->invoke($service, $path));
+
+            array_pop($migrationNames);
+            file_put_contents($path, implode(PHP_EOL, $migrationNames));
+            $this->assertFalse($method->invoke($service, $path));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_encrypted_payment_gateway_config_uses_text_storage(): void
+    {
+        $baseMigration = file_get_contents(database_path('migrations/2026_07_03_000000_create_saas_central_schema.php'));
+        $upgradeMigration = file_get_contents(database_path('migrations/2026_07_24_020000_store_encrypted_payment_gateway_config_as_text.php'));
+
+        $this->assertStringContainsString("\$table->longText('config')->nullable();", $baseMigration);
+        $this->assertStringNotContainsString("\$table->json('config')->nullable();", $baseMigration);
+        $this->assertStringContainsString("\$table->longText('config')->nullable()->change();", $upgradeMigration);
+    }
+
     public function test_mysql_install_dump_contains_tenant_provisioning_metadata_schema(): void
     {
         $dump = file_get_contents(database_path('sql/mysql_install.sql'));

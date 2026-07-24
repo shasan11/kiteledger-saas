@@ -179,7 +179,8 @@ return new class extends Migration
             $table->text('secret_key')->nullable();
             $table->text('webhook_secret')->nullable();
             $table->json('supported_currencies')->nullable();
-            $table->json('config')->nullable();
+            // Laravel's encrypted:array cast persists ciphertext, not JSON.
+            $table->longText('config')->nullable();
             $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
         });
