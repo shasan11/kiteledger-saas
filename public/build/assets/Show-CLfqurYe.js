@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./PaymentInRecordShow-DhBK1BAX.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Quotation`,endpoint:`/api/quotations/`,backRoute:`payment-in.quotations.index`,backLabel:`Back to Quotations`,documentType:`quotation`,editRoute:`payment-in.quotations.edit`})}export{r as default};

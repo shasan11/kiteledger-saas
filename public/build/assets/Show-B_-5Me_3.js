@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./ManufacturingShow-Dg6BO2vG.js";var n=e();function r({id:e,...r}){return(0,n.jsx)(t,{id:e,documentType:`bom`,...r})}export{r as default};

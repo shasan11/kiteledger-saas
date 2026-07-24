@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./AccountingRecordShow-BNB3VfZl.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Unit of Measurement`,endpoint:`/api/product-units/`,backRoute:`inventory.unit-of-measurements.index`,backLabel:`Back to Units of Measurement`,titleField:`name`,subtitleField:`symbol`})}export{r as default};
