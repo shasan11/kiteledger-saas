@@ -13,6 +13,8 @@ use Throwable;
 
 class FroidenEnvironmentManager extends EnvironmentManager
 {
+    private const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
+
     /** Disable the package's legacy GET endpoint, which exposes DB passwords in URLs. */
     public function saveFile(Request $request)
     {
@@ -79,11 +81,16 @@ class FroidenEnvironmentManager extends EnvironmentManager
 
     private function ensureDatabaseExists(string $host, int $port, string $database, string $username, string $password): void
     {
+        $this->assertDatabaseEndpointReachable($host, $port);
+
         $pdo = new PDO(
             "mysql:host={$host};port={$port};charset=utf8mb4",
             $username,
             $password,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            ],
         );
 
         $statement = $pdo->prepare('SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?');
@@ -103,7 +110,10 @@ class FroidenEnvironmentManager extends EnvironmentManager
             "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4",
             $username,
             $password,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            ],
         );
 
         $tables = $databasePdo->query('SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '.$databasePdo->quote($database))->fetchAll(PDO::FETCH_COLUMN);
@@ -113,6 +123,28 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 : 'The selected database is not empty. The browser installer will not overwrite existing data. Select an empty database.';
             throw new RuntimeException($message);
         }
+    }
+
+    private function assertDatabaseEndpointReachable(string $host, int $port): void
+    {
+        $socketHost = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? "[{$host}]" : $host;
+        $socket = @stream_socket_client(
+            "tcp://{$socketHost}:{$port}",
+            $errorCode,
+            $errorMessage,
+            self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            STREAM_CLIENT_CONNECT,
+        );
+
+        if (is_resource($socket)) {
+            fclose($socket);
+
+            return;
+        }
+
+        throw new RuntimeException(
+            "Could not reach MySQL at {$host}:{$port}. Confirm that MySQL is running and that the database host and port are correct.",
+        );
     }
 
     /** @param array<string, string> $values */

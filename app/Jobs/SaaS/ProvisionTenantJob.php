@@ -9,6 +9,7 @@ use App\Models\Central\ProvisioningLog;
 use App\Models\Central\Tenant;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\SaaS\CentralNotificationService;
 use App\Services\SaaS\DefaultTemplateService;
 use App\Services\SaaS\SubscriptionService;
 use App\Services\SaaS\TenantDatabaseService;
@@ -81,12 +82,14 @@ class ProvisionTenantJob implements ShouldBeUnique, ShouldQueue
             $tenant->data = $data;
             $lifecycle->transition($tenant, TenantStatus::Active, idempotencyKey: 'provision-complete:'.$this->attemptId);
             DB::connection(config('tenancy.database.central_connection'))->table('tenant_provisioning_attempts')->where('id', $this->attemptId)->update(['status' => 'succeeded', 'finished_at' => now(), 'updated_at' => now()]);
+            app(CentralNotificationService::class)->notifyOnce('provisioning_completed', 'provisioning', 'success', 'Tenant provisioning completed', $tenant->company_name.' is ready.', route('central.tenants.show', $tenant), $tenant, ['attempt_id' => $this->attemptId], 1);
         } catch (\Throwable $e) {
             $code = $this->safeErrorCode($e);
             if ($tenant->fresh()->status === TenantStatus::Provisioning->value) {
                 $lifecycle->transition($tenant->fresh(), TenantStatus::ProvisioningFailed, $code, 'provision-failed:'.$this->attemptId.':'.$this->attempts());
             }
             DB::connection(config('tenancy.database.central_connection'))->table('tenant_provisioning_attempts')->where('id', $this->attemptId)->update(['status' => 'failed', 'error_code' => $code, 'safe_message' => 'Tenant provisioning could not complete. Review the failed step and retry.', 'finished_at' => now(), 'updated_at' => now()]);
+            app(CentralNotificationService::class)->notifyOnce('provisioning_failed', 'provisioning', 'critical', 'Tenant provisioning failed', $tenant->company_name.' could not be provisioned. Error code: '.$code, route('central.tenants.show', $tenant), $tenant, ['attempt_id' => $this->attemptId, 'error_code' => $code], 1);
             report($e);
             throw $e;
         }

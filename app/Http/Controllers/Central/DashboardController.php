@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\PaymentTransaction;
 use App\Models\Central\ProvisioningLog;
 use App\Models\Central\Subscription;
+use App\Models\Central\SupportTicket;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantInvoice;
 use Illuminate\Support\Facades\DB;
@@ -51,18 +52,26 @@ class DashboardController extends Controller
                 'arr' => round($monthly * 12, 2),
                 'totalRevenue' => (float) PaymentTransaction::where('status', 'success')->sum('amount'),
                 'pendingPayments' => (float) TenantInvoice::whereIn('status', ['issued', 'partially_paid'])->sum('total'),
+                'outstandingInvoices' => TenantInvoice::whereNotIn('status', ['paid', 'void'])->count(),
+                'outstandingBalance' => (float) TenantInvoice::whereNotIn('status', ['paid', 'void'])->sum('balance'),
                 'failedPayments' => $failedPayments,
                 'newSignups' => $currentSignups,
                 'signupGrowth' => $signupGrowth,
+                'openSupportTickets' => SupportTicket::whereNotIn('status', ['resolved', 'closed'])->count(),
+                'slaBreachedTickets' => SupportTicket::whereNotNull('sla_breached_at')->whereNotIn('status', ['resolved', 'closed'])->count(),
             ],
             'recentTenants' => Tenant::with(['plan', 'domains'])->latest()->limit(8)->get(),
             'planDistribution' => Tenant::selectRaw('plan_id, count(*) total')->with('plan')->groupBy('plan_id')->get(),
             'revenueTrend' => $revenueTrend,
+            'recentPayments' => PaymentTransaction::with(['invoice:id,invoice_number', 'tenant:id,company_name'])->latest('paid_at')->limit(8)->get(),
+            'urgentTickets' => SupportTicket::with('tenant:id,company_name')->where('priority', 'urgent')->whereNotIn('status', ['resolved', 'closed'])->latest('updated_at')->limit(8)->get(),
+            'provisioningFunnel' => collect(['pending', 'provisioning', 'active', 'provisioning_failed'])->map(fn ($status) => ['status' => $status, 'count' => Tenant::where('status', $status)->count()]),
             'attention' => [
                 ['key' => 'provisioning', 'label' => 'Provisioning failures', 'count' => $failedProvisioning, 'route' => route('central.tenants.index', ['status' => 'provisioning_failed'])],
                 ['key' => 'invoices', 'label' => 'Overdue invoices', 'count' => $overdueInvoices, 'route' => route('central.invoices.index', ['status' => 'issued'])],
                 ['key' => 'payments', 'label' => 'Failed payments', 'count' => $failedPayments, 'route' => route('central.payments.index', ['status' => 'failed'])],
                 ['key' => 'suspended', 'label' => 'Suspended tenants', 'count' => Tenant::where('status', 'suspended')->count(), 'route' => route('central.tenants.index', ['status' => 'suspended'])],
+                ['key' => 'support', 'label' => 'SLA-breached support tickets', 'count' => SupportTicket::whereNotNull('sla_breached_at')->whereNotIn('status', ['resolved', 'closed'])->count(), 'route' => route('central.support.tickets.index', ['view' => 'sla_breached'])],
             ],
             'health' => [
                 ['name' => 'Central database', 'status' => DB::connection()->getPdo() ? 'healthy' : 'warning', 'detail' => 'Connected'],

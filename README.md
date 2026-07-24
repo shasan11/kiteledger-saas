@@ -52,6 +52,8 @@ npm run build
 Then open `/install` or run `php artisan kiteledger:install`. Use
 `php artisan kiteledger:doctor` to check a deployment.
 
+See [KiteLedger Control Center](docs/SUPERADMIN_CONTROL_CENTER.md) for central modules, installation seeding, settings, payments, CMS/blog/SEO, support tickets, queues, security, and production verification.
+
 ## AI knowledge indexes
 
 KiteLedger's AI Assistant uses exact, keyword, metadata, and optional embedding

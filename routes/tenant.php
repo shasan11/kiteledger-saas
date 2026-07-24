@@ -5,6 +5,7 @@ use App\Http\Controllers\Documents\DocumentUploadPageController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Tenant\BillingController;
+use App\Http\Controllers\Tenant\CentralSupportController;
 use App\Http\Controllers\Tenant\ImpersonationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -32,6 +33,15 @@ Route::get('/dashboard', function () {
 })->middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.valid'])->name('dashboard');
 
 Route::middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.valid'])->group(function () {
+    Route::prefix('support-center')->name('tenant.support.')->middleware('throttle:30,1')->group(function () {
+        Route::get('/', [CentralSupportController::class, 'index'])->name('index');
+        Route::post('/', [CentralSupportController::class, 'store'])->name('store');
+        Route::get('/tickets/{ticket}', [CentralSupportController::class, 'show'])->name('show');
+        Route::post('/tickets/{ticket}/reply', [CentralSupportController::class, 'reply'])->name('reply');
+        Route::post('/tickets/{ticket}/reopen', [CentralSupportController::class, 'reopen'])->name('reopen');
+        Route::post('/tickets/{ticket}/resolve', [CentralSupportController::class, 'resolve'])->name('resolve');
+        Route::get('/attachments/{attachment}', [CentralSupportController::class, 'download'])->name('attachments.download');
+    });
     Route::prefix('localization')->name('localization.')->group(function () {
         Route::get('/languages', [LocalizationController::class, 'index'])->name('languages.index');
         Route::post('/languages', [LocalizationController::class, 'store'])->name('languages.store');

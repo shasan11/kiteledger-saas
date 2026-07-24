@@ -27,7 +27,10 @@ class TenantDeletionService
         return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $adminId, $reason, $backup, $waived) {
             $this->lifecycle->transition($tenant, TenantStatus::DeletionPending, $reason);
 
-            return TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'backup_manifest_id' => $backup?->id, 'backup_waived' => $waived, 'reason' => $reason]);
+            $request = TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'backup_manifest_id' => $backup?->id, 'backup_waived' => $waived, 'reason' => $reason]);
+            app(CentralNotificationService::class)->notifyOnce('deletion_approval_pending', 'tenants', 'critical', 'Tenant deletion approval pending', $tenant->company_name.' has a pending deletion request.', route('central.tenants.show', $tenant), $request, ['tenant_id' => $tenant->id], 1);
+
+            return $request;
         });
     }
 

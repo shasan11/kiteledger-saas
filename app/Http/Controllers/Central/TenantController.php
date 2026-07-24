@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SaaS\BackupTenantJob;
 use App\Jobs\RunTenantMigrations;
 use App\Jobs\RunTenantSeeders;
+use App\Jobs\SaaS\BackupTenantJob;
 use App\Models\Central\BackupManifest;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ImpersonationToken;
@@ -17,8 +17,8 @@ use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -73,7 +73,9 @@ class TenantController extends Controller
     {
         $old = $tenant->getOriginal();
         $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
-        if (blank($data['tenancy_db_password'] ?? null)) unset($data['tenancy_db_password']);
+        if (blank($data['tenancy_db_password'] ?? null)) {
+            unset($data['tenancy_db_password']);
+        }
         $tenant->update($data + ['database_name' => $data['tenancy_db_name'], 'database_provisioning_mode' => 'manual']);
         $this->syncTenantDatabaseInternals($tenant);
         $audit->log($request, 'tenant.updated', $tenant, $old, $tenant->getChanges());
@@ -136,44 +138,53 @@ class TenantController extends Controller
         } catch (\Throwable) {
             return response()->json(['healthy' => false, 'message' => 'Tenant database health check failed.'], 503);
         } finally {
-            if (tenancy()->initialized) tenancy()->end();
+            if (tenancy()->initialized) {
+                tenancy()->end();
+            }
         }
     }
 
-    public function backup(Tenant $tenant)
+    public function backup(Request $request, Tenant $tenant, CentralAuditService $audit)
     {
         dispatch((new BackupTenantJob($tenant->id))->onConnection('central')->onQueue('backups'));
+        $audit->log($request, 'tenant.backup_queued', $tenant, [], ['tenant_id' => $tenant->id]);
 
         return back()->with('success', 'Tenant backup queued.');
     }
 
-    public function requestDeletion(Request $request, Tenant $tenant, TenantDeletionService $deletions)
+    public function requestDeletion(Request $request, Tenant $tenant, TenantDeletionService $deletions, CentralAuditService $audit)
     {
         $data = $request->validate(['current_password' => ['required', 'string'], 'confirmation' => ['required', 'string'], 'reason' => ['required', 'string', 'max:1000'], 'backup_manifest_id' => ['nullable', 'uuid', 'exists:backup_manifests,id'], 'backup_waived' => ['boolean']]);
         $admin = $request->attributes->get('centralAdmin');
         abort_unless(Hash::check($data['current_password'], $admin->password), 422, 'The password is incorrect.');
         abort_unless(hash_equals($tenant->company_name, $data['confirmation']), 422, 'Type the exact company name to confirm.');
         $backup = filled($data['backup_manifest_id'] ?? null) ? BackupManifest::find($data['backup_manifest_id']) : null;
-        $deletions->request($tenant, $admin->id, $data['reason'], $backup, (bool) ($data['backup_waived'] ?? false));
+        $deletion = $deletions->request($tenant, $admin->id, $data['reason'], $backup, (bool) ($data['backup_waived'] ?? false));
+        $audit->log($request, 'tenant.deletion_requested', $tenant, [], ['deletion_id' => $deletion->id, 'backup_waived' => $deletion->backup_waived]);
 
         return back()->with('success', 'Deletion request created.');
     }
 
-    public function approveDeletion(Request $request, TenantDeletionRequest $deletion, TenantDeletionService $deletions)
+    public function approveDeletion(Request $request, TenantDeletionRequest $deletion, TenantDeletionService $deletions, CentralAuditService $audit)
     {
         $data = $request->validate(['current_password' => ['required', 'string']]);
         $admin = $request->attributes->get('centralAdmin');
         abort_unless(Hash::check($data['current_password'], $admin->password), 422, 'The password is incorrect.');
         $deletions->approve($deletion, $admin->id);
+        $audit->log($request, 'tenant.deletion_approved', $deletion, ['status' => 'pending'], ['status' => 'approved']);
 
         return back()->with('success', 'Deletion approved for scheduled execution.');
     }
 
-    public function impersonate(Request $request, Tenant $tenant)
+    public function impersonate(Request $request, Tenant $tenant, CentralAuditService $audit)
     {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:10', 'max:1000'], 'current_password' => ['required', 'string']]);
+        $admin = $request->attributes->get('centralAdmin');
+        abort_unless(Hash::check($data['current_password'], $admin->password), 422, 'The password is incorrect.');
         $domain = $tenant->domains()->where('status', 'active')->whereNotNull('verified_at')->where('is_primary', true)->firstOrFail();
         $plain = Str::random(64);
-        ImpersonationToken::create(['id' => (string) Str::uuid(), 'admin_id' => $request->attributes->get('centralAdmin')->id, 'tenant_id' => $tenant->id, 'token_hash' => hash('sha256', $plain), 'expires_at' => now()->addMinutes(10)]);
+        $token = ImpersonationToken::create(['id' => (string) Str::uuid(), 'admin_id' => $admin->id, 'tenant_id' => $tenant->id, 'token_hash' => hash('sha256', $plain), 'expires_at' => now()->addMinutes(10)]);
+        $audit->log($request, 'tenant.impersonation_started', $tenant, [], ['token_id' => $token->id, 'reason' => $data['reason']]);
 
         return redirect()->away('https://'.$domain->domain.'/impersonate/'.$plain);
     }

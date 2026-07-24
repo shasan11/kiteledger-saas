@@ -41,6 +41,7 @@ class AuthController extends Controller
         }
         $request->session()->regenerate();
         $request->session()->put('auth.password_confirmed_at', time());
+        $request->session()->forget('central_mfa_verified_at');
         $admin->update(['last_login_at' => now()]);
 
         return redirect()->intended(route('central.dashboard'));
@@ -77,6 +78,7 @@ class AuthController extends Controller
         $request->session()->forget('central_mfa_pending_id');
         $request->session()->regenerate();
         $request->session()->put('auth.password_confirmed_at', time());
+        $request->session()->put('central_mfa_verified_at', time());
 
         return redirect()->route('central.dashboard');
     }

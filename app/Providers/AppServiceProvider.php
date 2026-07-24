@@ -13,6 +13,11 @@ use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
+use App\Models\Central\BlogPost;
+use App\Models\Central\PaymentGateway;
+use App\Models\Central\SupportTicket;
+use App\Models\Central\TenantInvoice;
+use App\Models\Central\WebsitePage;
 use App\Models\ChartOfAccount;
 use App\Models\ChequeRegister;
 use App\Models\Contact;
@@ -83,6 +88,11 @@ use App\Observers\SalesReturnObserver;
 use App\Observers\SubsequentJournalVoucherObserver;
 use App\Observers\SupplierPaymentLineObserver;
 use App\Observers\SupplierPaymentObserver;
+use App\Policies\Central\BlogPostPolicy;
+use App\Policies\Central\PaymentGatewayPolicy;
+use App\Policies\Central\SupportTicketPolicy;
+use App\Policies\Central\TenantInvoicePolicy;
+use App\Policies\Central\WebsitePagePolicy;
 use App\Policies\DocumentUploadPolicy;
 use App\Services\SaaS\AtomicQuotaManager;
 use App\Services\SaaS\NativeBackupManager;
@@ -210,6 +220,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(DocumentUpload::class, DocumentUploadPolicy::class);
+        Gate::policy(WebsitePage::class, WebsitePagePolicy::class);
+        Gate::policy(BlogPost::class, BlogPostPolicy::class);
+        Gate::policy(PaymentGateway::class, PaymentGatewayPolicy::class);
+        Gate::policy(TenantInvoice::class, TenantInvoicePolicy::class);
+        Gate::policy(SupportTicket::class, SupportTicketPolicy::class);
 
         if (! $this->app->runningInConsole() && request()->is('install*')) {
             app()->setLocale('en');

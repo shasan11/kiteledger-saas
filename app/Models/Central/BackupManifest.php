@@ -12,4 +12,9 @@ class BackupManifest extends CentralModel
     {
         return ['verified_at' => 'datetime', 'expires_at' => 'datetime'];
     }
+
+    public function tenant()
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 }

@@ -131,7 +131,7 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString("'CACHE_STORE' => 'file'", $service);
         $this->assertStringContainsString("'cache.default' => 'file'", $service);
         $this->assertStringContainsString("env('CACHE_STORE', 'file')", $cacheConfig);
-        $this->assertStringContainsString("env('DB_CONNECTION', 'mysql')", $databaseConfig);
+        $this->assertStringContainsString("env('DB_CONNECTION', 'central')", $databaseConfig);
     }
 
     private function restoreServerValue(string $key, ?string $value): void

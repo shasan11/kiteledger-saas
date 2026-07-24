@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\SaaS\RecordQueueHeartbeatJob;
+use App\Models\Central\BlogPost;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\PaymentTransaction;
@@ -8,7 +9,10 @@ use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDeletionRequest;
 use App\Models\Central\TenantInvoice;
+use App\Models\Central\WebsitePage;
 use App\Services\SaaS\AtomicQuotaManager;
+use App\Services\SaaS\PlatformNotificationMonitor;
+use App\Services\SaaS\SupportTicketService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
@@ -294,6 +298,12 @@ Schedule::call(function (): void {
 Schedule::call(function (): void {
     app(AtomicQuotaManager::class)->expireStale();
 })->everyFifteenMinutes()->name('quota-reservation-cleanup')->withoutOverlapping(10);
+Schedule::call(fn () => app(SupportTicketService::class)->markBreaches())->everyFiveMinutes()->name('support-sla-breaches')->withoutOverlapping(10);
+Schedule::call(fn () => app(PlatformNotificationMonitor::class)->run())->everyFifteenMinutes()->name('platform-notification-monitor')->withoutOverlapping(10);
+Schedule::call(function (): void {
+    BlogPost::where('status', 'scheduled')->where('scheduled_at', '<=', now())->chunkById(100, fn ($posts) => $posts->each(fn ($post) => $post->update(['status' => 'published', 'published_at' => $post->published_at ?: $post->scheduled_at ?: now()])));
+    WebsitePage::where('status', 'scheduled')->where('scheduled_at', '<=', now())->chunkById(100, fn ($pages) => $pages->each(fn ($page) => $page->update(['status' => 'published', 'published_at' => $page->published_at ?: $page->scheduled_at ?: now()])));
+})->everyMinute()->name('cms-publish-scheduled')->withoutOverlapping(5);
 Schedule::command('tenants:check-subscriptions')->dailyAt('00:15')->withoutOverlapping(30);
 Schedule::command('tenants:calculate-usage')->dailyAt('01:00')->withoutOverlapping(30);
 Schedule::command('billing:generate-invoices')->dailyAt('02:00')->withoutOverlapping(30);

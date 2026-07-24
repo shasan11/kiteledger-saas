@@ -1,0 +1,11 @@
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import RichTextEditor from '@/Components/Central/RichTextEditor';
+import { Head, router } from '@inertiajs/react';
+import { Button, Form, Modal, Space, Tag, Upload } from 'antd';
+
+export default function TenantSupportShow({ ticket }) {
+    const [form] = Form.useForm();
+    const reply = (values) => router.post(route('tenant.support.reply', ticket.id), { ...values, attachments: values.attachments?.map((item) => item.originFileObj) }, { forceFormData: true, onSuccess: () => form.resetFields() });
+    const resolve = () => Modal.confirm({ title: 'Mark this ticket resolved?', content: 'You can reopen it during the configured reopen period if the issue returns.', okText: 'Mark resolved', onOk: () => router.post(route('tenant.support.resolve', ticket.id)) });
+    return <AuthenticatedLayout header={ticket.ticket_number}><Head title={ticket.ticket_number}/><h2>{ticket.subject}</h2><p><Tag>{ticket.priority}</Tag><Tag>{ticket.status}</Tag></p><div style={{ padding: 16, border: '1px solid #e5e7eb', borderRadius: 12, marginBottom: 16 }}>{ticket.description}</div>{ticket.messages.map((message) => <div key={message.id} style={{ padding: 16, border: '1px solid #e5e7eb', borderRadius: 12, marginBottom: 10 }}><strong>{message.sender_name}</strong><div dangerouslySetInnerHTML={{ __html: message.html_body || message.plain_body }}/>{message.attachments?.map((file) => <Button key={file.id} type="link" href={route('tenant.support.attachments.download', file.id)}>{file.original_filename}</Button>)}</div>)}{!['resolved', 'closed'].includes(ticket.status) && <><Form form={form} layout="vertical" onFinish={reply}><Form.Item name="body" label="Reply" rules={[{ required: true }]}><RichTextEditor autosaveKey={`tenant.ticket.${ticket.id}`}/></Form.Item><Form.Item name="attachments" valuePropName="fileList" getValueFromEvent={(event) => event.fileList}><Upload beforeUpload={() => false} multiple maxCount={5}><Button>Attach files</Button></Upload></Form.Item><Space><Button type="primary" htmlType="submit">Send reply</Button><Button onClick={resolve}>Mark resolved</Button></Space></Form></>}{['resolved', 'closed'].includes(ticket.status) && <Button onClick={() => router.post(route('tenant.support.reopen', ticket.id))}>Reopen ticket</Button>}</AuthenticatedLayout>;
+}

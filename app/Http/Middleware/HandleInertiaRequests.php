@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Models\AppSetting;
+use App\Models\Central\CentralNotification;
 use App\Services\BranchScopeService;
 use App\Services\LocalizationService;
+use Database\Seeders\CentralRolesAndPermissionsSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
@@ -36,9 +38,14 @@ class HandleInertiaRequests extends Middleware
         $centralUser = $request->user('central');
 
         if ($centralUser && ! tenancy()->initialized) {
+            $permissions = $centralUser->role === 'super_admin'
+                ? CentralRolesAndPermissionsSeeder::PERMISSIONS
+                : $centralUser->roles()->with('permissions')->get()->flatMap->permissions->pluck('name')->merge($centralUser->permissions ?? [])->unique()->values()->all();
+
             return [
                 ...parent::share($request),
-                'auth' => ['user' => $centralUser, 'permissions' => [], 'roles' => [], 'canBypassPermissions' => $centralUser->role === 'super_admin'],
+                'auth' => ['user' => $centralUser, 'permissions' => $permissions, 'roles' => $centralUser->roles()->pluck('name')->all(), 'canBypassPermissions' => $centralUser->role === 'super_admin'],
+                'centralNotifications' => fn () => $this->centralNotifications($centralUser->id),
                 'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
                 'translations' => [],
             ];
@@ -159,5 +166,16 @@ class HandleInertiaRequests extends Middleware
             'super-admin',
             'admin',
         ]);
+    }
+
+    private function centralNotifications(int $adminId): array
+    {
+        try {
+            $query = CentralNotification::where('admin_id', $adminId)->whereNull('dismissed_at')->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+
+            return ['unread' => (clone $query)->whereNull('read_at')->count(), 'recent' => $query->latest()->limit(6)->get(['id', 'severity', 'title', 'message', 'action_url', 'read_at', 'created_at'])];
+        } catch (\Throwable) {
+            return ['unread' => 0, 'recent' => []];
+        }
     }
 }

@@ -18,6 +18,7 @@ class NativeBackupManager implements BackupManager
         $binary = (new ExecutableFinder)->find('mysqldump');
         if (! $binary) {
             $manifest->update(['status' => 'failed', 'error_code' => 'mysqldump_unavailable']);
+            app(CentralNotificationService::class)->notifyOnce('backup_failed', 'infrastructure', 'critical', 'Tenant backup failed', $tenant->company_name.' could not be backed up: mysqldump unavailable.', route('central.backups.index'), $manifest, [], 1);
             throw new \RuntimeException('mysqldump_unavailable');
         }
         $config = config('database.connections.'.($tenant->database()->getTemplateConnectionName()));
@@ -33,6 +34,7 @@ class NativeBackupManager implements BackupManager
         if (! $process->isSuccessful()) {
             @unlink($path.'.tmp');
             $manifest->update(['status' => 'failed', 'error_code' => 'database_dump_failed']);
+            app(CentralNotificationService::class)->notifyOnce('backup_failed', 'infrastructure', 'critical', 'Tenant backup failed', $tenant->company_name.' database dump failed.', route('central.backups.index'), $manifest, [], 1);
             throw new \RuntimeException('database_dump_failed');
         }
         rename($path.'.tmp', $path);
@@ -46,6 +48,9 @@ class NativeBackupManager implements BackupManager
     {
         $valid = $manifest->path && is_file($manifest->path) && hash_equals((string) $manifest->checksum, hash_file('sha256', $manifest->path));
         $manifest->update(['status' => $valid ? 'verified' : 'failed', 'verified_at' => $valid ? now() : null, 'error_code' => $valid ? null : 'checksum_mismatch']);
+        if (! $valid) {
+            app(CentralNotificationService::class)->notifyOnce('backup_failed', 'infrastructure', 'critical', 'Backup verification failed', 'Backup '.$manifest->id.' did not pass checksum verification.', route('central.backups.index'), $manifest, [], 1);
+        }
 
         return $valid;
     }

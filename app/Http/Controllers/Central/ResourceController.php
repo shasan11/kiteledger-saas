@@ -3,31 +3,27 @@
 namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
+use App\Models\Central\CentralAuditLog;
 use App\Models\Central\DefaultDataTemplate;
-use App\Models\Central\Feature;
-use App\Models\Central\TenantFeatureOverride;
-use App\Models\Central\PaymentGateway;
 use App\Models\Central\PaymentRefund;
 use App\Models\Central\PaymentTransaction;
-use App\Models\Central\PlatformSetting;
 use App\Models\Central\ProvisioningLog;
 use App\Models\Central\Subscription;
 use App\Models\Central\TenantDatabasePool;
 use App\Models\Central\TenantInvoice;
 use App\Models\Central\TenantUsageMetric;
-use App\Models\Central\WebsiteContentItem;
-use App\Models\Central\WebsiteMenu;
-use App\Models\Central\WebsitePage;
-use App\Models\Central\WebsiteSection;
 use App\Services\Payments\ManualPaymentService;
 use App\Services\Payments\PaymentManager;
 use App\Services\SaaS\CentralAuditService;
+use App\Services\SaaS\CentralNotificationService;
 use App\Services\SaaS\DatabaseProvisioning\PoolDatabaseValidator;
+use App\Services\SaaS\PlatformSettingsService;
 use App\Services\SaaS\SubscriptionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -36,23 +32,11 @@ use Inertia\Inertia;
 class ResourceController extends Controller
 {
     private const RESOURCES = [
-        'subscriptions' => [Subscription::class, ['id', 'tenant_id', 'plan_id', 'status', 'billing_cycle', 'current_period_starts_at', 'current_period_ends_at'], false],
-        'invoices' => [TenantInvoice::class, ['id', 'invoice_number', 'tenant_id', 'subtotal', 'tax', 'total', 'currency', 'status', 'due_date', 'paid_at'], false],
-        'payments' => [PaymentTransaction::class, ['id', 'tenant_id', 'invoice_id', 'gateway', 'amount', 'currency', 'status', 'paid_at'], false],
-        'gateways' => [PaymentGateway::class, ['id', 'name', 'slug', 'mode', 'is_active', 'supported_currencies', 'sort_order'], true],
-        'website-pages' => [WebsitePage::class, ['id', 'title', 'slug', 'page_type', 'status', 'published_at', 'sort_order'], true],
-        'website-sections' => [WebsiteSection::class, ['id', 'page_id', 'section_key', 'section_type', 'title', 'is_active', 'sort_order'], true],
-        'website-menus' => [WebsiteMenu::class, ['id', 'label', 'url', 'location', 'target', 'is_active', 'sort_order'], true],
-        'website-faqs' => [WebsiteContentItem::class, ['id', 'title', 'slug', 'status', 'sort_order', 'published_at'], true, 'faq'],
-        'website-testimonials' => [WebsiteContentItem::class, ['id', 'title', 'slug', 'status', 'sort_order', 'published_at'], true, 'testimonial'],
-        'blog-posts' => [WebsiteContentItem::class, ['id', 'title', 'slug', 'status', 'sort_order', 'published_at'], true, 'blog'],
         'default-templates' => [DefaultDataTemplate::class, ['id', 'name', 'slug', 'country', 'industry', 'is_default', 'is_active'], true],
-        'platform-settings' => [PlatformSetting::class, ['id', 'group', 'key', 'type', 'is_public', 'updated_at'], true],
         'provisioning-logs' => [ProvisioningLog::class, ['id', 'tenant_id', 'step', 'status', 'message', 'started_at', 'finished_at'], false],
         'tenant-databases' => [TenantDatabasePool::class, ['id', 'database_name', 'status', 'tenant_id', 'validated_at', 'allocated_at', 'last_error'], true],
         'usage' => [TenantUsageMetric::class, ['id', 'tenant_id', 'period_start', 'period_end', 'users_count', 'products_count', 'invoices_count', 'storage_mb', 'ai_requests_count'], false],
-        'features' => [Feature::class, ['id', 'key', 'name', 'type', 'is_active', 'updated_at'], true],
-        'tenant-feature-overrides' => [TenantFeatureOverride::class, ['id', 'tenant_id', 'feature_id', 'enabled', 'limit_value', 'expires_at'], true],
+        'audit-logs' => [CentralAuditLog::class, ['id', 'admin_id', 'action', 'model_type', 'model_id', 'ip_address', 'created_at'], false],
     ];
 
     public function index(Request $request)
@@ -111,13 +95,6 @@ class ResourceController extends Controller
         }
         $old = $model->getAttributes();
         $data = $request->validate($this->rules($request->route('resource'), $model));
-        if ($model instanceof PaymentGateway) {
-            foreach (['secret_key', 'webhook_secret'] as $secret) {
-                if (blank($data[$secret] ?? null)) {
-                    unset($data[$secret]);
-                }
-            }
-        }
         if ($model instanceof TenantDatabasePool) {
             foreach (['username', 'password'] as $secret) {
                 if (blank($data[$secret] ?? null)) {
@@ -135,7 +112,7 @@ class ResourceController extends Controller
     public function destroy(Request $request, int $id, CentralAuditService $audit)
     {
         [$class, , $editable] = $this->definition($request);
-        abort_unless($editable && ! in_array($request->route('resource'), ['gateways', 'platform-settings'], true), 405);
+        abort_unless($editable, 405);
         $model = $class::findOrFail($id);
         if ($model instanceof TenantDatabasePool) {
             $this->abortIfPoolDatabaseAllocated($model, 'Allocated tenant databases cannot be removed.');
@@ -157,12 +134,17 @@ class ResourceController extends Controller
         return back()->with('success', 'Tenant database revalidated.');
     }
 
-    public function subscriptionAction(Request $request, Subscription $subscription, SubscriptionService $service)
+    public function subscriptionAction(Request $request, Subscription $subscription, SubscriptionService $service, CentralAuditService $audit)
     {
         $action = $request->validate(['action' => ['required', Rule::in(['cancel', 'cancel_now', 'reactivate', 'pause', 'renew'])]])['action'];
+        $old = $subscription->only(['status', 'ends_at', 'current_period_ends_at']);
         match ($action) {
             'cancel' => $service->cancel($subscription), 'cancel_now' => $service->cancel($subscription, true), 'reactivate' => $service->reactivate($subscription), 'pause' => $service->pause($subscription), 'renew' => $service->renew($subscription)
         };
+        if (in_array($action, ['cancel', 'cancel_now'], true)) {
+            app(CentralNotificationService::class)->notifyOnce('subscription_cancelled', 'subscriptions', 'warning', 'Subscription cancelled', 'Subscription #'.$subscription->id.' for tenant '.$subscription->tenant_id.' was cancelled.', route('central.subscriptions.index', ['search' => $subscription->tenant_id]), $subscription, ['action' => $action], 1);
+        }
+        $audit->log($request, 'subscription.'.$action, $subscription, $old, $subscription->fresh()->only(['status', 'ends_at', 'current_period_ends_at']));
 
         return back()->with('success', 'Subscription updated.');
     }
@@ -181,21 +163,37 @@ class ResourceController extends Controller
         return Pdf::loadView('central.invoice', ['invoice' => $invoice->load('lines')])->download($invoice->invoice_number.'.pdf');
     }
 
-    public function refund(Request $request, PaymentTransaction $payment, PaymentManager $payments)
+    public function refund(Request $request, PaymentTransaction $payment, PaymentManager $payments, CentralAuditService $audit)
     {
-        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01'], 'idempotency_key' => ['nullable', 'string', 'max:255']]);
+        $settings = app(PlatformSettingsService::class);
+        abort_unless($settings->get('billing.refunds', true), 403, 'Refunds are disabled in billing settings.');
+        if ($settings->get('security.require_mfa_for_refunds', true)) {
+            $verifiedAt = (int) $request->session()->get('central_mfa_verified_at', 0);
+            abort_unless(filled($request->user('central')->mfa_secret) && $verifiedAt > 0, 403, 'Sign in with MFA before issuing a refund.');
+        }
+        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01'], 'idempotency_key' => ['nullable', 'string', 'max:255'], 'reason' => ['required', 'string', 'min:10', 'max:1000'], 'current_password' => ['required', 'string']]);
+        abort_unless(Hash::check($data['current_password'], $request->user('central')->password), 422, 'The administrator password is incorrect.');
         $key = $data['idempotency_key'] ?? (string) Str::uuid();
         if ($existing = PaymentRefund::where('idempotency_key', $key)->first()) {
             return back()->with('success', 'Refund already processed.');
         }
+        $maximumPeriod = (int) $settings->get('billing.maximum_refund_period', 90);
+        abort_if($maximumPeriod > 0 && $payment->paid_at?->lt(now()->subDays($maximumPeriod)), 409, 'The maximum refund period has elapsed.');
         abort_if($payment->status !== 'success' || $payment->refunded_amount + $data['amount'] > $payment->amount, 409, 'Refund amount is invalid.');
-        $result = $payments->driver($payment->gateway)->refund($payment->gateway_transaction_id ?: (string) $payment->id, (float) $data['amount']);
+        try {
+            $result = $payments->driver($payment->gateway)->refund($payment->gateway_transaction_id ?: (string) $payment->id, (float) $data['amount']);
+        } catch (\Throwable $exception) {
+            app(CentralNotificationService::class)->notify('refund_failed', 'billing', 'critical', 'Refund failed', 'Refund for payment '.($payment->reference ?: '#'.$payment->id).' could not be completed.', route('central.payments.index', ['search' => $payment->reference ?: $payment->id]), $payment);
+            throw $exception;
+        }
         DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($payment, $data, $key, $result): void {
             $locked = PaymentTransaction::lockForUpdate()->findOrFail($payment->id);
             $total = $locked->refunded_amount + $data['amount'];
             PaymentRefund::create(['payment_transaction_id' => $locked->id, 'gateway_refund_id' => $result['id'] ?? $result['refund_id'] ?? null, 'amount' => $data['amount'], 'status' => $result['status'] ?? 'succeeded', 'idempotency_key' => $key, 'response' => $result]);
             $locked->update(['refunded_amount' => $total, 'status' => $total >= $locked->amount ? 'refunded' : $locked->status]);
         });
+        app(CentralNotificationService::class)->notify('refund_completed', 'billing', 'success', 'Refund completed', $payment->currency.' '.number_format((float) $data['amount'], 2).' was refunded for payment '.($payment->reference ?: '#'.$payment->id).'.', route('central.payments.index', ['search' => $payment->reference ?: $payment->id]), $payment);
+        $audit->log($request, 'payment.refunded', $payment, [], ['amount' => $data['amount'], 'idempotency_key' => $key, 'reason' => $data['reason']]);
 
         return back()->with('success', 'Refund processed.');
     }
@@ -211,16 +209,8 @@ class ResourceController extends Controller
     private function rules(string $resource, ?Model $model = null): array
     {
         return match ($resource) {
-            'gateways' => ['name' => ['required', 'string', 'max:255'], 'slug' => ['required', Rule::in(['stripe', 'paypal', 'razorpay', 'manual'])], 'mode' => ['required', Rule::in(['sandbox', 'live'])], 'is_active' => ['boolean'], 'public_key' => ['nullable', 'string'], 'secret_key' => ['nullable', 'string'], 'webhook_secret' => ['nullable', 'string'], 'supported_currencies' => ['nullable', 'array'], 'sort_order' => ['integer', 'min:0']],
-            'platform-settings' => ['group' => ['required', 'string', 'max:100'], 'key' => ['required', 'string', 'max:255', Rule::unique('platform_settings')->ignore($model)], 'value' => ['nullable'], 'type' => ['required', Rule::in(['string', 'boolean', 'integer', 'json'])], 'is_public' => ['boolean'], 'is_encrypted' => ['boolean']],
-            'website-pages' => ['title' => ['required', 'string', 'max:255'], 'slug' => ['required', 'alpha_dash', Rule::unique('website_pages')->ignore($model)], 'page_type' => ['required', 'string', 'max:100'], 'status' => ['required', Rule::in(['draft', 'published'])], 'sort_order' => ['integer', 'min:0']],
-            'website-sections' => ['page_id' => ['required', 'exists:website_pages,id'], 'section_key' => ['required', 'string'], 'section_type' => ['required', 'string'], 'title' => ['nullable', 'string'], 'content' => ['nullable', 'string'], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0']],
-            'website-menus' => ['label' => ['required', 'string'], 'url' => ['nullable', 'string'], 'location' => ['required', Rule::in(['header', 'footer'])], 'target' => ['required', Rule::in(['same_tab', 'new_tab'])], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0']],
-            'website-faqs', 'website-testimonials', 'blog-posts' => ['title' => ['required', 'string'], 'slug' => ['nullable', 'alpha_dash'], 'content' => ['nullable', 'string'], 'status' => ['required', Rule::in(['draft', 'active', 'published'])], 'sort_order' => ['integer', 'min:0']],
             'default-templates' => ['name' => ['required', 'string'], 'slug' => ['required', 'alpha_dash', Rule::unique('default_data_templates')->ignore($model)], 'description' => ['nullable', 'string'], 'country' => ['nullable', 'string', 'size:2'], 'industry' => ['nullable', 'string'], 'is_default' => ['boolean'], 'is_active' => ['boolean']],
             'tenant-databases' => ['database_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenant_database_pool')->ignore($model)], 'username' => ['nullable', 'string', 'max:128'], 'password' => ['nullable', 'string', 'max:1024']],
-            'features' => ['key' => ['required', 'alpha_dash', Rule::unique('features')->ignore($model)], 'name' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string'], 'type' => ['required', Rule::in(['boolean', 'limit'])], 'is_active' => ['boolean']],
-            'tenant-feature-overrides' => ['tenant_id' => ['required', 'exists:tenants,id'], 'feature_id' => ['required', 'exists:features,id'], 'enabled' => ['nullable', 'boolean'], 'limit_value' => ['nullable', 'integer', 'min:0'], 'expires_at' => ['nullable', 'date'], 'reason' => ['nullable', 'string']],
             default => [],
         };
     }

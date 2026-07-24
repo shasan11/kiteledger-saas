@@ -8,12 +8,14 @@ import {
     CloudDownloadOutlined, DatabaseOutlined, EditOutlined, GlobalOutlined, LoginOutlined,
     PlayCircleOutlined, ReloadOutlined, SafetyCertificateOutlined, StopOutlined,
 } from '@ant-design/icons';
-import { Avatar, Button, Col, Empty, Form, Input, Modal, Row, Space, Table, Tabs, Timeline, Typography, message } from 'antd';
+import { Alert, Avatar, Button, Col, Empty, Form, Input, Modal, Row, Space, Table, Tabs, Timeline, Typography, message } from 'antd';
 import { useState } from 'react';
 
 export default function Show({ tenant }) {
     const [suspendOpen, setSuspendOpen] = useState(false);
+    const [impersonateOpen, setImpersonateOpen] = useState(false);
     const [form] = Form.useForm();
+    const [impersonateForm] = Form.useForm();
     const post = (name, data = {}) => router.post(route(name, tenant.id), data, { preserveScroll: true });
     const suspend = ({ reason }) => post('central.tenants.suspend', { reason });
     const health = async () => {
@@ -53,11 +55,12 @@ export default function Show({ tenant }) {
     return <CentralLayout title={tenant.company_name} breadcrumbs={[{title:'Tenants'}]}>
         <div className="central-detail-hero">
             <div className="central-detail-hero__identity"><Avatar size={54} className="central-tenant-avatar">{initials(tenant.company_name)}</Avatar><div className="central-detail-hero__copy"><Typography.Title level={2}>{tenant.company_name}</Typography.Title><div className="central-detail-hero__meta"><StatusBadge value={tenant.status}/><Typography.Text type="secondary"><GlobalOutlined /> {primaryDomain?.domain || 'No primary domain'}</Typography.Text><Typography.Text type="secondary">{tenant.plan?.name || 'No plan'}</Typography.Text></div></div></div>
-            <div className="central-detail-hero__actions"><Button icon={<EditOutlined />} onClick={()=>router.visit(route('central.tenants.edit',tenant.id))}>Edit</Button>{tenant.status === 'suspended' ? <Button type="primary" icon={<ReloadOutlined />} onClick={()=>post('central.tenants.reactivate')}>Reactivate</Button> : <Button danger icon={<StopOutlined />} onClick={()=>setSuspendOpen(true)}>Suspend</Button>}{tenant.status === 'provisioning_failed' && <Button type="primary" icon={<ReloadOutlined />} onClick={()=>post('central.tenants.retry')}>Retry</Button>}<Button icon={<LoginOutlined />} onClick={()=>post('central.tenants.impersonate')}>Sign in</Button><ActionDropdown size="middle" items={operationItems}/></div>
+            <div className="central-detail-hero__actions"><Button icon={<EditOutlined />} onClick={()=>router.visit(route('central.tenants.edit',tenant.id))}>Edit</Button>{tenant.status === 'suspended' ? <Button type="primary" icon={<ReloadOutlined />} onClick={()=>post('central.tenants.reactivate')}>Reactivate</Button> : <Button danger icon={<StopOutlined />} onClick={()=>setSuspendOpen(true)}>Suspend</Button>}{tenant.status === 'provisioning_failed' && <Button type="primary" icon={<ReloadOutlined />} onClick={()=>post('central.tenants.retry')}>Retry</Button>}<Button icon={<LoginOutlined />} onClick={()=>setImpersonateOpen(true)}>Sign in</Button><ActionDropdown size="middle" items={operationItems}/></div>
         </div>
         {tenant.status_reason && <div style={{marginBottom:16}}><Typography.Text type="danger">Account note: {tenant.status_reason}</Typography.Text></div>}
         <Tabs items={tabs} defaultActiveKey="overview" destroyInactiveTabPane={false} />
         <Modal open={suspendOpen} title="Suspend tenant" okText="Suspend tenant" okButtonProps={{danger:true}} onCancel={()=>setSuspendOpen(false)} onOk={()=>form.submit()}><Typography.Paragraph type="secondary">Users will lose access until an administrator reactivates this tenant.</Typography.Paragraph><Form form={form} layout="vertical" onFinish={(values)=>{setSuspendOpen(false);suspend(values);}} initialValues={{reason:'Suspended by central administrator'}}><Form.Item name="reason" label="Reason" rules={[{required:true,message:'Explain why this tenant is being suspended.'}]}><Input.TextArea rows={4}/></Form.Item></Form></Modal>
+        <Modal open={impersonateOpen} title="Sign in as tenant" okText="Start secure session" onCancel={()=>setImpersonateOpen(false)} onOk={()=>impersonateForm.submit()}><Alert type="warning" showIcon message="This action is security-sensitive and fully audited." style={{marginBottom:16}}/><Form form={impersonateForm} layout="vertical" onFinish={(values)=>post('central.tenants.impersonate',values)}><Form.Item name="reason" label="Reason" rules={[{required:true,min:10,message:'Enter at least 10 characters.'}]}><Input.TextArea rows={3}/></Form.Item><Form.Item name="current_password" label="Current administrator password" rules={[{required:true}]}><Input.Password autoComplete="current-password"/></Form.Item></Form></Modal>
     </CentralLayout>;
 }
 

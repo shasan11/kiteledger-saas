@@ -106,6 +106,22 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertSame('success', $response['status'] ?? null);
     }
 
+    public function test_unreachable_database_returns_an_installer_error_without_waiting_for_php_timeout(): void
+    {
+        $startedAt = microtime(true);
+
+        $response = app(FroidenEnvironmentManager::class)->save(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
+                'hostname' => '127.0.0.1',
+                'port' => 1,
+            ])),
+        );
+
+        $this->assertSame('fail', $response['status'] ?? null);
+        $this->assertStringContainsString('Could not reach MySQL', (string) ($response['message'] ?? ''));
+        $this->assertLessThan(10, microtime(true) - $startedAt);
+    }
+
     public function test_browser_environment_submission_redirects_without_javascript(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);
