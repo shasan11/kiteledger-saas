@@ -85,7 +85,8 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
 
     public function destroy(Tenant $tenant): void
     {
-        throw new \LogicException('Manually supplied tenant databases are never deleted by the application.');
+        // Manual databases are owned outside the application. Customer deletion
+        // removes central access and files, but leaves the supplied database intact.
     }
 
     public function available(): bool { return true; }

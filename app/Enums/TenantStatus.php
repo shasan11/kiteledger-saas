@@ -22,16 +22,16 @@ enum TenantStatus: string
     public function canTransitionTo(self $next): bool
     {
         return in_array($next, match ($this) {
-            self::Pending => [self::Provisioning, self::Archived],
+            self::Pending => [self::Provisioning, self::Archived, self::DeletionPending],
             self::Provisioning => [self::DatabaseCreating, self::DatabaseCreated, self::Active, self::Failed, self::ProvisioningFailed],
             self::DatabaseCreating => [self::DatabaseCreated, self::Failed],
             self::DatabaseCreated => [self::Migrating, self::Failed],
             self::Migrating => [self::Seeding, self::Failed],
             self::Seeding => [self::Active, self::Failed],
-            self::Failed => [self::Provisioning, self::Deleting],
+            self::Failed => [self::Provisioning, self::Deleting, self::DeletionPending],
             self::Deleting => [self::Deleted, self::Failed],
             self::Deleted => [],
-            self::ProvisioningFailed => [self::Provisioning, self::Archived],
+            self::ProvisioningFailed => [self::Provisioning, self::Archived, self::DeletionPending],
             self::Active => [self::Suspended, self::Archived, self::DeletionPending],
             self::Suspended => [self::Active, self::Archived, self::DeletionPending],
             self::Archived => [self::Active, self::DeletionPending],

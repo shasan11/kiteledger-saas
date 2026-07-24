@@ -41,7 +41,7 @@ class TenantController extends Controller
                 'total' => Tenant::count(),
                 'active' => Tenant::where('status', 'active')->count(),
                 'trialing' => Tenant::where('status', 'trialing')->count(),
-                'attention' => Tenant::whereIn('status', ['suspended', 'expired', 'provisioning_failed'])->count(),
+                'attention' => Tenant::whereIn('status', ['suspended', 'expired', 'provisioning_failed', 'deletion_pending'])->count(),
             ],
         ]);
     }
@@ -61,7 +61,7 @@ class TenantController extends Controller
 
     public function show(Tenant $tenant)
     {
-        return Inertia::render('Central/Tenants/Show', ['tenant' => $tenant->load(['plan', 'domains', 'subscription.plan', 'provisioningLogs', 'usageMetrics', 'invoices']), 'options' => $this->options()]);
+        return Inertia::render('Central/Tenants/Show', ['tenant' => $tenant->load(['plan', 'domains', 'subscription.plan', 'provisioningLogs', 'usageMetrics', 'invoices', 'backupManifests' => fn ($query) => $query->where('status', 'verified')->latest()->limit(20), 'deletionRequests' => fn ($query) => $query->latest()->limit(5)]), 'options' => $this->options()]);
     }
 
     public function edit(Tenant $tenant)
