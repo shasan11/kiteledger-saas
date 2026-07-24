@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./PaymentInRecordShow-x9IJhCWC.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Proforma Invoice`,endpoint:`/api/proforma-invoices/`,backRoute:`payment-in.proforma-invoices.index`,backLabel:`Back to Proforma Invoices`,documentType:`proforma_invoice`})}export{r as default};

@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./PaymentInRecordShow-x9IJhCWC.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Credit Note`,endpoint:`/api/credit-notes/`,backRoute:`payment-in.credit-notes.index`,backLabel:`Back to Credit Notes`,documentType:`credit_note`,editRoute:`payment-in.credit-notes.edit`})}export{r as default};

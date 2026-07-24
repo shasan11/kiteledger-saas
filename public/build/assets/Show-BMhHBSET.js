@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./PaymentOutRecordShow-DioBfCUD.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Expense`,endpoint:`/api/expenses/`,backRoute:`payment-out.expenses.index`,backLabel:`Back to Expenses`,documentType:`expense`,editRoute:`payment-out.expenses.edit`})}export{r as default};
