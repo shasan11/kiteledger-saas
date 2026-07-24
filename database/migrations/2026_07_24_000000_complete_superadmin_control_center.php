@@ -238,7 +238,7 @@ return new class extends Migration
             $table->text('message');
             $table->string('action_url')->nullable();
             $table->string('action_label')->nullable();
-            $table->nullableMorphs('related');
+            $table->nullableUuidMorphs('related');
             $table->json('data')->nullable();
             $table->timestamp('read_at')->nullable()->index();
             $table->timestamp('dismissed_at')->nullable();
