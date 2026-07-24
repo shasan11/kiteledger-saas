@@ -43,10 +43,44 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
             $connection->statement("DROP TABLE `{$table}`");
         } catch (\Throwable $exception) {
             try { DB::connection($name)->statement("DROP TABLE IF EXISTS `{$table}`"); } catch (\Throwable) {}
-            throw new \RuntimeException('manual_database_verification_failed', previous: $exception);
+            throw new \RuntimeException($this->failureCode($exception), previous: $exception);
         } finally {
             DB::purge($name);
         }
+    }
+
+    private function failureCode(\Throwable $exception): string
+    {
+        $message = strtolower($exception->getMessage());
+
+        if (str_contains($message, 'sqlstate[hy000] [1049]') || str_contains($message, 'unknown database')) {
+            return 'manual_database_not_found';
+        }
+
+        if (str_contains($message, 'sqlstate[hy000] [1045]') || str_contains($message, 'access denied for user')) {
+            return 'manual_database_access_denied';
+        }
+
+        if (
+            str_contains($message, 'create command denied')
+            || str_contains($message, 'alter command denied')
+            || str_contains($message, 'drop command denied')
+            || str_contains($message, 'sqlstate[42000] [1044]')
+            || str_contains($message, 'sqlstate[42000]: syntax error or access violation: 1142')
+        ) {
+            return 'manual_database_privilege_check_failed';
+        }
+
+        if (
+            str_contains($message, 'sqlstate[hy000] [2002]')
+            || str_contains($message, 'sqlstate[hy000] [2003]')
+            || str_contains($message, 'connection refused')
+            || str_contains($message, 'getaddrinfo')
+        ) {
+            return 'manual_database_connection_failed';
+        }
+
+        return 'manual_database_verification_failed';
     }
 
     public function destroy(Tenant $tenant): void
