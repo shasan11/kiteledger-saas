@@ -79,9 +79,9 @@ class TenantProvisioningService
         });
     }
 
-    public function retry(Tenant $tenant): void
+    public function retry(Tenant $tenant, bool $sync = false): void
     {
         $job = new ProvisionTenantJob($tenant->getTenantKey(), true);
-        config('saas.provision_sync') ? dispatch_sync($job) : dispatch($job->onConnection('central')->onQueue(config('saas.provisioning_queue')));
+        ($sync || config('saas.provision_sync')) ? dispatch_sync($job) : dispatch($job->onConnection('central')->onQueue(config('saas.provisioning_queue')));
     }
 }

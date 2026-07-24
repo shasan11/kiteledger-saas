@@ -3,8 +3,6 @@
 namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\RunTenantMigrations;
-use App\Jobs\RunTenantSeeders;
 use App\Jobs\SaaS\BackupTenantJob;
 use App\Models\Central\BackupManifest;
 use App\Models\Central\DefaultDataTemplate;
@@ -13,6 +11,7 @@ use App\Models\Central\Plan;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDeletionRequest;
 use App\Services\SaaS\CentralAuditService;
+use App\Services\SaaS\TenantDatabaseService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
@@ -103,26 +102,26 @@ class TenantController extends Controller
 
     public function retry(Tenant $tenant, TenantProvisioningService $service)
     {
-        abort_unless($tenant->status === 'provisioning_failed', 422);
-        $service->retry($tenant);
+        abort_unless(in_array($tenant->status, ['pending', 'failed', 'provisioning_failed'], true), 422);
+        $service->retry($tenant, true);
 
-        return back();
+        return back()->with('success', 'Tenant provisioning completed.');
     }
 
-    public function migrate(Request $request, Tenant $tenant, CentralAuditService $audit)
+    public function migrate(Request $request, Tenant $tenant, TenantDatabaseService $databases, CentralAuditService $audit)
     {
-        RunTenantMigrations::dispatch($tenant->id);
-        $audit->log($request, 'tenant.migrations.queued', $tenant, [], ['tenant_id' => $tenant->id]);
+        $databases->migrate($tenant);
+        $audit->log($request, 'tenant.migrations.ran', $tenant, [], ['tenant_id' => $tenant->id]);
 
-        return back()->with('success', 'Tenant migrations queued.');
+        return back()->with('success', 'Tenant migrations completed.');
     }
 
-    public function seed(Request $request, Tenant $tenant, CentralAuditService $audit)
+    public function seed(Request $request, Tenant $tenant, TenantDatabaseService $databases, CentralAuditService $audit)
     {
-        RunTenantSeeders::dispatch($tenant->id);
-        $audit->log($request, 'tenant.seeders.queued', $tenant, [], ['tenant_id' => $tenant->id]);
+        $databases->seed($tenant);
+        $audit->log($request, 'tenant.seeders.ran', $tenant, [], ['tenant_id' => $tenant->id]);
 
-        return back()->with('success', 'Tenant seeders queued.');
+        return back()->with('success', 'Tenant seeders completed.');
     }
 
     public function health(Tenant $tenant)
