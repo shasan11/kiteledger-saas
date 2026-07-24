@@ -9,7 +9,7 @@ return [
     'admin_path' => env('CENTRAL_ADMIN_PATH', 'superadmin'),
     'trusted_proxies' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXY_IPS', ''))))),
     'provisioning_queue' => env('TENANT_PROVISIONING_QUEUE', 'provisioning'),
-    'provision_sync' => env('TENANT_PROVISION_SYNC', false),
+    'provision_sync' => env('TENANT_PROVISION_SYNC', env('QUEUE_CONNECTION') === 'sync'),
     'allow_uninitialized_tenant_models' => env('SAAS_ALLOW_UNINITIALIZED_TENANT_MODELS', false),
     'grace_period_days' => (int) env('SUBSCRIPTION_GRACE_PERIOD_DAYS', 3),
     'backup_retention_days' => (int) env('SAAS_BACKUP_RETENTION_DAYS', 30),
