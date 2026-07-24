@@ -323,7 +323,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('admin_id')->nullable()->constrained('central_admin_users')->nullOnDelete();
             $table->string('action');
-            $table->nullableMorphs('model');
+            $table->nullableUuidMorphs('model');
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();
             $table->ipAddress('ip_address')->nullable();
