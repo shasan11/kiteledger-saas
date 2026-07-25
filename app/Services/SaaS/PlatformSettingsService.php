@@ -4,9 +4,11 @@ namespace App\Services\SaaS;
 
 use App\Models\Central\PlatformSetting;
 use App\Models\Central\PlatformSettingRevision;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class PlatformSettingsService
@@ -39,6 +41,7 @@ class PlatformSettingsService
                 if ($setting->is_encrypted && ($value === null || $value === '')) {
                     continue;
                 }
+                $value = $this->prepareValue($setting, $value);
                 $this->validateValue($setting, $value);
                 $old = $setting->is_encrypted ? null : $setting->value;
                 $setting->updated_by = $adminId;
@@ -97,6 +100,26 @@ class PlatformSettingsService
         Mail::purge($driver);
 
         return $driver;
+    }
+
+    private function prepareValue(PlatformSetting $setting, mixed $value): mixed
+    {
+        if (! $value instanceof UploadedFile) {
+            return $value;
+        }
+
+        if ($setting->input_type !== 'image') {
+            throw ValidationException::withMessages([$setting->key => 'This setting does not accept file uploads.']);
+        }
+
+        validator(
+            ['value' => $value],
+            ['value' => ['file', 'mimes:jpg,jpeg,png,gif,webp,svg,ico', 'max:5120']]
+        )->validate();
+
+        $path = $value->store('central/settings/'.now()->format('Y/m'), 'public');
+
+        return Storage::disk('public')->url($path);
     }
 
     private function validateValue(PlatformSetting $setting, mixed $value): void
