@@ -106,8 +106,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::post('tenants/{tenant}/seed', [TenantController::class, 'seed'])->middleware('central.admin:tenant.update')->name('tenants.seed');
             Route::get('tenants/{tenant}/health', [TenantController::class, 'health'])->middleware('central.admin:system_health.view')->name('tenants.health');
             Route::post('tenants/{tenant}/backup', [TenantController::class, 'backup'])->middleware('central.admin:tenant.backup')->name('tenants.backup');
-            Route::post('tenants/{tenant}/deletion', [TenantController::class, 'requestDeletion'])->middleware('central.admin:tenant.delete')->name('tenants.deletion.request');
-            Route::post('tenant-deletions/{deletion}/approve', [TenantController::class, 'approveDeletion'])->middleware('central.admin:tenant.delete')->name('tenants.deletion.approve');
+            Route::delete('tenants/{tenant}', [TenantController::class, 'destroy'])->middleware('central.admin:tenant.delete')->name('tenants.destroy');
             Route::post('tenants/{tenant}/impersonate', [TenantController::class, 'impersonate'])->middleware('central.admin:tenant.impersonate')->name('tenants.impersonate');
             Route::get('plans', [PlanController::class, 'index'])->middleware('central.admin:plan.view')->name('plans.index');
             Route::get('plans/create', [PlanController::class, 'create'])->middleware('central.admin:plan.manage')->name('plans.create');

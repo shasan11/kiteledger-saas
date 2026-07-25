@@ -5,6 +5,7 @@ namespace Tests\Feature\SaaS;
 use App\Contracts\SaaS\QuotaManager;
 use App\Enums\DomainStatus;
 use App\Enums\TenantStatus;
+use App\Http\Middleware\ConfigureTenantSession;
 use App\Http\Middleware\EnsureSubscriptionIsValid;
 use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
@@ -113,6 +114,34 @@ class ProductionHardeningTest extends TestCase
         $this->assertNull(config('session.domain'));
         $this->assertTrue(config('session.http_only'));
         $this->assertSame('lax', config('session.same_site'));
+    }
+
+    public function test_tenant_session_is_configured_before_web_middleware_and_restored_afterward(): void
+    {
+        $tenant = Tenant::create(['id' => 'tenant-session-a', 'company_name' => 'Session A', 'owner_name' => 'Owner', 'owner_email' => 'session-a@test.invalid', 'status' => 'active']);
+        config([
+            'session.cookie' => 'shared-session',
+            'session.tenant_cookie_prefix' => 'kiteledger-tenant-session',
+            'session.domain' => '.example.test',
+            'session.connection' => 'tenant_template',
+        ]);
+        tenancy()->initialize($tenant);
+
+        try {
+            app(ConfigureTenantSession::class)->handle(Request::create('https://session-a.example.test/login'), function () use ($tenant) {
+                $this->assertSame('kiteledger-tenant-session-'.substr(hash('sha256', $tenant->id), 0, 16), config('session.cookie'));
+                $this->assertNull(config('session.domain'));
+                $this->assertSame(config('tenancy.database.central_connection'), config('session.connection'));
+
+                return response('ok');
+            });
+        } finally {
+            tenancy()->end();
+        }
+
+        $this->assertSame('shared-session', config('session.cookie'));
+        $this->assertSame('.example.test', config('session.domain'));
+        $this->assertSame('tenant_template', config('session.connection'));
     }
 
     public function test_routes_are_cacheable_for_shared_host_deployments(): void

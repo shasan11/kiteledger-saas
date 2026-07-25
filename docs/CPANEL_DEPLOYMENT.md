@@ -101,7 +101,11 @@ Automatic mode is uncommon on shared hosting. Enable it only after this probe su
 
 ## Environment and runtime
 
-Copy `.env.example`, set a unique `APP_KEY`, use `APP_ENV=production`, `APP_DEBUG=false`, and an HTTPS `APP_URL`. Keep `SESSION_DOMAIN=null` so tenant cookies remain host-only. Database sessions, cache, locks, queues, and failed jobs use the explicit central connection. Configure SMTP before onboarding tenants.
+Copy `.env.example`, set a unique `APP_KEY`, use `APP_ENV=production`, `APP_DEBUG=false`, and an HTTPS `APP_URL`. Keep `SESSION_DOMAIN=null` so tenant cookies remain host-only. Tenant requests also use a tenant-specific session cookie name and pin database sessions to the central connection before CSRF validation. Database sessions, cache, locks, queues, and failed jobs use the explicit central connection. Configure SMTP before onboarding tenants.
+
+### Tenant login returns 419 Page Expired
+
+After deploying or changing domains, confirm `SESSION_DOMAIN=null`, `SESSION_SECURE_COOKIE=true`, and `APP_URL=https://yourdomain.com`. If Cloudflare or another reverse proxy terminates TLS, configure its actual IP ranges in `TRUSTED_PROXY_IPS`. Then run `php artisan optimize:clear` and retry in a fresh browser window. The tenant-specific cookie prefix defaults to `kiteledger-tenant-session`; changing `TENANT_SESSION_COOKIE_PREFIX` logs tenant users out once. Old parent-domain session cookies are ignored by the tenant routes after this release.
 
 If symlinks are allowed, run `php artisan storage:link`. Without symlinks, Laravel serves authorized files through application routes; private documents, PDFs, exports, and backups must never be copied into public storage.
 

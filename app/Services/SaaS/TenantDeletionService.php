@@ -40,6 +40,23 @@ class TenantDeletionService
         $request->update(['status' => 'approved', 'approved_by' => $adminId]);
     }
 
+    public function deleteImmediately(Tenant $tenant): void
+    {
+        $this->databases->driver($tenant->database_provisioning_mode)->destroy($tenant);
+        $this->files->delete($tenant);
+
+        DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant): void {
+            $tenant->domains()->update([
+                'status' => 'disabled',
+                'disabled_at' => now(),
+            ]);
+            $tenant->deletionRequests()
+                ->whereNotIn('status', ['completed', 'cancelled'])
+                ->update(['status' => 'cancelled']);
+            $tenant->delete();
+        });
+    }
+
     public function execute(TenantDeletionRequest $request): void
     {
         DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($request): void {

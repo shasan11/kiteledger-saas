@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Middleware\BindSessionToTenant;
+use App\Http\Middleware\ConfigureTenantSession;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureTenantDomainIsVerified;
 use Illuminate\Contracts\Http\Kernel;
@@ -39,6 +40,7 @@ class TenancyServiceProvider extends ServiceProvider
                 EnsureTenantDomainIsVerified::class,
                 'tenant.initialized',
                 'tenant.active',
+                ConfigureTenantSession::class,
             ];
             Route::middleware(array_merge($tenantMiddleware, ['web', BindSessionToTenant::class]))->group(base_path('routes/tenant.php'));
             Route::prefix('api')->middleware(array_merge($tenantMiddleware, ['api']))->group(base_path('routes/api.php'));
