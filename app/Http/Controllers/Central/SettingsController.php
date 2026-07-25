@@ -27,7 +27,7 @@ class SettingsController extends Controller
         ];
         $groups = PlatformSetting::query()->with(['revisions', 'updatedBy:id,name'])->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
             'id' => $setting->id, 'group' => $setting->group, 'key' => $setting->key, 'label' => $setting->label,
-            'description' => $setting->description, 'input_type' => $setting->input_type,
+             'input_type' => $setting->input_type,
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
             'value' => $setting->safeValue(), 'has_secret' => $setting->is_encrypted && filled($setting->getRawOriginal('value')),
