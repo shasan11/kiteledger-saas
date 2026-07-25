@@ -21,7 +21,13 @@ class Tenant extends BaseTenant implements TenantWithDatabase
 
     protected $guarded = [];
 
-    protected $hidden = ['tenancy_db_password', 'database_password', 'database_username', 'data'];
+    protected $hidden = [
+        'tenancy_db_password',
+        'database_password',
+        'database_username',
+        'provisioning_owner_password',
+        'data',
+    ];
 
     public static function getCustomColumns(): array
     {

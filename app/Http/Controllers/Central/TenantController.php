@@ -100,10 +100,13 @@ class TenantController extends Controller
         return back();
     }
 
-    public function retry(Tenant $tenant, TenantProvisioningService $service)
+    public function retry(Request $request, Tenant $tenant, TenantProvisioningService $service)
     {
         abort_unless(in_array($tenant->status, ['pending', 'failed', 'provisioning_failed'], true), 422);
-        $service->retry($tenant);
+        $data = $request->validate([
+            'owner_password' => ['required', 'string', 'min:12', 'confirmed'],
+        ]);
+        $service->retry($tenant, $data['owner_password']);
 
         return back()->with('success', 'Tenant provisioning completed.');
     }

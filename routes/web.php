@@ -23,6 +23,7 @@ use App\Http\Controllers\Central\TenantController;
 use App\Http\Controllers\Central\WebsiteAdminController;
 use App\Http\Controllers\Central\WebsiteContentController;
 use App\Http\Controllers\Central\WebsiteController;
+use App\Http\Controllers\Central\WebsiteLeadController;
 use App\Http\Controllers\Installer\DatabaseController as InstallerDatabaseController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
@@ -74,6 +75,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
         Route::get('/blog/{slug}', [WebsiteController::class, 'post'])->name($namePrefix.'blog.post');
         Route::get('/sitemap.xml', [WebsiteController::class, 'sitemap'])->name($namePrefix.'sitemap');
         Route::get('/robots.txt', [WebsiteController::class, 'robots'])->name($namePrefix.'robots');
+        Route::post('/website-leads', [WebsiteLeadController::class, 'store'])->middleware('throttle:6,1')->name($namePrefix.'website-leads.store');
         Route::get('/p/{slug}', [WebsiteController::class, 'page'])->name($namePrefix.'page');
         Route::get('/{slug}', [WebsiteController::class, 'page'])->whereIn('slug', ['features', 'about', 'contact', 'support', 'privacy-policy', 'terms-of-service', 'cookie-policy'])->name($namePrefix.'content.page');
         Route::post('/billing/webhooks/{gateway}', BillingWebhookController::class)->middleware('throttle:120,1')->name($namePrefix.'billing.webhook');
@@ -175,6 +177,9 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::get('support/attachments/{attachment}', [SupportController::class, 'download'])->middleware('central.admin:ticket.view')->name('support.attachments.download');
 
             Route::get('website', WebsiteAdminController::class)->middleware('central.admin:cms.view')->name('website.overview');
+            Route::get('website-leads', [WebsiteLeadController::class, 'index'])->middleware('central.admin:lead.view')->name('website-leads.index');
+            Route::patch('website-leads/{lead}', [WebsiteLeadController::class, 'update'])->middleware('central.admin:lead.manage')->name('website-leads.update');
+            Route::get('website-leads-export', [WebsiteLeadController::class, 'export'])->middleware('central.admin:lead.view')->name('website-leads.export');
             Route::middleware('central.admin:cms.view')->group(function (): void {
                 Route::get('website-pages', [WebsiteContentController::class, 'pages'])->name('website-pages.index');
                 Route::get('website-pages/create', [WebsiteContentController::class, 'createPage'])->middleware('central.admin:cms.manage')->name('website-pages.create');
@@ -214,8 +219,8 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
                 Route::patch('blog-'.$taxonomy.'/{id}', [BlogTaxonomyController::class, 'update'])->defaults('type', $taxonomy)->middleware('central.admin:blog.manage')->name('blog-'.$taxonomy.'.update');
                 Route::delete('blog-'.$taxonomy.'/{id}', [BlogTaxonomyController::class, 'destroy'])->defaults('type', $taxonomy)->middleware('central.admin:blog.manage')->name('blog-'.$taxonomy.'.destroy');
             }
-            Route::resource('media', MediaController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('central.admin:cms.manage');
-            foreach (['faqs' => 'faq', 'testimonials' => 'testimonial'] as $path => $type) {
+            Route::resource('media', MediaController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('central.admin:media.manage');
+            foreach (['faqs' => 'faq', 'testimonials' => 'testimonial', 'announcements' => 'announcement', 'logos' => 'logo', 'features' => 'feature', 'solutions' => 'solution', 'integrations' => 'integration', 'metrics' => 'metric'] as $path => $type) {
                 Route::get('website-'.$path, [WebsiteContentController::class, 'contentItems'])->defaults('type', $type)->middleware('central.admin:cms.view')->name('website-'.$path.'.index');
                 Route::post('website-'.$path, [WebsiteContentController::class, 'storeContentItem'])->defaults('type', $type)->middleware('central.admin:cms.manage')->name('website-'.$path.'.store');
                 Route::patch('website-'.$path.'/{item}', [WebsiteContentController::class, 'updateContentItem'])->defaults('type', $type)->middleware('central.admin:cms.manage')->name('website-'.$path.'.update');

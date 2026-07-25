@@ -78,6 +78,22 @@ class TenantProvisioningRunnerTest extends TestCase
         }
     }
 
+    public function test_provisioning_owner_password_is_restored_as_a_virtual_attribute(): void
+    {
+        $encrypted = Crypt::encryptString('VerySecure!123');
+        $tenant = $this->tenant([
+            'data' => null,
+            'provisioning_owner_password' => $encrypted,
+        ]);
+
+        $tenant = $tenant->fresh();
+
+        $this->assertNull($tenant->data);
+        $this->assertSame($encrypted, $tenant->provisioning_owner_password);
+        $this->assertSame('VerySecure!123', Crypt::decryptString($tenant->provisioning_owner_password));
+        $this->assertArrayNotHasKey('provisioning_owner_password', $tenant->toArray());
+    }
+
     public function test_database_failure_is_recorded_and_marks_tenant_provisioning_failed(): void
     {
         $tenant = $this->tenant();

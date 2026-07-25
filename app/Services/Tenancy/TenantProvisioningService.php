@@ -45,9 +45,9 @@ class TenantProvisioningService
     {
         $tenant = is_string($tenant) ? Tenant::query()->findOrFail($tenant) : $tenant;
         if ($ownerPassword !== null) {
-            $data = $tenant->data ?? [];
-            $data['provisioning_owner_password'] = Crypt::encryptString($ownerPassword);
-            $tenant->forceFill(['data' => $data])->save();
+            $tenant->forceFill([
+                'provisioning_owner_password' => Crypt::encryptString($ownerPassword),
+            ])->save();
         }
 
         return $this->runner->run($tenant, true);

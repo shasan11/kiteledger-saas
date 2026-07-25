@@ -13,75 +13,134 @@ class WebsiteSeeder extends Seeder
     public function run(): void
     {
         $pages = [
-            'home' => ['Home', 'home'], 'features' => ['Features', 'features'], 'pricing' => ['Pricing', 'pricing'],
-            'about' => ['About', 'about'], 'contact' => ['Contact', 'contact'], 'blog' => ['Blog', 'blog'],
-            'support' => ['Support', 'support'], 'privacy-policy' => ['Privacy Policy', 'legal'],
-            'terms-of-service' => ['Terms of Service', 'legal'], 'cookie-policy' => ['Cookie Policy', 'legal'],
+            'home' => ['Home', 'home', 'One intelligent workspace for finance and operations.'],
+            'features' => ['Features', 'features', 'Explore connected tools for accounting, sales, inventory, CRM, people, and reporting.'],
+            'pricing' => ['Pricing', 'pricing', 'Straightforward plans built to grow with your business.'],
+            'about' => ['About KiteLedger', 'about', 'We build calm, capable software for ambitious operating teams.'],
+            'contact' => ['Talk to our team', 'contact', 'Tell us how your business works and we will help map the right setup.'],
+            'blog' => ['Resources', 'blog', 'Practical ideas for running a clearer, more connected business.'],
+            'support' => ['Help center', 'support', 'Answers, guidance, and responsive support when you need it.'],
+            'privacy-policy' => ['Privacy Policy', 'legal', 'How KiteLedger handles and protects personal information.'],
+            'terms-of-service' => ['Terms of Service', 'legal', 'The terms governing access to and use of KiteLedger.'],
+            'cookie-policy' => ['Cookie Policy', 'legal', 'How and why KiteLedger uses cookies and similar technologies.'],
         ];
-        foreach ($pages as $slug => [$title, $type]) {
-            WebsitePage::firstOrCreate(['slug' => $slug], [
-                'title' => $title, 'page_type' => $type, 'excerpt' => $title.' information for KiteLedger customers.',
-                'status' => 'published', 'visibility' => 'public', 'published_at' => now(),
-                'meta_title' => $title.' | KiteLedger', 'meta_description' => 'Learn about '.strtolower($title).' in KiteLedger.',
+
+        foreach ($pages as $slug => [$title, $type, $excerpt]) {
+            WebsitePage::updateOrCreate(['slug' => $slug], [
+                'title' => $title, 'page_type' => $type, 'excerpt' => $excerpt,
+                'body' => $type === 'legal' ? '<h2>Our commitment</h2><p>This page provides a clear summary of the policies that apply when you use KiteLedger. Your organization should review and adapt this seeded policy with qualified counsel before publishing it.</p><h2>Questions</h2><p>Contact the platform operator if you have questions about this policy or your data.</p>' : null,
+                'layout' => $type === 'legal' ? 'legal' : 'landing', 'status' => 'published',
+                'visibility' => 'public', 'published_at' => now(), 'robots_index' => true,
+                'robots_follow' => true, 'sitemap_include' => true, 'sitemap_priority' => $slug === 'home' ? .9 : .6,
+                'sitemap_change_frequency' => in_array($type, ['home', 'blog'], true) ? 'weekly' : 'monthly',
+                'meta_title' => ($slug === 'home' ? 'KiteLedger — Run your business from one workspace' : $title.' | KiteLedger'),
+                'meta_description' => $excerpt,
             ]);
         }
 
         $home = WebsitePage::where('slug', 'home')->firstOrFail();
         $sections = [
-            'hero' => ['Hero', 'Run your business with financial clarity', 'Accounting, billing, inventory, CRM, and operations in one secure workspace.'],
-            'accounting' => ['Feature', 'Accounting overview', 'Keep ledgers, journals, and reporting connected.'],
-            'invoicing' => ['Feature', 'Invoicing', 'Create consistent invoices and follow payment status.'],
-            'expenses' => ['Feature', 'Expense management', 'Record, categorize, and review business spending.'],
-            'inventory' => ['Feature', 'Inventory', 'Understand stock movement across products and warehouses.'],
-            'crm' => ['Feature', 'CRM', 'Keep customer context close to commercial activity.'],
-            'reporting' => ['Feature', 'Reporting', 'Turn operational records into useful business views.'],
-            'multi_branch' => ['Feature', 'Multi-branch', 'Operate multiple locations with clear boundaries.'],
-            'ai' => ['Feature', 'AI capabilities', 'Use assisted workflows with explicit controls and auditability.'],
-            'security' => ['Trust', 'Designed for responsible operations', 'Permissions, audit trails, MFA, and tenant isolation protect sensitive work.'],
-            'integrations' => ['Feature', 'Integrations', 'Connect payment and operational services through supported drivers.'],
-            'pricing_cta' => ['CTA', 'Choose the plan that fits', 'Start with the essentials and expand as your needs grow.'],
-            'testimonials' => ['Testimonials', 'Built around practical workflows', 'A flexible foundation for teams that value clear financial operations.'],
-            'faqs' => ['FAQ', 'Frequently asked questions', 'Answers to common questions about KiteLedger.'],
-            'final_cta' => ['CTA', 'Bring your operations together', 'Create a workspace and configure it for your organization.'],
-            'footer' => ['Footer', 'KiteLedger', 'Business operations with clarity and control.'],
+            ['hero', 'hero', 'A clearer way to run your business', 'Run your entire business from one intelligent workspace.', 'Connect accounting, invoicing, inventory, CRM, HR, reporting, and daily operations in one powerful platform built for growing companies.', 'Start free', '/pricing', 'Explore the platform', '/features', [], null],
+            ['trusted', 'logos', null, 'Trusted by teams that value clarity', null, null, null, null, null, [], null],
+            ['platform', 'features', 'One connected platform', 'Everything your team needs. Nothing your data has to fight.', 'Replace disconnected tools and fragile spreadsheets with workflows that share the same source of truth.', null, null, null, null, [
+                ['title' => 'Financial control', 'content' => 'General ledger, journal entries, receivables, payables, tax, and close-ready reports.', 'icon' => 'chart'],
+                ['title' => 'Sales and invoicing', 'content' => 'From estimate to payment with clear ownership and a complete customer history.', 'icon' => 'spark'],
+                ['title' => 'Inventory and purchasing', 'content' => 'Know what is in stock, what is moving, and what needs to be replenished.', 'icon' => 'box'],
+                ['title' => 'CRM and customers', 'content' => 'Bring conversations, opportunities, orders, and balances into one useful view.', 'icon' => 'people'],
+                ['title' => 'People operations', 'content' => 'Manage employee records, attendance, leave, payroll, and everyday HR workflows.', 'icon' => 'people'],
+                ['title' => 'Governance and security', 'content' => 'Roles, approvals, audit history, MFA, and tenant isolation protect critical work.', 'icon' => 'shield'],
+            ], null],
+            ['invoice', 'product', 'Move from work to cash', 'Create polished invoices. Get paid with less follow-up.', 'Build estimates, convert them into invoices, record payments, and understand what is outstanding without stitching reports together.', 'Explore invoicing', '/features', null, null, [
+                ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],
+                ['title' => 'Live payment status', 'content' => 'See paid, partial, overdue, and outstanding balances instantly.'],
+                ['title' => 'Customer context', 'content' => 'Keep transactions, contacts, and communication connected.'],
+            ], 'mist'],
+            ['operations', 'features', 'Operations, in context', 'Make faster decisions with the whole picture in view.', 'Each workspace connects daily activity to the financial result, so teams spend less time reconciling and more time improving.', null, null, null, null, [
+                ['title' => 'Multi-branch command center', 'content' => 'Compare performance while preserving clear branch-level responsibility.', 'icon' => 'chart'],
+                ['title' => 'Warehouse visibility', 'content' => 'Track stock movement, transfers, batches, and reorder pressure.', 'icon' => 'box'],
+                ['title' => 'Approvals that keep moving', 'content' => 'Route purchases, expenses, and sensitive actions to the right people.', 'icon' => 'shield'],
+            ], null],
+            ['metrics', 'statistics', null, 'Built for confident daily operations', 'Useful scale, dependable controls, and a workspace your team can understand.', null, null, null, null, [
+                ['value' => '360°', 'content' => 'Business visibility'], ['value' => '20+', 'content' => 'Connected modules'], ['value' => '24/7', 'content' => 'Operational access'], ['value' => '1', 'content' => 'Source of truth'],
+            ], null],
+            ['security', 'security', 'Trust is a product feature', 'Control access without slowing good work down.', 'KiteLedger is designed around clear boundaries, traceable actions, and practical safeguards for sensitive business information.', 'Explore security', '/features', null, null, [
+                ['title' => 'Role-based access', 'content' => 'Give people only the capabilities their work requires.'],
+                ['title' => 'Audit-ready activity', 'content' => 'Understand who changed what, and when.'],
+                ['title' => 'Tenant isolation', 'content' => 'Dedicated data boundaries keep customer workspaces separate.'],
+                ['title' => 'Multi-factor authentication', 'content' => 'Add stronger protection to administrator access.'],
+            ], 'dark'],
+            ['testimonials', 'testimonials', 'From the people doing the work', 'A calmer operating rhythm for every team.', null, null, null, null, null, [], null],
+            ['pricing', 'pricing', 'Simple, flexible pricing', 'Start with what fits. Grow without starting over.', 'Every plan keeps the same connected KiteLedger foundation.', null, null, null, null, [], 'mist'],
+            ['faq', 'faq', 'Questions, answered', 'Everything you need to know before getting started.', null, null, null, null, null, [], null],
+            ['final', 'cta', 'Your next clear decision starts here', 'Bring finance, operations, customers, inventory, and people together.', 'See how KiteLedger can fit the way your company actually works.', 'Start free', '/pricing', 'Talk to our team', '/contact', [], null],
         ];
-        foreach ($sections as $order => $data) {
-            [$key, [$type, $title, $content]] = [$order, $data];
-            WebsiteSection::firstOrCreate(['page_id' => $home->id, 'section_key' => $key], [
-                'section_type' => strtolower($type), 'title' => $title, 'content' => $content,
-                'is_active' => true, 'sort_order' => array_search($key, array_keys($sections), true),
+
+        foreach ($sections as $order => [$key, $type, $eyebrow, $title, $subtitle, $button, $url, $secondary, $secondaryUrl, $items, $background]) {
+            WebsiteSection::updateOrCreate(['page_id' => $home->id, 'section_key' => $key], [
+                'section_type' => $type, 'eyebrow' => $eyebrow, 'title' => $title, 'subtitle' => $subtitle,
+                'button_text' => $button, 'button_url' => $url, 'secondary_button_text' => $secondary,
+                'secondary_button_url' => $secondaryUrl, 'items' => $items, 'background_style' => $background,
+                'alignment' => 'left', 'is_active' => true, 'sort_order' => $order,
             ]);
         }
 
         $menuSets = [
-            'header' => ['Features' => '/features', 'Pricing' => '/pricing', 'Blog' => '/blog', 'Support' => '/support'],
-            'footer' => ['About' => '/about', 'Contact' => '/contact', 'Support' => '/support'],
-            'legal' => ['Privacy Policy' => '/privacy-policy', 'Terms of Service' => '/terms-of-service', 'Cookie Policy' => '/cookie-policy'],
+            'header' => ['Product' => '/features', 'Solutions' => '/features#solutions', 'Features' => '/features', 'Pricing' => '/pricing', 'Resources' => '/blog', 'Company' => '/about'],
+            'product' => ['Accounting' => '/features', 'Invoicing' => '/features', 'Inventory' => '/features', 'CRM' => '/features'],
+            'resources' => ['Resource center' => '/blog', 'Help center' => '/support', 'Contact support' => '/contact'],
+            'footer' => ['About' => '/about', 'Contact' => '/contact', 'Pricing' => '/pricing'],
+            'legal' => ['Privacy' => '/privacy-policy', 'Terms' => '/terms-of-service', 'Cookies' => '/cookie-policy'],
         ];
         foreach ($menuSets as $location => $items) {
             foreach ($items as $order => $url) {
-                $page = WebsitePage::where('slug', trim($url, '/'))->first();
-                WebsiteMenu::firstOrCreate(['location' => $location, 'label' => $order], [
+                $page = str_contains($url, '#') ? null : WebsitePage::where('slug', trim($url, '/'))->first();
+                WebsiteMenu::updateOrCreate(['location' => $location, 'label' => $order], [
                     'url' => $url, 'page_id' => $page?->id, 'target' => 'same_tab', 'is_active' => true,
                     'sort_order' => array_search($order, array_keys($items), true),
                 ]);
             }
         }
 
-        foreach ([
-            'getting-started' => ['How do I get started?', 'An administrator creates and provisions your workspace, then invites the owner.'],
-            'data-isolation' => ['How is tenant data isolated?', 'Each tenant uses a dedicated database and tenant-aware access controls.'],
-            'plans' => ['Can I change plans?', 'Plan changes are available according to the subscription settings configured by the platform administrator.'],
-            'payments' => ['Which payment methods are supported?', 'Available methods depend on the payment gateways enabled for your account.'],
-            'support' => ['How do I contact support?', 'Signed-in tenant users can open a ticket from the support portal.'],
-            'exports' => ['Can I export my data?', 'Export capabilities depend on the modules and permissions enabled for your workspace.'],
-            'security' => ['Does KiteLedger support MFA?', 'Administrators can require multi-factor authentication for sensitive access.'],
-            'custom-domain' => ['Can I use a custom domain?', 'Custom domains can be enabled per plan and verified before activation.'],
-        ] as $slug => [$title, $content]) {
-            WebsiteContentItem::firstOrCreate(['type' => 'faq', 'slug' => $slug], ['title' => $title, 'content' => $content, 'status' => 'published', 'published_at' => now()]);
-        }
-        foreach (['finance-lead' => ['Finance lead', 'The connected workflow helps our team keep routine reviews organized.'], 'operations-manager' => ['Operations manager', 'Clear roles and a shared operational view make handoffs easier.'], 'business-owner' => ['Business owner', 'The platform gives us one place to understand day-to-day business activity.']] as $slug => [$title, $content]) {
-            WebsiteContentItem::firstOrCreate(['type' => 'testimonial', 'slug' => $slug], ['title' => $title, 'content' => $content, 'status' => 'published', 'published_at' => now()]);
+        $this->seedContent();
+    }
+
+    private function seedContent(): void
+    {
+        $content = [
+            'announcement' => [
+                'multi-branch-insights' => ['New: Multi-branch reporting and intelligent cash-flow insights are now available.', ['link_label' => 'See what is new', 'url' => '/features', 'dismissible' => true, 'style' => 'green']],
+            ],
+            'logo' => [
+                'northstar' => ['Northstar', []], 'atlas' => ['ATLAS', []], 'meridian' => ['Meridian Works', []], 'grove' => ['Grove & Co.', []], 'summit' => ['SUMMIT', []],
+            ],
+            'testimonial' => [
+                'maya-chen' => ['The month-end picture used to live across five tools. Now our team works from the same numbers every day.', ['attribution' => 'Maya Chen', 'role' => 'Finance Director', 'company' => 'Northstar Creative', 'rating' => 5]],
+                'arjun-shah' => ['KiteLedger gives branch managers autonomy while keeping controls and reporting consistent at head office.', ['attribution' => 'Arjun Shah', 'role' => 'COO', 'company' => 'Atlas Retail Group', 'rating' => 5]],
+                'sara-williams' => ['We can follow a customer from first conversation through invoice and payment without losing the story.', ['attribution' => 'Sara Williams', 'role' => 'Commercial Lead', 'company' => 'Meridian Works', 'rating' => 5]],
+            ],
+            'faq' => [
+                'getting-started' => ['How quickly can we get started?', 'A platform administrator provisions your secure workspace, then your team can configure company settings, roles, opening data, and workflows.'],
+                'modules' => ['Do we need to use every module?', 'No. Enable the capabilities your organization needs today and expand the workspace as your processes grow.'],
+                'data-isolation' => ['How is customer data isolated?', 'Each tenant uses dedicated data boundaries together with tenant-aware application access controls.'],
+                'migration' => ['Can we bring data from our current tools?', 'KiteLedger supports structured imports and a guided setup process. The exact migration path depends on your source systems and plan.'],
+                'branches' => ['Does KiteLedger support multiple branches?', 'Yes. Eligible plans support branch-aware transactions, permissions, stock, reporting, and operating workflows.'],
+                'security' => ['Does KiteLedger support MFA and audit logs?', 'Yes. Administrators can protect sensitive access with multi-factor authentication and review traceable activity.'],
+                'plans' => ['Can we change our plan later?', 'Yes. Plan availability and subscription changes follow the billing options configured by your platform operator.'],
+                'support' => ['What support is available?', 'Tenant users can use the support portal, while public help and contact options can be managed by the platform team.'],
+            ],
+        ];
+
+        foreach ($content as $type => $items) {
+            foreach ($items as $order => $payload) {
+                [$title, $data] = $payload;
+                $isFaq = $type === 'faq';
+                WebsiteContentItem::updateOrCreate(['type' => $type, 'slug' => $order], [
+                    'title' => $isFaq ? $title : ($data['attribution'] ?? ucfirst(str_replace('-', ' ', $order))),
+                    'content' => $isFaq ? $data : $title, 'data' => $isFaq ? [] : $data,
+                    'status' => 'published', 'published_at' => now(),
+                    'sort_order' => array_search($order, array_keys($items), true),
+                ]);
+            }
         }
     }
 }

@@ -32,6 +32,14 @@ provisioning.
 php artisan kiteledger:seed-demo --profile=full --force
 ```
 
+For a database-per-tenant installation, always select the demo tenant explicitly:
+
+```bash
+php artisan kiteledger:seed-demo --tenant=TENANT_ID --profile=quick
+```
+
+Public website editing, publishing, media, lead handling, and upgrade commands are documented in [docs/WEBSITE_CMS.md](docs/WEBSITE_CMS.md).
+
 See [INSTALL.md](INSTALL.md) for deployment details and [PACKAGING.md](PACKAGING.md)
 for release builds.
 

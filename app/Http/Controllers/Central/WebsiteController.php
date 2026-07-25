@@ -123,7 +123,32 @@ class WebsiteController extends Controller
             return $page->toArray();
         });
 
-        return Inertia::render('Central/Website/Page', $this->sharedPublic() + ['page' => $page, 'faqs' => in_array($page['page_type'], ['home', 'support'], true) ? WebsiteContentItem::where('type', 'faq')->where('status', 'published')->orderBy('sort_order')->get() : [], 'testimonials' => $page['page_type'] === 'home' ? WebsiteContentItem::where('type', 'testimonial')->where('status', 'published')->orderBy('sort_order')->get() : []] + $extra);
+        $content = Cache::remember('website-content:v1', now()->addMinutes(30), fn (): array => WebsiteContentItem::query()
+            ->where('status', 'published')
+            ->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))
+            ->orderBy('sort_order')
+            ->get()
+            ->groupBy('type')
+            ->map(fn ($items) => $items->values()->toArray())
+            ->all());
+        $publicPlans = in_array($page['page_type'], ['home', 'pricing'], true)
+            ? Plan::with('features')->where('is_active', true)->orderBy('sort_order')->get()
+            : collect();
+
+        return Inertia::render('Central/Website/Page', $this->sharedPublic() + [
+            'page' => $page,
+            'content' => $content,
+            'faqs' => in_array($page['page_type'], ['home', 'support'], true) ? ($content['faq'] ?? []) : [],
+            'testimonials' => $page['page_type'] === 'home' ? ($content['testimonial'] ?? []) : [],
+            'announcements' => collect($content['announcement'] ?? [])->filter(function (array $item): bool {
+                $data = $item['data'] ?? [];
+                $started = blank($data['starts_at'] ?? null) || now()->gte($data['starts_at']);
+                $notEnded = blank($data['ends_at'] ?? null) || now()->lte($data['ends_at']);
+
+                return $started && $notEnded;
+            })->values()->all(),
+            'plans' => $publicPlans,
+        ] + $extra);
     }
 
     private function sharedPublic(): array

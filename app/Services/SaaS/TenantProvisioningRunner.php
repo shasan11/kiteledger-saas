@@ -74,10 +74,11 @@ class TenantProvisioningRunner
             });
 
             $tenant->refresh();
-            $data = $tenant->data ?? [];
-            unset($data['provisioning_owner_password']);
+            // Virtual-column values are exposed as model attributes after a
+            // tenant is retrieved. Remove the temporary secret explicitly so
+            // it is not encoded back into `data` on save.
+            unset($tenant->provisioning_owner_password);
             $tenant->forceFill([
-                'data' => $data,
                 'provisioning_step' => null,
                 'last_provisioning_error' => null,
                 'provisioned_at' => now(),
@@ -142,7 +143,11 @@ class TenantProvisioningRunner
             $tenant->run(function () use ($tenant): void {
                 $branch = Branch::query()->where('is_head_office', true)->first()
                     ?? Branch::query()->firstOrCreate(['code' => 'MAIN'], ['name' => 'Main Branch', 'active' => true, 'is_head_office' => true]);
-                $encrypted = ($tenant->data ?? [])['provisioning_owner_password'] ?? null;
+                // Stancl decodes the JSON `data` column into virtual model
+                // attributes. Keep the array fallback for records created by
+                // older application versions or models not yet decoded.
+                $encrypted = $tenant->provisioning_owner_password
+                    ?? (($tenant->data ?? [])['provisioning_owner_password'] ?? null);
                 if (! $encrypted) {
                     throw new \RuntimeException('owner_creation_failed');
                 }

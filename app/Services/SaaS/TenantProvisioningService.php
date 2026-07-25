@@ -54,7 +54,9 @@ class TenantProvisioningService
                 'database_provisioning_mode' => $mode,
                 'tenancy_db_connection' => 'tenant_template',
                 'database_created_by_app' => false,
-                'data' => ['provisioning_owner_password' => Crypt::encryptString($password)],
+                // Stancl persists non-custom attributes in the virtual `data`
+                // column and exposes them as model attributes after retrieval.
+                'provisioning_owner_password' => Crypt::encryptString($password),
             ]));
             $this->domains->attachSubdomain($tenant, $subdomain);
 
@@ -69,8 +71,14 @@ class TenantProvisioningService
         return $tenant;
     }
 
-    public function retry(Tenant $tenant): Tenant
+    public function retry(Tenant $tenant, ?string $ownerPassword = null): Tenant
     {
+        if ($ownerPassword !== null) {
+            $tenant->forceFill([
+                'provisioning_owner_password' => Crypt::encryptString($ownerPassword),
+            ])->save();
+        }
+
         return $this->runner->run($tenant, true);
     }
 }

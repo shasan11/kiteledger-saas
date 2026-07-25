@@ -47,6 +47,7 @@ class CentralTenancyTest extends TestCase
         $this->assertNotNull($tenant->domains()->firstOrFail()->verified_at);
         $this->assertSame('manual', $tenant->database_provisioning_mode);
         $this->assertSame('tenant_acme', $tenant->database_name);
+        $this->assertSame('VerySecure!123', Crypt::decryptString($tenant->provisioning_owner_password));
         Queue::assertNotPushed(ProvisionTenantJob::class);
     }
 

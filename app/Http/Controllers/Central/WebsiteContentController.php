@@ -20,6 +20,8 @@ use Inertia\Inertia;
 
 class WebsiteContentController extends Controller
 {
+    private const CONTENT_TYPES = ['faq', 'testimonial', 'announcement', 'logo', 'feature', 'solution', 'integration', 'metric'];
+
     public function pages(Request $request)
     {
         $query = WebsitePage::with(['parent:id,title', 'featuredMedia:id,path,disk'])->withCount('sections');
@@ -196,7 +198,7 @@ class WebsiteContentController extends Controller
 
     public function contentItems(Request $request, string $type)
     {
-        abort_unless(in_array($type, ['faq', 'testimonial'], true), 404);
+        abort_unless(in_array($type, self::CONTENT_TYPES, true), 404);
         $query = WebsiteContentItem::where('type', $type);
         if ($request->filled('search')) {
             $query->where(fn ($builder) => $builder->where('title', 'like', '%'.$request->string('search').'%')->orWhere('content', 'like', '%'.$request->string('search').'%'));
@@ -247,16 +249,16 @@ class WebsiteContentController extends Controller
 
     private function contentItemData(Request $request, string $type, ?WebsiteContentItem $item = null): array
     {
-        abort_unless(in_array($type, ['faq', 'testimonial'], true), 404);
+        abort_unless(in_array($type, self::CONTENT_TYPES, true), 404);
         $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'slug' => ['required', 'alpha_dash', 'max:255', Rule::unique('website_content_items')->where('type', $type)->ignore($item)],
             'content' => ['required', 'string', 'max:50000'], 'status' => ['required', Rule::in(['draft', 'published', 'archived'])],
             'sort_order' => ['required', 'integer', 'min:0'], 'published_at' => ['nullable', 'date'],
-            'attribution' => ['nullable', 'string', 'max:255'], 'role' => ['nullable', 'string', 'max:255'], 'company' => ['nullable', 'string', 'max:255'], 'rating' => ['nullable', 'integer', 'between:1,5'],
+            'attribution' => ['nullable', 'string', 'max:255'], 'role' => ['nullable', 'string', 'max:255'], 'company' => ['nullable', 'string', 'max:255'], 'rating' => ['nullable', 'integer', 'between:1,5'], 'data' => ['nullable', 'array'],
         ]);
         $data['content'] = trim(strip_tags($data['content']));
-        $data['data'] = collect($data)->only(['attribution', 'role', 'company', 'rating'])->filter(fn ($value) => filled($value))->all();
+        $data['data'] = array_merge($data['data'] ?? [], collect($data)->only(['attribution', 'role', 'company', 'rating'])->filter(fn ($value) => filled($value))->all());
         unset($data['attribution'], $data['role'], $data['company'], $data['rating']);
         if ($data['status'] === 'published' && blank($data['published_at'])) {
             $data['published_at'] = now();
@@ -310,7 +312,7 @@ class WebsiteContentController extends Controller
     {
         $data = $request->validate([
             'page_id' => ['required', 'exists:website_pages,id'], 'section_key' => ['required', 'alpha_dash', Rule::unique('website_sections')->where('page_id', $request->integer('page_id'))->ignore($section)],
-            'section_type' => ['required', 'string', 'max:100'], 'title' => ['nullable', 'string', 'max:255'], 'subtitle' => ['nullable', 'string', 'max:500'], 'eyebrow' => ['nullable', 'string', 'max:100'],
+            'section_type' => ['required', Rule::in(['hero', 'logos', 'features', 'content', 'product', 'statistics', 'steps', 'solutions', 'integrations', 'security', 'pricing', 'testimonials', 'faq', 'cta', 'newsletter', 'footer'])], 'title' => ['nullable', 'string', 'max:255'], 'subtitle' => ['nullable', 'string', 'max:500'], 'eyebrow' => ['nullable', 'string', 'max:100'],
             'content' => ['nullable', 'string'], 'image' => ['nullable', 'string', 'max:2048'], 'media_type' => ['nullable', Rule::in(['image', 'video'])], 'video_url' => ['nullable', 'url', 'max:2048'],
             'button_text' => ['nullable', 'string', 'max:100'], 'button_url' => ['nullable', 'string', 'max:2048'], 'secondary_button_text' => ['nullable', 'string', 'max:100'], 'secondary_button_url' => ['nullable', 'string', 'max:2048'],
             'background_style' => ['nullable', 'string', 'max:100'], 'alignment' => ['required', Rule::in(['left', 'center', 'right'])], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0'],
