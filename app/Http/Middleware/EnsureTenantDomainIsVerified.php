@@ -10,11 +10,17 @@ class EnsureTenantDomainIsVerified
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $host = strtolower(rtrim($request->getHost(), '.'));
+        $host = strtolower(rtrim(trim($request->getHost()), '.'));
         $domain = tenant()?->domains()->whereRaw('LOWER(domain) = ?', [$host])->first();
-        $status = $domain?->verification_status ?: $domain?->status;
 
-        abort_unless($domain && $domain->verified_at && in_array($status, ['verified', 'active'], true), 404);
+        abort_unless(
+            $domain
+            && $domain->status === 'active'
+            && $domain->verification_status === 'verified'
+            && $domain->verified_at !== null
+            && $domain->disabled_at === null,
+            404,
+        );
 
         return $next($request);
     }

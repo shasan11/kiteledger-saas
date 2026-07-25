@@ -14,7 +14,7 @@ Use PHP 8.3 or newer with ctype, curl, DOM/XML, fileinfo, filter, intl, JSON, mb
 
 ## Domains, DNS, SSL, and proxies
 
-Set the apex domain and optional `www` host in `CENTRAL_DOMAINS`, and set `SAAS_BASE_DOMAIN` to the apex host. Create an `A`/`AAAA` record for the apex and a wildcard record for `*.example.com`. In cPanel, point a wildcard subdomain or alias at the same public document root. Obtain a wildcard certificate when supported; AutoSSL installations that cannot issue wildcard certificates require DNS validation, Cloudflare origin certificates, or explicit subdomains.
+Set the apex domain and optional `www` host in `CENTRAL_DOMAINS`, and set both `SAAS_BASE_DOMAIN` and `TENANT_BASE_DOMAIN` to the apex host. Create `A`/`AAAA` records for the apex, `www`, and `*.example.com`, all pointing to the same application server. In Apache or cPanel, point the wildcard host at the same Laravel `public` directory; do not create one physical subdomain per tenant. For Nginx, include `server_name example.com *.example.com;`. Obtain a wildcard certificate when supported; AutoSSL installations that cannot issue wildcard certificates require DNS validation, Cloudflare origin certificates, or explicit subdomains.
 
 Cloudflare must use Full (strict) TLS. Configure only known Cloudflare/cPanel proxy CIDRs as trusted proxies; never trust all forwarded headers. Custom domains require their own DNS verification and certificate support from the hosting provider.
 

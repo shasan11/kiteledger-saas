@@ -12,7 +12,7 @@ class Domain extends BaseDomain
     protected function domain(): Attribute
     {
         return Attribute::make(
-            set: static fn (mixed $value): string => strtolower(trim((string) $value)),
+            set: static fn (mixed $value): string => strtolower(rtrim(trim((string) $value), '.')),
         );
     }
 

@@ -28,6 +28,38 @@ class TenantDatabaseService
         $provisioner->provision($tenant);
     }
 
+    public function syncConnectionValues(Tenant $tenant): Tenant
+    {
+        $name = $tenant->tenancy_db_name ?: $tenant->database_name;
+        $host = $tenant->tenancy_db_host ?: config('database.connections.tenant_template.host');
+        $port = $tenant->tenancy_db_port ?: config('database.connections.tenant_template.port');
+        $username = $tenant->tenancy_db_username ?: $tenant->database_username ?: config('database.connections.tenant_template.username');
+        $password = $tenant->tenancy_db_password ?? $tenant->database_password ?? config('database.connections.tenant_template.password');
+
+        if (blank($name) || blank($host) || blank($username)) {
+            throw new \RuntimeException('database_connection_failed');
+        }
+
+        $tenant->forceFill([
+            'tenancy_db_connection' => 'tenant_template',
+            'tenancy_db_name' => $name,
+            'tenancy_db_host' => $host,
+            'tenancy_db_port' => $port,
+            'tenancy_db_username' => $username,
+            'tenancy_db_password' => $password,
+            'database_name' => $name,
+        ]);
+        $tenant->setInternal('db_connection', 'tenant_template');
+        $tenant->setInternal('db_name', $name);
+        $tenant->setInternal('db_host', $host);
+        $tenant->setInternal('db_port', $port);
+        $tenant->setInternal('db_username', $username);
+        $tenant->setInternal('db_password', $password);
+        $tenant->save();
+
+        return $tenant->refresh();
+    }
+
     public function migrate(Tenant $tenant): void
     {
         try {

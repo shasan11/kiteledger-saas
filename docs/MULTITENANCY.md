@@ -7,3 +7,5 @@ Tenant requests are selected by hostname. Central hosts come from `CENTRAL_DOMAI
 Never add `tenant_id` to ERP tables as a substitute for isolation. Central models belong under `App\Models\Central` (or use Stancl's central connection concern); tenant models must only be queried after tenancy has initialized.
 
 The tenant migration path is `database/migrations/tenant`. Central installation must never load that path.
+
+Tenant creation from the central admin is synchronous. The request commits the central tenant, encrypted provisioning configuration, and exact verified subdomain first; `TenantProvisioningRunner` then provisions or verifies the database, saves Stancl connection internals, migrates, seeds, applies the default template, creates the owner and optional subscription, and finally marks the tenant `active`. Failures preserve the tenant and record a safe `provisioning_failed` state for retry. Queue workers are not involved in this initial flow.

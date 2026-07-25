@@ -94,7 +94,8 @@ class SaasHealthCommand extends Command
 
         $checks['session'] = $this->check(in_array(config('session.driver'), ['file', 'database'], true) && config('session.domain') === null, 'driver='.config('session.driver').'; SESSION_DOMAIN must remain null');
         $checks['cache'] = $this->check(in_array(config('cache.default'), ['file', 'database', 'array'], true), 'store='.config('cache.default'));
-        $checks['base_domain'] = $this->check(filled(config('saas.base_domain')) && ! in_array(config('saas.base_domain'), ['localhost', '127.0.0.1'], true), 'base='.config('saas.base_domain'));
+        $tenantBaseDomain = strtolower(rtrim(trim((string) config('saas.tenant_base_domain')), '.'));
+        $checks['tenant_base_domain'] = $this->check(filled($tenantBaseDomain) && ! in_array($tenantBaseDomain, ['localhost', '127.0.0.1'], true), 'base='.$tenantBaseDomain.'; wildcard=*.'.$tenantBaseDomain);
         $checks['central_domains'] = $this->check(config('tenancy.central_domains') !== [], 'central='.implode(',', config('tenancy.central_domains')));
         $checks['mail'] = $this->check(config('mail.default') !== 'log', 'mailer='.config('mail.default'), false);
         $checks['tenant_migrations'] = $this->check(is_dir(database_path('migrations/tenant')), 'path='.database_path('migrations/tenant'));
