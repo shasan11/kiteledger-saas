@@ -182,6 +182,35 @@ class CentralTenancyTest extends TestCase
         $this->assertSoftDeleted('tenants', ['id' => $tenant->id]);
     }
 
+    public function test_tenant_can_be_deleted_immediately_without_a_deletion_request(): void
+    {
+        $tenant = Tenant::create([
+            'id' => 'tenant-delete-now',
+            'company_name' => 'Delete Now Co',
+            'owner_name' => 'Owner',
+            'owner_email' => 'delete-now@example.test',
+            'status' => 'active',
+            'database_name' => 'tenant_delete_now',
+            'database_provisioning_mode' => 'pool',
+        ]);
+        $tenant->domains()->create(['domain' => 'delete-now.test', 'status' => 'active', 'type' => 'subdomain']);
+
+        $provisioner = Mockery::mock(TenantDatabaseProvisioner::class);
+        $provisioner->shouldReceive('destroy')->once()->with(Mockery::on(fn (Tenant $passed): bool => $passed->id === $tenant->id));
+        $manager = Mockery::mock(DatabaseProvisionerManager::class);
+        $manager->shouldReceive('driver')->once()->with('pool')->andReturn($provisioner);
+        $this->app->instance(DatabaseProvisionerManager::class, $manager);
+        $files = Mockery::mock(TenantFileDeletionService::class);
+        $files->shouldReceive('delete')->once()->with(Mockery::type(Tenant::class));
+        $this->app->instance(TenantFileDeletionService::class, $files);
+
+        app(TenantDeletionService::class)->deleteImmediately($tenant);
+
+        $this->assertSoftDeleted('tenants', ['id' => $tenant->id]);
+        $this->assertDatabaseHas('domains', ['tenant_id' => $tenant->id, 'status' => 'disabled']);
+        $this->assertDatabaseCount('tenant_deletion_requests', 0);
+    }
+
     public static function provisioningModes(): array
     {
         return [

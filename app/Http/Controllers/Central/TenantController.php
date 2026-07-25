@@ -4,12 +4,10 @@ namespace App\Http\Controllers\Central;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\SaaS\BackupTenantJob;
-use App\Models\Central\BackupManifest;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ImpersonationToken;
 use App\Models\Central\Plan;
 use App\Models\Central\Tenant;
-use App\Models\Central\TenantDeletionRequest;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\TenantDatabaseService;
 use App\Services\SaaS\TenantDeletionService;
@@ -168,28 +166,14 @@ class TenantController extends Controller
         return back()->with('success', 'Tenant backup queued.');
     }
 
-    public function requestDeletion(Request $request, Tenant $tenant, TenantDeletionService $deletions, CentralAuditService $audit)
+    public function destroy(Request $request, Tenant $tenant, TenantDeletionService $deletions, CentralAuditService $audit)
     {
-        $data = $request->validate(['current_password' => ['required', 'string'], 'confirmation' => ['required', 'string'], 'reason' => ['required', 'string', 'max:1000'], 'backup_manifest_id' => ['nullable', 'uuid', 'exists:backup_manifests,id'], 'backup_waived' => ['boolean']]);
-        $admin = $request->attributes->get('centralAdmin');
-        abort_unless(Hash::check($data['current_password'], $admin->password), 422, 'The password is incorrect.');
-        abort_unless(hash_equals($tenant->company_name, $data['confirmation']), 422, 'Type the exact company name to confirm.');
-        $backup = filled($data['backup_manifest_id'] ?? null) ? BackupManifest::find($data['backup_manifest_id']) : null;
-        $deletion = $deletions->request($tenant, $admin->id, $data['reason'], $backup, (bool) ($data['backup_waived'] ?? false));
-        $audit->log($request, 'tenant.deletion_requested', $tenant, [], ['deletion_id' => $deletion->id, 'backup_waived' => $deletion->backup_waived]);
+        abort_if($tenant->is_internal, 422, 'Internal tenants cannot be deleted.');
+        $snapshot = $tenant->only(['id', 'company_name', 'owner_email', 'status', 'database_provisioning_mode']);
+        $deletions->deleteImmediately($tenant);
+        $audit->log($request, 'tenant.deleted', $tenant, $snapshot, ['deleted_at' => $tenant->deleted_at?->toIso8601String()]);
 
-        return back()->with('success', 'Deletion request created.');
-    }
-
-    public function approveDeletion(Request $request, TenantDeletionRequest $deletion, TenantDeletionService $deletions, CentralAuditService $audit)
-    {
-        $data = $request->validate(['current_password' => ['required', 'string']]);
-        $admin = $request->attributes->get('centralAdmin');
-        abort_unless(Hash::check($data['current_password'], $admin->password), 422, 'The password is incorrect.');
-        $deletions->approve($deletion, $admin->id);
-        $audit->log($request, 'tenant.deletion_approved', $deletion, ['status' => 'pending'], ['status' => 'approved']);
-
-        return back()->with('success', 'Deletion approved for scheduled execution.');
+        return redirect()->route('central.tenants.index')->with('success', 'Tenant deleted successfully.');
     }
 
     public function impersonate(Request $request, Tenant $tenant, CentralAuditService $audit)

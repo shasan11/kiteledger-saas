@@ -1,18 +1,26 @@
-import axios from 'axios';
-import { notification } from 'antd';
+import axios from "axios";
+import { notification } from "antd";
 window.axios = axios;
 
-window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+window.axios.defaults.headers.common["X-Requested-With"] = "XMLHttpRequest";
+
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+if (csrfToken) {
+    // Prefer the token rendered for this exact host/session. This avoids a
+    // stale parent-domain XSRF cookie causing tenant login failures after a
+    // wildcard-domain deployment is corrected.
+    window.axios.defaults.headers.common["X-CSRF-TOKEN"] = csrfToken;
+}
 
 window.axios.interceptors.request.use((config) => {
     const appContext = window.__KITELEDGER_APP_CONTEXT__ || {};
 
     if (appContext.branchId) {
-        config.headers['X-Branch-ID'] = appContext.branchId;
+        config.headers["X-Branch-ID"] = appContext.branchId;
     }
 
     if (appContext.fiscalYearId) {
-        config.headers['X-Fiscal-Year-ID'] = appContext.fiscalYearId;
+        config.headers["X-Fiscal-Year-ID"] = appContext.fiscalYearId;
     }
 
     return config;
@@ -23,7 +31,9 @@ window.axios.interceptors.response.use(
         const rules = response?.data?.business_rules;
         if (rules?.has_warnings) {
             notification.warning({
-                message: response?.data?.message || 'Transaction has warnings but can continue.',
+                message:
+                    response?.data?.message ||
+                    "Transaction has warnings but can continue.",
             });
         }
 
@@ -33,14 +43,17 @@ window.axios.interceptors.response.use(
         const rules = error?.response?.data?.business_rules;
         if (rules?.has_errors) {
             const first = Array.isArray(rules.checks)
-                ? rules.checks.find((check) => check?.status === 'error')?.message
+                ? rules.checks.find((check) => check?.status === "error")
+                      ?.message
                 : null;
             notification.error({
-                message: error?.response?.data?.message || 'Transaction blocked by business rules.',
+                message:
+                    error?.response?.data?.message ||
+                    "Transaction blocked by business rules.",
                 description: first || undefined,
             });
         }
 
         return Promise.reject(error);
-    }
+    },
 );

@@ -15,6 +15,7 @@ class InstallerRuntimeService
             'APP_ENV' => 'production',
             'APP_DEBUG' => 'false',
             'SESSION_DRIVER' => 'database',
+            'SESSION_CONNECTION' => 'central',
             // File cache is available before and after database installation,
             // and lets recovery commands such as cache:clear remain usable
             // even when database configuration needs repair.
@@ -26,6 +27,7 @@ class InstallerRuntimeService
             'app.env' => 'production',
             'app.debug' => false,
             'session.driver' => 'database',
+            'session.connection' => 'central',
             'cache.default' => 'file',
             'queue.default' => 'central',
         ]);
