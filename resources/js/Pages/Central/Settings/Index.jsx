@@ -86,7 +86,7 @@ export default function Settings({ groups, activeGroup }) {
         if (!term) return settings;
 
         return settings.filter((item) =>
-            `${item.label} ${item.description} ${item.key}`.toLowerCase().includes(term),
+            `${item.label} $in  ${item.key}`.toLowerCase().includes(term),
         );
     }, [settings, search]);
 
