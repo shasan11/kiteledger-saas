@@ -9,7 +9,6 @@ import {
     CloudUploadOutlined,
     DeleteOutlined,
     HistoryOutlined,
-    InfoCircleOutlined,
     ReloadOutlined,
     SearchOutlined,
 } from '@ant-design/icons';
@@ -195,7 +194,6 @@ export default function Settings({ groups, activeGroup }) {
             <PageHeader
                 eyebrow="Administration"
                 title="Platform Settings"
-                description="Manage platform identity, billing, provisioning, security, and public website defaults."
                 actions={
                     <Space wrap>
                         {['email', 'storage', 'notifications'].includes(section) && (
@@ -479,11 +477,6 @@ function SettingField({ item, onHistory }) {
                     {item.is_readonly && <Tag>Read-only</Tag>}
                 </div>
                 <Space size={4}>
-                    {(item.description || item.help_text) && (
-                        <Tooltip title={[item.description, item.help_text].filter(Boolean).join(' ')}>
-                            <Button type="text" size="small" icon={<InfoCircleOutlined />} />
-                        </Tooltip>
-                    )}
                     <Tooltip title="Details and history">
                         <Button type="text" size="small" icon={<HistoryOutlined />} onClick={() => onHistory(item)} />
                     </Tooltip>
@@ -520,9 +513,6 @@ function SettingField({ item, onHistory }) {
 function SettingMeta({ item }) {
     const rows = [
         ['Key', item.key],
-        ['Updated', item.updated_at || 'During installation'],
-        ['Updated by', item.updated_by || 'System'],
-        ['Last tested', item.last_tested_at || 'Not tested'],
         ['Environment', item.environment ? humanize(item.environment) : 'All'],
         ['Default', item.default_value ?? 'Empty'],
     ];
@@ -536,7 +526,6 @@ function SettingMeta({ item }) {
                     <Text>{String(value)}</Text>
                 </div>
             ))}
-            {(item.description || item.help_text) && <Alert type="info" showIcon message={item.description} description={item.help_text} />}
         </div>
     );
 }
