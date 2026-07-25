@@ -27,15 +27,14 @@ class SettingsController extends Controller
         ];
         $groups = PlatformSetting::query()->with(['revisions', 'updatedBy:id,name'])->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
             'id' => $setting->id, 'group' => $setting->group, 'key' => $setting->key, 'label' => $setting->label,
-            'description' => $setting->description, 'help_text' => $setting->help_text, 'input_type' => $setting->input_type,
+            'description' => $setting->description, 'input_type' => $setting->input_type,
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
             'value' => $setting->safeValue(), 'has_secret' => $setting->is_encrypted && filled($setting->getRawOriginal('value')),
             'preview_url' => $this->previewUrl($setting),
             'is_encrypted' => $setting->is_encrypted, 'is_required' => $setting->is_required, 'is_readonly' => $setting->is_readonly,
             'requires_confirmation' => $setting->requires_confirmation, 'requires_restart' => $setting->requires_restart,
-            'last_tested_at' => $setting->last_tested_at, 'updated_at' => $setting->updated_at,
-            'updated_by' => $setting->updatedBy?->name,
+            'last_tested_at' => $setting->last_tested_at,
         ])->values())->toArray();
         $requestedGroup = (string) ($request->route('group') ?: $request->query('group', ''));
 

@@ -454,12 +454,6 @@ export default function Settings({ groups, activeGroup }) {
                 .platform-setting-field__required {
                     color: #dc2626;
                 }
-                .platform-setting-field__description {
-                    display: block;
-                    max-width: 560px;
-                    margin-top: 5px;
-                    line-height: 1.5;
-                }
                 .platform-setting-field__control {
                     min-width: 0;
                 }
@@ -601,11 +595,6 @@ function SettingField({ item, onHistory }) {
                     {item.requires_restart && <Tag color="gold">Restart required</Tag>}
                     {item.is_readonly && <Tag>Read-only</Tag>}
                 </div>
-                {item.description && (
-                    <Text type="secondary" className="platform-setting-field__description">
-                        {item.description}
-                    </Text>
-                )}
             </div>
 
             <div className="platform-setting-field__control">
