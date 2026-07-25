@@ -31,6 +31,7 @@ class SettingsController extends Controller
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
             'value' => $setting->safeValue(), 'has_secret' => $setting->is_encrypted && filled($setting->getRawOriginal('value')),
+            'preview_url' => $this->previewUrl($setting),
             'is_encrypted' => $setting->is_encrypted, 'is_required' => $setting->is_required, 'is_readonly' => $setting->is_readonly,
             'requires_confirmation' => $setting->requires_confirmation, 'requires_restart' => $setting->requires_restart,
             'last_tested_at' => $setting->last_tested_at, 'updated_at' => $setting->updated_at,
@@ -102,5 +103,23 @@ class SettingsController extends Controller
             'old_value' => $setting->is_encrypted ? null : $revision->getRawOriginal('old_value'),
             'new_value' => $setting->is_encrypted ? null : $revision->getRawOriginal('new_value'),
         ]));
+    }
+
+    private function previewUrl(PlatformSetting $setting): ?string
+    {
+        if (! in_array($setting->input_type, ['image', 'file'], true)) {
+            return null;
+        }
+
+        $value = $setting->safeValue();
+        if (! is_string($value) || blank($value)) {
+            return null;
+        }
+
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, '/')) {
+            return $value;
+        }
+
+        return Storage::disk('public')->url(ltrim($value, '/'));
     }
 }
