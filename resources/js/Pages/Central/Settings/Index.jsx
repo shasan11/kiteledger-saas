@@ -5,7 +5,6 @@ import { humanize } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
 import {
     CheckOutlined,
-    CloseOutlined,
     CloudUploadOutlined,
     DeleteOutlined,
     HistoryOutlined,
@@ -46,6 +45,16 @@ const selectOptions = {
 
 const wideInputs = new Set(['textarea', 'code editor', 'key-value editor', 'rich-text editor', 'image']);
 
+const sectionDescriptions = {
+    general: 'Core defaults used across the platform.',
+    branding: 'Control how your product and organization appear.',
+    email: 'Configure outbound email delivery and sender details.',
+    storage: 'Choose where files are stored and how they are handled.',
+    notifications: 'Manage system notifications and delivery behavior.',
+    security: 'Review authentication and security-related preferences.',
+    billing: 'Set billing defaults, currencies, and invoice behavior.',
+};
+
 export default function Settings({ groups, activeGroup }) {
     const [section, setSection] = useState(activeGroup);
     const [search, setSearch] = useState('');
@@ -77,18 +86,21 @@ export default function Settings({ groups, activeGroup }) {
         if (!term) return settings;
 
         return settings.filter((item) =>
-            `${item.label} ${item.description} ${item.help_text} ${item.key}`.toLowerCase().includes(term),
+            `${item.label} ${item.description} ${item.key}`.toLowerCase().includes(term),
         );
     }, [settings, search]);
 
     const grouped = useMemo(() => groupSettings(filtered), [filtered]);
     const currentLabel = humanize(section);
-    const imageCount = settings.filter((item) => item.input_type === 'image').length;
-    const sensitiveCount = settings.filter((item) => item.requires_confirmation).length;
 
     const clearConfirmation = () => {
         setConfirmation(null);
         setConfirmationPassword('');
+    };
+
+    const discardChanges = () => {
+        form.setFieldsValue(Object.fromEntries(settings.map((item) => [item.key, initialValue(item)])));
+        setDirty(false);
     };
 
     const prepare = (values) => {
@@ -202,10 +214,7 @@ export default function Settings({ groups, activeGroup }) {
                             </Button>
                         )}
                         <Button icon={<ReloadOutlined />} onClick={reset}>
-                            Reset section
-                        </Button>
-                        <Button type="primary" icon={<CheckOutlined />} onClick={save} disabled={!dirty}>
-                            Save changes
+                            Reset to defaults
                         </Button>
                     </Space>
                 }
@@ -220,15 +229,15 @@ export default function Settings({ groups, activeGroup }) {
                         onChange={(event) => setSearch(event.target.value)}
                     />
                     <div className="platform-settings-nav__list">
-                        {Object.entries(groups).map(([group, rows]) => (
+                        {Object.keys(groups).map((group) => (
                             <button
                                 key={group}
                                 type="button"
                                 className={section === group ? 'is-active' : ''}
+                                aria-current={section === group ? 'page' : undefined}
                                 onClick={() => changeSection(group)}
                             >
                                 <span>{humanize(group)}</span>
-                                <Text type="secondary">{rows.length}</Text>
                             </button>
                         ))}
                     </div>
@@ -237,18 +246,18 @@ export default function Settings({ groups, activeGroup }) {
                 <main className="platform-settings-main">
                     <SectionCard
                         title={currentLabel}
-                        description={`${settings.length} settings${imageCount ? ` · ${imageCount} image fields` : ''}${sensitiveCount ? ` · ${sensitiveCount} sensitive` : ''}`}
+                        description={
+                            sectionDescriptions[section] ||
+                            `Manage ${currentLabel.toLowerCase()} preferences for your organization.`
+                        }
                     >
                         <Form form={form} layout="vertical" onValuesChange={() => setDirty(true)}>
                             {grouped.map((group) => (
                                 <section className="platform-settings-panel" key={group.title}>
                                     <div className="platform-settings-panel__header">
-                                        <div>
-                                            <Typography.Title level={5}>{group.title}</Typography.Title>
-                                            <Text type="secondary">{group.items.length} fields</Text>
-                                        </div>
+                                        <Typography.Title level={5}>{group.title}</Typography.Title>
                                     </div>
-                                    <div className="platform-settings-grid">
+                                    <div className="platform-settings-list">
                                         {group.items.map((item) => (
                                             <SettingField key={item.key} item={item} onHistory={openHistory} />
                                         ))}
@@ -258,14 +267,26 @@ export default function Settings({ groups, activeGroup }) {
                         </Form>
                         {!filtered.length && <Empty description="No settings match your search." />}
                     </SectionCard>
+
+                    {dirty && (
+                        <div className="platform-settings-savebar" role="status">
+                            <Text>You have unsaved changes.</Text>
+                            <Space>
+                                <Button onClick={discardChanges}>Discard</Button>
+                                <Button type="primary" icon={<CheckOutlined />} onClick={save}>
+                                    Save changes
+                                </Button>
+                            </Space>
+                        </div>
+                    )}
                 </main>
             </div>
 
             <Drawer
                 open={Boolean(history)}
                 onClose={() => setHistory(null)}
-                title={history ? `${history.label} details` : 'Setting details'}
-                width={560}
+                title={history ? history.label : 'Setting details'}
+                width={520}
             >
                 {history && (
                     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -273,23 +294,31 @@ export default function Settings({ groups, activeGroup }) {
                         {history.is_encrypted && (
                             <Alert type="warning" showIcon message="Secret values are never returned to the browser." />
                         )}
-                        {historyRows.length ? (
-                            historyRows.map((row) => (
-                                <div className="central-attention" key={row.id}>
-                                    <span className="central-attention__copy">
-                                        <Text strong>Administrator #{row.admin_id || 'system'}</Text>
-                                        <Text type="secondary">{row.changed_at}</Text>
-                                        {!history.is_encrypted && (
-                                            <Text code>
-                                                {String(row.old_value ?? 'empty')} {'->'} {String(row.new_value ?? 'empty')}
-                                            </Text>
-                                        )}
-                                    </span>
+                        <div>
+                            <Typography.Title level={5} className="platform-setting-history__title">
+                                Change history
+                            </Typography.Title>
+                            {historyRows.length ? (
+                                <div className="platform-setting-history">
+                                    {historyRows.map((row) => (
+                                        <div className="platform-setting-history__row" key={row.id}>
+                                            <div>
+                                                <Text strong>Administrator #{row.admin_id || 'system'}</Text>
+                                                <br />
+                                                <Text type="secondary">{row.changed_at}</Text>
+                                            </div>
+                                            {!history.is_encrypted && (
+                                                <Text code className="platform-setting-history__value">
+                                                    {String(row.old_value ?? 'empty')} {'→'} {String(row.new_value ?? 'empty')}
+                                                </Text>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
-                            ))
-                        ) : (
-                            <Empty description="No changes recorded yet." />
-                        )}
+                            ) : (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No changes recorded yet." />
+                            )}
+                        </div>
                     </Space>
                 )}
             </Drawer>
@@ -319,22 +348,25 @@ export default function Settings({ groups, activeGroup }) {
             <style>{`
                 .platform-settings-shell {
                     display: grid;
-                    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-                    gap: 18px;
+                    grid-template-columns: 240px minmax(0, 1fr);
+                    gap: 24px;
                     align-items: start;
                 }
                 .platform-settings-nav {
                     position: sticky;
-                    top: 90px;
+                    top: 88px;
                     display: grid;
-                    gap: 12px;
+                    gap: 10px;
+                    padding: 10px;
+                    border: 1px solid #e8edf3;
+                    border-radius: 12px;
+                    background: #fff;
                 }
                 .platform-settings-nav__list {
                     display: grid;
-                    gap: 4px;
+                    gap: 2px;
                     max-height: calc(100vh - 190px);
                     overflow: auto;
-                    padding-right: 2px;
                 }
                 .platform-settings-nav button {
                     display: flex;
@@ -346,81 +378,116 @@ export default function Settings({ groups, activeGroup }) {
                     border-radius: 8px;
                     background: transparent;
                     cursor: pointer;
-                    padding: 9px 10px;
-                    color: inherit;
+                    padding: 10px 11px;
+                    color: #334155;
                     text-align: left;
+                    transition: background 120ms ease, color 120ms ease;
                 }
-                .platform-settings-nav button:hover,
+                .platform-settings-nav button:hover {
+                    background: #f8fafc;
+                }
                 .platform-settings-nav button.is-active {
-                    background: rgba(15, 118, 110, 0.09);
+                    background: rgba(15, 118, 110, 0.1);
                     color: #0f766e;
+                    font-weight: 600;
                 }
                 .platform-settings-main {
                     min-width: 0;
+                    width: 100%;
+                    max-width: 1040px;
                 }
                 .platform-settings-panel {
-                    border-top: 1px solid #eef2f7;
-                    padding-top: 20px;
-                    margin-top: 20px;
+                    overflow: hidden;
+                    margin-top: 22px;
+                    border: 1px solid #e8edf3;
+                    border-radius: 12px;
+                    background: #fff;
                 }
                 .platform-settings-panel:first-child {
-                    border-top: 0;
                     margin-top: 0;
-                    padding-top: 0;
                 }
                 .platform-settings-panel__header {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    gap: 16px;
-                    margin-bottom: 14px;
+                    padding: 16px 20px;
+                    border-bottom: 1px solid #e8edf3;
+                    background: #fafbfc;
                 }
                 .platform-settings-panel__header h5 {
                     margin: 0;
+                    font-size: 15px;
                 }
-                .platform-settings-grid {
+                .platform-settings-list {
                     display: grid;
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                    gap: 16px 18px;
                 }
                 .platform-setting-field {
+                    display: grid;
+                    grid-template-columns: minmax(220px, 1fr) minmax(280px, 440px) 32px;
+                    gap: 24px;
+                    align-items: center;
                     min-width: 0;
-                    border: 1px solid #eef2f7;
-                    border-radius: 8px;
-                    padding: 14px;
-                    background: #fff;
+                    padding: 18px 20px;
+                    border-bottom: 1px solid #eef2f6;
+                }
+                .platform-setting-field:last-child {
+                    border-bottom: 0;
+                }
+                .platform-setting-field:hover {
+                    background: #fcfdfe;
                 }
                 .platform-setting-field.is-wide {
-                    grid-column: 1 / -1;
+                    grid-template-columns: minmax(0, 1fr) 32px;
+                    align-items: start;
                 }
-                .platform-setting-field__label {
-                    display: flex;
-                    justify-content: space-between;
-                    gap: 12px;
-                    margin-bottom: 8px;
+                .platform-setting-field.is-wide .platform-setting-field__control {
+                    grid-column: 1 / -1;
+                    grid-row: 2;
+                }
+                .platform-setting-field__copy {
+                    min-width: 0;
                 }
                 .platform-setting-field__label-text {
                     display: flex;
                     align-items: center;
                     flex-wrap: wrap;
-                    gap: 6px;
+                    gap: 7px;
                     min-width: 0;
+                }
+                .platform-setting-field__required {
+                    color: #dc2626;
+                }
+                .platform-setting-field__description {
+                    display: block;
+                    max-width: 560px;
+                    margin-top: 5px;
+                    line-height: 1.5;
+                }
+                .platform-setting-field__control {
+                    min-width: 0;
+                }
+                .platform-setting-field__action {
+                    grid-column: -2 / -1;
+                    grid-row: 1;
+                    align-self: center;
+                    color: #64748b;
                 }
                 .platform-setting-field .ant-form-item {
                     margin-bottom: 0;
                 }
+                .platform-setting-field .ant-select,
+                .platform-setting-field .ant-input-number {
+                    width: 100%;
+                }
                 .platform-setting-image {
                     display: grid;
-                    grid-template-columns: minmax(140px, 220px) 1fr;
-                    gap: 14px;
+                    grid-template-columns: minmax(140px, 210px) minmax(0, 1fr);
+                    gap: 16px;
                     align-items: center;
                 }
                 .platform-setting-image__preview {
                     display: grid;
                     place-items: center;
                     min-height: 112px;
-                    border: 1px dashed #d9e2ec;
-                    border-radius: 8px;
+                    border: 1px dashed #cbd5e1;
+                    border-radius: 10px;
                     background: #f8fafc;
                     overflow: hidden;
                 }
@@ -436,9 +503,51 @@ export default function Settings({ groups, activeGroup }) {
                     gap: 10px;
                     align-items: center;
                 }
+                .platform-settings-savebar {
+                    position: sticky;
+                    bottom: 16px;
+                    z-index: 20;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 16px;
+                    margin: 18px auto 0;
+                    padding: 12px 14px 12px 18px;
+                    border: 1px solid #dbe3ea;
+                    border-radius: 12px;
+                    background: rgba(255, 255, 255, 0.96);
+                    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.14);
+                    backdrop-filter: blur(10px);
+                }
                 .platform-setting-meta {
                     display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 16px;
+                    padding: 16px;
+                    border: 1px solid #e8edf3;
+                    border-radius: 10px;
+                    background: #fafbfc;
+                }
+                .platform-setting-history__title {
+                    margin: 0 0 12px !important;
+                }
+                .platform-setting-history {
+                    overflow: hidden;
+                    border: 1px solid #e8edf3;
+                    border-radius: 10px;
+                }
+                .platform-setting-history__row {
+                    display: grid;
                     gap: 10px;
+                    padding: 14px 16px;
+                    border-bottom: 1px solid #eef2f6;
+                }
+                .platform-setting-history__row:last-child {
+                    border-bottom: 0;
+                }
+                .platform-setting-history__value {
+                    overflow-wrap: anywhere;
+                    white-space: normal;
                 }
                 @media (max-width: 1100px) {
                     .platform-settings-shell {
@@ -451,12 +560,26 @@ export default function Settings({ groups, activeGroup }) {
                         grid-template-columns: repeat(2, minmax(0, 1fr));
                         max-height: none;
                     }
+                    .platform-settings-main {
+                        max-width: none;
+                    }
                 }
                 @media (max-width: 760px) {
-                    .platform-settings-grid,
                     .platform-settings-nav__list,
                     .platform-setting-image {
                         grid-template-columns: 1fr;
+                    }
+                    .platform-setting-field,
+                    .platform-setting-field.is-wide {
+                        grid-template-columns: minmax(0, 1fr) 32px;
+                        gap: 14px;
+                    }
+                    .platform-setting-field__control {
+                        grid-column: 1 / -1;
+                    }
+                    .platform-settings-savebar {
+                        align-items: flex-start;
+                        flex-direction: column;
                     }
                 }
             `}</style>
@@ -469,43 +592,58 @@ function SettingField({ item, onHistory }) {
 
     return (
         <div className={`platform-setting-field ${isWide ? 'is-wide' : ''}`}>
-            <div className="platform-setting-field__label">
+            <div className="platform-setting-field__copy">
                 <div className="platform-setting-field__label-text">
-                    <Text strong>{item.label}</Text>
-                    {item.is_required && <Tag color="red">Required</Tag>}
-                    {item.requires_restart && <Tag color="gold">Restart</Tag>}
+                    <Text strong>
+                        {item.label}
+                        {item.is_required && <span className="platform-setting-field__required"> *</span>}
+                    </Text>
+                    {item.requires_restart && <Tag color="gold">Restart required</Tag>}
                     {item.is_readonly && <Tag>Read-only</Tag>}
                 </div>
-                <Space size={4}>
-                    <Tooltip title="Details and history">
-                        <Button type="text" size="small" icon={<HistoryOutlined />} onClick={() => onHistory(item)} />
-                    </Tooltip>
-                </Space>
+                {item.description && (
+                    <Text type="secondary" className="platform-setting-field__description">
+                        {item.description}
+                    </Text>
+                )}
             </div>
 
-            <Form.Item
-                name={item.key}
-                rules={[
-                    ...(item.is_required ? [{ required: true }] : []),
-                    ...(item.input_type === 'key-value editor'
-                        ? [
-                              {
-                                  validator: (_, value) => {
-                                      try {
-                                          JSON.parse(value || '{}');
-                                          return Promise.resolve();
-                                      } catch {
-                                          return Promise.reject(new Error('Enter valid JSON.'));
-                                      }
+            <div className="platform-setting-field__control">
+                <Form.Item
+                    name={item.key}
+                    rules={[
+                        ...(item.is_required ? [{ required: true, message: `${item.label} is required.` }] : []),
+                        ...(item.input_type === 'key-value editor'
+                            ? [
+                                  {
+                                      validator: (_, value) => {
+                                          try {
+                                              JSON.parse(value || '{}');
+                                              return Promise.resolve();
+                                          } catch {
+                                              return Promise.reject(new Error('Enter valid JSON.'));
+                                          }
+                                      },
                                   },
-                              },
-                          ]
-                        : []),
-                ]}
-                valuePropName={item.input_type === 'switch' ? 'checked' : 'value'}
-            >
-                {control(item)}
-            </Form.Item>
+                              ]
+                            : []),
+                    ]}
+                    valuePropName={item.input_type === 'switch' ? 'checked' : 'value'}
+                >
+                    {control(item)}
+                </Form.Item>
+            </div>
+
+            <Tooltip title="View details and change history">
+                <Button
+                    className="platform-setting-field__action"
+                    type="text"
+                    size="small"
+                    icon={<HistoryOutlined />}
+                    aria-label={`View ${item.label} history`}
+                    onClick={() => onHistory(item)}
+                />
+            </Tooltip>
         </div>
     );
 }
@@ -601,7 +739,7 @@ function ImageControl({ value, onChange, item }) {
 function control(item) {
     const common = { disabled: item.is_readonly };
     const input = item.input_type;
-    if (input === 'switch') return <Switch {...common} checkedChildren={<CheckOutlined />} unCheckedChildren={<CloseOutlined />} />;
+    if (input === 'switch') return <Switch {...common} />;
     if (input === 'number' || input === 'decimal') {
         return <InputNumber {...common} precision={input === 'decimal' ? 2 : 0} style={{ width: '100%' }} />;
     }
