@@ -34,7 +34,7 @@ class SettingsController extends Controller
             'preview_url' => $this->previewUrl($setting),
             'is_encrypted' => $setting->is_encrypted, 'is_required' => $setting->is_required, 'is_readonly' => $setting->is_readonly,
             'requires_confirmation' => $setting->requires_confirmation, 'requires_restart' => $setting->requires_restart,
-            'last_tested_at' => $setting->last_tested_at,
+            
         ])->values())->toArray();
         $requestedGroup = (string) ($request->route('group') ?: $request->query('group', ''));
 
