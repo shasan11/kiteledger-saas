@@ -48,11 +48,15 @@ class WebsitePage extends CentralModel
         static::saved(function (self $page): void {
             cache()->forget('website-page:'.$page->slug);
             cache()->forget('website-page:'.$page->page_type);
+            cache()->forget('website-page:v2:'.$page->slug);
+            cache()->forget('website-page:v2:'.$page->page_type);
             cache()->forget('website-sitemap');
         });
         static::deleted(function (self $page): void {
             cache()->forget('website-page:'.$page->slug);
             cache()->forget('website-page:'.$page->page_type);
+            cache()->forget('website-page:v2:'.$page->slug);
+            cache()->forget('website-page:v2:'.$page->page_type);
             cache()->forget('website-sitemap');
         });
     }

@@ -26,7 +26,13 @@ class WebsiteMenu extends CentralModel
 
     protected static function booted(): void
     {
-        static::saved(fn () => cache()->forget('website-menus'));
-        static::deleted(fn () => cache()->forget('website-menus'));
+        static::saved(function (): void {
+            cache()->forget('website-menus');
+            cache()->forget('website-menus:v2');
+        });
+        static::deleted(function (): void {
+            cache()->forget('website-menus');
+            cache()->forget('website-menus:v2');
+        });
     }
 }
