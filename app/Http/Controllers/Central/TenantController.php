@@ -55,7 +55,7 @@ class TenantController extends Controller
         $tenant = $service->create($this->validated($request) + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
         $audit->log($request, 'tenant.created', $tenant, [], $tenant->only(['company_name', 'owner_email', 'status', 'plan_id']));
 
-        return redirect()->route('central.tenants.show', $tenant)->with('success', 'Tenant queued for provisioning.');
+        return redirect()->route('central.tenants.show', $tenant)->with('success', 'Tenant created and provisioned successfully.');
     }
 
     public function show(Tenant $tenant)
@@ -103,7 +103,7 @@ class TenantController extends Controller
     public function retry(Tenant $tenant, TenantProvisioningService $service)
     {
         abort_unless(in_array($tenant->status, ['pending', 'failed', 'provisioning_failed'], true), 422);
-        $service->retry($tenant, true);
+        $service->retry($tenant);
 
         return back()->with('success', 'Tenant provisioning completed.');
     }
@@ -126,16 +126,30 @@ class TenantController extends Controller
 
     public function health(Tenant $tenant)
     {
+        $domain = $tenant->domains()->where('is_primary', true)->first();
+        $diagnostic = [
+            'central_domains' => config('tenancy.central_domains'),
+            'tenant_base_domain' => config('saas.tenant_base_domain'),
+            'expected_wildcard' => '*.'.ltrim((string) config('saas.tenant_base_domain'), '.'),
+            'domain' => [
+                'hostname' => $domain?->domain,
+                'exists' => $domain !== null,
+                'status' => $domain?->status,
+                'verification_status' => $domain?->verification_status,
+                'verified' => $domain?->verification_status === 'verified' && $domain?->verified_at !== null,
+            ],
+            'tenant_active' => $tenant->status === 'active',
+        ];
         try {
             $result = $tenant->run(fn (): array => [
                 'database' => DB::connection()->getDatabaseName(),
-                'connected' => (bool) DB::connection()->getPdo(),
+                'database_reachable' => (bool) DB::connection()->getPdo(),
                 'migration_count' => DB::table('migrations')->count(),
             ]);
 
-            return response()->json(['healthy' => true] + $result);
+            return response()->json(['healthy' => true] + $diagnostic + $result);
         } catch (\Throwable) {
-            return response()->json(['healthy' => false, 'message' => 'Tenant database health check failed.'], 503);
+            return response()->json(['healthy' => false] + $diagnostic + ['database_reachable' => false, 'message' => 'Tenant database health check failed.'], 503);
         } finally {
             if (tenancy()->initialized) {
                 tenancy()->end();

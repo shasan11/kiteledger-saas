@@ -108,18 +108,34 @@ class WebsiteController extends Controller
 
     private function publicRender(string $slugOrType, array $extra = [])
     {
-        $page = Cache::remember('website-page:'.$slugOrType, now()->addMinutes(30), fn () => WebsitePage::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])->where('status', 'published')->where('visibility', 'public')->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))->where(fn ($q) => $q->where('slug', $slugOrType)->orWhere('page_type', $slugOrType))->firstOrFail());
-        if (blank($page->canonical_url)) {
-            $base = rtrim((string) app(PlatformSettingsService::class)->get('seo.canonical_base_url', config('app.url')), '/');
-            $page->setAttribute('canonical_url', $base.($page->slug === 'home' ? '/' : '/'.$page->slug));
-        }
+        $page = Cache::remember('website-page:v2:'.$slugOrType, now()->addMinutes(30), function () use ($slugOrType): array {
+            $page = WebsitePage::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])
+                ->where('status', 'published')
+                ->where('visibility', 'public')
+                ->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))
+                ->where(fn ($query) => $query->where('slug', $slugOrType)->orWhere('page_type', $slugOrType))
+                ->firstOrFail();
+            if (blank($page->canonical_url)) {
+                $base = rtrim((string) app(PlatformSettingsService::class)->get('seo.canonical_base_url', config('app.url')), '/');
+                $page->setAttribute('canonical_url', $base.($page->slug === 'home' ? '/' : '/'.$page->slug));
+            }
 
-        return Inertia::render('Central/Website/Page', $this->sharedPublic() + ['page' => $page, 'faqs' => $page->page_type === 'home' || $page->page_type === 'support' ? WebsiteContentItem::where('type', 'faq')->where('status', 'published')->orderBy('sort_order')->get() : [], 'testimonials' => $page->page_type === 'home' ? WebsiteContentItem::where('type', 'testimonial')->where('status', 'published')->orderBy('sort_order')->get() : []] + $extra);
+            return $page->toArray();
+        });
+
+        return Inertia::render('Central/Website/Page', $this->sharedPublic() + ['page' => $page, 'faqs' => in_array($page['page_type'], ['home', 'support'], true) ? WebsiteContentItem::where('type', 'faq')->where('status', 'published')->orderBy('sort_order')->get() : [], 'testimonials' => $page['page_type'] === 'home' ? WebsiteContentItem::where('type', 'testimonial')->where('status', 'published')->orderBy('sort_order')->get() : []] + $extra);
     }
 
     private function sharedPublic(): array
     {
-        $menus = Cache::remember('website-menus', now()->addMinutes(30), fn () => WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->where('is_active', true)->orderBy('sort_order')])->whereNull('parent_id')->where('is_active', true)->orderBy('sort_order')->get()->groupBy('location'));
+        $menus = Cache::remember('website-menus:v2', now()->addMinutes(30), fn (): array => WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->where('is_active', true)->orderBy('sort_order')])
+            ->whereNull('parent_id')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get()
+            ->groupBy('location')
+            ->map(fn ($items) => $items->values()->toArray())
+            ->all());
 
         return ['menus' => $menus, 'site' => app(PlatformSettingsService::class)->publicSettings()];
     }

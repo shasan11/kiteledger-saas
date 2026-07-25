@@ -10,10 +10,18 @@ class MySqlDatabaseProvisioner implements TenantDatabaseProvisioner
 {
     public function provision(Tenant $tenant): void
     {
-        abort_unless($this->available(), 500, 'The tenant_admin connection is not configured.');
+        if (! $this->available()) {
+            throw new \RuntimeException('automatic_privilege_unavailable');
+        }
         $database = (string) ($tenant->tenancy_db_name ?: $tenant->database_name);
-        abort_unless((bool) preg_match('/^[a-zA-Z0-9_]{1,64}$/', $database), 422, 'Invalid tenant database name.');
-        DB::connection('tenant_admin')->statement('CREATE DATABASE IF NOT EXISTS `'.str_replace('`', '``', $database).'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        if (! preg_match('/^[a-zA-Z0-9_]{1,64}$/', $database)) {
+            throw new \RuntimeException('database_name_invalid');
+        }
+        try {
+            DB::connection('tenant_admin')->statement('CREATE DATABASE IF NOT EXISTS `'.str_replace('`', '``', $database).'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException('automatic_privilege_unavailable', previous: $exception);
+        }
         $tenant->setInternal('db_connection', 'tenant_template');
         $tenant->setInternal('db_name', $database);
         $tenant->forceFill([

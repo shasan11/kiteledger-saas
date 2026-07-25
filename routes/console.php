@@ -157,7 +157,7 @@ Artisan::command('central-admin:create {email} {--name=Super Admin} {--password=
 Artisan::command('tenants:provision {tenant}', function (): int {
     $tenant = Tenant::findOrFail($this->argument('tenant'));
     app(TenantProvisioningService::class)->retry($tenant);
-    $this->info('Tenant provisioning dispatched.');
+    $this->info('Tenant provisioning completed.');
 
     return 0;
 })->purpose('Provision or retry one tenant');

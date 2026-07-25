@@ -13,6 +13,7 @@ use App\Services\SaaS\PlanLimitService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantDomainService;
 use App\Services\SaaS\TenantFileDeletionService;
+use App\Services\SaaS\TenantProvisioningRunner;
 use App\Services\SaaS\TenantProvisioningService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
@@ -27,47 +28,56 @@ class CentralTenancyTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['saas.tenant_base_domain' => 'test']);
+    }
+
     public function test_central_service_creates_tenant_and_domain_without_branch_confusion(): void
     {
         Queue::fake();
+        $this->fakeSuccessfulRunner();
         $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Acme', 'acme', 'ada@example.test', 'tenant_acme'));
-        $this->assertDatabaseHas('tenants', ['id' => $tenant->id, 'company_name' => 'Acme', 'status' => 'pending']);
-        $this->assertDatabaseHas('domains', ['tenant_id' => $tenant->id, 'domain' => 'acme.test', 'type' => 'subdomain']);
+        $this->assertDatabaseHas('tenants', ['id' => $tenant->id, 'company_name' => 'Acme', 'status' => 'active']);
+        $this->assertDatabaseHas('domains', [
+            'tenant_id' => $tenant->id, 'domain' => 'acme.test', 'type' => 'subdomain',
+            'status' => 'active', 'verification_status' => 'verified', 'is_primary' => true,
+        ]);
+        $this->assertNotNull($tenant->domains()->firstOrFail()->verified_at);
         $this->assertSame('manual', $tenant->database_provisioning_mode);
         $this->assertSame('tenant_acme', $tenant->database_name);
+        Queue::assertNotPushed(ProvisionTenantJob::class);
     }
 
-    public function test_tenant_provisioning_job_uses_central_queue_connection(): void
+    public function test_normal_creation_is_synchronous_and_ignores_queue_configuration(): void
     {
         Queue::fake();
-        config(['saas.provision_sync' => false, 'saas.provisioning_queue' => 'provisioning']);
+        config(['queue.default' => 'database', 'saas.provision_sync' => false, 'saas.provisioning_queue' => 'never-run']);
+        $this->fakeSuccessfulRunner();
 
-        app(TenantProvisioningService::class)->create($this->tenantPayload('Queued', 'queued', 'queue@example.test', 'tenant_queued'));
+        $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Immediate', 'immediate', 'queue@example.test', 'tenant_immediate'));
 
-        Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->connection === 'central' && $job->queue === 'provisioning');
+        $this->assertSame('active', $tenant->status);
+        Queue::assertNotPushed(ProvisionTenantJob::class);
     }
 
-    public function test_tenant_provisioning_job_dispatches_after_outer_central_transaction_commits(): void
+    public function test_runner_is_called_after_the_central_transaction_commits(): void
     {
         Queue::fake();
-        config(['saas.provision_sync' => false, 'saas.provisioning_queue' => 'provisioning']);
-        $connection = DB::connection(config('tenancy.database.central_connection'));
+        $baselineTransactionLevel = DB::connection(config('tenancy.database.central_connection'))->transactionLevel();
+        $runner = Mockery::mock(TenantProvisioningRunner::class);
+        $runner->shouldReceive('run')->once()->withArgs(function (Tenant $tenant) use ($baselineTransactionLevel): bool {
+            $this->assertSame($baselineTransactionLevel, DB::connection(config('tenancy.database.central_connection'))->transactionLevel());
+            $tenant->update(['status' => 'active']);
 
-        $connection->beginTransaction();
+            return true;
+        })->andReturnUsing(fn (Tenant $tenant) => $tenant->refresh());
+        $this->app->instance(TenantProvisioningRunner::class, $runner);
 
-        try {
-            app(TenantProvisioningService::class)->create($this->tenantPayload('Deferred', 'deferred', 'deferred@example.test', 'tenant_deferred'));
+        app(TenantProvisioningService::class)->create($this->tenantPayload('Committed', 'committed', 'committed@example.test', 'tenant_committed'));
 
-            Queue::assertNotPushed(ProvisionTenantJob::class);
-        } catch (\Throwable $e) {
-            $connection->rollBack();
-
-            throw $e;
-        }
-
-        $connection->commit();
-
-        Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->connection === 'central' && $job->queue === 'provisioning');
+        Queue::assertNotPushed(ProvisionTenantJob::class);
     }
 
     public function test_central_queue_connection_is_database_backed_and_after_commit(): void
@@ -81,6 +91,7 @@ class CentralTenancyTest extends TestCase
     public function test_manual_mode_stores_admin_supplied_database_credentials(): void
     {
         Queue::fake();
+        $this->fakeSuccessfulRunner();
         $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Acme', 'acme2', 'ada2@example.test', 'buyer_created_acme'));
 
         $this->assertSame('manual', $tenant->database_provisioning_mode);
@@ -98,6 +109,17 @@ class CentralTenancyTest extends TestCase
             'tenancy_db_port' => 3306, 'tenancy_db_name' => $database,
             'tenancy_db_username' => 'tenant_user', 'tenancy_db_password' => 'tenant-db-secret',
         ];
+    }
+
+    private function fakeSuccessfulRunner(): void
+    {
+        $runner = Mockery::mock(TenantProvisioningRunner::class);
+        $runner->shouldReceive('run')->once()->with(Mockery::type(Tenant::class))->andReturnUsing(function (Tenant $tenant): Tenant {
+            $tenant->forceFill(['status' => 'active', 'provisioned_at' => now()])->save();
+
+            return $tenant->refresh();
+        });
+        $this->app->instance(TenantProvisioningRunner::class, $runner);
     }
 
     public function test_tenant_database_credentials_are_hidden_from_serialization(): void

@@ -115,6 +115,7 @@ class SaasHealthCommandTest extends TestCase
             'queue.failed.database' => $central,
             'queue.failed.table' => 'failed_jobs',
             'saas.base_domain' => 'example.test',
+            'saas.tenant_base_domain' => 'example.test',
             'saas.database.mode' => 'pool',
             'session.driver' => 'file',
             'session.domain' => null,

@@ -30,6 +30,7 @@ use Database\Seeders\PlatformSettingsSeeder;
 use Database\Seeders\WebsiteSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -202,11 +203,14 @@ class SuperadminRequirementsTest extends TestCase
         $this->seed(PlatformSettingsSeeder::class);
         $this->seed(WebsiteSeeder::class);
         WebsitePage::create(['title' => 'Hidden draft', 'slug' => 'hidden-draft', 'page_type' => 'custom', 'status' => 'draft', 'visibility' => 'public']);
+        Cache::put('website-page:home', WebsitePage::where('slug', 'home')->firstOrFail(), now()->addMinutes(30));
 
         $this->get(route('central.home'))->assertOk()->assertInertia(fn ($page) => $page
             ->component('Central/Website/Page')
             ->where('page.page_type', 'home')
             ->has('menus.header'));
+        $this->assertIsArray(Cache::get('website-page:v2:home'));
+        $this->assertIsArray(Cache::get('website-menus:v2'));
         $this->get(route('central.page', 'hidden-draft'))->assertNotFound();
         $this->get(route('central.robots'))->assertOk()->assertHeader('Content-Type', 'text/plain; charset=UTF-8')->assertSee('User-agent: *', false);
     }
