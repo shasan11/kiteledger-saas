@@ -305,7 +305,7 @@ export default function Settings({ groups, activeGroup }) {
                                             <div>
                                                 <Text strong>Administrator #{row.admin_id || 'system'}</Text>
                                                 <br />
-                                                <Text type="secondary">{row.changed_at}</Text>
+                                                
                                             </div>
                                             {!history.is_encrypted && (
                                                 <Text code className="platform-setting-history__value">
