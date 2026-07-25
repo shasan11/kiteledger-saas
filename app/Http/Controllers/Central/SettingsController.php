@@ -95,15 +95,6 @@ class SettingsController extends Controller
         return back()->with('success', ucfirst($group).' configuration test succeeded.');
     }
 
-    public function history(PlatformSetting $setting)
-    {
-        return response()->json($setting->revisions()->limit(50)->get()->map(fn ($revision) => [
-            'id' => $revision->id, 'admin_id' => $revision->admin_id, 'changed_at' => $revision->created_at,
-            'old_value' => $setting->is_encrypted ? null : $revision->getRawOriginal('old_value'),
-            'new_value' => $setting->is_encrypted ? null : $revision->getRawOriginal('new_value'),
-        ]));
-    }
-
     private function previewUrl(PlatformSetting $setting): ?string
     {
         if (! in_array($setting->input_type, ['image', 'file'], true)) {

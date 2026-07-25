@@ -7,7 +7,6 @@ import {
     CheckOutlined,
     CloudUploadOutlined,
     DeleteOutlined,
-    HistoryOutlined,
     ReloadOutlined,
     SearchOutlined,
 } from '@ant-design/icons';
@@ -16,7 +15,6 @@ import {
     Alert,
     Button,
     ColorPicker,
-    Drawer,
     Empty,
     Form,
     Input,
@@ -26,11 +24,9 @@ import {
     Space,
     Switch,
     Tag,
-    Tooltip,
     Typography,
     Upload,
 } from 'antd';
-import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 
 const { Text } = Typography;
@@ -59,8 +55,6 @@ export default function Settings({ groups, activeGroup }) {
     const [section, setSection] = useState(activeGroup);
     const [search, setSearch] = useState('');
     const [dirty, setDirty] = useState(false);
-    const [history, setHistory] = useState(null);
-    const [historyRows, setHistoryRows] = useState([]);
     const [confirmation, setConfirmation] = useState(null);
     const [confirmationPassword, setConfirmationPassword] = useState('');
     const [form] = Form.useForm();
@@ -86,7 +80,7 @@ export default function Settings({ groups, activeGroup }) {
         if (!term) return settings;
 
         return settings.filter((item) =>
-            `${item.label} $in  ${item.key}`.toLowerCase().includes(term),
+            `${item.label} ${item.key}`.toLowerCase().includes(term),
         );
     }, [settings, search]);
 
@@ -195,12 +189,6 @@ export default function Settings({ groups, activeGroup }) {
               )
             : submit(confirmation.values, confirmationPassword);
 
-    const openHistory = async (item) => {
-        setHistory(item);
-        const { data } = await axios.get(route('central.settings.history', item.id));
-        setHistoryRows(data);
-    };
-
     return (
         <CentralLayout title="Platform Settings">
             <PageHeader
@@ -259,7 +247,7 @@ export default function Settings({ groups, activeGroup }) {
                                     </div>
                                     <div className="platform-settings-list">
                                         {group.items.map((item) => (
-                                            <SettingField key={item.key} item={item} onHistory={openHistory} />
+                                            <SettingField key={item.key} item={item} />
                                         ))}
                                     </div>
                                 </section>
@@ -282,46 +270,6 @@ export default function Settings({ groups, activeGroup }) {
                 </main>
             </div>
 
-            <Drawer
-                open={Boolean(history)}
-                onClose={() => setHistory(null)}
-                title={history ? history.label : 'Setting details'}
-                width={520}
-            >
-                {history && (
-                    <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        <SettingMeta item={history} />
-                        {history.is_encrypted && (
-                            <Alert type="warning" showIcon message="Secret values are never returned to the browser." />
-                        )}
-                        <div>
-                            <Typography.Title level={5} className="platform-setting-history__title">
-                                Change history
-                            </Typography.Title>
-                            {historyRows.length ? (
-                                <div className="platform-setting-history">
-                                    {historyRows.map((row) => (
-                                        <div className="platform-setting-history__row" key={row.id}>
-                                            <div>
-                                                <Text strong>Administrator #{row.admin_id || 'system'}</Text>
-                                                <br />
-                                                
-                                            </div>
-                                            {!history.is_encrypted && (
-                                                <Text code className="platform-setting-history__value">
-                                                    {String(row.old_value ?? 'empty')} {'→'} {String(row.new_value ?? 'empty')}
-                                                </Text>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No changes recorded yet." />
-                            )}
-                        </div>
-                    </Space>
-                )}
-            </Drawer>
 
             <Modal
                 open={Boolean(confirmation)}
@@ -420,7 +368,7 @@ export default function Settings({ groups, activeGroup }) {
                 }
                 .platform-setting-field {
                     display: grid;
-                    grid-template-columns: minmax(220px, 1fr) minmax(280px, 440px) 32px;
+                    grid-template-columns: minmax(220px, 1fr) minmax(280px, 440px);
                     gap: 24px;
                     align-items: center;
                     min-width: 0;
@@ -434,7 +382,7 @@ export default function Settings({ groups, activeGroup }) {
                     background: #fcfdfe;
                 }
                 .platform-setting-field.is-wide {
-                    grid-template-columns: minmax(0, 1fr) 32px;
+                    grid-template-columns: minmax(0, 1fr);
                     align-items: start;
                 }
                 .platform-setting-field.is-wide .platform-setting-field__control {
@@ -456,12 +404,6 @@ export default function Settings({ groups, activeGroup }) {
                 }
                 .platform-setting-field__control {
                     min-width: 0;
-                }
-                .platform-setting-field__action {
-                    grid-column: -2 / -1;
-                    grid-row: 1;
-                    align-self: center;
-                    color: #64748b;
                 }
                 .platform-setting-field .ant-form-item {
                     margin-bottom: 0;
@@ -513,36 +455,6 @@ export default function Settings({ groups, activeGroup }) {
                     box-shadow: 0 12px 34px rgba(15, 23, 42, 0.14);
                     backdrop-filter: blur(10px);
                 }
-                .platform-setting-meta {
-                    display: grid;
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                    gap: 16px;
-                    padding: 16px;
-                    border: 1px solid #e8edf3;
-                    border-radius: 10px;
-                    background: #fafbfc;
-                }
-                .platform-setting-history__title {
-                    margin: 0 0 12px !important;
-                }
-                .platform-setting-history {
-                    overflow: hidden;
-                    border: 1px solid #e8edf3;
-                    border-radius: 10px;
-                }
-                .platform-setting-history__row {
-                    display: grid;
-                    gap: 10px;
-                    padding: 14px 16px;
-                    border-bottom: 1px solid #eef2f6;
-                }
-                .platform-setting-history__row:last-child {
-                    border-bottom: 0;
-                }
-                .platform-setting-history__value {
-                    overflow-wrap: anywhere;
-                    white-space: normal;
-                }
                 @media (max-width: 1100px) {
                     .platform-settings-shell {
                         grid-template-columns: 1fr;
@@ -565,7 +477,7 @@ export default function Settings({ groups, activeGroup }) {
                     }
                     .platform-setting-field,
                     .platform-setting-field.is-wide {
-                        grid-template-columns: minmax(0, 1fr) 32px;
+                        grid-template-columns: minmax(0, 1fr);
                         gap: 14px;
                     }
                     .platform-setting-field__control {
@@ -581,7 +493,7 @@ export default function Settings({ groups, activeGroup }) {
     );
 }
 
-function SettingField({ item, onHistory }) {
+function SettingField({ item }) {
     const isWide = wideInputs.has(item.input_type);
 
     return (
@@ -622,37 +534,6 @@ function SettingField({ item, onHistory }) {
                     {control(item)}
                 </Form.Item>
             </div>
-
-            <Tooltip title="View details and change history">
-                <Button
-                    className="platform-setting-field__action"
-                    type="text"
-                    size="small"
-                    icon={<HistoryOutlined />}
-                    aria-label={`View ${item.label} history`}
-                    onClick={() => onHistory(item)}
-                />
-            </Tooltip>
-        </div>
-    );
-}
-
-function SettingMeta({ item }) {
-    const rows = [
-        ['Key', item.key],
-        ['Environment', item.environment ? humanize(item.environment) : 'All'],
-        ['Default', item.default_value ?? 'Empty'],
-    ];
-
-    return (
-        <div className="platform-setting-meta">
-            {rows.map(([label, value]) => (
-                <div key={label}>
-                    <Text type="secondary">{label}</Text>
-                    <br />
-                    <Text>{String(value)}</Text>
-                </div>
-            ))}
         </div>
     );
 }

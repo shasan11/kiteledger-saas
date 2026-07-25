@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./PaymentOutRecordShow-CPx5AU9_.js";var n=e();function r({id:e}){return(0,n.jsx)(t,{id:e,title:`Purchase Bill`,endpoint:`/api/purchase-bills/`,backRoute:`payment-out.purchase-bills.index`,backLabel:`Back to Purchase Bills`,documentType:`purchase_bill`,editRoute:`payment-out.purchase-bills.edit`})}export{r as default};
