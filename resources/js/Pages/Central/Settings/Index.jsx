@@ -3,6 +3,7 @@ import RichTextEditor from '@/Components/Central/RichTextEditor';
 import SectionCard from '@/Components/Central/SectionCard';
 import { humanize } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
+import { fetchBrandSettings, publishBrandSettings } from '@/brandSettings';
 import {
     CheckOutlined,
     CloudUploadOutlined,
@@ -124,6 +125,9 @@ export default function Settings({ groups, activeGroup }) {
             onSuccess: () => {
                 setDirty(false);
                 clearConfirmation();
+                if (section === 'branding') {
+                    fetchBrandSettings().then(publishBrandSettings).catch(() => {});
+                }
             },
         };
 

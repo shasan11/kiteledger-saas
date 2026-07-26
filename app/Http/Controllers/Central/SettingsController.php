@@ -9,6 +9,7 @@ use App\Models\Central\PlatformSetting;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -25,16 +26,15 @@ class SettingsController extends Controller
             'tenant_registration.default_plan' => Plan::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name'])->map(fn (Plan $plan) => ['value' => $plan->id, 'label' => $plan->name])->values(),
             'tenant_registration.default_data_template' => DefaultDataTemplate::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->map(fn (DefaultDataTemplate $template) => ['value' => $template->id, 'label' => $template->name])->values(),
         ];
-        $groups = PlatformSetting::query()->with(['revisions', 'updatedBy:id,name'])->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
+        $groups = PlatformSetting::query()->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
             'id' => $setting->id, 'group' => $setting->group, 'key' => $setting->key, 'label' => $setting->label,
-             'input_type' => $setting->input_type,
+            'input_type' => $setting->input_type,
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
             'value' => $setting->safeValue(), 'has_secret' => $setting->is_encrypted && filled($setting->getRawOriginal('value')),
             'preview_url' => $this->previewUrl($setting),
             'is_encrypted' => $setting->is_encrypted, 'is_required' => $setting->is_required, 'is_readonly' => $setting->is_readonly,
             'requires_confirmation' => $setting->requires_confirmation, 'requires_restart' => $setting->requires_restart,
-            
         ])->values())->toArray();
         $requestedGroup = (string) ($request->route('group') ?: $request->query('group', ''));
 
@@ -43,13 +43,28 @@ class SettingsController extends Controller
 
     public function update(Request $request, string $group, PlatformSettingsService $settings, CentralAuditService $audit)
     {
-        $data = $request->validate(['values' => ['required', 'array'], 'confirmation_password' => ['nullable', 'string', 'max:1000']]);
-        $sensitive = PlatformSetting::where('group', $group)->whereIn('key', array_keys($data['values']))->where('requires_confirmation', true)->exists();
+        $data = $request->validate(['confirmation_password' => ['nullable', 'string', 'max:1000']]);
+        $values = $this->settingValues($request);
+        if ($values === []) {
+            throw ValidationException::withMessages(['values' => 'No settings were submitted.']);
+        }
+
+        $sensitive = PlatformSetting::where('group', $group)->whereIn('key', array_keys($values))->where('requires_confirmation', true)->exists();
         abort_if($sensitive && ! Hash::check((string) ($data['confirmation_password'] ?? ''), $request->user('central')->password), 422, 'Your current administrator password is required for sensitive settings.');
-        $settings->updateSection($group, $data['values'], $request->user('central')->id, $request->ip());
-        $audit->log($request, 'settings.section_updated', null, [], ['group' => $group, 'keys' => array_keys($data['values'])]);
+        $settings->updateSection($group, $values, $request->user('central')->id, $request->ip());
+        $audit->log($request, 'settings.section_updated', null, [], ['group' => $group, 'keys' => array_keys($values)]);
 
         return back()->with('success', 'Settings saved.');
+    }
+
+    private function settingValues(Request $request): array
+    {
+        $values = $request->input('values', []);
+        if (! is_array($values)) {
+            return [];
+        }
+
+        return array_replace($values, Arr::dot($request->file('values', [])));
     }
 
     public function reset(Request $request, string $group, PlatformSettingsService $settings, CentralAuditService $audit)

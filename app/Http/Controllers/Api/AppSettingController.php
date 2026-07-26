@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\AppSetting;
 use App\Services\LocalizationService;
 use App\Services\Media\MediaStorageService;
+use App\Services\SaaS\PlatformSettingsService;
 use App\Support\Branding;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -118,7 +119,7 @@ class AppSettingController extends BaseCrudApiController
             ->first();
 
         if (! $record) {
-            return response()->json(null);
+            return response()->json($this->platformBrandSettings());
         }
 
         return response()->json($this->serializeAppSetting($record));
@@ -135,12 +136,13 @@ class AppSettingController extends BaseCrudApiController
     public function brand()
     {
         $record = AppSetting::query()->orderBy('created_at')->first();
+        $platform = app(PlatformSettingsService::class)->publicSettings();
 
         return response()->json([
-            'app_name' => $record?->company_name ?: config('app.name'),
-            'logo_url' => Branding::logoUrl($record?->logo),
-            'dark_logo_url' => Branding::darkLogoUrl($record?->dark_logo),
-            'favicon_url' => Branding::faviconUrl($record?->favicon),
+            'app_name' => $record?->company_name ?: ($platform['platform.name'] ?? $platform['general.platform_name'] ?? config('app.name')),
+            'logo_url' => $this->brandAssetUrl($record?->logo, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl()),
+            'dark_logo_url' => $this->brandAssetUrl($record?->dark_logo, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl()),
+            'favicon_url' => $this->brandAssetUrl($record?->favicon, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl()),
         ]);
     }
 
@@ -255,11 +257,43 @@ class AppSettingController extends BaseCrudApiController
             return $data;
         }
 
-        $data['logo_url'] = Branding::logoUrl($record->logo);
-        $data['dark_logo_url'] = Branding::darkLogoUrl($record->dark_logo);
-        $data['favicon_url'] = Branding::faviconUrl($record->favicon);
+        $platform = app(PlatformSettingsService::class)->publicSettings();
+
+        $data['logo_url'] = $this->brandAssetUrl($record->logo, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl());
+        $data['dark_logo_url'] = $this->brandAssetUrl($record->dark_logo, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl());
+        $data['favicon_url'] = $this->brandAssetUrl($record->favicon, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl());
+        $data['brand_primary_color'] = ($data['brand_primary_color'] ?? null) ?: ($platform['branding.primary_color'] ?? null);
+        $data['brand_secondary_color'] = ($data['brand_secondary_color'] ?? null) ?: ($platform['branding.secondary_color'] ?? null);
 
         return $data;
+    }
+
+    private function brandAssetUrl(?string $appValue, mixed $platformValue, callable $default): string
+    {
+        if ($appValue) {
+            return Branding::publicFileUrl($appValue) ?: $default();
+        }
+
+        if (is_string($platformValue) && filled($platformValue)) {
+            return $platformValue;
+        }
+
+        return $default();
+    }
+
+    private function platformBrandSettings(): array
+    {
+        $platform = app(PlatformSettingsService::class)->publicSettings();
+
+        return [
+            'app_name' => $platform['platform.name'] ?? $platform['general.platform_name'] ?? config('app.name'),
+            'company_name' => $platform['platform.name'] ?? $platform['general.platform_name'] ?? config('app.name'),
+            'logo_url' => $this->brandAssetUrl(null, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl()),
+            'dark_logo_url' => $this->brandAssetUrl(null, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl()),
+            'favicon_url' => $this->brandAssetUrl(null, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl()),
+            'brand_primary_color' => $platform['branding.primary_color'] ?? null,
+            'brand_secondary_color' => $platform['branding.secondary_color'] ?? null,
+        ];
     }
 
     protected function handleBrandingUploads(Request $request, AppSetting $record): void
