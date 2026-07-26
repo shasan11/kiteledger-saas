@@ -50,14 +50,15 @@ class WebsiteContentController extends Controller
 
     public function previewPage(WebsitePage $page, PlatformSettingsService $settings)
     {
-        $page->load(['sections' => fn ($query) => $query->where('is_active', true)->orderBy('sort_order')]);
+        $page->load(['sections' => fn ($query) => $query->with('media')->where('is_active', true)->orderBy('sort_order')]);
+        $this->hydrateItemMedia($page->sections);
         $menus = WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->where('is_active', true)])->whereNull('parent_id')->where('is_active', true)->orderBy('sort_order')->get()->groupBy('location');
 
         return Inertia::render('Central/Website/Page', [
             'page' => $page, 'menus' => $menus, 'site' => $settings->publicSettings(), 'isPreview' => true,
             'plans' => $page->page_type === 'pricing' ? Plan::where('is_active', true)->orderBy('sort_order')->get() : [],
-            'faqs' => in_array($page->page_type, ['home', 'support'], true) ? WebsiteContentItem::where('type', 'faq')->where('status', 'published')->orderBy('sort_order')->get() : [],
-            'testimonials' => $page->page_type === 'home' ? WebsiteContentItem::where('type', 'testimonial')->where('status', 'published')->orderBy('sort_order')->get() : [],
+            'faqs' => in_array($page->page_type, ['home', 'support'], true) ? WebsiteContentItem::with('media')->where('type', 'faq')->where('status', 'published')->orderBy('sort_order')->get() : [],
+            'testimonials' => $page->page_type === 'home' ? WebsiteContentItem::with('media')->where('type', 'testimonial')->where('status', 'published')->orderBy('sort_order')->get() : [],
         ]);
     }
 
@@ -109,10 +110,13 @@ class WebsiteContentController extends Controller
         $pages = WebsitePage::orderBy('sort_order')->get(['id', 'title', 'slug']);
         $pageId = $request->integer('page_id') ?: $pages->first()?->id;
 
+        $sections = WebsiteSection::with('media')->where('page_id', $pageId)->orderBy('sort_order')->get();
+        $this->hydrateItemMedia($sections);
+
         return Inertia::render('Central/Website/Sections', [
             'pages' => $pages,
             'selectedPage' => $pageId,
-            'sections' => WebsiteSection::where('page_id', $pageId)->orderBy('sort_order')->get(),
+            'sections' => $sections,
         ]);
     }
 
@@ -199,7 +203,7 @@ class WebsiteContentController extends Controller
     public function contentItems(Request $request, string $type)
     {
         abort_unless(in_array($type, self::CONTENT_TYPES, true), 404);
-        $query = WebsiteContentItem::where('type', $type);
+        $query = WebsiteContentItem::with('media')->where('type', $type);
         if ($request->filled('search')) {
             $query->where(fn ($builder) => $builder->where('title', 'like', '%'.$request->string('search').'%')->orWhere('content', 'like', '%'.$request->string('search').'%'));
         }
@@ -256,10 +260,14 @@ class WebsiteContentController extends Controller
             'content' => ['required', 'string', 'max:50000'], 'status' => ['required', Rule::in(['draft', 'published', 'archived'])],
             'sort_order' => ['required', 'integer', 'min:0'], 'published_at' => ['nullable', 'date'],
             'attribution' => ['nullable', 'string', 'max:255'], 'role' => ['nullable', 'string', 'max:255'], 'company' => ['nullable', 'string', 'max:255'], 'rating' => ['nullable', 'integer', 'between:1,5'], 'data' => ['nullable', 'array'],
+            'media_id' => ['nullable', Rule::exists('central_media', 'id')->where(fn ($query) => $query->where('mime_type', 'like', 'image/%'))],
+            'image_alt' => ['nullable', 'string', 'max:255'], 'icon' => ['nullable', 'string', 'max:100'], 'url' => ['nullable', 'string', 'max:2048'],
+            'cta_label' => ['nullable', 'string', 'max:100'], 'display_style' => ['nullable', 'string', 'max:100'],
         ]);
         $data['content'] = trim(strip_tags($data['content']));
-        $data['data'] = array_merge($data['data'] ?? [], collect($data)->only(['attribution', 'role', 'company', 'rating'])->filter(fn ($value) => filled($value))->all());
-        unset($data['attribution'], $data['role'], $data['company'], $data['rating']);
+        $explicit = collect($data)->only(['attribution', 'role', 'company', 'rating', 'icon', 'url', 'cta_label', 'display_style'])->filter(fn ($value) => filled($value))->all();
+        $data['data'] = array_merge($item?->data ?? [], $data['data'] ?? [], $explicit);
+        unset($data['attribution'], $data['role'], $data['company'], $data['rating'], $data['icon'], $data['url'], $data['cta_label'], $data['display_style']);
         if ($data['status'] === 'published' && blank($data['published_at'])) {
             $data['published_at'] = now();
         }
@@ -314,9 +322,15 @@ class WebsiteContentController extends Controller
             'page_id' => ['required', 'exists:website_pages,id'], 'section_key' => ['required', 'alpha_dash', Rule::unique('website_sections')->where('page_id', $request->integer('page_id'))->ignore($section)],
             'section_type' => ['required', Rule::in(['hero', 'logos', 'features', 'content', 'product', 'statistics', 'steps', 'solutions', 'integrations', 'security', 'pricing', 'testimonials', 'faq', 'cta', 'newsletter', 'footer'])], 'title' => ['nullable', 'string', 'max:255'], 'subtitle' => ['nullable', 'string', 'max:500'], 'eyebrow' => ['nullable', 'string', 'max:100'],
             'content' => ['nullable', 'string'], 'image' => ['nullable', 'string', 'max:2048'], 'media_type' => ['nullable', Rule::in(['image', 'video'])], 'video_url' => ['nullable', 'url', 'max:2048'],
+            'media_id' => ['nullable', Rule::exists('central_media', 'id')->where(fn ($query) => $query->where('mime_type', 'like', 'image/%'))], 'image_alt' => ['nullable', 'string', 'max:255'],
             'button_text' => ['nullable', 'string', 'max:100'], 'button_url' => ['nullable', 'string', 'max:2048'], 'secondary_button_text' => ['nullable', 'string', 'max:100'], 'secondary_button_url' => ['nullable', 'string', 'max:2048'],
             'background_style' => ['nullable', 'string', 'max:100'], 'alignment' => ['required', Rule::in(['left', 'center', 'right'])], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0'],
-            'items' => ['nullable', 'array'], 'settings' => ['nullable', 'array'],
+            'items' => ['nullable', 'array'],
+            'items.*.media_id' => ['nullable', Rule::exists('central_media', 'id')->where(fn ($query) => $query->where('mime_type', 'like', 'image/%'))],
+            'items.*.title' => ['nullable', 'string', 'max:255'], 'items.*.content' => ['nullable', 'string', 'max:5000'],
+            'items.*.image_alt' => ['nullable', 'string', 'max:255'], 'items.*.icon' => ['nullable', 'string', 'max:100'],
+            'items.*.url' => ['nullable', 'string', 'max:2048'], 'items.*.cta_label' => ['nullable', 'string', 'max:100'],
+            'settings' => ['nullable', 'array'],
         ]);
 
         return $data;
@@ -340,5 +354,20 @@ class WebsiteContentController extends Controller
     private function revision(Model $model, ?int $adminId): void
     {
         WebsiteRevision::create(['revisionable_type' => $model::class, 'revisionable_id' => $model->id, 'admin_id' => $adminId, 'snapshot' => $model->toArray()]);
+    }
+
+    private function hydrateItemMedia($sections): void
+    {
+        $ids = $sections->flatMap(fn (WebsiteSection $section) => collect($section->items ?? [])->pluck('media_id'))->filter()->unique();
+        $media = Media::whereIn('id', $ids)->get()->keyBy('id');
+        $sections->each(function (WebsiteSection $section) use ($media): void {
+            $section->items = collect($section->items ?? [])->map(function (array $item) use ($media): array {
+                if ($asset = $media->get($item['media_id'] ?? null)) {
+                    $item['media'] = $asset->only(['id', 'url', 'width', 'height', 'original_filename', 'alt_text', 'mime_type']);
+                }
+
+                return $item;
+            })->all();
+        });
     }
 }

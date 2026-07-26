@@ -27,6 +27,11 @@ class WebsiteSection extends CentralModel
         return $this->belongsTo(WebsitePage::class, 'page_id');
     }
 
+    public function media()
+    {
+        return $this->belongsTo(Media::class, 'media_id');
+    }
+
     private static function forgetPageCache(self $section): void
     {
         $page = $section->page;

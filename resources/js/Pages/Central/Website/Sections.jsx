@@ -2,6 +2,7 @@ import CentralLayout from "@/Layouts/CentralLayout";
 import PageHeader from "@/Components/Central/PageHeader";
 import RichTextEditor from "@/Components/Central/RichTextEditor";
 import SectionCard from "@/Components/Central/SectionCard";
+import MediaPicker from "@/Components/Central/MediaPicker";
 import {
     ArrowDownOutlined,
     ArrowUpOutlined,
@@ -12,11 +13,13 @@ import {
 import { router } from "@inertiajs/react";
 import {
     Button,
+    Col,
     Drawer,
     Form,
     Input,
     InputNumber,
     Modal,
+    Row,
     Select,
     Space,
     Switch,
@@ -29,6 +32,7 @@ export default function Sections({ pages, selectedPage, sections }) {
     const [record, setRecord] = useState(null);
     const [open, setOpen] = useState(false);
     const [form] = Form.useForm();
+    const imageAlt = Form.useWatch("image_alt", form);
     const edit = (section = null) => {
         setRecord(section);
         form.resetFields();
@@ -36,6 +40,7 @@ export default function Sections({ pages, selectedPage, sections }) {
             section
                 ? {
                       ...section,
+                      item_fields: section.items || [],
                       items_json: JSON.stringify(section.items || [], null, 2),
                       settings_json: JSON.stringify(
                           section.settings || {},
@@ -50,6 +55,7 @@ export default function Sections({ pages, selectedPage, sections }) {
                       is_active: true,
                       sort_order: sections.length,
                       items_json: "[]",
+                      item_fields: [],
                       settings_json: "{}",
                   },
         );
@@ -59,7 +65,8 @@ export default function Sections({ pages, selectedPage, sections }) {
         let items;
         let settings;
         try {
-            items = JSON.parse(values.items_json || "[]");
+            const legacyItems = JSON.parse(values.items_json || "[]");
+            items = (values.item_fields || []).map((item, index) => ({ ...(legacyItems[index] || {}), ...item }));
             settings = JSON.parse(values.settings_json || "{}");
         } catch {
             form.setFields([
@@ -72,6 +79,7 @@ export default function Sections({ pages, selectedPage, sections }) {
         }
         const payload = { ...values, items, settings };
         delete payload.items_json;
+        delete payload.item_fields;
         delete payload.settings_json;
         const options = {
             preserveScroll: true,
@@ -272,6 +280,12 @@ export default function Sections({ pages, selectedPage, sections }) {
                             <Input type="url" />
                         </Form.Item>
                     </div>
+                    <Form.Item label="Hero / presentation screenshot">
+                        <Form.Item name="media_id" noStyle>
+                            <MediaPicker media={record?.media} alt={imageAlt} onAltChange={(value) => form.setFieldValue("image_alt", value)} />
+                        </Form.Item>
+                        <Form.Item name="image_alt" hidden><Input /></Form.Item>
+                    </Form.Item>
                     <div className="central-two-column">
                         <Form.Item name="button_text" label="Primary button">
                             <Input />
@@ -313,9 +327,26 @@ export default function Sections({ pages, selectedPage, sections }) {
                             />
                         </Form.Item>
                     </div>
+                    <Form.List name="item_fields">
+                        {(fields, { add, remove }) => <Space direction="vertical" style={{ width: "100%", marginBottom: 18 }}>
+                            <Typography.Text strong>Repeatable items</Typography.Text>
+                            {fields.map(({ key, name, ...rest }) => <SectionCard key={key}>
+                                <Row gutter={12}>
+                                    <Col xs={24} md={12}><Form.Item {...rest} name={[name, "title"]} label="Title"><Input /></Form.Item></Col>
+                                    <Col xs={24} md={12}><Form.Item {...rest} name={[name, "icon"]} label="Icon fallback"><Input /></Form.Item></Col>
+                                    <Col xs={24}><Form.Item {...rest} name={[name, "content"]} label="Description"><Input.TextArea rows={2} /></Form.Item></Col>
+                                    <Col xs={24} md={12}><Form.Item {...rest} name={[name, "url"]} label="URL"><Input /></Form.Item></Col>
+                                    <Col xs={24} md={12}><Form.Item {...rest} name={[name, "cta_label"]} label="CTA label"><Input /></Form.Item></Col>
+                                    <Col xs={24}><Form.Item {...rest} name={[name, "media_id"]} label="Screenshot"><MediaPicker /></Form.Item></Col>
+                                </Row>
+                                <Button danger icon={<DeleteOutlined />} onClick={() => remove(name)}>Remove item</Button>
+                            </SectionCard>)}
+                            <Button icon={<PlusOutlined />} onClick={() => add({ title: "", content: "" })}>Add item</Button>
+                        </Space>}
+                    </Form.List>
                     <Form.Item
                         name="items_json"
-                        label="Repeatable items (JSON)"
+                        label="Legacy item data (advanced JSON)"
                         rules={[{ validator: jsonValidator }]}
                     >
                         <Input.TextArea rows={8} className="central-code" />

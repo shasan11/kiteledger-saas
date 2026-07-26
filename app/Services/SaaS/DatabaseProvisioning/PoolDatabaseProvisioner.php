@@ -18,15 +18,17 @@ class PoolDatabaseProvisioner implements TenantDatabaseProvisioner
     public function provision(Tenant $tenant): void
     {
         DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant): void {
-            $entry = TenantDatabasePool::query()->where('tenant_id', $tenant->id)->lockForUpdate()->first()
-                ?? TenantDatabasePool::query()->where('status', 'available')->whereNotNull('validated_at')->lockForUpdate()->first();
+            $entry = $tenant->database_pool_id
+                ? TenantDatabasePool::query()->whereKey($tenant->database_pool_id)->where('tenant_id', $tenant->id)->whereIn('status', ['reserved', 'allocated'])->lockForUpdate()->first()
+                : TenantDatabasePool::query()->where('tenant_id', $tenant->id)->lockForUpdate()->first()
+                    ?? TenantDatabasePool::query()->where('status', 'available')->whereNotNull('validated_at')->lockForUpdate()->first();
             if (! $entry) {
                 throw new \RuntimeException('pool_exhausted');
             }
 
             $this->names->assertValid($entry->database_name);
             $entry->forceFill([
-                'status' => 'allocated',
+                'status' => 'reserved',
                 'tenant_id' => $tenant->id,
                 'ownership_tenant_id' => $tenant->id,
                 'allocated_at' => $entry->allocated_at ?? now(),
@@ -52,7 +54,7 @@ class PoolDatabaseProvisioner implements TenantDatabaseProvisioner
         try {
             $this->connections->createOrVerifyOwnership($tenant, 'pool');
             $tenant->forceFill(['provisioned_at' => now()])->save();
-            TenantDatabasePool::where('tenant_id', $tenant->id)->update(['validated_at' => now(), 'last_error' => null]);
+            TenantDatabasePool::where('tenant_id', $tenant->id)->update(['status' => 'allocated', 'validated_at' => now(), 'last_error' => null]);
         } catch (\Throwable $e) {
             TenantDatabasePool::where('tenant_id', $tenant->id)->update(['status' => 'failed', 'last_error' => 'database_connection_failed']);
             throw new \RuntimeException('database_connection_failed', previous: $e);

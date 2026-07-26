@@ -16,6 +16,7 @@ return [
     'deletion_wait_days' => (int) env('SAAS_DELETION_WAIT_DAYS', 14),
     'database' => [
         'mode' => env('TENANT_DB_PROVISIONING_MODE', env('TENANT_DATABASE_PROVISIONING_MODE', 'manual')),
+        'allowed_modes' => array_values(array_filter(array_map('trim', explode(',', (string) env('TENANT_DB_PROVISIONING_MODES', env('TENANT_DB_PROVISIONING_MODE', env('TENANT_DATABASE_PROVISIONING_MODE', 'manual'))))))),
         'prefix' => env('TENANT_DATABASE_PREFIX', 'tenant_'),
         'cpanel' => [
             'host' => env('CPANEL_HOST'),

@@ -28,6 +28,7 @@ class SettingsController extends Controller
         ];
         $groups = PlatformSetting::query()->orderBy('group')->orderBy('sort_order')->get()->groupBy('group')->map(fn ($settings) => $settings->map(fn (PlatformSetting $setting) => [
             'id' => $setting->id, 'group' => $setting->group, 'key' => $setting->key, 'label' => $setting->label,
+            'description' => $setting->description, 'help_text' => $setting->help_text, 'updated_at' => $setting->updated_at?->toIso8601String(),
             'input_type' => $setting->input_type,
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
@@ -50,11 +51,14 @@ class SettingsController extends Controller
         }
 
         $sensitive = PlatformSetting::where('group', $group)->whereIn('key', array_keys($values))->where('requires_confirmation', true)->exists();
-        abort_if($sensitive && ! Hash::check((string) ($data['confirmation_password'] ?? ''), $request->user('central')->password), 422, 'Your current administrator password is required for sensitive settings.');
-        $settings->updateSection($group, $values, $request->user('central')->id, $request->ip());
+        if ($sensitive && ! Hash::check((string) ($data['confirmation_password'] ?? ''), $request->user('central')->password)) {
+            throw ValidationException::withMessages(['confirmation_password' => 'Your current administrator password is incorrect.']);
+        }
+        $result = $settings->updateSection($group, $values, $request->user('central')->id, $request->ip());
         $audit->log($request, 'settings.section_updated', null, [], ['group' => $group, 'keys' => array_keys($values)]);
 
-        return back()->with('success', 'Settings saved.');
+        return back()->with('success', $result['saved'] === [] ? 'No settings changed.' : 'Settings saved.')
+            ->with('settings_result', $result);
     }
 
     private function settingValues(Request $request): array
@@ -71,7 +75,9 @@ class SettingsController extends Controller
     {
         $data = $request->validate(['confirmation_password' => ['nullable', 'string', 'max:1000']]);
         $sensitive = PlatformSetting::where('group', $group)->where('requires_confirmation', true)->exists();
-        abort_if($sensitive && ! Hash::check((string) ($data['confirmation_password'] ?? ''), $request->user('central')->password), 422, 'Your current administrator password is required to reset sensitive settings.');
+        if ($sensitive && ! Hash::check((string) ($data['confirmation_password'] ?? ''), $request->user('central')->password)) {
+            throw ValidationException::withMessages(['confirmation_password' => 'Your current administrator password is incorrect.']);
+        }
         $settings->resetSection($group, $request->user('central')->id, $request->ip());
         $audit->log($request, 'settings.section_reset', null, [], ['group' => $group]);
 

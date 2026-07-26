@@ -9,6 +9,7 @@ use App\Models\Central\Subscription;
 use App\Models\Central\TenantFeatureOverride;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Stancl\Tenancy\Contracts\TenantWithDatabase;
 use Stancl\Tenancy\Database\Concerns\HasDatabase;
@@ -45,6 +46,8 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'database_provisioning_mode', 'database_server', 'database_username',
             'database_password', 'database_ownership_id', 'created_by', 'created_at',
             'updated_at', 'is_internal', 'lifecycle_version',
+            'onboarding_idempotency_key', 'onboarding_billing_cycle', 'onboarding_subscription_mode',
+            'onboarding_effective_at', 'database_pool_id', 'provisioning_owner_password',
         ];
     }
 
@@ -57,6 +60,8 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'deleted_at' => 'datetime',
             'tenancy_db_password' => 'encrypted',
             'database_created_by_app' => 'boolean',
+            'onboarding_effective_at' => 'datetime',
+            'provisioning_owner_password' => 'encrypted',
             'data' => 'array',
         ];
     }
@@ -69,6 +74,11 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class, 'tenant_id', $this->getTenantKeyName())->latestOfMany();
     }
 
     public function featureOverrides(): HasMany

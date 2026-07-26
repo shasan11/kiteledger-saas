@@ -6,9 +6,13 @@ use App\Enums\TenantStatus;
 use App\Models\Branch;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ProvisioningLog;
+use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
+use App\Models\Central\TenantInitialPaymentIntent;
+use App\Models\Central\TenantInvoice;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Payments\ManualPaymentService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +28,8 @@ class TenantProvisioningRunner
         private TenantLifecycleService $lifecycle,
         private TenantDomainService $domains,
         private CentralNotificationService $notifications,
+        private ?BillingInvoiceService $invoices = null,
+        private ?ManualPaymentService $payments = null,
     ) {}
 
     public function run(Tenant $tenant, bool $retry = false): Tenant
@@ -49,7 +55,7 @@ class TenantProvisioningRunner
             $tenant = $this->lifecycle->transition(
                 $tenant,
                 TenantStatus::Provisioning,
-                idempotencyKey: 'provision-start:'.$attemptId,
+                idempotencyKey: 'tenant:'.$tenant->id.':provision-start:v'.((int) $tenant->lifecycle_version + 1),
             );
         }
 
@@ -69,21 +75,56 @@ class TenantProvisioningRunner
             $this->step($tenant, $attemptId, 'subscription', function () use ($tenant): void {
                 $tenant->refresh();
                 if ($tenant->plan && ! $tenant->subscription) {
-                    $this->subscriptions->start($tenant, $tenant->plan, idempotencyKey: 'tenant-provisioning:'.$tenant->id);
+                    $this->subscriptions->start(
+                        $tenant, $tenant->plan,
+                        cycle: $tenant->onboarding_billing_cycle ?: 'monthly',
+                        mode: $tenant->onboarding_subscription_mode ?: 'active',
+                        effectiveAt: $tenant->onboarding_effective_at,
+                        idempotencyKey: 'tenant:'.$tenant->id.':subscription',
+                    );
                 }
+            });
+            $this->step($tenant, $attemptId, 'invoice', function () use ($tenant): void {
+                $subscription = Subscription::where('tenant_id', $tenant->id)->latest('id')->first();
+                if (! $subscription || $subscription->status !== 'active' || ! $subscription->plan || ((float) $subscription->plan->price_monthly === 0.0 && (float) $subscription->plan->price_yearly === 0.0)) {
+                    return;
+                }
+                ($this->invoices ?? app(BillingInvoiceService::class))->generate($subscription, 'tenant:'.$tenant->id.':initial-invoice');
+            });
+            $this->step($tenant, $attemptId, 'payment', function () use ($tenant): void {
+                $intent = TenantInitialPaymentIntent::where('tenant_id', $tenant->id)->first();
+                if (! $intent || $intent->status === 'processed') {
+                    return;
+                }
+                $invoice = TenantInvoice::where('idempotency_key', 'tenant:'.$tenant->id.':initial-invoice')->first();
+                if (! $invoice) {
+                    throw new \RuntimeException('initial_invoice_missing');
+                }
+                $amount = $intent->amount !== null ? (float) $intent->amount : (float) $invoice->balance;
+                if (abs($amount - (float) $invoice->balance) > 0.009 && ! $intent->adjustment_acknowledged) {
+                    throw new \RuntimeException('payment_amount_confirmation_required');
+                }
+                $transaction = ($this->payments ?? app(ManualPaymentService::class))->record($invoice, [
+                    'amount' => $amount, 'currency' => $intent->currency, 'payment_method' => $intent->payment_method,
+                    'payment_date' => $intent->payment_date, 'reference' => $intent->reference,
+                    'bank_reference' => $intent->bank_reference, 'notes' => $intent->notes,
+                    'proof_disk' => $intent->proof_disk, 'proof_path' => $intent->proof_path,
+                    'send_receipt' => $intent->send_receipt, 'idempotency_key' => $intent->idempotency_key,
+                ]);
+                $intent->update(['status' => 'processed', 'payment_transaction_id' => $transaction->id]);
             });
 
             $tenant->refresh();
             // Virtual-column values are exposed as model attributes after a
             // tenant is retrieved. Remove the temporary secret explicitly so
             // it is not encoded back into `data` on save.
-            unset($tenant->provisioning_owner_password);
             $tenant->forceFill([
+                'provisioning_owner_password' => null,
                 'provisioning_step' => null,
                 'last_provisioning_error' => null,
                 'provisioned_at' => now(),
             ])->save();
-            $tenant = $this->lifecycle->transition($tenant, TenantStatus::Active, idempotencyKey: 'provision-complete:'.$attemptId);
+            $tenant = $this->lifecycle->transition($tenant, TenantStatus::Active, idempotencyKey: 'tenant:'.$tenant->id.':provision-complete:v'.((int) $tenant->lifecycle_version + 1));
             $this->recordAttempt($attemptId, $tenant, 'succeeded', ['finished_at' => now(), 'current_step' => null]);
             $this->notifySafely('provisioning_completed', 'success', 'Tenant provisioning completed', $tenant->company_name.' is ready.', $tenant, $attemptId);
 
@@ -93,7 +134,7 @@ class TenantProvisioningRunner
             $failedStep = $tenant->fresh()->provisioning_step;
             $current = $tenant->fresh();
             if ($current->status === TenantStatus::Provisioning->value) {
-                $tenant = $this->lifecycle->transition($current, TenantStatus::ProvisioningFailed, $code, 'provision-failed:'.$attemptId);
+                $tenant = $this->lifecycle->transition($current, TenantStatus::ProvisioningFailed, $code, 'tenant:'.$tenant->id.':provision-failed:v'.((int) $current->lifecycle_version + 1));
             }
             $tenant->forceFill([
                 'provisioning_step' => $failedStep,
@@ -151,13 +192,18 @@ class TenantProvisioningRunner
                 if (! $encrypted) {
                     throw new \RuntimeException('owner_creation_failed');
                 }
+                try {
+                    $plainPassword = Crypt::decryptString($encrypted);
+                } catch (\Throwable) {
+                    $plainPassword = $encrypted;
+                }
                 $user = User::query()->firstOrCreate(['email' => $tenant->owner_email], [
                     'name' => $tenant->owner_name,
                     'first_name' => Str::before($tenant->owner_name, ' '),
                     'last_name' => Str::after($tenant->owner_name, ' '),
                     'username' => Str::slug(Str::before($tenant->owner_email, '@')).'-'.Str::lower(Str::random(4)),
                     'branch_id' => $branch->id,
-                    'password' => Hash::make(Crypt::decryptString($encrypted)),
+                    'password' => Hash::make($plainPassword),
                     'email_verified_at' => now(),
                     'active' => true,
                     'is_system_generated' => true,
@@ -225,6 +271,7 @@ class TenantProvisioningRunner
             'tenant_migration_failed', 'tenant_seeding_failed', 'owner_creation_failed',
             'tenant_database_provisioner_unavailable', 'tenant_domain_creation_failed', 'tenant_domain_invalid',
             'tenant_base_domain_missing', 'tenant_domain_verification_failed',
+            'initial_invoice_missing', 'payment_amount_confirmation_required',
         ] as $code) {
             if (str_contains($message, $code)) {
                 return $code;

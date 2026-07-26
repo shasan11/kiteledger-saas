@@ -14,6 +14,7 @@ class EnsureSubscriptionIsValid
         }
 
         $tenant = tenant();
+        $tenant?->loadMissing(['plan', 'subscription']);
         $subscription = $tenant?->subscription;
         $freePlan = $tenant?->plan && (float) $tenant->plan->price_monthly === 0.0 && (float) $tenant->plan->price_yearly === 0.0;
         if (! $tenant?->is_internal && ! $freePlan && (! $subscription || ! $subscription->isValid())) {
@@ -21,7 +22,7 @@ class EnsureSubscriptionIsValid
                 return response()->json(['message' => 'An active subscription is required.', 'code' => 'subscription_required'], 402);
             }
 
-            abort(402, 'An active subscription is required.');
+            return redirect()->route('tenant.billing.index', ['reason' => 'subscription_required']);
         }
 
         return $next($request);

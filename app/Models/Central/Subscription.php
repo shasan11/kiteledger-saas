@@ -24,9 +24,16 @@ class Subscription extends CentralModel
     public function isValid(): bool
     {
         $status = SubscriptionStatus::tryFrom($this->status);
+        if (! $status?->grantsAccess() || ! $this->starts_at || $this->starts_at->isFuture() || ($this->ends_at && ! $this->ends_at->isFuture())) {
+            return false;
+        }
+        if ($status === SubscriptionStatus::Trialing) {
+            return $this->trial_ends_at?->isFuture() === true;
+        }
+        if ($status === SubscriptionStatus::GracePeriod) {
+            return $this->grace_ends_at?->isFuture() === true;
+        }
 
-        return $status?->grantsAccess() === true
-            && (! $this->ends_at || $this->ends_at->isFuture())
-            && ($status !== SubscriptionStatus::GracePeriod || $this->grace_ends_at?->isFuture());
+        return ! $this->current_period_ends_at || $this->current_period_ends_at->isFuture();
     }
 }

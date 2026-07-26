@@ -24,10 +24,10 @@ class InvoiceCustomizationController extends Controller
         'number_format', 'currency_format', 'tax_label', 'due_date_label',
     ];
 
-    public function index()
+    public function index(PlatformSettingsService $settings)
     {
         return Inertia::render('Central/Billing/InvoiceCustomization', [
-            'values' => PlatformSetting::where('group', 'invoice_customization')->orderBy('sort_order')->get()->mapWithKeys(fn (PlatformSetting $setting) => [str($setting->key)->after('invoice_customization.')->toString() => $setting->safeValue()])->all(),
+            'values' => collect($settings->getGroup('invoice_customization'))->mapWithKeys(fn ($value, string $key) => [str($key)->after('invoice_customization.')->toString() => $value])->all(),
             'updatedAt' => PlatformSetting::where('group', 'invoice_customization')->max('updated_at'),
         ]);
     }
@@ -75,7 +75,9 @@ class InvoiceCustomizationController extends Controller
     private function sampleInvoice(): TenantInvoice
     {
         $snapshot = [];
-        PlatformSetting::where('group', 'invoice_customization')->get()->each(fn (PlatformSetting $setting) => Arr::set($snapshot, $setting->key, $setting->safeValue()));
+        foreach (app(PlatformSettingsService::class)->getGroup('invoice_customization') as $key => $value) {
+            Arr::set($snapshot, $key, $value);
+        }
         $seller = $snapshot;
         Arr::set($seller, 'company.legal_company_name', data_get($snapshot, 'invoice_customization.company_legal_name', 'KiteLedger Ltd.'));
         Arr::set($seller, 'company.address_line_1', data_get($snapshot, 'invoice_customization.company_address', '123 Finance Avenue'));

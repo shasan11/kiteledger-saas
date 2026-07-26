@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class PlatformSettingsService
@@ -25,37 +26,90 @@ class PlatformSettingsService
         $setting->value = $value;
         $setting->save();
         Cache::forget('platform-setting:'.$key);
+        Cache::forget('platform-settings:group:'.$group);
+        if ($setting->is_public) {
+            Cache::forget('platform-settings:public');
+        }
 
         return $setting;
     }
 
-    public function updateSection(string $group, array $values, ?int $adminId = null, ?string $ip = null): void
+    public function getGroup(string $group): array
     {
-        DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($group, $values, $adminId, $ip): void {
-            $settings = PlatformSetting::where('group', $group)->whereIn('key', array_keys($values))->lockForUpdate()->get()->keyBy('key');
-            foreach ($values as $key => $value) {
-                $setting = $settings->get($key);
-                if (! $setting || $setting->is_readonly) {
-                    continue;
-                }
-                if ($setting->is_encrypted && ($value === null || $value === '')) {
-                    continue;
-                }
-                $value = $this->prepareValue($setting, $value);
-                $this->validateValue($setting, $value);
-                $old = $setting->is_encrypted ? null : $setting->value;
-                $setting->updated_by = $adminId;
-                $setting->value = $value;
-                $setting->save();
-                PlatformSettingRevision::create([
-                    'setting_id' => $setting->id, 'admin_id' => $adminId,
-                    'old_value' => $setting->is_encrypted ? null : $this->encode($old),
-                    'new_value' => $setting->is_encrypted ? null : $this->encode($value), 'ip_address' => $ip,
-                ]);
-                Cache::forget('platform-setting:'.$key);
-                Cache::forget('platform-settings:public');
+        return Cache::remember('platform-settings:group:'.$group, now()->addHour(), fn () => PlatformSetting::query()
+            ->where('group', $group)->get()->mapWithKeys(fn (PlatformSetting $setting) => [$setting->key => $setting->safeValue()])->all());
+    }
+
+    /** @return array{saved:array<int,string>,unchanged:array<int,string>} */
+    public function updateSection(string $group, array $values, ?int $adminId = null, ?string $ip = null): array
+    {
+        $all = PlatformSetting::query()->whereIn('key', array_keys($values))->get()->keyBy('key');
+        $errors = [];
+        foreach ($values as $key => $value) {
+            $setting = $all->get($key);
+            if (! $setting) {
+                $errors['values.'.$key] = 'This setting does not exist.';
+            } elseif ($setting->group !== $group) {
+                $errors['values.'.$key] = 'This setting belongs to another section.';
+            } elseif ($setting->is_readonly) {
+                $errors['values.'.$key] = 'This setting is read-only.';
             }
-        });
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $storedFiles = [];
+        try {
+            $result = DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($group, $values, $adminId, $ip, &$storedFiles): array {
+                $settings = PlatformSetting::where('group', $group)->whereIn('key', array_keys($values))->lockForUpdate()->get()->keyBy('key');
+                $saved = [];
+                $unchanged = [];
+                foreach ($values as $key => $submitted) {
+                    $setting = $settings->get($key);
+                    if ($setting->is_encrypted && ($submitted === null || $submitted === '')) {
+                        $unchanged[] = $key;
+
+                        continue;
+                    }
+                    $value = $this->prepareValue($setting, $submitted, $storedFiles);
+                    $value = $this->normalizeValue($setting, $value);
+                    $this->validateValue($setting, $value);
+                    $old = $setting->value;
+                    if ($this->encode($old) === $this->encode($value)) {
+                        $unchanged[] = $key;
+
+                        continue;
+                    }
+                    $setting->updated_by = $adminId;
+                    $setting->value = $value;
+                    $setting->save();
+                    PlatformSettingRevision::create([
+                        'setting_id' => $setting->id, 'admin_id' => $adminId,
+                        'old_value' => $setting->is_encrypted ? null : $this->encode($old),
+                        'new_value' => $setting->is_encrypted ? null : $this->encode($value), 'ip_address' => $ip,
+                    ]);
+                    $saved[] = $key;
+                }
+
+                return compact('saved', 'unchanged');
+            });
+        } catch (\Throwable $exception) {
+            foreach ($storedFiles as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            throw $exception;
+        }
+
+        foreach (array_unique([...$result['saved'], ...$result['unchanged']]) as $key) {
+            Cache::forget('platform-setting:'.$key);
+        }
+        Cache::forget('platform-settings:group:'.$group);
+        if (collect($result['saved'])->contains(fn (string $key) => (bool) $all->get($key)?->is_public)) {
+            Cache::forget('platform-settings:public');
+        }
+
+        return $result;
     }
 
     public function resetSection(string $group, ?int $adminId = null, ?string $ip = null): void
@@ -102,7 +156,7 @@ class PlatformSettingsService
         return $driver;
     }
 
-    private function prepareValue(PlatformSetting $setting, mixed $value): mixed
+    private function prepareValue(PlatformSetting $setting, mixed $value, array &$storedFiles = []): mixed
     {
         if (! $value instanceof UploadedFile) {
             return $value;
@@ -118,8 +172,20 @@ class PlatformSettingsService
         )->validate();
 
         $path = $value->store('central/settings/'.now()->format('Y/m'), 'public');
+        $storedFiles[] = $path;
 
         return Storage::disk('public')->url($path);
+    }
+
+    private function normalizeValue(PlatformSetting $setting, mixed $value): mixed
+    {
+        return match ($setting->type) {
+            'boolean' => filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? $value,
+            'integer' => is_numeric($value) ? (int) $value : $value,
+            'decimal' => is_numeric($value) ? (float) $value : $value,
+            'json' => is_string($value) ? json_decode($value, true) : $value,
+            default => $value,
+        };
     }
 
     private function validateValue(PlatformSetting $setting, mixed $value): void
@@ -137,7 +203,7 @@ class PlatformSettingsService
         }
         if (filled($setting->validation_rules)) {
             try {
-                validator(['value' => $value], ['value' => explode('|', $setting->validation_rules)])->validate();
+                Validator::make(['value' => $value], ['value' => explode('|', $setting->validation_rules)])->validate();
             } catch (ValidationException $exception) {
                 throw ValidationException::withMessages([$setting->key => $exception->validator->errors()->first('value')]);
             }

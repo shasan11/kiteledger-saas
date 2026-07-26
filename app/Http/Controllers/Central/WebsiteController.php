@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\BlogCategory;
 use App\Models\Central\BlogPost;
 use App\Models\Central\BlogTag;
+use App\Models\Central\Media;
 use App\Models\Central\Plan;
 use App\Models\Central\WebsiteContentItem;
 use App\Models\Central\WebsiteMenu;
@@ -109,7 +110,7 @@ class WebsiteController extends Controller
     private function publicRender(string $slugOrType, array $extra = [])
     {
         $page = Cache::remember('website-page:v2:'.$slugOrType, now()->addMinutes(30), function () use ($slugOrType): array {
-            $page = WebsitePage::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')])
+            $page = WebsitePage::with(['sections' => fn ($q) => $q->with('media')->where('is_active', true)->orderBy('sort_order')])
                 ->where('status', 'published')
                 ->where('visibility', 'public')
                 ->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))
@@ -120,10 +121,10 @@ class WebsiteController extends Controller
                 $page->setAttribute('canonical_url', $base.($page->slug === 'home' ? '/' : '/'.$page->slug));
             }
 
-            return $page->toArray();
+            return $this->hydrateSectionItemMedia($page->toArray());
         });
 
-        $content = Cache::remember('website-content:v1', now()->addMinutes(30), fn (): array => WebsiteContentItem::query()
+        $content = Cache::remember('website-content:v1', now()->addMinutes(30), fn (): array => WebsiteContentItem::with('media')
             ->where('status', 'published')
             ->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))
             ->orderBy('sort_order')
@@ -163,5 +164,28 @@ class WebsiteController extends Controller
             ->all());
 
         return ['menus' => $menus, 'site' => app(PlatformSettingsService::class)->publicSettings()];
+    }
+
+    private function hydrateSectionItemMedia(array $page): array
+    {
+        $ids = collect($page['sections'] ?? [])->flatMap(fn (array $section) => collect($section['items'] ?? [])->pluck('media_id'))->filter()->unique();
+        if ($ids->isEmpty()) {
+            return $page;
+        }
+
+        $media = Media::whereIn('id', $ids)->get()->keyBy('id');
+        $page['sections'] = collect($page['sections'])->map(function (array $section) use ($media): array {
+            $section['items'] = collect($section['items'] ?? [])->map(function (array $item) use ($media): array {
+                if ($asset = $media->get($item['media_id'] ?? null)) {
+                    $item['media'] = $asset->only(['id', 'url', 'width', 'height', 'original_filename', 'alt_text', 'mime_type']);
+                }
+
+                return $item;
+            })->all();
+
+            return $section;
+        })->all();
+
+        return $page;
     }
 }

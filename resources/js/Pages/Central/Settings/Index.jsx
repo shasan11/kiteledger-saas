@@ -4,7 +4,18 @@ import SectionCard from '@/Components/Central/SectionCard';
 import { humanize } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
 import { fetchBrandSettings, publishBrandSettings } from '@/brandSettings';
+import { categoryLabels, orderedSections, sectionMatches } from './sectionRegistry';
 import {
+    ApiOutlined,
+    BgColorsOutlined,
+    CloudSyncOutlined,
+    DatabaseOutlined,
+    DollarOutlined,
+    MailOutlined,
+    SafetyCertificateOutlined,
+    SettingOutlined,
+    TeamOutlined,
+    ToolOutlined,
     CheckOutlined,
     CloudUploadOutlined,
     DeleteOutlined,
@@ -27,8 +38,9 @@ import {
     Tag,
     Typography,
     Upload,
+    message,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -56,15 +68,28 @@ export default function Settings({ groups, activeGroup }) {
     const [section, setSection] = useState(activeGroup);
     const [search, setSearch] = useState('');
     const [dirty, setDirty] = useState(false);
+    const [changedKeys, setChangedKeys] = useState(() => new Set());
+    const [processing, setProcessing] = useState(false);
+    const [errorCount, setErrorCount] = useState(0);
     const [confirmation, setConfirmation] = useState(null);
     const [confirmationPassword, setConfirmationPassword] = useState('');
     const [form] = Form.useForm();
     const settings = groups[section] || [];
+    const hydrated = useRef({ section: null, signature: null });
+    const awaitingServer = useRef(false);
+    const serverSignature = useMemo(() => JSON.stringify(settings.map(({ key, value, preview_url, has_secret, updated_at }) => ({ key, value, preview_url, has_secret, updated_at }))), [settings]);
 
     useEffect(() => {
+        const sectionChanged = hydrated.current.section !== section;
+        const serverChanged = hydrated.current.signature !== serverSignature;
+        if (!sectionChanged && (!serverChanged || (dirty && !awaitingServer.current))) return;
+        form.resetFields();
         form.setFieldsValue(Object.fromEntries(settings.map((item) => [item.key, initialValue(item)])));
+        hydrated.current = { section, signature: serverSignature };
+        awaitingServer.current = false;
         setDirty(false);
-    }, [section]);
+        setChangedKeys(new Set());
+    }, [section, serverSignature]);
 
     useEffect(() => {
         const block = (event) => {
@@ -86,7 +111,10 @@ export default function Settings({ groups, activeGroup }) {
     }, [settings, search]);
 
     const grouped = useMemo(() => groupSettings(filtered), [filtered]);
+    const sections = useMemo(() => orderedSections(groups), [groups]);
+    const visibleSections = useMemo(() => sections.filter((item) => sectionMatches(item, groups[item.key] || [], search)), [sections, groups, search]);
     const currentLabel = humanize(section);
+    const currentSection = sections.find((item) => item.key === section);
 
     const clearConfirmation = () => {
         setConfirmation(null);
@@ -96,12 +124,14 @@ export default function Settings({ groups, activeGroup }) {
     const discardChanges = () => {
         form.setFieldsValue(Object.fromEntries(settings.map((item) => [item.key, initialValue(item)])));
         setDirty(false);
+        setChangedKeys(new Set());
+        setErrorCount(0);
     };
 
     const prepare = (values) => {
         const payload = { ...values };
         settings
-            .filter((item) => item.input_type === 'key-value editor')
+            .filter((item) => item.input_type === 'key-value editor' && Object.prototype.hasOwnProperty.call(payload, item.key))
             .forEach((item) => {
                 try {
                     payload[item.key] = JSON.parse(payload[item.key] || '{}');
@@ -122,13 +152,27 @@ export default function Settings({ groups, activeGroup }) {
         const options = {
             preserveScroll: true,
             forceFormData: hasUpload(values),
+            onStart: () => { setProcessing(true); awaitingServer.current = true; },
             onSuccess: () => {
                 setDirty(false);
+                setChangedKeys(new Set());
+                setErrorCount(0);
                 clearConfirmation();
+                message.success('Settings saved.');
                 if (section === 'branding') {
                     fetchBrandSettings().then(publishBrandSettings).catch(() => {});
                 }
             },
+            onError: (errors) => {
+                awaitingServer.current = false;
+                setErrorCount(Object.keys(errors).filter((name) => name !== 'confirmation_password').length);
+                Object.entries(errors).forEach(([name, error]) => {
+                    const field = name.replace(/^values\./, '');
+                    if (field !== 'confirmation_password') form.setFields([{ name: field, errors: [error] }]);
+                });
+                message.error('Settings could not be saved. Review the highlighted fields.');
+            },
+            onFinish: () => setProcessing(false),
         };
 
         if (hasUpload(values)) {
@@ -140,10 +184,11 @@ export default function Settings({ groups, activeGroup }) {
     };
 
     const save = () =>
-        form.validateFields().then((values) => {
+        form.validateFields([...changedKeys]).then((allValues) => {
             try {
+                const values = Object.fromEntries([...changedKeys].map((key) => [key, allValues[key]]));
                 const payload = prepare(values);
-                settings.some((item) => item.requires_confirmation)
+                settings.some((item) => changedKeys.has(item.key) && item.requires_confirmation)
                     ? setConfirmation({ type: 'save', values: payload })
                     : submit(payload);
             } catch {
@@ -154,6 +199,7 @@ export default function Settings({ groups, activeGroup }) {
     const changeSection = (group) => {
         const visit = () => {
             setSection(group);
+            setChangedKeys(new Set());
             router.get(route('central.settings.index'), { group }, { preserveState: true, replace: true });
         };
         if (!dirty) return visit();
@@ -185,10 +231,15 @@ export default function Settings({ groups, activeGroup }) {
                   { confirmation_password: confirmationPassword },
                   {
                       preserveScroll: true,
+                      onStart: () => setProcessing(true),
                       onSuccess: () => {
                           setDirty(false);
+                          setChangedKeys(new Set());
                           clearConfirmation();
+                          message.success('Settings reset to defaults.');
                       },
+                      onError: () => message.error('The password was rejected. The reset was not applied.'),
+                      onFinish: () => setProcessing(false),
                   },
               )
             : submit(confirmation.values, confirmationPassword);
@@ -213,6 +264,10 @@ export default function Settings({ groups, activeGroup }) {
             />
 
             <div className="platform-settings-shell">
+                <div className="platform-settings-mobile">
+                    <Input prefix={<SearchOutlined />} placeholder="Search settings" value={search} onChange={(event) => setSearch(event.target.value)} />
+                    <Select value={section} onChange={changeSection} options={visibleSections.map((entry) => ({ value: entry.key, label: entry.label }))} style={{ width: '100%' }} aria-label="Settings section" />
+                </div>
                 <aside className="platform-settings-nav">
                     <Input
                         prefix={<SearchOutlined />}
@@ -221,17 +276,21 @@ export default function Settings({ groups, activeGroup }) {
                         onChange={(event) => setSearch(event.target.value)}
                     />
                     <div className="platform-settings-nav__list">
-                        {Object.keys(groups).map((group) => (
-                            <button
-                                key={group}
-                                type="button"
-                                className={section === group ? 'is-active' : ''}
-                                aria-current={section === group ? 'page' : undefined}
-                                onClick={() => changeSection(group)}
-                            >
-                                <span>{humanize(group)}</span>
-                            </button>
-                        ))}
+                        {Object.entries(categoryLabels).map(([category, label]) => {
+                            const entries = visibleSections.filter((entry) => entry.category === category);
+                            if (!entries.length) return null;
+                            return <div key={category} className="platform-settings-nav__category">
+                                <Text type="secondary">{label}</Text>
+                                {entries.map((entry) => <button
+                                    key={entry.key}
+                                    type="button"
+                                    className={section === entry.key ? 'is-active' : ''}
+                                    aria-current={section === entry.key ? 'page' : undefined}
+                                    onClick={() => changeSection(entry.key)}
+                                ><span>{sectionIcon(entry.key)} {entry.label}</span>{section === entry.key && <span>{dirty && <Tag color="warning">Dirty</Tag>}{errorCount > 0 && <Tag color="error">{errorCount}</Tag>}{settings.some((item) => item.requires_restart) && <Tag>Restart</Tag>}</span>}</button>)}
+                            </div>;
+                        })}
+                        {search && <Text type="secondary">{visibleSections.length} sections match</Text>}
                     </div>
                 </aside>
 
@@ -239,11 +298,11 @@ export default function Settings({ groups, activeGroup }) {
                     <SectionCard
                         title={currentLabel}
                         description={
-                            sectionDescriptions[section] ||
+                            currentSection?.description || sectionDescriptions[section] ||
                             `Manage ${currentLabel.toLowerCase()} preferences for your organization.`
                         }
                     >
-                        <Form form={form} layout="vertical" onValuesChange={() => setDirty(true)}>
+                        <Form form={form} layout="vertical" onValuesChange={(changed) => { setDirty(true); setChangedKeys((current) => new Set([...current, ...Object.keys(changed)])); }}>
                             {grouped.map((group) => (
                                 <section className="platform-settings-panel" key={group.title}>
                                     <div className="platform-settings-panel__header">
@@ -265,7 +324,7 @@ export default function Settings({ groups, activeGroup }) {
                             <Text>You have unsaved changes.</Text>
                             <Space>
                                 <Button onClick={discardChanges}>Discard</Button>
-                                <Button type="primary" icon={<CheckOutlined />} onClick={save}>
+                                <Button type="primary" icon={<CheckOutlined />} onClick={save} loading={processing} disabled={processing || changedKeys.size === 0}>
                                     Save changes
                                 </Button>
                             </Space>
@@ -281,7 +340,8 @@ export default function Settings({ groups, activeGroup }) {
                 okText={confirmation?.type === 'reset' ? 'Confirm reset' : 'Confirm and save'}
                 onCancel={clearConfirmation}
                 onOk={confirmSensitive}
-                okButtonProps={{ disabled: !confirmationPassword, danger: confirmation?.type === 'reset' }}
+                confirmLoading={processing}
+                okButtonProps={{ disabled: !confirmationPassword || processing, danger: confirmation?.type === 'reset' }}
             >
                 <Alert
                     type="warning"
@@ -320,6 +380,9 @@ export default function Settings({ groups, activeGroup }) {
                     max-height: calc(100vh - 190px);
                     overflow: auto;
                 }
+                .platform-settings-mobile { display: none; }
+                .platform-settings-nav__category { display: grid; gap: 2px; }
+                .platform-settings-nav__category > .ant-typography { padding: 10px 11px 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
                 .platform-settings-nav button {
                     display: flex;
                     align-items: center;
@@ -463,7 +526,7 @@ export default function Settings({ groups, activeGroup }) {
                     .platform-settings-shell {
                         grid-template-columns: 1fr;
                     }
-                    .platform-settings-nav {
+                .platform-settings-nav {
                         position: static;
                     }
                     .platform-settings-nav__list {
@@ -475,6 +538,8 @@ export default function Settings({ groups, activeGroup }) {
                     }
                 }
                 @media (max-width: 760px) {
+                    .platform-settings-nav { display: none; }
+                    .platform-settings-mobile { display: grid; gap: 10px; }
                     .platform-settings-nav__list,
                     .platform-setting-image {
                         grid-template-columns: 1fr;
@@ -786,4 +851,17 @@ function matches(item, needles) {
 
 function hasUpload(values) {
     return Object.values(values).some((value) => value instanceof File);
+}
+
+function sectionIcon(key) {
+    if (key === 'branding') return <BgColorsOutlined />;
+    if (['tenant_registration', 'subscriptions', 'trials'].includes(key)) return <TeamOutlined />;
+    if (['billing', 'invoice_customization'].includes(key)) return <DollarOutlined />;
+    if (key === 'email' || key === 'notifications') return <MailOutlined />;
+    if (['storage', 'database_pool', 'provisioning'].includes(key)) return <DatabaseOutlined />;
+    if (['security', 'privacy'].includes(key)) return <SafetyCertificateOutlined />;
+    if (['api', 'analytics', 'seo'].includes(key)) return <ApiOutlined />;
+    if (key === 'backups') return <CloudSyncOutlined />;
+    if (['general', 'company', 'domains'].includes(key)) return <SettingOutlined />;
+    return <ToolOutlined />;
 }

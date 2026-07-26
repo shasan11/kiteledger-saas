@@ -1,5 +1,6 @@
 import PageHeader from "@/Components/Central/PageHeader";
 import SectionCard from "@/Components/Central/SectionCard";
+import MediaPicker from "@/Components/Central/MediaPicker";
 import StatusBadge from "@/Components/Central/StatusBadge";
 import CentralLayout from "@/Layouts/CentralLayout";
 import {
@@ -43,6 +44,7 @@ export default function ContentItems({ type, items, filters }) {
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters.search || "");
     const [form] = Form.useForm();
+    const imageAlt = Form.useWatch("image_alt", form);
     const open = (item = null) => {
         setEditing(item || {});
         form.setFieldsValue(
@@ -252,6 +254,15 @@ export default function ContentItems({ type, items, filters }) {
                             </Form.Item>
                         </Space>
                     )}
+                    {type === "feature" && <>
+                        <Form.Item label="Feature screenshot"><Form.Item name="media_id" noStyle><MediaPicker media={editing?.media} alt={imageAlt} onAltChange={(value) => form.setFieldValue("image_alt", value)} /></Form.Item><Form.Item name="image_alt" hidden><Input /></Form.Item></Form.Item>
+                        <Space align="start" wrap>
+                            <Form.Item name="icon" label="Icon fallback"><Input placeholder="chart" /></Form.Item>
+                            <Form.Item name="url" label="Destination URL"><Input /></Form.Item>
+                            <Form.Item name="cta_label" label="CTA label"><Input /></Form.Item>
+                            <Form.Item name="display_style" label="Card style"><Input placeholder="default" /></Form.Item>
+                        </Space>
+                    </>}
                     {!["faq", "testimonial"].includes(type) && (
                         <Form.Item
                             name="data_json"

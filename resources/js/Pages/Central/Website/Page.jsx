@@ -420,6 +420,7 @@ function Actions({ section }) {
 }
 
 function Hero({ section }) {
+    const image = section.media?.url || section.image || section.settings?.image_url;
     return (
         <section className="kl-hero">
             <div className="kl-hero-glow" />
@@ -445,7 +446,18 @@ function Hero({ section }) {
                         </span>
                     </div>
                 </div>
-                <Dashboard />
+                {image ? (
+                    <img
+                        className="kl-hero-screenshot"
+                        src={image}
+                        alt={section.image_alt || section.media?.alt_text || section.title || "Product dashboard"}
+                        width={section.media?.width || undefined}
+                        height={section.media?.height || undefined}
+                        fetchPriority="high"
+                        loading="eager"
+                        style={{ width: "100%", height: "auto", objectFit: "contain", borderRadius: 20, boxShadow: "0 28px 70px rgba(16,51,42,.18)" }}
+                    />
+                ) : <Dashboard />}
             </div>
         </section>
     );
@@ -599,13 +611,23 @@ function Grid({ section, items }) {
                 <Intro section={section} />
                 <div className="kl-feature-grid">
                     {items.map((item, i) => (
-                        <article key={item.id || i}>
-                            <Icon name={item.icon || item.data?.icon} />
+                        <article className={item.display_style || item.data?.display_style || ""} key={item.id || i}>
+                            {(item.media?.url || item.data?.image || item.image) ? (
+                                <img
+                                    className="kl-feature-screenshot"
+                                    src={item.media?.url || item.data?.image || item.image}
+                                    alt={item.image_alt || item.media?.alt_text || item.title || ""}
+                                    width={item.media?.width || undefined}
+                                    height={item.media?.height || undefined}
+                                    loading="lazy"
+                                    style={{ width: "100%", height: "auto", maxHeight: 220, objectFit: "cover", borderRadius: 12, marginBottom: 22 }}
+                                />
+                            ) : <Icon name={item.icon || item.data?.icon} />}
                             <h3>{item.title}</h3>
                             <p>{item.content || item.description}</p>
                             {(item.url || item.data?.url) && (
                                 <a href={item.url || item.data.url}>
-                                    Explore <Arrow />
+                                    {item.cta_label || item.data?.cta_label || "Explore"} <Arrow />
                                 </a>
                             )}
                         </article>
@@ -641,8 +663,14 @@ function Product({ section }) {
                     <Actions section={section} />
                 </div>
                 <div className="kl-product-visual">
-                    {section.image ? (
-                        <img src={section.image} alt={section.title || ""} />
+                    {(section.media?.url || section.image || section.settings?.image_url) ? (
+                        <img
+                            src={section.media?.url || section.image || section.settings?.image_url}
+                            alt={section.image_alt || section.media?.alt_text || section.title || ""}
+                            width={section.media?.width || undefined}
+                            height={section.media?.height || undefined}
+                            loading="lazy"
+                        />
                     ) : (
                         <MiniProduct />
                     )}

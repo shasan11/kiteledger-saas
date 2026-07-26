@@ -95,6 +95,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::get('search', GlobalSearchController::class)->name('search');
             Route::get('tenants', [TenantController::class, 'index'])->middleware('central.admin:tenant.view')->name('tenants.index');
             Route::get('tenants/create', [TenantController::class, 'create'])->middleware('central.admin:tenant.create')->name('tenants.create');
+            Route::post('tenants/database-test', [TenantController::class, 'testDatabase'])->middleware('central.admin:tenant.create')->name('tenants.database-test');
             Route::post('tenants', [TenantController::class, 'store'])->middleware('central.admin:tenant.create')->name('tenants.store');
             Route::get('tenants/{tenant}', [TenantController::class, 'show'])->middleware('central.admin:tenant.view')->name('tenants.show');
             Route::get('tenants/{tenant}/edit', [TenantController::class, 'edit'])->middleware('central.admin:tenant.update')->name('tenants.edit');
@@ -244,7 +245,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
                     $resource === 'roles' => 'role.manage',
                     $resource === 'audit-logs' => 'audit.view',
                     $resource === 'backups' => 'system_health.view',
-                    in_array($resource, ['platform-settings', 'default-templates', 'tenant-databases'], true) => 'settings.manage',
+                    in_array($resource, ['default-templates', 'tenant-databases'], true) => 'settings.manage',
                     $resource === 'features' => 'feature.manage',
                     $resource === 'tenant-feature-overrides' => 'feature_override.manage',
                     default => 'tenant.view',

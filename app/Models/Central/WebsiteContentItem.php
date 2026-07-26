@@ -18,4 +18,9 @@ class WebsiteContentItem extends CentralModel
         static::saved(fn () => cache()->forget('website-content:v1'));
         static::deleted(fn () => cache()->forget('website-content:v1'));
     }
+
+    public function media()
+    {
+        return $this->belongsTo(Media::class, 'media_id');
+    }
 }

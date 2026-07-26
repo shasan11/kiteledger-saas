@@ -2,7 +2,6 @@
 
 namespace App\Services\SaaS;
 
-use App\Models\Central\PlatformSetting;
 use App\Models\Central\Subscription;
 use App\Models\Central\TenantInvoice;
 use Illuminate\Support\Arr;
@@ -10,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class BillingInvoiceService
 {
-    public function __construct(private readonly InvoiceNumberService $numbers) {}
+    public function __construct(private readonly InvoiceNumberService $numbers, private readonly PlatformSettingsService $settings) {}
 
     public function generate(Subscription $subscription, string $idempotencyKey): TenantInvoice
     {
@@ -21,9 +20,11 @@ class BillingInvoiceService
             $subscription = Subscription::with(['tenant', 'plan'])->lockForUpdate()->findOrFail($subscription->id);
             $price = (float) ($subscription->billing_cycle === 'yearly' ? $subscription->plan->price_yearly : $subscription->plan->price_monthly);
             $settings = [];
-            PlatformSetting::whereIn('group', ['company', 'billing', 'invoice_customization'])->get()->each(function (PlatformSetting $setting) use (&$settings): void {
-                Arr::set($settings, $setting->key, $setting->safeValue());
-            });
+            foreach (['company', 'billing', 'invoice_customization'] as $group) {
+                foreach ($this->settings->getGroup($group) as $key => $value) {
+                    Arr::set($settings, $key, $value);
+                }
+            }
             $taxEnabled = (bool) data_get($settings, 'billing.tax_enabled', false);
             $taxRate = $taxEnabled ? max(0, (float) data_get($settings, 'billing.tax_rate', 0)) : 0;
             $pricesIncludeTax = $taxEnabled && (bool) data_get($settings, 'billing.prices_include_tax', false);

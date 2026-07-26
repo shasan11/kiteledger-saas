@@ -7,24 +7,30 @@ use App\Enums\SubscriptionStatus;
 use App\Models\Central\Plan;
 use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SubscriptionService implements SubscriptionLifecycle
 {
-    public function start(Tenant $tenant, Plan $plan, string $cycle = 'monthly', ?string $idempotencyKey = null): Subscription
+    public function start(Tenant $tenant, Plan $plan, string $cycle = 'monthly', string $mode = 'auto', mixed $effectiveAt = null, ?string $idempotencyKey = null): Subscription
     {
         if (! in_array($cycle, ['monthly', 'yearly'], true)) {
             throw ValidationException::withMessages(['billing_cycle' => 'Billing cycle must be monthly or yearly.']);
         }
+        if (! in_array($mode, ['auto', 'trial', 'active'], true) || ($mode === 'trial' && (int) $plan->trial_days < 1)) {
+            throw ValidationException::withMessages(['subscription_start_mode' => 'The selected subscription start mode is unavailable.']);
+        }
 
-        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $plan, $cycle, $idempotencyKey): Subscription {
+        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $plan, $cycle, $mode, $effectiveAt, $idempotencyKey): Subscription {
             if ($idempotencyKey && ($existing = Subscription::where('idempotency_key', $idempotencyKey)->first())) {
                 return $existing;
             }
-            $now = now();
-            $trialEnd = $plan->trial_days ? $now->copy()->addDays($plan->trial_days) : null;
-            $subscription = Subscription::query()->create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => $trialEnd ? SubscriptionStatus::Trialing->value : SubscriptionStatus::Active->value, 'billing_cycle' => $cycle, 'starts_at' => $now, 'trial_ends_at' => $trialEnd, 'current_period_starts_at' => $now, 'current_period_ends_at' => $cycle === 'yearly' ? $now->copy()->addYear() : $now->copy()->addMonth(), 'idempotency_key' => $idempotencyKey]);
+            $start = $effectiveAt ? Carbon::parse($effectiveAt) : now();
+            $trial = $mode === 'trial' || ($mode === 'auto' && (int) $plan->trial_days > 0);
+            $trialEnd = $trial ? $start->copy()->addDays($plan->trial_days) : null;
+            $periodEnd = $trialEnd ?: ($cycle === 'yearly' ? $start->copy()->addYear() : $start->copy()->addMonth());
+            $subscription = Subscription::query()->create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => $trial ? SubscriptionStatus::Trialing->value : SubscriptionStatus::Active->value, 'billing_cycle' => $cycle, 'starts_at' => $start, 'trial_ends_at' => $trialEnd, 'current_period_starts_at' => $start, 'current_period_ends_at' => $periodEnd, 'idempotency_key' => $idempotencyKey]);
             $tenant->update(['plan_id' => $plan->id, 'trial_ends_at' => $trialEnd, 'subscription_ends_at' => $subscription->current_period_ends_at]);
             $this->audit($subscription, null, $subscription->status, $idempotencyKey);
 

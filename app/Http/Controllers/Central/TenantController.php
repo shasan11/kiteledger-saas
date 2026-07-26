@@ -2,13 +2,21 @@
 
 namespace App\Http\Controllers\Central;
 
+use App\Data\TenantOnboardingData;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Central\StoreTenantOnboardingRequest;
 use App\Jobs\SaaS\BackupTenantJob;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ImpersonationToken;
+use App\Models\Central\PaymentGateway;
 use App\Models\Central\Plan;
 use App\Models\Central\Tenant;
+use App\Models\Central\TenantDatabasePool;
 use App\Services\SaaS\CentralAuditService;
+use App\Services\SaaS\DatabaseProvisioning\DatabaseProvisionerManager;
+use App\Services\SaaS\DatabaseProvisioning\ManualDatabaseProvisioner;
+use App\Services\SaaS\DatabaseProvisioning\TenantDatabaseNameValidator;
+use App\Services\SaaS\PlatformSettingsService;
 use App\Services\SaaS\TenantDatabaseService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
@@ -18,6 +26,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TenantController extends Controller
@@ -48,12 +57,30 @@ class TenantController extends Controller
         return Inertia::render('Central/Tenants/Form', $this->options());
     }
 
-    public function store(Request $request, TenantProvisioningService $service, CentralAuditService $audit)
+    public function store(StoreTenantOnboardingRequest $request, TenantProvisioningService $service, CentralAuditService $audit)
     {
-        $tenant = $service->create($this->validated($request) + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
+        $data = TenantOnboardingData::from($request->validated())->toArray();
+        $tenant = $service->create($data + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
         $audit->log($request, 'tenant.created', $tenant, [], $tenant->only(['company_name', 'owner_email', 'status', 'plan_id']));
 
         return redirect()->route('central.tenants.show', $tenant)->with('success', 'Tenant created and provisioned successfully.');
+    }
+
+    public function testDatabase(Request $request, ManualDatabaseProvisioner $manual, TenantDatabaseNameValidator $names)
+    {
+        $data = $request->validate([
+            'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'],
+            'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/'],
+            'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['present', 'string', 'max:1024'],
+        ]);
+        try {
+            $names->assertValid($data['tenancy_db_name']);
+            $manual->verify(['host' => $data['tenancy_db_host'], 'port' => $data['tenancy_db_port'], 'database' => $data['tenancy_db_name'], 'username' => $data['tenancy_db_username'], 'password' => $data['tenancy_db_password']]);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages(['tenancy_db_name' => 'The database could not be verified. Check its name, credentials, connectivity, and privileges.']);
+        }
+
+        return response()->json(['message' => 'Database connection and required privileges were verified.']);
     }
 
     public function show(Tenant $tenant)
@@ -211,6 +238,32 @@ class TenantController extends Controller
 
     private function options(): array
     {
-        return ['plans' => Plan::where('is_active', true)->orderBy('sort_order')->get(), 'templates' => DefaultDataTemplate::where('is_active', true)->orderBy('name')->get()];
+        $manager = app(DatabaseProvisionerManager::class);
+        $modes = collect(config('saas.database.allowed_modes', [config('saas.database.mode', 'manual')]))
+            ->unique()->filter(function (string $mode) use ($manager): bool {
+                try {
+                    return $manager->driver($mode)->available();
+                } catch (\Throwable) {
+                    return false;
+                }
+            })->values();
+
+        return [
+            'plans' => Plan::where('is_active', true)->orderBy('sort_order')->get(),
+            'templates' => DefaultDataTemplate::where('is_active', true)->orderBy('name')->get(),
+            'billingCycles' => ['monthly', 'yearly'], 'subscriptionModes' => ['trial', 'active'],
+            'provisioningModes' => $modes, 'tenantBaseDomain' => config('saas.tenant_base_domain'),
+            'databasePool' => $modes->contains('pool') ? TenantDatabasePool::where('status', 'available')->whereNotNull('validated_at')->orderBy('database_name')->get(['id', 'database_name', 'status', 'validated_at']) : [],
+            'payment' => $this->paymentOptions(),
+            'defaults' => ['timezone' => config('app.timezone', 'UTC'), 'currency' => app(PlatformSettingsService::class)->get('billing.default_currency', 'USD')],
+        ];
+    }
+
+    private function paymentOptions(): array
+    {
+        $manual = PaymentGateway::where('slug', 'manual')->where('is_active', true)->first();
+        $safeMethods = ['bank_transfer', 'cash', 'cheque', 'card_terminal', 'other'];
+
+        return ['enabled' => (bool) $manual, 'methods' => collect($manual?->config['methods'] ?? $safeMethods)->intersect($safeMethods)->values(), 'proof_required' => (bool) ($manual?->config['proof_required'] ?? false)];
     }
 }

@@ -2,8 +2,8 @@
 
 namespace App\Models\Central;
 
+use App\Enums\TenantStatus;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Backwards-compatible namespace for the central admin module.
@@ -42,11 +42,6 @@ class Tenant extends \App\Models\Tenant
         ]);
     }
 
-    public function subscription(): HasOne
-    {
-        return $this->hasOne(Subscription::class)->latestOfMany();
-    }
-
     public function provisioningLogs(): HasMany
     {
         return $this->hasMany(ProvisioningLog::class);
@@ -74,6 +69,6 @@ class Tenant extends \App\Models\Tenant
 
     public function isOperational(): bool
     {
-        return $this->status === \App\Enums\TenantStatus::Active->value;
+        return $this->status === TenantStatus::Active->value;
     }
 }
