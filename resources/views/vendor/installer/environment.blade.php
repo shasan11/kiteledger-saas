@@ -21,6 +21,8 @@
     @php
         $requestHost = request()->getHost();
         $defaultUrl = request()->getSchemeAndHttpHost();
+        $configuredDatabaseHost = trim((string) env('DB_HOST', '127.0.0.1'));
+        $defaultDatabaseHost = strcasecmp($configuredDatabaseHost, 'localhost') === 0 ? '127.0.0.1' : $configuredDatabaseHost;
         $configuredDatabase = (string) env('DB_DATABASE', 'kiteledger');
         $defaultDatabase = blank($configuredDatabase) || strtolower($configuredDatabase) === 'laravel' ? 'kiteledger' : $configuredDatabase;
     @endphp
@@ -40,7 +42,8 @@
             <label class="col-sm-2 control-label">Host</label>
 
             <div class="col-sm-10">
-                <input type="text" name="hostname" class="form-control" value="{{ old('hostname', env('DB_HOST', '127.0.0.1')) }}" required autocomplete="off">
+                <input type="text" name="hostname" class="form-control" value="{{ old('hostname', $defaultDatabaseHost) }}" required autocomplete="off">
+                <small>For a database on this computer, use 127.0.0.1 (not localhost).</small>
             </div>
         </div>
         <div class="form-group">

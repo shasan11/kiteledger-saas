@@ -71,6 +71,50 @@ class SuperadminRequirementsTest extends TestCase
         $this->assertDatabaseHas('invoice_number_sequences', ['period' => '2026', 'last_number' => 11]);
     }
 
+    public function test_trial_subscription_invoice_is_due_when_the_trial_ends(): void
+    {
+        [$subscription] = $this->subscription(30);
+        $trialEnd = now()->addDays(14)->startOfDay();
+        $subscription->update([
+            'status' => 'trialing',
+            'trial_ends_at' => $trialEnd,
+            'current_period_ends_at' => $trialEnd,
+        ]);
+
+        $invoice = app(BillingInvoiceService::class)->generate($subscription->refresh(), 'trial-initial-invoice');
+
+        $this->assertSame('issued', $invoice->status);
+        $this->assertEquals(30.0, $invoice->balance);
+        $this->assertTrue($invoice->due_date->isSameDay($trialEnd));
+        $this->assertTrue($invoice->period_start->isSameDay($trialEnd));
+        $this->assertTrue($invoice->period_end->isSameDay($trialEnd->copy()->addMonth()));
+    }
+
+    public function test_zero_value_initial_invoice_is_closed_automatically(): void
+    {
+        [$subscription] = $this->subscription(0);
+
+        $invoice = app(BillingInvoiceService::class)->generate($subscription, 'free-initial-invoice');
+
+        $this->assertSame('paid', $invoice->status);
+        $this->assertEquals(0.0, $invoice->balance);
+        $this->assertNotNull($invoice->paid_at);
+    }
+
+    public function test_central_invoice_list_relationships_can_be_eager_loaded(): void
+    {
+        [$subscription, $tenant, $plan] = $this->subscription(45);
+        $invoice = app(BillingInvoiceService::class)->generate($subscription, 'central-list-invoice');
+
+        $loaded = TenantInvoice::with(['tenant:id,company_name', 'subscription.plan:id,name', 'payments'])
+            ->findOrFail($invoice->id);
+
+        $this->assertTrue($loaded->tenant->is($tenant));
+        $this->assertTrue($loaded->subscription->is($subscription));
+        $this->assertTrue($loaded->subscription->plan->is($plan));
+        $this->assertCount(0, $loaded->payments);
+    }
+
     public function test_manual_refunds_are_idempotent_and_never_double_count(): void
     {
         $admin = $this->admin('refunds@example.test');

@@ -68,30 +68,28 @@ class InstalledState
 
             $database = trim((string) ($runtime['database'] ?? ''));
             $username = trim((string) ($runtime['username'] ?? ''));
-            $password = (string) ($runtime['password'] ?? '');
 
             return $database !== ''
                 && strtolower($database) !== 'laravel'
-                && $username !== ''
-                && ! (strtolower($username) === 'root' && $password === '');
+                && $username !== '';
         }
 
         $values = self::environmentValues();
         $database = trim((string) ($values['DB_DATABASE'] ?? ''));
         $username = trim((string) ($values['DB_USERNAME'] ?? ''));
-        $password = (string) ($values['DB_PASSWORD'] ?? '');
         $runtimeDatabase = trim((string) ($runtime['database'] ?? ''));
         $runtimeUsername = trim((string) ($runtime['username'] ?? ''));
-        $runtimePassword = (string) ($runtime['password'] ?? '');
 
+        // A blank password is valid for common localhost MySQL installations
+        // and is already verified by the environment step using a live PDO
+        // connection. Configuration health should reject Laravel placeholders,
+        // not contradict credentials that the installer successfully tested.
         return $database !== ''
             && strtolower($database) !== 'laravel'
             && $username !== ''
-            && ! (strtolower($username) === 'root' && $password === '')
             && $runtimeDatabase !== ''
             && strtolower($runtimeDatabase) !== 'laravel'
-            && $runtimeUsername !== ''
-            && ! (strtolower($runtimeUsername) === 'root' && $runtimePassword === '');
+            && $runtimeUsername !== '';
     }
 
     public static function hasRequiredRuntimeFiles(): bool

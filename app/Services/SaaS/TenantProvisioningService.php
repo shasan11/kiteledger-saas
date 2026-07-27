@@ -3,6 +3,7 @@
 namespace App\Services\SaaS;
 
 use App\Enums\TenantStatus;
+use App\Jobs\SaaS\ProvisionTenantJob;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDatabasePool;
 use App\Models\Central\TenantInitialPaymentIntent;
@@ -17,6 +18,7 @@ class TenantProvisioningService
     public function __construct(
         private TenantDomainService $domains,
         private TenantProvisioningRunner $runner,
+        private PlatformSettingsService $settings,
     ) {}
 
     public function create(array $attributes): Tenant
@@ -34,6 +36,12 @@ class TenantProvisioningService
         $mode = (string) ($attributes['provisioning_mode'] ?? config('saas.database.mode', config('saas.db_provisioning_mode', 'manual')));
         $manual = $mode === 'manual';
         $mysql = $mode === 'mysql';
+        if ($manual) {
+            // MySQL accounts are allowed to have an empty password, especially
+            // in local XAMPP/Laragon environments. Preserve that as an explicit
+            // empty credential instead of falling back to a template password.
+            $attributes['tenancy_db_password'] = (string) ($attributes['tenancy_db_password'] ?? '');
+        }
 
         Validator::make($attributes, [
             'provisioning_mode' => ['nullable', Rule::in(config('saas.database.allowed_modes', [config('saas.database.mode', 'manual')]))],
@@ -41,7 +49,7 @@ class TenantProvisioningService
             'tenancy_db_port' => [$manual ? 'required' : 'nullable', 'integer', 'between:1,65535'],
             'tenancy_db_name' => [$manual || $mysql ? 'required' : 'nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/'],
             'tenancy_db_username' => [$manual ? 'required' : 'nullable', 'string'],
-            'tenancy_db_password' => [$manual ? 'present' : 'nullable', 'string'],
+            'tenancy_db_password' => ['nullable', 'string'],
         ])->validate();
 
         $payment = (array) ($attributes['initial_payment'] ?? []);
@@ -118,6 +126,12 @@ class TenantProvisioningService
         }
 
         try {
+            if ($this->queued()) {
+                ProvisionTenantJob::dispatch($tenant->id);
+
+                return $tenant->refresh();
+            }
+
             $tenant = $this->runner->run($tenant);
         } catch (\Throwable $exception) {
             if ($tenant->database_provisioning_mode === 'pool') {
@@ -145,6 +159,17 @@ class TenantProvisioningService
             ])->save();
         }
 
+        if ($this->queued()) {
+            ProvisionTenantJob::dispatch($tenant->id, true);
+
+            return $tenant->refresh();
+        }
+
         return $this->runner->run($tenant, true);
+    }
+
+    private function queued(): bool
+    {
+        return (bool) $this->settings->get('provisioning.queue_tenant_provisioning', false);
     }
 }

@@ -60,10 +60,21 @@ class TenantController extends Controller
     public function store(StoreTenantOnboardingRequest $request, TenantProvisioningService $service, CentralAuditService $audit)
     {
         $data = TenantOnboardingData::from($request->validated())->toArray();
-        $tenant = $service->create($data + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
+        try {
+            $tenant = $service->create($data + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
+        } catch (\Throwable $exception) {
+            report($exception);
+            throw ValidationException::withMessages([
+                'provisioning' => 'Tenant provisioning failed: '.Str::limit($exception->getMessage(), 240).'. Review the database credentials and provisioning logs, then retry.',
+            ]);
+        }
         $audit->log($request, 'tenant.created', $tenant, [], $tenant->only(['company_name', 'owner_email', 'status', 'plan_id']));
 
-        return redirect()->route('central.tenants.show', $tenant)->with('success', 'Tenant created and provisioned successfully.');
+        $message = $tenant->status === 'active'
+            ? 'Tenant created and provisioned successfully.'
+            : 'Tenant created and queued for provisioning. Ensure the provisioning queue cron job is configured.';
+
+        return redirect()->route('central.tenants.show', $tenant)->with('success', $message);
     }
 
     public function testDatabase(Request $request, ManualDatabaseProvisioner $manual, TenantDatabaseNameValidator $names)
@@ -71,11 +82,11 @@ class TenantController extends Controller
         $data = $request->validate([
             'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'],
             'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/'],
-            'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['present', 'string', 'max:1024'],
+            'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024'],
         ]);
         try {
             $names->assertValid($data['tenancy_db_name']);
-            $manual->verify(['host' => $data['tenancy_db_host'], 'port' => $data['tenancy_db_port'], 'database' => $data['tenancy_db_name'], 'username' => $data['tenancy_db_username'], 'password' => $data['tenancy_db_password']]);
+            $manual->verify(['host' => $data['tenancy_db_host'], 'port' => $data['tenancy_db_port'], 'database' => $data['tenancy_db_name'], 'username' => $data['tenancy_db_username'], 'password' => (string) ($data['tenancy_db_password'] ?? '')]);
         } catch (\Throwable) {
             throw ValidationException::withMessages(['tenancy_db_name' => 'The database could not be verified. Check its name, credentials, connectivity, and privileges.']);
         }
@@ -131,9 +142,11 @@ class TenantController extends Controller
         $data = $request->validate([
             'owner_password' => ['required', 'string', 'min:12', 'confirmed'],
         ]);
-        $service->retry($tenant, $data['owner_password']);
+        $tenant = $service->retry($tenant, $data['owner_password']);
 
-        return back()->with('success', 'Tenant provisioning completed.');
+        return back()->with('success', $tenant->status === 'active'
+            ? 'Tenant provisioning completed.'
+            : 'Tenant provisioning was queued. Ensure the provisioning queue cron job is configured.');
     }
 
     public function migrate(Request $request, Tenant $tenant, TenantDatabaseService $databases, CentralAuditService $audit)
@@ -222,7 +235,7 @@ class TenantController extends Controller
         $manual = $mode === 'manual';
         $mysql = in_array($mode, ['mysql'], true);
 
-        return $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_email' => ['required', 'email', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'subdomain' => ['required', 'string', 'max:63', Rule::notIn(config('saas.reserved_subdomains'))], 'owner_password' => ['required', 'string', 'min:12', 'confirmed'], 'tenancy_db_host' => [$manual ? 'required' : 'nullable', 'string', 'max:255'], 'tenancy_db_port' => [$manual ? 'required' : 'nullable', 'integer', 'between:1,65535'], 'tenancy_db_name' => [$manual || $mysql ? 'required' : 'nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')], 'tenancy_db_username' => [$manual ? 'required' : 'nullable', 'string', 'max:255'], 'tenancy_db_password' => [$manual ? 'present' : 'nullable', 'string', 'max:1024']]);
+        return $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_email' => ['required', 'email', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'subdomain' => ['required', 'string', 'max:63', Rule::notIn(config('saas.reserved_subdomains'))], 'owner_password' => ['required', 'string', 'min:12', 'confirmed'], 'tenancy_db_host' => [$manual ? 'required' : 'nullable', 'string', 'max:255'], 'tenancy_db_port' => [$manual ? 'required' : 'nullable', 'integer', 'between:1,65535'], 'tenancy_db_name' => [$manual || $mysql ? 'required' : 'nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')], 'tenancy_db_username' => [$manual ? 'required' : 'nullable', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
     }
 
     private function syncTenantDatabaseInternals(Tenant $tenant): void
@@ -256,6 +269,8 @@ class TenantController extends Controller
             'databasePool' => $modes->contains('pool') ? TenantDatabasePool::where('status', 'available')->whereNotNull('validated_at')->orderBy('database_name')->get(['id', 'database_name', 'status', 'validated_at']) : [],
             'payment' => $this->paymentOptions(),
             'defaults' => ['timezone' => config('app.timezone', 'UTC'), 'currency' => app(PlatformSettingsService::class)->get('billing.default_currency', 'USD')],
+            'provisioningQueueEnabled' => (bool) app(PlatformSettingsService::class)->get('provisioning.queue_tenant_provisioning', false),
+            'provisioningQueueCommand' => 'php artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300',
         ];
     }
 

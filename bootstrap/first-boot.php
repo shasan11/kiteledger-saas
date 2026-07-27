@@ -71,12 +71,10 @@ if ($getValue($contents, 'APP_KEY') === '') {
 
 $database = $getValue($contents, 'DB_DATABASE');
 $username = $getValue($contents, 'DB_USERNAME');
-$password = $getValue($contents, 'DB_PASSWORD');
 $configurationValid = $getValue($contents, 'APP_KEY') !== ''
     && $database !== ''
     && strtolower($database) !== 'laravel'
-    && $username !== ''
-    && ! (strtolower($username) === 'root' && $password === '');
+    && $username !== '';
 $recoveryMarker = $basePath.'/storage/app/install/recovery-required';
 $needsRecovery = $hasLock && (! $environmentExists || $originalKeyMissing || ! $configurationValid);
 if ($needsRecovery) {

@@ -133,17 +133,14 @@ class AiAssistantApiTest extends TestCase
         $this->assertEquals(1, AiUsageLog::where('user_id', $user->id)->where('status', 'error')->count());
     }
 
-    public function test_settings_show_never_returns_raw_api_key(): void
+    public function test_tenant_cannot_view_centrally_managed_ai_provider_settings(): void
     {
         $user = $this->userWith(['ai.settings.view']);
 
-        $res = $this->actingAs($user)
+        $this->actingAs($user)
             ->getJson('/api/ai/settings')
-            ->assertOk();
-
-        $payload = $res->json();
-        $this->assertArrayNotHasKey('ai_api_key', $payload['settings']);
-        $this->assertArrayHasKey('ai_api_key_masked', $payload['settings']);
+            ->assertForbidden()
+            ->assertJsonPath('code', 'AI_SETTINGS_CENTRALLY_MANAGED');
     }
 
     public function test_settings_update_requires_manage_permission(): void

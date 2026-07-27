@@ -21,14 +21,14 @@ class FirstBootEnvironmentTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (['.env', '.env.example', 'bootstrap/first-boot.php'] as $file) {
-            $path = $this->directory.DIRECTORY_SEPARATOR.$file;
-            if (is_file($path)) {
-                unlink($path);
-            }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->directory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+        foreach ($iterator as $item) {
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
-        @rmdir($this->directory.DIRECTORY_SEPARATOR.'bootstrap');
-        @rmdir($this->directory);
+        rmdir($this->directory);
 
         parent::tearDown();
     }
@@ -99,6 +99,28 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString('SESSION_DRIVER=file', $contents);
         $this->assertStringContainsString('CACHE_STORE=file', $contents);
         $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
+    }
+
+    public function test_completed_local_install_with_blank_root_password_is_not_marked_for_recovery(): void
+    {
+        mkdir($this->directory.DIRECTORY_SEPARATOR.'storage/app/install', 0777, true);
+        file_put_contents($this->directory.DIRECTORY_SEPARATOR.'storage/installed', 'installed');
+        file_put_contents($this->directory.DIRECTORY_SEPARATOR.'.env', implode(PHP_EOL, [
+            'APP_KEY=base64:'.base64_encode(str_repeat('k', 32)),
+            'DB_CONNECTION=central',
+            'DB_DATABASE=kitedb',
+            'DB_USERNAME=root',
+            'DB_PASSWORD=',
+            'INSTALL_RECOVERY_REQUIRED=false',
+            '',
+        ]));
+
+        $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
+        $this->assertFileDoesNotExist($this->directory.DIRECTORY_SEPARATOR.'storage/app/install/recovery-required');
+        $this->assertStringContainsString(
+            'INSTALL_RECOVERY_REQUIRED=false',
+            (string) file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'),
+        );
     }
 
     public function test_artisan_bootstraps_a_missing_marketplace_environment_before_laravel(): void

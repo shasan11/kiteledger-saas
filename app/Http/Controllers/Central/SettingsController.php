@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\Plan;
 use App\Models\Central\PlatformSetting;
+use App\Services\AI\AiProviderManager;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Http\Request;
@@ -86,7 +87,7 @@ class SettingsController extends Controller
 
     public function test(Request $request, string $group, PlatformSettingsService $settings, CentralAuditService $audit)
     {
-        abort_unless(in_array($group, ['email', 'storage', 'notifications'], true), 404);
+        abort_unless(in_array($group, ['email', 'storage', 'notifications', 'ai'], true), 404);
         try {
             if ($group === 'email') {
                 abort_unless($settings->get('email.email_enabled', false), 422, 'Email delivery is disabled.');
@@ -100,10 +101,13 @@ class SettingsController extends Controller
                 abort_unless(Storage::disk($disk)->put($path, 'kiteledger-storage-check'), 422, 'The storage disk is not writable.');
                 abort_unless(Storage::disk($disk)->get($path) === 'kiteledger-storage-check', 422, 'The storage disk could not read the verification object.');
                 Storage::disk($disk)->delete($path);
-            } else {
+            } elseif ($group === 'notifications') {
                 $webhook = $settings->get('notifications.slack_webhook_url');
                 abort_unless(filled($webhook), 422, 'Configure a Slack webhook URL before testing notifications.');
                 Http::timeout(10)->post($webhook, ['text' => 'KiteLedger central notification webhook test succeeded.'])->throw();
+            } else {
+                $result = app(AiProviderManager::class)->testConnection();
+                abort_unless($result['success'] ?? false, 422, (string) ($result['message'] ?? 'The AI provider connection failed.'));
             }
         } catch (\Throwable $exception) {
             report($exception);

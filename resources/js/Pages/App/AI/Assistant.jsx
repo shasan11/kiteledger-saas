@@ -580,18 +580,8 @@ export default function Assistant() {
                             <Alert
                                 type="warning"
                                 showIcon
-                                message="AI Assistant is disabled in AI Settings."
-                                action={
-                                    canManage && (
-                                        <Button
-                                            size="small"
-                                            icon={<SettingOutlined />}
-                                            onClick={() => router.visit('/settings/ai')}
-                                        >
-                                            Open Settings
-                                        </Button>
-                                    )
-                                }
+                                message="AI Assistant is disabled by the central administrator."
+                                description="Contact the platform administrator to enable AI for the application."
                             />
                         )}
 
@@ -599,18 +589,8 @@ export default function Assistant() {
                             <Alert
                                 type="warning"
                                 showIcon
-                                message="AI provider is not configured. Add API key in AI Settings."
-                                action={
-                                    canManage && (
-                                        <Button
-                                            size="small"
-                                            icon={<SettingOutlined />}
-                                            onClick={() => router.visit('/settings/ai')}
-                                        >
-                                            Open Settings
-                                        </Button>
-                                    )
-                                }
+                                message="AI provider is not configured by the central administrator."
+                                description="Contact the platform administrator to configure the shared AI provider."
                             />
                         )}
 

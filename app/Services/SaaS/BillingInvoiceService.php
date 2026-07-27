@@ -31,17 +31,26 @@ class BillingInvoiceService
             $subtotal = $pricesIncludeTax && $taxRate > 0 ? round($price / (1 + ($taxRate / 100)), 2) : round($price, 2);
             $tax = $taxEnabled ? ($pricesIncludeTax ? round($price - $subtotal, 2) : round($subtotal * $taxRate / 100, 2)) : 0;
             $total = $pricesIncludeTax ? round($price, 2) : round($subtotal + $tax, 2);
+            $trialEndsAt = $subscription->status === 'trialing' ? $subscription->trial_ends_at : null;
+            $periodStart = $trialEndsAt ?? $subscription->current_period_starts_at;
+            $periodEnd = $trialEndsAt
+                ? ($subscription->billing_cycle === 'yearly' ? $trialEndsAt->copy()->addYear() : $trialEndsAt->copy()->addMonth())
+                : $subscription->current_period_ends_at;
+            $dueDate = $trialEndsAt?->toDateString()
+                ?? today()->addDays(max(0, (int) data_get($settings, 'billing.invoice_due_days', 14)))->toDateString();
+            $isZeroValue = abs($total) < 0.005;
             $buyer = ['company_name' => $subscription->tenant->company_name, 'legal_name' => $subscription->tenant->legal_name, 'email' => $subscription->tenant->owner_email, 'address' => $subscription->tenant->address, 'country' => $subscription->tenant->country];
             $lineSnapshot = [['type' => 'plan', 'description' => $subscription->plan->name.' ('.$subscription->billing_cycle.')', 'quantity' => 1, 'unit_amount' => $subtotal, 'amount' => $subtotal]];
             $invoice = TenantInvoice::create([
                 'invoice_number' => $this->numbers->next($settings),
                 'tenant_id' => $subscription->tenant_id, 'subscription_id' => $subscription->id, 'plan_id' => $subscription->plan_id,
                 'subtotal' => $subtotal, 'discount' => 0, 'tax' => $tax, 'total' => $total, 'currency' => $subscription->plan->currency,
-                'status' => 'issued', 'issue_date' => today(), 'due_date' => today()->addDays(max(0, (int) data_get($settings, 'billing.invoice_due_days', 14))),
-                'period_start' => $subscription->current_period_starts_at, 'period_end' => $subscription->current_period_ends_at,
+                'status' => $isZeroValue ? 'paid' : 'issued', 'issue_date' => today(), 'due_date' => $dueDate,
+                'period_start' => $periodStart, 'period_end' => $periodEnd,
                 'billing_identity' => $buyer, 'seller_snapshot' => $settings, 'buyer_snapshot' => $buyer,
                 'tax_snapshot' => $settings, 'customization_snapshot' => $settings,
-                'line_items_snapshot' => $lineSnapshot, 'paid_amount' => 0, 'balance' => $total,
+                'line_items_snapshot' => $lineSnapshot, 'paid_amount' => 0, 'balance' => $isZeroValue ? 0 : $total,
+                'paid_at' => $isZeroValue ? now() : null,
                 'notes' => data_get($settings, 'billing.default_invoice_notes'), 'idempotency_key' => $idempotencyKey, 'locked_at' => now(),
             ]);
             $invoice->lines()->create($lineSnapshot[0]);

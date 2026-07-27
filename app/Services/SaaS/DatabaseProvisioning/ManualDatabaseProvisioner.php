@@ -16,7 +16,7 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
             'port' => $tenant->tenancy_db_port,
             'database' => $tenant->tenancy_db_name,
             'username' => $tenant->tenancy_db_username,
-            'password' => $tenant->tenancy_db_password,
+            'password' => (string) ($tenant->tenancy_db_password ?? ''),
         ]);
         $tenant->setInternal('db_connection', 'tenant_template');
         $tenant->setInternal('db_name', $tenant->tenancy_db_name);
@@ -33,7 +33,7 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
         config(["database.connections.{$name}" => array_merge(config('database.connections.tenant_template'), [
             'host' => $credentials['host'], 'port' => $credentials['port'] ?: 3306,
             'database' => $credentials['database'], 'username' => $credentials['username'],
-            'password' => $credentials['password'],
+            'password' => (string) ($credentials['password'] ?? ''),
         ])]);
         $table = '_kiteledger_provision_probe_'.Str::lower(Str::random(10));
         try {
@@ -42,7 +42,10 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
             $connection->statement("ALTER TABLE `{$table}` ADD COLUMN `checked_at` TIMESTAMP NULL");
             $connection->statement("DROP TABLE `{$table}`");
         } catch (\Throwable $exception) {
-            try { DB::connection($name)->statement("DROP TABLE IF EXISTS `{$table}`"); } catch (\Throwable) {}
+            try {
+                DB::connection($name)->statement("DROP TABLE IF EXISTS `{$table}`");
+            } catch (\Throwable) {
+            }
             throw new \RuntimeException($this->failureCode($exception), previous: $exception);
         } finally {
             DB::purge($name);
@@ -89,7 +92,13 @@ class ManualDatabaseProvisioner implements TenantDatabaseProvisioner
         // removes central access and files, but leaves the supplied database intact.
     }
 
-    public function available(): bool { return true; }
+    public function available(): bool
+    {
+        return true;
+    }
 
-    public function diagnostic(): string { return 'Manual database credentials are verified during provisioning.'; }
+    public function diagnostic(): string
+    {
+        return 'Manual database credentials are verified during provisioning.';
+    }
 }

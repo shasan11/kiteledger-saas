@@ -16,7 +16,12 @@ class StoreTenantOnboardingRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['subdomain' => str($this->input('subdomain'))->trim()->lower()->toString()]);
+        $prepared = ['subdomain' => str($this->input('subdomain'))->trim()->lower()->toString()];
+        if ($this->input('provisioning_mode') === 'manual') {
+            $prepared['tenancy_db_password'] = (string) ($this->input('tenancy_db_password') ?? '');
+        }
+
+        $this->merge($prepared);
     }
 
     public function rules(): array
@@ -43,7 +48,7 @@ class StoreTenantOnboardingRequest extends FormRequest
             'tenancy_db_port' => [$manual ? 'required' : 'nullable', 'integer', 'between:1,65535'],
             'tenancy_db_name' => [$named ? 'required' : 'nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', 'unique:tenants,tenancy_db_name'],
             'tenancy_db_username' => [$manual ? 'required' : 'nullable', 'string', 'max:255'],
-            'tenancy_db_password' => [$manual ? 'present' : 'nullable', 'string', 'max:1024'],
+            'tenancy_db_password' => ['nullable', 'string', 'max:1024'],
             'initial_payment' => ['nullable', 'array'], 'initial_payment.enabled' => ['nullable', 'boolean'],
             'initial_payment.amount' => ['nullable', 'numeric', 'min:0.01'], 'initial_payment.currency' => ['nullable', 'string', 'size:3'],
             'initial_payment.payment_method' => ['nullable', Rule::in(['bank_transfer', 'cash', 'cheque', 'card_terminal', 'other'])],

@@ -2,9 +2,7 @@
 
 namespace App\Services\AI;
 
-use App\Services\Settings\DatabaseSettingService;
-use Illuminate\Support\Facades\Crypt;
-use Throwable;
+use App\Services\SaaS\PlatformSettingsService;
 
 class AiSettingsService
 {
@@ -36,88 +34,104 @@ class AiSettingsService
         'ai_assistant_mode' => 'reports_only',
     ];
 
-    public function __construct(protected DatabaseSettingService $db) {}
+    public function __construct(protected PlatformSettingsService $platform) {}
+
+    private function value(string $key, mixed $default = null): mixed
+    {
+        return $this->platform->get(self::GROUP.'.'.$key, $default);
+    }
 
     public function enabled(): bool
     {
-        return $this->db->bool('ai_enabled', (bool) self::DEFAULTS['ai_enabled'], self::GROUP);
+        return filter_var($this->value('ai_enabled', self::DEFAULTS['ai_enabled']), FILTER_VALIDATE_BOOL);
     }
 
     public function provider(): string
     {
-        $p = strtolower($this->db->string('ai_provider', self::DEFAULTS['ai_provider'], self::GROUP));
+        $p = strtolower((string) $this->value('ai_provider', self::DEFAULTS['ai_provider']));
+
         return $p ?: self::DEFAULTS['ai_provider'];
     }
 
     public function model(): string
     {
-        $m = $this->db->string('ai_model', '', self::GROUP);
-        if ($m) return $m;
+        $m = (string) $this->value('ai_model', '');
+        if ($m) {
+            return $m;
+        }
+
         return $this->defaultModelFor($this->provider());
     }
 
     public function apiKey(): ?string
     {
-        $raw = $this->db->string('ai_api_key', '', self::GROUP);
-        if (!$raw) {
+        $raw = (string) $this->value('ai_api_key', '');
+        if (! $raw) {
             $provider = $this->provider();
             $cfg = config("ai.providers.{$provider}.api_key") ?: config("prism.providers.{$provider}.api_key");
+
             return $cfg ?: null;
         }
 
-        try {
-            return Crypt::decryptString($raw);
-        } catch (Throwable) {
-            return $raw;
-        }
+        return $raw;
     }
 
     public function hasApiKey(): bool
     {
         $key = $this->apiKey();
+
         return is_string($key) && trim($key) !== '';
     }
 
     public function maskedApiKey(): ?string
     {
         $key = $this->apiKey();
-        if (!$key) return null;
+        if (! $key) {
+            return null;
+        }
         $len = mb_strlen($key);
-        if ($len <= 8) return str_repeat('*', $len);
-        return mb_substr($key, 0, 4) . '...' . mb_substr($key, -4);
+        if ($len <= 8) {
+            return str_repeat('*', $len);
+        }
+
+        return mb_substr($key, 0, 4).'...'.mb_substr($key, -4);
     }
 
     public function baseUrl(): string
     {
-        $url = $this->db->string('ai_base_url', '', self::GROUP);
-        if ($url) return rtrim($url, '/');
+        $url = (string) $this->value('ai_base_url', '');
+        if ($url) {
+            return rtrim($url, '/');
+        }
+
         return $this->defaultBaseUrlFor($this->provider());
     }
 
     public function temperature(): float
     {
-        return $this->db->float('ai_temperature', (float) self::DEFAULTS['ai_temperature'], self::GROUP);
+        return (float) $this->value('ai_temperature', self::DEFAULTS['ai_temperature']);
     }
 
     public function maxTokens(): int
     {
-        return max(50, min(32000, $this->db->int('ai_max_tokens', (int) self::DEFAULTS['ai_max_tokens'], self::GROUP)));
+        return max(50, min(32000, (int) $this->value('ai_max_tokens', self::DEFAULTS['ai_max_tokens'])));
     }
 
     public function savedTimeoutSeconds(): int
     {
-        return max(5, min(600, $this->db->int('ai_timeout_seconds', (int) self::DEFAULTS['ai_timeout_seconds'], self::GROUP)));
+        return max(5, min(600, (int) $this->value('ai_timeout_seconds', self::DEFAULTS['ai_timeout_seconds'])));
     }
 
     public function timeoutSeconds(): int
     {
         $saved = $this->savedTimeoutSeconds();
+
         return max($this->minimumRuntimeTimeoutForProvider($this->provider()), $saved);
     }
 
     public function savedConnectTimeoutSeconds(): int
     {
-        return max(2, min(60, $this->db->int('ai_connect_timeout_seconds', (int) self::DEFAULTS['ai_connect_timeout_seconds'], self::GROUP)));
+        return max(2, min(60, (int) $this->value('ai_connect_timeout_seconds', self::DEFAULTS['ai_connect_timeout_seconds'])));
     }
 
     public function connectTimeoutSeconds(): int
@@ -127,52 +141,52 @@ class AiSettingsService
 
     public function streamEnabled(): bool
     {
-        return $this->db->bool('ai_stream_enabled', (bool) self::DEFAULTS['ai_stream_enabled'], self::GROUP);
+        return filter_var($this->value('ai_stream_enabled', self::DEFAULTS['ai_stream_enabled']), FILTER_VALIDATE_BOOL);
     }
 
     public function cacheEnabled(): bool
     {
-        return $this->db->bool('ai_cache_enabled', (bool) self::DEFAULTS['ai_cache_enabled'], self::GROUP);
+        return filter_var($this->value('ai_cache_enabled', self::DEFAULTS['ai_cache_enabled']), FILTER_VALIDATE_BOOL);
     }
 
     public function cacheTtl(): int
     {
-        return max(30, $this->db->int('ai_cache_ttl', (int) self::DEFAULTS['ai_cache_ttl'], self::GROUP));
+        return max(30, (int) $this->value('ai_cache_ttl', self::DEFAULTS['ai_cache_ttl']));
     }
 
     public function contextMaxRows(): int
     {
-        return max(1, min(500, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
+        return max(1, min(500, (int) $this->value('ai_context_max_rows', self::DEFAULTS['ai_context_max_rows'])));
     }
 
     public function reportSummaryMaxRows(): int
     {
-        return max(1, min(100, $this->db->int('ai_context_max_rows', (int) self::DEFAULTS['ai_context_max_rows'], self::GROUP)));
+        return max(1, min(100, (int) $this->value('ai_context_max_rows', self::DEFAULTS['ai_context_max_rows'])));
     }
 
     public function contextMaxChars(): int
     {
-        return max(500, min(200000, $this->db->int('ai_context_max_chars', (int) self::DEFAULTS['ai_context_max_chars'], self::GROUP)));
+        return max(500, min(200000, (int) $this->value('ai_context_max_chars', self::DEFAULTS['ai_context_max_chars'])));
     }
 
     public function fastMode(): bool
     {
-        return $this->db->bool('ai_fast_mode', (bool) self::DEFAULTS['ai_fast_mode'], self::GROUP);
+        return filter_var($this->value('ai_fast_mode', self::DEFAULTS['ai_fast_mode']), FILTER_VALIDATE_BOOL);
     }
 
     public function financialAssistantEnabled(): bool
     {
-        return $this->db->bool('ai_financial_assistant_enabled', (bool) self::DEFAULTS['ai_financial_assistant_enabled'], self::GROUP);
+        return filter_var($this->value('ai_financial_assistant_enabled', self::DEFAULTS['ai_financial_assistant_enabled']), FILTER_VALIDATE_BOOL);
     }
 
     public function writeActionsEnabled(): bool
     {
-        return $this->db->bool('ai_write_actions_enabled', (bool) self::DEFAULTS['ai_write_actions_enabled'], self::GROUP);
+        return filter_var($this->value('ai_write_actions_enabled', self::DEFAULTS['ai_write_actions_enabled']), FILTER_VALIDATE_BOOL);
     }
 
     public function assistantMode(): string
     {
-        $mode = strtolower(trim($this->db->string('ai_assistant_mode', self::DEFAULTS['ai_assistant_mode'], self::GROUP)));
+        $mode = strtolower(trim((string) $this->value('ai_assistant_mode', self::DEFAULTS['ai_assistant_mode'])));
 
         return in_array($mode, ['full', 'reports_only'], true) ? $mode : 'full';
     }
@@ -184,18 +198,20 @@ class AiSettingsService
 
     public function setApiKey(string $key): void
     {
-        $encrypted = Crypt::encryptString($key);
-        $this->db->set('ai_api_key', $encrypted, self::GROUP);
+        $this->platform->set(self::GROUP, self::GROUP.'.ai_api_key', $key, 'string', true);
     }
 
     public function setMany(array $values): void
     {
         foreach ($values as $key => $value) {
-            if ($value === null) continue;
+            if ($value === null) {
+                continue;
+            }
             if (is_bool($value)) {
                 $value = $value ? '1' : '0';
             }
-            $this->db->set($key, $value, self::GROUP);
+            $type = is_bool($value) ? 'boolean' : (is_int($value) ? 'integer' : (is_float($value) ? 'decimal' : 'string'));
+            $this->platform->set(self::GROUP, self::GROUP.'.'.$key, $value, $type);
         }
     }
 
@@ -247,7 +263,7 @@ class AiSettingsService
 
     public function embeddingModel(): string
     {
-        $m = $this->db->string('ai_embedding_model', '', self::GROUP);
+        $m = (string) $this->value('ai_embedding_model', '');
         if ($m) {
             return $m;
         }

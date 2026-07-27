@@ -30,7 +30,6 @@ import {
   MailOutlined,
   MessageOutlined,
   NumberOutlined,
-  RobotOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
   CloudOutlined,
@@ -68,7 +67,6 @@ const DocumentNumberings = lazy(() => import('./DocumentNumberings/Index'));
 const PrintingTemplates = lazy(() => import('./PrintingTemplates/Index'));
 const ChequeFormatConfigurations = lazy(() => import('./ChequeFormatConfigurations/Index'));
 const MasterData = lazy(() => import('./MasterData/Index'));
-const AiSettings = lazy(() => import('./AiSettings'));
 const PaymentGatewaySettings = lazy(() => import('./PaymentGatewaySettings'));
 
 const DEFAULT_TAB_KEY = 'company-profile';
@@ -325,19 +323,6 @@ const SETTINGS_TABS = [
     props: {},
   },
 
-  {
-    key: 'ai-group',
-    label: 'Artificial Intelligence',
-    disabled: true,
-  },
-  {
-    key: 'ai-settings',
-    label: 'AI Settings',
-    description: 'Configure the provider used for AI report summaries.',
-    icon: <RobotOutlined />,
-    component: AiSettings,
-    props: {},
-  },
 ].filter(Boolean);
 
 function getRealTabs() {

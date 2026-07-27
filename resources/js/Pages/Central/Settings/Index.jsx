@@ -74,6 +74,7 @@ export default function Settings({ groups, activeGroup }) {
     const [confirmation, setConfirmation] = useState(null);
     const [confirmationPassword, setConfirmationPassword] = useState('');
     const [form] = Form.useForm();
+    const provisioningQueueEnabled = Form.useWatch('provisioning.queue_tenant_provisioning', form);
     const settings = groups[section] || [];
     const hydrated = useRef({ section: null, signature: null });
     const awaitingServer = useRef(false);
@@ -251,7 +252,7 @@ export default function Settings({ groups, activeGroup }) {
                 title="Platform Settings"
                 actions={
                     <Space wrap>
-                        {['email', 'storage', 'notifications'].includes(section) && (
+                        {['email', 'storage', 'notifications', 'ai'].includes(section) && (
                             <Button onClick={() => router.post(route('central.settings.test', section))}>
                                 Test configuration
                             </Button>
@@ -303,6 +304,17 @@ export default function Settings({ groups, activeGroup }) {
                         }
                     >
                         <Form form={form} layout="vertical" onValuesChange={(changed) => { setDirty(true); setChangedKeys((current) => new Set([...current, ...Object.keys(changed)])); }}>
+                            {section === 'provisioning' && (
+                                <Alert
+                                    type={provisioningQueueEnabled ? 'warning' : 'info'}
+                                    showIcon
+                                    message={provisioningQueueEnabled ? 'Queue worker cron job required' : 'Immediate provisioning is enabled'}
+                                    description={provisioningQueueEnabled
+                                        ? <><div>Add this cron/worker command before creating tenants:</div><code>php artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300</code></>
+                                        : 'Tenants are provisioned during the request. No provisioning queue worker is required.'}
+                                    style={{ marginBottom: 18 }}
+                                />
+                            )}
                             {grouped.map((group) => (
                                 <section className="platform-settings-panel" key={group.title}>
                                     <div className="platform-settings-panel__header">

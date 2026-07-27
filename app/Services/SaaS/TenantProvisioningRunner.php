@@ -86,11 +86,11 @@ class TenantProvisioningRunner
             });
             $this->step($tenant, $attemptId, 'invoice', function () use ($tenant): void {
                 $subscription = Subscription::where('tenant_id', $tenant->id)->latest('id')->first();
-                if (! $subscription || $subscription->status !== 'active' || ! $subscription->plan || ((float) $subscription->plan->price_monthly === 0.0 && (float) $subscription->plan->price_yearly === 0.0)) {
+                if (! $subscription || ! $subscription->plan) {
                     return;
                 }
                 ($this->invoices ?? app(BillingInvoiceService::class))->generate($subscription, 'tenant:'.$tenant->id.':initial-invoice');
-            });
+            }, repeat: true);
             $this->step($tenant, $attemptId, 'payment', function () use ($tenant): void {
                 $intent = TenantInitialPaymentIntent::where('tenant_id', $tenant->id)->first();
                 if (! $intent || $intent->status === 'processed') {
@@ -112,7 +112,7 @@ class TenantProvisioningRunner
                     'send_receipt' => $intent->send_receipt, 'idempotency_key' => $intent->idempotency_key,
                 ]);
                 $intent->update(['status' => 'processed', 'payment_transaction_id' => $transaction->id]);
-            });
+            }, repeat: true);
 
             $tenant->refresh();
             // Virtual-column values are exposed as model attributes after a

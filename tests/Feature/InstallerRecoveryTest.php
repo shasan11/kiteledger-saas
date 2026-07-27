@@ -94,6 +94,18 @@ class InstallerRecoveryTest extends TestCase
         $this->assertTrue(InstalledState::hasInstallLock());
     }
 
+    public function test_local_mysql_root_with_blank_password_is_a_usable_installer_configuration(): void
+    {
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql.database' => 'kiteledger',
+            'database.connections.mysql.username' => 'root',
+            'database.connections.mysql.password' => '',
+        ]);
+
+        $this->assertTrue(InstalledState::hasUsableDatabaseConfig());
+    }
+
     public function test_tenant_domain_middleware_returns_clear_error_when_database_is_unavailable(): void
     {
         InstalledState::mark();

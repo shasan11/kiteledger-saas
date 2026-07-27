@@ -24,8 +24,15 @@ class FroidenEnvironmentManager extends EnvironmentManager
     public function save(Request $request): array
     {
         try {
+            // `localhost` is special to PDO MySQL: depending on the OS it may
+            // select an IPv6 address, Unix socket, or Windows named pipe and
+            // silently ignore the port entered in the installer. The wizard
+            // explicitly asks for a TCP port, so make its behaviour consistent
+            // across XAMPP, Laragon, Docker, cPanel, Linux, and Windows.
+            $databaseHost = $this->normalizeDatabaseHost((string) $request->input('hostname'));
+
             $this->ensureDatabaseExists(
-                (string) $request->input('hostname'),
+                $databaseHost,
                 (int) $request->integer('port'),
                 (string) $request->input('database'),
                 (string) $request->input('username'),
@@ -39,7 +46,7 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'TENANT_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
                 'DB_CONNECTION' => 'central',
                 'DB_DRIVER' => 'mysql',
-                'DB_HOST' => (string) $request->input('hostname'),
+                'DB_HOST' => $databaseHost,
                 'DB_PORT' => (string) $request->integer('port'),
                 'DB_DATABASE' => (string) $request->input('database'),
                 'DB_USERNAME' => (string) $request->input('username'),
@@ -143,8 +150,15 @@ class FroidenEnvironmentManager extends EnvironmentManager
         }
 
         throw new RuntimeException(
-            "Could not reach MySQL at {$host}:{$port}. Confirm that MySQL is running and that the database host and port are correct.",
+            "Could not reach MySQL at {$host}:{$port} within ".self::DATABASE_CONNECT_TIMEOUT_SECONDS.' seconds. Confirm that MySQL is running and accepting TCP connections on that host and port.',
         );
+    }
+
+    private function normalizeDatabaseHost(string $host): string
+    {
+        $host = trim($host);
+
+        return strcasecmp($host, 'localhost') === 0 ? '127.0.0.1' : $host;
     }
 
     /** @param array<string, string> $values */

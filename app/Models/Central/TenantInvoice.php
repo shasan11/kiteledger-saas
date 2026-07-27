@@ -2,6 +2,7 @@
 
 namespace App\Models\Central;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TenantInvoice extends CentralModel
@@ -37,8 +38,18 @@ class TenantInvoice extends CentralModel
         return $this->hasMany(PaymentTransaction::class, 'invoice_id');
     }
 
-    public function tenant()
+    public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function subscription(): BelongsTo
+    {
+        return $this->belongsTo(Subscription::class);
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class);
     }
 }

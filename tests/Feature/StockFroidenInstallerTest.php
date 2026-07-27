@@ -93,6 +93,13 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertStringContainsString('RewriteRule ^ index.php [L]', $publicRules);
     }
 
+    public function test_local_composer_dev_server_disables_env_file_reloading(): void
+    {
+        $composer = json_decode((string) file_get_contents(base_path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('php artisan serve --no-reload', implode("\n", $composer['scripts']['dev']));
+    }
+
     public function test_environment_save_accepts_a_blank_central_database_password(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);
@@ -120,6 +127,16 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertSame('fail', $response['status'] ?? null);
         $this->assertStringContainsString('Could not reach MySQL', (string) ($response['message'] ?? ''));
         $this->assertLessThan(10, microtime(true) - $startedAt);
+    }
+
+    public function test_localhost_database_host_is_forced_to_ipv4_tcp(): void
+    {
+        $manager = app(FroidenEnvironmentManager::class);
+        $method = new \ReflectionMethod($manager, 'normalizeDatabaseHost');
+
+        $this->assertSame('127.0.0.1', $method->invoke($manager, 'localhost'));
+        $this->assertSame('127.0.0.1', $method->invoke($manager, ' LOCALHOST '));
+        $this->assertSame('db.internal', $method->invoke($manager, ' db.internal '));
     }
 
     public function test_browser_environment_submission_redirects_without_javascript(): void

@@ -10,6 +10,7 @@ use App\Models\Central\Tenant;
 use App\Models\Central\TenantDeletionRequest;
 use App\Services\SaaS\DatabaseProvisioning\DatabaseProvisionerManager;
 use App\Services\SaaS\PlanLimitService;
+use App\Services\SaaS\PlatformSettingsService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantDomainService;
 use App\Services\SaaS\TenantFileDeletionService;
@@ -47,11 +48,11 @@ class CentralTenancyTest extends TestCase
         $this->assertNotNull($tenant->domains()->firstOrFail()->verified_at);
         $this->assertSame('manual', $tenant->database_provisioning_mode);
         $this->assertSame('tenant_acme', $tenant->database_name);
-        $this->assertSame('VerySecure!123', Crypt::decryptString($tenant->provisioning_owner_password));
+        $this->assertSame('VerySecure!123', $tenant->provisioning_owner_password);
         Queue::assertNotPushed(ProvisionTenantJob::class);
     }
 
-    public function test_normal_creation_is_synchronous_and_ignores_queue_configuration(): void
+    public function test_normal_creation_is_synchronous_when_provisioning_queue_is_off(): void
     {
         Queue::fake();
         config(['queue.default' => 'database', 'saas.provision_sync' => false, 'saas.provisioning_queue' => 'never-run']);
@@ -61,6 +62,20 @@ class CentralTenancyTest extends TestCase
 
         $this->assertSame('active', $tenant->status);
         Queue::assertNotPushed(ProvisionTenantJob::class);
+    }
+
+    public function test_creation_is_queued_when_provisioning_queue_setting_is_on(): void
+    {
+        Queue::fake();
+        app(PlatformSettingsService::class)->set('provisioning', 'provisioning.queue_tenant_provisioning', true, 'boolean');
+        $runner = Mockery::mock(TenantProvisioningRunner::class);
+        $runner->shouldNotReceive('run');
+        $this->app->instance(TenantProvisioningRunner::class, $runner);
+
+        $tenant = app(TenantProvisioningService::class)->create($this->tenantPayload('Queued', 'queued', 'queued@example.test', 'tenant_queued'));
+
+        $this->assertSame('pending', $tenant->status);
+        Queue::assertPushed(ProvisionTenantJob::class, fn (ProvisionTenantJob $job): bool => $job->tenantId === $tenant->id);
     }
 
     public function test_runner_is_called_after_the_central_transaction_commits(): void
@@ -99,6 +114,18 @@ class CentralTenancyTest extends TestCase
         $this->assertSame('buyer_created_acme', $tenant->database_name);
         $this->assertNotSame('tenant-db-secret', $tenant->getRawOriginal('tenancy_db_password'));
         $this->assertArrayNotHasKey('data', $tenant->toArray());
+    }
+
+    public function test_manual_mode_accepts_and_preserves_a_blank_database_password(): void
+    {
+        Queue::fake();
+        $this->fakeSuccessfulRunner();
+        $payload = $this->tenantPayload('Blank Password', 'blank-password', 'blank-password@example.test', 'buyer_blank_password');
+        unset($payload['tenancy_db_password']);
+
+        $tenant = app(TenantProvisioningService::class)->create($payload);
+
+        $this->assertSame('', $tenant->tenancy_db_password);
     }
 
     private function tenantPayload(string $company, string $subdomain, string $email, string $database): array

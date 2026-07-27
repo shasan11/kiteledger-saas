@@ -14,10 +14,11 @@ export default function TenantForm(props) {
     return props.tenant ? <EditTenant {...props} /> : <OnboardingWizard {...props} />;
 }
 
-function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthly", "yearly"], subscriptionModes = ["active"], provisioningModes = ["manual"], tenantBaseDomain, databasePool = [], payment = {}, defaults = {} }) {
+function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthly", "yearly"], subscriptionModes = ["active"], provisioningModes = ["manual"], tenantBaseDomain, databasePool = [], payment = {}, defaults = {}, provisioningQueueEnabled = false, provisioningQueueCommand = "" }) {
     const [antForm] = Form.useForm();
     const [step, setStep] = useState(0);
     const [testing, setTesting] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const initial = useMemo(() => ({
         company_name: "", legal_name: "", owner_name: "", owner_email: "", owner_phone: "", country: "", address: "",
         timezone: defaults.timezone || "UTC", currency: defaults.currency || "USD", subdomain: "", owner_password: "", owner_password_confirmation: "",
@@ -35,11 +36,30 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
     const steps = [
         { title: "Company & owner", fields: ["company_name", "owner_name", "owner_email", "subdomain", "owner_password", "owner_password_confirmation"] },
         { title: "Plan & billing", fields: ["plan_id", "billing_cycle", "subscription_start_mode", "effective_at"] },
-        { title: "Database", fields: mode === "manual" ? ["provisioning_mode", "tenancy_db_host", "tenancy_db_port", "tenancy_db_name", "tenancy_db_username", "tenancy_db_password"] : ["provisioning_mode", "database_pool_id"] },
+        { title: "Database", fields: mode === "manual" ? ["provisioning_mode", "tenancy_db_host", "tenancy_db_port", "tenancy_db_name", "tenancy_db_username"] : ["provisioning_mode", "database_pool_id"] },
         { title: "Review", fields: [] },
     ];
     const normalizeSubdomain = () => antForm.setFieldValue("subdomain", String(antForm.getFieldValue("subdomain") || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, ""));
-    const next = async () => { await antForm.validateFields(steps[step].fields); setStep((value) => Math.min(3, value + 1)); };
+    const fieldLabels = {
+        company_name: "company name", owner_name: "owner name", owner_email: "owner email", subdomain: "workspace hostname",
+        owner_password: "owner password", owner_password_confirmation: "password confirmation", plan_id: "plan",
+        billing_cycle: "billing cycle", subscription_start_mode: "subscription start mode", effective_at: "effective date",
+        timezone: "timezone", currency: "currency", provisioning_mode: "provisioning mode", database_pool_id: "database",
+        tenancy_db_host: "database host", tenancy_db_port: "database port", tenancy_db_name: "database name",
+        tenancy_db_username: "database username",
+    };
+    const validationMessage = (errorFields = []) => {
+        const labels = [...new Set(errorFields.map(({ name }) => fieldLabels[name?.[0]] || String(name?.[0] || "field").replaceAll("_", " ")))];
+        return labels.length ? `Please complete: ${labels.join(", ")}.` : "Review the highlighted fields before provisioning.";
+    };
+    const next = async () => {
+        try {
+            await antForm.validateFields(steps[step].fields);
+            setStep((value) => Math.min(3, value + 1));
+        } catch (error) {
+            message.error(validationMessage(error?.errorFields));
+        }
+    };
     const testDatabase = async () => {
         try {
             const values = await antForm.validateFields(steps[2].fields);
@@ -50,22 +70,51 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
             if (error.response) message.error(error.response.data?.message || "Database verification failed");
         } finally { setTesting(false); }
     };
-    const submit = async () => {
-        if (submission.processing) return;
-        const values = await antForm.validateFields();
-        const payload = { ...values, effective_at: values.effective_at?.toISOString(), initial_payment: { ...values.initial_payment, payment_date: values.initial_payment?.payment_date?.toISOString(), proof: values.initial_payment?.proof?.fileList?.[0]?.originFileObj || null } };
-        submission.transform(() => payload).post(route("central.tenants.store"), {
-            forceFormData: true,
-            preserveScroll: true,
-            onError: (errors) => antForm.setFields(Object.entries(errors).map(([name, errors]) => ({ name: name.split("."), errors: [Array.isArray(errors) ? errors[0] : errors] }))),
-        });
+    const stepForField = (name) => steps.findIndex(({ fields }) => fields.includes(String(name).split(".")[0]));
+    const submit = (values) => {
+        if (submitting || submission.processing) return;
+        setSubmitting(true);
+        const payload = { ...values, onboarding_idempotency_key: values.onboarding_idempotency_key || initial.onboarding_idempotency_key, effective_at: values.effective_at?.toISOString(), initial_payment: { ...values.initial_payment, payment_date: values.initial_payment?.payment_date?.toISOString(), proof: values.initial_payment?.proof?.fileList?.[0]?.originFileObj || null } };
+        try {
+            submission.transform(() => payload);
+            submission.post(route("central.tenants.store"), {
+                forceFormData: true,
+                preserveScroll: true,
+                onError: (errors) => {
+                    antForm.setFields(Object.entries(errors).map(([name, fieldErrors]) => ({ name: name.split("."), errors: [Array.isArray(fieldErrors) ? fieldErrors[0] : fieldErrors] })));
+                    const errorStep = stepForField(Object.keys(errors)[0]);
+                    if (errorStep >= 0) setStep(errorStep);
+                    message.error(Object.values(errors)[0] || "Tenant could not be provisioned. Review the highlighted fields.");
+                },
+                onFinish: () => setSubmitting(false),
+            });
+        } catch (error) {
+            setSubmitting(false);
+            message.error(error?.message || "Tenant provisioning could not be started.");
+        }
+    };
+    const provision = async () => {
+        if (submitting || submission.processing) return;
+        try {
+            const values = await antForm.validateFields();
+            submit(values);
+        } catch (error) {
+            if (error?.errorFields) submitFailed(error);
+            else message.error(error?.message || "Tenant provisioning could not be started.");
+        }
+    };
+    const submitFailed = ({ errorFields }) => {
+        const errorStep = stepForField(errorFields?.[0]?.name?.[0]);
+        if (errorStep >= 0) setStep(errorStep);
+        message.error(validationMessage(errorFields));
     };
     const price = selectedPlan ? (Form.useWatch("billing_cycle", antForm) === "yearly" ? selectedPlan.price_yearly : selectedPlan.price_monthly) : null;
 
     return <CentralLayout title="Create tenant" breadcrumbs={[{ title: "Tenants" }]}>
         <PageHeader eyebrow="Tenant onboarding" title="Create a tenant" description="Provision the workspace, owner, subscription, invoice, and database through a retry-safe guided flow." />
         <SectionCard><Steps current={step} items={steps.map(({ title }) => ({ title }))} responsive style={{ marginBottom: 28 }} />
-            <Form form={antForm} layout="vertical" initialValues={initial} onFinish={submit} onValuesChange={(_, all) => submission.setData(all)}>
+            <Form form={antForm} layout="vertical" initialValues={initial} onFinish={submit} onFinishFailed={submitFailed} onValuesChange={(_, all) => submission.setData(all)}>
+                <Form.Item name="onboarding_idempotency_key" hidden><Input /></Form.Item>
                 <div hidden={step !== 0}><Row gutter={16}>
                     <Col xs={24} md={12}><Form.Item name="company_name" label="Company name" rules={[{ required: true }]}><Input /></Form.Item></Col>
                     <Col xs={24} md={12}><Form.Item name="legal_name" label="Legal name"><Input /></Form.Item></Col>
@@ -94,14 +143,14 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
                 </Row></div>
                 <div hidden={step !== 2}><Alert type="info" showIcon message="Credentials are used only for provisioning and are never returned to the browser." style={{ marginBottom: 18 }} /><Row gutter={16}>
                     <Col xs={24}><Form.Item name="provisioning_mode" label="Provisioning mode" rules={[{ required: true }]}><Select options={provisioningModes.map((value) => ({ value, label: value }))} /></Form.Item></Col>
-                    {mode === "pool" ? <Col xs={24}><Form.Item name="database_pool_id" label="Validated database" rules={[{ required: true }]}><Select options={databasePool.map((row) => ({ value: row.id, label: row.database_name }))} /></Form.Item></Col> : mode === "manual" && <><Col xs={16}><Form.Item name="tenancy_db_host" label="Host" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={8}><Form.Item name="tenancy_db_port" label="Port" rules={[{ required: true }]}><InputNumber min={1} max={65535} style={{ width: "100%" }} /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_name" label="Database name" rules={[{ required: true }, { pattern: /^[A-Za-z0-9_]+$/ }]}><Input /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_username" label="Username" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_password" label="Password" rules={[{ required: true }]}><Input.Password /></Form.Item></Col><Col xs={24}><Button loading={testing} onClick={testDatabase}>Test database connection</Button></Col></>}
+                    {mode === "pool" ? <Col xs={24}><Form.Item name="database_pool_id" label="Validated database" rules={[{ required: true }]}><Select options={databasePool.map((row) => ({ value: row.id, label: row.database_name }))} /></Form.Item></Col> : mode === "manual" && <><Col xs={16}><Form.Item name="tenancy_db_host" label="Host" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={8}><Form.Item name="tenancy_db_port" label="Port" rules={[{ required: true }]}><InputNumber min={1} max={65535} style={{ width: "100%" }} /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_name" label="Database name" rules={[{ required: true }, { pattern: /^[A-Za-z0-9_]+$/ }]}><Input /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_username" label="Username" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24}><Form.Item name="tenancy_db_password" label="Password (optional)" extra="Leave blank when this MySQL user has no password."><Input.Password /></Form.Item></Col><Col xs={24}><Button loading={testing} onClick={testDatabase}>Test database connection</Button></Col></>}
                 </Row></div>
-                <div hidden={step !== 3}><Alert type="warning" showIcon message="Review before provisioning" description="Provisioning may create a domain, migrate and seed a tenant database, create the owner, and start billing. Retrying this request uses the same idempotency key." style={{ marginBottom: 18 }} /><Descriptions bordered column={{ xs: 1, md: 2 }} items={[
+                <div hidden={step !== 3}><Alert type={provisioningQueueEnabled ? "warning" : "info"} showIcon message={provisioningQueueEnabled ? "Provisioning will be queued" : "Provisioning will run immediately"} description={provisioningQueueEnabled ? <span>A queue worker is required: <code>{provisioningQueueCommand}</code></span> : "No provisioning queue or queue cron job is required."} style={{ marginBottom: 18 }} /><Descriptions bordered column={{ xs: 1, md: 2 }} items={[
                     { key: "company", label: "Company", children: antForm.getFieldValue("company_name") }, { key: "owner", label: "Owner", children: antForm.getFieldValue("owner_email") },
                     { key: "host", label: "Hostname", children: `${antForm.getFieldValue("subdomain")}.${tenantBaseDomain}` }, { key: "plan", label: "Plan", children: selectedPlan?.name },
                     { key: "subscription", label: "Subscription", children: `${startMode} / ${antForm.getFieldValue("billing_cycle")}` }, { key: "database", label: "Database", children: mode === "pool" ? databasePool.find((row) => row.id === antForm.getFieldValue("database_pool_id"))?.database_name : antForm.getFieldValue("tenancy_db_name") },
                 ]} /></div>
-                <Space style={{ width: "100%", justifyContent: "space-between", marginTop: 28 }}><Button onClick={() => step ? setStep(step - 1) : window.history.back()}>{step ? "Back" : "Cancel"}</Button>{step < 3 ? <Button type="primary" onClick={next}>Continue</Button> : <Button type="primary" htmlType="submit" loading={submission.processing} disabled={submission.processing}>Provision tenant</Button>}</Space>
+                <Space style={{ width: "100%", justifyContent: "space-between", marginTop: 28 }}><Button onClick={() => step ? setStep(step - 1) : window.history.back()}>{step ? "Back" : "Cancel"}</Button>{step < 3 ? <Button type="primary" onClick={next}>Continue</Button> : <Button type="primary" onClick={provision} loading={submitting || submission.processing} disabled={submitting || submission.processing}>Provision tenant</Button>}</Space>
             </Form>
         </SectionCard>
     </CentralLayout>;

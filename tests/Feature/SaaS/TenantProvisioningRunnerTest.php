@@ -28,7 +28,7 @@ class TenantProvisioningRunnerTest extends TestCase
     public function test_runner_completes_every_infrastructure_step_and_activates_the_tenant(): void
     {
         config(['saas.tenant_base_domain' => 'Example.Test.']);
-        $plan = Plan::query()->create(['name' => 'Starter', 'slug' => 'runner-starter', 'currency' => 'USD']);
+        $plan = Plan::query()->create(['name' => 'Starter', 'slug' => 'runner-starter', 'currency' => 'USD', 'price_monthly' => 25, 'price_yearly' => 250]);
         $template = DefaultDataTemplate::query()->create(['name' => 'Default', 'slug' => 'runner-default', 'is_active' => true]);
         $tenant = $this->tenant(['plan_id' => $plan->id, 'default_template_id' => $template->id]);
         ProvisioningLog::query()->create(['tenant_id' => $tenant->id, 'step' => 'owner', 'status' => 'success']);
@@ -72,8 +72,16 @@ class TenantProvisioningRunnerTest extends TestCase
         $this->assertNotNull($domain->verified_at);
         $this->assertNotNull($domain->activated_at);
         $this->assertDatabaseHas('subscriptions', ['tenant_id' => $tenant->id, 'plan_id' => $plan->id]);
+        $this->assertDatabaseHas('tenant_invoices', [
+            'tenant_id' => $tenant->id,
+            'plan_id' => $plan->id,
+            'total' => 25,
+            'balance' => 25,
+            'status' => 'issued',
+            'idempotency_key' => 'tenant:'.$tenant->id.':initial-invoice',
+        ]);
         $this->assertDatabaseHas('tenant_provisioning_attempts', ['tenant_id' => $tenant->id, 'status' => 'succeeded']);
-        foreach (['domain', 'database', 'migrations', 'seeders', 'template', 'owner', 'subscription'] as $step) {
+        foreach (['domain', 'database', 'migrations', 'seeders', 'template', 'owner', 'subscription', 'invoice', 'payment'] as $step) {
             $this->assertDatabaseHas('tenant_provisioning_logs', ['tenant_id' => $tenant->id, 'step' => $step, 'status' => 'success']);
         }
     }
