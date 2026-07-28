@@ -57,6 +57,8 @@ class CentralAdminController extends Controller
     public function destroy(Request $request, CentralAdmin $centralAdmin, CentralAuditService $audit)
     {
         abort_if($request->user('central')?->is($centralAdmin), 422, 'You cannot delete your own account.');
+        $isSuper=$centralAdmin->role==='super_admin'||$centralAdmin->roles()->where('name','super_administrator')->exists();
+        abort_if($isSuper&&CentralAdmin::where('is_active',true)->whereKeyNot($centralAdmin->id)->where(fn($q)=>$q->where('role','super_admin')->orWhereHas('roles',fn($r)=>$r->where('name','super_administrator')))->doesntExist(),422,'At least one active Super Administrator must remain.');
         $audit->log($request, 'central-admin.deleted', $centralAdmin, $centralAdmin->only(['name', 'email', 'role', 'is_active']));
         $centralAdmin->delete();
 

@@ -4,7 +4,7 @@ import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
-import { AlertOutlined, ClockCircleOutlined, MessageOutlined, SearchOutlined, UserDeleteOutlined } from '@ant-design/icons';
+import { AlertOutlined, ClockCircleOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UserDeleteOutlined } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
 import { Button, Col, DatePicker, Input, Row, Select, Table, Typography } from 'antd';
 import dayjs from 'dayjs';
@@ -16,7 +16,7 @@ export default function SupportIndex({ tickets, metrics, filters = {}, filterOpt
     const cards = [['Open', metrics.open, <MessageOutlined/>, 'blue'], ['Unassigned', metrics.unassigned, <UserDeleteOutlined/>, 'amber'], ['Urgent', metrics.urgent, <AlertOutlined/>, 'rose'], ['SLA breached', metrics.sla_breached, <ClockCircleOutlined/>, 'rose'], ['Awaiting support', metrics.pending_support, <MessageOutlined/>, 'violet'], ['Resolved today', metrics.resolved_today, <MessageOutlined/>, 'emerald']];
     const columns = [
         { title: 'Ticket', dataIndex: 'ticket_number' }, { title: 'Subject', dataIndex: 'subject' },
-        { title: 'Tenant', render: (_, row) => row.tenant?.company_name || row.tenant_id },
+        { title: 'Customer', render: (_, row) => row.tenant?.company_name || 'Deleted customer' },
         { title: 'Requester', render: (_, row) => <span>{row.requester_name}<Typography.Text type="secondary" style={{ display: 'block' }}>{row.requester_email}</Typography.Text></span> },
         { title: 'Priority', render: (_, row) => <StatusBadge value={row.priority}/> }, { title: 'Status', render: (_, row) => <StatusBadge value={row.status}/> },
         { title: 'Assignee', render: (_, row) => row.assignee?.name || 'Unassigned' }, { title: 'Last reply', render: (_, row) => formatDate(row.last_reply_at, true) },
@@ -26,13 +26,13 @@ export default function SupportIndex({ tickets, metrics, filters = {}, filterOpt
     const dateChange = (from, to, values) => apply({ [from]: values?.[0] || undefined, [to]: values?.[1] || undefined, page: undefined });
 
     return <CentralLayout title="Support Tickets">
-        <PageHeader eyebrow="Support" title="Support Tickets" description="A tenant-aware inbox for assignments, conversations, internal notes, private attachments, and SLA response."/>
+        <PageHeader eyebrow="Support" title="Support Tickets" description="Manage customer conversations, assignments, private notes, attachments, and response targets." actions={<Button type="primary" icon={<PlusOutlined/>} onClick={()=>router.visit(route('central.support.tickets.create'))}>Create ticket</Button>}/>
         <Row gutter={[12, 12]} style={{ marginBottom: 18 }}>{cards.map(([label, value, icon, tone]) => <Col xs={12} md={8} xl={4} key={label}><MetricCard label={label} value={value} icon={icon} tone={tone}/></Col>)}</Row>
         <SectionCard>
             <div className="central-toolbar">
                 <Input.Search prefix={<SearchOutlined/>} value={search} onChange={(event) => setSearch(event.target.value)} onSearch={() => apply({ page: undefined })} placeholder="Ticket, subject, or requester" allowClear/>
                 <Select allowClear value={filters.view} placeholder="View" onChange={(view) => apply({ view, page: undefined })} options={['mine', 'unassigned', 'urgent', 'sla_breached', 'pending_customer', 'resolved', 'closed'].map((value) => ({ value, label: value.replaceAll('_', ' ') }))}/>
-                <Select allowClear value={filters.tenant_id} showSearch optionFilterProp="label" placeholder="Tenant" onChange={(tenant_id) => apply({ tenant_id, page: undefined })} options={option(filterOptions.tenants, 'company_name')}/>
+                <Select allowClear value={filters.tenant_id} showSearch optionFilterProp="label" placeholder="Customer" onChange={(tenant_id) => apply({ tenant_id, page: undefined })} options={option(filterOptions.tenants, 'company_name')}/>
                 <Select allowClear value={filters.category_id && Number(filters.category_id)} placeholder="Category" onChange={(category_id) => apply({ category_id, page: undefined })} options={option(filterOptions.categories, 'name')}/>
                 <Select allowClear value={filters.status} placeholder="Status" onChange={(status) => apply({ status, page: undefined })} options={['open', 'pending_support', 'pending_customer', 'resolved', 'closed'].map((value) => ({ value, label: value.replaceAll('_', ' ') }))}/>
                 <Select allowClear value={filters.priority} placeholder="Priority" onChange={(priority) => apply({ priority, page: undefined })} options={['low', 'normal', 'high', 'urgent'].map((value) => ({ value, label: value }))}/>

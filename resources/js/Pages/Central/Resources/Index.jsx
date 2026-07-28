@@ -5,7 +5,7 @@ import PageHeader from '@/Components/Central/PageHeader';
 import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate, formatMoney, humanize } from '@/Components/Central/formatters';
-import { DeleteOutlined, EditOutlined, FilePdfOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, FilePdfOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
 import { Button, Col, Drawer, Form, Input, InputNumber, Modal, Row, Select, Switch, Table, Typography } from 'antd';
 import { useState } from 'react';
@@ -33,7 +33,7 @@ const meta = {
 const moneyColumns = ['amount','total','subtotal','tax','discount','refunded_amount'];
 const dateColumns = ['created_at','updated_at','paid_at','due_date','published_at','validated_at','allocated_at','started_at','finished_at','period_start','period_end','current_period_starts_at','current_period_ends_at','expires_at'];
 
-export default function Index({ resource, rows, columns = [], editable = false, fields = [], summary = null, filters = {} }) {
+export default function Index({ resource, rows, columns = [], editable = false, fields = [], summary = null, filters = {}, customers = [] }) {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [record, setRecord] = useState(null);
     const [search, setSearch] = useState(filters.search || '');
@@ -59,6 +59,8 @@ export default function Index({ resource, rows, columns = [], editable = false, 
         router.post(target,values,{preserveScroll:true,onSuccess:()=>{setFinancialAction(null);actionForm.resetFields();}});
     };
     const renderValue = (key,value,row) => {
+        if (key === 'changes') return value?.length ? value.map(change=><div key={change.field}><strong>{change.field}:</strong> {String(change.from ?? '—')} → {String(change.to ?? '—')}</div>) : 'No field changes';
+        if (key === 'storage_mb') return `${Number(value||0).toLocaleString()} MB`;
         if (key === 'status') return <StatusBadge value={value}/>;
         if (key.startsWith('is_') || key === 'enabled') return <StatusBadge value={value ? 'active' : 'disabled'}/>;
         if (moneyColumns.includes(key)) return formatMoney(value,row.currency || 'USD');
@@ -76,7 +78,7 @@ export default function Index({ resource, rows, columns = [], editable = false, 
         resource === 'payments' && row.status === 'success' && {label:'Issue refund',danger:true,onClick:()=>openFinancialAction('refund',row)},
         editable && !['gateways','platform-settings'].includes(resource) && {label:'Delete',icon:<DeleteOutlined/>,danger:true,disabled:isAllocated(row),onClick:()=>remove(row)},
     ];
-    const tableColumns = columns.map((key)=>({title:humanize(key),dataIndex:key,key,render:(value,row)=>renderValue(key,value,row),ellipsis:key === 'message' || key === 'last_error'}));
+    const tableColumns = columns.map((key)=>({title:humanize(key),dataIndex:key,key,sorter:resource==='usage'&&!['customer'].includes(key),sortOrder:filters.sort===key?(filters.direction==='asc'?'ascend':'descend'):null,render:(value,row)=>renderValue(key,value,row),ellipsis:key === 'message' || key === 'last_error'}));
     if (editable || ['subscriptions','invoices','payments'].includes(resource)) tableColumns.push({title:'',key:'actions',fixed:'right',width:52,render:(_,row)=><ActionDropdown items={actionItems(row)}/>});
     const input = (field) => {
         if (field.startsWith('is_') || field === 'enabled') return <Switch/>;
@@ -91,11 +93,11 @@ export default function Index({ resource, rows, columns = [], editable = false, 
     const apply = (extra={}) => router.get(window.location.pathname,{...filters,search:search || undefined,...extra},{preserveState:true,replace:true});
 
     return <CentralLayout title={title}>
-        <PageHeader eyebrow={resource.includes('website') || resource === 'blog-posts' ? 'Content' : 'Control plane'} title={title} description={description} actions={editable && <Button type="primary" icon={<PlusOutlined/>} onClick={()=>edit()}>Add {title.toLowerCase().replace(/s$/,'')}</Button>}/>
+        <PageHeader eyebrow={resource.includes('website') || resource === 'blog-posts' ? 'Content' : 'Control center'} title={title} description={description} actions={<Space>{resource==='provisioning-logs'&&<Button icon={<DownloadOutlined/>} href={route('central.provisioning-logs.export',filters)}>Export Excel</Button>}{editable&&<Button type="primary" icon={<PlusOutlined/>} onClick={()=>edit()}>Add {title.toLowerCase().replace(/s$/,'')}</Button>}</Space>}/>
         {isTenantDatabases && summary && <Row gutter={[12,12]} style={{marginBottom:16}}>{[['Available',summary.available,'emerald'],['Allocated',summary.allocated,'blue'],['Failed',summary.failed,'rose'],['Registered',summary.total,'violet']].map(([label,value,tone])=><Col xs={12} lg={6} key={label}><MetricCard label={label} value={value} helper="Tenant databases" icon={<DatabaseGlyph/>} tone={tone}/></Col>)}</Row>}
         <SectionCard>
-            <div className="central-toolbar"><Input.Search className="central-toolbar__search" value={search} onChange={(event)=>setSearch(event.target.value)} onSearch={()=>apply({page:undefined})} allowClear prefix={<SearchOutlined/>} placeholder={`Search ${title.toLowerCase()}`}/>{columns.includes('status') && <Select allowClear value={filters.status || undefined} placeholder="All statuses" style={{minWidth:160}} options={['active','pending','success','failed','paid','issued','draft','published','available','allocated'].map((value)=>({value,label:humanize(value)}))} onChange={(status)=>apply({status,page:undefined})}/>}<span className="central-filter-summary">{rows.total || 0} records</span></div>
-            <Table className="central-table" rowKey="id" dataSource={rows.data || []} columns={tableColumns} scroll={{x:Math.max(800,columns.length*150)}} pagination={{current:rows.current_page,total:rows.total,pageSize:rows.per_page,showSizeChanger:false,onChange:(page)=>apply({page})}}/>
+            <div className="central-toolbar"><Input.Search className="central-toolbar__search" value={search} onChange={(event)=>setSearch(event.target.value)} onSearch={()=>apply({page:undefined})} allowClear prefix={<SearchOutlined/>} placeholder={`Search ${title.toLowerCase()}`}/>{customers.length>0&&<Select allowClear showSearch optionFilterProp="label" value={filters.customer_id||undefined} placeholder="All customers" style={{minWidth:220}} options={customers.map(row=>({value:row.id,label:row.company_name}))} onChange={customer_id=>apply({customer_id,page:undefined})}/>} {columns.includes('status') && <Select allowClear value={filters.status || undefined} placeholder="All statuses" style={{minWidth:160}} options={['active','pending','success','failed','paid','issued','draft','published','available','allocated'].map((value)=>({value,label:humanize(value)}))} onChange={(status)=>apply({status,page:undefined})}/>}<span className="central-filter-summary">{rows.total || 0} records</span></div>
+            <Table className="central-table" rowKey="id" dataSource={rows.data || []} columns={tableColumns} onChange={(_,__,sorter)=>sorter?.field&&apply({sort:sorter.field,direction:sorter.order==='ascend'?'asc':'desc',page:undefined})} scroll={{x:Math.max(800,columns.length*150)}} pagination={{current:rows.current_page,total:rows.total,pageSize:rows.per_page,showSizeChanger:false,onChange:(page)=>apply({page})}}/>
         </SectionCard>
         <Drawer open={drawerOpen} title={record ? `Edit ${title.toLowerCase().replace(/s$/,'')}` : `Add ${title.toLowerCase().replace(/s$/,'')}`} width={520} onClose={()=>setDrawerOpen(false)} destroyOnClose extra={<Button type="primary" onClick={()=>form.submit()}>Save</Button>}><Form form={form} layout="vertical" onFinish={save}>{fields.map((field)=><Form.Item key={field} name={field} label={humanize(field)} valuePropName={field.startsWith('is_') || field === 'enabled'?'checked':'value'}>{input(field)}</Form.Item>)}</Form></Drawer>
         <Modal open={!!financialAction} title={financialAction?.type === 'refund'?'Issue refund':'Approve manual payment'} onCancel={()=>setFinancialAction(null)} onOk={()=>actionForm.submit()} okText={financialAction?.type === 'refund'?'Issue refund':'Approve payment'} okButtonProps={{danger:financialAction?.type === 'refund'}}><Typography.Paragraph type="secondary">{financialAction?.type === 'refund'?'Confirm the amount to return through the original payment gateway.':'Record an externally received payment and its reference.'}</Typography.Paragraph><Form form={actionForm} layout="vertical" onFinish={submitFinancialAction}><Form.Item name="amount" label="Amount" rules={[{required:true}]}><InputNumber min={0.01} precision={2} style={{width:'100%'}}/></Form.Item>{financialAction?.type === 'payment' && <Form.Item name="reference" label="Payment reference" rules={[{required:true,message:'Enter the bank or transaction reference.'}]}><Input/></Form.Item>}</Form></Modal>

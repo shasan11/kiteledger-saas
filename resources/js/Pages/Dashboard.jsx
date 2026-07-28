@@ -149,15 +149,19 @@ export default function Dashboard() {
                                 {m.kpis.map((k) => <KpiCard key={k.key} {...k} />)}
                             </section>
 
-                            {/* Row 2: Financial + Expense Breakdown */}
+                            {/* Row 2: Financial overview */}
                             <section className="kd-row-2">
                                 <FinancialChart data={m.chartData} />
-                                <ExpenseDonut data={m.expenseBreakdown} />
                             </section>
 
-                            {/* Row 3: Cash Flow + Ageing */}
-                            <section className="kd-row-3">
+                            {/* Row 3: Expense Breakdown + Cash Flow */}
+                            <section className="kd-cash-expense-row">
+                                <ExpenseDonut data={m.expenseBreakdown} />
                                 <CashFlowChart data={m.cashflowChart} />
+                            </section>
+
+                            {/* Row 4: Ageing */}
+                            <section className="kd-row-3">
                                 <AgeingChart data={m.ageingData} />
                             </section>
 
@@ -549,6 +553,9 @@ function DashSkeleton() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 8 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
             <div className="kd-row-2">
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
+            </div>
+            <div className="kd-cash-expense-row">
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
             </div>
@@ -949,11 +956,18 @@ function Styles({ token }) {
             }
 
             .kd-row-2,
-            .kd-row-3 {
+            .kd-row-3,
+            .kd-cash-expense-row {
                 display: grid;
-                grid-template-columns: minmax(0, 3fr) minmax(270px, 1.35fr);
                 gap: var(--kd-gap);
                 align-items: stretch;
+            }
+            .kd-row-2,
+            .kd-row-3 {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .kd-cash-expense-row {
+                grid-template-columns: minmax(250px, 30%) minmax(0, 70%);
             }
             .kd-chart-main,
             .kd-chart-side {
@@ -1088,7 +1102,8 @@ function Styles({ token }) {
                     grid-template-columns: repeat(6, minmax(0, 1fr));
                 }
                 .kd-row-2,
-                .kd-row-3 {
+                .kd-row-3,
+                .kd-cash-expense-row {
                     grid-template-columns: minmax(0, 1fr);
                 }
             }

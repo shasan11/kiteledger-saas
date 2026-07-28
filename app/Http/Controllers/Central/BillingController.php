@@ -152,6 +152,6 @@ class BillingController extends Controller
             });
         }
 
-        return Inertia::render('Central/Billing/Index', ['kind' => $kind, 'rows' => $rows, 'filters' => $request->only('search', 'status')]);
+        return Inertia::render('Central/Billing/Index', ['kind' => $kind, 'rows' => $rows, 'filters' => $request->only('search', 'status'), 'schedulerEnabled' => (bool) app(PlatformSettingsService::class)->get('queue_scheduler.scheduler_enabled', true)]);
     }
 }

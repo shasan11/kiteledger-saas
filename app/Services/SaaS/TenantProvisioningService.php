@@ -170,6 +170,7 @@ class TenantProvisioningService
 
     private function queued(): bool
     {
-        return (bool) $this->settings->get('provisioning.queue_tenant_provisioning', false);
+        return (bool) $this->settings->get('queue_scheduler.queue_enabled', true)
+            && (bool) $this->settings->get('provisioning.queue_tenant_provisioning', false);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AppSettingController;
 use App\Models\AppSetting;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\PlatformSetting;
+use Database\Seeders\PlatformSettingsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +24,35 @@ class BrandingFallbackTest extends TestCase
             ->assertJsonPath('logo_url', url('/branding/light_logo.png'))
             ->assertJsonPath('dark_logo_url', url('/branding/dark_logo.png'))
             ->assertJsonPath('favicon_url', url('/branding/favicon.png'));
+    }
+
+    public function test_branding_seeder_provides_both_logos_and_independent_color_palettes(): void
+    {
+        $this->seed(PlatformSettingsSeeder::class);
+
+        $this->assertSame('/branding/light_logo.png', PlatformSetting::where('key', 'branding.light_logo')->value('value'));
+        $this->assertSame('/branding/dark_logo.png', PlatformSetting::where('key', 'branding.dark_logo')->value('value'));
+        $this->assertSame('#176b5b', PlatformSetting::where('key', 'branding.primary_color')->value('value'));
+        $this->assertSame('#ffffff', PlatformSetting::where('key', 'branding.website_background_color')->value('value'));
+        $this->assertSame('#0f766e', PlatformSetting::where('key', 'branding.software_primary_color')->value('value'));
+        $this->assertSame('#101827', PlatformSetting::where('key', 'branding.software_sidebar_color')->value('value'));
+    }
+
+    public function test_public_brand_endpoint_exposes_cms_software_palette(): void
+    {
+        PlatformSetting::create([
+            'group' => 'branding',
+            'key' => 'branding.software_primary_color',
+            'label' => 'Software primary color',
+            'type' => 'string',
+            'input_type' => 'color',
+            'value' => '#123456',
+            'is_public' => true,
+        ]);
+
+        $this->getJson('/api/brand')
+            ->assertOk()
+            ->assertJsonPath('brand_primary_color', '#123456');
     }
 
     public function test_missing_uploaded_paths_fall_back_in_serialized_settings(): void

@@ -55,7 +55,7 @@ A manual payment requires an invoice, positive amount, matching currency, date, 
 
 Gateway secrets are encrypted and masked. Webhook routes are rate limited; supported external drivers verify signatures and persist idempotent events. Do not enable a provider until its sandbox webhook and refund tests pass.
 
-Refunds require the dedicated permission, a reason, the administrator's current password, a stable idempotency key, an eligible successful transaction, available refundable balance, and compliance with the configured refund window. When `security.require_mfa_for_refunds` is enabled, the administrator must have completed MFA for the current sign-in session. Partial and full refunds update the local transaction exactly once, create durable refund/notification records, and write an audit event.
+Refunds require the dedicated permission, a reason, the administrator's current password, a stable idempotency key, an eligible successful transaction, available refundable balance, and compliance with the configured refund window. Partial and full refunds update the local transaction exactly once, create durable refund and notification records, and write an audit event.
 
 ## Invoice customization and history
 

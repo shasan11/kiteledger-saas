@@ -182,6 +182,7 @@ Artisan::command('tenants:suspend-expired', function (): int {
 
 Artisan::command('tenants:check-subscriptions', function (): int {
     Subscription::whereIn('status', ['active', 'trialing'])->where('current_period_ends_at', '<', now())->update(['status' => 'expired']);
+    Subscription::where('status', 'paused')->whereNotNull('resume_at')->where('resume_at', '<=', now())->each(fn (Subscription $subscription) => app(\App\Services\SaaS\SubscriptionService::class)->reactivate($subscription));
 
     return Artisan::call('tenants:suspend-expired');
 })->purpose('Refresh subscription and tenant access states');
@@ -289,24 +290,26 @@ Artisan::command('templates:import {file}', function (): int {
     return 0;
 })->purpose('Import a default-data template from JSON');
 
+$schedulerEnabled = fn (): bool => (bool) app(\App\Services\SaaS\PlatformSettingsService::class)->get('queue_scheduler.scheduler_enabled', true);
+
 Schedule::call(function (): void {
     DB::connection(config('tenancy.database.central_connection'))->table('saas_heartbeats')->updateOrInsert(['name' => 'scheduler'], ['last_seen_at' => now(), 'metadata' => json_encode(['host' => gethostname()])]);
-})->everyMinute()->name('saas-heartbeat')->withoutOverlapping(5);
+})->everyMinute()->name('saas-heartbeat')->withoutOverlapping(5)->when($schedulerEnabled);
 Schedule::call(function (): void {
     dispatch(new RecordQueueHeartbeatJob);
-})->everyMinute()->name('saas-queue-heartbeat')->withoutOverlapping(5);
+})->everyMinute()->name('saas-queue-heartbeat')->withoutOverlapping(5)->when($schedulerEnabled);
 Schedule::call(function (): void {
     app(AtomicQuotaManager::class)->expireStale();
-})->everyFifteenMinutes()->name('quota-reservation-cleanup')->withoutOverlapping(10);
-Schedule::call(fn () => app(SupportTicketService::class)->markBreaches())->everyFiveMinutes()->name('support-sla-breaches')->withoutOverlapping(10);
-Schedule::call(fn () => app(PlatformNotificationMonitor::class)->run())->everyFifteenMinutes()->name('platform-notification-monitor')->withoutOverlapping(10);
+})->everyFifteenMinutes()->name('quota-reservation-cleanup')->withoutOverlapping(10)->when($schedulerEnabled);
+Schedule::call(fn () => app(SupportTicketService::class)->markBreaches())->everyFiveMinutes()->name('support-sla-breaches')->withoutOverlapping(10)->when($schedulerEnabled);
+Schedule::call(fn () => app(PlatformNotificationMonitor::class)->run())->everyFifteenMinutes()->name('platform-notification-monitor')->withoutOverlapping(10)->when($schedulerEnabled);
 Schedule::call(function (): void {
     BlogPost::where('status', 'scheduled')->where('scheduled_at', '<=', now())->chunkById(100, fn ($posts) => $posts->each(fn ($post) => $post->update(['status' => 'published', 'published_at' => $post->published_at ?: $post->scheduled_at ?: now()])));
     WebsitePage::where('status', 'scheduled')->where('scheduled_at', '<=', now())->chunkById(100, fn ($pages) => $pages->each(fn ($page) => $page->update(['status' => 'published', 'published_at' => $page->published_at ?: $page->scheduled_at ?: now()])));
-})->everyMinute()->name('cms-publish-scheduled')->withoutOverlapping(5);
-Schedule::command('tenants:check-subscriptions')->dailyAt('00:15')->withoutOverlapping(30);
-Schedule::command('tenants:calculate-usage')->dailyAt('01:00')->withoutOverlapping(30);
-Schedule::command('billing:generate-invoices')->dailyAt('02:00')->withoutOverlapping(30);
+})->everyMinute()->name('cms-publish-scheduled')->withoutOverlapping(5)->when($schedulerEnabled);
+Schedule::command('tenants:check-subscriptions')->dailyAt('00:15')->withoutOverlapping(30)->when($schedulerEnabled);
+Schedule::command('tenants:calculate-usage')->dailyAt('01:00')->withoutOverlapping(30)->when($schedulerEnabled);
+Schedule::command('billing:generate-invoices')->dailyAt('02:00')->withoutOverlapping(30)->when($schedulerEnabled);
 Schedule::call(function (): void {
     TenantDeletionRequest::where('status', 'approved')->where('execute_after', '<=', now())->orderBy('execute_after')->limit(5)->get()->each(fn ($request) => app(TenantDeletionService::class)->execute($request));
-})->dailyAt('03:00')->name('tenant-deletions')->withoutOverlapping(60);
+})->dailyAt('03:00')->name('tenant-deletions')->withoutOverlapping(60)->when($schedulerEnabled);

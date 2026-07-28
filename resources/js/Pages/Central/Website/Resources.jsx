@@ -1,0 +1,7 @@
+import { Head, router } from '@inertiajs/react';
+import WebsiteLayout from './components/WebsiteLayout';
+import { WebsiteContainer, WebsiteImage, WebsiteLink } from './components/WebsitePrimitives';
+export default function Resources({ articles, categories = [], filters = {}, ...layout }) {
+    const apply = (extra={}) => router.get('/resources',{...filters,...extra},{preserveState:true,replace:true});
+    return <WebsiteLayout {...layout}><Head title="Resources"/><WebsiteContainer><header className="kl-resource-hero"><p>Resources</p><h1>Practical guides for getting more from KiteLedger</h1><input aria-label="Search resources" defaultValue={filters.search || ''} placeholder="Search documentation" onKeyDown={e=>e.key==='Enter'&&apply({search:e.currentTarget.value||undefined})}/><nav>{categories.map(c=><button className={filters.category===c.slug?'active':''} key={c.id} onClick={()=>apply({category:filters.category===c.slug?undefined:c.slug})}>{c.name} ({c.articles_count})</button>)}</nav></header><div className="kl-resource-grid">{articles.data.map(article=><article key={article.id}>{article.featured_media&&<WebsiteImage src={article.featured_media.url} alt={article.featured_media.alt_text || article.title} fit="cover"/>}<p>{article.category?.name}</p><h2><WebsiteLink href={`/resources/${article.slug}`}>{article.title}</WebsiteLink></h2><p>{article.excerpt}</p></article>)}</div></WebsiteContainer></WebsiteLayout>;
+}

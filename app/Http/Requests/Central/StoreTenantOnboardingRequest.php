@@ -6,6 +6,7 @@ use App\Models\Central\PaymentGateway;
 use App\Models\Central\Plan;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Support\PhoneNumber;
 
 class StoreTenantOnboardingRequest extends FormRequest
 {
@@ -17,6 +18,7 @@ class StoreTenantOnboardingRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $prepared = ['subdomain' => str($this->input('subdomain'))->trim()->lower()->toString()];
+        $prepared['owner_phone'] = PhoneNumber::join($this->input('phone_country_code', PhoneNumber::callingCode($this->input('country'))), $this->input('owner_phone'));
         if ($this->input('provisioning_mode') === 'manual') {
             $prepared['tenancy_db_password'] = (string) ($this->input('tenancy_db_password') ?? '');
         }
@@ -33,7 +35,7 @@ class StoreTenantOnboardingRequest extends FormRequest
         return [
             'company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'],
             'owner_name' => ['required', 'string', 'max:255'], 'owner_email' => ['required', 'email', 'max:255', 'unique:tenants,owner_email'],
-            'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'],
+            'owner_phone' => ['nullable', 'regex:/^\+[1-9][0-9]{6,14}$/'], 'phone_country_code' => ['nullable', 'regex:/^\+[1-9][0-9]{0,3}$/'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'],
             'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'],
             'plan_id' => ['required', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'],
             'subdomain' => ['required', 'string', 'min:2', 'max:63', 'regex:/^(?!-)[a-z0-9-]+(?<!-)$/', Rule::notIn(config('saas.reserved_subdomains')), 'unique:tenants,slug'],

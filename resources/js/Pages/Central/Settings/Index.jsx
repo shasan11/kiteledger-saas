@@ -3,7 +3,7 @@ import RichTextEditor from '@/Components/Central/RichTextEditor';
 import SectionCard from '@/Components/Central/SectionCard';
 import { humanize } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
-import { fetchBrandSettings, publishBrandSettings } from '@/brandSettings';
+import { fetchPublicBrandSettings, publishBrandSettings } from '@/brandSettings';
 import { categoryLabels, orderedSections, sectionMatches } from './sectionRegistry';
 import {
     ApiOutlined,
@@ -75,6 +75,8 @@ export default function Settings({ groups, activeGroup }) {
     const [confirmationPassword, setConfirmationPassword] = useState('');
     const [form] = Form.useForm();
     const provisioningQueueEnabled = Form.useWatch('provisioning.queue_tenant_provisioning', form);
+    const queueEnabled = Form.useWatch('queue_scheduler.queue_enabled', form);
+    const schedulerEnabled = Form.useWatch('queue_scheduler.scheduler_enabled', form);
     const settings = groups[section] || [];
     const hydrated = useRef({ section: null, signature: null });
     const awaitingServer = useRef(false);
@@ -161,7 +163,7 @@ export default function Settings({ groups, activeGroup }) {
                 clearConfirmation();
                 message.success('Settings saved.');
                 if (section === 'branding') {
-                    fetchBrandSettings().then(publishBrandSettings).catch(() => {});
+                    fetchPublicBrandSettings().then(publishBrandSettings).catch(() => {});
                 }
             },
             onError: (errors) => {
@@ -312,6 +314,18 @@ export default function Settings({ groups, activeGroup }) {
                                     description={provisioningQueueEnabled
                                         ? <><div>Add this cron/worker command before creating tenants:</div><code>php artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300</code></>
                                         : 'Tenants are provisioned during the request. No provisioning queue worker is required.'}
+                                    style={{ marginBottom: 18 }}
+                                />
+                            )}
+                            {section === 'queue_scheduler' && (
+                                <Alert
+                                    type={queueEnabled && schedulerEnabled ? 'success' : 'warning'}
+                                    showIcon
+                                    message={`Queue processing is ${queueEnabled ? 'on' : 'off'} · Cron jobs are ${schedulerEnabled ? 'on' : 'off'}`}
+                                    description={<Space direction="vertical" size={4}>
+                                        <span>Saving these switches takes effect immediately. Queue off makes supported mail and customer setup run during the request. Cron off pauses automatic subscription checks, timed resumes, invoice generation, usage collection, publishing, and cleanup.</span>
+                                        <Button size="small" onClick={() => router.visit(route('central.settings.operations-guide'))}>Read setup commands and detailed documentation</Button>
+                                    </Space>}
                                     style={{ marginBottom: 18 }}
                                 />
                             )}

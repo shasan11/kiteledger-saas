@@ -9,7 +9,7 @@ When shared hosting does not allow changing the document root, extract the compl
 For local development, run:
 
 ```bash
-php artisan serve
+php artisan serve --no-reload
 ```
 
 Laravel's development server serves `public/index.php` directly and does not use either `.htaccess` file. The application routes and installer URLs are otherwise identical.

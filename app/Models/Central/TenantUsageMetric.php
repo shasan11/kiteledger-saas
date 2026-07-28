@@ -4,6 +4,7 @@ namespace App\Models\Central;
 
 class TenantUsageMetric extends CentralModel
 {
+    public function tenant(){ return $this->belongsTo(Tenant::class); }
     protected function casts(): array
     {
         return ['period_start' => 'date', 'period_end' => 'date', 'data' => 'array'];

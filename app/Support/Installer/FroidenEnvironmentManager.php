@@ -39,7 +39,7 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 (string) $request->input('password', ''),
             );
 
-            $this->writeEnvironment([
+            $environmentValues = [
                 'APP_URL' => rtrim((string) $request->input('app_url'), '/'),
                 'CENTRAL_DOMAINS' => $this->normalizeDomains((string) $request->input('central_domains')),
                 'SAAS_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
@@ -59,8 +59,22 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'QUEUE_CONNECTION' => 'central',
                 'DB_QUEUE_CONNECTION' => 'central',
                 'DB_QUEUE_RETRY_AFTER' => '330',
-            ]);
-            Artisan::call('config:clear');
+            ];
+
+            if ($this->usesPhpDevelopmentServer($request)) {
+                $this->assertEnvironmentWritable();
+                // `php artisan serve` watches .env and kills its child process as
+                // soon as the file changes. Writing during the controller action
+                // therefore drops the HTTP response in Firefox/Chrome. Laravel's
+                // terminating callbacks run after the redirect has been sent.
+                app()->terminating(function () use ($environmentValues): void {
+                    $this->writeEnvironment($environmentValues);
+                    Artisan::call('config:clear');
+                });
+            } else {
+                $this->writeEnvironment($environmentValues);
+                Artisan::call('config:clear');
+            }
             session([
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
             ]);
@@ -203,5 +217,19 @@ class FroidenEnvironmentManager extends EnvironmentManager
             static fn (string $domain): string => strtolower(trim($domain)),
             explode(',', $domains),
         )))));
+    }
+
+    private function usesPhpDevelopmentServer(Request $request): bool
+    {
+        return PHP_SAPI === 'cli-server'
+            || str_contains(strtolower((string) $request->server('SERVER_SOFTWARE')), 'development server');
+    }
+
+    private function assertEnvironmentWritable(): void
+    {
+        $path = base_path('.env');
+        if ((is_file($path) && ! is_writable($path)) || (! is_file($path) && ! is_writable(base_path()))) {
+            throw new RuntimeException('The project .env file is not writable.');
+        }
     }
 }

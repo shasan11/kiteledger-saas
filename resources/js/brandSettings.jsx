@@ -76,6 +76,15 @@ export const fetchBrandSettings = async () => {
   return settings;
 };
 
+export const fetchPublicBrandSettings = async () => {
+  const response = await axios.get(api('/api/brand'));
+  const settings = response.data || {};
+
+  storeBrandSettings(settings);
+
+  return settings;
+};
+
 export const publishBrandSettings = (settings) => {
   if (!settings) return;
 

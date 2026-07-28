@@ -14,6 +14,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +22,49 @@ use Inertia\Inertia;
 
 class SettingsController extends Controller
 {
+    public function operationsGuide(PlatformSettingsService $settings)
+    {
+        $status = ['queued_jobs' => null, 'failed_jobs' => null, 'scheduler_last_seen_at' => null, 'queue_last_seen_at' => null];
+        try {
+            $connection = DB::connection(config('tenancy.database.central_connection'));
+            $status['queued_jobs'] = $connection->table('jobs')->count();
+            $status['failed_jobs'] = $connection->table('failed_jobs')->count();
+            $heartbeats = $connection->table('saas_heartbeats')->whereIn('name', ['scheduler', 'queue'])->pluck('last_seen_at', 'name');
+            $status['scheduler_last_seen_at'] = $heartbeats->get('scheduler');
+            $status['queue_last_seen_at'] = $heartbeats->get('queue');
+        } catch (\Throwable) {
+            // The guide remains available during first-run setup and before queue tables exist.
+        }
+
+        return Inertia::render('Central/Settings/OperationsGuide', [
+            'runtime' => [
+                'queue_enabled' => (bool) $settings->get('queue_scheduler.queue_enabled', true),
+                'scheduler_enabled' => (bool) $settings->get('queue_scheduler.scheduler_enabled', true),
+                'queue_connection' => $settings->get('queue_scheduler.queue_connection', config('queue.default')),
+                'default_queue' => $settings->get('queue_scheduler.default_queue', 'default'),
+            ],
+            'status' => $status,
+            'commands' => [
+                'worker' => 'php artisan queue:work --queue=provisioning,communication,notifications,mail,default --tries=3 --timeout=1800',
+                'worker_once' => 'php artisan queue:work --queue=provisioning,communication,notifications,mail,default --stop-when-empty --tries=3 --timeout=1800',
+                'scheduler' => '* * * * * cd /absolute/path/to/kiteledger && php artisan schedule:run >> /dev/null 2>&1',
+                'windows_scheduler' => 'php artisan schedule:run',
+                'inspect_schedule' => 'php artisan schedule:list',
+                'failed_jobs' => 'php artisan queue:failed',
+                'retry_failed' => 'php artisan queue:retry all',
+            ],
+            'scheduledTasks' => [
+                ['name' => 'Customer subscription checks', 'frequency' => 'Daily at 00:15', 'effect' => 'Expires ended subscriptions, suspends expired customers, and resumes pauses whose resume time has arrived.'],
+                ['name' => 'Usage collection', 'frequency' => 'Daily at 01:00', 'effect' => 'Refreshes customer usage metrics.'],
+                ['name' => 'Upcoming invoices', 'frequency' => 'Daily at 02:00', 'effect' => 'Creates upcoming subscription invoices idempotently.'],
+                ['name' => 'Scheduled website publishing', 'frequency' => 'Every minute', 'effect' => 'Publishes due website pages and blog posts.'],
+                ['name' => 'Support SLA checks', 'frequency' => 'Every five minutes', 'effect' => 'Updates overdue support response and resolution states.'],
+                ['name' => 'Notifications and cleanup', 'frequency' => 'Every fifteen minutes', 'effect' => 'Creates platform alerts and clears stale quota reservations.'],
+                ['name' => 'Approved customer deletions', 'frequency' => 'Daily at 03:00', 'effect' => 'Executes approved deletion requests after their waiting period.'],
+            ],
+        ]);
+    }
+
     public function index(Request $request)
     {
         $dynamicOptions = [

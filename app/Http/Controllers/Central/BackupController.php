@@ -32,10 +32,8 @@ class BackupController extends Controller
     public function store(Request $request, NativeBackupManager $backups, CentralAuditService $audit)
     {
         $tenant = Tenant::findOrFail($request->validate(['tenant_id' => ['required', 'exists:tenants,id']])['tenant_id']);
-        $manifest = $backups->backupTenant($tenant);
-        $audit->log($request, 'backup.created', $manifest, [], $manifest->only(['tenant_id', 'type', 'status', 'size_bytes', 'checksum']));
-
-        return back()->with('success', 'Tenant backup created and verified.');
+        try{$manifest=$backups->backupTenant($tenant);$audit->log($request,'backup.created',$manifest,[],$manifest->only(['tenant_id','type','status','size_bytes','checksum']));return back()->with('success','Customer backup created and verified.');}
+        catch(\Throwable $exception){report($exception);return back()->with('error',$exception->getMessage()?:'The customer backup could not be completed. Review the failed backup record and server logs.');}
     }
 
     public function verify(Request $request, BackupManifest $backup, NativeBackupManager $backups, CentralAuditService $audit)

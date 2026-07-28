@@ -50,7 +50,7 @@ import {
     Tag,
     Typography,
 } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import ApplicationLogo from "@/Components/ApplicationLogo";
 import { humanize, initials } from "@/Components/Central/formatters";
 
@@ -91,38 +91,8 @@ const navigation = [
             "feature_override.manage",
         ),
     ]),
-    menu("Billing", <BankOutlined />, [
-        entry(
-            "central.dashboard",
-            "Revenue Overview",
-            <BankOutlined />,
-            "dashboard.view",
-        ),
-        entry(
-            "central.invoices.index",
-            "Invoices",
-            <FileTextOutlined />,
-            "invoice.view",
-        ),
-        entry(
-            "central.payments.index",
-            "Payments",
-            <BankOutlined />,
-            "payment.view",
-        ),
-        entry(
-            "central.gateways.index",
-            "Payment Gateways",
-            <CreditCardOutlined />,
-            "gateway.view",
-        ),
-        entry(
-            "central.invoice-customization.index",
-            "Invoice Customization",
-            <FileTextOutlined />,
-            "invoice.customize",
-        ),
-    ]),
+    entry("central.invoices.index", "Invoices", <FileTextOutlined />, "invoice.view"),
+    entry("central.payments.index", "Payments", <BankOutlined />, "payment.view"),
     menu("Support", <MessageOutlined />, [
         entry(
             "central.support.tickets.index",
@@ -142,13 +112,12 @@ const navigation = [
             <MessageOutlined />,
             "support.manage",
         ),
-        entry(
-            "central.settings.index",
-            "Support Settings",
-            <SettingOutlined />,
-            "settings.view",
-            { group: "support" },
-        ),
+
+    ]),
+    menu("Communication", <NotificationOutlined />, [
+        entry("central.communication.index", "Campaigns", <NotificationOutlined />, "communication.view", { section: "campaigns" }),
+        entry("central.communication.index", "Delivery Logs", <MessageOutlined />, "communication.view", { section: "deliveries" }),
+        entry("central.communication.index", "Suppression List", <SafetyCertificateOutlined />, "communication.view", { section: "suppressions" }),
     ]),
     menu("Infrastructure", <DatabaseOutlined />, [
         entry(
@@ -169,12 +138,7 @@ const navigation = [
             <CodeSandboxOutlined />,
             "system_health.view",
         ),
-        entry(
-            "central.dashboard",
-            "System Health",
-            <HeartOutlined />,
-            "system_health.view",
-        ),
+
     ]),
     menu("Products", <AppstoreOutlined />, [
         entry(
@@ -203,6 +167,7 @@ const navigation = [
             <HomeOutlined />,
             "cms.view",
         ),
+        entry("central.settings.index", "Website Settings", <SettingOutlined />, "settings.view", { group: "website" }),
         entry(
             "central.website-pages.index",
             "Pages",
@@ -227,6 +192,13 @@ const navigation = [
             <TeamOutlined />,
             "lead.view",
         ),
+        entry("central.website-structured.index", "Website Features", <AppstoreOutlined />, "cms.manage", { resource: "features" }),
+        entry("central.website-structured.index", "Resource Articles", <BookOutlined />, "cms.manage", { resource: "resource-articles" }),
+        entry("central.website-structured.index", "Resource Categories", <TagsOutlined />, "cms.manage", { resource: "resource-categories" }),
+        entry("central.website-structured.index", "Contact Locations", <GlobalOutlined />, "cms.manage", { resource: "contact-locations" }),
+        entry("central.website-structured.index", "Social Media", <HeartOutlined />, "cms.manage", { resource: "social-links" }),
+        entry("central.website-structured.index", "Homepage Popups", <NotificationOutlined />, "cms.manage", { resource: "popups" }),
+        entry("central.website-structured.index", "Navbar Notices", <AlertOutlined />, "cms.manage", { resource: "navbar-notifications" }),
         menu("Content", <BookOutlined />, [
             entry(
                 "central.blog.index",
@@ -297,13 +269,18 @@ const navigation = [
             ),
         ]),
     ]),
-    menu("Administration", <SafetyCertificateOutlined />, [
+    menu("Settings", <SettingOutlined />, [
         entry(
             "central.settings.index",
             "Platform Settings",
             <SettingOutlined />,
             "settings.view",
         ),
+        entry("central.settings.operations-guide", "Queue & Cron Guide", <BookOutlined />, "settings.view"),
+        entry("central.gateways.index", "Payment Gateways", <CreditCardOutlined />, "gateway.view"),
+        entry("central.invoice-customization.index", "Invoice Customization", <FileTextOutlined />, "invoice.customize"),
+    ]),
+    menu("Administration", <SafetyCertificateOutlined />, [
         entry(
             "central.notifications.index",
             "Notifications",
@@ -331,6 +308,35 @@ const navigation = [
 ];
 
 const navKey = (parents, label) => [...parents, label].join(">");
+
+const CentralSidebarContent = memo(function CentralSidebarContent({
+    activeKey,
+    activeOpenKeys,
+    isCollapsed,
+    menuItems,
+}) {
+    return (
+        <>
+            <div className="central-sider__brand">
+                <ApplicationLogo
+                    dark
+                    className="central-sider__logo"
+                    alt="KiteLedger"
+                />
+            </div>
+            <div className="central-sider__menu">
+                <Menu
+                    theme="dark"
+                    mode="inline"
+                    inlineCollapsed={isCollapsed}
+                    selectedKeys={activeKey ? [activeKey] : []}
+                    defaultOpenKeys={isCollapsed ? [] : activeOpenKeys}
+                    items={menuItems}
+                />
+            </div>
+        </>
+    );
+});
 
 export default function CentralLayout({
     title,
@@ -399,19 +405,26 @@ export default function CentralLayout({
         return items;
     }, [visibleNavigation]);
     const currentPath = page.url.split("?")[0];
-    const active = [...allNav]
-        .sort(
-            (a, b) =>
-                new URL(b.url, location.origin).pathname.length -
-                new URL(a.url, location.origin).pathname.length,
-        )
-        .find((item) =>
-            currentPath.startsWith(new URL(item.url, location.origin).pathname),
-        );
-    const activeOpenKeys =
-        active?.parents?.map((label, index) =>
-            navKey(active.parents.slice(0, index), label),
-        ) || [];
+    const active = useMemo(() => {
+        return [...allNav]
+            .sort(
+                (a, b) =>
+                    new URL(b.url, location.origin).pathname.length -
+                    new URL(a.url, location.origin).pathname.length,
+            )
+            .find((item) =>
+                currentPath.startsWith(
+                    new URL(item.url, location.origin).pathname,
+                ),
+            );
+    }, [allNav, currentPath]);
+    const activeOpenKeys = useMemo(
+        () =>
+            active?.parents?.map((label, index) =>
+                navKey(active.parents.slice(0, index), label),
+            ) || [],
+        [active],
+    );
 
     useEffect(() => {
         localStorage.setItem(
@@ -486,16 +499,7 @@ export default function CentralLayout({
             key: "profile",
             label: "Profile",
             icon: <UserOutlined />,
-            onClick: () => router.visit(route("central.central-admins.index")),
-        },
-        {
-            key: "security",
-            label: "Security and MFA",
-            icon: <SafetyCertificateOutlined />,
-            onClick: () =>
-                router.visit(
-                    route("central.settings.index", { group: "security" }),
-                ),
+            onClick: () => router.visit(route("central.profile.edit")),
         },
         {
             key: "activity",
@@ -519,27 +523,6 @@ export default function CentralLayout({
             onClick: () => router.post(route("central.logout")),
         },
     ];
-    const renderMenu = (isCollapsed) => (
-        <>
-            <div className="central-sider__brand">
-                <ApplicationLogo
-                    dark
-                    className="central-sider__logo"
-                    alt="KiteLedger"
-                />
-            </div>
-            <div className="central-sider__menu">
-                <Menu
-                    theme="dark"
-                    mode="inline"
-                    inlineCollapsed={isCollapsed}
-                    selectedKeys={[active?.key]}
-                    defaultOpenKeys={isCollapsed ? [] : activeOpenKeys}
-                    items={menuItems}
-                />
-            </div>
-        </>
-    );
     const notifications = (
         <div style={{ width: 360, maxWidth: "82vw" }}>
             <div
@@ -633,7 +616,12 @@ export default function CentralLayout({
                 collapsed={collapsed}
                 trigger={null}
             >
-                {renderMenu(collapsed)}
+                <CentralSidebarContent
+                    activeKey={active?.key}
+                    activeOpenKeys={activeOpenKeys}
+                    isCollapsed={collapsed}
+                    menuItems={menuItems}
+                />
             </Sider>
             <Drawer
                 open={mobileOpen}
@@ -644,7 +632,12 @@ export default function CentralLayout({
                 styles={{ body: { padding: 0, background: "#101827" } }}
             >
                 <div style={{ width: 290, minHeight: "100vh" }}>
-                    {renderMenu(false)}
+                    <CentralSidebarContent
+                        activeKey={active?.key}
+                        activeOpenKeys={activeOpenKeys}
+                        isCollapsed={false}
+                        menuItems={menuItems}
+                    />
                 </div>
             </Drawer>
             <Layout

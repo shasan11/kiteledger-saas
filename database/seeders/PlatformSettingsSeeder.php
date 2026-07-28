@@ -23,8 +23,8 @@ class PlatformSettingsSeeder extends Seeder
                     'help_text' => $this->helpText($label, (bool) $encrypted),
                     'options' => $this->optionsFor($group, $label, $input ?: $this->inputType($label)),
                     'validation_rules' => $this->validationRules($input ?: $this->inputType($label), (bool) $required),
-                    'is_encrypted' => (bool) $encrypted, 'is_public' => in_array($group, ['general', 'branding', 'company', 'support', 'privacy', 'seo'], true) && ! $encrypted,
-                    'is_required' => (bool) $required, 'requires_confirmation' => (bool) $encrypted || in_array($label, ['Maintenance mode', 'Require MFA for all admins', 'Require MFA for superadmins'], true),
+                    'is_encrypted' => (bool) $encrypted, 'is_public' => in_array($group, ['general', 'branding', 'company', 'support', 'privacy', 'seo', 'website'], true) && ! $encrypted,
+                    'is_required' => (bool) $required, 'requires_confirmation' => (bool) $encrypted || $label === 'Maintenance mode',
                     'sort_order' => $order, 'environment' => 'all',
                 ]);
                 if (! $setting->exists) {
@@ -55,7 +55,35 @@ class PlatformSettingsSeeder extends Seeder
     {
         return [
             'general' => [['Platform name', 'text', 'KiteLedger SaaS'], 'Legal platform name', 'Tagline', 'Description', ['Default locale', 'select', 'en'], ['Supported locales', 'multiselect', ['en']], ['Default timezone', 'timezone', 'UTC'], ['Date format', 'select', 'Y-m-d'], ['Time format', 'select', 'H:i'], ['Default currency', 'currency', env('SAAS_BILLING_CURRENCY', 'USD')], ['Currency position', 'select', 'before'], ['Environment label', 'text', env('APP_ENV', 'production')], ['Maintenance mode', 'switch', false], 'Maintenance message'],
-            'branding' => [['Light logo', 'image'], ['Dark logo', 'image'], ['Icon logo', 'image'], ['Mobile logo', 'image'], ['Favicon', 'image'], ['Logo alt text', 'text', 'KiteLedger'], ['Logo width', 'number', 180], ['Logo link', 'url', '/'], ['Primary color', 'color', '#176b5b'], ['Secondary color', 'color', '#10211d'], ['Primary CTA label', 'text', 'Start free'], ['Primary CTA URL', 'url', '/pricing'], ['Email logo', 'image'], ['Invoice logo', 'image'], ['Login background', 'image'], ['Footer text', 'textarea', 'One intelligent workspace for finance, operations, customers, inventory, and people.']],
+            'branding' => [
+                ['Light logo', 'image', '/branding/light_logo.png'],
+                ['Dark logo', 'image', '/branding/dark_logo.png'],
+                ['Icon logo', 'image'],
+                ['Mobile logo', 'image'],
+                ['Favicon', 'image', '/branding/favicon.png'],
+                ['Logo alt text', 'text', 'KiteLedger'],
+                ['Logo width', 'number', 180],
+                ['Logo link', 'url', '/'],
+                ['Primary color', 'color', '#176b5b'],
+                ['Secondary color', 'color', '#10211d'],
+                ['Website accent color', 'color', '#d97706'],
+                ['Website background color', 'color', '#ffffff'],
+                ['Website surface color', 'color', '#f6f8f7'],
+                ['Website text color', 'color', '#3d4d48'],
+                ['Website footer color', 'color', '#10211d'],
+                ['Software primary color', 'color', '#0f766e'],
+                ['Software secondary color', 'color', '#115e59'],
+                ['Software accent color', 'color', '#d97706'],
+                ['Software sidebar color', 'color', '#101827'],
+                ['Software header color', 'color', '#ffffff'],
+                ['Software text color', 'color', '#0f172a'],
+                ['Primary CTA label', 'text', 'Start free'],
+                ['Primary CTA URL', 'url', '/pricing'],
+                ['Email logo', 'image'],
+                ['Invoice logo', 'image'],
+                ['Login background', 'image'],
+                ['Footer text', 'textarea', 'One intelligent workspace for finance, operations, customers, inventory, and people.'],
+            ],
             'company' => ['Legal company name', 'Registration number', 'Tax number', ['Email', 'email'], 'Phone', ['Website', 'url'], 'Address line 1', 'Address line 2', 'City', 'State', 'Postal code', ['Country', 'country'], 'Authorized signatory'],
             'tenant_registration' => [['Allow public signup', 'switch', false], ['Require email verification', 'switch', true], ['Require administrator approval', 'switch', false], ['Default plan', 'select'], ['Default trial days', 'number', 14], ['Default country', 'country'], ['Default currency', 'currency', env('SAAS_BILLING_CURRENCY', 'USD')], ['Default timezone', 'timezone', 'UTC'], ['Default data template', 'select'], ['Allow custom domains', 'switch', false], ['Allow subdomain selection', 'switch', true], ['Minimum subdomain length', 'number', 3], ['Reserved subdomains', 'multiselect', config('saas.reserved_subdomains', [])], ['Owner invitation expiration', 'number', 72], ['Automatically activate after provisioning', 'switch', true], ['Suspend on expiration', 'switch', true], ['Delete expired tenants after configured days', 'number', 0]],
             'provisioning' => [['Provisioning mode', 'select', config('saas.database.mode', 'manual')], ['Queue tenant provisioning', 'switch', false], ['Database strategy', 'select', 'database_per_tenant'], ['Database prefix', 'text', config('saas.database.prefix', 'tenant_')], ['Run migrations', 'switch', true], ['Run seeders', 'switch', true], ['Send owner invitation', 'switch', true], ['Create default domain', 'switch', true], ['Maximum attempts', 'number', 3], ['Retry delay', 'number', 300], ['Timeout', 'number', 1800], ['Clean up failed databases', 'switch', true], ['Notify administrators on failure', 'switch', true], ['Notification email addresses', 'multiselect', []]],
@@ -65,9 +93,11 @@ class PlatformSettingsSeeder extends Seeder
             'subscriptions' => [['Allow upgrades', 'switch', true], ['Allow downgrades', 'switch', true], ['Allow pause', 'switch', false], ['Allow self-cancellation', 'switch', true], ['Cancel at period end', 'switch', true], ['Reactivate before period end', 'switch', true], ['Prorate upgrades', 'switch', true], ['Prorate downgrades', 'switch', false], ['Renewal reminders', 'multiselect', [14, 7, 1]], ['Expiry reminders', 'multiselect', [14, 7, 1]]],
             'email' => [['Email enabled', 'switch', true], 'Sender name', ['Sender address', 'email'], ['Reply-to address', 'email'], ['Driver', 'select', 'smtp'], 'Host', ['Port', 'number', 587], 'Username', ['Password', 'secret', null, true], ['Encryption', 'select', 'tls'], ['Timeout', 'number', 30], ['Queue enabled', 'switch', true], ['Administrator alert address', 'email'], ['Email footer', 'rich-text editor'], ['Email logo', 'image']],
             'notifications' => [['Administrator notification emails', 'multiselect', []], ['Provisioning-failure notification', 'switch', true], ['Payment-failure notification', 'switch', true], ['Overdue-invoice notification', 'switch', true], ['Low database-pool notification', 'switch', true], ['Unhealthy database notification', 'switch', true], ['Backup-failure notification', 'switch', true], ['Expiring SSL notification', 'switch', true], ['Expiring trial notification', 'switch', true], ['Expiring subscription notification', 'switch', true], ['Tenant suspension notification', 'switch', true], ['Deletion request notification', 'switch', true], ['Gateway-failure notification', 'switch', true], ['Usage-limit notification', 'switch', true], ['Usage warning percentage', 'number', 80], ['Slack webhook URL', 'secret', null, true]],
-            'security' => [['Require MFA for superadmins', 'switch', true], ['Require MFA for all admins', 'switch', false], ['Session lifetime', 'number', 120], ['Inactivity timeout', 'number', 30], ['Maximum login attempts', 'number', 5], ['Lockout duration', 'number', 15], ['Password minimum length', 'number', 12], ['Require uppercase', 'switch', true], ['Require lowercase', 'switch', true], ['Require numbers', 'switch', true], ['Require symbols', 'switch', true], ['Password expiration', 'number', 0], ['Password history', 'number', 5], ['Remember-me support', 'switch', false], ['Allowed administrator IPs', 'multiselect', []], ['Blocked administrator IPs', 'multiselect', []], ['Require MFA for impersonation', 'switch', true], ['Require impersonation reason', 'switch', true], ['Impersonation session duration', 'number', 30], ['Require MFA for refunds', 'switch', true], ['Require MFA for tenant deletion', 'switch', true], ['Audit-retention period', 'number', 365]],
+            'security' => [['Session lifetime', 'number', 120], ['Inactivity timeout', 'number', 30], ['Maximum login attempts', 'number', 5], ['Lockout duration', 'number', 15], ['Password minimum length', 'number', 12], ['Require uppercase', 'switch', true], ['Require lowercase', 'switch', true], ['Require numbers', 'switch', true], ['Require symbols', 'switch', true], ['Password expiration', 'number', 0], ['Password history', 'number', 5], ['Remember-me support', 'switch', false], ['Allowed administrator IPs', 'multiselect', []], ['Blocked administrator IPs', 'multiselect', []], ['Require impersonation reason', 'switch', true], ['Impersonation session duration', 'number', 30], ['Audit-retention period', 'number', 365]],
+            'website' => [['Website enabled', 'switch', true], ['Disabled title', 'text', 'We will be back soon'], ['Disabled message', 'textarea', 'Our website is temporarily unavailable while we make improvements.'], ['Cookie consent enabled', 'switch', true], ['Cookie consent content', 'textarea', 'We use necessary cookies and optional analytics to improve your experience.']],
+            'communication' => [['SMS enabled', 'switch', false], ['Twilio account SID', 'secret', null, true], ['Twilio auth token', 'secret', null, true], ['Twilio from number', 'text'], ['Campaign batch size', 'number', 100], ['Marketing sender name', 'text'], ['Marketing reply-to address', 'email']],
             'domains' => [['Base domain', 'text', config('saas.tenant_base_domain')], ['Default scheme', 'select', 'https'], ['Custom domains enabled', 'switch', false], ['Domain verification required', 'switch', true], ['Automatic SSL', 'switch', true], ['SSL provider', 'select'], ['SSL-expiry warning period', 'number', 30], ['DNS verification interval', 'number', 15], ['Maximum custom domains', 'number', 3], ['Reserved subdomains', 'multiselect', config('saas.reserved_subdomains', [])], ['Force HTTPS', 'switch', true]],
-            'backups' => [['Backups enabled', 'switch', true], ['Backup schedule', 'text', '0 2 * * *'], ['Retention days', 'number', config('saas.backup_retention_days', 30)], ['Include central database', 'switch', true], ['Include tenant databases', 'switch', true], ['Include uploaded files', 'switch', true], ['Compression', 'select', 'gzip'], ['Encryption', 'switch', true], ['Storage driver', 'select', 'local'], 'Bucket', 'Region', ['Access key', 'secret', null, true], ['Secret key', 'secret', null, true], ['Success notification', 'switch', false], ['Failure notification', 'switch', true], ['Maximum parallel jobs', 'number', 2]],
+            'backups' => [['Backups enabled', 'switch', true], ['Mysqldump path', 'text'], ['Backup schedule', 'text', '0 2 * * *'], ['Retention days', 'number', config('saas.backup_retention_days', 30)], ['Include central database', 'switch', true], ['Include tenant databases', 'switch', true], ['Include uploaded files', 'switch', true], ['Compression', 'select', 'gzip'], ['Encryption', 'switch', true], ['Storage driver', 'select', 'local'], 'Bucket', 'Region', ['Access key', 'secret', null, true], ['Secret key', 'secret', null, true], ['Success notification', 'switch', false], ['Failure notification', 'switch', true], ['Maximum parallel jobs', 'number', 2]],
             'storage' => [['Storage driver', 'select', 'public'], ['Maximum upload size', 'number', 10240], ['Allowed file types', 'multiselect', ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx']], ['Image limit', 'number', 5120], ['Document limit', 'number', 10240], ['Virus scanning', 'switch', false], ['Private files', 'switch', true], ['Temporary URL expiry', 'number', 15], ['Temporary-file cleanup', 'number', 24]],
             'usage' => [['Usage tracking', 'switch', true], ['Collection interval', 'number', 60], ['Warning percentage', 'number', 80], ['Hard limits', 'switch', true], ['Temporary overage', 'switch', false], ['Overage grace period', 'number', 3], ['Storage tracking', 'switch', true], ['AI request tracking', 'switch', true], ['API request tracking', 'switch', true], ['Retention period', 'number', 365], ['Notify tenant', 'switch', true], ['Notify administrator', 'switch', true]],
             'ai' => [['AI enabled', 'switch', true], ['AI provider', 'select', config('ai.default_provider', 'openai')], ['AI model', 'text', 'gpt-4o-mini'], ['AI API key', 'secret', null, true], ['AI base URL', 'url', 'https://api.openai.com/v1'], ['AI temperature', 'decimal', 0.2], ['AI max tokens', 'number', 500], ['AI timeout seconds', 'number', 180], ['AI connect timeout seconds', 'number', 15], ['AI stream enabled', 'switch', false], ['AI cache enabled', 'switch', true], ['AI cache TTL', 'number', 600], ['AI context max rows', 'number', 15], ['AI context max chars', 'number', 5000], ['AI fast mode', 'switch', true], ['AI embedding model', 'text', 'text-embedding-3-small']],
@@ -116,8 +146,14 @@ class PlatformSettingsSeeder extends Seeder
 
     private function helpText(string $label, bool $encrypted): ?string
     {
+        if ($label === 'Queue enabled') {
+            return 'Takes effect immediately. Off runs customer setup, invoices, notifications, and campaign email/SMS inside the current request. Scheduled campaigns require this to remain on.';
+        }
+        if ($label === 'Scheduler enabled') {
+            return 'Takes effect on the next scheduler tick. Off pauses all KiteLedger scheduled tasks, including expiry checks, automatic subscription state changes, usage collection, invoices, scheduled publishing, and cleanup.';
+        }
         if ($label === 'Queue tenant provisioning') {
-            return 'Off provisions immediately without a queue worker. On requires the provisioning queue cron command shown on this page.';
+            return 'Queues customer setup only when the global Queue enabled option is also on. Otherwise customer setup runs immediately.';
         }
         if ($encrypted) {
             return 'Stored encrypted; leave blank to keep the current secret.';

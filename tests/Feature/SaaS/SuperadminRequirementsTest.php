@@ -121,7 +121,6 @@ class SuperadminRequirementsTest extends TestCase
         $settings = app(PlatformSettingsService::class);
         $settings->set('billing', 'billing.refunds', true, 'boolean');
         $settings->set('billing', 'billing.maximum_refund_period', 90, 'integer');
-        $settings->set('security', 'security.require_mfa_for_refunds', false, 'boolean');
         [, $tenant] = $this->subscription(100);
         $invoice = TenantInvoice::create(['invoice_number' => 'REF-001', 'tenant_id' => $tenant->id, 'subtotal' => 100, 'total' => 100, 'paid_amount' => 100, 'balance' => 0, 'currency' => 'USD', 'status' => 'paid']);
         $payment = PaymentTransaction::create(['tenant_id' => $tenant->id, 'invoice_id' => $invoice->id, 'gateway' => 'manual', 'amount' => 100, 'currency' => 'USD', 'status' => 'success', 'refunded_amount' => 0, 'paid_at' => now(), 'reference' => 'MANUAL-REFUND']);

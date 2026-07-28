@@ -12,6 +12,7 @@ import { createRoot } from "react-dom/client";
 
 import {
     fetchBrandSettings,
+    fetchPublicBrandSettings,
     getStoredBrandSettings,
     resolveMediaUrl,
     subscribeToBrandSettings,
@@ -105,8 +106,11 @@ function RootApp({ App, props }) {
 
         syncFavicon(brandSettings);
 
-        if (!isCentralSurface) {
-            fetchBrandSettings()
+        {
+            const requestBrandSettings = isCentralSurface
+                ? fetchPublicBrandSettings
+                : fetchBrandSettings;
+            requestBrandSettings()
                 .then((settings) => {
                     if (!mounted) return;
 
@@ -121,9 +125,7 @@ function RootApp({ App, props }) {
                 });
         }
 
-        const unsubscribe = isCentralSurface
-            ? () => {}
-            : subscribeToBrandSettings((settings) => {
+        const unsubscribe = subscribeToBrandSettings((settings) => {
                   setBrandSettings(settings);
                   syncFavicon(settings);
               });
@@ -183,6 +185,19 @@ function RootApp({ App, props }) {
     }, [isCentralSurface]);
 
     useEffect(() => {
+        if (!isCentralSurface) return;
+
+        document.documentElement.style.setProperty(
+            "--central-primary",
+            brandSettings?.brand_primary_color || "#0f766e",
+        );
+        document.documentElement.style.setProperty(
+            "--central-sidebar",
+            brandSettings?.brand_sidebar_color || "#101827",
+        );
+    }, [brandSettings, isCentralSurface]);
+
+    useEffect(() => {
         const applyLocale = (nextLocale) => {
             const resolved = nextLocale || { current: "en", dir: "ltr" };
 
@@ -221,7 +236,10 @@ function RootApp({ App, props }) {
 }
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) =>
+        String(title || "").includes(appName)
+            ? title
+            : `${title} - ${appName}`,
 
     resolve: (name) =>
         resolvePageComponent(

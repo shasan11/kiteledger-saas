@@ -15,12 +15,13 @@ export default function TenantForm(props) {
 }
 
 function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthly", "yearly"], subscriptionModes = ["active"], provisioningModes = ["manual"], tenantBaseDomain, databasePool = [], payment = {}, defaults = {}, provisioningQueueEnabled = false, provisioningQueueCommand = "" }) {
+    const callingCodes = defaults.calling_codes || {};
     const [antForm] = Form.useForm();
     const [step, setStep] = useState(0);
     const [testing, setTesting] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const initial = useMemo(() => ({
-        company_name: "", legal_name: "", owner_name: "", owner_email: "", owner_phone: "", country: "", address: "",
+        company_name: "", legal_name: "", owner_name: "", owner_email: "", owner_phone: "", phone_country_code: callingCodes[defaults.country] || "+1", country: defaults.country || "US", address: "",
         timezone: defaults.timezone || "UTC", currency: defaults.currency || "USD", subdomain: "", owner_password: "", owner_password_confirmation: "",
         plan_id: plans[0]?.id, default_template_id: null, billing_cycle: billingCycles[0] || "monthly", subscription_start_mode: plans[0]?.trial_days > 0 ? "trial" : "active", effective_at: dayjs(),
         onboarding_idempotency_key: crypto.randomUUID(), provisioning_mode: provisioningModes[0] || "manual", database_pool_id: null,
@@ -36,7 +37,7 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
     const steps = [
         { title: "Company & owner", fields: ["company_name", "owner_name", "owner_email", "subdomain", "owner_password", "owner_password_confirmation"] },
         { title: "Plan & billing", fields: ["plan_id", "billing_cycle", "subscription_start_mode", "effective_at"] },
-        { title: "Database", fields: mode === "manual" ? ["provisioning_mode", "tenancy_db_host", "tenancy_db_port", "tenancy_db_name", "tenancy_db_username"] : ["provisioning_mode", "database_pool_id"] },
+        { title: "Workspace setup", fields: mode === "manual" ? ["provisioning_mode", "tenancy_db_host", "tenancy_db_port", "tenancy_db_name", "tenancy_db_username"] : ["provisioning_mode", "database_pool_id"] },
         { title: "Review", fields: [] },
     ];
     const normalizeSubdomain = () => antForm.setFieldValue("subdomain", String(antForm.getFieldValue("subdomain") || "").trim().toLowerCase().replace(/[^a-z0-9-]/g, ""));
@@ -84,13 +85,13 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
                     antForm.setFields(Object.entries(errors).map(([name, fieldErrors]) => ({ name: name.split("."), errors: [Array.isArray(fieldErrors) ? fieldErrors[0] : fieldErrors] })));
                     const errorStep = stepForField(Object.keys(errors)[0]);
                     if (errorStep >= 0) setStep(errorStep);
-                    message.error(Object.values(errors)[0] || "Tenant could not be provisioned. Review the highlighted fields.");
+                    message.error(Object.values(errors)[0] || "Customer could not be created. Review the highlighted fields.");
                 },
                 onFinish: () => setSubmitting(false),
             });
         } catch (error) {
             setSubmitting(false);
-            message.error(error?.message || "Tenant provisioning could not be started.");
+            message.error(error?.message || "Customer setup could not be started.");
         }
     };
     const provision = async () => {
@@ -100,7 +101,7 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
             submit(values);
         } catch (error) {
             if (error?.errorFields) submitFailed(error);
-            else message.error(error?.message || "Tenant provisioning could not be started.");
+            else message.error(error?.message || "Customer setup could not be started.");
         }
     };
     const submitFailed = ({ errorFields }) => {
@@ -110,18 +111,18 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
     };
     const price = selectedPlan ? (Form.useWatch("billing_cycle", antForm) === "yearly" ? selectedPlan.price_yearly : selectedPlan.price_monthly) : null;
 
-    return <CentralLayout title="Create tenant" breadcrumbs={[{ title: "Tenants" }]}>
-        <PageHeader eyebrow="Tenant onboarding" title="Create a tenant" description="Provision the workspace, owner, subscription, invoice, and database through a retry-safe guided flow." />
+    return <CentralLayout title="Create customer" breadcrumbs={[{ title: "Customers" }]}>
+        <PageHeader eyebrow="Customer onboarding" title="Create a customer" description="Set up the customer, owner, subscription, and workspace through a guided flow." />
         <SectionCard><Steps current={step} items={steps.map(({ title }) => ({ title }))} responsive style={{ marginBottom: 28 }} />
-            <Form form={antForm} layout="vertical" initialValues={initial} onFinish={submit} onFinishFailed={submitFailed} onValuesChange={(_, all) => submission.setData(all)}>
+            <Form form={antForm} layout="vertical" initialValues={initial} onFinish={submit} onFinishFailed={submitFailed}>
                 <Form.Item name="onboarding_idempotency_key" hidden><Input /></Form.Item>
                 <div hidden={step !== 0}><Row gutter={16}>
                     <Col xs={24} md={12}><Form.Item name="company_name" label="Company name" rules={[{ required: true }]}><Input /></Form.Item></Col>
                     <Col xs={24} md={12}><Form.Item name="legal_name" label="Legal name"><Input /></Form.Item></Col>
                     <Col xs={24} md={12}><Form.Item name="owner_name" label="Owner name" rules={[{ required: true }]}><Input /></Form.Item></Col>
                     <Col xs={24} md={12}><Form.Item name="owner_email" label="Owner email" rules={[{ required: true }, { type: "email" }]}><Input type="email" /></Form.Item></Col>
-                    <Col xs={24} md={12}><Form.Item name="owner_phone" label="Owner phone"><Input /></Form.Item></Col>
-                    <Col xs={24} md={12}><Form.Item name="country" label="Country code" rules={[{ len: 2 }]}><Input maxLength={2} /></Form.Item></Col>
+                    <Col xs={24} md={12}><Form.Item label="Owner phone"><Space.Compact block><Form.Item name="phone_country_code" noStyle><Select showSearch style={{width:145}} options={Object.entries(callingCodes).map(([country,code])=>({value:code,label:`${country} ${code}`}))}/></Form.Item><Form.Item name="owner_phone" noStyle><Input inputMode="tel" placeholder="Phone number"/></Form.Item></Space.Compact></Form.Item></Col>
+                    <Col xs={24} md={12}><Form.Item name="country" label="Country" rules={[{ len: 2 }]}><Select showSearch options={Object.keys(callingCodes).map(value=>({value,label:value}))} onChange={country=>antForm.setFieldValue('phone_country_code',callingCodes[country])}/></Form.Item></Col>
                     <Col xs={24}><Form.Item name="address" label="Address"><Input.TextArea rows={2} /></Form.Item></Col>
                     <Col xs={24}><Form.Item name="subdomain" label="Workspace hostname" rules={[{ required: true }, { pattern: /^(?!-)[a-z0-9-]+(?<!-)$/, message: "Use lowercase letters, numbers, and internal hyphens." }]}><Input onBlur={normalizeSubdomain} addonAfter={`.${tenantBaseDomain || window.location.hostname}`} /></Form.Item></Col>
                     <Col xs={24} md={12}><Form.Item name="owner_password" label="Owner password" rules={[{ required: true }, { min: 12 }]}><Input.Password autoComplete="new-password" /></Form.Item></Col>
@@ -133,7 +134,7 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
                     <Col xs={24} md={8}><Form.Item name="billing_cycle" label="Billing cycle" rules={[{ required: true }]}><Select options={billingCycles.map((value) => ({ value, label: value }))} /></Form.Item></Col>
                     <Col xs={24} md={8}><Form.Item name="subscription_start_mode" label="Start mode" rules={[{ required: true }]}><Select options={subscriptionModes.filter((value) => value !== "trial" || selectedPlan?.trial_days > 0).map((value) => ({ value, label: value === "trial" ? `Trial (${selectedPlan?.trial_days} days)` : "Active" }))} /></Form.Item></Col>
                     <Col xs={24} md={8}><Form.Item name="effective_at" label="Effective at" rules={[{ required: true }]}><DatePicker showTime style={{ width: "100%" }} disabledDate={(date) => date?.isAfter(dayjs(), "day")} /></Form.Item></Col>
-                    <Col xs={24} md={8}><Form.Item name="timezone" label="Timezone" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="currency" label="Tenant currency" rules={[{ required: true }]}><Select options={currencies.map((value) => ({ value, label: value }))} /></Form.Item></Col>
+                    <Col xs={24} md={8}><Form.Item name="timezone" label="Timezone" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24} md={8}><Form.Item name="currency" label="Customer currency" rules={[{ required: true }]}><Select options={currencies.map((value) => ({ value, label: value }))} /></Form.Item></Col>
                     {payment.enabled && startMode === "active" && Number(price) > 0 && <Col xs={24}><Form.Item name={["initial_payment", "enabled"]} valuePropName="checked"><Checkbox>Record a manual payment against the generated initial invoice</Checkbox></Form.Item>{paymentEnabled && <Row gutter={12}>
                         <Col xs={12} md={6}><Form.Item name={["initial_payment", "amount"]} label="Amount" rules={[{ required: true }]}><InputNumber min={0.01} style={{ width: "100%" }} /></Form.Item></Col><Col xs={12} md={6}><Form.Item name={["initial_payment", "currency"]} label="Currency" rules={[{ required: true }]}><Input disabled /></Form.Item></Col>
                         <Col xs={12} md={6}><Form.Item name={["initial_payment", "payment_method"]} label="Method" rules={[{ required: true }]}><Select options={(payment.methods || []).map((value) => ({ value, label: value }))} /></Form.Item></Col><Col xs={12} md={6}><Form.Item name={["initial_payment", "payment_date"]} label="Paid at" rules={[{ required: true }]}><DatePicker showTime style={{ width: "100%" }} /></Form.Item></Col>
@@ -150,14 +151,15 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
                     { key: "host", label: "Hostname", children: `${antForm.getFieldValue("subdomain")}.${tenantBaseDomain}` }, { key: "plan", label: "Plan", children: selectedPlan?.name },
                     { key: "subscription", label: "Subscription", children: `${startMode} / ${antForm.getFieldValue("billing_cycle")}` }, { key: "database", label: "Database", children: mode === "pool" ? databasePool.find((row) => row.id === antForm.getFieldValue("database_pool_id"))?.database_name : antForm.getFieldValue("tenancy_db_name") },
                 ]} /></div>
-                <Space style={{ width: "100%", justifyContent: "space-between", marginTop: 28 }}><Button onClick={() => step ? setStep(step - 1) : window.history.back()}>{step ? "Back" : "Cancel"}</Button>{step < 3 ? <Button type="primary" onClick={next}>Continue</Button> : <Button type="primary" onClick={provision} loading={submitting || submission.processing} disabled={submitting || submission.processing}>Provision tenant</Button>}</Space>
+                <Space style={{ width: "100%", justifyContent: "space-between", marginTop: 28 }}><Button onClick={() => step ? setStep(step - 1) : window.history.back()}>{step ? "Back" : "Cancel"}</Button>{step < 3 ? <Button type="primary" onClick={next}>Continue</Button> : <Button type="primary" onClick={provision} loading={submitting || submission.processing} disabled={submitting || submission.processing}>Create customer</Button>}</Space>
             </Form>
         </SectionCard>
     </CentralLayout>;
 }
 
-function EditTenant({ tenant, plans = [], templates = [] }) {
-    const form = useForm({ company_name: tenant.company_name || "", legal_name: tenant.legal_name || "", owner_name: tenant.owner_name || "", owner_phone: tenant.owner_phone || "", country: tenant.country || "", address: tenant.address || "", timezone: tenant.timezone || "UTC", currency: tenant.currency || "USD", plan_id: tenant.plan_id || null, default_template_id: tenant.default_template_id || null, tenancy_db_host: tenant.tenancy_db_host || "127.0.0.1", tenancy_db_port: tenant.tenancy_db_port || 3306, tenancy_db_name: tenant.tenancy_db_name || tenant.database_name || "", tenancy_db_username: tenant.tenancy_db_username || "", tenancy_db_password: "" });
+function EditTenant({ tenant, plans = [], templates = [], defaults = {} }) {
+    const codes=defaults.calling_codes||{};const callingCode=codes[tenant.country]||'+1';const localPhone=String(tenant.owner_phone||'').startsWith(callingCode)?String(tenant.owner_phone).slice(callingCode.length):tenant.owner_phone||'';
+    const form = useForm({ company_name: tenant.company_name || "", legal_name: tenant.legal_name || "", owner_name: tenant.owner_name || "", owner_phone: localPhone, phone_country_code: callingCode, country: tenant.country || defaults.country || "US", address: tenant.address || "", timezone: tenant.timezone || "UTC", currency: tenant.currency || "USD", plan_id: tenant.plan_id || null, default_template_id: tenant.default_template_id || null, tenancy_db_host: tenant.tenancy_db_host || "127.0.0.1", tenancy_db_port: tenant.tenancy_db_port || 3306, tenancy_db_name: tenant.tenancy_db_name || tenant.database_name || "", tenancy_db_username: tenant.tenancy_db_username || "", tenancy_db_password: "" });
     const field = (name, label, node, required = false) => <Form.Item label={label} required={required} validateStatus={form.errors[name] ? "error" : ""} help={form.errors[name]}>{node || <Input value={form.data[name]} onChange={(event) => form.setData(name, event.target.value)} />}</Form.Item>;
     return <CentralLayout title="Edit tenant"><PageHeader eyebrow="Tenant" title={`Edit ${tenant.company_name}`} description="Update workspace identity and its existing database connection." /><Form layout="vertical" onFinish={() => form.put(route("central.tenants.update", tenant.id))}><SectionCard><Row gutter={16}><Col xs={24} md={12}>{field("company_name", "Company name", null, true)}</Col><Col xs={24} md={12}>{field("legal_name", "Legal name")}</Col><Col xs={24} md={12}>{field("owner_name", "Owner name", null, true)}</Col><Col xs={24} md={12}>{field("owner_phone", "Owner phone")}</Col><Col xs={24} md={12}>{field("timezone", "Timezone", null, true)}</Col><Col xs={24} md={12}>{field("currency", "Currency", <Select value={form.data.currency} onChange={(value) => form.setData("currency", value)} options={currencies.map((value) => ({ value, label: value }))} />, true)}</Col><Col xs={24} md={12}>{field("plan_id", "Plan", <Select allowClear value={form.data.plan_id} onChange={(value) => form.setData("plan_id", value)} options={plans.map((plan) => ({ value: plan.id, label: plan.name }))} />)}</Col><Col xs={24} md={12}>{field("default_template_id", "Template", <Select allowClear value={form.data.default_template_id} onChange={(value) => form.setData("default_template_id", value)} options={templates.map((item) => ({ value: item.id, label: item.name }))} />)}</Col><Col xs={24}>{field("tenancy_db_host", "Database host", null, true)}</Col><Col xs={24}>{field("tenancy_db_name", "Database name", null, true)}</Col><Col xs={24}>{field("tenancy_db_username", "Database username", null, true)}</Col><Col xs={24}>{field("tenancy_db_password", "Database password (leave blank to keep)", <Input.Password value={form.data.tenancy_db_password} onChange={(event) => form.setData("tenancy_db_password", event.target.value)} />)}</Col></Row><Space><Button onClick={() => window.history.back()}>Cancel</Button><Button type="primary" htmlType="submit" loading={form.processing}>Save changes</Button></Space></SectionCard></Form></CentralLayout>;
 }

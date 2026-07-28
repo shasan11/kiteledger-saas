@@ -4,10 +4,11 @@ import SectionCard from '@/Components/Central/SectionCard';
 import { humanize } from '@/Components/Central/formatters';
 import { router } from '@inertiajs/react';
 import { Alert, Button, Checkbox, Col, Input, Row, Space, Tag, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function Roles({ roles, permissions }) {
     const [selectedId, setSelectedId] = useState(roles[0]?.id);
+    const [search, setSearch] = useState('');
     const selected = roles.find((role) => role.id === selectedId) || roles[0];
     const [drafts, setDrafts] = useState(() => Object.fromEntries(roles.map((role) => [role.id, { label: role.label, permissions: role.permissions.map((permission) => permission.id) }])));
     const draft = drafts[selected?.id] || { label: '', permissions: [] };
@@ -15,11 +16,14 @@ export default function Roles({ roles, permissions }) {
     const locked = selected?.name === 'super_administrator';
     const update = (changes) => setDrafts((current) => ({ ...current, [selected.id]: { ...current[selected.id], ...changes } }));
     const save = () => router.put(route('central.roles.update', selected.id), draft, { preserveScroll: true });
+    const original = selected ? { label:selected.label, permissions:selected.permissions.map((permission)=>permission.id).sort() } : null;
+    const dirty = original && (draft.label !== original.label || JSON.stringify([...draft.permissions].sort()) !== JSON.stringify(original.permissions));
+    useEffect(() => { const warn=(event)=>{if(dirty){event.preventDefault();event.returnValue='';}}; window.addEventListener('beforeunload',warn); return()=>window.removeEventListener('beforeunload',warn); }, [dirty]);
 
     return <CentralLayout title="Roles and Permissions">
         <PageHeader eyebrow="Administration" title="Roles and Permissions" description="Grant the least privilege needed for each control-center responsibility. Every change is audited." actions={<Button type="primary" onClick={save}>Save role</Button>}/>
         <Row gutter={[18, 18]}>
-            <Col xs={24} lg={7}><SectionCard title="Platform roles"><Space direction="vertical" style={{ width: '100%' }} size={6}>{roles.map((role) => <Button key={role.id} type={role.id === selected?.id ? 'primary' : 'text'} onClick={() => setSelectedId(role.id)} style={{ height: 'auto', minHeight: 48, justifyContent: 'space-between', textAlign: 'left' }}><span><strong>{role.label}</strong><br/><Typography.Text type="secondary">{role.permissions_count} permissions</Typography.Text></span></Button>)}</Space></SectionCard></Col>
+            <Col xs={24} lg={7}><SectionCard title="Platform roles"><Input.Search allowClear placeholder="Search roles" value={search} onChange={(event)=>setSearch(event.target.value)} style={{marginBottom:12}}/><Space direction="vertical" style={{ width: '100%' }} size={6}>{roles.filter(role=>role.label.toLowerCase().includes(search.toLowerCase())).map((role) => <Button key={role.id} type={role.id === selected?.id ? 'primary' : 'text'} onClick={() => setSelectedId(role.id)} style={{ height: 'auto', minHeight: 48, justifyContent: 'space-between', textAlign: 'left' }}><span><strong>{role.label}</strong><br/><Typography.Text type="secondary">{role.admins_count} administrators · {role.permissions_count} permissions</Typography.Text></span></Button>)}</Space></SectionCard></Col>
             <Col xs={24} lg={17}><SectionCard title={selected?.label} description={selected ? `Stable role key: ${selected.name}` : ''} extra={!locked && <Button size="small" onClick={() => update({ permissions: draft.permissions.length === allIds.length ? [] : allIds })}>{draft.permissions.length === allIds.length ? 'Clear all' : 'Select all'}</Button>}>
                 {locked && <Alert type="info" showIcon message="Super Administrator always retains every platform permission." style={{ marginBottom: 18 }}/>} 
                 <label className="central-field-label" htmlFor="role-label">Display name</label><Input id="role-label" value={draft.label} onChange={(event) => update({ label: event.target.value })} style={{ marginBottom: 20 }} />

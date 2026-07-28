@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use App\Support\PhoneNumber;
 use Inertia\Inertia;
 
 class TenantController extends Controller
@@ -59,7 +60,8 @@ class TenantController extends Controller
 
     public function store(StoreTenantOnboardingRequest $request, TenantProvisioningService $service, CentralAuditService $audit)
     {
-        $data = TenantOnboardingData::from($request->validated())->toArray();
+        $validated = $request->validated(); unset($validated['phone_country_code']);
+        $data = TenantOnboardingData::from($validated)->toArray();
         try {
             $tenant = $service->create($data + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
         } catch (\Throwable $exception) {
@@ -107,7 +109,8 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant, CentralAuditService $audit)
     {
         $old = $tenant->getOriginal();
-        $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
+        $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'phone_country_code' => ['nullable','regex:/^\+[1-9][0-9]{0,3}$/'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
+        $data['owner_phone'] = PhoneNumber::join($data['phone_country_code'] ?? PhoneNumber::callingCode($data['country'] ?? null), $data['owner_phone'] ?? null); unset($data['phone_country_code']);
         if (blank($data['tenancy_db_password'] ?? null)) {
             unset($data['tenancy_db_password']);
         }
@@ -268,7 +271,7 @@ class TenantController extends Controller
             'provisioningModes' => $modes, 'tenantBaseDomain' => config('saas.tenant_base_domain'),
             'databasePool' => $modes->contains('pool') ? TenantDatabasePool::where('status', 'available')->whereNotNull('validated_at')->orderBy('database_name')->get(['id', 'database_name', 'status', 'validated_at']) : [],
             'payment' => $this->paymentOptions(),
-            'defaults' => ['timezone' => config('app.timezone', 'UTC'), 'currency' => app(PlatformSettingsService::class)->get('billing.default_currency', 'USD')],
+            'defaults' => ['timezone' => config('app.timezone', 'UTC'), 'currency' => app(PlatformSettingsService::class)->get('billing.default_currency', 'USD'), 'country' => app(PlatformSettingsService::class)->get('tenant_registration.default_country', 'US'), 'calling_codes' => PhoneNumber::CALLING_CODES],
             'provisioningQueueEnabled' => (bool) app(PlatformSettingsService::class)->get('provisioning.queue_tenant_provisioning', false),
             'provisioningQueueCommand' => 'php artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300',
         ];

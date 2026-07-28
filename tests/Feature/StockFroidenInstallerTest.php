@@ -100,6 +100,17 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertStringContainsString('php artisan serve --no-reload', implode("\n", $composer['scripts']['dev']));
     }
 
+    public function test_environment_save_detects_the_php_development_server_restart_risk(): void
+    {
+        $manager = app(FroidenEnvironmentManager::class);
+        $method = new \ReflectionMethod($manager, 'usesPhpDevelopmentServer');
+        $request = Request::create('/install/environment/save', 'POST', server: [
+            'SERVER_SOFTWARE' => 'PHP 8.5 Development Server',
+        ]);
+
+        $this->assertTrue($method->invoke($manager, $request));
+    }
+
     public function test_environment_save_accepts_a_blank_central_database_password(): void
     {
         $manager = Mockery::mock(FroidenEnvironmentManager::class);

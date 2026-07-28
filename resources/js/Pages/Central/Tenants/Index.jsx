@@ -31,9 +31,9 @@ export default function Index({ tenants, filters = {}, plans = [], summary = {} 
     const tabItems = statuses.map((status) => ({ key: status, label: status === 'all' ? 'All customers' : status.replaceAll('_',' ').replace(/\b\w/g,(letter)=>letter.toUpperCase()) }));
 
     return <CentralLayout title="Customers">
-        <PageHeader eyebrow="Workspace management" title="Customers" description="Provision, monitor, and support every customer workspace from one place." actions={<Link href={route('central.tenants.create')}><Button type="primary" icon={<PlusOutlined />}>Create customer</Button></Link>} />
+        <PageHeader eyebrow="Customer management" title="Customers" description="Manage every customer account, subscription, and support relationship from one place." actions={<Link href={route('central.tenants.create')}><Button type="primary" icon={<PlusOutlined />}>Create customer</Button></Link>} />
         <Row gutter={[14,14]} style={{ marginBottom: 16 }}>
-            <Col xs={12} xl={6}><MetricCard label="All tenants" value={summary.total || 0} helper="Across every lifecycle stage" icon={<TeamOutlined />} /></Col>
+            <Col xs={12} xl={6}><MetricCard label="All customers" value={summary.total || 0} helper="Across every lifecycle stage" icon={<TeamOutlined />} /></Col>
             <Col xs={12} xl={6}><MetricCard label="Active" value={summary.active || 0} helper="Operational workspaces" icon={<AppstoreOutlined />} tone="blue" /></Col>
             <Col xs={12} xl={6}><MetricCard label="On trial" value={summary.trialing || 0} helper="Evaluation accounts" icon={<SearchOutlined />} tone="violet" /></Col>
             <Col xs={12} xl={6}><MetricCard label="Needs attention" value={summary.attention || 0} helper="Failed, expired, or suspended" icon={<WarningOutlined />} tone={summary.attention ? 'rose' : 'amber'} /></Col>

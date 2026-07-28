@@ -3,7 +3,7 @@ import PageHeader from '@/Components/Central/PageHeader';
 import RichTextEditor from '@/Components/Central/RichTextEditor';
 import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
-import { humanize } from '@/Components/Central/formatters';
+import { formatDate, humanize } from '@/Components/Central/formatters';
 import CentralLayout from '@/Layouts/CentralLayout';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
@@ -50,7 +50,7 @@ export default function Configuration({ type, rows = [], categories = [], admins
         { title: 'Title', dataIndex: 'title', render: (value) => <Typography.Text strong>{value}</Typography.Text> },
         { title: 'Category', dataIndex: ['category', 'name'], render: (value) => value || 'All categories' },
         { title: 'Status', dataIndex: 'is_active', render: (value) => <StatusBadge value={value ? 'active' : 'disabled'}/> },
-        { title: 'Last updated', dataIndex: 'updated_at' },
+        { title: 'Last updated', dataIndex: 'updated_at', render: value => formatDate(value, true) },
     ];
     columns.push({ title: '', key: 'actions', width: 52, render: (_, row) => <ActionDropdown items={actions(row)}/> });
 

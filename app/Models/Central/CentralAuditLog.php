@@ -12,4 +12,5 @@ class CentralAuditLog extends CentralModel
     {
         return ['old_values' => 'array', 'new_values' => 'array', 'created_at' => 'datetime'];
     }
+    public function admin(){ return $this->belongsTo(CentralAdmin::class, 'admin_id')->withTrashed(); }
 }

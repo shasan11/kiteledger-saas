@@ -8,6 +8,7 @@ use App\Models\Central\PaymentTransaction;
 use App\Models\Central\TenantInvoice;
 use App\Services\SaaS\CentralNotificationService;
 use App\Services\SaaS\PlatformSettingsService;
+use App\Services\SaaS\InvoicePaymentReconciler;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -69,13 +70,7 @@ class ManualPaymentService implements PaymentGatewayInterface
                 'receipt_sent' => false, 'paid_at' => $context['payment_date'] ?? now(),
                 'raw_response' => ['source' => 'central_admin'],
             ]);
-            $newPaid = round($paid + $amount, 2);
-            $newBalance = max(0, round((float) $locked->total - $newPaid, 2));
-            $locked->update([
-                'paid_amount' => $newPaid, 'balance' => $newBalance,
-                'status' => $newBalance <= 0 ? 'paid' : ($newPaid > 0 ? 'partially_paid' : 'unpaid'),
-                'paid_at' => $newBalance <= 0 ? now() : null,
-            ]);
+            app(InvoicePaymentReconciler::class)->reconcile($locked);
             app(CentralNotificationService::class)->notify('manual_payment_recorded', 'billing', 'success', 'Manual payment recorded', $locked->invoice_number.' received '.$amount.' '.$locked->currency, route('central.payments.index'), $transaction);
 
             return $transaction;

@@ -7,6 +7,7 @@ use App\Http\Controllers\Central\BillingWebhookController;
 use App\Http\Controllers\Central\BlogController;
 use App\Http\Controllers\Central\BlogTaxonomyController;
 use App\Http\Controllers\Central\CentralAdminController;
+use App\Http\Controllers\Central\CommunicationController;
 use App\Http\Controllers\Central\DashboardController as CentralDashboardController;
 use App\Http\Controllers\Central\FeatureController;
 use App\Http\Controllers\Central\FeatureOverrideController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Central\InvoiceCustomizationController;
 use App\Http\Controllers\Central\MediaController;
 use App\Http\Controllers\Central\NotificationController;
 use App\Http\Controllers\Central\PlanController;
+use App\Http\Controllers\Central\ProfileController;
 use App\Http\Controllers\Central\ResourceController;
 use App\Http\Controllers\Central\RoleController;
 use App\Http\Controllers\Central\SettingsController;
@@ -24,6 +26,7 @@ use App\Http\Controllers\Central\WebsiteAdminController;
 use App\Http\Controllers\Central\WebsiteContentController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Central\WebsiteLeadController;
+use App\Http\Controllers\Central\WebsiteStructuredContentController;
 use App\Http\Controllers\Installer\DatabaseController as InstallerDatabaseController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
@@ -69,6 +72,8 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
     if ($includeWebsite) {
         Route::get('/', [WebsiteController::class, 'home'])->name($namePrefix.'home');
         Route::get('/pricing', [WebsiteController::class, 'pricing'])->name($namePrefix.'pricing');
+        Route::get('/resources', [WebsiteController::class, 'resources'])->name($namePrefix.'resources');
+        Route::get('/resources/{slug}', [WebsiteController::class, 'resourceArticle'])->name($namePrefix.'resources.show');
         Route::get('/blog', [WebsiteController::class, 'blog'])->name($namePrefix.'blog');
         Route::get('/blog/category/{category}', [WebsiteController::class, 'category'])->name($namePrefix.'blog.category');
         Route::get('/blog/tag/{tag}', [WebsiteController::class, 'tag'])->name($namePrefix.'blog.tag');
@@ -76,21 +81,21 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
         Route::get('/sitemap.xml', [WebsiteController::class, 'sitemap'])->name($namePrefix.'sitemap');
         Route::get('/robots.txt', [WebsiteController::class, 'robots'])->name($namePrefix.'robots');
         Route::post('/website-leads', [WebsiteLeadController::class, 'store'])->middleware('throttle:6,1')->name($namePrefix.'website-leads.store');
+        Route::get('/communication/unsubscribe/{token}', [CommunicationController::class, 'unsubscribe'])->name($namePrefix.'communication.unsubscribe');
         Route::get('/p/{slug}', [WebsiteController::class, 'page'])->name($namePrefix.'page');
-        Route::get('/{slug}', [WebsiteController::class, 'page'])->whereIn('slug', ['features', 'about', 'contact', 'support', 'privacy-policy', 'terms-of-service', 'cookie-policy'])->name($namePrefix.'content.page');
+        Route::get('/{slug}', [WebsiteController::class, 'page'])->whereIn('slug', ['features', 'contact', 'privacy-policy', 'terms-of-service', 'cookie-policy'])->name($namePrefix.'content.page');
         Route::post('/billing/webhooks/{gateway}', BillingWebhookController::class)->middleware('throttle:120,1')->name($namePrefix.'billing.webhook');
     }
 
     Route::prefix($adminPath ?? config('saas.admin_path', 'superadmin'))->name($namePrefix)->group(function (): void {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
         Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
-        Route::get('/mfa/challenge', [AuthController::class, 'mfaChallenge'])->name('mfa.challenge');
-        Route::post('/mfa/challenge', [AuthController::class, 'mfaVerify'])->middleware('throttle:5,1')->name('mfa.verify');
-
         Route::middleware('central.admin')->group(function (): void {
             Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
-            Route::post('/mfa/setup', [AuthController::class, 'mfaSetup'])->name('mfa.setup');
-            Route::post('/mfa/enable', [AuthController::class, 'mfaEnable'])->name('mfa.enable');
+            Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+            Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+            Route::post('/profile', [ProfileController::class, 'update']);
+            Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
             Route::get('/', CentralDashboardController::class)->name('dashboard');
             Route::get('search', GlobalSearchController::class)->name('search');
             Route::get('tenants', [TenantController::class, 'index'])->middleware('central.admin:tenant.view')->name('tenants.index');
@@ -151,6 +156,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::delete('backups/{backup}', [BackupController::class, 'destroy'])->middleware('central.admin:tenant.backup')->name('backups.destroy');
 
             Route::get('settings', [SettingsController::class, 'index'])->middleware('central.admin:settings.view')->name('settings.index');
+            Route::get('settings/operations-guide', [SettingsController::class, 'operationsGuide'])->middleware('central.admin:settings.view')->name('settings.operations-guide');
             Route::put('settings/{group}', [SettingsController::class, 'update'])->middleware('central.admin:settings.manage')->name('settings.update');
             Route::post('settings/{group}/reset', [SettingsController::class, 'reset'])->middleware('central.admin:settings.manage')->name('settings.reset');
             Route::post('settings/{group}/test', [SettingsController::class, 'test'])->middleware('central.admin:settings.manage')->name('settings.test');
@@ -163,12 +169,22 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::get('seo-settings', [SettingsController::class, 'index'])->defaults('group', 'seo')->middleware('central.admin:seo.manage')->name('seo.index');
 
             Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+            Route::get('communication', [CommunicationController::class, 'index'])->middleware('central.admin:communication.view')->name('communication.index');
+            Route::post('communication/campaigns', [CommunicationController::class, 'store'])->middleware('central.admin:communication.manage')->name('communication.store');
+            Route::post('communication/campaigns/{campaign}/import', [CommunicationController::class, 'import'])->middleware('central.admin:communication.import')->name('communication.import');
+            Route::post('communication/campaigns/{campaign}/send', [CommunicationController::class, 'send'])->middleware('central.admin:communication.send')->name('communication.send');
+            Route::post('communication/campaigns/{campaign}/cancel', [CommunicationController::class, 'cancel'])->middleware('central.admin:communication.manage')->name('communication.cancel');
+            Route::post('communication/campaigns/{campaign}/retry', [CommunicationController::class, 'retry'])->middleware('central.admin:communication.retry')->name('communication.retry');
+            Route::post('communication/suppressions', [CommunicationController::class, 'suppress'])->middleware('central.admin:communication.manage')->name('communication.suppress');
+            Route::delete('communication/suppressions/{suppression}', [CommunicationController::class, 'unsuppress'])->middleware('central.admin:communication.manage')->name('communication.unsuppress');
             Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
             Route::post('notifications/bulk', [NotificationController::class, 'bulk'])->name('notifications.bulk');
             Route::post('notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
             Route::delete('notifications/{notification}', [NotificationController::class, 'dismiss'])->name('notifications.dismiss');
 
             Route::get('support/tickets', [SupportController::class, 'index'])->middleware('central.admin:ticket.view')->name('support.tickets.index');
+            Route::get('support/tickets/create', [SupportController::class, 'create'])->middleware('central.admin:ticket.update')->name('support.tickets.create');
+            Route::post('support/tickets', [SupportController::class, 'store'])->middleware('central.admin:ticket.update')->name('support.tickets.store');
             Route::get('support/tickets/{ticket}', [SupportController::class, 'show'])->middleware('central.admin:ticket.view')->name('support.tickets.show');
             Route::patch('support/tickets/{ticket}', [SupportController::class, 'update'])->middleware('central.admin:ticket.update')->name('support.tickets.update');
             Route::post('support/tickets/{ticket}/reply', [SupportController::class, 'reply'])->middleware('central.admin:ticket.reply')->name('support.tickets.reply');
@@ -180,6 +196,10 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::patch('website-leads/{lead}', [WebsiteLeadController::class, 'update'])->middleware('central.admin:lead.manage')->name('website-leads.update');
             Route::get('website-leads-export', [WebsiteLeadController::class, 'export'])->middleware('central.admin:lead.view')->name('website-leads.export');
             Route::middleware('central.admin:cms.view')->group(function (): void {
+                Route::get('website-content/{resource}', [WebsiteStructuredContentController::class, 'index'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->name('website-structured.index');
+                Route::post('website-content/{resource}', [WebsiteStructuredContentController::class, 'store'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.store');
+                Route::patch('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'update'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.update');
+                Route::delete('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'destroy'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.destroy');
                 Route::get('website-pages', [WebsiteContentController::class, 'pages'])->name('website-pages.index');
                 Route::get('website-pages/create', [WebsiteContentController::class, 'createPage'])->middleware('central.admin:cms.manage')->name('website-pages.create');
                 Route::get('website-pages/{page}/edit', [WebsiteContentController::class, 'editPage'])->middleware('central.admin:cms.manage')->name('website-pages.edit');
@@ -235,6 +255,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::patch('saved-replies/{reply}', [SupportController::class, 'updateSavedReply'])->middleware('central.admin:support.manage')->name('saved-replies.update');
             Route::delete('saved-replies/{reply}', [SupportController::class, 'destroySavedReply'])->middleware('central.admin:support.manage')->name('saved-replies.destroy');
 
+            Route::get('provisioning-logs/export', [ResourceController::class, 'exportProvisioning'])->middleware('central.admin:system_health.view')->name('provisioning-logs.export');
             foreach (['default-templates', 'provisioning-logs', 'tenant-databases', 'usage', 'audit-logs'] as $resource) {
                 $permission = match (true) {
                     in_array($resource, ['subscriptions', 'invoices', 'payments'], true) => 'billing.manage',

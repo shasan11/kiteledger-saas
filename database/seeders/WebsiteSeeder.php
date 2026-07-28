@@ -6,7 +6,15 @@ use App\Models\Central\WebsiteContentItem;
 use App\Models\Central\WebsiteMenu;
 use App\Models\Central\WebsitePage;
 use App\Models\Central\WebsiteSection;
+use App\Models\Central\ContactLocation;
+use App\Models\Central\Media;
+use App\Models\Central\NavbarNotification;
+use App\Models\Central\ResourceArticle;
+use App\Models\Central\ResourceCategory;
+use App\Models\Central\WebsiteFeature;
+use App\Models\Central\WebsiteSocialLink;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 
 class WebsiteSeeder extends Seeder
 {
@@ -16,10 +24,9 @@ class WebsiteSeeder extends Seeder
             'home' => ['Home', 'home', 'One intelligent workspace for finance and operations.'],
             'features' => ['Features', 'features', 'Explore connected tools for accounting, sales, inventory, CRM, people, and reporting.'],
             'pricing' => ['Pricing', 'pricing', 'Straightforward plans built to grow with your business.'],
-            'about' => ['About KiteLedger', 'about', 'We build calm, capable software for ambitious operating teams.'],
             'contact' => ['Talk to our team', 'contact', 'Tell us how your business works and we will help map the right setup.'],
-            'blog' => ['Resources', 'blog', 'Practical ideas for running a clearer, more connected business.'],
-            'support' => ['Help center', 'support', 'Answers, guidance, and responsive support when you need it.'],
+            'blog' => ['Blogs', 'blog', 'Practical ideas for running a clearer, more connected business.'],
+            'resources' => ['Resources', 'resources', 'Illustrated guides for setting up and using KiteLedger.'],
             'privacy-policy' => ['Privacy Policy', 'legal', 'How KiteLedger handles and protects personal information.'],
             'terms-of-service' => ['Terms of Service', 'legal', 'The terms governing access to and use of KiteLedger.'],
             'cookie-policy' => ['Cookie Policy', 'legal', 'How and why KiteLedger uses cookies and similar technologies.'],
@@ -37,6 +44,7 @@ class WebsiteSeeder extends Seeder
                 'meta_description' => $excerpt,
             ]);
         }
+        WebsitePage::whereIn('slug', ['about', 'support'])->update(['status' => 'archived']);
 
         $home = WebsitePage::where('slug', 'home')->firstOrFail();
         $sections = [
@@ -48,7 +56,7 @@ class WebsiteSeeder extends Seeder
                 ['title' => 'Inventory and purchasing', 'content' => 'Know what is in stock, what is moving, and what needs to be replenished.', 'icon' => 'box'],
                 ['title' => 'CRM and customers', 'content' => 'Bring conversations, opportunities, orders, and balances into one useful view.', 'icon' => 'people'],
                 ['title' => 'People operations', 'content' => 'Manage employee records, attendance, leave, payroll, and everyday HR workflows.', 'icon' => 'people'],
-                ['title' => 'Governance and security', 'content' => 'Roles, approvals, audit history, MFA, and tenant isolation protect critical work.', 'icon' => 'shield'],
+                ['title' => 'Governance and security', 'content' => 'Roles, approvals, audit history, and isolated customer workspaces protect critical work.', 'icon' => 'shield'],
             ], null],
             ['invoice', 'product', 'Move from work to cash', 'Create polished invoices. Get paid with less follow-up.', 'Build estimates, convert them into invoices, record payments, and understand what is outstanding without stitching reports together.', 'Explore invoicing', '/features', null, null, [
                 ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],
@@ -66,8 +74,7 @@ class WebsiteSeeder extends Seeder
             ['security', 'security', 'Trust is a product feature', 'Control access without slowing good work down.', 'KiteLedger is designed around clear boundaries, traceable actions, and practical safeguards for sensitive business information.', 'Explore security', '/features', null, null, [
                 ['title' => 'Role-based access', 'content' => 'Give people only the capabilities their work requires.'],
                 ['title' => 'Audit-ready activity', 'content' => 'Understand who changed what, and when.'],
-                ['title' => 'Tenant isolation', 'content' => 'Dedicated data boundaries keep customer workspaces separate.'],
-                ['title' => 'Multi-factor authentication', 'content' => 'Add stronger protection to administrator access.'],
+                ['title' => 'Customer isolation', 'content' => 'Dedicated data boundaries keep customer workspaces separate.'],
             ], 'dark'],
             ['testimonials', 'testimonials', 'From the people doing the work', 'A calmer operating rhythm for every team.', null, null, null, null, null, [], null],
             ['pricing', 'pricing', 'Simple, flexible pricing', 'Start with what fits. Grow without starting over.', 'Every plan keeps the same connected KiteLedger foundation.', null, null, null, null, [], 'mist'],
@@ -84,11 +91,12 @@ class WebsiteSeeder extends Seeder
             ]);
         }
 
+        WebsiteMenu::where('location', 'header')->update(['is_active' => false]);
         $menuSets = [
-            'header' => ['Product' => '/features', 'Solutions' => '/features#solutions', 'Features' => '/features', 'Pricing' => '/pricing', 'Resources' => '/blog', 'Company' => '/about'],
+            'header' => ['Home' => '/', 'Features' => '/features', 'Pricing' => '/pricing', 'Blogs' => '/blog', 'Resources' => '/resources', 'Contact' => '/contact'],
             'product' => ['Accounting' => '/features', 'Invoicing' => '/features', 'Inventory' => '/features', 'CRM' => '/features'],
-            'resources' => ['Resource center' => '/blog', 'Help center' => '/support', 'Contact support' => '/contact'],
-            'footer' => ['About' => '/about', 'Contact' => '/contact', 'Pricing' => '/pricing'],
+            'resources' => ['Blogs' => '/blog', 'Documentation' => '/resources', 'Contact' => '/contact'],
+            'footer' => ['Home' => '/', 'Features' => '/features', 'Contact' => '/contact', 'Pricing' => '/pricing'],
             'legal' => ['Privacy' => '/privacy-policy', 'Terms' => '/terms-of-service', 'Cookies' => '/cookie-policy'],
         ];
         foreach ($menuSets as $location => $items) {
@@ -102,6 +110,7 @@ class WebsiteSeeder extends Seeder
         }
 
         $this->seedContent();
+        $this->seedStructuredContent();
     }
 
     private function seedContent(): void
@@ -121,10 +130,10 @@ class WebsiteSeeder extends Seeder
             'faq' => [
                 'getting-started' => ['How quickly can we get started?', 'A platform administrator provisions your secure workspace, then your team can configure company settings, roles, opening data, and workflows.'],
                 'modules' => ['Do we need to use every module?', 'No. Enable the capabilities your organization needs today and expand the workspace as your processes grow.'],
-                'data-isolation' => ['How is customer data isolated?', 'Each tenant uses dedicated data boundaries together with tenant-aware application access controls.'],
+                'data-isolation' => ['How is customer data isolated?', 'Each customer uses dedicated data boundaries together with customer-aware application access controls.'],
                 'migration' => ['Can we bring data from our current tools?', 'KiteLedger supports structured imports and a guided setup process. The exact migration path depends on your source systems and plan.'],
                 'branches' => ['Does KiteLedger support multiple branches?', 'Yes. Eligible plans support branch-aware transactions, permissions, stock, reporting, and operating workflows.'],
-                'security' => ['Does KiteLedger support MFA and audit logs?', 'Yes. Administrators can protect sensitive access with multi-factor authentication and review traceable activity.'],
+                'security' => ['Does KiteLedger provide audit logs?', 'Yes. Administrators can review traceable activity and control access with roles and permissions.'],
                 'plans' => ['Can we change our plan later?', 'Yes. Plan availability and subscription changes follow the billing options configured by your platform operator.'],
                 'support' => ['What support is available?', 'Tenant users can use the support portal, while public help and contact options can be managed by the platform team.'],
             ],
@@ -142,5 +151,33 @@ class WebsiteSeeder extends Seeder
                 ]);
             }
         }
+    }
+
+    private function seedStructuredContent(): void
+    {
+        $media = null;
+        $source = base_path('docs/screenshots/kiteledger-home-desktop.png');
+        if (is_file($source)) {
+            $path = 'website/seed/kiteledger-home-desktop.png';
+            if (! Storage::disk('public')->exists($path)) Storage::disk('public')->put($path, file_get_contents($source));
+            [$width, $height] = getimagesize($source) ?: [null, null];
+            $media = Media::updateOrCreate(['path' => $path], ['disk'=>'public','original_filename'=>'kiteledger-home-desktop.png','mime_type'=>'image/png','size'=>filesize($source),'width'=>$width,'height'=>$height,'title'=>'KiteLedger dashboard','alt_text'=>'KiteLedger business dashboard overview']);
+        }
+        foreach ([
+            ['Connected accounting','connected-accounting','Keep journals, receivables, payables, tax, and financial reports in one dependable flow.'],
+            ['Inventory visibility','inventory-visibility','Understand stock, purchasing, warehouses, and movement without disconnected spreadsheets.'],
+            ['Customer relationships','customer-relationships','Connect conversations, opportunities, invoices, payments, and support history.'],
+        ] as $order => [$title,$slug,$excerpt]) WebsiteFeature::updateOrCreate(['slug'=>$slug], ['title'=>$title,'excerpt'=>$excerpt,'body'=>'<p>'.$excerpt.'</p>','featured_media_id'=>$media?->id,'status'=>'published','published_at'=>now(),'sort_order'=>$order,'seo_title'=>$title.' | KiteLedger','meta_description'=>$excerpt]);
+
+        $category = ResourceCategory::updateOrCreate(['slug'=>'getting-started'], ['name'=>'Getting Started','description'=>'Short guides for configuring a new KiteLedger workspace.','status'=>'active','sort_order'=>0]);
+        foreach ([
+            ['Set up your company','set-up-your-company','Configure company identity, currency, dates, and branding.','Open Settings, review the company profile, choose your working currency and timezone, then upload the light and dark logo variants.'],
+            ['Invite your team','invite-your-team','Add users and give each person a clear role.','Create users from the administration area, assign the smallest practical role, and verify access before sharing credentials.'],
+            ['Create your first invoice','create-your-first-invoice','Move from customer details to a polished invoice.','Add the customer, create an invoice with clear line items and due dates, then record or collect payment from the invoice workflow.'],
+        ] as $order => [$title,$slug,$excerpt,$body]) ResourceArticle::updateOrCreate(['slug'=>$slug], ['category_id'=>$category->id,'title'=>$title,'excerpt'=>$excerpt,'body'=>'<h2>'.$title.'</h2><p>'.$body.'</p>','featured_media_id'=>$media?->id,'gallery_media_ids'=>$media?->id?[$media->id]:[],'status'=>'published','published_at'=>now(),'sort_order'=>$order,'seo_title'=>$title.' | KiteLedger Resources','meta_description'=>$excerpt]);
+
+        ContactLocation::firstOrCreate(['name'=>'Main Office'], ['address'=>'Update this address in Website → Contact Locations','email'=>'hello@example.com','business_hours'=>'Monday–Friday, 9:00–17:00','is_active'=>true,'sort_order'=>0]);
+        foreach ([['LinkedIn','https://www.linkedin.com/'],['Facebook','https://www.facebook.com/'],['Instagram','https://www.instagram.com/']] as $order => [$platform,$url]) WebsiteSocialLink::firstOrCreate(['platform'=>$platform], ['url'=>$url,'icon'=>$platform,'is_active'=>false,'sort_order'=>$order]);
+        NavbarNotification::firstOrCreate(['content'=>'Welcome to KiteLedger—one connected workspace for your business.'], ['link_label'=>'Explore features','link_url'=>'/features','target'=>'same_tab','is_dismissible'=>true,'is_active'=>false,'sort_order'=>0]);
     }
 }

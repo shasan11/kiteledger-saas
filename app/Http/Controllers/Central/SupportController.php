@@ -20,6 +20,19 @@ use Inertia\Inertia;
 
 class SupportController extends Controller
 {
+    public function create()
+    {
+        return Inertia::render('Central/Support/Create', ['customers'=>Tenant::orderBy('company_name')->get(['id','company_name','owner_name','owner_email']),'categories'=>SupportCategory::where('is_active',true)->orderBy('sort_order')->get(),'admins'=>CentralAdmin::where('is_active',true)->orderBy('name')->get(['id','name'])]);
+    }
+
+    public function store(Request $request, SupportTicketService $service, CentralAuditService $audit)
+    {
+        $data=$request->validate(['tenant_id'=>['required','exists:tenants,id'],'requester_name'=>['required','string','max:255'],'requester_email'=>['required','email','max:255'],'subject'=>['required','string','max:255'],'description'=>['required','string','max:50000'],'category_id'=>['nullable','exists:support_categories,id'],'priority'=>['required',Rule::in(['low','normal','high','urgent'])],'assigned_admin_id'=>['nullable','exists:central_admin_users,id'],'notify_requester'=>['boolean']]+$service->attachmentValidationRules());
+        $notify=$data['notify_requester']??false;unset($data['notify_requester'],$data['attachments']);$ticket=$service->create($data+['source'=>'central_admin','actor_type'=>'admin','actor_id'=>$request->user('central')->id]);
+        $message=$service->reply($ticket,['sender_type'=>'admin','sender_id'=>$request->user('central')->id,'sender_name'=>$request->user('central')->name,'sender_email'=>$request->user('central')->email,'body'=>$data['description'],'is_internal_note'=>!$notify]);
+        foreach($request->file('attachments',[]) as $file)$message->attachments()->create(['ticket_id'=>$ticket->id,'disk'=>'local','path'=>$file->store('central/support/'.$ticket->id,'local'),'original_filename'=>$file->getClientOriginalName(),'mime_type'=>$file->getMimeType(),'size'=>$file->getSize(),'uploader_type'=>'admin','uploader_id'=>$request->user('central')->id]);
+        $audit->log($request,'ticket.created_manually',$ticket,[],['customer'=>$ticket->tenant_id,'subject'=>$ticket->subject]);return redirect()->route('central.support.tickets.show',$ticket)->with('success','Support ticket created.');
+    }
     public function categories()
     {
         return Inertia::render('Central/Support/Configuration', [

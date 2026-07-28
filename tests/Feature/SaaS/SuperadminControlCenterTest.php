@@ -165,12 +165,12 @@ class SuperadminControlCenterTest extends TestCase
     public function test_sensitive_setting_updates_require_the_current_admin_password(): void
     {
         $admin = CentralAdmin::create(['name' => 'Owner', 'email' => 'owner-settings@example.test', 'password' => bcrypt('correct-password'), 'role' => 'super_admin', 'is_active' => true]);
-        PlatformSetting::create(['group' => 'security', 'key' => 'security.require_mfa_for_all_admins', 'label' => 'Require MFA', 'type' => 'boolean', 'input_type' => 'switch', 'value' => false, 'requires_confirmation' => true]);
+        PlatformSetting::create(['group' => 'security', 'key' => 'security.session_lifetime', 'label' => 'Session lifetime', 'type' => 'integer', 'input_type' => 'number', 'value' => 120, 'requires_confirmation' => true]);
         $url = route('central.settings.update', 'security');
-        $this->actingAs($admin, 'central')->put($url, ['values' => ['security.require_mfa_for_all_admins' => true]])->assertStatus(422);
-        $this->assertFalse((bool) PlatformSetting::where('key', 'security.require_mfa_for_all_admins')->first()->value);
-        $this->actingAs($admin, 'central')->put($url, ['values' => ['security.require_mfa_for_all_admins' => true], 'confirmation_password' => 'correct-password'])->assertRedirect();
-        $this->assertTrue((bool) PlatformSetting::where('key', 'security.require_mfa_for_all_admins')->first()->value);
+        $this->actingAs($admin, 'central')->putJson($url, ['values' => ['security.session_lifetime' => 60]])->assertStatus(422);
+        $this->assertSame(120, (int) PlatformSetting::where('key', 'security.session_lifetime')->first()->value);
+        $this->actingAs($admin, 'central')->put($url, ['values' => ['security.session_lifetime' => 60], 'confirmation_password' => 'correct-password'])->assertRedirect();
+        $this->assertSame(60, (int) PlatformSetting::where('key', 'security.session_lifetime')->first()->value);
     }
 
     public function test_feature_override_workflow_exposes_effective_value_and_resets_to_plan(): void

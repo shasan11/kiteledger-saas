@@ -15,7 +15,7 @@ class RoleController extends Controller
     public function index()
     {
         return Inertia::render('Central/Administration/Roles', [
-            'roles' => CentralRole::with(['permissions:id,name,label'])->withCount('permissions')->orderBy('label')->get(),
+            'roles' => CentralRole::with(['permissions:id,name,label'])->withCount(['permissions','admins'])->orderBy('label')->get(),
             'permissions' => CentralPermission::query()->orderBy('name')->get(['id', 'name', 'label'])->groupBy(fn (CentralPermission $permission) => str($permission->name)->before('.')->toString()),
         ]);
     }

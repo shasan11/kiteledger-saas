@@ -137,12 +137,14 @@ class AppSettingController extends BaseCrudApiController
     {
         $record = AppSetting::query()->orderBy('created_at')->first();
         $platform = app(PlatformSettingsService::class)->publicSettings();
+        $colorOverrides = tenancy()->initialized ? ($record?->toArray() ?? []) : [];
 
         return response()->json([
             'app_name' => $record?->company_name ?: ($platform['platform.name'] ?? $platform['general.platform_name'] ?? config('app.name')),
             'logo_url' => $this->brandAssetUrl($record?->logo, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl()),
             'dark_logo_url' => $this->brandAssetUrl($record?->dark_logo, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl()),
             'favicon_url' => $this->brandAssetUrl($record?->favicon, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl()),
+            ...$this->softwareColors($platform, $colorOverrides),
         ]);
     }
 
@@ -262,8 +264,7 @@ class AppSettingController extends BaseCrudApiController
         $data['logo_url'] = $this->brandAssetUrl($record->logo, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl());
         $data['dark_logo_url'] = $this->brandAssetUrl($record->dark_logo, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl());
         $data['favicon_url'] = $this->brandAssetUrl($record->favicon, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl());
-        $data['brand_primary_color'] = ($data['brand_primary_color'] ?? null) ?: ($platform['branding.primary_color'] ?? null);
-        $data['brand_secondary_color'] = ($data['brand_secondary_color'] ?? null) ?: ($platform['branding.secondary_color'] ?? null);
+        $data = [...$data, ...$this->softwareColors($platform, $data)];
 
         return $data;
     }
@@ -291,9 +292,30 @@ class AppSettingController extends BaseCrudApiController
             'logo_url' => $this->brandAssetUrl(null, $platform['branding.light_logo'] ?? null, fn () => Branding::logoUrl()),
             'dark_logo_url' => $this->brandAssetUrl(null, $platform['branding.dark_logo'] ?? null, fn () => Branding::darkLogoUrl()),
             'favicon_url' => $this->brandAssetUrl(null, $platform['branding.favicon'] ?? null, fn () => Branding::faviconUrl()),
-            'brand_primary_color' => $platform['branding.primary_color'] ?? null,
-            'brand_secondary_color' => $platform['branding.secondary_color'] ?? null,
+            ...$this->softwareColors($platform),
         ];
+    }
+
+    private function softwareColors(array $platform, array $overrides = []): array
+    {
+        $map = [
+            'brand_primary_color' => ['branding.software_primary_color', 'branding.primary_color'],
+            'brand_secondary_color' => ['branding.software_secondary_color', 'branding.secondary_color'],
+            'brand_accent_color' => ['branding.software_accent_color'],
+            'brand_sidebar_color' => ['branding.software_sidebar_color'],
+            'brand_header_color' => ['branding.software_header_color'],
+            'brand_text_color' => ['branding.software_text_color'],
+        ];
+
+        return collect($map)->mapWithKeys(function (array $keys, string $output) use ($platform, $overrides) {
+            $value = $overrides[$output] ?? null;
+
+            foreach ($keys as $key) {
+                $value = $value ?: ($platform[$key] ?? null);
+            }
+
+            return [$output => $value];
+        })->all();
     }
 
     protected function handleBrandingUploads(Request $request, AppSetting $record): void
