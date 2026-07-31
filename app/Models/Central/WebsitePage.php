@@ -14,7 +14,7 @@ class WebsitePage extends CentralModel
         return [
             'content' => 'array', 'published_at' => 'datetime', 'scheduled_at' => 'datetime',
             'robots_index' => 'boolean', 'robots_follow' => 'boolean', 'schema_json' => 'array',
-            'sitemap_include' => 'boolean',
+            'sitemap_include' => 'boolean', 'draft_payload' => 'array', 'draft_updated_at' => 'datetime',
         ];
     }
 
@@ -36,6 +36,18 @@ class WebsitePage extends CentralModel
     public function revisions()
     {
         return $this->hasMany(WebsiteRevision::class, 'revisionable_id')->where('revisionable_type', self::class)->latest('created_at');
+    }
+
+    public function publicPath(): string
+    {
+        if ($this->slug === 'home') {
+            return '/';
+        }
+        if (in_array($this->slug, ['features', 'contact', 'privacy-policy', 'terms-of-service', 'cookie-policy'], true)) {
+            return '/'.$this->slug;
+        }
+
+        return '/p/'.$this->slug;
     }
 
     public function setBodyAttribute(?string $value): void

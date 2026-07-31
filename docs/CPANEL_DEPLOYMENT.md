@@ -72,7 +72,7 @@ Run this checklist before accepting a shared-host installation:
 14. Retry provisioning for an already active tenant only from the documented retry action and confirm no duplicate owner, branch, role, subscription, or seed data is created.
 15. Attempt a third tenant while the pool is empty and confirm a safe `pool_exhausted` failure is shown.
 16. Add a third empty database from central admin, revalidate it, retry the failed tenant, and confirm it provisions successfully.
-17. Request and approve a test deletion only after a verified backup or explicit waiver. Confirm the database ownership marker is checked before the database is recycled.
+17. Request and approve a test deletion using the administrator password, typed confirmation, and a recorded reason. Confirm the database ownership marker is checked before the database is recycled.
 
 ## cPanel UAPI manual test
 
@@ -107,7 +107,7 @@ Copy `.env.example`, set a unique `APP_KEY`, use `APP_ENV=production`, `APP_DEBU
 
 After deploying or changing domains, confirm `SESSION_DOMAIN=null`, `SESSION_SECURE_COOKIE=true`, and `APP_URL=https://yourdomain.com`. If Cloudflare or another reverse proxy terminates TLS, configure its actual IP ranges in `TRUSTED_PROXY_IPS`. Then run `php artisan optimize:clear` and retry in a fresh browser window. The tenant-specific cookie prefix defaults to `kiteledger-tenant-session`; changing `TENANT_SESSION_COOKIE_PREFIX` logs tenant users out once. Old parent-domain session cookies are ignored by the tenant routes after this release.
 
-If symlinks are allowed, run `php artisan storage:link`. Without symlinks, Laravel serves authorized files through application routes; private documents, PDFs, exports, and backups must never be copied into public storage.
+If symlinks are allowed, run `php artisan storage:link`. Without symlinks, Laravel serves authorized files through application routes; private documents, PDFs, exports, and database dumps must never be copied into public storage.
 
 ## Cron
 
@@ -122,7 +122,7 @@ Laravel overlap locks prevent duplicate scheduled work. `DB_QUEUE_RETRY_AFTER` m
 
 ## Verification, updates, and rollback
 
-Run `php artisan saas:health`, `php artisan migrate --force`, `php artisan tenants:migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache`. Verify the central host, an active tenant subdomain, an unknown host, suspension, subscription expiry, mail, queue heartbeat, private uploads, and a test backup. The queue heartbeat turns healthy only after the scheduler enqueues the heartbeat job and the `queue:work central --queue=provisioning,default` cron processes the `default` queue.
+Run `php artisan saas:health`, `php artisan migrate --force`, `php artisan tenants:migrate --force`, `php artisan config:cache`, `php artisan route:cache`, and `php artisan view:cache`. Verify the central host, an active tenant subdomain, an unknown host, suspension, subscription expiry, mail, queue heartbeat, and private uploads. The queue heartbeat turns healthy only after the scheduler enqueues the heartbeat job and the `queue:work central --queue=provisioning,default` cron processes the `default` queue.
 
 Before updating, back up the central database, every tenant database, `.env`, and tenant files. Deploy code, install production Composer dependencies, run additive migrations, build assets, refresh caches, and process the queue. Roll back code only when migrations are backward compatible; restore databases from verified backups when necessary.
 

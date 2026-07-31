@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-RbF_zoRI.js";import t from"./ManufacturingShow-B3J5O9uH.js";var n=e();function r({id:e,...r}){return(0,n.jsx)(t,{id:e,documentType:`production_order`,...r})}export{r as default};

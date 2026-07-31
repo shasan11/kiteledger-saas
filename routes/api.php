@@ -57,6 +57,7 @@ use App\Http\Controllers\Api\EmployeeProfileController;
 use App\Http\Controllers\Api\EmploymentStatusController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FiscalYearController;
+use App\Http\Controllers\Api\FixedAssetController;
 use App\Http\Controllers\Api\GeneralSettingController;
 use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\InventoryAdjustmentController;
@@ -253,6 +254,7 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
 
     Route::post('fiscal-years/{id}/mark-current', [FiscalYearController::class, 'markCurrent']);
     Route::post('fiscal-years/{id}/close', [FiscalYearController::class, 'close']);
+    Route::post('fiscal-years/{id}/reopen', [FiscalYearController::class, 'reopen']);
     Route::apiResource('fiscal-years', FiscalYearController::class);
 
     Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->group(function () {
@@ -359,6 +361,9 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
             ->parameters([
                 'journal-vouchers' => 'journalVoucher',
             ]);
+        Route::post('fixed-assets/{fixedAsset}/depreciate', [FixedAssetController::class, 'depreciate']);
+        Route::post('fixed-assets/{fixedAsset}/dispose', [FixedAssetController::class, 'dispose']);
+        Route::apiResource('fixed-assets', FixedAssetController::class);
 
         /*
         |--------------------------------------------------------------------------

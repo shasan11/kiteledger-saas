@@ -17,7 +17,7 @@ export default function Menus({ location, locations, menus, pages }) {
     const columns = [
         { title: 'Order', width: 100, render: (_, row, index) => <Space><Button size="small" icon={<ArrowUpOutlined/>} disabled={index === 0} onClick={() => move(index, -1)}/><Button size="small" icon={<ArrowDownOutlined/>} disabled={index === menus.length - 1} onClick={() => move(index, 1)}/></Space> },
         { title: 'Label', dataIndex: 'label', render: (value, row) => <><strong>{value}</strong>{row.parent_id && <Tag style={{ marginLeft: 8 }}>Nested</Tag>}</> },
-        { title: 'Destination', render: (_, row) => row.page ? `${row.page.title} (/${row.page.slug})` : row.url },
+        { title: 'Destination', render: (_, row) => row.page ? `${row.page.title} (${row.page.slug === 'home' ? '/' : `/${row.page.slug}`})` : row.url },
         { title: 'Target', dataIndex: 'target' },
         { title: 'Icon', dataIndex: 'icon', render: (value) => value || '—' },
         { title: 'Status', dataIndex: 'is_active', render: (value) => <Tag color={value ? 'green' : 'default'}>{value ? 'Active' : 'Hidden'}</Tag> },

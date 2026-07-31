@@ -10,4 +10,9 @@ class WebsiteRevision extends CentralModel
     {
         return ['snapshot' => 'array', 'created_at' => 'datetime'];
     }
+
+    public function admin()
+    {
+        return $this->belongsTo(CentralAdmin::class, 'admin_id')->withTrashed();
+    }
 }

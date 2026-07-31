@@ -10,11 +10,19 @@ import {
     PlusOutlined, RiseOutlined, TeamOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { Button, Col, Empty, Row, Space, Table, Typography } from 'antd';
+import { Select } from 'antd';
+import { useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-export default function Dashboard({ metrics = {}, recentTenants = [], recentPayments = [], urgentTickets = [], provisioningFunnel = [], planDistribution = [], revenueTrend = [], attention = [], health = [], activity = [] }) {
+export default function Dashboard({ metrics = {}, financials = {}, recentTenants = [], recentPayments = [], urgentTickets = [], provisioningFunnel = [], planDistribution = [], attention = [], health = [], activity = [] }) {
     const user = usePage().props?.auth?.user;
     const firstName = (user?.name || 'Administrator').split(' ')[0];
+    const revenueCurrencies = financials.revenue || [];
+    const [revenueCurrency, setRevenueCurrency] = useState(revenueCurrencies[0]?.currency || 'USD');
+    const selectedRevenue = revenueCurrencies.find((item) => item.currency === revenueCurrency) || { total: 0, trend: [] };
+    const formatCurrencyTotals = (items, valueKey) => items?.length
+        ? items.map((item) => formatMoney(item[valueKey], item.currency, true)).join(' · ')
+        : formatMoney(0, 'USD', true);
     const plans = planDistribution.map((item) => ({ name: item.plan?.name || 'No plan', tenants: Number(item.total) }));
     const customerStatus = [
         { status: 'Active', customers: Number(metrics.activeTenants || 0) },
@@ -40,10 +48,10 @@ export default function Dashboard({ metrics = {}, recentTenants = [], recentPaym
         </section>
 
         <Row gutter={[14,14]}>
-            <Col xs={24} sm={12} xl={6}><MetricCard label="Monthly recurring revenue" value={formatMoney(metrics.mrr, 'USD', true)} helper={`${formatMoney(metrics.arr, 'USD', true)} ARR`} icon={<DollarOutlined />} /></Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard label="Monthly recurring revenue" value={formatCurrencyTotals(financials.recurring, 'mrr')} helper={`${formatCurrencyTotals(financials.recurring, 'arr')} ARR`} icon={<DollarOutlined />} /></Col>
             <Col xs={24} sm={12} xl={6}><MetricCard label="Active customers" value={Number(metrics.activeTenants || 0).toLocaleString()} helper={`${metrics.totalTenants || 0} total customers`} icon={<TeamOutlined />} tone="blue" /></Col>
             <Col xs={24} sm={12} xl={6}><MetricCard label="New signups" value={Number(metrics.newSignups || 0).toLocaleString()} trend={metrics.signupGrowth} helper="vs previous month" icon={<RiseOutlined />} tone="violet" /></Col>
-            <Col xs={24} sm={12} xl={6}><MetricCard label="Outstanding balance" value={formatMoney(metrics.outstandingBalance, 'USD', true)} helper={`${metrics.failedPayments || 0} failed payments`} icon={<CreditCardOutlined />} tone={metrics.failedPayments ? 'rose' : 'amber'} /></Col>
+            <Col xs={24} sm={12} xl={6}><MetricCard label="Outstanding balance" value={formatCurrencyTotals(financials.outstanding, 'amount')} helper={`${metrics.failedPayments || 0} failed payments`} icon={<CreditCardOutlined />} tone={metrics.failedPayments ? 'rose' : 'amber'} /></Col>
         </Row>
 
         <SectionCard title="Customer status" description="Current customer lifecycle counts" style={{ marginTop: 14 }}>
@@ -51,8 +59,8 @@ export default function Dashboard({ metrics = {}, recentTenants = [], recentPaym
         </SectionCard>
 
         <Row gutter={[16,16]} style={{ marginTop: 16 }}>
-            <Col xs={24} xl={15}><SectionCard title="Revenue momentum" description="Successful payments over the last 12 months" extra={<Typography.Text strong>{formatMoney(metrics.totalRevenue, 'USD', true)} lifetime</Typography.Text>}>
-                <ResponsiveContainer width="100%" height={290}><AreaChart data={revenueTrend} margin={{ top:10,right:5,left:-15,bottom:0 }}><defs><linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0f766e" stopOpacity={.25}/><stop offset="95%" stopColor="#0f766e" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb"/><XAxis dataKey="month" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/><Tooltip formatter={(value) => formatMoney(value)}/><Area type="monotone" dataKey="revenue" stroke="#0f766e" strokeWidth={3} fill="url(#revenueFill)"/></AreaChart></ResponsiveContainer>
+            <Col xs={24} xl={15}><SectionCard title="Revenue momentum" description="Net successful payments after refunds over the last 12 months" extra={<Space><Typography.Text strong>{formatMoney(selectedRevenue.total, revenueCurrency, true)} lifetime</Typography.Text>{revenueCurrencies.length > 1 && <Select size="small" value={revenueCurrency} onChange={setRevenueCurrency} options={revenueCurrencies.map((item) => ({ value: item.currency, label: item.currency }))}/>}</Space>}>
+                <ResponsiveContainer width="100%" height={290}><AreaChart data={selectedRevenue.trend} margin={{ top:10,right:5,left:-15,bottom:0 }}><defs><linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0f766e" stopOpacity={.25}/><stop offset="95%" stopColor="#0f766e" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb"/><XAxis dataKey="month" axisLine={false} tickLine={false}/><YAxis axisLine={false} tickLine={false}/><Tooltip formatter={(value) => formatMoney(value, revenueCurrency)}/><Area type="monotone" dataKey="revenue" stroke="#0f766e" strokeWidth={3} fill="url(#revenueFill)"/></AreaChart></ResponsiveContainer>
             </SectionCard></Col>
             <Col xs={24} xl={9}><SectionCard title="Plan mix" description="Customer distribution by current plan">
                 {plans.length ? <ResponsiveContainer width="100%" height={290}><BarChart data={plans} layout="vertical" margin={{ top:10,right:15,left:10,bottom:0 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb"/><XAxis type="number" axisLine={false} tickLine={false}/><YAxis dataKey="name" type="category" width={90} axisLine={false} tickLine={false}/><Tooltip/><Bar dataKey="tenants" fill="#2563eb" radius={[0,7,7,0]} barSize={18}/></BarChart></ResponsiveContainer> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No plan data yet" />}

@@ -11,10 +11,10 @@ use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -45,8 +45,8 @@ class SettingsController extends Controller
             ],
             'status' => $status,
             'commands' => [
-                'worker' => 'php artisan queue:work --queue=provisioning,communication,notifications,mail,default --tries=3 --timeout=1800',
-                'worker_once' => 'php artisan queue:work --queue=provisioning,communication,notifications,mail,default --stop-when-empty --tries=3 --timeout=1800',
+                'worker' => 'php artisan queue:work central --queue=provisioning,billing,communication,notifications,mail,default --tries=3 --timeout=1800',
+                'worker_once' => 'php artisan queue:work central --queue=provisioning,billing,communication,notifications,mail,default --stop-when-empty --tries=3 --timeout=1800',
                 'scheduler' => '* * * * * cd /absolute/path/to/kiteledger && php artisan schedule:run >> /dev/null 2>&1',
                 'windows_scheduler' => 'php artisan schedule:run',
                 'inspect_schedule' => 'php artisan schedule:list',

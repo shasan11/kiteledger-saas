@@ -3,6 +3,8 @@
 namespace Tests\Feature\SaaS;
 
 use App\Http\Controllers\Tenant\CentralSupportController;
+use App\Jobs\SaaS\ProcessBillingWebhookJob;
+use App\Models\Central\BillingWebhookEvent;
 use App\Models\Central\BlogCategory;
 use App\Models\Central\BlogPost;
 use App\Models\Central\BlogTag;
@@ -39,6 +41,51 @@ use Tests\TestCase;
 class SuperadminRequirementsTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_successful_webhook_reuses_pending_checkout_and_renews_only_once(): void
+    {
+        $this->travelTo(now()->setDate(2026, 7, 15)->startOfDay());
+        [$subscription, $tenant] = $this->subscription(100);
+        $invoice = app(BillingInvoiceService::class)->generate($subscription, 'webhook-renewal-invoice');
+        $originalPeriodEnd = $subscription->current_period_ends_at->copy();
+        $pending = PaymentTransaction::create([
+            'tenant_id' => $tenant->id,
+            'invoice_id' => $invoice->id,
+            'gateway' => 'stripe',
+            'gateway_transaction_id' => 'cs_checkout_123',
+            'amount' => 100,
+            'currency' => 'USD',
+            'status' => 'pending',
+            'payment_method' => 'stripe',
+            'idempotency_key' => 'checkout-attempt-123',
+        ]);
+        $payload = ['data' => ['object' => [
+            'id' => 'cs_checkout_123',
+            'payment_intent' => 'pi_paid_123',
+            'payment_status' => 'paid',
+            'amount_total' => 10000,
+            'currency' => 'usd',
+            'metadata' => ['invoice_id' => (string) $invoice->id],
+        ]]];
+        $event = BillingWebhookEvent::create(['gateway' => 'stripe', 'event_type' => 'checkout.session.completed', 'event_id' => 'evt_paid_123', 'payload' => $payload, 'status' => 'pending']);
+
+        dispatch_sync(new ProcessBillingWebhookJob($event->id));
+
+        $this->assertSame('processed', $event->refresh()->status);
+        $this->assertSame('paid', $invoice->refresh()->status);
+        $this->assertSame('success', $pending->refresh()->status);
+        $this->assertSame('pi_paid_123', $pending->gateway_transaction_id);
+        $this->assertSame(1, PaymentTransaction::where('invoice_id', $invoice->id)->count());
+        $renewedPeriodEnd = $subscription->refresh()->current_period_ends_at;
+        $this->assertTrue($renewedPeriodEnd->equalTo($originalPeriodEnd->copy()->addMonth()));
+
+        $duplicate = BillingWebhookEvent::create(['gateway' => 'stripe', 'event_type' => 'checkout.session.completed', 'event_id' => 'evt_paid_123_retry', 'payload' => $payload, 'status' => 'pending']);
+        dispatch_sync(new ProcessBillingWebhookJob($duplicate->id));
+
+        $this->assertSame('processed', $duplicate->refresh()->status);
+        $this->assertTrue($subscription->refresh()->current_period_ends_at->equalTo($renewedPeriodEnd));
+        $this->assertSame(1, PaymentTransaction::where('invoice_id', $invoice->id)->count());
+    }
 
     public function test_invoice_generation_uses_configured_sequence_tax_due_date_and_idempotency(): void
     {

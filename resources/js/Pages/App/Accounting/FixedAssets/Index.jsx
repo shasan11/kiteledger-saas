@@ -1,20 +1,30 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head } from '@inertiajs/react';
+import { Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, message } from 'antd';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
+import dayjs from 'dayjs';
 
-export default function Index() {
-    return (
-        <AuthenticatedLayout
-            header={
-                <h2 className="text-xl font-semibold leading-tight text-gray-800">
-                    Fixed Asset
-                </h2>
-            }
-        >
-            <Head title="Fixed Asset" />
-
-            <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-gray-700">
-                Fixed Asset page
-            </div>
-        </AuthenticatedLayout>
-    );
+export default function Index({ branches = [], accounts = [] }) {
+    const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [record, setRecord] = useState(null); const [open, setOpen] = useState(false); const [action, setAction] = useState(null);
+    const [form] = Form.useForm(); const [actionForm] = Form.useForm();
+    const accountOptions = accounts.map(item => ({value:item.id,label:`${item.code || ''} ${item.name}`.trim()}));
+    const load = async () => { setLoading(true); try { const {data} = await axios.get('/api/fixed-assets'); setRows(data.data || []); } finally { setLoading(false); } };
+    useEffect(() => { load(); }, []);
+    const edit = (asset = null) => { setRecord(asset); form.resetFields(); form.setFieldsValue(asset ? {...asset,purchase_date:asset.purchase_date?.slice(0,10),in_service_date:asset.in_service_date?.slice(0,10)} : {depreciation_method:'straight_line',salvage_value:0,useful_life_months:60}); setOpen(true); };
+    const save = async values => { try { record ? await axios.put(`/api/fixed-assets/${record.id}`, values) : await axios.post('/api/fixed-assets', values); setOpen(false); await load(); message.success('Fixed asset saved.'); } catch (error) { showError(error); } };
+    const submitAction = async values => { try { await axios.post(`/api/fixed-assets/${action.asset.id}/${action.type}`, values); setAction(null); actionForm.resetFields(); await load(); message.success(action.type === 'depreciate' ? 'Depreciation posted.' : 'Asset disposed.'); } catch (error) { showError(error); } };
+    const remove = asset => Modal.confirm({title:`Delete ${asset.name}?`,content:'Only assets without accounting activity can be deleted.',okButtonProps:{danger:true},onOk:async()=>{try{await axios.delete(`/api/fixed-assets/${asset.id}`);await load();}catch(error){showError(error);}}});
+    const columns = [
+        {title:'Asset',render:(_,row)=><><strong>{row.asset_code}</strong><br/>{row.name}</>},
+        {title:'Cost',render:(_,row)=>Number(row.cost).toLocaleString(undefined,{minimumFractionDigits:2})},
+        {title:'Accumulated depreciation',render:(_,row)=>Number(row.accumulated_depreciation).toLocaleString(undefined,{minimumFractionDigits:2})},
+        {title:'Book value',render:(_,row)=><strong>{Number(row.book_value).toLocaleString(undefined,{minimumFractionDigits:2})}</strong>},
+        {title:'Life',render:(_,row)=>`${row.useful_life_months} months`},
+        {title:'Status',render:(_,row)=><Tag color={row.status === 'active' ? 'green' : 'default'}>{row.status}</Tag>},
+        {title:'',render:(_,row)=><Space><Button onClick={()=>edit(row)} disabled={row.status==='disposed'}>Edit</Button><Button onClick={()=>{setAction({type:'depreciate',asset:row});actionForm.setFieldsValue({depreciation_date:dayjs().format('YYYY-MM-DD')});}} disabled={row.status!=='active'}>Depreciate</Button><Button onClick={()=>setAction({type:'dispose',asset:row})} disabled={row.status!=='active'}>Dispose</Button><Button danger onClick={()=>remove(row)}>Delete</Button></Space>},
+    ];
+    return <AuthenticatedLayout header={<div className="flex items-center justify-between"><h2 className="text-xl font-semibold text-gray-800">Fixed Assets</h2><Button type="primary" onClick={()=>edit()}>Add asset</Button></div>}><Head title="Fixed Assets"/><div className="rounded-lg bg-white p-5 shadow"><Table rowKey="id" loading={loading} dataSource={rows} columns={columns} scroll={{x:1100}}/></div><Drawer width={620} open={open} title={record?'Edit fixed asset':'Add fixed asset'} onClose={()=>setOpen(false)} extra={<Button type="primary" onClick={()=>form.submit()}>Save</Button>}><Form form={form} layout="vertical" onFinish={save}><div className="grid grid-cols-2 gap-3"><Form.Item name="asset_code" label="Asset code" rules={[{required:true}]}><Input/></Form.Item><Form.Item name="name" label="Asset name" rules={[{required:true}]}><Input/></Form.Item><Form.Item name="branch_id" label="Branch"><Select allowClear options={branches.map(item=>({value:item.id,label:item.name}))}/></Form.Item><Form.Item name="purchase_date" label="Purchase date" rules={[{required:true}]}><Input type="date"/></Form.Item><Form.Item name="in_service_date" label="In-service date" rules={[{required:true}]}><Input type="date"/></Form.Item><Form.Item name="cost" label="Cost" rules={[{required:true}]}><InputNumber min={0.01} precision={2} style={{width:'100%'}}/></Form.Item><Form.Item name="salvage_value" label="Salvage value" rules={[{required:true}]}><InputNumber min={0} precision={2} style={{width:'100%'}}/></Form.Item><Form.Item name="useful_life_months" label="Useful life (months)" rules={[{required:true}]}><InputNumber min={1} style={{width:'100%'}}/></Form.Item></div><Form.Item name="depreciation_method" label="Depreciation method"><Select options={[{value:'straight_line',label:'Straight line'}]}/></Form.Item><Form.Item name="asset_account_id" label="Fixed asset account" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={accountOptions}/></Form.Item><Form.Item name="accumulated_depreciation_account_id" label="Accumulated depreciation account" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={accountOptions}/></Form.Item><Form.Item name="depreciation_expense_account_id" label="Depreciation expense account" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={accountOptions}/></Form.Item><Form.Item name="notes" label="Notes"><Input.TextArea rows={3}/></Form.Item></Form></Drawer><Modal open={Boolean(action)} title={action?.type==='depreciate'?'Post depreciation':'Dispose fixed asset'} onCancel={()=>setAction(null)} onOk={()=>actionForm.submit()} okText={action?.type==='depreciate'?'Post depreciation':'Post disposal'}><Form form={actionForm} layout="vertical" onFinish={submitAction}>{action?.type==='depreciate'?<><Form.Item name="depreciation_date" label="Depreciation date" rules={[{required:true}]}><Input type="date"/></Form.Item><Form.Item name="amount" label="Amount" extra="Leave blank to use the straight-line monthly amount."><InputNumber min={0.01} precision={2} style={{width:'100%'}}/></Form.Item></>:<><Form.Item name="disposed_at" label="Disposal date" rules={[{required:true}]}><Input type="date"/></Form.Item><Form.Item name="proceeds" label="Proceeds" rules={[{required:true}]}><InputNumber min={0} precision={2} style={{width:'100%'}}/></Form.Item><Form.Item name="proceeds_account_id" label="Cash/bank proceeds account" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={accountOptions}/></Form.Item><Form.Item name="gain_loss_account_id" label="Gain or loss account" rules={[{required:true}]}><Select showSearch optionFilterProp="label" options={accountOptions}/></Form.Item></>}</Form></Modal></AuthenticatedLayout>;
 }
+
+function showError(error) { const errors=error.response?.data?.errors; message.error(errors ? Object.values(errors).flat()[0] : error.response?.data?.message || 'The operation failed.'); }

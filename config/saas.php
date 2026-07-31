@@ -12,7 +12,6 @@ return [
     'provision_sync' => env('TENANT_PROVISION_SYNC', env('QUEUE_CONNECTION') === 'sync'),
     'allow_uninitialized_tenant_models' => env('SAAS_ALLOW_UNINITIALIZED_TENANT_MODELS', false),
     'grace_period_days' => (int) env('SUBSCRIPTION_GRACE_PERIOD_DAYS', 3),
-    'backup_retention_days' => (int) env('SAAS_BACKUP_RETENTION_DAYS', 30),
     'deletion_wait_days' => (int) env('SAAS_DELETION_WAIT_DAYS', 14),
     'database' => [
         'mode' => env('TENANT_DB_PROVISIONING_MODE', env('TENANT_DATABASE_PROVISIONING_MODE', 'manual')),

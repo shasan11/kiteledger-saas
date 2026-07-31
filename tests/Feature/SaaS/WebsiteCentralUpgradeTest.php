@@ -37,9 +37,12 @@ class WebsiteCentralUpgradeTest extends TestCase
         $this->assertSame('+977', PhoneNumber::callingCode('NP'));
     }
 
-    public function test_mfa_routes_are_removed(): void
+    public function test_superadmin_mfa_routes_are_available(): void
     {
-        $this->assertFalse(Route::has('central.mfa.challenge'));
-        $this->assertFalse(Route::has('central.profile.mfa.enable'));
+        $this->assertTrue(Route::has('central.mfa.challenge'));
+        $this->assertTrue(Route::has('central.mfa.verify'));
+        $this->assertTrue(Route::has('central.profile.mfa.setup'));
+        $this->assertTrue(Route::has('central.profile.mfa.confirm'));
+        $this->assertTrue(Route::has('central.profile.mfa.disable'));
     }
 }

@@ -10,6 +10,6 @@ class TenantDeletionRequest extends CentralModel
 
     protected function casts(): array
     {
-        return ['execute_after' => 'datetime', 'backup_waived' => 'boolean'];
+        return ['execute_after' => 'datetime'];
     }
 }

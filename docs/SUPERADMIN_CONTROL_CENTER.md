@@ -88,7 +88,7 @@ Run the scheduler every minute so the five-minute SLA task can mark breaches and
 Production should run a central/provisioning queue worker:
 
 ```bash
-php artisan queue:work central --queue=provisioning,default --tries=3 --timeout=1800
+php artisan queue:work central --queue=provisioning,billing,communication,notifications,mail,default --tries=3 --timeout=1800
 ```
 
 Database notifications are the durable baseline. Email and optional Slack delivery are controlled by Email and Notifications settings. Keep failure retention, retries, scheduler health, and recipients configured. Installation/tests use the synchronous queue fallback.
@@ -100,7 +100,7 @@ Database notifications are the durable baseline. Email and optional Slack delive
 - Require MFA for privileged users and sensitive actions.
 - Rotate installer credentials before external access.
 - Use private storage for tickets and payment proof.
-- Validate queue/scheduler heartbeats and backup restoration.
+- Validate queue and scheduler heartbeats before enabling automated operations.
 - Configure mail, webhooks, rate limits, and alerts.
 - Review gateways before enabling them.
 - Remove unused administrators and review role assignments.

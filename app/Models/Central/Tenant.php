@@ -47,11 +47,6 @@ class Tenant extends \App\Models\Tenant
         return $this->hasMany(ProvisioningLog::class);
     }
 
-    public function backupManifests(): HasMany
-    {
-        return $this->hasMany(BackupManifest::class);
-    }
-
     public function deletionRequests(): HasMany
     {
         return $this->hasMany(TenantDeletionRequest::class);

@@ -79,6 +79,29 @@ class ProductionHardeningTest extends TestCase
         $this->assertNull(tenant());
     }
 
+    public function test_localhost_can_initialize_single_active_local_customer(): void
+    {
+        InstalledState::mark();
+        config(['tenancy.central_domains' => ['127.0.0.1', 'localhost']]);
+
+        $tenant = Tenant::create([
+            'id' => 'tenant-localhost',
+            'company_name' => 'Local Customer',
+            'owner_name' => 'Owner',
+            'owner_email' => 'local@test.invalid',
+            'status' => TenantStatus::Active->value,
+            'provisioned_at' => now(),
+        ]);
+
+        $request = Request::create('http://localhost/dashboard', 'GET', server: ['HTTP_ACCEPT' => 'text/html']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('local tenant ready'));
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame($tenant->id, tenant('id'));
+
+        tenancy()->end();
+    }
+
     public function test_disabled_domain_fails_closed(): void
     {
         InstalledState::mark();

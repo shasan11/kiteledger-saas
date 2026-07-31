@@ -3,7 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Enums\DomainStatus;
+use App\Enums\TenantStatus;
 use App\Models\Central\Domain;
+use App\Models\Tenant;
 use App\Support\Installer\InstalledState;
 use Closure;
 use Illuminate\Database\QueryException;
@@ -24,11 +26,15 @@ class InitializeTenancyByVerifiedDomain
         }
 
         $host = strtolower(rtrim($request->getHost(), '.'));
-        if (in_array($host, array_map('strtolower', config('tenancy.central_domains', [])), true)) {
-            return $this->notFound($request);
-        }
-
         try {
+            if ($this->isLocalHost($host) && $this->initializeSingleLocalTenant()) {
+                return $next($request);
+            }
+
+            if (in_array($host, array_map('strtolower', config('tenancy.central_domains', [])), true)) {
+                return $this->notFound($request);
+            }
+
             $domain = Domain::query()->with('tenant')->whereRaw('LOWER(domain) = ?', [$host])->first();
             if (! $domain || $domain->status !== DomainStatus::Active->value || ! $domain->verified_at || ! $domain->tenant) {
                 return $this->notFound($request);
@@ -53,6 +59,28 @@ class InitializeTenancyByVerifiedDomain
         }
 
         return $next($request);
+    }
+
+    private function isLocalHost(string $host): bool
+    {
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    }
+
+    private function initializeSingleLocalTenant(): bool
+    {
+        $tenants = Tenant::query()
+            ->whereIn('status', [TenantStatus::Active->value, 'trialing'])
+            ->whereNotNull('provisioned_at')
+            ->limit(2)
+            ->get();
+
+        if ($tenants->count() !== 1) {
+            return false;
+        }
+
+        tenancy()->initialize($tenants->first());
+
+        return true;
     }
 
     private function notFound(Request $request): Response

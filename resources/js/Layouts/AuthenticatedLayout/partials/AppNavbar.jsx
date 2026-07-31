@@ -127,42 +127,25 @@ export default function AppNavbar({
         const shared = {
             primary,
             primaryHover: token.colorPrimaryHover || primary,
-            primarySoft: rgba(primary, isDarkMode ? 0.16 : 0.1),
-            primaryBorder: rgba(primary, isDarkMode ? 0.38 : 0.24),
+            primarySoft: rgba(primary, 0.16),
+            primaryBorder: rgba(primary, 0.38),
         };
-
-        if (isDarkMode) {
-            return {
-                ...shared,
-                nav: 'rgba(8, 13, 24, 0.96)',
-                navSoft: '#101827',
-                navElevated: '#172234',
-                surface: '#0d1524',
-                border: 'rgba(148, 163, 184, 0.14)',
-                borderStrong: 'rgba(148, 163, 184, 0.3)',
-                text: '#f8fafc',
-                textSecondary: '#cbd5e1',
-                textMuted: '#94a3b8',
-                shadow: '0 12px 36px rgba(2, 6, 23, 0.34)',
-            };
-        }
 
         return {
             ...shared,
-            nav: 'rgba(255, 255, 255, 0.96)',
-            navSoft: '#f4f7fb',
-            navElevated: '#eaf0f7',
-            surface: '#ffffff',
-            border: 'rgba(15, 23, 42, 0.09)',
-            borderStrong: 'rgba(15, 23, 42, 0.18)',
-            text: '#0f172a',
-            textSecondary: '#334155',
-            textMuted: '#64748b',
-            shadow: '0 12px 34px rgba(15, 23, 42, 0.12)',
+            nav: 'rgba(8, 13, 24, 0.96)',
+            navSoft: '#101827',
+            navElevated: '#172234',
+            surface: '#0d1524',
+            border: 'rgba(148, 163, 184, 0.14)',
+            borderStrong: 'rgba(148, 163, 184, 0.3)',
+            text: '#f8fafc',
+            textSecondary: '#cbd5e1',
+            textMuted: '#94a3b8',
+            shadow: '0 12px 36px rgba(2, 6, 23, 0.34)',
         };
     }, [
         brandSettings?.brand_primary_color,
-        isDarkMode,
         token.colorPrimary,
         token.colorPrimaryHover,
     ]);
@@ -292,7 +275,7 @@ export default function AppNavbar({
                         >
                             <ApplicationLogo
                                 className="app-navbar__logo"
-                                dark={isDarkMode}
+                                dark={false}
                                 style={{ width: logoWidth, maxWidth: '100%' }}
                             />
                         </Link>

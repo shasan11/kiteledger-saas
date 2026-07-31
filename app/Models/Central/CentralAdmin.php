@@ -14,11 +14,11 @@ class CentralAdmin extends Authenticatable
 
     protected $guarded = [];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'mfa_secret', 'mfa_recovery_codes'];
 
     protected function casts(): array
     {
-        return ['permissions' => 'array', 'is_active' => 'boolean', 'last_login_at' => 'datetime'];
+        return ['permissions' => 'array', 'is_active' => 'boolean', 'last_login_at' => 'datetime', 'mfa_secret' => 'encrypted', 'mfa_recovery_codes' => 'encrypted:array', 'mfa_confirmed_at' => 'datetime'];
     }
 
     public function roles()

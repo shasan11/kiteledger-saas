@@ -7,7 +7,7 @@ namespace App\Providers;
 use App\Http\Middleware\BindSessionToTenant;
 use App\Http\Middleware\ConfigureTenantSession;
 use App\Http\Middleware\EnsureInstalled;
-use App\Http\Middleware\EnsureTenantDomainIsVerified;
+use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
@@ -15,7 +15,6 @@ use Illuminate\Support\ServiceProvider;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Listeners;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
-use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -35,9 +34,7 @@ class TenancyServiceProvider extends ServiceProvider
             }
             $tenantMiddleware = [
                 EnsureInstalled::class,
-                InitializeTenancyByDomain::class,
-                PreventAccessFromCentralDomains::class,
-                EnsureTenantDomainIsVerified::class,
+                InitializeTenancyByVerifiedDomain::class,
                 'tenant.initialized',
                 'tenant.active',
                 ConfigureTenantSession::class,

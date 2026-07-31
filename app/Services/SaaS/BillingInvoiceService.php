@@ -6,6 +6,7 @@ use App\Models\Central\Subscription;
 use App\Models\Central\TenantInvoice;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 
 class BillingInvoiceService
 {
@@ -54,6 +55,7 @@ class BillingInvoiceService
                 'notes' => data_get($settings, 'billing.default_invoice_notes'), 'idempotency_key' => $idempotencyKey, 'locked_at' => now(),
             ]);
             $invoice->lines()->create($lineSnapshot[0]);
+            $invoice->update(['metadata' => array_merge($invoice->metadata ?? [], ['payment_url' => URL::signedRoute('central.billing.invoice.show', ['invoice' => $invoice->id])])]);
 
             return $invoice->load('lines');
         });

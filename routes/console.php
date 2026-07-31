@@ -11,7 +11,11 @@ use App\Models\Central\TenantDeletionRequest;
 use App\Models\Central\TenantInvoice;
 use App\Models\Central\WebsitePage;
 use App\Services\SaaS\AtomicQuotaManager;
+use App\Services\SaaS\BillingInvoiceService;
+use App\Services\SaaS\InvoicePaymentReconciler;
 use App\Services\SaaS\PlatformNotificationMonitor;
+use App\Services\SaaS\PlatformSettingsService;
+use App\Services\SaaS\SubscriptionService;
 use App\Services\SaaS\SupportTicketService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
@@ -169,20 +173,41 @@ Artisan::command('tenants:migrate-one {tenant}', function (): int {
 Artisan::command('tenants:suspend-expired', function (): int {
     $service = app(TenantSuspensionService::class);
     $count = 0;
-    Tenant::where('status', 'active')->where(fn ($q) => $q->where('trial_ends_at', '<', now())->whereNull('subscription_ends_at')->orWhere('subscription_ends_at', '<', now()))->chunkById(50, function ($tenants) use ($service, &$count) {
-        foreach ($tenants as $tenant) {
-            $service->suspend($tenant, 'Subscription or trial expired.');
-            $count++;
-        }
-    });
+    Tenant::where('status', 'active')
+        ->where(function ($query): void {
+            $query->whereHas('subscription', fn ($subscription) => $subscription->whereIn('status', ['expired', 'cancelled']))
+                ->orWhere(function ($trial): void {
+                    $trial->whereDoesntHave('subscription')
+                        ->whereNotNull('trial_ends_at')
+                        ->where('trial_ends_at', '<', now());
+                });
+        })
+        ->chunkById(50, function ($tenants) use ($service, &$count) {
+            foreach ($tenants as $tenant) {
+                $service->suspend($tenant, 'Subscription or trial expired.');
+                $count++;
+            }
+        });
     $this->info("Suspended {$count} expired tenants.");
 
     return 0;
 })->purpose('Suspend expired tenant accounts');
 
 Artisan::command('tenants:check-subscriptions', function (): int {
-    Subscription::whereIn('status', ['active', 'trialing'])->where('current_period_ends_at', '<', now())->update(['status' => 'expired']);
-    Subscription::where('status', 'paused')->whereNotNull('resume_at')->where('resume_at', '<=', now())->each(fn (Subscription $subscription) => app(\App\Services\SaaS\SubscriptionService::class)->reactivate($subscription));
+    $graceDays = max(0, (int) app(PlatformSettingsService::class)->get('billing.grace_period', 3));
+    Subscription::where('status', 'active')->where('current_period_ends_at', '<', now())->each(function (Subscription $subscription) use ($graceDays): void {
+        if ($subscription->cancel_at_period_end || $graceDays === 0) {
+            $subscription->update(['status' => 'expired', 'ends_at' => $subscription->current_period_ends_at]);
+
+            return;
+        }
+        $graceEndsAt = $subscription->current_period_ends_at->copy()->addDays($graceDays);
+        $subscription->update(['status' => $graceEndsAt->isFuture() ? 'grace_period' : 'expired', 'grace_ends_at' => $graceEndsAt]);
+        $subscription->tenant()->update(['subscription_ends_at' => $graceEndsAt]);
+    });
+    Subscription::where('status', 'trialing')->where('trial_ends_at', '<', now())->update(['status' => 'expired', 'ends_at' => now()]);
+    Subscription::where('status', 'grace_period')->where('grace_ends_at', '<', now())->update(['status' => 'expired', 'ends_at' => now()]);
+    Subscription::where('status', 'paused')->whereNotNull('resume_at')->where('resume_at', '<=', now())->each(fn (Subscription $subscription) => app(SubscriptionService::class)->reactivate($subscription));
 
     return Artisan::call('tenants:suspend-expired');
 })->purpose('Refresh subscription and tenant access states');
@@ -199,52 +224,25 @@ Artisan::command('tenants:calculate-usage {tenant?}', function (): int {
     return 0;
 })->purpose('Calculate current tenant usage metrics');
 
-Artisan::command('tenants:backup {tenant?}', function (): int {
-    $connection = config('tenancy.database.template_tenant_connection') ?: config('tenancy.database.central_connection');
-    $database = config("database.connections.{$connection}");
-    if (! in_array($database['driver'] ?? null, ['mysql', 'mariadb'], true)) {
-        $this->error('Automated tenant backup currently supports MySQL/MariaDB. Use the native PostgreSQL/SQLite backup tooling for other drivers.');
-
-        return 1;
-    }
-    $query = Tenant::query();
-    if ($id = $this->argument('tenant')) {
-        $query->whereKey($id);
-    }
-    $directory = storage_path('app/backups/tenants/'.now()->format('Y-m-d'));
-    if (! is_dir($directory)) {
-        mkdir($directory, 0770, true);
-    }
-    foreach ($query->cursor() as $tenant) {
-        $path = $directory.DIRECTORY_SEPARATOR.$tenant->id.'.sql';
-        $process = new Process(['mysqldump', '--single-transaction', '--skip-comments', '--host='.$database['host'], '--port='.(string) $database['port'], '--user='.$database['username'], $tenant->database_name], base_path(), ['MYSQL_PWD' => $database['password'] ?? ''], null, 1800);
-        $handle = fopen($path.'.tmp', 'wb');
-        $process->run(fn (string $type, string $buffer) => $type === Process::OUT ? fwrite($handle, $buffer) : null);
-        fclose($handle);
-        if (! $process->isSuccessful()) {
-            @unlink($path.'.tmp');
-            $this->error("Backup failed for {$tenant->id}: ".$process->getErrorOutput());
-
-            return 1;
-        }
-        rename($path.'.tmp', $path);
-        $this->info($path);
-    }
-
-    return 0;
-})->purpose('Create native SQL backups for one or all tenant databases');
-
 Artisan::command('billing:generate-invoices', function (): int {
     $count = 0;
-    Subscription::with(['tenant', 'plan'])->where('status', 'active')->where('current_period_ends_at', '<=', now()->addDays(7))->each(function ($subscription) use (&$count) {
-        $exists = TenantInvoice::where('subscription_id', $subscription->id)->whereDate('due_date', $subscription->current_period_ends_at)->exists();
-        if ($exists) {
-            return;
-        }
-        $amount = $subscription->billing_cycle === 'yearly' ? $subscription->plan->price_yearly : $subscription->plan->price_monthly;
-        TenantInvoice::create(['invoice_number' => 'KL-'.now()->format('Ym').'-'.str_pad((string) ($subscription->id), 6, '0', STR_PAD_LEFT), 'tenant_id' => $subscription->tenant_id, 'subscription_id' => $subscription->id, 'plan_id' => $subscription->plan_id, 'subtotal' => $amount, 'total' => $amount, 'currency' => $subscription->plan->currency, 'status' => 'issued', 'issue_date' => today(), 'due_date' => $subscription->current_period_ends_at]);
-        $count++;
-    });
+    $billing = app(BillingInvoiceService::class);
+    Subscription::with(['tenant', 'plan'])
+        ->where('status', 'active')
+        ->where('cancel_at_period_end', false)
+        ->where('current_period_ends_at', '<=', now()->addDays(7))
+        ->each(function (Subscription $subscription) use (&$count, $billing): void {
+            $period = optional($subscription->current_period_ends_at)->utc()->format('YmdHis') ?: 'open';
+            $key = 'subscription:'.$subscription->id.':period:'.$period;
+            $existing = TenantInvoice::where('idempotency_key', $key)->exists();
+            $invoice = $billing->generate($subscription, $key);
+            if (! $existing) {
+                $count++;
+            }
+            if ($invoice->status === 'paid') {
+                app(InvoicePaymentReconciler::class)->reconcile($invoice);
+            }
+        });
     $this->info("Generated {$count} invoices.");
 
     return 0;
@@ -290,14 +288,15 @@ Artisan::command('templates:import {file}', function (): int {
     return 0;
 })->purpose('Import a default-data template from JSON');
 
-$schedulerEnabled = fn (): bool => (bool) app(\App\Services\SaaS\PlatformSettingsService::class)->get('queue_scheduler.scheduler_enabled', true);
+$schedulerEnabled = fn (): bool => (bool) app(PlatformSettingsService::class)->get('queue_scheduler.scheduler_enabled', true);
+$queueEnabled = fn (): bool => (bool) app(PlatformSettingsService::class)->get('queue_scheduler.queue_enabled', true);
 
 Schedule::call(function (): void {
     DB::connection(config('tenancy.database.central_connection'))->table('saas_heartbeats')->updateOrInsert(['name' => 'scheduler'], ['last_seen_at' => now(), 'metadata' => json_encode(['host' => gethostname()])]);
 })->everyMinute()->name('saas-heartbeat')->withoutOverlapping(5)->when($schedulerEnabled);
 Schedule::call(function (): void {
     dispatch(new RecordQueueHeartbeatJob);
-})->everyMinute()->name('saas-queue-heartbeat')->withoutOverlapping(5)->when($schedulerEnabled);
+})->everyMinute()->name('saas-queue-heartbeat')->withoutOverlapping(5)->when(fn (): bool => $schedulerEnabled() && $queueEnabled());
 Schedule::call(function (): void {
     app(AtomicQuotaManager::class)->expireStale();
 })->everyFifteenMinutes()->name('quota-reservation-cleanup')->withoutOverlapping(10)->when($schedulerEnabled);

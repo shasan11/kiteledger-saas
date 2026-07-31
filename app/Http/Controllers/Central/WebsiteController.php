@@ -6,21 +6,23 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\BlogCategory;
 use App\Models\Central\BlogPost;
 use App\Models\Central\BlogTag;
-use App\Models\Central\Media;
 use App\Models\Central\ContactLocation;
+use App\Models\Central\Media;
 use App\Models\Central\NavbarNotification;
 use App\Models\Central\Plan;
 use App\Models\Central\ResourceArticle;
 use App\Models\Central\ResourceCategory;
-use App\Models\Central\WebsiteFeature;
 use App\Models\Central\WebsiteContentItem;
+use App\Models\Central\WebsiteFeature;
 use App\Models\Central\WebsiteMenu;
 use App\Models\Central\WebsitePage;
 use App\Models\Central\WebsitePopup;
+use App\Models\Central\WebsiteRedirect;
 use App\Models\Central\WebsiteSocialLink;
 use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 class WebsiteController extends Controller
@@ -37,12 +39,18 @@ class WebsiteController extends Controller
 
     public function page(string $slug)
     {
+        if ($response = $this->redirectForCurrentPath()) {
+            return $response;
+        }
+
         return $this->publicRender($slug);
     }
 
     public function blog(Request $request, ?string $category = null, ?string $tag = null)
     {
-        if ($disabled = $this->disabledWebsite()) return $disabled;
+        if ($disabled = $this->disabledWebsite()) {
+            return $disabled;
+        }
         $query = BlogPost::with(['categories', 'tags', 'featuredMedia'])->where('status', 'published')->where('visibility', 'public')->where('published_at', '<=', now());
         if ($category) {
             $query->whereHas('categories', fn ($q) => $q->where('slug', $category));
@@ -56,17 +64,30 @@ class WebsiteController extends Controller
 
     public function category(Request $request, string $category)
     {
+        if ($response = $this->redirectForCurrentPath()) {
+            return $response;
+        }
+
         return $this->blog($request, $category);
     }
 
     public function tag(Request $request, string $tag)
     {
+        if ($response = $this->redirectForCurrentPath()) {
+            return $response;
+        }
+
         return $this->blog($request, null, $tag);
     }
 
     public function post(string $slug)
     {
-        if ($disabled = $this->disabledWebsite()) return $disabled;
+        if ($response = $this->redirectForCurrentPath()) {
+            return $response;
+        }
+        if ($disabled = $this->disabledWebsite()) {
+            return $disabled;
+        }
         $post = BlogPost::with(['categories', 'tags', 'featuredMedia'])->where('slug', $slug)->where('status', 'published')->where('visibility', 'public')->where('published_at', '<=', now())->firstOrFail();
         if (blank($post->canonical_url)) {
             $post->canonical_url = rtrim((string) app(PlatformSettingsService::class)->get('seo.canonical_base_url', config('app.url')), '/').'/blog/'.$post->slug;
@@ -84,7 +105,7 @@ class WebsiteController extends Controller
         $xml = Cache::remember('website-sitemap', now()->addMinutes((int) $settings->get('seo.sitemap_cache_duration', 60)), function () use ($settings, $base): string {
             $urls = collect();
             if ($settings->get('seo.include_pages', true)) {
-                $urls = $urls->merge(WebsitePage::where('status', 'published')->where('visibility', 'public')->where('sitemap_include', true)->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))->get()->map(fn ($page) => [$base.($page->slug === 'home' ? '/' : '/'.$page->slug), $page->updated_at, $page->sitemap_priority, $page->sitemap_change_frequency]));
+                $urls = $urls->merge(WebsitePage::where('status', 'published')->where('visibility', 'public')->where('sitemap_include', true)->where(fn ($query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()))->get()->map(fn ($page) => [$base.$page->publicPath(), $page->updated_at, $page->sitemap_priority, $page->sitemap_change_frequency]));
             }
             if ($settings->get('seo.include_posts', true)) {
                 $urls = $urls->merge(BlogPost::where('status', 'published')->where('visibility', 'public')->where('published_at', '<=', now())->where('sitemap_include', true)->get()->map(fn ($post) => [$base.'/blog/'.$post->slug, $post->updated_at, $post->sitemap_priority, 'monthly']));
@@ -120,7 +141,9 @@ class WebsiteController extends Controller
 
     private function publicRender(string $slugOrType, array $extra = [])
     {
-        if ($disabled = $this->disabledWebsite()) return $disabled;
+        if ($disabled = $this->disabledWebsite()) {
+            return $disabled;
+        }
         $page = Cache::remember('website-page:v2:'.$slugOrType, now()->addMinutes(30), function () use ($slugOrType): array {
             $page = WebsitePage::with(['sections' => fn ($q) => $q->with('media')->where('is_active', true)->orderBy('sort_order')])
                 ->where('status', 'published')
@@ -130,7 +153,7 @@ class WebsiteController extends Controller
                 ->firstOrFail();
             if (blank($page->canonical_url)) {
                 $base = rtrim((string) app(PlatformSettingsService::class)->get('seo.canonical_base_url', config('app.url')), '/');
-                $page->setAttribute('canonical_url', $base.($page->slug === 'home' ? '/' : '/'.$page->slug));
+                $page->setAttribute('canonical_url', $base.$page->publicPath());
             }
 
             return $this->hydrateSectionItemMedia($page->toArray());
@@ -168,30 +191,44 @@ class WebsiteController extends Controller
 
     public function resources(Request $request)
     {
-        if ($disabled = $this->disabledWebsite()) return $disabled;
+        if ($disabled = $this->disabledWebsite()) {
+            return $disabled;
+        }
         $query = ResourceArticle::with(['category:id,name,slug', 'featuredMedia'])->where('status', 'published')->where(fn ($q) => $q->whereNull('published_at')->orWhere('published_at', '<=', now()));
-        if ($request->filled('category')) $query->whereHas('category', fn ($q) => $q->where('slug', $request->string('category')));
-        if ($request->filled('search')) { $term = '%'.$request->string('search').'%'; $query->where(fn ($q) => $q->where('title', 'like', $term)->orWhere('excerpt', 'like', $term)->orWhere('body', 'like', $term)); }
+        if ($request->filled('category')) {
+            $query->whereHas('category', fn ($q) => $q->where('slug', $request->string('category')));
+        }
+        if ($request->filled('search')) {
+            $term = '%'.$request->string('search').'%';
+            $query->where(fn ($q) => $q->where('title', 'like', $term)->orWhere('excerpt', 'like', $term)->orWhere('body', 'like', $term));
+        }
+
         return Inertia::render('Central/Website/Resources', $this->sharedPublic() + [
             'articles' => $query->orderBy('sort_order')->latest('published_at')->paginate(12)->withQueryString(),
             'categories' => ResourceCategory::where('status', 'active')->withCount(['articles' => fn ($q) => $q->where('status', 'published')])->orderBy('sort_order')->get(),
-            'filters' => $request->only(['search','category']),
+            'filters' => $request->only(['search', 'category']),
         ]);
     }
 
     public function resourceArticle(string $slug)
     {
-        if ($disabled = $this->disabledWebsite()) return $disabled;
-        $article = ResourceArticle::with(['category:id,name,slug','featuredMedia'])->where('slug', $slug)->where('status', 'published')->where(fn ($q) => $q->whereNull('published_at')->orWhere('published_at', '<=', now()))->firstOrFail();
+        if ($response = $this->redirectForCurrentPath()) {
+            return $response;
+        }
+        if ($disabled = $this->disabledWebsite()) {
+            return $disabled;
+        }
+        $article = ResourceArticle::with(['category:id,name,slug', 'featuredMedia'])->where('slug', $slug)->where('status', 'published')->where(fn ($q) => $q->whereNull('published_at')->orWhere('published_at', '<=', now()))->firstOrFail();
         $article->setAttribute('gallery', Media::whereIn('id', $article->gallery_media_ids ?? [])->get());
+
         return Inertia::render('Central/Website/ResourceArticle', $this->sharedPublic() + ['article' => $article]);
     }
 
     private function sharedPublic(): array
     {
-        $menus = Cache::remember('website-menus:v2', now()->addMinutes(30), fn (): array => WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->where('is_active', true)->orderBy('sort_order')])
+        $menus = Cache::remember('website-menus:v2', now()->addMinutes(30), fn (): array => WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->publiclyVisible()->orderBy('sort_order')])
             ->whereNull('parent_id')
-            ->where('is_active', true)
+            ->publiclyVisible()
             ->orderBy('sort_order')
             ->get()
             ->groupBy('location')
@@ -199,6 +236,7 @@ class WebsiteController extends Controller
             ->all());
 
         $activeWindow = fn ($q) => $q->where('is_active', true)->where(fn ($w) => $w->whereNull('starts_at')->orWhere('starts_at', '<=', now()))->where(fn ($w) => $w->whereNull('ends_at')->orWhere('ends_at', '>=', now()));
+
         return [
             'menus' => $menus, 'site' => app(PlatformSettingsService::class)->publicSettings(),
             'socialLinks' => WebsiteSocialLink::where('is_active', true)->orderBy('sort_order')->get(),
@@ -210,7 +248,10 @@ class WebsiteController extends Controller
     private function disabledWebsite()
     {
         $settings = app(PlatformSettingsService::class);
-        if ($settings->get('website.website_enabled', true)) return null;
+        if ($settings->get('website.website_enabled', true)) {
+            return null;
+        }
+
         return Inertia::render('Central/Website/Disabled', ['site' => $settings->publicSettings()])->toResponse(request())->setStatusCode(503);
     }
 
@@ -235,5 +276,22 @@ class WebsiteController extends Controller
         })->all();
 
         return $page;
+    }
+
+    private function redirectForCurrentPath()
+    {
+        if (! Schema::connection(config('tenancy.database.central_connection'))->hasTable('website_redirects')) {
+            return null;
+        }
+
+        $redirect = WebsiteRedirect::where('source_path', request()->getPathInfo())->first();
+        if (! $redirect) {
+            return null;
+        }
+
+        $redirect->increment('hits');
+        $redirect->update(['last_hit_at' => now()]);
+
+        return redirect($redirect->destination_path, $redirect->status_code);
     }
 }

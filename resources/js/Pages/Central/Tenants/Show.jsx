@@ -6,7 +6,7 @@ import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate, formatMoney, initials } from '@/Components/Central/formatters';
 import { router } from '@inertiajs/react';
 import {
-    CloudDownloadOutlined, DatabaseOutlined, DeleteOutlined, EditOutlined, GlobalOutlined, LoginOutlined,
+    DatabaseOutlined, DeleteOutlined, EditOutlined, GlobalOutlined, LoginOutlined,
     PlayCircleOutlined, ReloadOutlined, SafetyCertificateOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { Alert, Avatar, Button, Col, Empty, Form, Input, Modal, Row, Space, Table, Tabs, Timeline, Typography, message } from 'antd';
@@ -17,9 +17,11 @@ export default function Show({ tenant }) {
     const [impersonateOpen, setImpersonateOpen] = useState(false);
     const [retryOpen, setRetryOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [operation, setOperation] = useState(null);
     const [form] = Form.useForm();
     const [impersonateForm] = Form.useForm();
     const [retryForm] = Form.useForm();
+    const [operationForm] = Form.useForm();
     const post = (name, data = {}) => router.post(route(name, tenant.id), data, { preserveScroll: true });
     const suspend = ({ reason }) => post('central.tenants.suspend', { reason });
     const health = async () => {
@@ -35,9 +37,8 @@ export default function Show({ tenant }) {
     const latestInvoice = [...(tenant.invoices || [])].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
     const operationItems = [
         { label:'Run health check',icon:<SafetyCertificateOutlined />,onClick:health },
-        { label:'Run migrations now',icon:<DatabaseOutlined />,onClick:()=>post('central.tenants.migrate') },
-        { label:'Run seeders now',icon:<PlayCircleOutlined />,onClick:()=>post('central.tenants.seed') },
-        { label:'Create backup',icon:<CloudDownloadOutlined />,onClick:()=>post('central.tenants.backup') },
+        { label:'Run migrations now',icon:<DatabaseOutlined />,onClick:()=>setOperation({ route:'central.tenants.migrate', title:'Run tenant migrations' }) },
+        { label:'Run seeders now',icon:<PlayCircleOutlined />,onClick:()=>setOperation({ route:'central.tenants.seed', title:'Run tenant seeders' }) },
     ];
 
     const overview = <Row gutter={[16,16]}>
@@ -66,6 +67,7 @@ export default function Show({ tenant }) {
         <Modal open={suspendOpen} title="Suspend customer" okText="Suspend customer" okButtonProps={{danger:true}} onCancel={()=>setSuspendOpen(false)} onOk={()=>form.submit()}><Typography.Paragraph type="secondary">Users will lose access until an administrator reactivates this customer.</Typography.Paragraph><Form form={form} layout="vertical" onFinish={(values)=>{setSuspendOpen(false);suspend(values);}} initialValues={{reason:'Suspended by central administrator'}}><Form.Item name="reason" label="Reason" rules={[{required:true,message:'Explain why this customer is being suspended.'}]}><Input.TextArea rows={4}/></Form.Item></Form></Modal>
         <Modal open={retryOpen} title="Retry customer setup" okText="Run setup" onCancel={()=>setRetryOpen(false)} onOk={()=>retryForm.submit()}><Alert type="info" showIcon message="Set the customer owner's login password" description="The password is required to recover a setup attempt created before the owner account was completed." style={{marginBottom:16}}/><Form form={retryForm} layout="vertical" onFinish={(values)=>{setRetryOpen(false);post('central.tenants.retry',values);retryForm.resetFields();}}><Form.Item name="owner_password" label="Owner password" rules={[{required:true,min:12,message:'Enter at least 12 characters.'}]}><Input.Password autoComplete="new-password"/></Form.Item><Form.Item name="owner_password_confirmation" label="Confirm owner password" dependencies={['owner_password']} rules={[{required:true,message:'Confirm the owner password.'},({getFieldValue})=>({validator(_,value){return !value || getFieldValue('owner_password')===value ? Promise.resolve() : Promise.reject(new Error('The passwords do not match.'));}})]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal>
         <Modal open={impersonateOpen} title="Sign in as customer" okText="Start secure session" onCancel={()=>setImpersonateOpen(false)} onOk={()=>impersonateForm.submit()}><Alert type="warning" showIcon message="This action is security-sensitive and fully audited." style={{marginBottom:16}}/><Form form={impersonateForm} layout="vertical" onFinish={(values)=>post('central.tenants.impersonate',values)}><Form.Item name="reason" label="Reason" rules={[{required:true,min:10,message:'Enter at least 10 characters.'}]}><Input.TextArea rows={3}/></Form.Item><Form.Item name="current_password" label="Current administrator password" rules={[{required:true}]}><Input.Password autoComplete="current-password"/></Form.Item></Form></Modal>
+        <Modal open={Boolean(operation)} title={operation?.title} okText="Confirm and run" okButtonProps={{danger:true}} onCancel={()=>{setOperation(null);operationForm.resetFields();}} onOk={()=>operationForm.submit()}><Alert type="warning" showIcon message="This changes the customer database and will be recorded in the audit log." style={{marginBottom:16}}/><Form form={operationForm} layout="vertical" onFinish={(values)=>{post(operation.route,values);setOperation(null);operationForm.resetFields();}}><Form.Item name="reason" label="Reason" rules={[{required:true,min:10,message:'Enter at least 10 characters.'}]}><Input.TextArea rows={3}/></Form.Item><Form.Item name="current_password" label="Current administrator password" rules={[{required:true}]}><Input.Password autoComplete="current-password"/></Form.Item></Form></Modal>
         <DeleteCustomerModal open={deleteOpen} onClose={()=>setDeleteOpen(false)} tenant={tenant} />
     </CentralLayout>;
 }

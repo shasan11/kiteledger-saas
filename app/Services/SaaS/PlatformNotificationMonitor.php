@@ -2,7 +2,6 @@
 
 namespace App\Services\SaaS;
 
-use App\Models\Central\BackupManifest;
 use App\Models\Central\Domain;
 use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
@@ -28,8 +27,6 @@ class PlatformNotificationMonitor
             $this->notifications->notifyOnce('database_pool_low', 'infrastructure', 'critical', 'Database pool capacity is low', $available.' databases remain available; the configured threshold is '.$threshold.'.', route('central.tenant-databases.index'));
         }
         TenantDatabasePool::where(fn ($query) => $query->whereNotNull('last_error')->orWhere('status', 'failed'))->limit(100)->get()->each(fn (TenantDatabasePool $database) => $this->notifications->notifyOnce('database_unhealthy', 'infrastructure', 'critical', 'Tenant database unhealthy', $database->database_name.' requires revalidation.', route('central.tenant-databases.index', ['search' => $database->database_name]), $database));
-
-        BackupManifest::where('status', 'failed')->where('updated_at', '>=', now()->subDays(2))->limit(100)->get()->each(fn (BackupManifest $backup) => $this->notifications->notifyOnce('backup_failed', 'infrastructure', 'critical', 'Backup failed', 'Backup '.$backup->id.' failed with code '.($backup->error_code ?: 'unknown').'.', route('central.backups.index'), $backup));
 
         Domain::whereNotNull('metadata')->limit(500)->get()->filter(function (Domain $domain): bool {
             $expires = data_get($domain->metadata, 'ssl_expires_at');

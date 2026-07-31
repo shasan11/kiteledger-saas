@@ -23,7 +23,6 @@ export const sectionRegistry = [
     ['api', 'API & Webhooks', 'discovery', 'API access and webhook behavior', ['developer', 'integration']],
     ['database_pool', 'Database Pool', 'advanced', 'Pre-created tenant database capacity', ['database', 'allocation']],
     ['provisioning', 'Provisioning', 'advanced', 'Tenant provisioning behavior', ['tenant', 'database']],
-    ['backups', 'Backups', 'advanced', 'Backup scheduling and retention', ['restore']],
     ['usage', 'Usage', 'advanced', 'Usage collection and limits', ['quota', 'metrics']],
 ].map(([key, label, category, description, keywords], order) => ({ key, label, category, description, keywords, order }));
 

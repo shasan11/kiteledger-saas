@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Central;
 use App\Data\TenantOnboardingData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Central\StoreTenantOnboardingRequest;
-use App\Jobs\SaaS\BackupTenantJob;
 use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\ImpersonationToken;
 use App\Models\Central\PaymentGateway;
@@ -17,17 +16,18 @@ use App\Services\SaaS\DatabaseProvisioning\DatabaseProvisionerManager;
 use App\Services\SaaS\DatabaseProvisioning\ManualDatabaseProvisioner;
 use App\Services\SaaS\DatabaseProvisioning\TenantDatabaseNameValidator;
 use App\Services\SaaS\PlatformSettingsService;
+use App\Services\SaaS\SubscriptionService;
 use App\Services\SaaS\TenantDatabaseService;
 use App\Services\SaaS\TenantDeletionService;
 use App\Services\SaaS\TenantProvisioningService;
 use App\Services\SaaS\TenantSuspensionService;
+use App\Support\PhoneNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use App\Support\PhoneNumber;
 use Inertia\Inertia;
 
 class TenantController extends Controller
@@ -60,7 +60,8 @@ class TenantController extends Controller
 
     public function store(StoreTenantOnboardingRequest $request, TenantProvisioningService $service, CentralAuditService $audit)
     {
-        $validated = $request->validated(); unset($validated['phone_country_code']);
+        $validated = $request->validated();
+        unset($validated['phone_country_code']);
         $data = TenantOnboardingData::from($validated)->toArray();
         try {
             $tenant = $service->create($data + ['created_by' => $request->attributes->get('centralAdmin')?->id]);
@@ -98,7 +99,7 @@ class TenantController extends Controller
 
     public function show(Tenant $tenant)
     {
-        return Inertia::render('Central/Tenants/Show', ['tenant' => $tenant->load(['plan', 'domains', 'subscription.plan', 'provisioningLogs', 'usageMetrics', 'invoices', 'backupManifests' => fn ($query) => $query->where('status', 'verified')->latest()->limit(20), 'deletionRequests' => fn ($query) => $query->latest()->limit(5)]), 'options' => $this->options()]);
+        return Inertia::render('Central/Tenants/Show', ['tenant' => $tenant->load(['plan', 'domains', 'subscription.plan', 'provisioningLogs', 'usageMetrics', 'invoices', 'deletionRequests' => fn ($query) => $query->latest()->limit(5)]), 'options' => $this->options()]);
     }
 
     public function edit(Tenant $tenant)
@@ -106,15 +107,26 @@ class TenantController extends Controller
         return Inertia::render('Central/Tenants/Form', $this->options() + ['tenant' => $tenant]);
     }
 
-    public function update(Request $request, Tenant $tenant, CentralAuditService $audit)
+    public function update(Request $request, Tenant $tenant, CentralAuditService $audit, SubscriptionService $subscriptions)
     {
         $old = $tenant->getOriginal();
-        $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'phone_country_code' => ['nullable','regex:/^\+[1-9][0-9]{0,3}$/'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
-        $data['owner_phone'] = PhoneNumber::join($data['phone_country_code'] ?? PhoneNumber::callingCode($data['country'] ?? null), $data['owner_phone'] ?? null); unset($data['phone_country_code']);
+        $data = $request->validate(['company_name' => ['required', 'string', 'max:255'], 'legal_name' => ['nullable', 'string', 'max:255'], 'owner_name' => ['required', 'string', 'max:255'], 'owner_phone' => ['nullable', 'string', 'max:50'], 'phone_country_code' => ['nullable', 'regex:/^\+[1-9][0-9]{0,3}$/'], 'country' => ['nullable', 'string', 'size:2'], 'address' => ['nullable', 'string'], 'timezone' => ['required', 'timezone'], 'currency' => ['required', 'string', 'size:3'], 'plan_id' => ['nullable', 'exists:plans,id'], 'default_template_id' => ['nullable', 'exists:default_data_templates,id'], 'tenancy_db_host' => ['required', 'string', 'max:255'], 'tenancy_db_port' => ['required', 'integer', 'between:1,65535'], 'tenancy_db_name' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/', Rule::unique('tenants', 'tenancy_db_name')->ignore($tenant)], 'tenancy_db_username' => ['required', 'string', 'max:255'], 'tenancy_db_password' => ['nullable', 'string', 'max:1024']]);
+        $data['owner_phone'] = PhoneNumber::join($data['phone_country_code'] ?? PhoneNumber::callingCode($data['country'] ?? null), $data['owner_phone'] ?? null);
+        unset($data['phone_country_code']);
         if (blank($data['tenancy_db_password'] ?? null)) {
             unset($data['tenancy_db_password']);
         }
+        $planId = $data['plan_id'] ?? null;
+        unset($data['plan_id']);
         $tenant->update($data + ['database_name' => $data['tenancy_db_name'], 'database_provisioning_mode' => 'manual']);
+        if ((int) $tenant->plan_id !== (int) $planId) {
+            if ($subscription = $tenant->subscription()->first()) {
+                abort_if(blank($planId), 422, 'A subscribed customer must remain assigned to a plan.');
+                $subscriptions->changePlan($subscription, Plan::findOrFail($planId), true);
+            } else {
+                $tenant->update(['plan_id' => $planId]);
+            }
+        }
         $this->syncTenantDatabaseInternals($tenant);
         $audit->log($request, 'tenant.updated', $tenant, $old, $tenant->getChanges());
 
@@ -154,18 +166,33 @@ class TenantController extends Controller
 
     public function migrate(Request $request, Tenant $tenant, TenantDatabaseService $databases, CentralAuditService $audit)
     {
+        $data = $this->validateSensitiveOperation($request);
         $databases->migrate($tenant);
-        $audit->log($request, 'tenant.migrations.ran', $tenant, [], ['tenant_id' => $tenant->id]);
+        $audit->log($request, 'tenant.migrations.ran', $tenant, [], ['tenant_id' => $tenant->id, 'reason' => $data['reason']]);
 
         return back()->with('success', 'Tenant migrations completed.');
     }
 
     public function seed(Request $request, Tenant $tenant, TenantDatabaseService $databases, CentralAuditService $audit)
     {
+        $data = $this->validateSensitiveOperation($request);
         $databases->seed($tenant);
-        $audit->log($request, 'tenant.seeders.ran', $tenant, [], ['tenant_id' => $tenant->id]);
+        $audit->log($request, 'tenant.seeders.ran', $tenant, [], ['tenant_id' => $tenant->id, 'reason' => $data['reason']]);
 
         return back()->with('success', 'Tenant seeders completed.');
+    }
+
+    private function validateSensitiveOperation(Request $request): array
+    {
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'current_password' => ['required', 'string'],
+        ]);
+        if (! Hash::check($data['current_password'], $request->user('central')->password)) {
+            throw ValidationException::withMessages(['current_password' => 'The administrator password is incorrect.']);
+        }
+
+        return $data;
     }
 
     public function health(Tenant $tenant)
@@ -199,14 +226,6 @@ class TenantController extends Controller
                 tenancy()->end();
             }
         }
-    }
-
-    public function backup(Request $request, Tenant $tenant, CentralAuditService $audit)
-    {
-        dispatch((new BackupTenantJob($tenant->id))->onConnection('central')->onQueue('backups'));
-        $audit->log($request, 'tenant.backup_queued', $tenant, [], ['tenant_id' => $tenant->id]);
-
-        return back()->with('success', 'Tenant backup queued.');
     }
 
     public function destroy(Request $request, Tenant $tenant, TenantDeletionService $deletions, CentralAuditService $audit)

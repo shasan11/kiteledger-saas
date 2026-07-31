@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\BlogCategory;
 use App\Models\Central\BlogTag;
 use App\Models\Central\Media;
+use App\Models\Central\WebsiteRedirect;
 use App\Services\SaaS\CentralAuditService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class BlogTaxonomyController extends Controller
             'items' => $query->orderBy($type === 'categories' ? 'sort_order' : 'name')->paginate(30)->withQueryString(),
             'filters' => $request->only(['search', 'status']),
             'categories' => $type === 'categories' ? BlogCategory::orderBy('name')->get(['id', 'name']) : [],
-            'media' => $type === 'categories' ? Media::where('mime_type', 'like', 'image/%')->latest()->limit(200)->get(['id', 'original_filename as filename', 'disk', 'path']) : [],
+            'media' => $type === 'categories' ? Media::where('mime_type', 'like', 'image/%')->latest()->get(['id', 'original_filename as filename', 'disk', 'path']) : [],
         ]);
     }
 
@@ -41,6 +42,7 @@ class BlogTaxonomyController extends Controller
     {
         $class = $this->model($type);
         $item = $class::create($this->validated($request, $type));
+        WebsiteRedirect::where('source_path', $this->publicPath($type, $item->slug))->delete();
         $audit->log($request, 'blog_'.$type.'.created', $item, [], $item->toArray());
 
         return back()->with('success', ucfirst(rtrim($type, 's')).' created.');
@@ -50,7 +52,13 @@ class BlogTaxonomyController extends Controller
     {
         $item = $this->find($type, $id);
         $old = $item->toArray();
+        $oldPath = $this->publicPath($type, $item->slug);
         $item->update($this->validated($request, $type, $item));
+        $newPath = $this->publicPath($type, $item->slug);
+        WebsiteRedirect::where('source_path', $newPath)->delete();
+        if ($oldPath !== $newPath) {
+            WebsiteRedirect::updateOrCreate(['source_path' => $oldPath], ['destination_path' => $newPath, 'status_code' => 301]);
+        }
         $audit->log($request, 'blog_'.$type.'.updated', $item, $old, $item->fresh()->toArray());
 
         return back()->with('success', ucfirst(rtrim($type, 's')).' updated.');
@@ -101,5 +109,10 @@ class BlogTaxonomyController extends Controller
         }
 
         return $request->validate($rules);
+    }
+
+    private function publicPath(string $type, string $slug): string
+    {
+        return '/blog/'.($type === 'categories' ? 'category' : 'tag').'/'.$slug;
     }
 }

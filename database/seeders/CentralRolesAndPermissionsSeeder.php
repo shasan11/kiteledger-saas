@@ -10,7 +10,7 @@ class CentralRolesAndPermissionsSeeder extends Seeder
 {
     public const PERMISSIONS = [
         'dashboard.view',
-        'tenant.view', 'tenant.create', 'tenant.update', 'tenant.suspend', 'tenant.reactivate', 'tenant.impersonate', 'tenant.backup', 'tenant.delete', 'tenant.manage_domains', 'tenant.manage_features',
+        'tenant.view', 'tenant.create', 'tenant.update', 'tenant.suspend', 'tenant.reactivate', 'tenant.impersonate', 'tenant.delete', 'tenant.manage_domains', 'tenant.manage_features',
         'plan.view', 'plan.manage', 'feature.view', 'feature.manage', 'feature_override.manage',
         'subscription.view', 'subscription.manage', 'invoice.view', 'invoice.manage', 'invoice.customize', 'payment.view', 'payment.add_manual', 'payment.refund', 'gateway.view', 'gateway.manage',
         'cms.view', 'cms.manage', 'cms.publish', 'media.manage', 'lead.view', 'lead.manage', 'blog.view', 'blog.manage', 'seo.manage', 'website.branding.manage',
@@ -34,7 +34,7 @@ class CentralRolesAndPermissionsSeeder extends Seeder
             'support_manager' => ['Support Manager', ['dashboard.view', 'tenant.view', 'subscription.view', 'invoice.view', 'payment.view', 'ticket.view', 'ticket.assign', 'ticket.reply', 'ticket.update', 'ticket.close', 'ticket.delete', 'support.manage']],
             'support_agent' => ['Support Agent', ['dashboard.view', 'tenant.view', 'ticket.view', 'ticket.reply', 'ticket.update', 'ticket.close']],
             'content_manager' => ['Content Manager', ['dashboard.view', 'cms.view', 'cms.manage', 'cms.publish', 'media.manage', 'lead.view', 'lead.manage', 'blog.view', 'blog.manage', 'seo.manage', 'website.branding.manage', 'communication.view', 'communication.manage', 'communication.send', 'communication.import', 'communication.export']],
-            'operations_administrator' => ['Operations Administrator', ['dashboard.view', 'tenant.view', 'tenant.create', 'tenant.update', 'tenant.suspend', 'tenant.reactivate', 'tenant.backup', 'tenant.manage_domains', 'tenant.manage_features', 'feature.view', 'feature.manage', 'feature_override.manage', 'system_health.view', 'audit.view']],
+            'operations_administrator' => ['Operations Administrator', ['dashboard.view', 'tenant.view', 'tenant.create', 'tenant.update', 'tenant.suspend', 'tenant.reactivate', 'tenant.manage_domains', 'tenant.manage_features', 'feature.view', 'feature.manage', 'feature_override.manage', 'system_health.view', 'audit.view']],
             'read_only_auditor' => ['Read-only Auditor', ['dashboard.view', 'tenant.view', 'plan.view', 'feature.view', 'subscription.view', 'invoice.view', 'payment.view', 'gateway.view', 'cms.view', 'lead.view', 'blog.view', 'ticket.view', 'settings.view', 'audit.view', 'system_health.view']],
         ];
 

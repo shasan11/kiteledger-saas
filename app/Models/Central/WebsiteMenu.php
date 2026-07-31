@@ -24,6 +24,17 @@ class WebsiteMenu extends CentralModel
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
     }
 
+    public function scopePubliclyVisible($query)
+    {
+        return $query->where('is_active', true)->where(function ($menu): void {
+            $menu->whereNull('page_id')->orWhereHas('page', function ($page): void {
+                $page->where('status', 'published')
+                    ->where('visibility', 'public')
+                    ->where(fn ($window) => $window->whereNull('published_at')->orWhere('published_at', '<=', now()));
+            });
+        });
+    }
+
     protected static function booted(): void
     {
         static::saved(function (): void {

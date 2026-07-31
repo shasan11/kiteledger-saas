@@ -8,6 +8,7 @@ use App\Models\Central\Plan;
 use App\Models\Central\WebsiteContentItem;
 use App\Models\Central\WebsiteMenu;
 use App\Models\Central\WebsitePage;
+use App\Models\Central\WebsiteRedirect;
 use App\Models\Central\WebsiteRevision;
 use App\Models\Central\WebsiteSection;
 use App\Services\SaaS\CentralAuditService;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class WebsiteContentController extends Controller
@@ -50,6 +52,9 @@ class WebsiteContentController extends Controller
 
     public function previewPage(WebsitePage $page, PlatformSettingsService $settings)
     {
+        if (request()->boolean('working_copy') && $page->draft_payload) {
+            $page->fill($page->draft_payload);
+        }
         $page->load(['sections' => fn ($query) => $query->with('media')->where('is_active', true)->orderBy('sort_order')]);
         $this->hydrateItemMedia($page->sections);
         $menus = WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->where('is_active', true)])->whereNull('parent_id')->where('is_active', true)->orderBy('sort_order')->get()->groupBy('location');
@@ -68,6 +73,7 @@ class WebsiteContentController extends Controller
         $data['created_by'] = $request->user('central')->id;
         $data['updated_by'] = $request->user('central')->id;
         $page = WebsitePage::create($data);
+        WebsiteRedirect::where('source_path', $page->publicPath())->delete();
         $this->revision($page, $request->user('central')->id);
         $audit->log($request, 'website.page_created', $page, [], $page->toArray());
 
@@ -77,8 +83,21 @@ class WebsiteContentController extends Controller
     public function updatePage(Request $request, WebsitePage $page, CentralAuditService $audit)
     {
         $before = $page->toArray();
+        $data = $this->pageData($request, $page);
+        if ($request->boolean('working_copy') && $page->status === 'published') {
+            $page->update(['draft_payload' => $data, 'draft_updated_at' => now(), 'draft_updated_by' => $request->user('central')->id]);
+            $audit->log($request, 'website.page_working_draft_saved', $page, [], ['draft_updated_at' => $page->draft_updated_at]);
+
+            return back()->with('success', 'Working draft saved. The published page was not changed.');
+        }
+        $oldPath = $page->publicPath();
         $this->revision($page, $request->user('central')->id);
-        $page->update($this->pageData($request, $page) + ['updated_by' => $request->user('central')->id]);
+        $page->update($data + ['updated_by' => $request->user('central')->id, 'draft_payload' => null, 'draft_updated_at' => null, 'draft_updated_by' => null]);
+        $newPath = $page->publicPath();
+        WebsiteRedirect::where('source_path', $newPath)->delete();
+        if ($oldPath !== $newPath) {
+            WebsiteRedirect::updateOrCreate(['source_path' => $oldPath], ['destination_path' => $newPath, 'status_code' => 301]);
+        }
         $audit->log($request, 'website.page_updated', $page, $before, $page->fresh()->toArray());
 
         return back()->with('success', 'Page saved.');
@@ -161,7 +180,7 @@ class WebsiteContentController extends Controller
         return Inertia::render('Central/Website/Menus', [
             'location' => $location,
             'menus' => WebsiteMenu::with(['page:id,title,slug'])->where('location', $location)->orderBy('sort_order')->get(),
-            'pages' => WebsitePage::whereIn('status', ['draft', 'scheduled', 'published'])->orderBy('title')->get(['id', 'title', 'slug']),
+            'pages' => WebsitePage::whereIn('status', ['draft', 'scheduled', 'published'])->orderBy('title')->get(['id', 'title', 'slug', 'status', 'visibility', 'published_at']),
             'locations' => ['header', 'footer', 'legal', 'product', 'resources'],
         ]);
     }
@@ -243,11 +262,18 @@ class WebsiteContentController extends Controller
 
     private function pageEditor(WebsitePage $page)
     {
+        $editorPage = $page->toArray();
+        if ($page->exists && $page->draft_payload) {
+            $editorPage = array_replace($editorPage, $page->draft_payload, ['id' => $page->id]);
+        }
+
         return Inertia::render('Central/Website/Pages/Editor', [
-            'page' => $page,
+            'page' => $editorPage,
+            'liveStatus' => $page->status,
+            'hasWorkingDraft' => $page->exists && filled($page->draft_payload),
             'parents' => WebsitePage::when($page->exists, fn ($query) => $query->whereKeyNot($page->id))->orderBy('title')->get(['id', 'title']),
-            'media' => Media::where('mime_type', 'like', 'image/%')->latest()->limit(100)->get(['id', 'title', 'original_filename', 'path', 'disk']),
-            'revisions' => $page->exists ? $page->revisions()->limit(30)->get() : [],
+            'media' => Media::where('mime_type', 'like', 'image/%')->latest()->get(['id', 'title', 'original_filename', 'path', 'disk']),
+            'revisions' => $page->exists ? $page->revisions()->with('admin:id,name')->limit(30)->get() : [],
         ]);
     }
 
@@ -298,7 +324,7 @@ class WebsiteContentController extends Controller
             'page_type' => ['required', 'string', 'max:100'], 'excerpt' => ['nullable', 'string', 'max:2000'], 'body' => ['nullable', 'string'],
             'featured_media_id' => ['nullable', 'exists:central_media,id'], 'layout' => ['required', Rule::in(['default', 'landing', 'legal', 'support', 'full_width'])],
             'status' => ['required', Rule::in(['draft', 'scheduled', 'published', 'archived'])], 'visibility' => ['required', Rule::in(['public', 'private'])],
-            'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled'], 'sort_order' => ['integer', 'min:0'],
+            'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled', 'after:now'], 'sort_order' => ['integer', 'min:0'],
             'parent_id' => ['nullable', 'exists:website_pages,id', Rule::notIn(array_filter([$page?->id]))],
             'meta_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:500'], 'focus_keyword' => ['nullable', 'string', 'max:255'],
             'canonical_url' => ['nullable', 'url', 'max:2048'], 'robots_index' => ['boolean'], 'robots_follow' => ['boolean'],
@@ -345,7 +371,28 @@ class WebsiteContentController extends Controller
             'icon' => ['nullable', 'string', 'max:100'], 'is_active' => ['boolean'], 'sort_order' => ['integer', 'min:0'],
         ]);
         if (filled($data['page_id'] ?? null)) {
-            $data['url'] = '/'.WebsitePage::findOrFail($data['page_id'])->slug;
+            $page = WebsitePage::findOrFail($data['page_id']);
+            if (($data['is_active'] ?? false) && ($page->status !== 'published' || $page->visibility !== 'public' || ($page->published_at && $page->published_at->isFuture()))) {
+                throw ValidationException::withMessages(['page_id' => 'An active menu item must link to a currently published public page.']);
+            }
+            $data['url'] = $page->publicPath();
+        }
+        if (filled($data['parent_id'] ?? null)) {
+            $parent = WebsiteMenu::findOrFail($data['parent_id']);
+            if ($parent->location !== $data['location']) {
+                throw ValidationException::withMessages(['parent_id' => 'The parent item must belong to the same menu location.']);
+            }
+            $visited = [];
+            while ($parent) {
+                if ($menu && (int) $parent->id === (int) $menu->id) {
+                    throw ValidationException::withMessages(['parent_id' => 'Menu nesting cannot contain a cycle.']);
+                }
+                if (isset($visited[$parent->id])) {
+                    throw ValidationException::withMessages(['parent_id' => 'The selected menu hierarchy already contains a cycle.']);
+                }
+                $visited[$parent->id] = true;
+                $parent = $parent->parent()->first();
+            }
         }
 
         return $data;

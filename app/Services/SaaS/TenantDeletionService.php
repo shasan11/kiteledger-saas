@@ -3,7 +3,6 @@
 namespace App\Services\SaaS;
 
 use App\Enums\TenantStatus;
-use App\Models\Central\BackupManifest;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDeletionRequest;
 use App\Services\SaaS\DatabaseProvisioning\DatabaseProvisionerManager;
@@ -18,16 +17,12 @@ class TenantDeletionService
         private TenantFileDeletionService $files,
     ) {}
 
-    public function request(Tenant $tenant, int $adminId, string $reason, ?BackupManifest $backup, bool $waived): TenantDeletionRequest
+    public function request(Tenant $tenant, int $adminId, string $reason): TenantDeletionRequest
     {
-        if (! $waived && (! $backup || $backup->tenant_id !== $tenant->id || $backup->status !== 'verified')) {
-            throw new \RuntimeException('verified_backup_required');
-        }
-
-        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $adminId, $reason, $backup, $waived) {
+        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $adminId, $reason) {
             $this->lifecycle->transition($tenant, TenantStatus::DeletionPending, $reason);
 
-            $request = TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'backup_manifest_id' => $backup?->id, 'backup_waived' => $waived, 'reason' => $reason]);
+            $request = TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'reason' => $reason]);
             app(CentralNotificationService::class)->notifyOnce('deletion_approval_pending', 'tenants', 'critical', 'Tenant deletion approval pending', $tenant->company_name.' has a pending deletion request.', route('central.tenants.show', $tenant), $request, ['tenant_id' => $tenant->id], 1);
 
             return $request;

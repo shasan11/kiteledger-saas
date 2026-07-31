@@ -8,7 +8,7 @@ import Youtube from '@tiptap/extension-youtube';
 import Blockquote from '@tiptap/extension-blockquote';
 import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
 import { Button, Input, Modal, Select, Space, Typography } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const AlignedImage = Image.extend({
     addAttributes() {
@@ -25,6 +25,7 @@ export default function RichTextEditor({ value = '', onChange, autosaveKey = 'ed
     const [url, setUrl] = useState('');
     const [alt, setAlt] = useState('');
     const [align, setAlign] = useState('center');
+    const recoveryChecked = useRef(false);
     const editor = useEditor({
         extensions: [StarterKit.configure({ blockquote: false, heading: { levels: [2, 3, 4, 5, 6] } }), StyledBlockquote, Underline, Link.configure({ openOnClick: false, protocols: ['http', 'https', 'mailto'] }), AlignedImage.configure({ allowBase64: false }), Youtube.configure({ nocookie: true, controls: true }), TextAlign.configure({ types: ['heading', 'paragraph'] }), Table.configure({ resizable: true }), TableRow, TableHeader, TableCell],
         content: value || '',
@@ -32,6 +33,22 @@ export default function RichTextEditor({ value = '', onChange, autosaveKey = 'ed
         onUpdate: ({ editor: instance }) => onChange?.(instance.getHTML()),
     });
     useEffect(() => { if (editor && value !== editor.getHTML()) editor.commands.setContent(value || ''); }, [value]);
+    useEffect(() => {
+        if (!editor || recoveryChecked.current) return;
+        recoveryChecked.current = true;
+        const key = `central.autosave.${autosaveKey}`;
+        const saved = localStorage.getItem(key);
+        if (saved && saved !== (value || '') && saved !== editor.getHTML()) {
+            Modal.confirm({
+                title: 'Recover locally saved content?',
+                content: 'This browser contains an unsent draft for this editor.',
+                okText: 'Recover draft',
+                cancelText: 'Discard local draft',
+                onOk: () => { editor.commands.setContent(saved); onChange?.(saved); },
+                onCancel: () => localStorage.removeItem(key),
+            });
+        }
+    }, [editor, autosaveKey]);
     useEffect(() => { if (!editor) return; const timer = setInterval(() => localStorage.setItem(`central.autosave.${autosaveKey}`, editor.getHTML()), 5000); return () => clearInterval(timer); }, [editor, autosaveKey]);
     const words = useMemo(() => editor?.getText().trim().split(/\s+/).filter(Boolean).length || 0, [value, editor?.state]);
     if (!editor) return null;

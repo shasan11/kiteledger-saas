@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Central\AuthController;
-use App\Http\Controllers\Central\BackupController;
 use App\Http\Controllers\Central\BillingController;
 use App\Http\Controllers\Central\BillingWebhookController;
 use App\Http\Controllers\Central\BlogController;
@@ -19,6 +18,7 @@ use App\Http\Controllers\Central\PlanController;
 use App\Http\Controllers\Central\ProfileController;
 use App\Http\Controllers\Central\ResourceController;
 use App\Http\Controllers\Central\RoleController;
+use App\Http\Controllers\Central\SaaSInvoicePaymentController;
 use App\Http\Controllers\Central\SettingsController;
 use App\Http\Controllers\Central\SupportController;
 use App\Http\Controllers\Central\TenantController;
@@ -85,17 +85,29 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
         Route::get('/p/{slug}', [WebsiteController::class, 'page'])->name($namePrefix.'page');
         Route::get('/{slug}', [WebsiteController::class, 'page'])->whereIn('slug', ['features', 'contact', 'privacy-policy', 'terms-of-service', 'cookie-policy'])->name($namePrefix.'content.page');
         Route::post('/billing/webhooks/{gateway}', BillingWebhookController::class)->middleware('throttle:120,1')->name($namePrefix.'billing.webhook');
+        Route::get('/billing/invoices/{invoice}', [SaaSInvoicePaymentController::class, 'show'])->middleware('signed')->name($namePrefix.'billing.invoice.show');
+        Route::post('/billing/invoices/{invoice}/checkout', [SaaSInvoicePaymentController::class, 'checkout'])->middleware(['signed', 'throttle:10,1'])->name($namePrefix.'billing.invoice.checkout');
+        Route::get('/billing/invoices/{invoice}/paypal/complete', [SaaSInvoicePaymentController::class, 'completePayPal'])->middleware('throttle:10,1')->name($namePrefix.'billing.invoice.paypal.complete');
     }
 
     Route::prefix($adminPath ?? config('saas.admin_path', 'superadmin'))->name($namePrefix)->group(function (): void {
         Route::get('/login', [AuthController::class, 'create'])->name('login');
         Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+        Route::get('/forgot-password', [AuthController::class, 'forgot'])->name('password.request');
+        Route::post('/forgot-password', [AuthController::class, 'emailResetLink'])->middleware('throttle:3,1')->name('password.email');
+        Route::get('/reset-password/{token}', [AuthController::class, 'reset'])->name('password.reset');
+        Route::post('/reset-password', [AuthController::class, 'updatePassword'])->middleware('throttle:5,1')->name('password.update');
+        Route::get('/mfa-challenge', [AuthController::class, 'mfaChallenge'])->name('mfa.challenge');
+        Route::post('/mfa-challenge', [AuthController::class, 'verifyMfaChallenge'])->middleware('throttle:5,1')->name('mfa.verify');
         Route::middleware('central.admin')->group(function (): void {
             Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
             Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
             Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
             Route::post('/profile', [ProfileController::class, 'update']);
             Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+            Route::post('/profile/mfa/setup', [ProfileController::class, 'setupMfa'])->name('profile.mfa.setup');
+            Route::post('/profile/mfa/confirm', [ProfileController::class, 'confirmMfa'])->name('profile.mfa.confirm');
+            Route::delete('/profile/mfa', [ProfileController::class, 'disableMfa'])->name('profile.mfa.disable');
             Route::get('/', CentralDashboardController::class)->name('dashboard');
             Route::get('search', GlobalSearchController::class)->name('search');
             Route::get('tenants', [TenantController::class, 'index'])->middleware('central.admin:tenant.view')->name('tenants.index');
@@ -111,7 +123,6 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::post('tenants/{tenant}/migrate', [TenantController::class, 'migrate'])->middleware('central.admin:tenant.update')->name('tenants.migrate');
             Route::post('tenants/{tenant}/seed', [TenantController::class, 'seed'])->middleware('central.admin:tenant.update')->name('tenants.seed');
             Route::get('tenants/{tenant}/health', [TenantController::class, 'health'])->middleware('central.admin:system_health.view')->name('tenants.health');
-            Route::post('tenants/{tenant}/backup', [TenantController::class, 'backup'])->middleware('central.admin:tenant.backup')->name('tenants.backup');
             Route::delete('tenants/{tenant}', [TenantController::class, 'destroy'])->middleware('central.admin:tenant.delete')->name('tenants.destroy');
             Route::post('tenants/{tenant}/impersonate', [TenantController::class, 'impersonate'])->middleware('central.admin:tenant.impersonate')->name('tenants.impersonate');
             Route::get('plans', [PlanController::class, 'index'])->middleware('central.admin:plan.view')->name('plans.index');
@@ -148,12 +159,6 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::get('gateways', [BillingController::class, 'gateways'])->middleware('central.admin:gateway.view')->name('gateways.index');
             Route::put('gateways/{gateway}', [BillingController::class, 'updateGateway'])->middleware('central.admin:gateway.manage')->name('gateways.update');
             Route::post('gateways/{gateway}/test', [BillingController::class, 'testGateway'])->middleware('central.admin:gateway.manage')->name('gateways.test');
-
-            Route::get('backups', [BackupController::class, 'index'])->middleware('central.admin:system_health.view')->name('backups.index');
-            Route::post('backups', [BackupController::class, 'store'])->middleware('central.admin:tenant.backup')->name('backups.store');
-            Route::post('backups/{backup}/verify', [BackupController::class, 'verify'])->middleware('central.admin:tenant.backup')->name('backups.verify');
-            Route::get('backups/{backup}/download', [BackupController::class, 'download'])->middleware('central.admin:system_health.view')->name('backups.download');
-            Route::delete('backups/{backup}', [BackupController::class, 'destroy'])->middleware('central.admin:tenant.backup')->name('backups.destroy');
 
             Route::get('settings', [SettingsController::class, 'index'])->middleware('central.admin:settings.view')->name('settings.index');
             Route::get('settings/operations-guide', [SettingsController::class, 'operationsGuide'])->middleware('central.admin:settings.view')->name('settings.operations-guide');
@@ -196,10 +201,10 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::patch('website-leads/{lead}', [WebsiteLeadController::class, 'update'])->middleware('central.admin:lead.manage')->name('website-leads.update');
             Route::get('website-leads-export', [WebsiteLeadController::class, 'export'])->middleware('central.admin:lead.view')->name('website-leads.export');
             Route::middleware('central.admin:cms.view')->group(function (): void {
-                Route::get('website-content/{resource}', [WebsiteStructuredContentController::class, 'index'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->name('website-structured.index');
-                Route::post('website-content/{resource}', [WebsiteStructuredContentController::class, 'store'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.store');
-                Route::patch('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'update'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.update');
-                Route::delete('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'destroy'])->whereIn('resource', ['features','resource-categories','resource-articles','contact-locations','social-links','popups','navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.destroy');
+                Route::get('website-content/{resource}', [WebsiteStructuredContentController::class, 'index'])->whereIn('resource', ['features', 'resource-categories', 'resource-articles', 'contact-locations', 'social-links', 'popups', 'navbar-notifications'])->name('website-structured.index');
+                Route::post('website-content/{resource}', [WebsiteStructuredContentController::class, 'store'])->whereIn('resource', ['features', 'resource-categories', 'resource-articles', 'contact-locations', 'social-links', 'popups', 'navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.store');
+                Route::patch('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'update'])->whereIn('resource', ['features', 'resource-categories', 'resource-articles', 'contact-locations', 'social-links', 'popups', 'navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.update');
+                Route::delete('website-content/{resource}/{id}', [WebsiteStructuredContentController::class, 'destroy'])->whereIn('resource', ['features', 'resource-categories', 'resource-articles', 'contact-locations', 'social-links', 'popups', 'navbar-notifications'])->middleware('central.admin:cms.manage')->name('website-structured.destroy');
                 Route::get('website-pages', [WebsiteContentController::class, 'pages'])->name('website-pages.index');
                 Route::get('website-pages/create', [WebsiteContentController::class, 'createPage'])->middleware('central.admin:cms.manage')->name('website-pages.create');
                 Route::get('website-pages/{page}/edit', [WebsiteContentController::class, 'editPage'])->middleware('central.admin:cms.manage')->name('website-pages.edit');
@@ -265,7 +270,6 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
                     in_array($resource, ['support-categories', 'saved-replies'], true) => 'support.manage',
                     $resource === 'roles' => 'role.manage',
                     $resource === 'audit-logs' => 'audit.view',
-                    $resource === 'backups' => 'system_health.view',
                     in_array($resource, ['default-templates', 'tenant-databases'], true) => 'settings.manage',
                     $resource === 'features' => 'feature.manage',
                     $resource === 'tenant-feature-overrides' => 'feature_override.manage',
@@ -275,11 +279,11 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
                     in_array($resource, ['features'], true) => 'feature.view', $resource === 'tenant-feature-overrides' => 'feature_override.manage',
                     in_array($resource, ['website-pages', 'website-sections', 'website-menus', 'website-faqs', 'website-testimonials'], true) => 'cms.view',
                     in_array($resource, ['blog-categories', 'blog-tags'], true) => 'blog.view', in_array($resource, ['support-categories', 'saved-replies'], true) => 'ticket.view',
-                    $resource === 'audit-logs' => 'audit.view', in_array($resource, ['backups', 'provisioning-logs', 'tenant-databases'], true) => 'system_health.view',
+                    $resource === 'audit-logs' => 'audit.view', in_array($resource, ['provisioning-logs', 'tenant-databases'], true) => 'system_health.view',
                     default => 'settings.view',
                 };
                 Route::get($resource, [ResourceController::class, 'index'])->middleware('central.admin:'.$viewPermission)->defaults('resource', $resource)->name($resource.'.index');
-                if (! in_array($resource, ['provisioning-logs', 'usage', 'backups', 'roles', 'audit-logs'], true)) {
+                if (! in_array($resource, ['provisioning-logs', 'usage', 'roles', 'audit-logs'], true)) {
                     Route::post($resource, [ResourceController::class, 'store'])->middleware('central.admin:'.$permission)->defaults('resource', $resource)->name($resource.'.store');
                     Route::patch($resource.'/{id}', [ResourceController::class, 'update'])->middleware('central.admin:'.$permission)->defaults('resource', $resource)->name($resource.'.update');
                     Route::delete($resource.'/{id}', [ResourceController::class, 'destroy'])->middleware('central.admin:'.$permission)->defaults('resource', $resource)->name($resource.'.destroy');

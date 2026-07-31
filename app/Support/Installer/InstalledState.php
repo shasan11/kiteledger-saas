@@ -8,6 +8,10 @@ class InstalledState
 {
     public static function lockPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/app-installed');
+        }
+
         return storage_path('app/installed');
     }
 
@@ -19,16 +23,28 @@ class InstalledState
      */
     public static function froidenLockPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/froiden-installed');
+        }
+
         return storage_path('installed');
     }
 
     public static function recoveryMarkerPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/recovery-required');
+        }
+
         return storage_path('app/install/recovery-required');
     }
 
     public static function installerStatusPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/status.json');
+        }
+
         return storage_path('app/install/status.json');
     }
 
@@ -197,6 +213,10 @@ class InstalledState
     {
         if (is_file(self::recoveryMarkerPath())) {
             @unlink(self::recoveryMarkerPath());
+        }
+
+        if (app()->environment('testing')) {
+            return;
         }
 
         $path = base_path('.env');

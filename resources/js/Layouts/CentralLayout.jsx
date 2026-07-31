@@ -24,6 +24,7 @@ import {
     NotificationOutlined,
     PlusOutlined,
     QuestionCircleOutlined,
+    RiseOutlined,
     SafetyCertificateOutlined,
     SearchOutlined,
     SettingOutlined,
@@ -132,13 +133,6 @@ const navigation = [
             <CloudServerOutlined />,
             "system_health.view",
         ),
-        entry(
-            "central.backups.index",
-            "Backups",
-            <CodeSandboxOutlined />,
-            "system_health.view",
-        ),
-
     ]),
     menu("Products", <AppstoreOutlined />, [
         entry(
@@ -234,6 +228,24 @@ const navigation = [
                 "central.website-announcements.index",
                 "Announcements",
                 <NotificationOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-logos.index",
+                "Logo Strip",
+                <FileImageOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-features.index",
+                "Homepage Feature Blocks",
+                <AppstoreOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-metrics.index",
+                "Homepage Metrics",
+                <RiseOutlined />,
                 "cms.manage",
             ),
             entry(
@@ -611,7 +623,7 @@ export default function CentralLayout({
             <Head title={title} />
             <Sider
                 className="central-sider"
-                width={270}
+                width={230}
                 collapsedWidth={80}
                 collapsed={collapsed}
                 trigger={null}

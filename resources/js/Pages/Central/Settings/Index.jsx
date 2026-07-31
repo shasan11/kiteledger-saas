@@ -8,7 +8,6 @@ import { categoryLabels, orderedSections, sectionMatches } from './sectionRegist
 import {
     ApiOutlined,
     BgColorsOutlined,
-    CloudSyncOutlined,
     DatabaseOutlined,
     DollarOutlined,
     MailOutlined,
@@ -826,7 +825,6 @@ function groupSettings(settings) {
                     'notification',
                     'webhook',
                     'storage',
-                    'backup',
                     'provider',
                     'ssl',
                     'domain',
@@ -887,7 +885,6 @@ function sectionIcon(key) {
     if (['storage', 'database_pool', 'provisioning'].includes(key)) return <DatabaseOutlined />;
     if (['security', 'privacy'].includes(key)) return <SafetyCertificateOutlined />;
     if (['api', 'analytics', 'seo'].includes(key)) return <ApiOutlined />;
-    if (key === 'backups') return <CloudSyncOutlined />;
     if (['general', 'company', 'domains'].includes(key)) return <SettingOutlined />;
     return <ToolOutlined />;
 }

@@ -101,14 +101,6 @@ class AlertTypeSeeder extends Seeder
                 'sync_time' => null,
                 'recipient' => 'admin',
             ],
-            [
-                'name' => 'System Backup Reminder',
-                'medium' => 'email',
-                'alert_type' => 'system_backup_reminder',
-                'schedule' => 'weekly',
-                'sync_time' => '23:00:00',
-                'recipient' => 'admin',
-            ],
         ];
 
         foreach ($alertTypes as $alertType) {

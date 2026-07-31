@@ -164,6 +164,27 @@ function safeDisplay(value, fallback = '-') {
     return String(value);
 }
 
+function asArray(value) {
+    if (Array.isArray(value)) return value;
+
+    if (!value || typeof value !== 'object') return [];
+
+    if (Array.isArray(value.data)) return value.data;
+    if (Array.isArray(value.results)) return value.results;
+    if (Array.isArray(value.items)) return value.items;
+    if (Array.isArray(value.fields)) return value.fields;
+    if (Array.isArray(value.schema)) return value.schema;
+    if (Array.isArray(value.records)) return value.records;
+    if (value.data && typeof value.data === 'object' && Array.isArray(value.data.data)) return value.data.data;
+    if (value.results && typeof value.results === 'object' && Array.isArray(value.results.data)) return value.results.data;
+
+    return Object.values(value).filter((item) => item !== null && item !== undefined);
+}
+
+function asObject(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
 function cleanExtractionValue(value, fallback = '-') {
     if (value === null || value === undefined || value === '') return fallback;
     if (isUuidLike(value)) return fallback;
@@ -212,13 +233,13 @@ function fileSize(bytes) {
 }
 
 function toOptions(items = []) {
-    return items.map((item) => (typeof item === 'string'
+    return asArray(items).map((item) => (typeof item === 'string'
         ? { value: item, label: humanize(item) }
         : { ...item, label: humanize(item.label || item.value) }));
 }
 
 function formatList(items = []) {
-    const cleaned = items
+    const cleaned = asArray(items)
         .map((item) => cleanExtractionValue(item))
         .filter((item) => item && item !== '-');
 
@@ -226,7 +247,7 @@ function formatList(items = []) {
 }
 
 function recalcLines(lines = []) {
-    const next = lines.map((line) => {
+    const next = asArray(lines).map((line) => {
         const qty = Number(line.qty || 1);
         const rate = Number(line.unit_price || 0);
         const discount = Number(line.discount_amount || 0);
@@ -248,9 +269,11 @@ function recalcLines(lines = []) {
 }
 
 function pickValue(source = {}, keys = []) {
+    const target = asObject(source);
+
     for (const key of keys) {
-        if (source?.[key] !== null && source?.[key] !== undefined && source?.[key] !== '') {
-            return source[key];
+        if (target?.[key] !== null && target?.[key] !== undefined && target?.[key] !== '') {
+            return target[key];
         }
     }
 
@@ -258,8 +281,10 @@ function pickValue(source = {}, keys = []) {
 }
 
 function getFirstObject(source = {}, keys = []) {
+    const target = asObject(source);
+
     for (const key of keys) {
-        const value = source?.[key];
+        const value = target?.[key];
 
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             return value;
@@ -276,7 +301,7 @@ function getExtractedParty(normalized = {}, payload = {}) {
 }
 
 function getLineItems(normalized = {}, payload = {}) {
-    for (const source of [normalized, payload]) {
+    for (const source of [asObject(normalized), asObject(payload)]) {
         for (const key of LINE_ITEM_KEYS) {
             if (Array.isArray(source?.[key])) {
                 return source[key];
@@ -288,19 +313,20 @@ function getLineItems(normalized = {}, payload = {}) {
 }
 
 function normalizeLineItem(line = {}) {
-    const qty = Number(pickValue(line, ['qty', 'quantity']) || 1);
-    const unitPrice = Number(pickValue(line, ['unit_price', 'rate', 'price']) || 0);
-    const discount = Number(pickValue(line, ['discount_amount', 'discount']) || 0);
-    const tax = Number(pickValue(line, ['tax_amount', 'tax']) || 0);
-    const suppliedTotal = pickValue(line, ['line_total', 'total', 'amount']);
+    const source = asObject(line);
+    const qty = Number(pickValue(source, ['qty', 'quantity']) || 1);
+    const unitPrice = Number(pickValue(source, ['unit_price', 'rate', 'price']) || 0);
+    const discount = Number(pickValue(source, ['discount_amount', 'discount']) || 0);
+    const tax = Number(pickValue(source, ['tax_amount', 'tax']) || 0);
+    const suppliedTotal = pickValue(source, ['line_total', 'total', 'amount']);
 
     return {
-        ...line,
-        product_id: pickValue(line, ['product_id', 'matched_product_id']) || null,
-        product_name: pickValue(line, ['product_name', 'name', 'item']) || null,
-        description: pickValue(line, ['description', 'details', 'product_name', 'name', 'item']) || '',
+        ...source,
+        product_id: pickValue(source, ['product_id', 'matched_product_id']) || null,
+        product_name: pickValue(source, ['product_name', 'name', 'item']) || null,
+        description: pickValue(source, ['description', 'details', 'product_name', 'name', 'item']) || '',
         qty: Number.isFinite(qty) ? qty : 1,
-        unit: pickValue(line, ['unit', 'uom', 'unit_name']) || '',
+        unit: pickValue(source, ['unit', 'uom', 'unit_name']) || '',
         unit_price: Number.isFinite(unitPrice) ? unitPrice : 0,
         discount_amount: Number.isFinite(discount) ? discount : 0,
         tax_amount: Number.isFinite(tax) ? tax : 0,
@@ -354,7 +380,7 @@ function buildObjectRows(source = {}, excluded = []) {
     const excludedSet = new Set(excluded);
     const rows = [];
 
-    Object.entries(source || {}).forEach(([key, value]) => {
+    Object.entries(asObject(source)).forEach(([key, value]) => {
         if (excludedSet.has(key)) return;
         if (isIdLikeKey(key)) return;
         if (Array.isArray(value)) return;
@@ -379,16 +405,18 @@ function getLineValue(row, keys = []) {
 }
 
 function optionLabel(row) {
-    return row.display_name
-        || row.name
-        || row.code
-        || row.label
-        || row.title
-        || row.email
-        || row.number
-        || row.reference
-        || row.original_name
-        || row.original_file_name
+    const record = asObject(row);
+
+    return record.display_name
+        || record.name
+        || record.code
+        || record.label
+        || record.title
+        || record.email
+        || record.number
+        || record.reference
+        || record.original_name
+        || record.original_file_name
         || 'Record';
 }
 
@@ -431,12 +459,13 @@ export default function DocumentUploadIndex() {
     const [reviewSaving, setReviewSaving] = useState(false);
     const [converting, setConverting] = useState(false);
     const [reviewForm] = Form.useForm();
+    const documentRows = useMemo(() => asArray(documents.data), [documents.data]);
 
     const transactionTypeOptions = useMemo(() => toOptions(config.transaction_types || []), [config.transaction_types]);
     const documentTypeOptions = useMemo(() => toOptions(config.document_types || []), [config.document_types]);
 
     const stats = useMemo(() => {
-        const list = documents.data || [];
+        const list = documentRows;
 
         return {
             uploaded: list.filter((doc) => doc.status === 'uploaded').length,
@@ -445,7 +474,7 @@ export default function DocumentUploadIndex() {
             converted: list.filter((doc) => doc.status === 'converted').length,
             failed: list.filter((doc) => doc.status === 'failed').length,
         };
-    }, [documents.data]);
+    }, [documentRows]);
 
     const styles = useMemo(() => ({
         page: { padding: 24, minHeight: '100%', background: token.colorBgLayout },
@@ -509,7 +538,13 @@ export default function DocumentUploadIndex() {
                 },
             });
 
-            setDocuments(data);
+            setDocuments({
+                ...asObject(data),
+                data: asArray(data?.data ?? data),
+                total: data?.total ?? data?.meta?.total ?? asArray(data?.data ?? data).length,
+                current_page: data?.current_page ?? data?.meta?.current_page ?? nextPage,
+                per_page: data?.per_page ?? data?.meta?.per_page ?? nextPageSize,
+            });
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Failed to load documents');
         } finally {
@@ -624,7 +659,7 @@ export default function DocumentUploadIndex() {
 
         try {
             const { data } = await axios.post(`/api/document-uploads/${key}/match-entities`);
-            setMatchData(data.matches || []);
+            setMatchData(asArray(data.matches));
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Match failed');
         } finally {
@@ -702,7 +737,8 @@ export default function DocumentUploadIndex() {
                 ({ data } = await axios.post(`/api/document-uploads/${key}/proposals`, { transaction_type: type }));
             } else {
                 const proposalsResp = await axios.get(`/api/document-uploads/${key}/proposals`);
-                const proposal = proposalsResp.data.proposals?.find((item) => item.status !== 'converted') || proposalsResp.data.proposals?.[0];
+                const proposals = asArray(proposalsResp.data?.proposals);
+                const proposal = proposals.find((item) => item.status !== 'converted') || proposals[0];
 
                 if (proposal) {
                     ({ data } = await axios.get(`/api/document-uploads/${key}/proposals/${proposal.id}/review`));
@@ -772,7 +808,7 @@ export default function DocumentUploadIndex() {
 
         if (!reviewDoc || !dataForConvert?.proposal) return;
 
-        if (dataForConvert.missing_fields?.length) {
+        if (asArray(dataForConvert.missing_fields).length) {
             antMessage.warning('Fill required fields before creating draft transaction.');
             return;
         }
@@ -906,8 +942,8 @@ export default function DocumentUploadIndex() {
                     <Space wrap>
                         <Button
                             icon={<ScanOutlined />}
-                            onClick={() => documents.data?.[0] && scanDoc(documents.data[0])}
-                            disabled={!documents.data?.[0] || !hasPerm(permissions, 'document_upload.scan_ai')}
+                            onClick={() => documentRows[0] && scanDoc(documentRows[0])}
+                            disabled={!documentRows[0] || !hasPerm(permissions, 'document_upload.scan_ai')}
                         >
                             Run AI Scan
                         </Button>
@@ -1006,7 +1042,7 @@ export default function DocumentUploadIndex() {
                         size="small"
                         rowKey="public_id"
                         loading={loading}
-                        dataSource={documents.data || []}
+                        dataSource={documentRows}
                         columns={columns}
                         scroll={{ x: 1100 }}
                         pagination={{
@@ -1235,10 +1271,10 @@ function RemoteSelect({ endpoint, value, onChange, placeholder, selectedLabel })
                 params: { search, per_page: 20 },
             });
 
-            const rows = Array.isArray(data) ? data : data.results || data.data || [];
+            const rows = asArray(data?.results ?? data?.data ?? data);
 
             setOptions(rows.map((row) => ({
-                value: row.id,
+                value: row.id ?? row.value,
                 label: optionLabel(row),
             })));
         } catch {
@@ -1404,11 +1440,15 @@ function DocumentReviewDrawer({
     onConvert,
     onClose,
 }) {
-    const payload = data?.mapped_payload || {};
-    const normalized = data?.extraction?.normalized_json || {};
+    const payload = asObject(data?.mapped_payload);
+    const normalized = asObject(data?.extraction?.normalized_json);
     const document = data?.document || doc || {};
     const party = getExtractedParty(normalized, payload);
-    const totals = normalized?.totals || normalized;
+    const totals = asObject(normalized?.totals);
+    const totalsSource = Object.keys(totals).length ? totals : normalized;
+    const missingFields = asArray(data?.missing_fields);
+    const warnings = asArray(data?.warnings);
+    const reviewSchema = asArray(data?.review_schema).filter((field) => field && typeof field === 'object' && !Array.isArray(field));
 
     const lineColumns = [
         {
@@ -1544,19 +1584,19 @@ function DocumentReviewDrawer({
                                 </Space>
                             </Card>
 
-                            {data?.missing_fields?.length > 0 && (
+                            {missingFields.length > 0 && (
                                 <Alert
                                     type="warning"
                                     message="Fill required fields before creating draft transaction."
-                                    description={formatList(data.missing_fields)}
+                                    description={formatList(missingFields)}
                                 />
                             )}
 
-                            {data?.warnings?.length > 0 && (
+                            {warnings.length > 0 && (
                                 <Alert
                                     type="info"
                                     message="Review warnings"
-                                    description={formatList(data.warnings)}
+                                    description={formatList(warnings)}
                                 />
                             )}
 
@@ -1594,19 +1634,19 @@ function DocumentReviewDrawer({
                                             : '-'}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Subtotal">
-                                        {money(pickValue(totals, ['subtotal', 'sub_total']))}
+                                        {money(pickValue(totalsSource, ['subtotal', 'sub_total']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Discount">
-                                        {money(pickValue(totals, ['discount_amount', 'discount']))}
+                                        {money(pickValue(totalsSource, ['discount_amount', 'discount']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Tax">
-                                        {money(pickValue(totals, ['tax_amount', 'tax']))}
+                                        {money(pickValue(totalsSource, ['tax_amount', 'tax']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Total">
-                                        {money(pickValue(totals, ['grand_total', 'total', 'total_amount']))}
+                                        {money(pickValue(totalsSource, ['grand_total', 'total', 'total_amount']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Amount Due">
-                                        {money(pickValue(totals, ['amount_due', 'balance_due']))}
+                                        {money(pickValue(totalsSource, ['amount_due', 'balance_due']))}
                                     </Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1636,7 +1676,7 @@ function DocumentReviewDrawer({
 
                             <Card size="small" title="Transaction Details" style={styles.card}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-                                    {(data?.review_schema || []).map((field) => (
+                                    {reviewSchema.map((field) => (
                                         <ReviewField
                                             key={field.field}
                                             schema={field}
@@ -2000,9 +2040,10 @@ function PreviewModal({ doc, styles, onClose }) {
 }
 
 function ExtractionModal({ doc, data, loading, styles, onClose }) {
-    const normalized = data?.extraction?.normalized_json || {};
-    const payload = data?.document?.mapped_payload || data?.mapped_payload || {};
+    const normalized = asObject(data?.extraction?.normalized_json);
+    const payload = asObject(data?.document?.mapped_payload || data?.mapped_payload);
     const document = data?.document || doc || {};
+    const warnings = asArray(normalized.warnings);
 
     return (
         <Modal
@@ -2033,11 +2074,11 @@ function ExtractionModal({ doc, data, loading, styles, onClose }) {
                         </Descriptions>
                     </Card>
 
-                    {normalized.warnings?.length > 0 && (
+                    {warnings.length > 0 && (
                         <Alert
                             type="warning"
                             message="Warnings"
-                            description={formatList(normalized.warnings)}
+                            description={formatList(warnings)}
                         />
                     )}
 
@@ -2071,7 +2112,7 @@ function MatchModal({ doc, data, loading, onClose }) {
                     size="small"
                     rowKey={(record, index) => record.public_id || index}
                     pagination={false}
-                    dataSource={data || []}
+                    dataSource={asArray(data)}
                     columns={[
                         {
                             title: 'Type',

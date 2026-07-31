@@ -17,7 +17,8 @@ export default function BlogEditor({ post, categories, tags, media, revisions = 
         if (values.article_schema_json) { try { articleSchema = JSON.parse(values.article_schema_json); } catch { form.setFields([{ name: 'article_schema_json', errors: ['Enter valid JSON.'] }]); return; } }
         const payload = { ...values, article_schema: articleSchema, published_at: values.published_at?.toISOString() || null, scheduled_at: values.scheduled_at?.toISOString() || null };
         delete payload.article_schema_json;
-        editing ? router.put(route('central.blog.update', post.id), payload) : router.post(route('central.blog.store'), payload);
+        const options = { onSuccess: () => localStorage.removeItem(`central.autosave.blog.${post.id || 'new'}`) };
+        editing ? router.put(route('central.blog.update', post.id), payload, options) : router.post(route('central.blog.store'), payload, options);
     };
     const saveAs = (nextStatus) => { form.setFieldValue('status', nextStatus); form.submit(); };
     const restore = (revision) => Modal.confirm({ title: `Restore revision from ${formatDate(revision.created_at, true)}?`, content: 'The current post is saved as a revision first.', okText: 'Restore revision', onOk: () => router.post(route('central.blog.revisions.restore', { post: post.id, revision: revision.id })) });

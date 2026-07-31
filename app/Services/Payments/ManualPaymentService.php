@@ -7,8 +7,8 @@ use App\Jobs\SaaS\DeliverManualPaymentReceiptJob;
 use App\Models\Central\PaymentTransaction;
 use App\Models\Central\TenantInvoice;
 use App\Services\SaaS\CentralNotificationService;
-use App\Services\SaaS\PlatformSettingsService;
 use App\Services\SaaS\InvoicePaymentReconciler;
+use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -51,7 +51,10 @@ class ManualPaymentService implements PaymentGatewayInterface
                 throw ValidationException::withMessages(['reference' => 'This payment reference has already been recorded.']);
             }
 
-            $paid = round((float) PaymentTransaction::where('invoice_id', $locked->id)->where('status', 'success')->sum('amount'), 2);
+            $paid = round((float) PaymentTransaction::where('invoice_id', $locked->id)
+                ->whereIn('status', ['success', 'refunded'])
+                ->get()
+                ->sum(fn (PaymentTransaction $payment): float => max(0, (float) $payment->amount - (float) $payment->refunded_amount)), 2);
             $balance = max(0, round((float) $locked->total - $paid, 2));
             if ($amount > $balance && ! $settings->get('billing.overpayments_enabled', false)) {
                 throw ValidationException::withMessages(['amount' => 'The payment exceeds the outstanding invoice balance.']);

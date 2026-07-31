@@ -192,7 +192,6 @@ class CentralTenancyTest extends TestCase
             'requested_by' => 1,
             'approved_by' => 1,
             'execute_after' => now()->subMinute(),
-            'backup_waived' => true,
             'reason' => 'test',
         ]);
 
@@ -265,7 +264,6 @@ class CentralTenancyTest extends TestCase
             'requested_by' => 1,
             'approved_by' => 1,
             'execute_after' => now()->subMinute(),
-            'backup_waived' => true,
             'reason' => 'test',
         ]);
 

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Central\Tenant;
 use Database\Seeders\DemoFullSeeder;
 use Database\Seeders\DemoLiteSeeder;
+use Database\Seeders\ModuleDemoSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Database\Seeder;
 use Throwable;
@@ -13,16 +14,16 @@ class SeedDemoCommand extends Command
 {
     protected $signature = 'kiteledger:seed-demo
         {--tenant= : Seed one tenant by its exact tenant ID}
-        {--profile=quick : Demo profile: quick or full}
+        {--profile=quick : Demo profile: quick, modules, or full}
         {--force : Required for full demo in production}';
 
-    protected $description = 'Seed KiteLedger demo data using the quick or full profile.';
+    protected $description = 'Seed KiteLedger demo data using the quick, module-focused, or full profile.';
 
     public function handle(): int
     {
         $profile = strtolower((string) $this->option('profile'));
-        if (! in_array($profile, ['quick', 'full'], true)) {
-            $this->error('Invalid profile. Use --profile=quick or --profile=full.');
+        if (! in_array($profile, ['quick', 'modules', 'full'], true)) {
+            $this->error('Invalid profile. Use --profile=quick, --profile=modules, or --profile=full.');
 
             return self::FAILURE;
         }
@@ -47,7 +48,11 @@ class SeedDemoCommand extends Command
         logger()->info('Demo seeding started.', ['profile' => $profile, 'tenant_id' => $tenant?->id]);
 
         try {
-            $seeder = $profile === 'full' ? DemoFullSeeder::class : DemoLiteSeeder::class;
+            $seeder = match ($profile) {
+                'full' => DemoFullSeeder::class,
+                'modules' => ModuleDemoSeeder::class,
+                default => DemoLiteSeeder::class,
+            };
             if ($tenant) {
                 $tenant->run(fn () => $this->runSeeder($seeder));
             } else {

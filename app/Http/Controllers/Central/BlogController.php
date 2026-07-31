@@ -9,6 +9,7 @@ use App\Models\Central\BlogTag;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\Media;
 use App\Models\Central\WebsiteMenu;
+use App\Models\Central\WebsiteRedirect;
 use App\Models\Central\WebsiteRevision;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
@@ -78,6 +79,7 @@ class BlogController extends Controller
 
             return $post;
         });
+        WebsiteRedirect::where('source_path', '/blog/'.$post->slug)->delete();
         $audit->log($request, 'blog.created', $post, [], ['title' => $post->title, 'status' => $post->status]);
 
         return redirect()->route('central.blog.edit', $post)->with('success', 'Post created.');
@@ -87,6 +89,7 @@ class BlogController extends Controller
     {
         $data = $this->validatePost($request, $post);
         $old = $post->only(['title', 'slug', 'status', 'published_at']);
+        $oldPath = '/blog/'.$post->slug;
         DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($request, $data, $post) {
             $this->revision($post, $request->user('central')->id);
             $categories = $data['category_ids'] ?? [];
@@ -103,6 +106,11 @@ class BlogController extends Controller
             $post->categories()->sync($categories);
             $post->tags()->sync($tags);
         });
+        $newPath = '/blog/'.$post->slug;
+        WebsiteRedirect::where('source_path', $newPath)->delete();
+        if ($oldPath !== $newPath) {
+            WebsiteRedirect::updateOrCreate(['source_path' => $oldPath], ['destination_path' => $newPath, 'status_code' => 301]);
+        }
         $audit->log($request, 'blog.updated', $post, $old, $post->only(['title', 'slug', 'status', 'published_at']));
 
         return back()->with('success', 'Post saved.');
@@ -150,7 +158,7 @@ class BlogController extends Controller
 
     public function quickUpdate(Request $request, BlogPost $post, CentralAuditService $audit)
     {
-        $data = $request->validate(['title' => ['required', 'string', 'max:255'], 'status' => ['required', Rule::in(['draft', 'review', 'scheduled', 'published', 'archived'])], 'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled']]);
+        $data = $request->validate(['title' => ['required', 'string', 'max:255'], 'status' => ['required', Rule::in(['draft', 'review', 'scheduled', 'published', 'archived'])], 'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled', 'after:now']]);
         $before = $post->only(array_keys($data));
         $this->revision($post, $request->user('central')->id);
         if ($data['status'] === 'published' && blank($data['published_at'])) {
@@ -171,7 +179,7 @@ class BlogController extends Controller
         if (blank($post->canonical_url)) {
             $post->canonical_url = rtrim((string) $settings->get('seo.canonical_base_url', config('app.url')), '/').'/blog/'.$post->slug;
         }
-        $menus = WebsiteMenu::with(['page:id,title,slug', 'children.page:id,title,slug'])->whereNull('parent_id')->where('is_active', true)->orderBy('sort_order')->get()->groupBy('location');
+        $menus = WebsiteMenu::with(['page:id,title,slug', 'children' => fn ($query) => $query->with('page:id,title,slug')->publiclyVisible()->orderBy('sort_order')])->whereNull('parent_id')->publiclyVisible()->orderBy('sort_order')->get()->groupBy('location');
 
         return Inertia::render('Central/Website/Post', ['post' => $post, 'related' => [], 'menus' => $menus, 'site' => $settings->publicSettings(), 'isPreview' => true]);
     }
@@ -180,8 +188,14 @@ class BlogController extends Controller
     {
         abort_unless($revision->revisionable_type === BlogPost::class && $revision->revisionable_id === $post->id, 404);
         $before = $post->toArray();
+        $oldPath = '/blog/'.$post->slug;
         $this->revision($post, $request->user('central')->id);
         $post->update(collect($revision->snapshot)->only(array_keys($this->postRules($post)))->except(['category_ids', 'tag_ids'])->all() + ['updated_by' => $request->user('central')->id]);
+        $newPath = '/blog/'.$post->slug;
+        WebsiteRedirect::where('source_path', $newPath)->delete();
+        if ($oldPath !== $newPath) {
+            WebsiteRedirect::updateOrCreate(['source_path' => $oldPath], ['destination_path' => $newPath, 'status_code' => 301]);
+        }
         $audit->log($request, 'blog.revision_restored', $post, $before, $post->fresh()->toArray());
 
         return back()->with('success', 'Post revision restored.');
@@ -189,7 +203,7 @@ class BlogController extends Controller
 
     private function editor(BlogPost $post)
     {
-        return Inertia::render('Central/Blog/Editor', ['post' => $post, 'categories' => BlogCategory::where('status', 'active')->orderBy('name')->get(), 'tags' => BlogTag::where('status', 'active')->orderBy('name')->get(), 'media' => Media::where('mime_type', 'like', 'image/%')->latest()->limit(100)->get(), 'revisions' => $post->exists ? $post->revisions()->limit(30)->get() : []]);
+        return Inertia::render('Central/Blog/Editor', ['post' => $post, 'categories' => BlogCategory::where('status', 'active')->orderBy('name')->get(), 'tags' => BlogTag::where('status', 'active')->orderBy('name')->get(), 'media' => Media::where('mime_type', 'like', 'image/%')->latest()->get(), 'revisions' => $post->exists ? $post->revisions()->with('admin:id,name')->limit(30)->get() : []]);
     }
 
     private function validatePost(Request $request, ?BlogPost $post = null): array
@@ -203,7 +217,7 @@ class BlogController extends Controller
             'title' => ['required', 'string', 'max:255'], 'slug' => ['required', 'alpha_dash', 'max:255', Rule::unique('blog_posts')->ignore($post)],
             'excerpt' => ['nullable', 'string', 'max:1000'], 'content' => ['nullable', 'string', 'max:1000000'], 'featured_media_id' => ['nullable', 'exists:central_media,id'],
             'featured_image_alt' => ['nullable', 'string', 'max:255'], 'status' => ['required', Rule::in(['draft', 'review', 'scheduled', 'published', 'archived'])],
-            'visibility' => ['required', Rule::in(['public', 'private'])], 'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled'], 'is_featured' => ['boolean'],
+            'visibility' => ['required', Rule::in(['public', 'private'])], 'published_at' => ['nullable', 'date'], 'scheduled_at' => ['nullable', 'date', 'required_if:status,scheduled', 'after:now'], 'is_featured' => ['boolean'],
             'category_ids' => ['array'], 'category_ids.*' => ['integer', 'exists:blog_categories,id'], 'tag_ids' => ['array'], 'tag_ids.*' => ['integer', 'exists:blog_tags,id'],
             'seo_title' => ['nullable', 'string', 'max:255'], 'meta_description' => ['nullable', 'string', 'max:320'], 'focus_keyword' => ['nullable', 'string', 'max:255'],
             'canonical_url' => ['nullable', 'url', 'max:2048'], 'robots_index' => ['boolean'], 'robots_follow' => ['boolean'], 'og_title' => ['nullable', 'string', 'max:255'],

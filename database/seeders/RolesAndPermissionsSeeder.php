@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
@@ -64,8 +65,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
     public function run(): void
     {
-        if (class_exists(\Spatie\Permission\PermissionRegistrar::class)) {
-            app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        if (class_exists(PermissionRegistrar::class)) {
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
 
         DB::transaction(function () {
@@ -107,8 +108,8 @@ class RolesAndPermissionsSeeder extends Seeder
             $this->assignSuperAdminToFirstUser($roleIds['Super Admin'] ?? null);
         });
 
-        if (class_exists(\Spatie\Permission\PermissionRegistrar::class)) {
-            app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        if (class_exists(PermissionRegistrar::class)) {
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
         }
     }
 
@@ -563,6 +564,13 @@ class RolesAndPermissionsSeeder extends Seeder
                     'void',
                     'print',
                     'export',
+                ],
+
+                'fixed_asset' => [
+                    'view',
+                    'create',
+                    'update',
+                    'delete',
                 ],
 
                 'cash_transfer' => [
@@ -1610,6 +1618,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'accounting.bank_account.view',
                     'accounting.bank_account.statement',
                     'accounting.journal_voucher.*',
+                    'accounting.fixed_asset.*',
                     'accounting.cash_transfer.*',
                     'accounting.cheque_register.*',
                     'accounting.expense.*',
@@ -1644,6 +1653,9 @@ class RolesAndPermissionsSeeder extends Seeder
                     'accounting.journal_voucher.view',
                     'accounting.journal_voucher.create',
                     'accounting.journal_voucher.update',
+                    'accounting.fixed_asset.view',
+                    'accounting.fixed_asset.create',
+                    'accounting.fixed_asset.update',
                     'accounting.expense.view',
                     'accounting.expense.create',
                     'accounting.expense.update',

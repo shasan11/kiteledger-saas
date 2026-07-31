@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Contracts\SaaS\BackupManager;
 use App\Contracts\SaaS\FeatureResolver;
 use App\Contracts\SaaS\QuotaManager;
 use App\Contracts\SaaS\SubscriptionLifecycle;
@@ -95,7 +94,6 @@ use App\Policies\Central\TenantInvoicePolicy;
 use App\Policies\Central\WebsitePagePolicy;
 use App\Policies\DocumentUploadPolicy;
 use App\Services\SaaS\AtomicQuotaManager;
-use App\Services\SaaS\NativeBackupManager;
 use App\Services\SaaS\PlanFeatureResolver;
 use App\Services\SaaS\SubscriptionService;
 use App\Services\SmsService;
@@ -149,7 +147,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(FeatureResolver::class, PlanFeatureResolver::class);
         $this->app->singleton(QuotaManager::class, AtomicQuotaManager::class);
         $this->app->singleton(SubscriptionLifecycle::class, SubscriptionService::class);
-        $this->app->singleton(BackupManager::class, NativeBackupManager::class);
     }
 
     /**

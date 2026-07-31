@@ -230,6 +230,11 @@ export default function AuthenticatedLayout({ header, children }) {
                             ),
                     },
                     {
+                        key: 'pi-proforma-invoices',
+                        label: 'Proforma Invoices',
+                        onClick: () => visit('payment-in.proforma-invoices.index', '/payment-in/proforma-invoices'),
+                    },
+                    {
                         key: 'pi-invoices',
                         label: 'Invoices',
                         onClick: () =>
@@ -359,6 +364,21 @@ export default function AuthenticatedLayout({ header, children }) {
                                 'accounting.journal-vouchers.index',
                                 '/accounting/journal-vouchers',
                             ),
+                    },
+                    {
+                        key: 'quick-bill',
+                        label: 'Quick Bills',
+                        onClick: () => visit('accounting.quick-bills.index', '/accounting/quick-bills'),
+                    },
+                    {
+                        key: 'quick-receipt',
+                        label: 'Quick Receipts',
+                        onClick: () => visit('accounting.quick-receipts.index', '/accounting/quick-receipts'),
+                    },
+                    {
+                        key: 'fixed-asset',
+                        label: 'Fixed Assets',
+                        onClick: () => visit('accounting.fixed-assets.index', '/accounting/fixed-assets'),
                     },
                     {
                         key: 'loan-accounts',
