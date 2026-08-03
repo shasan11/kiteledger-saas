@@ -10,7 +10,7 @@ use ZipArchive;
 
 class DocumentAiExtractionService
 {
-    private const MAX_TEXT_CHARS = 30000;
+    private const DEFAULT_MAX_TEXT_CHARS = 30000;
 
     public function __construct(
         protected DocumentStorageService $storage,
@@ -241,42 +241,46 @@ class DocumentAiExtractionService
             throw new RuntimeException('Could not create temporary file for DOCX processing.');
         }
 
-        file_put_contents($tempFile, $binary);
+        // try/finally so the temp file is removed even when XML parsing throws.
+        try {
+            file_put_contents($tempFile, $binary);
 
-        $zip = new ZipArchive();
-        $opened = $zip->open($tempFile);
+            $zip = new ZipArchive();
 
-        if ($opened !== true) {
-            @unlink($tempFile);
-            throw new RuntimeException('Invalid DOCX file. The file could not be opened.');
-        }
-
-        $textParts = [];
-
-        $xmlFiles = [
-            'word/document.xml',
-            'word/header1.xml',
-            'word/header2.xml',
-            'word/header3.xml',
-            'word/footer1.xml',
-            'word/footer2.xml',
-            'word/footer3.xml',
-            'word/footnotes.xml',
-            'word/endnotes.xml',
-        ];
-
-        foreach ($xmlFiles as $xmlFile) {
-            $xml = $zip->getFromName($xmlFile);
-
-            if ($xml !== false) {
-                $textParts[] = $this->extractTextFromWordXml($xml);
+            if ($zip->open($tempFile) !== true) {
+                throw new RuntimeException('Invalid DOCX file. The file could not be opened.');
             }
+
+            $xmlFiles = [
+                'word/document.xml',
+                'word/header1.xml',
+                'word/header2.xml',
+                'word/header3.xml',
+                'word/footer1.xml',
+                'word/footer2.xml',
+                'word/footer3.xml',
+                'word/footnotes.xml',
+                'word/endnotes.xml',
+            ];
+
+            $textParts = [];
+
+            try {
+                foreach ($xmlFiles as $xmlFile) {
+                    $xml = $zip->getFromName($xmlFile);
+
+                    if ($xml !== false) {
+                        $textParts[] = $this->extractTextFromWordXml($xml);
+                    }
+                }
+            } finally {
+                $zip->close();
+            }
+
+            return trim(implode("\n\n", array_filter($textParts)));
+        } finally {
+            @unlink($tempFile);
         }
-
-        $zip->close();
-        @unlink($tempFile);
-
-        return trim(implode("\n\n", array_filter($textParts)));
     }
 
     private function extractTextFromWordXml(string $xml): string
@@ -341,7 +345,9 @@ class DocumentAiExtractionService
             $text = preg_replace($pattern, '[redacted]', $text) ?? $text;
         }
 
-        return mb_substr($text, 0, self::MAX_TEXT_CHARS);
+        $limit = (int) config('documents.max_plain_text_chars', self::DEFAULT_MAX_TEXT_CHARS);
+
+        return mb_substr($text, 0, $limit > 0 ? $limit : self::DEFAULT_MAX_TEXT_CHARS);
     }
 
     private function safeErrorMessage(\Throwable $e): string

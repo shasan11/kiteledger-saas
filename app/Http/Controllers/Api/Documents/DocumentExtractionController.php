@@ -12,10 +12,14 @@ use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class DocumentExtractionController extends Controller
 {
+    /** Statuses a document may be (re)scanned from. */
+    private const SCANNABLE_STATUSES = ['uploaded', 'failed', 'needs_review', 'extracted'];
+
     public function __construct(
         protected DocumentPermissionService $perms,
         protected DocumentAuditService $audit,
@@ -36,14 +40,6 @@ class DocumentExtractionController extends Controller
         $this->authorize('scanAi', $doc);
         $this->assertDocumentAccess($request, $doc);
 
-        if (!in_array($doc->status, ['uploaded', 'failed', 'needs_review', 'extracted'], true)) {
-            return response()->json([
-                'ok' => false,
-                'message' => 'Document cannot be scanned in current status: ' . $doc->status,
-                'code' => 'DOCUMENT_STATUS_INVALID',
-            ], 422);
-        }
-
         if (! Storage::disk(config('documents.disk', 'local'))->exists($doc->file_path)) {
             return response()->json([
                 'ok' => false,
@@ -52,14 +48,47 @@ class DocumentExtractionController extends Controller
             ], 422);
         }
 
-        $extraction = DocumentExtraction::query()->create([
-            'document_upload_id' => $doc->id,
-            'status' => 'queued',
-            'provider' => null,
-            'model' => null,
-        ]);
+        // The status check and the extraction insert have to happen under the
+        // same row lock. Without it two concurrent scans (double click, two
+        // tabs, retried request) both pass the whitelist and both enqueue a job.
+        $extraction = DB::transaction(function () use ($doc) {
+            $locked = DocumentUpload::query()->whereKey($doc->id)->lockForUpdate()->first();
 
-        $doc->update(['status' => 'queued']);
+            if (! $locked || ! in_array($locked->status, self::SCANNABLE_STATUSES, true)) {
+                return $locked?->status ?? 'missing';
+            }
+
+            $hasActiveAttempt = DocumentExtraction::query()
+                ->where('document_upload_id', $locked->id)
+                ->whereIn('status', ['queued', 'processing'])
+                ->exists();
+
+            if ($hasActiveAttempt) {
+                return 'in_progress';
+            }
+
+            $created = DocumentExtraction::query()->create([
+                'document_upload_id' => $locked->id,
+                'status' => 'queued',
+                'provider' => null,
+                'model' => null,
+            ]);
+
+            $locked->update(['status' => 'queued']);
+
+            return $created;
+        });
+
+        if (! $extraction instanceof DocumentExtraction) {
+            return response()->json([
+                'ok' => false,
+                'message' => $extraction === 'in_progress'
+                    ? 'A scan is already running for this document.'
+                    : 'Document cannot be scanned in current status: '.$extraction,
+                'code' => $extraction === 'in_progress' ? 'DOCUMENT_SCAN_IN_PROGRESS' : 'DOCUMENT_STATUS_INVALID',
+            ], 409);
+        }
+
         $this->audit->log('scan.queued', [
             'document_upload_id' => $doc->id,
             'document_extraction_id' => $extraction->id,

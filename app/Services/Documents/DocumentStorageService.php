@@ -4,6 +4,7 @@ namespace App\Services\Documents;
 
 use App\Models\DocumentUpload;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -120,10 +121,29 @@ class DocumentStorageService
 
     public function delete(DocumentUpload $doc): void
     {
+        $this->deletePath($doc->file_path);
+    }
+
+    /**
+     * Best-effort removal of a stored blob. Used both for normal deletion and
+     * as the compensating action when a row fails to persist after the file
+     * has already landed on disk. A failure here is an operational concern,
+     * not a user-facing one — surface it in the log rather than the response.
+     */
+    public function deletePath(?string $path): void
+    {
+        if (blank($path)) {
+            return;
+        }
+
         try {
-            Storage::disk($this->disk())->delete($doc->file_path);
+            Storage::disk($this->disk())->delete($path);
         } catch (\Throwable $e) {
-            // ignore
+            Log::warning('Document file could not be deleted; it may be orphaned.', [
+                'disk' => $this->disk(),
+                'path' => $path,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
