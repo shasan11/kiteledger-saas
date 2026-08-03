@@ -239,6 +239,18 @@ class AiSettingsService
         return filter_var($this->value('ai_copilot_enabled', config('ai.copilot.enabled', true)), FILTER_VALIDATE_BOOL);
     }
 
+    /**
+     * Copilot V2 orchestration. Database setting wins so a tenant can be moved
+     * onto (or off) V2 without a deploy; config is the environment default.
+     */
+    public function copilotV2Enabled(): bool
+    {
+        return filter_var(
+            $this->value('ai_copilot_v2_enabled', config('ai.copilot.v2_enabled', false)),
+            FILTER_VALIDATE_BOOL
+        );
+    }
+
     public function copilotEngine(): string
     {
         $engine = strtolower(trim((string) $this->value('ai_copilot_engine', config('ai.copilot.engine', 'neuron'))));

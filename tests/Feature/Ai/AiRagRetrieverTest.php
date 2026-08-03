@@ -69,6 +69,17 @@ class AiRagRetrieverTest extends TestCase
         $this->assertStringNotContainsString('ABC Secret', $labels);
     }
 
+    private function userWithContactAccess(): User
+    {
+        Permission::firstOrCreate(['name' => 'master.contact.view', 'guard_name' => 'web']);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $user = User::factory()->create();
+        $user->givePermissionTo('master.contact.view');
+
+        return $user->fresh();
+    }
+
     public function test_business_indexer_creates_readable_customer_chunk(): void
     {
         DB::table('contacts')->insert([
@@ -78,7 +89,13 @@ class AiRagRetrieverTest extends TestCase
         ]);
 
         $stats = app(BusinessKnowledgeIndexer::class)->index('contact', false);
-        $result = app(AiHybridRetriever::class)->retrieve(null, 'Explain customer ABC Trading');
+
+        // Retrieval now fails closed for a null user, so this exercises the
+        // real path: an authenticated user holding the contact permission.
+        $result = app(AiHybridRetriever::class)->retrieve(
+            $this->userWithContactAccess(),
+            'Explain customer ABC Trading',
+        );
 
         $this->assertGreaterThan(0, $stats['created']);
         $this->assertSame('Contact ABC-001', $result['sources'][0]['label']);

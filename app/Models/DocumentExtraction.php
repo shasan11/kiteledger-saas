@@ -27,6 +27,17 @@ class DocumentExtraction extends Model
         'error_message',
         'started_at',
         'completed_at',
+        // Document AI V2 attempt history.
+        'stage',
+        'error_code',
+        'schema_version',
+        'attempt_number',
+        'page_count',
+        'used_ocr',
+        'partial',
+        'duration_ms',
+        'review_issue_count',
+        'structured_json',
     ];
 
     protected $hidden = [
@@ -48,7 +59,14 @@ class DocumentExtraction extends Model
         return [
             'extracted_json' => 'array',
             'normalized_json' => 'array',
+            'structured_json' => 'array',
             'confidence_score' => 'float',
+            'attempt_number' => 'integer',
+            'page_count' => 'integer',
+            'used_ocr' => 'boolean',
+            'partial' => 'boolean',
+            'duration_ms' => 'integer',
+            'review_issue_count' => 'integer',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'created_at' => 'datetime',

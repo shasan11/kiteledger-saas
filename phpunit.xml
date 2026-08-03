@@ -35,6 +35,14 @@
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="AI_INCREMENTAL_INDEXING_ENABLED" value="false"/>
+        <!--
+            Default the suite to the legacy engine so existing tests keep
+            asserting that path deterministically. Neuron-path tests opt in
+            explicitly by setting the engine and binding a fake provider, which
+            replaces the old app()->runningUnitTests() bypass.
+        -->
+        <env name="AI_COPILOT_ENGINE" value="legacy"/>
+        <env name="AI_COPILOT_V2_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
     </php>

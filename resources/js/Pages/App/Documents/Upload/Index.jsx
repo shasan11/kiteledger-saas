@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import dayjs from 'dayjs';
 import {
     Alert,
@@ -57,368 +57,18 @@ const STATUS_COLORS = {
     archived: 'default',
 };
 
-const STATUS_LABELS = {
-    uploaded: 'Uploaded',
-    queued: 'Queued',
-    processing: 'Processing',
-    extracted: 'Extracted',
-    needs_review: 'Needs Review',
-    converted: 'Converted',
-    failed: 'Failed',
-    archived: 'Archived',
-};
+import {
+    STATUS_LABELS, SUMMARY_FIELDS, TOTAL_FIELDS, LINE_ITEM_KEYS, PARTY_KEYS,
+    EXCLUDED_EXTRACTION_KEYS, hasPerm, docKey, isUuidLike, isIdLikeKey, humanize,
+    safeDisplay, asArray, asObject, cleanExtractionValue, money, fileSize,
+    toOptions, formatList, recalcLines, pickValue, getFirstObject,
+    getExtractedParty, getLineItems, normalizeLineItem, reviewLinesFromData,
+    buildKnownRows, buildObjectRows, getLineValue, optionLabel,
+} from './documentUtils';
+import DocumentActionMenu from '../Components/DocumentActionMenu';
+import RemoteSelect from '../Components/RemoteSelect';
+import DocumentSummaryCards from '../Components/DocumentSummaryCards';
 
-const SUMMARY_FIELDS = [
-    { key: 'document_type', label: 'Document Type' },
-    { key: 'document_number', label: 'Document Number', aliases: ['invoice_number', 'bill_number', 'number', 'reference_number'] },
-    { key: 'document_date', label: 'Document Date', aliases: ['invoice_date', 'bill_date', 'date'] },
-    { key: 'due_date', label: 'Due Date' },
-    { key: 'currency_code', label: 'Currency', aliases: ['currency'] },
-    { key: 'confidence', label: 'Confidence' },
-];
-
-const TOTAL_FIELDS = [
-    { key: 'subtotal', label: 'Subtotal', aliases: ['sub_total'] },
-    { key: 'discount_amount', label: 'Discount' },
-    { key: 'tax_amount', label: 'Tax' },
-    { key: 'shipping_amount', label: 'Shipping' },
-    { key: 'total', label: 'Total', aliases: ['grand_total', 'total_amount', 'amount'] },
-    { key: 'amount_due', label: 'Amount Due', aliases: ['balance_due'] },
-];
-
-const LINE_ITEM_KEYS = ['line_items', 'lines', 'items', 'products', 'services'];
-
-const PARTY_KEYS = [
-    'extracted_party',
-    'party',
-    'vendor',
-    'supplier',
-    'customer',
-    'client',
-    'bill_to',
-    'ship_to',
-];
-
-const EXCLUDED_EXTRACTION_KEYS = [
-    ...LINE_ITEM_KEYS,
-    ...PARTY_KEYS,
-    'warnings',
-    'raw',
-    'raw_text',
-    'metadata',
-    'confidence',
-    'subtotal',
-    'sub_total',
-    'discount_amount',
-    'tax_amount',
-    'shipping_amount',
-    'total',
-    'grand_total',
-    'total_amount',
-    'amount',
-    'amount_due',
-    'balance_due',
-];
-
-function hasPerm(perms, key) {
-    return !!(perms && perms[key]);
-}
-
-function docKey(doc) {
-    return doc?.public_id;
-}
-
-function isUuidLike(value) {
-    if (value === null || value === undefined) return false;
-
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        String(value).trim(),
-    );
-}
-
-function isIdLikeKey(key) {
-    return /(^id$|_id$|uuid|guid|token|hash|password|secret)/i.test(String(key || ''));
-}
-
-function humanize(value) {
-    if (value === null || value === undefined || value === '') return '-';
-
-    return String(value)
-        .replace(/[_-]+/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function safeDisplay(value, fallback = '-') {
-    if (value === null || value === undefined || value === '') return fallback;
-    if (isUuidLike(value)) return fallback;
-
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fallback;
-    }
-
-    return String(value);
-}
-
-function asArray(value) {
-    if (Array.isArray(value)) return value;
-
-    if (!value || typeof value !== 'object') return [];
-
-    if (Array.isArray(value.data)) return value.data;
-    if (Array.isArray(value.results)) return value.results;
-    if (Array.isArray(value.items)) return value.items;
-    if (Array.isArray(value.fields)) return value.fields;
-    if (Array.isArray(value.schema)) return value.schema;
-    if (Array.isArray(value.records)) return value.records;
-    if (value.data && typeof value.data === 'object' && Array.isArray(value.data.data)) return value.data.data;
-    if (value.results && typeof value.results === 'object' && Array.isArray(value.results.data)) return value.results.data;
-
-    return Object.values(value).filter((item) => item !== null && item !== undefined);
-}
-
-function asObject(value) {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function cleanExtractionValue(value, fallback = '-') {
-    if (value === null || value === undefined || value === '') return fallback;
-    if (isUuidLike(value)) return fallback;
-
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fallback;
-    }
-
-    if (Array.isArray(value)) {
-        const cleaned = value
-            .map((item) => {
-                if (item === null || item === undefined || item === '') return null;
-                if (isUuidLike(item)) return null;
-                if (typeof item === 'object') return null;
-                return safeDisplay(item, null);
-            })
-            .filter(Boolean);
-
-        return cleaned.length ? cleaned.join(', ') : fallback;
-    }
-
-    if (typeof value === 'object') {
-        const cleaned = Object.entries(value)
-            .filter(([key, item]) => !isIdLikeKey(key) && !isUuidLike(item) && item !== null && item !== undefined && item !== '')
-            .map(([key, item]) => `${humanize(key)}: ${safeDisplay(item)}`);
-
-        return cleaned.length ? cleaned.join(', ') : fallback;
-    }
-
-    return safeDisplay(value, fallback);
-}
-
-function money(value) {
-    const numeric = Number(value || 0);
-    return Number.isFinite(numeric) ? numeric.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-';
-}
-
-function fileSize(bytes) {
-    const size = Number(bytes || 0);
-    if (!size) return '-';
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function toOptions(items = []) {
-    return asArray(items).map((item) => (typeof item === 'string'
-        ? { value: item, label: humanize(item) }
-        : { ...item, label: humanize(item.label || item.value) }));
-}
-
-function formatList(items = []) {
-    const cleaned = asArray(items)
-        .map((item) => cleanExtractionValue(item))
-        .filter((item) => item && item !== '-');
-
-    return cleaned.length ? cleaned.join(', ') : '-';
-}
-
-function recalcLines(lines = []) {
-    const next = asArray(lines).map((line) => {
-        const qty = Number(line.qty || 1);
-        const rate = Number(line.unit_price || 0);
-        const discount = Number(line.discount_amount || 0);
-        const tax = Number(line.tax_amount || 0);
-
-        return {
-            ...line,
-            qty,
-            unit_price: rate,
-            discount_amount: discount,
-            tax_amount: tax,
-            line_total: Number(((qty * rate) - discount + tax).toFixed(2)),
-        };
-    });
-
-    const total = next.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
-
-    return { lines: next, total: Number(total.toFixed(2)) };
-}
-
-function pickValue(source = {}, keys = []) {
-    const target = asObject(source);
-
-    for (const key of keys) {
-        if (target?.[key] !== null && target?.[key] !== undefined && target?.[key] !== '') {
-            return target[key];
-        }
-    }
-
-    return null;
-}
-
-function getFirstObject(source = {}, keys = []) {
-    const target = asObject(source);
-
-    for (const key of keys) {
-        const value = target?.[key];
-
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-            return value;
-        }
-    }
-
-    return {};
-}
-
-function getExtractedParty(normalized = {}, payload = {}) {
-    return getFirstObject(normalized, PARTY_KEYS)
-        || getFirstObject(payload, PARTY_KEYS)
-        || {};
-}
-
-function getLineItems(normalized = {}, payload = {}) {
-    for (const source of [asObject(normalized), asObject(payload)]) {
-        for (const key of LINE_ITEM_KEYS) {
-            if (Array.isArray(source?.[key])) {
-                return source[key];
-            }
-        }
-    }
-
-    return [];
-}
-
-function normalizeLineItem(line = {}) {
-    const source = asObject(line);
-    const qty = Number(pickValue(source, ['qty', 'quantity']) || 1);
-    const unitPrice = Number(pickValue(source, ['unit_price', 'rate', 'price']) || 0);
-    const discount = Number(pickValue(source, ['discount_amount', 'discount']) || 0);
-    const tax = Number(pickValue(source, ['tax_amount', 'tax']) || 0);
-    const suppliedTotal = pickValue(source, ['line_total', 'total', 'amount']);
-
-    return {
-        ...source,
-        product_id: pickValue(source, ['product_id', 'matched_product_id']) || null,
-        product_name: pickValue(source, ['product_name', 'name', 'item']) || null,
-        description: pickValue(source, ['description', 'details', 'product_name', 'name', 'item']) || '',
-        qty: Number.isFinite(qty) ? qty : 1,
-        unit: pickValue(source, ['unit', 'uom', 'unit_name']) || '',
-        unit_price: Number.isFinite(unitPrice) ? unitPrice : 0,
-        discount_amount: Number.isFinite(discount) ? discount : 0,
-        tax_amount: Number.isFinite(tax) ? tax : 0,
-        line_total: Number.isFinite(Number(suppliedTotal))
-            ? Number(suppliedTotal)
-            : Number(((qty * unitPrice) - discount + tax).toFixed(2)),
-    };
-}
-
-function reviewLinesFromData(payload = {}, data = {}) {
-    const normalized = data?.extraction?.normalized_json || {};
-    const candidates = [
-        payload.lines,
-        payload.line_items,
-        payload.items,
-        payload.products,
-        payload.services,
-        data?.mapped_payload?.lines,
-        data?.mapped_payload?.line_items,
-        normalized.lines,
-        normalized.line_items,
-        normalized.items,
-        normalized.products,
-        normalized.services,
-    ];
-
-    const lines = candidates.find((items) => Array.isArray(items) && items.length > 0) || [];
-    return lines.map(normalizeLineItem);
-}
-
-function buildKnownRows(source = {}, fields = []) {
-    const rows = [];
-
-    fields.forEach((field) => {
-        const value = pickValue(source, [field.key, ...(field.aliases || [])]);
-        const display = cleanExtractionValue(value);
-
-        if (display !== '-') {
-            rows.push({
-                key: field.key,
-                field: field.label,
-                value: display,
-            });
-        }
-    });
-
-    return rows;
-}
-
-function buildObjectRows(source = {}, excluded = []) {
-    const excludedSet = new Set(excluded);
-    const rows = [];
-
-    Object.entries(asObject(source)).forEach(([key, value]) => {
-        if (excludedSet.has(key)) return;
-        if (isIdLikeKey(key)) return;
-        if (Array.isArray(value)) return;
-        if (value && typeof value === 'object') return;
-
-        const display = cleanExtractionValue(value);
-
-        if (display !== '-') {
-            rows.push({
-                key,
-                field: humanize(key),
-                value: display,
-            });
-        }
-    });
-
-    return rows;
-}
-
-function getLineValue(row, keys = []) {
-    return cleanExtractionValue(pickValue(row, keys));
-}
-
-function optionLabel(row) {
-    const record = asObject(row);
-
-    return record.display_name
-        || record.name
-        || record.code
-        || record.label
-        || record.title
-        || record.email
-        || record.number
-        || record.reference
-        || record.original_name
-        || record.original_file_name
-        || 'Record';
-}
 
 export default function DocumentUploadIndex() {
     const { token } = theme.useToken();
@@ -487,18 +137,6 @@ export default function DocumentUploadIndex() {
 
     const transactionTypeOptions = useMemo(() => toOptions(config.transaction_types || []), [config.transaction_types]);
     const documentTypeOptions = useMemo(() => toOptions(config.document_types || []), [config.document_types]);
-
-    const stats = useMemo(() => {
-        const list = documentRows;
-
-        return {
-            uploaded: list.filter((doc) => doc.status === 'uploaded').length,
-            processing: list.filter((doc) => ['queued', 'processing'].includes(doc.status)).length,
-            needs_review: list.filter((doc) => doc.status === 'needs_review').length,
-            converted: list.filter((doc) => doc.status === 'converted').length,
-            failed: list.filter((doc) => doc.status === 'failed').length,
-        };
-    }, [documentRows]);
 
     const styles = useMemo(() => ({
         page: { padding: 24, minHeight: '100%', background: token.colorBgLayout },
@@ -936,6 +574,18 @@ export default function DocumentUploadIndex() {
         });
     };
 
+    /*
+     * Reviewing a document is a focused task, so it gets its own screen with
+     * the source visible beside the extracted values rather than a drawer
+     * stacked over the list. Proposal creation still uses the existing drawer.
+     */
+    const openReviewWorkspace = (doc) => {
+        const key = docKey(doc);
+        if (!key) return;
+
+        router.visit(`/documents/${key}/review`);
+    };
+
     const openReview = async (doc, createNew = false) => {
         setReviewDoc(doc);
         setReviewOpen(true);
@@ -1128,7 +778,7 @@ export default function DocumentUploadIndex() {
                     scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
                     onExtraction={() => openExtraction(record)}
                     onMatch={() => openMatch(record)}
-                    onReview={() => openReview(record)}
+                    onReview={() => openReviewWorkspace(record)}
                     onCreateProposal={() => openReview(record, true)}
                     onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
                     onDelete={() => deleteDoc(record)}
@@ -1177,13 +827,18 @@ export default function DocumentUploadIndex() {
                     </Space>
                 </div>
 
-                <div style={styles.statGrid}>
-                    {Object.entries(stats).map(([key, value]) => (
-                        <Card key={key} size="small" style={styles.card}>
-                            <Statistic title={STATUS_LABELS[key]} value={value} />
-                        </Card>
-                    ))}
-                </div>
+                {/* Server-computed counts across the whole filtered dataset.
+                    These replace an earlier grid that counted only the rows on
+                    the current page, which under-reported every total. */}
+                <DocumentSummaryCards
+                    summary={summary}
+                    loading={loading}
+                    activeStatus={filters.status}
+                    onSelect={(status) => {
+                        setFilters((prev) => ({ ...prev, status }));
+                        setPage(1);
+                    }}
+                />
 
                 <Card size="small" style={{ ...styles.card, ...styles.filters }}>
                     <div style={styles.filterInner}>
@@ -1397,176 +1052,6 @@ function denormalizeReviewValues(values) {
     return next;
 }
 
-function DocumentActionMenu({
-    doc,
-    permissions,
-    canUpdate,
-    onPreview,
-    onEdit,
-    onScan,
-    onExtraction,
-    onMatch,
-    onReview,
-    onCreateProposal,
-    onDownload,
-    onDelete,
-    scanBusy = false,
-}) {
-    // 'queued' and 'processing' are deliberately excluded: a scan is already
-    // in flight and the server would reject a second one anyway.
-    const canScan = ['uploaded', 'failed', 'needs_review', 'extracted'].includes(doc.status)
-        && !scanBusy
-        && hasPerm(permissions, 'document_upload.scan_ai');
-
-    const hasExtraction = !!doc.extraction;
-
-    const items = [
-        { key: 'preview', icon: <EyeOutlined />, label: 'Preview Document', onClick: onPreview },
-        canUpdate && { key: 'edit', icon: <EditOutlined />, label: 'Edit Details', onClick: onEdit },
-        {
-            key: 'scan',
-            icon: <ScanOutlined />,
-            label: doc.status === 'failed' ? 'Retry AI Scan' : 'Run AI Scan',
-            disabled: !canScan,
-            onClick: onScan,
-        },
-        {
-            key: 'extraction',
-            icon: <FileTextOutlined />,
-            label: 'View Extraction',
-            disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.extract.view'),
-            onClick: onExtraction,
-        },
-        {
-            key: 'match',
-            icon: <ToolOutlined />,
-            label: 'Entity Matches',
-            disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.entity_match'),
-            onClick: onMatch,
-        },
-        {
-            key: 'proposal',
-            icon: <PlusOutlined />,
-            label: 'Create Proposal',
-            disabled: !hasExtraction || doc.status === 'converted',
-            onClick: onCreateProposal,
-        },
-        {
-            key: 'review',
-            icon: <SwapOutlined />,
-            label: doc.status === 'converted' ? 'Open Draft Record' : 'Review Transaction',
-            disabled: !hasExtraction,
-            onClick: onReview,
-        },
-        { key: 'download', icon: <DownloadOutlined />, label: 'Download', onClick: onDownload },
-        hasPerm(permissions, 'document_upload.delete') && { type: 'divider' },
-        hasPerm(permissions, 'document_upload.delete') && {
-            key: 'delete',
-            icon: <DeleteOutlined />,
-            label: 'Delete',
-            danger: true,
-            onClick: onDelete,
-        },
-    ].filter(Boolean);
-
-    return (
-        <Dropdown menu={{ items }} trigger={['click']}>
-            <Tooltip title="Actions">
-                <Button icon={<MoreOutlined />} />
-            </Tooltip>
-        </Dropdown>
-    );
-}
-
-function RemoteSelect({ endpoint, value, onChange, placeholder, selectedLabel }) {
-    const [options, setOptions] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [resolvedLabel, setResolvedLabel] = useState(selectedLabel || null);
-
-    const load = async (search = '') => {
-        setLoading(true);
-
-        try {
-            const { data } = await axios.get(endpoint, {
-                params: { search, per_page: 20 },
-            });
-
-            const rows = asArray(data?.results ?? data?.data ?? data);
-
-            setOptions(rows.map((row) => ({
-                value: row.id ?? row.value,
-                label: optionLabel(row),
-            })));
-        } catch {
-            setOptions([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [endpoint]);
-
-    useEffect(() => {
-        setResolvedLabel(selectedLabel || null);
-    }, [selectedLabel, value]);
-
-    useEffect(() => {
-        if (!value || selectedLabel || options.some((item) => String(item.value) === String(value))) {
-            return;
-        }
-
-        let active = true;
-        const loadSelected = async () => {
-            try {
-                const { data } = await axios.get(`${String(endpoint).replace(/\/+$/, '')}/${value}`);
-                const record = data?.result || data?.data || data;
-                const label = record && typeof record === 'object' ? optionLabel(record) : null;
-
-                if (active && label && label !== 'Record') {
-                    setResolvedLabel(label);
-                }
-            } catch {
-                // The list endpoint may not expose a show route. Keep the safe label fallback.
-            }
-        };
-
-        void loadSelected();
-
-        return () => {
-            active = false;
-        };
-    }, [endpoint, options, selectedLabel, value]);
-
-    const displayOptions = useMemo(() => {
-        const next = [...options];
-
-        if (value && !next.some((item) => String(item.value) === String(value))) {
-            next.unshift({
-                value,
-                label: resolvedLabel || (isUuidLike(value) ? 'Linked record' : safeDisplay(value)),
-            });
-        }
-
-        return next;
-    }, [options, resolvedLabel, value]);
-
-    return (
-        <Select
-            showSearch
-            allowClear
-            value={value}
-            onChange={onChange}
-            onSearch={load}
-            loading={loading}
-            filterOption={false}
-            placeholder={placeholder}
-            options={displayOptions}
-        />
-    );
-}
 
 function ReviewField({ schema, form, doc, onFkCreated }) {
     const createRecord = async () => {

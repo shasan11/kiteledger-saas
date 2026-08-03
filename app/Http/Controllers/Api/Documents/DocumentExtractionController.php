@@ -10,6 +10,7 @@ use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
+use App\Services\Documents\Review\DocumentReadinessService;
 use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -119,6 +120,9 @@ class DocumentExtractionController extends Controller
             'extraction' => $doc->extraction ? new DocumentExtractionResource($doc->extraction->load('documentUpload')) : null,
             'matches' => $doc->entityMatches,
             'proposals' => $doc->proposals,
+            // Explains in plain sentences whether a draft can be created, so the
+            // UI never has to grey out an action without saying why.
+            'readiness' => app(DocumentReadinessService::class)->evaluate($doc, $request->user()),
         ]);
     }
 

@@ -15,6 +15,7 @@ use App\Neuron\Agents\Tools\SearchKnowledgeTool;
 use App\Services\AI\AiSettingsService;
 use App\Services\AI\Copilot\CopilotContext;
 use App\Services\AI\Copilot\ToolAuthorizationService;
+use App\Services\AI\Copilot\Tools\CopilotToolRegistry;
 use NeuronAI\Agent\Agent;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Tools\ToolInterface;
@@ -26,7 +27,12 @@ final class KiteLedgerCopilotAgent extends Agent
         private AIProviderInterface $aiProvider,
         private ToolAuthorizationService $authorization,
         private AiSettingsService $settings,
-    ) {}
+    ) {
+        // Agent extends Workflow, whose constructor initializes the executor.
+        // Without this the agent throws "Workflow::$executor must not be
+        // accessed before initialization" on every real run.
+        parent::__construct();
+    }
 
     protected function provider(): AIProviderInterface
     {
@@ -56,6 +62,13 @@ PROMPT;
     /** @return ToolInterface[] */
     protected function tools(): array
     {
+        // V2 builds the toolset from the single registry, which also swaps the
+        // natural-language RunFinancialQueryTool for the typed metric tool so a
+        // message is never classified twice.
+        if ($this->settings->copilotV2Enabled()) {
+            return $this->registryTools();
+        }
+
         $map = [
             'search_knowledge' => SearchKnowledgeTool::class,
             'search_business_records' => SearchBusinessRecordsTool::class,
@@ -82,6 +95,24 @@ PROMPT;
             if ($this->authorization->allows($this->context, $name)) {
                 $tools[] = app()->makeWith($class, ['context' => $this->context]);
             }
+        }
+
+        return $tools;
+    }
+
+    /**
+     * Registry-driven toolset. Visibility is filtered by permission here, but
+     * every tool still re-authorizes when it executes — a tool being visible is
+     * never treated as permission to run it.
+     *
+     * @return ToolInterface[]
+     */
+    private function registryTools(): array
+    {
+        $tools = [];
+
+        foreach (app(CopilotToolRegistry::class)->visibleFor($this->context) as $definition) {
+            $tools[] = app()->makeWith($definition->handler, ['context' => $this->context]);
         }
 
         return $tools;

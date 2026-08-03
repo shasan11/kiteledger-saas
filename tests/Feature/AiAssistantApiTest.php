@@ -137,6 +137,12 @@ class AiAssistantApiTest extends TestCase
     {
         $user = $this->userWith(['ai.settings.view']);
 
+        // Set the engine explicitly rather than relying on the ambient test
+        // default: the suite now pins AI_COPILOT_ENGINE=legacy so the legacy
+        // path stays deterministic, and this assertion is about the endpoint
+        // echoing the configured engine, not about which default is in force.
+        config(['ai.copilot.engine' => 'neuron']);
+
         $this->actingAs($user)
             ->getJson('/api/ai/settings')
             ->assertOk()

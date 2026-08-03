@@ -4,6 +4,12 @@ namespace App\Services\Documents;
 
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
+use App\Services\Documents\Contracts\DocumentExtractionResult;
+use App\Services\Documents\Pipeline\DocumentErrorCode;
+use App\Services\Documents\Pipeline\DocumentPageAnalysis;
+use App\Services\Documents\Pipeline\DocumentPageService;
+use App\Services\Documents\Pipeline\DocumentProcessingStage;
+use App\Services\Documents\Pipeline\StructuredOutputValidator;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use ZipArchive;
@@ -16,7 +22,28 @@ class DocumentAiExtractionService
         protected DocumentStorageService $storage,
         protected DocumentAiClient $ai,
         protected DocumentExtractionNormalizer $normalizer,
+        protected DocumentExtractionNormalizerV2 $normalizerV2,
+        protected StructuredOutputValidator $structuredOutput,
+        protected DocumentPageService $pages,
     ) {}
+
+    /**
+     * Records the current pipeline position so the UI can show a truthful
+     * stage instead of an invented percentage. Extra attributes are merged in
+     * to keep this to one write per transition.
+     */
+    private function stage(DocumentExtraction $extraction, DocumentProcessingStage $stage, array $attributes = []): void
+    {
+        $extraction->update(array_merge(['stage' => $stage->value], $attributes));
+    }
+
+    /** Attempts are numbered per document so history has a stable order. */
+    private function nextAttemptNumber(DocumentUpload $doc): int
+    {
+        return (int) DocumentExtraction::query()
+            ->where('document_upload_id', $doc->id)
+            ->max('attempt_number') + 1;
+    }
 
     public function run(DocumentUpload $doc): DocumentExtraction
     {
@@ -42,19 +69,25 @@ class DocumentAiExtractionService
             throw new RuntimeException($message);
         }
 
-        $extraction->update([
+        $startedAt = microtime(true);
+
+        $this->stage($extraction, DocumentProcessingStage::Preparing, [
             'status' => 'processing',
             'provider' => $this->ai->provider(),
             'model' => $this->ai->model(),
             'started_at' => now(),
             'completed_at' => null,
             'error_message' => null,
+            'error_code' => null,
+            'attempt_number' => $this->nextAttemptNumber($doc),
         ]);
 
         $doc->update(['status' => 'processing']);
 
         try {
             $prepared = $this->prepareDocumentForAi($doc);
+
+            $this->stage($extraction, DocumentProcessingStage::Reading);
 
             $result = $this->ai->extract(
                 $prepared['base64'],
@@ -63,15 +96,56 @@ class DocumentAiExtractionService
                 $prepared['user_prompt'],
             );
 
-            $json = $this->parseJson($result['text'] ?? '');
+            $this->stage($extraction, DocumentProcessingStage::Extracting);
+
+            // Malformed output is never accepted quietly: one deterministic
+            // repair pass, then an explicit, user-facing failure.
+            $structured = $this->structuredOutput->validate((string) ($result['text'] ?? ''));
+
+            if (! $structured->ok) {
+                throw new RuntimeException(
+                    ($structured->errorCode ?? DocumentErrorCode::ExtractionInvalid)->message()
+                );
+            }
+
+            $json = $structured->data;
+
+            $this->stage($extraction, DocumentProcessingStage::Normalizing);
+
+            // v1 stays authoritative for the existing review UI; v2 is written
+            // alongside it so the new field-level contract can be adopted
+            // without a breaking migration of live records.
             $normalized = $this->normalizer->normalize($json);
+            $v2 = $this->normalizerV2->normalize($json);
+
+            $this->stage($extraction, DocumentProcessingStage::Validating);
+
+            /** @var DocumentPageAnalysis|null $analysis */
+            $analysis = $prepared['analysis'] ?? null;
+
+            $warnings = array_values(array_unique(array_merge(
+                $normalized['warnings'] ?? [],
+                $structured->warnings(),
+                $analysis?->warnings() ?? [],
+            )));
+            $normalized['warnings'] = $warnings;
 
             $extraction->update([
                 'status' => 'completed',
+                'stage' => DocumentProcessingStage::ReadyForReview->value,
+                // Real page structure, not a guess. used_ocr records whether
+                // vision was needed, which explains cost and quality later.
+                'page_count' => $analysis?->pageCount ?: null,
+                'used_ocr' => $analysis === null || ! $analysis->canUseNativeText(),
                 'raw_text' => $result['text'] ?? null,
                 'extracted_json' => $json,
                 'normalized_json' => $normalized,
+                'structured_json' => $v2->toArray(includeDebug: true),
+                'schema_version' => DocumentExtractionResult::SCHEMA_VERSION,
                 'confidence_score' => $normalized['confidence'] ?? null,
+                'review_issue_count' => $v2->reviewIssueCount(),
+                'partial' => $structured->partial || (bool) $analysis?->truncated,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'completed_at' => now(),
             ]);
 
@@ -83,17 +157,27 @@ class DocumentAiExtractionService
             return $extraction;
         } catch (\Throwable $e) {
             $message = $this->safeErrorMessage($e);
+            $code = DocumentErrorCode::fromThrowableMessage(
+                $e->getMessage(),
+                method_exists($e, 'getErrorCode') ? (string) $e->getErrorCode() : '',
+            );
 
             Log::error('Document extraction failed', [
                 'document_upload_id' => $doc->id,
                 'file_name' => $doc->original_file_name ?? null,
                 'mime_type' => $doc->mime_type ?? null,
+                'error_code' => $code->value,
                 'error' => $message,
             ]);
 
             $extraction->update([
                 'status' => 'failed',
-                'error_message' => $message,
+                'stage' => DocumentProcessingStage::Failed->value,
+                // The stored message is the actionable one shown to the user;
+                // the raw provider text stays in the log.
+                'error_message' => $code === DocumentErrorCode::Unknown ? $message : $code->message(),
+                'error_code' => $code->value,
+                'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
                 'completed_at' => now(),
             ]);
 
@@ -115,10 +199,42 @@ class DocumentAiExtractionService
         $extension = $this->detectExtension($doc);
 
         if ($this->isPdf($mime, $extension)) {
+            $binary = base64_decode($base64, true);
+
+            $analysis = $binary === false
+                ? DocumentPageAnalysis::unreadable(false)
+                : $this->pages->analyze($binary);
+
+            if ($analysis->encrypted) {
+                throw new RuntimeException(DocumentErrorCode::PasswordProtected->message());
+            }
+
+            /*
+             * A digitally generated PDF already contains its own text. Reading
+             * that directly is exact and cheap; sending the same page through
+             * vision re-transcribes data we can simply read, introducing errors
+             * and cost. Scans have no text layer and still go to vision.
+             */
+            if ($analysis->canUseNativeText()) {
+                $text = $analysis->toPromptText(
+                    (int) config('documents.max_plain_text_chars', 60000),
+                );
+
+                return [
+                    'base64' => base64_encode($this->sanitizeDocumentText($text)),
+                    'mime' => 'text/plain',
+                    'user_prompt' => DocumentExtractionPrompt::user()
+                        ."\n\nThe document's own text layer is provided below, split by page. "
+                        .'Cite the page number a value came from where you can.',
+                    'analysis' => $analysis,
+                ];
+            }
+
             return [
                 'base64' => $base64,
                 'mime' => 'application/pdf',
                 'user_prompt' => DocumentExtractionPrompt::user(),
+                'analysis' => $analysis,
             ];
         }
 

@@ -23,6 +23,9 @@ use App\Services\AI\AiSettingsService;
 use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Assistant\AiFinancialAnswerService;
 use App\Services\AI\Copilot\CopilotContextFactory;
+use App\Services\AI\Copilot\CopilotException;
+use App\Services\AI\Copilot\CopilotOrchestrator;
+use App\Services\AI\Copilot\CopilotRequestFactory;
 use App\Services\AI\Copilot\KiteLedgerCopilotService;
 use App\Services\AI\Rag\AiGroundedAnswerService;
 use App\Services\AI\Rag\AiRagRetriever;
@@ -74,6 +77,13 @@ class AiAgentChatController extends Controller
             'context_payload' => 'nullable|array',
             'cache' => 'nullable|boolean',
         ]);
+
+        // Copilot V2: one orchestrator owns routing, evidence policy, execution
+        // and persistence. The legacy cascade below stays untouched until V2 is
+        // the default, so the flag is a true kill switch in both directions.
+        if ($this->settings->copilotV2Enabled()) {
+            return $this->handleV2($request, $data);
+        }
 
         $message = trim($data['message']);
         $payload = $this->normalizeContextPayload($data['context_payload'] ?? []);
@@ -304,7 +314,10 @@ class AiAgentChatController extends Controller
         $startedAt = microtime(true);
 
         try {
-            if ($this->settings->copilotEngine() === 'neuron' && ! app()->runningUnitTests()) {
+            // Engine selection is a real setting, not an environment guess.
+            // Tests exercise the Neuron path by binding a fake provider into
+            // NeuronProviderFactory rather than by being silently routed around it.
+            if ($this->settings->copilotEngine() === 'neuron') {
                 $trustedContext = $this->copilotContexts->make($request, $conversation, $contextType);
                 $providerResult = $this->copilot->respond($trustedContext, $conversation);
             } else {
@@ -378,6 +391,60 @@ class AiAgentChatController extends Controller
         }
 
         return response()->json($response);
+    }
+
+    /**
+     * Thin V2 entry point: build a trusted request, delegate, render.
+     *
+     * @param array<string, mixed> $data validated input
+     */
+    private function handleV2(Request $request, array $data): JsonResponse
+    {
+        $user = $request->user();
+
+        $conversation = $this->resolveConversation(
+            $data['conversation_id'] ?? null,
+            $user,
+            $data['context_type'] ?? 'general',
+            $user?->branch_id,
+            trim((string) $data['message']),
+        );
+
+        $copilotRequest = app(CopilotRequestFactory::class)->make($request, $data, $conversation);
+        $orchestrator = app(CopilotOrchestrator::class);
+
+        try {
+            $outcome = $orchestrator->handle($copilotRequest);
+        } catch (CopilotException $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'code' => $e->getErrorCode(),
+                'conversation_id' => $this->conversationToken($conversation),
+                'request_id' => $copilotRequest->requestId,
+            ], $e->httpStatus());
+        }
+
+        $debug = $orchestrator->canViewTrace($copilotRequest) && config('ai.copilot.trace_enabled', true)
+            ? $outcome->trace->toArray()
+            : null;
+
+        if ($outcome->failed()) {
+            return response()->json([
+                'ok' => false,
+                'message' => $outcome->response->message,
+                'code' => $outcome->exception?->getErrorCode(),
+                'conversation_id' => $this->conversationToken($outcome->conversation),
+                'request_id' => $copilotRequest->requestId,
+                'debug' => $debug,
+            ], $outcome->httpStatus());
+        }
+
+        return response()->json($outcome->response->toArray(
+            $this->conversationToken($outcome->conversation),
+            $copilotRequest->requestId,
+            $debug,
+        ));
     }
 
     private function storeAndRespond(AiConversation $conversation, string $reply, array $intent, string $contextType, array $branchScope, array $actions, array $results, array $display = [], array $sources = [], ?array $debug = null): JsonResponse

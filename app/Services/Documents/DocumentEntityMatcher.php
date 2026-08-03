@@ -11,10 +11,20 @@ use App\Models\DocumentUpload;
 use App\Models\Product;
 use App\Models\TaxRate;
 use App\Models\Warehouse;
+use App\Services\Documents\Matching\AccountMatcher;
+use App\Services\Documents\Matching\MatchCandidate;
+use App\Services\Documents\Matching\PartyMatcher;
+use App\Services\Documents\Matching\ProductMatcher;
 use Illuminate\Support\Str;
 
 class DocumentEntityMatcher
 {
+    public function __construct(
+        private readonly PartyMatcher $parties,
+        private readonly ProductMatcher $products,
+        private readonly AccountMatcher $accounts,
+    ) {}
+
     public function matchAll(DocumentUpload $doc, array $normalized): array
     {
         $matches = [];
@@ -23,7 +33,12 @@ class DocumentEntityMatcher
         $entityType = $partyRole === 'supplier' || $partyRole === 'vendor' ? 'supplier' : 'customer';
         $partyName = $normalized['party']['name'] ?? null;
         if ($partyName) {
-            $matches[] = $this->saveMatch($doc, $entityType, $partyName, $this->matchContact($partyName, $normalized['party']));
+            $matches[] = $this->saveMatch(
+                $doc,
+                $entityType,
+                $partyName,
+                $this->matchContact($partyName, $normalized['party'], $entityType),
+            );
         }
 
         if (!empty($normalized['currency_code'])) {
@@ -93,26 +108,54 @@ class DocumentEntityMatcher
         return DocumentEntityMatch::create($data);
     }
 
-    private function matchContact(string $name, array $party): array
+    /**
+     * Delegates to PartyMatcher so contact matching has one implementation.
+     *
+     * The previous inline version ranked on a raw name LIKE, which could rank a
+     * loose substring above a tax-number match and gave the reviewer no reason
+     * for a suggestion. PartyMatcher orders by evidence strength and explains
+     * each candidate, and never auto-selects a fuzzy name.
+     *
+     * @param array{tax_number?: ?string, email?: ?string, phone?: ?string, role?: ?string} $party
+     */
+    private function matchContact(string $name, array $party, ?string $role = null): array
     {
-        $contact = null;
-        if (!empty($party['tax_number'])) {
-            $contact = Contact::query()->where('tax_registration_no', $party['tax_number'])->first();
-            if ($contact) return $this->matched($contact, Contact::class, 0.98);
-        }
-        if (!empty($party['email'])) {
-            $contact = Contact::query()->whereRaw('LOWER(email) = ?', [strtolower($party['email'])])->first();
-            if ($contact) return $this->matched($contact, Contact::class, 0.95);
-        }
-        $exact = Contact::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
-        if ($exact) return $this->matched($exact, Contact::class, 0.95);
+        $candidates = $this->parties->match([
+            'name' => $name,
+            'tax_number' => $party['tax_number'] ?? null,
+            'email' => $party['email'] ?? null,
+            'phone' => $party['phone'] ?? null,
+        ], $role);
 
-        $suggestions = Contact::query()
-            ->where('name', 'like', '%' . substr($name, 0, max(3, intval(strlen($name) / 2))) . '%')
-            ->limit(5)
-            ->get(['id', 'name', 'code', 'email'])
-            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name, 'code' => $c->code])
-            ->toArray();
+        if ($candidates === []) {
+            return ['status' => 'unmatched', 'model' => Contact::class];
+        }
+
+        $best = $candidates[0];
+
+        // Only strong, verifiable evidence auto-matches. Anything weaker is
+        // offered for confirmation, so a guess never silently becomes the
+        // supplier on a bill.
+        if ($best->isAutoSelectable()) {
+            $contact = Contact::query()->find($best->publicId);
+
+            if ($contact) {
+                $matched = $this->matched($contact, Contact::class, $best->score);
+                $matched['match_reason'] = $best->reason;
+
+                return $matched;
+            }
+        }
+
+        $suggestions = array_map(
+            static fn ($candidate) => [
+                'id' => $candidate->publicId,
+                'name' => $candidate->displayName,
+                'code' => $candidate->code,
+                'reason' => $candidate->reason,
+            ],
+            $candidates,
+        );
 
         return $suggestions
             ? ['status' => 'suggested', 'suggestions' => $suggestions, 'model' => Contact::class]
@@ -126,36 +169,61 @@ class DocumentEntityMatcher
         return ['status' => 'unmatched', 'model' => Currency::class];
     }
 
+    /** Delegates to ProductMatcher so barcode/SKU rank above a description. */
     private function matchProduct(string $name, ?string $code): array
     {
-        if ($code) {
-            $p = Product::query()->where('sku', $code)->orWhere('code', $code)->first();
-            if ($p) return $this->matched($p, Product::class, 0.98);
-        }
-        $exact = Product::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
-        if ($exact) return $this->matched($exact, Product::class, 0.95);
-        $suggestions = Product::query()
-            ->where('name', 'like', '%' . Str::limit($name, 20, '') . '%')
-            ->limit(5)
-            ->get(['id', 'name', 'sku'])
-            ->toArray();
-        return $suggestions
-            ? ['status' => 'suggested', 'suggestions' => $suggestions, 'model' => Product::class]
-            : ['status' => 'unmatched', 'model' => Product::class];
+        return $this->resolve(
+            $this->products->match(['name' => $name, 'code' => $code]),
+            Product::class,
+        );
     }
 
+    /** Delegates to AccountMatcher, which never auto-selects on name similarity. */
     private function matchAccount(string $name): array
     {
-        $exact = Account::query()->whereRaw('LOWER(name) = ?', [strtolower($name)])->first();
-        if ($exact) return $this->matched($exact, Account::class, 0.95);
-        $suggestions = Account::query()
-            ->where('name', 'like', '%' . Str::limit($name, 20, '') . '%')
-            ->limit(5)
-            ->get(['id', 'name'])
-            ->toArray();
-        return $suggestions
-            ? ['status' => 'suggested', 'suggestions' => $suggestions, 'model' => Account::class]
-            : ['status' => 'unmatched', 'model' => Account::class];
+        return $this->resolve($this->accounts->match($name), Account::class);
+    }
+
+    /**
+     * Turns ranked candidates into the match record shape.
+     *
+     * Only an auto-selectable candidate becomes a match; everything else is a
+     * suggestion carrying its reason, so the reviewer sees why it was offered.
+     *
+     * @param MatchCandidate[] $candidates
+     */
+    private function resolve(array $candidates, string $modelClass): array
+    {
+        if ($candidates === []) {
+            return ['status' => 'unmatched', 'model' => $modelClass];
+        }
+
+        $best = $candidates[0];
+
+        if ($best->isAutoSelectable()) {
+            $record = $modelClass::query()->find($best->publicId);
+
+            if ($record) {
+                $matched = $this->matched($record, $modelClass, $best->score);
+                $matched['match_reason'] = $best->reason;
+
+                return $matched;
+            }
+        }
+
+        return [
+            'status' => 'suggested',
+            'suggestions' => array_map(
+                static fn (MatchCandidate $c) => [
+                    'id' => $c->publicId,
+                    'name' => $c->displayName,
+                    'code' => $c->code,
+                    'reason' => $c->reason,
+                ],
+                $candidates,
+            ),
+            'model' => $modelClass,
+        ];
     }
 
     private function matchBank(string $name): array

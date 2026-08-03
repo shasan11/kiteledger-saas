@@ -8,6 +8,7 @@ use App\Models\DocumentUpload;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentStorageService;
+use App\Services\Documents\Review\DocumentReviewService;
 use App\Services\BranchScopeService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -246,13 +247,33 @@ class DocumentUploadController extends Controller
             'label' => ['nullable', 'string', 'max:255'],
             'document_type' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string'],
+            // Reviewer corrections, keyed by field. Unknown keys are ignored by
+            // the review service rather than trusted.
+            'review_edits' => ['nullable', 'array'],
+            'review_edits.*' => ['nullable'],
         ]);
-        $doc->update(array_filter($data, fn ($v) => $v !== null));
 
-        return response()->json([
+        $doc->update(array_filter(
+            array_intersect_key($data, array_flip(['label', 'document_type', 'notes'])),
+            fn ($v) => $v !== null,
+        ));
+
+        $corrections = null;
+
+        if (! empty($data['review_edits'])) {
+            // Editing extracted values changes what a draft will be built from,
+            // so it needs proposal-update rights, not merely view.
+            $this->perms->authorize($request->user(), 'document_upload.proposal.update');
+
+            $corrections = app(DocumentReviewService::class)
+                ->applyCorrections($doc, $data['review_edits']);
+        }
+
+        return response()->json(array_filter([
             'ok' => true,
             'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
-        ]);
+            'corrections' => $corrections,
+        ], fn ($v) => $v !== null));
     }
 
     public function destroy(Request $request, string $publicId)

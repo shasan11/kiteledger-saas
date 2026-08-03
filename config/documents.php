@@ -27,6 +27,19 @@ return [
     /* Upper bound on DOCX text handed to the model, to protect the context window. */
     'max_plain_text_chars' => (int) env('DOCUMENT_MAX_PLAIN_TEXT_CHARS', 60000),
 
+    /*
+     * Entity matching thresholds.
+     *
+     * auto_select is deliberately high: below it a match is offered as a
+     * suggestion for a person to confirm, never applied silently. A fuzzy name
+     * match can never reach it by design.
+     */
+    'matching' => [
+        'auto_select_threshold' => (float) env('DOCUMENT_MATCH_AUTO_SELECT', 0.95),
+        'suggestion_threshold' => (float) env('DOCUMENT_MATCH_SUGGESTION', 0.55),
+        'candidate_pool' => (int) env('DOCUMENT_MATCH_POOL', 2000),
+    ],
+
     'ai_scan_enabled' => (bool) env('AI_DOCUMENT_SCAN_ENABLED', true),
     'ai_provider' => env('DOCUMENT_AI_PROVIDER'), // null => use AI module setting
     'ai_model' => env('DOCUMENT_AI_MODEL'),

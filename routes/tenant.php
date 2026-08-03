@@ -75,6 +75,7 @@ Route::middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.val
 
     // Document Upload module
     Route::get('/documents/upload', [DocumentUploadPageController::class, 'index'])->name('documents.upload.index');
+    Route::get('/documents/{publicId}/review', [DocumentUploadPageController::class, 'review'])->name('documents.review');
 });
 
 Route::middleware(['auth:tenant', 'tenant.active'])->group(function () {

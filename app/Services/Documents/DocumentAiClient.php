@@ -364,13 +364,14 @@ class DocumentAiClient
             'force_ip_resolve' => 'v4',
         ];
 
-        $caBundle = trim((string) env('AI_CA_BUNDLE', ''));
+        // Resolved via config so the setting survives `php artisan config:cache`.
+        $caBundle = trim((string) config('ai.ssl.ca_bundle', ''));
 
         if ($caBundle !== '') {
             $options['verify'] = $caBundle;
         }
 
-        if (filter_var(env('AI_SSL_VERIFY', true), FILTER_VALIDATE_BOOLEAN) === false) {
+        if (filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
             $options['verify'] = false;
         }
 

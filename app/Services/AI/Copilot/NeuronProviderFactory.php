@@ -17,9 +17,37 @@ use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
 use NeuronAI\RAG\Embeddings\GeminiEmbeddingsProvider;
 use NeuronAI\RAG\Embeddings\OllamaEmbeddingsProvider;
 
-final class NeuronProviderFactory
+/**
+ * Not final: tests substitute a subclass returning NeuronAI\Testing\FakeAIProvider
+ * so the real Neuron orchestration path can be exercised without a paid provider.
+ */
+class NeuronProviderFactory
 {
     public function __construct(private AiSettingsService $settings) {}
+
+    /**
+     * Guzzle options applied to every Neuron provider call.
+     *
+     * Without this the Neuron client falls back to the system CA store, which
+     * on a PHP build with no curl.cainfo/openssl.cafile fails every HTTPS call
+     * with "cURL error 60: unable to get local issuer certificate". Read via
+     * config (not env) so it survives `php artisan config:cache`.
+     *
+     * Note: the vendor client only merges these options for request(), not
+     * stream(), so streamed responses still rely on the system CA store.
+     *
+     * @return array<string, mixed>
+     */
+    private function sslOptions(): array
+    {
+        $caBundle = trim((string) config('ai.ssl.ca_bundle', ''));
+
+        if (filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
+            return ['verify' => false];
+        }
+
+        return $caBundle !== '' ? ['verify' => $caBundle] : [];
+    }
 
     public function chat(): AIProviderInterface
     {
@@ -27,11 +55,9 @@ final class NeuronProviderFactory
         $client = new GuzzleHttpClient(
             timeout: $this->settings->timeoutSeconds(),
             connectTimeout: $this->settings->connectTimeoutSeconds(),
+            options: $this->sslOptions(),
         );
-        $parameters = [
-            'temperature' => $this->settings->temperature(),
-            'max_tokens' => $this->settings->maxTokens(),
-        ];
+        $parameters = $this->generationParameters($provider);
 
         if ($provider === 'ollama') {
             return new Ollama(rtrim($this->settings->baseUrl(), '/').'/api', $this->settings->model(), $parameters, $client);
@@ -49,6 +75,38 @@ final class NeuronProviderFactory
         };
     }
 
+    /**
+     * Generation parameters, shaped per provider.
+     *
+     * Neuron spreads these straight into the request body, so they must already
+     * match the provider's wire format. Gemini nests them under generationConfig
+     * and names the token cap maxOutputTokens — sending OpenAI-style
+     * `temperature` / `max_tokens` makes Gemini reject the whole request with
+     * 400 "Unknown name". Anthropic takes max_tokens as its own argument.
+     *
+     * @return array<string, mixed>
+     */
+    private function generationParameters(string $provider): array
+    {
+        $temperature = $this->settings->temperature();
+        $maxTokens = $this->settings->maxTokens();
+
+        return match ($provider) {
+            'gemini' => [
+                'generationConfig' => [
+                    'temperature' => $temperature,
+                    'maxOutputTokens' => $maxTokens,
+                ],
+            ],
+            // max_tokens is passed separately to the Anthropic constructor.
+            'anthropic' => ['temperature' => $temperature],
+            default => [
+                'temperature' => $temperature,
+                'max_tokens' => $maxTokens,
+            ],
+        };
+    }
+
     public function embeddings(): EmbeddingsProviderInterface
     {
         $provider = $this->settings->embeddingProvider();
@@ -56,6 +114,7 @@ final class NeuronProviderFactory
         $client = new GuzzleHttpClient(
             timeout: $this->settings->timeoutSeconds(),
             connectTimeout: $this->settings->connectTimeoutSeconds(),
+            options: $this->sslOptions(),
         );
 
         if ($provider === 'ollama') {

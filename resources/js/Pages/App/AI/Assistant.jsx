@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head, usePage, router } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import {
     Alert,
     Button,
     Card,
     Drawer,
-    Empty,
     Grid,
     Input,
     List,
@@ -25,7 +24,6 @@ import {
     ReloadOutlined,
     CopyOutlined,
     DeleteOutlined,
-    SettingOutlined,
     CheckCircleOutlined,
     ExclamationCircleOutlined,
     HistoryOutlined,
@@ -33,63 +31,178 @@ import {
 } from '@ant-design/icons';
 import axios from 'axios';
 import AiMessageRenderer from '@/Components/AI/AiMessageRenderer';
-import AiSuggestedQuestions from '@/Components/AI/AiSuggestedQuestions';
 import AiPendingActionCard from '@/Components/AI/AiPendingActionCard';
 import AiSourceCards from '@/Components/AI/AiSourceCards';
+import AiCopilotStyles from '@/Components/AI/AiCopilotStyles';
+import AiWelcome from '@/Components/AI/AiWelcome';
+import AiThinkingIndicator from '@/Components/AI/AiThinkingIndicator';
 
-const { Title, Paragraph, Text } = Typography;
+const { Title, Text } = Typography;
 
-const SUGGESTED_PROMPTS = [
-    'Give me a financial overview for this fiscal year.',
-    'Which customer receivables need attention?',
-    'Summarize supplier payables due soon.',
-    'Show the largest expenses this month.',
-    'Explain current inventory value and low stock.',
-    'Find invoice INV-0001.',
-    'Which report should I use for trial balance?',
-    'How do I create and send an invoice?',
-];
 
 function hasAnyPermission(perms = [], required = []) {
     if (!Array.isArray(perms)) return false;
     return required.some((r) => perms.includes(r));
 }
 
-function HeaderTitle({ token }) {
+function HeaderTitle({ token, compact = false }) {
+    const iconSize = compact ? 36 : 42;
+    const radius = token.borderRadiusXL || token.borderRadiusLG + 4;
+
     return (
-        <Space size={10} align="center" style={{ minWidth: 0 }}>
+        <Space size={compact ? 10 : 12} align="center" style={{ minWidth: 0 }}>
             <div
+                aria-hidden="true"
                 style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: token.borderRadiusLG,
-                    background: token.colorPrimaryBg,
-                    border: `1px solid ${token.colorPrimaryBorder}`,
-                    color: token.colorPrimary,
+                    width: iconSize,
+                    height: iconSize,
+                    flex: `0 0 ${iconSize}px`,
+                    borderRadius: radius,
+                    background: `linear-gradient(145deg, ${token.colorPrimary}, ${token.colorPrimaryActive})`,
+                    border: `1px solid ${token.colorPrimaryBorderHover}`,
+                    boxShadow: token.boxShadowTertiary || token.boxShadowSecondary,
+                    color: token.colorTextLightSolid,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    fontSize: compact ? 17 : 19,
                 }}
             >
                 <RobotOutlined />
             </div>
 
             <div style={{ minWidth: 0 }}>
-                <Title level={5} style={{ margin: 0, lineHeight: 1.1 }}>
+                {!compact && (
+                    <Text
+                        type="secondary"
+                        style={{
+                            display: 'block',
+                            marginBottom: 2,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: '0.1em',
+                            lineHeight: 1.2,
+                            textTransform: 'uppercase',
+                        }}
+                    >
+                        AI workspace
+                    </Text>
+                )}
+                <Title
+                    level={5}
+                    style={{
+                        margin: 0,
+                        fontSize: compact ? 15 : 17,
+                        fontWeight: 750,
+                        lineHeight: 1.2,
+                        letterSpacing: '-0.015em',
+                    }}
+                >
                     KiteLedger Copilot
                 </Title>
-                <Text type="secondary" style={{ fontSize: 12 }} ellipsis>
-                    Ask about your business data or how to use KiteLedger.
+                <Text
+                    type="secondary"
+                    ellipsis
+                    style={{ display: 'block', marginTop: 2, fontSize: 12, lineHeight: 1.35 }}
+                >
+                    Your permission-aware business assistant
                 </Text>
             </div>
         </Space>
     );
 }
 
+function PremiumCopilotStyles({ token }) {
+    return (
+        <style>{`
+            .kl-premium-page .ant-card-head {
+                border-bottom-color: ${token.colorBorderSecondary};
+            }
+
+            .kl-premium-page .kl-sidebar-chat {
+                transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+            }
+
+            .kl-premium-page .kl-sidebar-chat:hover {
+                background: ${token.colorFillTertiary} !important;
+                border-color: ${token.colorBorder} !important;
+                transform: translateY(-1px);
+            }
+
+            .kl-premium-page .kl-message-bubble {
+                transition: transform 160ms ease, box-shadow 160ms ease;
+            }
+
+            .kl-premium-page .kl-message-bubble:hover {
+                transform: translateY(-1px);
+                box-shadow: ${token.boxShadowSecondary || token.boxShadow} !important;
+            }
+
+            .kl-premium-page .kl-message-bubble .kl-copy-button {
+                opacity: .58;
+                transition: opacity 160ms ease, background-color 160ms ease;
+            }
+
+            .kl-premium-page .kl-message-bubble:hover .kl-copy-button {
+                opacity: 1;
+            }
+
+            .kl-premium-page .kl-chat-scroll {
+                scrollbar-width: thin;
+                scrollbar-color: ${token.colorFillSecondary} transparent;
+            }
+
+            .kl-premium-page .kl-chat-scroll::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            .kl-premium-page .kl-chat-scroll::-webkit-scrollbar-thumb {
+                background: ${token.colorFillSecondary};
+                border-radius: 999px;
+            }
+
+            .kl-premium-page .kl-composer-textarea textarea {
+                padding: 0 !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                line-height: 1.6 !important;
+            }
+
+            .kl-premium-page .kl-composer-textarea,
+            .kl-premium-page .kl-composer-textarea:hover,
+            .kl-premium-page .kl-composer-textarea:focus,
+            .kl-premium-page .kl-composer-textarea.ant-input-affix-wrapper-focused {
+                border: 0 !important;
+                box-shadow: none !important;
+                background: transparent !important;
+            }
+
+            @media (max-width: 767px) {
+                .kl-premium-page .ant-card-head {
+                    padding-inline: 14px;
+                }
+            }
+        `}</style>
+    );
+}
+
 function StatusBadge({ health, healthLoading, healthError, aiReady }) {
+    const sharedStyle = {
+        height: 26,
+        marginInlineEnd: 0,
+        paddingInline: 10,
+        borderRadius: 999,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: 11,
+        fontWeight: 650,
+        lineHeight: '24px',
+    };
+
     if (healthLoading) {
         return (
-            <Tag icon={<Spin size="small" />} bordered={false}>
+            <Tag icon={<Spin size="small" />} bordered={false} style={sharedStyle}>
                 Checking
             </Tag>
         );
@@ -97,7 +210,12 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
 
     if (healthError) {
         return (
-            <Tag color="error" icon={<ExclamationCircleOutlined />} bordered={false}>
+            <Tag
+                color="error"
+                icon={<ExclamationCircleOutlined />}
+                bordered={false}
+                style={sharedStyle}
+            >
                 Error
             </Tag>
         );
@@ -105,16 +223,72 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
 
     if (aiReady) {
         return (
-            <Tag color="success" icon={<CheckCircleOutlined />} bordered={false}>
+            <Tag
+                color="success"
+                icon={<CheckCircleOutlined />}
+                bordered={false}
+                style={sharedStyle}
+            >
                 Ready
             </Tag>
         );
     }
 
     return (
-        <Tag color="warning" icon={<ExclamationCircleOutlined />} bordered={false}>
+        <Tag
+            color="warning"
+            icon={<ExclamationCircleOutlined />}
+            bordered={false}
+            style={sharedStyle}
+        >
             Not ready
         </Tag>
+    );
+}
+
+/**
+ * Shows where an answer came from. A verified live figure and a paraphrase of
+ * documentation look identical in plain prose, so the distinction is made
+ * explicit rather than left to the wording of the reply.
+ */
+function EvidenceBadge({ evidence, token }) {
+    if (!evidence?.label) return null;
+
+    const verified = Boolean(evidence.verified);
+    const asOf = evidence.as_of ? new Date(evidence.as_of) : null;
+
+    const detail = [
+        evidence.currency,
+        evidence.branch_scope,
+        evidence.filters?.date_range
+            ? `${evidence.filters.date_range.from} to ${evidence.filters.date_range.to}`
+            : null,
+        asOf && !Number.isNaN(asOf.getTime())
+            ? `as of ${asOf.toLocaleString()}`
+            : null,
+    ]
+        .filter(Boolean)
+        .join(' · ');
+
+    return (
+        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+            <Tag
+                color={verified ? 'green' : 'blue'}
+                icon={verified ? <CheckCircleOutlined /> : null}
+                bordered={false}
+                style={{ marginInlineEnd: 0 }}
+            >
+                {evidence.label}
+            </Tag>
+
+            {detail && (
+                /* Tabular figures so dates and amounts keep their columns
+                   steady as answers change. */
+                <Text type="secondary" className="kl-tabular" style={{ fontSize: 11 }}>
+                    {detail}
+                </Text>
+            )}
+        </div>
     );
 }
 
@@ -122,27 +296,30 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
     const isSystem = message.role === 'system';
+    const radius = token.borderRadiusXL || token.borderRadiusLG + 6;
 
     const bubbleStyle = {
-        maxWidth: isMobile ? '100%' : isUser ? 'min(680px, 82%)' : 'min(860px, 94%)',
+        width: 'fit-content',
+        maxWidth: isMobile ? '100%' : isUser ? 'min(680px, 80%)' : 'min(880px, 92%)',
         borderRadius: isUser
-            ? `${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px ${token.borderRadiusXL}px`
-            : `${token.borderRadiusXL}px ${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px`,
-        padding: '12px 14px',
+            ? `${radius}px ${radius}px 6px ${radius}px`
+            : `${radius}px ${radius}px ${radius}px 6px`,
+        padding: isMobile ? '12px 13px' : '14px 16px',
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
-        lineHeight: 1.65,
+        lineHeight: 1.68,
         fontSize: 14,
         boxShadow: token.boxShadowTertiary,
         border: `1px solid ${token.colorBorderSecondary}`,
-        background: token.colorBgContainer,
+        background: token.colorBgElevated,
         color: token.colorText,
     };
 
     if (isUser) {
-        bubbleStyle.background = token.colorPrimary;
+        bubbleStyle.background = `linear-gradient(145deg, ${token.colorPrimary}, ${token.colorPrimaryActive})`;
         bubbleStyle.color = token.colorTextLightSolid;
-        bubbleStyle.border = `1px solid ${token.colorPrimary}`;
+        bubbleStyle.border = `1px solid ${token.colorPrimaryBorderHover}`;
+        bubbleStyle.boxShadow = token.boxShadowSecondary || token.boxShadow;
     }
 
     if (isSystem) {
@@ -155,25 +332,65 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
         <List.Item
             style={{
                 border: 'none',
-                padding: isMobile ? '6px 0' : '8px 0',
+                padding: isMobile ? '7px 0' : '10px 0',
                 display: 'flex',
+                alignItems: 'flex-start',
                 justifyContent: isUser ? 'flex-end' : 'flex-start',
+                gap: 10,
             }}
         >
-            <div style={bubbleStyle}>
+            {!isUser && (
+                <div
+                    aria-hidden="true"
+                    style={{
+                        width: 30,
+                        height: 30,
+                        marginTop: 2,
+                        flex: '0 0 30px',
+                        borderRadius: token.borderRadiusLG,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: isAssistant ? token.colorPrimary : token.colorWarning,
+                        background: isAssistant ? token.colorPrimaryBg : token.colorWarningBg,
+                        border: `1px solid ${
+                            isAssistant ? token.colorPrimaryBorder : token.colorWarningBorder
+                        }`,
+                        boxShadow: token.boxShadowTertiary,
+                    }}
+                >
+                    {isAssistant ? <RobotOutlined /> : <ExclamationCircleOutlined />}
+                </div>
+            )}
+
+            <div className="kl-message-bubble" style={bubbleStyle}>
                 {!isUser && (
-                    <Space size={6} style={{ marginBottom: 6 }}>
-                        <Tag
-                            bordered={false}
-                            color={isAssistant ? 'blue' : 'warning'}
-                            style={{ marginInlineEnd: 0 }}
+                    <div
+                        style={{
+                            marginBottom: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                        }}
+                    >
+                        <Text
+                            strong
+                            style={{
+                                color: isSystem ? token.colorWarningText : token.colorText,
+                                fontSize: 12,
+                                letterSpacing: '0.01em',
+                            }}
                         >
-                            {isAssistant ? 'Copilot' : 'System'}
-                        </Tag>
-                    </Space>
+                            {isAssistant ? 'KiteLedger Copilot' : 'System notice'}
+                        </Text>
+                    </div>
                 )}
 
                 <AiMessageRenderer message={message} onFollowup={onFollowup} />
+
+                {isAssistant && <EvidenceBadge evidence={message.evidence} token={token} />}
+
                 {Array.isArray(message.sources) && message.sources.length > 0 && (
                     <AiSourceCards sources={message.sources} />
                 )}
@@ -192,8 +409,8 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
                 {isAssistant && (
                     <div
                         style={{
-                            marginTop: 10,
-                            paddingTop: 8,
+                            marginTop: 12,
+                            paddingTop: 9,
                             borderTop: `1px solid ${token.colorBorderSecondary}`,
                             display: 'flex',
                             alignItems: 'center',
@@ -202,20 +419,25 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
                             flexWrap: 'wrap',
                         }}
                     >
-                        <Space size={4} wrap>
+                        <Space size={5} wrap>
                             {message.cached && (
-                                <Tag color="green" bordered={false} style={{ marginInlineEnd: 0 }}>
-                                    cached
+                                <Tag
+                                    color="green"
+                                    bordered={false}
+                                    style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: 10 }}
+                                >
+                                    Cached response
                                 </Tag>
                             )}
-
                         </Space>
 
-                        <Tooltip title="Copy reply">
+                        <Tooltip title="Copy response">
                             <Button
+                                className="kl-copy-button"
                                 size="small"
                                 type="text"
                                 icon={<CopyOutlined />}
+                                aria-label="Copy response"
                                 onClick={() => onCopy(message.content)}
                             />
                         </Tooltip>
@@ -237,9 +459,6 @@ export default function Assistant() {
 
     const canUseAi =
         canBypass || hasAnyPermission(permissions, ['ai.view', 'ai.use', 'ai.chat', 'ai.manage']);
-
-    const canManage =
-        canBypass || hasAnyPermission(permissions, ['ai.manage', 'ai.settings.update']);
 
     const [health, setHealth] = useState(null);
     const [healthError, setHealthError] = useState(null);
@@ -316,66 +535,88 @@ export default function Assistant() {
     }, [canUseAi]);
 
     const styles = useMemo(() => {
+        const radius = token.borderRadiusXL || token.borderRadiusLG + 6;
+        const premiumShadow = token.boxShadowSecondary || token.boxShadow;
+
         return {
             page: {
-                padding: isMobile ? 12 : 16,
-                background: token.colorBgLayout,
+                padding: isMobile ? 10 : 22,
+                background: `radial-gradient(circle at 12% 0%, ${token.colorPrimaryBg} 0, transparent 32%), ${token.colorBgLayout}`,
                 minHeight: 'calc(100vh - 64px)',
             },
             shell: {
                 display: 'grid',
-                gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '280px minmax(0, 1fr)',
-                gap: 16,
+                gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '292px minmax(0, 1fr)',
+                gap: isMobile ? 10 : 18,
                 alignItems: 'stretch',
                 width: '100%',
-                maxWidth: 1320,
+                maxWidth: 1400,
                 margin: '0 auto',
             },
             sideCard: {
-                height: '100%',
-                borderRadius: token.borderRadiusLG,
+                height: 'fit-content',
+                maxHeight: 'calc(100vh - 108px)',
+                borderRadius: radius,
                 border: `1px solid ${token.colorBorderSecondary}`,
-                boxShadow: token.boxShadowTertiary,
+                boxShadow: premiumShadow,
                 position: 'sticky',
-                top: 16,
+                top: 18,
+                overflow: 'hidden',
+                background: token.colorBgContainer,
             },
             mainCard: {
-                borderRadius: token.borderRadiusLG,
+                borderRadius: radius,
                 border: `1px solid ${token.colorBorderSecondary}`,
-                boxShadow: token.boxShadowTertiary,
+                boxShadow: premiumShadow,
                 overflow: 'hidden',
                 minWidth: 0,
+                background: token.colorBgContainer,
             },
             chatArea: {
-                minHeight: isMobile ? 440 : 540,
-                maxHeight: isMobile ? 'calc(100vh - 300px)' : 'calc(100vh - 235px)',
+                minHeight: isMobile ? 430 : 570,
+                maxHeight: isMobile ? 'calc(100vh - 292px)' : 'calc(100vh - 232px)',
                 overflowY: 'auto',
-                padding: isMobile ? 12 : 20,
-                background: `linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorFillQuaternary} 100%)`,
+                padding: isMobile ? '14px 12px 18px' : '22px 26px 28px',
+                background: `radial-gradient(circle at 100% 0%, ${token.colorPrimaryBg} 0, transparent 26%), linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorFillQuaternary} 100%)`,
             },
             composer: {
-                padding: isMobile ? 10 : 12,
+                padding: isMobile ? 10 : 14,
                 borderTop: `1px solid ${token.colorBorderSecondary}`,
                 background: token.colorBgContainer,
+            },
+            composerSurface: {
+                padding: isMobile ? 11 : 12,
+                borderRadius: radius,
+                background: token.colorBgElevated,
+                border: `1px solid ${token.colorBorder}`,
+                boxShadow: token.boxShadowTertiary,
+                transition: 'border-color 160ms ease, box-shadow 160ms ease',
             },
             composerBox: {
                 display: 'flex',
                 flexDirection: isMobile ? 'column' : 'row',
                 alignItems: isMobile ? 'stretch' : 'flex-end',
-                gap: 8,
-            },
-            promptButton: {
-                width: '100%',
-                textAlign: 'left',
-                justifyContent: 'flex-start',
-                height: 34,
-                borderRadius: token.borderRadius,
+                gap: 10,
             },
             statBox: {
-                padding: 12,
+                padding: 13,
                 borderRadius: token.borderRadiusLG,
-                background: token.colorFillQuaternary,
-                border: `1px solid ${token.colorBorderSecondary}`,
+                background: `linear-gradient(145deg, ${token.colorPrimaryBg}, ${token.colorFillQuaternary})`,
+                border: `1px solid ${token.colorPrimaryBorder}`,
+            },
+            sidebarSection: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                width: '100%',
+            },
+            sectionLabel: {
+                margin: 0,
+                color: token.colorTextTertiary,
+                fontSize: 10,
+                fontWeight: 750,
+                letterSpacing: '0.09em',
+                textTransform: 'uppercase',
             },
             toolbar: {
                 display: 'flex',
@@ -390,11 +631,21 @@ export default function Assistant() {
                 alignItems: 'center',
                 justifyContent: isMobile ? 'stretch' : 'flex-end',
                 flexWrap: 'wrap',
-                gap: 8,
+                gap: 7,
                 width: isMobile ? '100%' : 'auto',
             },
             compactButton: {
                 flex: isMobile ? '1 1 calc(50% - 8px)' : '0 0 auto',
+                borderRadius: token.borderRadiusLG,
+            },
+            emptyState: {
+                width: '100%',
+                maxWidth: 820,
+                minHeight: isMobile ? 390 : 510,
+                margin: '0 auto',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
             },
         };
     }, [token, isMobile]);
@@ -516,6 +767,9 @@ export default function Assistant() {
                     followups: res.data?.followups || [],
                     answer_type: res.data?.answer_type || null,
                     answer: res.data?.answer || null,
+                    // V2 evidence metadata: lets the user tell a verified live
+                    // figure apart from a documentation answer.
+                    evidence: res.data?.evidence || null,
                 },
             ]);
         } catch (err) {
@@ -695,8 +949,10 @@ export default function Assistant() {
     return (
         <AuthenticatedLayout header={<HeaderTitle token={token} />}>
             <Head title="KiteLedger Copilot" />
+            <AiCopilotStyles />
+            <PremiumCopilotStyles token={token} />
 
-            <div style={styles.page}>
+            <div className="kl-premium-page" style={styles.page}>
                 {(healthError || error || (!healthLoading && health && !aiReady)) && (
                     <Space
                         direction="vertical"
@@ -745,16 +1001,38 @@ export default function Assistant() {
                 <div style={styles.shell}>
                     {!isMobile && (
                         <Card
+                            className="kl-premium-sidebar"
                             size="small"
                             style={styles.sideCard}
-                            title={<HeaderTitle token={token} />}
-                            styles={{ body: { padding: 14 } }}
+                            title={<HeaderTitle token={token} compact />}
+                            styles={{
+                                header: { minHeight: 70, paddingInline: 16 },
+                                body: { padding: 14 },
+                            }}
                         >
-                            <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                                <Button
+                                    type="primary"
+                                    size="large"
+                                    block
+                                    icon={<PlusOutlined />}
+                                    onClick={clearConversation}
+                                    style={{
+                                        height: 44,
+                                        borderRadius: token.borderRadiusLG,
+                                        boxShadow: token.boxShadowTertiary,
+                                        fontWeight: 650,
+                                    }}
+                                >
+                                    New conversation
+                                </Button>
+
                                 <div style={styles.statBox}>
                                     <Space direction="vertical" size={8} style={{ width: '100%' }}>
                                         <div style={styles.toolbar}>
-                                            <Text strong>Status</Text>
+                                            <Text strong style={{ fontSize: 13 }}>
+                                                Copilot status
+                                            </Text>
                                             <StatusBadge
                                                 health={health}
                                                 healthLoading={healthLoading}
@@ -762,96 +1040,184 @@ export default function Assistant() {
                                                 aiReady={aiReady}
                                             />
                                         </div>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                        <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.55 }}>
                                             {aiReady
-                                                ? 'Ready to answer with your allowed business data.'
+                                                ? 'Ready to answer using the business data you are allowed to access.'
                                                 : health?.provider_configured === false
-                                                  ? 'Waiting for central AI provider configuration.'
+                                                  ? 'Waiting for the shared AI provider configuration.'
                                                   : 'Checking configuration and permissions.'}
                                         </Text>
                                     </Space>
                                 </div>
 
-                                <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                    <Text strong>Useful prompts</Text>
-                                    {SUGGESTED_PROMPTS.slice(0, 5).map((prompt) => (
-                                        <Button
-                                            key={prompt}
-                                            size="small"
-                                            style={styles.promptButton}
-                                            onClick={() => send(prompt)}
-                                            disabled={!aiReady || sending}
-                                        >
-                                            {prompt}
-                                        </Button>
-                                    ))}
-                                </Space>
-
-                                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                <div style={styles.sidebarSection}>
                                     <div style={styles.toolbar}>
-                                        <Text strong>Recent chats</Text>
+                                        <Text style={styles.sectionLabel}>Recent conversations</Text>
                                         <Button
                                             size="small"
-                                            type="link"
+                                            type="text"
                                             onClick={() => setHistoryOpen(true)}
-                                            style={{ paddingInline: 0 }}
+                                            style={{ paddingInline: 4, fontSize: 12 }}
                                         >
                                             View all
                                         </Button>
                                     </div>
+
                                     {conversations.length ? (
                                         <List
                                             size="small"
-                                            dataSource={conversations.slice(0, 4)}
-                                            renderItem={(item) => (
-                                                <List.Item
-                                                    onClick={() => openConversation(item.id)}
-                                                    style={{
-                                                        cursor: 'pointer',
-                                                        paddingInline: 0,
-                                                    }}
-                                                >
-                                                    <List.Item.Meta
-                                                        title={
-                                                            <Text ellipsis style={{ maxWidth: 220 }}>
-                                                                {item.title || 'Untitled conversation'}
-                                                            </Text>
-                                                        }
-                                                        description={
-                                                            item.updated_at
-                                                                ? new Date(item.updated_at).toLocaleString()
-                                                                : item.module
-                                                        }
-                                                    />
-                                                </List.Item>
-                                            )}
+                                            split={false}
+                                            dataSource={conversations.slice(0, 5)}
+                                            renderItem={(item) => {
+                                                const selected = conversationId === item.id;
+                                                return (
+                                                    <List.Item
+                                                        className="kl-sidebar-chat"
+                                                        onClick={() => openConversation(item.id)}
+                                                        style={{
+                                                            cursor: 'pointer',
+                                                            marginBottom: 5,
+                                                            padding: '10px 11px',
+                                                            borderRadius: token.borderRadiusLG,
+                                                            border: `1px solid ${
+                                                                selected
+                                                                    ? token.colorPrimaryBorder
+                                                                    : token.colorBorderSecondary
+                                                            }`,
+                                                            background: selected
+                                                                ? token.colorPrimaryBg
+                                                                : token.colorBgContainer,
+                                                        }}
+                                                    >
+                                                        <List.Item.Meta
+                                                            avatar={
+                                                                <div
+                                                                    style={{
+                                                                        width: 28,
+                                                                        height: 28,
+                                                                        borderRadius: token.borderRadius,
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        color: selected
+                                                                            ? token.colorPrimary
+                                                                            : token.colorTextSecondary,
+                                                                        background: selected
+                                                                            ? token.colorPrimaryBgHover
+                                                                            : token.colorFillQuaternary,
+                                                                    }}
+                                                                >
+                                                                    <HistoryOutlined />
+                                                                </div>
+                                                            }
+                                                            title={
+                                                                <Text
+                                                                    strong={selected}
+                                                                    ellipsis
+                                                                    style={{ maxWidth: 175, fontSize: 12 }}
+                                                                >
+                                                                    {item.title || 'Untitled conversation'}
+                                                                </Text>
+                                                            }
+                                                            description={
+                                                                <Text
+                                                                    type="secondary"
+                                                                    ellipsis
+                                                                    style={{ display: 'block', maxWidth: 175, fontSize: 10 }}
+                                                                >
+                                                                    {item.updated_at
+                                                                        ? new Date(item.updated_at).toLocaleString()
+                                                                        : item.module || 'KiteLedger Copilot'}
+                                                                </Text>
+                                                            }
+                                                        />
+                                                    </List.Item>
+                                                );
+                                            }}
                                         />
                                     ) : (
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            Your recent conversations will appear here.
-                                        </Text>
+                                        <div
+                                            style={{
+                                                padding: '14px 12px',
+                                                borderRadius: token.borderRadiusLG,
+                                                border: `1px dashed ${token.colorBorder}`,
+                                                background: token.colorFillQuaternary,
+                                                textAlign: 'center',
+                                            }}
+                                        >
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                Your recent conversations will appear here.
+                                            </Text>
+                                        </div>
                                     )}
-                                </Space>
+                                </div>
+
+                                <div
+                                    style={{
+                                        paddingTop: 12,
+                                        borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                    }}
+                                >
+                                    <CheckCircleOutlined style={{ color: token.colorSuccess }} />
+                                    <Text type="secondary" style={{ fontSize: 11, lineHeight: 1.45 }}>
+                                        Permission-aware access to KiteLedger data
+                                    </Text>
+                                </div>
                             </Space>
                         </Card>
                     )}
 
                     <Card
+                        className="kl-premium-main"
                         size="small"
                         style={styles.mainCard}
                         styles={{
                             body: { padding: 0 },
-                            header: { flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-                            title: { minWidth: 0, flex: '1 1 260px' },
+                            header: {
+                                minHeight: isMobile ? 66 : 74,
+                                paddingInline: isMobile ? 14 : 18,
+                                flexWrap: 'wrap',
+                                gap: 8,
+                                alignItems: 'center',
+                                background: token.colorBgContainer,
+                            },
+                            title: { minWidth: 0, flex: '1 1 280px' },
                             extra: { marginInlineStart: 0 },
                         }}
                         title={
                             <div style={styles.toolbar}>
-                                <Space size={8} wrap>
-                                    <RobotOutlined style={{ color: token.colorPrimary }} />
-                                    <Text strong>Conversation</Text>
-                                    <Tag bordered={false}>{messages.length} messages</Tag>
-                                </Space>
+                                <div style={{ minWidth: 0 }}>
+                                    <Space size={8} align="center" wrap>
+                                        <Text
+                                            strong
+                                            style={{
+                                                fontSize: isMobile ? 14 : 16,
+                                                letterSpacing: '-0.01em',
+                                            }}
+                                        >
+                                            Copilot workspace
+                                        </Text>
+                                        <Tag
+                                            bordered={false}
+                                            style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: 11 }}
+                                        >
+                                            {messages.length} {messages.length === 1 ? 'message' : 'messages'}
+                                        </Tag>
+                                    </Space>
+                                    {!isMobile && (
+                                        <Text
+                                            type="secondary"
+                                            ellipsis
+                                            style={{ display: 'block', marginTop: 3, fontSize: 12 }}
+                                        >
+                                            Ask, analyse, and take action without leaving KiteLedger
+                                        </Text>
+                                    )}
+                                </div>
+
                                 {isMobile && (
                                     <StatusBadge
                                         health={health}
@@ -882,217 +1248,208 @@ export default function Assistant() {
                                     New
                                 </Button>
 
-                                <Button
-                                    size="small"
-                                    icon={<ReloadOutlined />}
-                                    onClick={retry}
-                                    disabled={sending || !messages.length}
-                                    style={styles.compactButton}
-                                >
-                                    Retry
-                                </Button>
-
-                                <Button
-                                    size="small"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    onClick={clearConversation}
-                                    disabled={!messages.length}
-                                    style={styles.compactButton}
-                                >
-                                    Clear
-                                </Button>
+                                <Tooltip title="Clear this conversation">
+                                    <Button
+                                        size="small"
+                                        type="text"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        aria-label="Clear conversation"
+                                        onClick={clearConversation}
+                                        disabled={!messages.length}
+                                        style={{ borderRadius: token.borderRadiusLG }}
+                                    />
+                                </Tooltip>
                             </div>
                         }
                     >
-                        <div ref={scrollRef} style={styles.chatArea}>
+                        <div ref={scrollRef} className="kl-chat-scroll" style={styles.chatArea}>
                             {messages.length === 0 ? (
-                                <div
-                                    style={{
-                                        minHeight: 360,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        textAlign: 'center',
-                                    }}
-                                >
-                                    <div style={{ maxWidth: 560 }}>
-                                        <Empty
-                                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                            description={
-                                                <Space direction="vertical" size={4}>
-                                                    <Title level={4} style={{ margin: 0 }}>
-                                                        Ask anything about your business data or how to use KiteLedger.
-                                                    </Title>
-                                                    <Paragraph
-                                                        type="secondary"
-                                                        style={{
-                                                            margin: 0,
-                                                            maxWidth: 460,
-                                                        }}
-                                                    >
-                                                        Get source-backed help with invoices, reports, customers,
-                                                        inventory, settings, workflows, and business records.
-                                                    </Paragraph>
-                                                </Space>
-                                            }
-                                        />
-
-                                        <Space wrap size={[8, 8]} style={{ justifyContent: 'center' }}>
-                                            {SUGGESTED_PROMPTS.slice(0, isMobile ? 4 : 6).map((prompt) => (
-                                                <Button
-                                                    key={prompt}
-                                                    size="small"
-                                                    onClick={() => send(prompt)}
-                                                    disabled={!aiReady || sending}
-                                                    style={{
-                                                        whiteSpace: 'normal',
-                                                        height: 'auto',
-                                                        minHeight: 30,
-                                                    }}
-                                                >
-                                                    {prompt}
-                                                </Button>
-                                            ))}
-                                        </Space>
-                                        <div style={{ marginTop: 14 }}>
-                                            <AiSuggestedQuestions disabled={!aiReady || sending} onSelect={send} />
-                                        </div>
-                                    </div>
+                                <div style={styles.emptyState}>
+                                    <AiWelcome
+                                        onSelect={send}
+                                        disabled={!aiReady || sending}
+                                        isMobile={isMobile}
+                                    />
                                 </div>
                             ) : (
                                 <List
                                     dataSource={messages}
                                     split={false}
-                                    renderItem={(item) => (
-                                        <MessageBubble
+                                    renderItem={(item, index) => (
+                                        <div
                                             key={item.id}
-                                            message={item}
-                                            token={token}
-                                            isMobile={isMobile}
-                                            onCopy={copy}
-                                            onFollowup={send}
-                                            actionStates={actionStates}
-                                            onApprove={approveAction}
-                                            onReject={rejectAction}
-                                        />
+                                            className="kl-rise"
+                                            style={{
+                                                animationDelay: index < 6 ? `${index * 40}ms` : '0ms',
+                                            }}
+                                        >
+                                            <MessageBubble
+                                                message={item}
+                                                token={token}
+                                                isMobile={isMobile}
+                                                onCopy={copy}
+                                                onFollowup={send}
+                                                actionStates={actionStates}
+                                                onApprove={approveAction}
+                                                onReject={rejectAction}
+                                            />
+                                        </div>
                                     )}
                                 />
                             )}
 
-                            {sending && (
-                                <div style={{ padding: '8px 0' }}>
-                                    <Space>
-                                        <Spin size="small" />
-                                        <Text type="secondary">Searching your data and preparing an answer...</Text>
-                                    </Space>
-                                </div>
-                            )}
+                            {sending && <AiThinkingIndicator isMobile={isMobile} />}
                         </div>
 
                         <div style={styles.composer}>
-                            <div style={styles.composerBox}>
-                                <Input.TextArea
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    placeholder={
-                                        aiReady
-                                            ? 'Ask about invoices, reports, customers, inventory, settings, or how to use KiteLedger...'
-                                            : notReadyReason || 'KiteLedger Copilot is not ready.'
-                                    }
-                                    autoSize={{ minRows: 1, maxRows: 5 }}
-                                    disabled={!aiReady || sending}
-                                    onPressEnter={(e) => {
-                                        if (!e.shiftKey) {
-                                            e.preventDefault();
-                                            send();
+                            <div style={styles.composerSurface}>
+                                <div style={styles.composerBox}>
+                                    <Input.TextArea
+                                        className="kl-composer-textarea"
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        placeholder={
+                                            aiReady
+                                                ? 'Ask about invoices, cash flow, customers, inventory, reports, or KiteLedger workflows…'
+                                                : notReadyReason || 'KiteLedger Copilot is not ready.'
                                         }
-                                    }}
-                                    style={{
-                                        borderRadius: token.borderRadiusLG,
-                                        resize: 'none',
-                                    }}
-                                />
+                                        autoSize={{ minRows: isMobile ? 2 : 1, maxRows: 6 }}
+                                        bordered={false}
+                                        disabled={!aiReady || sending}
+                                        onPressEnter={(e) => {
+                                            if (!e.shiftKey) {
+                                                e.preventDefault();
+                                                send();
+                                            }
+                                        }}
+                                        style={{
+                                            minHeight: isMobile ? 48 : 42,
+                                            resize: 'none',
+                                            fontSize: 14,
+                                        }}
+                                    />
 
-                                <Space.Compact
+                                    <Space size={8} style={{ width: isMobile ? '100%' : 'auto' }}>
+                                        <Tooltip title="Retry the last prompt">
+                                            <Button
+                                                icon={<ReloadOutlined />}
+                                                onClick={retry}
+                                                disabled={sending || !messages.length}
+                                                aria-label="Retry last prompt"
+                                                style={{
+                                                    width: isMobile ? '42%' : 44,
+                                                    height: 44,
+                                                    borderRadius: token.borderRadiusLG,
+                                                }}
+                                            />
+                                        </Tooltip>
+
+                                        {sending ? (
+                                            <Button
+                                                danger
+                                                type="primary"
+                                                icon={<StopOutlined />}
+                                                onClick={stop}
+                                                style={{
+                                                    width: isMobile ? '58%' : 104,
+                                                    height: 44,
+                                                    borderRadius: token.borderRadiusLG,
+                                                    fontWeight: 650,
+                                                }}
+                                            >
+                                                Stop
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                type="primary"
+                                                icon={<SendOutlined />}
+                                                onClick={() => send()}
+                                                disabled={!aiReady || !input.trim()}
+                                                style={{
+                                                    width: isMobile ? '58%' : 104,
+                                                    height: 44,
+                                                    borderRadius: token.borderRadiusLG,
+                                                    boxShadow: token.boxShadowTertiary,
+                                                    fontWeight: 650,
+                                                }}
+                                            >
+                                                Send
+                                            </Button>
+                                        )}
+                                    </Space>
+                                </div>
+
+                                <div
                                     style={{
-                                        width: isMobile ? '100%' : 'auto',
-                                        minWidth: isMobile ? 0 : 190,
+                                        marginTop: 9,
+                                        paddingTop: 9,
+                                        borderTop: `1px solid ${token.colorBorderSecondary}`,
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        flexWrap: 'wrap',
                                     }}
                                 >
-                                    {sending ? (
-                                        <Button
-                                            danger
-                                            type="primary"
-                                            icon={<StopOutlined />}
-                                            onClick={stop}
+                                    <Text type="secondary" style={{ fontSize: 11 }}>
+                                        Enter to send · Shift + Enter for a new line
+                                    </Text>
+
+                                    <Space size={6}>
+                                        <span
+                                            aria-hidden="true"
                                             style={{
-                                                width: isMobile ? '50%' : undefined,
+                                                width: 6,
+                                                height: 6,
+                                                borderRadius: '50%',
+                                                background: aiReady
+                                                    ? token.colorSuccess
+                                                    : token.colorTextQuaternary,
                                             }}
-                                        >
-                                            Stop
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            type="primary"
-                                            icon={<SendOutlined />}
-                                            onClick={() => send()}
-                                            disabled={!aiReady || !input.trim()}
-                                            style={{
-                                                width: isMobile ? '50%' : undefined,
-                                            }}
-                                        >
-                                            Send
-                                        </Button>
-                                    )}
-
-                                    <Button
-                                        icon={<ReloadOutlined />}
-                                        onClick={retry}
-                                        disabled={sending || !messages.length}
-                                        style={{
-                                            width: isMobile ? '50%' : undefined,
-                                        }}
-                                    >
-                                        Retry
-                                    </Button>
-                                </Space.Compact>
-                            </div>
-
-                            <div
-                                style={{
-                                    marginTop: 8,
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    gap: 8,
-                                    flexWrap: 'wrap',
-                                }}
-                            >
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Press Enter to send, Shift + Enter for new line.
-                                </Text>
-
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Context: Auto
-                                </Text>
+                                        />
+                                        <Text type="secondary" style={{ fontSize: 11 }}>
+                                            Context · Auto
+                                        </Text>
+                                    </Space>
+                                </div>
                             </div>
                         </div>
                     </Card>
                 </div>
+
                 <Drawer
-                    title="Conversation history"
+                    title={<HeaderTitle token={token} compact />}
                     open={historyOpen}
                     onClose={() => setHistoryOpen(false)}
-                    width={isMobile ? '100%' : 420}
+                    width={isMobile ? '100%' : 430}
+                    styles={{
+                        header: { borderBottom: `1px solid ${token.colorBorderSecondary}` },
+                        body: { padding: 12 },
+                    }}
                 >
+                    <Text
+                        type="secondary"
+                        style={{ display: 'block', margin: '2px 4px 12px', fontSize: 12 }}
+                    >
+                        Select a conversation to continue where you left off.
+                    </Text>
                     <List
                         loading={historyLoading}
                         dataSource={conversations}
                         locale={{ emptyText: 'No saved conversations yet.' }}
+                        split={false}
                         renderItem={(item) => (
                             <List.Item
+                                className="kl-sidebar-chat"
                                 onClick={() => openConversation(item.id)}
-                                style={{ cursor: 'pointer' }}
+                                style={{
+                                    cursor: 'pointer',
+                                    marginBottom: 7,
+                                    padding: '11px 12px',
+                                    borderRadius: token.borderRadiusLG,
+                                    border: `1px solid ${token.colorBorderSecondary}`,
+                                }}
                                 actions={[
                                     <Button
                                         key="delete"
@@ -1105,8 +1462,29 @@ export default function Assistant() {
                                 ]}
                             >
                                 <List.Item.Meta
+                                    avatar={
+                                        <div
+                                            style={{
+                                                width: 34,
+                                                height: 34,
+                                                borderRadius: token.borderRadiusLG,
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: token.colorPrimary,
+                                                background: token.colorPrimaryBg,
+                                                border: `1px solid ${token.colorPrimaryBorder}`,
+                                            }}
+                                        >
+                                            <HistoryOutlined />
+                                        </div>
+                                    }
                                     title={item.title || 'Untitled conversation'}
-                                    description={item.updated_at ? new Date(item.updated_at).toLocaleString() : item.module}
+                                    description={
+                                        item.updated_at
+                                            ? new Date(item.updated_at).toLocaleString()
+                                            : item.module || 'KiteLedger Copilot'
+                                    }
                                 />
                             </List.Item>
                         )}

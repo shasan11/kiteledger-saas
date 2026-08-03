@@ -1520,6 +1520,17 @@ return new class extends Migration
             $table->decimal('confidence_score', 5, 4)->nullable();
             $table->string('status')->default('pending');
             $table->text('error_message')->nullable();
+            // Document AI V2 attempt history.
+            $table->string('stage', 40)->nullable();
+            $table->string('error_code', 60)->nullable();
+            $table->string('schema_version', 10)->nullable();
+            $table->unsignedInteger('attempt_number')->default(1);
+            $table->unsignedSmallInteger('page_count')->nullable();
+            $table->boolean('used_ocr')->default(false);
+            $table->boolean('partial')->default(false);
+            $table->unsignedInteger('duration_ms')->nullable();
+            $table->unsignedSmallInteger('review_issue_count')->nullable();
+            $table->json('structured_json')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

@@ -55,8 +55,34 @@ class DocumentTransactionConverter
             throw new RuntimeException('Proposal has missing required fields: ' . implode(', ', $validation['missing_fields']));
         }
 
+        /*
+         * Creation and the converted-marker must commit together, under a row
+         * lock taken before the status is re-read.
+         *
+         * Previously the "already converted" guard ran outside the transaction
+         * and the marker was written after it committed, so two concurrent
+         * requests could both pass the guard and create two purchase bills from
+         * one document — and a failure between commit and marker left a created
+         * record that a retry would duplicate.
+         */
         $result = DB::transaction(function () use ($proposal, $payload) {
-            return match ($proposal->transaction_type) {
+            /** @var DocumentTransactionProposal $locked */
+            $locked = DocumentTransactionProposal::query()
+                ->whereKey($proposal->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if (! $locked) {
+                throw new RuntimeException('Proposal no longer exists.');
+            }
+
+            // Re-read under the lock: another request may have converted it
+            // while this one was validating.
+            if ($locked->status === 'converted') {
+                throw new RuntimeException('Proposal already converted.');
+            }
+
+            $created = match ($locked->transaction_type) {
                 'purchase_bill' => $this->createPurchaseBill($payload),
                 'invoice' => $this->createInvoice($payload),
                 'expense' => $this->createExpense($payload),
@@ -67,16 +93,20 @@ class DocumentTransactionConverter
                 'purchase_order' => $this->createPurchaseOrder($payload),
                 'sales_order' => $this->createSalesOrder($payload),
                 'quotation' => $this->createQuotation($payload),
-                default => throw new RuntimeException('Unsupported transaction type: ' . $proposal->transaction_type),
+                default => throw new RuntimeException('Unsupported transaction type: '.$locked->transaction_type),
             };
+
+            $locked->update([
+                'status' => 'converted',
+                'created_record_type' => $created['record_type'],
+                'created_record_id' => $created['record_id'],
+                'converted_at' => now(),
+            ]);
+
+            return $created;
         });
 
-        $proposal->update([
-            'status' => 'converted',
-            'created_record_type' => $result['record_type'],
-            'created_record_id' => $result['record_id'],
-            'converted_at' => now(),
-        ]);
+        $proposal->refresh();
 
         $proposal->documentUpload->update(['status' => 'converted']);
 
@@ -124,8 +154,12 @@ class DocumentTransactionConverter
                 'description' => $l['description'] ?? null,
                 'qty' => $l['qty'] ?? 1,
                 'unit_price' => $l['unit_price'] ?? 0,
-                'discount_type' => $l['discount_type'] ?? null,
-                'discount_percent' => $l['discount_percent'] ?? null,
+                // These columns are NOT NULL with a database default. Passing an
+                // explicit null overrides the default and raises an integrity
+                // violation, so an extracted line that simply had no discount
+                // could never be converted. Default them here instead.
+                'discount_type' => $l['discount_type'] ?? 'percent',
+                'discount_percent' => $l['discount_percent'] ?? 0,
                 'discount_amount' => $l['discount_amount'] ?? 0,
                 'tax_rate_id' => $l['tax_rate_id'] ?? null,
                 'tax_amount' => $l['tax_amount'] ?? 0,

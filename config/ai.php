@@ -13,6 +13,20 @@ return [
     'copilot' => [
         'enabled' => env('AI_COPILOT_ENABLED', true),
         'engine' => env('AI_COPILOT_ENGINE', 'neuron'),
+
+        /*
+         * Copilot V2 orchestration. Off by default: V2 runs alongside the
+         * legacy controller path so it can be enabled per environment and
+         * switched off instantly without a deploy.
+         */
+        'v2_enabled' => env('AI_COPILOT_V2_ENABLED', false),
+        'router' => env('AI_COPILOT_ROUTER', 'structured'),
+        'router_confidence_threshold' => (float) env('AI_COPILOT_ROUTER_CONFIDENCE_THRESHOLD', 0.55),
+        'knowledge_tool_enabled' => env('AI_COPILOT_KNOWLEDGE_TOOL_ENABLED', true),
+        'conversation_state_enabled' => env('AI_COPILOT_CONVERSATION_STATE_ENABLED', true),
+        'trace_enabled' => env('AI_COPILOT_TRACE_ENABLED', true),
+        'streaming_enabled' => env('AI_COPILOT_STREAMING_ENABLED', false),
+
         'read_only' => env('AI_COPILOT_READ_ONLY', false),
         'rag_enabled' => env('AI_RAG_ENABLED', true),
         'financial_tools_enabled' => env('AI_FINANCIAL_TOOLS_ENABLED', true),
@@ -22,6 +36,25 @@ return [
         'incremental_indexing_enabled' => env('AI_INCREMENTAL_INDEXING_ENABLED', true),
         'history_messages' => (int) env('AI_COPILOT_HISTORY_MESSAGES', 20),
         'action_ttl_minutes' => (int) env('AI_ACTION_TTL_MINUTES', 30),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Outbound TLS verification
+    |--------------------------------------------------------------------------
+    | These must be resolved through config, not env() at call time: once
+    | `php artisan config:cache` runs, env() returns null and the CA bundle
+    | would silently stop being applied — every provider call then fails with
+    | "cURL error 60: unable to get local issuer certificate".
+    |
+    | ca_bundle: absolute path to a cacert.pem. Leave empty to use the system
+    | store (php.ini curl.cainfo / openssl.cafile).
+    | verify: never set false outside local debugging — it disables certificate
+    | verification entirely and exposes provider traffic to interception.
+    */
+    'ssl' => [
+        'ca_bundle' => env('AI_CA_BUNDLE'),
+        'verify' => env('AI_SSL_VERIFY', true),
     ],
 
     'embedding' => [

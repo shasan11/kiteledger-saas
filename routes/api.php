@@ -1190,6 +1190,10 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
         Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->prefix('ai')->group(function () {
             Route::get('health', [AiAssistantController::class, 'health'])->middleware('throttle:60,1');
             Route::post('chat', [AiAssistantController::class, 'chat'])->middleware('throttle:30,1');
+            // Copilot V2 progress stream (SSE). Gated by AI_COPILOT_STREAMING_ENABLED.
+            Route::post('chat/stream', [\App\Http\Controllers\Api\AI\CopilotStreamController::class, 'stream'])
+                ->middleware('throttle:30,1')
+                ->name('copilot.stream');
             Route::post('stream', [AiAssistantController::class, 'stream'])->middleware('throttle:30,1');
 
             Route::get('conversations', [AiAssistantController::class, 'conversations']);
