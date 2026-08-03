@@ -1268,6 +1268,7 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
 */
 Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->prefix('document-uploads')->name('api.document-uploads.')->group(function () {
     Route::get('/', [DocumentUploadController::class, 'index'])->name('index');
+    Route::get('summary', [DocumentUploadController::class, 'summary'])->name('summary');
     Route::post('/', [DocumentUploadController::class, 'store'])->middleware('throttle:20,1')->name('store');
     Route::get('{publicId}', [DocumentUploadController::class, 'show'])->name('show');
     Route::patch('{publicId}', [DocumentUploadController::class, 'update'])->name('update');

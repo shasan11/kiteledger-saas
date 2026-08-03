@@ -258,10 +258,50 @@ export default function Assistant() {
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
 
+    /*
+     * The backend `ready` flag is authoritative — it already accounts for the
+     * master switch, the Copilot switch, provider credentials and providers
+     * that need no key. Recomputing readiness here from a subset of those
+     * fields is how the UI ended up enabling the composer while the server
+     * refused every request. The boolean fallback only covers an older backend
+     * that predates `ready`.
+     */
     const aiReady = useMemo(() => {
-        if (!health) return false;
-        return health.ok && health.ai_enabled && health.provider_configured;
-    }, [health]);
+        if (!health || !canUseAi) return false;
+
+        return (
+            health.ready ??
+            Boolean(
+                health.ok &&
+                    health.ai_enabled &&
+                    health.copilot_enabled &&
+                    health.provider_configured,
+            )
+        );
+    }, [health, canUseAi]);
+
+    const notReadyReason = useMemo(() => {
+        if (healthLoading) return null;
+        if (healthError) {
+            return healthError.code === 'AI_PERMISSION_DENIED'
+                ? 'You do not have permission to use KiteLedger Copilot.'
+                : 'Copilot readiness could not be checked. Try refreshing.';
+        }
+        if (!health) return 'Copilot readiness could not be checked. Try refreshing.';
+        if (aiReady) return null;
+        if (!canUseAi) return 'You do not have permission to use KiteLedger Copilot.';
+        if (health.ai_enabled === false) {
+            return 'AI features are disabled by the platform administrator.';
+        }
+        if (health.copilot_enabled === false) {
+            return 'KiteLedger Copilot is currently disabled.';
+        }
+        if (health.provider_configured === false) {
+            return 'The shared AI provider has not been configured.';
+        }
+
+        return 'KiteLedger Copilot is not ready.';
+    }, [health, healthError, healthLoading, aiReady, canUseAi]);
 
     const refreshConversations = useCallback(async () => {
         if (!canUseAi) return;
@@ -413,6 +453,14 @@ export default function Assistant() {
         const text = (textOverride ?? input).trim();
 
         if (!text || sending) return;
+
+        // Readiness is re-checked here, not just on the disabled prop: health
+        // can change between page load and send, and suggested-prompt handlers
+        // call send() directly.
+        if (!aiReady) {
+            setError({ message: notReadyReason || 'KiteLedger Copilot is not ready.' });
+            return;
+        }
 
         setError(null);
 
@@ -950,7 +998,7 @@ export default function Assistant() {
                                     placeholder={
                                         aiReady
                                             ? 'Ask about invoices, reports, customers, inventory, settings, or how to use KiteLedger...'
-                                            : 'KiteLedger Copilot is not ready.'
+                                            : notReadyReason || 'KiteLedger Copilot is not ready.'
                                     }
                                     autoSize={{ minRows: 1, maxRows: 5 }}
                                     disabled={!aiReady || sending}

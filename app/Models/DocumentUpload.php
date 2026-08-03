@@ -76,14 +76,24 @@ class DocumentUpload extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
+    /**
+     * The current extraction attempt.
+     *
+     * Note: this must aggregate on created_at, not the primary key. Extractions
+     * use UUID primary keys, so a bare latestOfMany() resolves MAX(id) — a
+     * lexicographic comparison of random UUIDs — which can surface a stale
+     * completed attempt in place of the newest queued one.
+     */
     public function extraction(): HasOne
     {
-        return $this->hasOne(DocumentExtraction::class)->latestOfMany();
+        return $this->hasOne(DocumentExtraction::class)->latestOfMany(['created_at', 'id']);
     }
 
     public function extractions(): HasMany
     {
-        return $this->hasMany(DocumentExtraction::class);
+        return $this->hasMany(DocumentExtraction::class)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     public function entityMatches(): HasMany

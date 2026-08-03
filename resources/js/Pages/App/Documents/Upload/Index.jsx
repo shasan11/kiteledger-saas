@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, usePage } from '@inertiajs/react';
 import dayjs from 'dayjs';
@@ -427,10 +427,34 @@ export default function DocumentUploadIndex() {
     const permissions = props.permissions || {};
 
     const [documents, setDocuments] = useState({ data: [], total: 0 });
+    const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(false);
     const [filters, setFilters] = useState({ search: '', status: undefined, document_type: undefined, range: null });
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
+
+    // Per-document scan/poll progress, keyed by public id.
+    const [scanning, setScanning] = useState({});
+    const [polling, setPolling] = useState({});
+
+    // Refs hold the live values the async pollers read, so they never observe
+    // a stale closure and never update state after the page goes away.
+    const mountedRef = useRef(true);
+    const pollersRef = useRef(new Map());
+    const scanningRef = useRef(new Set());
+    const listAbortRef = useRef(null);
+
+    useEffect(() => {
+        mountedRef.current = true;
+
+        return () => {
+            mountedRef.current = false;
+            pollersRef.current.forEach((poller) => window.clearTimeout(poller.timeoutId));
+            pollersRef.current.clear();
+            scanningRef.current.clear();
+            listAbortRef.current?.abort();
+        };
+    }, []);
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -524,9 +548,16 @@ export default function DocumentUploadIndex() {
 
         setLoading(true);
 
+        // Supersede any in-flight listing request so a slow earlier response
+        // cannot overwrite the results of a newer filter.
+        listAbortRef.current?.abort();
+        const controller = new AbortController();
+        listAbortRef.current = controller;
+
         try {
             const range = filters.range || [];
             const { data } = await axios.get('/api/document-uploads', {
+                signal: controller.signal,
                 params: {
                     search: filters.search || undefined,
                     status: filters.status || undefined,
@@ -538,6 +569,8 @@ export default function DocumentUploadIndex() {
                 },
             });
 
+            if (!mountedRef.current) return;
+
             setDocuments({
                 ...asObject(data),
                 data: asArray(data?.data ?? data),
@@ -545,17 +578,44 @@ export default function DocumentUploadIndex() {
                 current_page: data?.current_page ?? data?.meta?.current_page ?? nextPage,
                 per_page: data?.per_page ?? data?.meta?.per_page ?? nextPageSize,
             });
+
+            // Counts cover the whole filtered dataset, not this page.
+            if (data?.summary) {
+                setSummary(data.summary);
+            }
         } catch (e) {
+            if (axios.isCancel?.(e) || e.name === 'CanceledError') return;
+            if (!mountedRef.current) return;
+
             antMessage.error(e.response?.data?.message || 'Failed to load documents');
         } finally {
-            setLoading(false);
+            if (mountedRef.current) {
+                setLoading(false);
+            }
         }
     };
+
+    const rangeKey = (filters.range || [])
+        .map((d) => d?.format?.('YYYY-MM-DD') || '')
+        .join('|');
 
     useEffect(() => {
         fetchDocs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, pageSize, filters.status, filters.document_type]);
+    }, [page, pageSize, filters.status, filters.document_type, rangeKey]);
+
+    // Resume monitoring for scans that were already in flight when the page
+    // loaded, so a refresh (or leaving and coming back) does not strand them.
+    useEffect(() => {
+        asArray(documents?.data).forEach((doc) => {
+            const key = docKey(doc);
+
+            if (key && ['queued', 'processing'].includes(doc.status)) {
+                startPolling(key);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [documents]);
 
     const handleUpload = async () => {
         let values;
@@ -578,12 +638,15 @@ export default function DocumentUploadIndex() {
         if (values.document_type) formData.append('document_type', values.document_type);
         if (values.notes) formData.append('notes', values.notes);
 
+        if (uploading) return;
+
         setUploading(true);
 
         try {
-            await axios.post('/api/document-uploads', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            // No explicit Content-Type: the browser must set it so the
+            // multipart boundary is generated. Hardcoding the header drops the
+            // boundary and the server sees an empty request body.
+            await axios.post('/api/document-uploads', formData);
 
             antMessage.success('Document uploaded.');
             setUploadOpen(false);
@@ -591,7 +654,27 @@ export default function DocumentUploadIndex() {
             setFileList([]);
             fetchDocs();
         } catch (e) {
-            antMessage.error(e.response?.data?.message || 'Upload failed');
+            const status = e.response?.status;
+            const errors = e.response?.data?.errors;
+
+            if (status === 422 && errors) {
+                // Correctable validation problem — surface it on the fields and
+                // keep the chosen file so the user does not reselect it.
+                uploadForm.setFields(
+                    Object.entries(errors).map(([name, messages]) => ({
+                        name,
+                        errors: asArray(messages),
+                    })),
+                );
+            }
+
+            if (status === 413) {
+                antMessage.error(
+                    'The file is larger than the server accepts. Please upload a smaller file.',
+                );
+            } else {
+                antMessage.error(e.response?.data?.message || 'Upload failed');
+            }
         } finally {
             setUploading(false);
         }
@@ -601,34 +684,166 @@ export default function DocumentUploadIndex() {
         const key = docKey(doc);
         if (!key) return;
 
+        // Guard the request itself, not just the button: a second click that
+        // lands before setState flushes would otherwise fire another scan.
+        if (scanningRef.current.has(key)) return;
+        scanningRef.current.add(key);
+        setScanning((prev) => ({ ...prev, [key]: true }));
+
         try {
             const { data } = await axios.post(`/api/document-uploads/${key}/scan-ai`);
             antMessage.success(data.message || 'Scan queued.');
             fetchDocs();
-            pollExtractionStatus(key);
+            startPolling(key);
         } catch (e) {
-            antMessage.error(e.response?.data?.message || 'Scan failed');
+            const code = e.response?.data?.code;
+
+            if (code === 'DOCUMENT_SCAN_IN_PROGRESS') {
+                // Another tab or an earlier click already queued this one.
+                antMessage.info('A scan is already running for this document.');
+                startPolling(key);
+            } else {
+                antMessage.error(e.response?.data?.message || 'Scan failed');
+            }
+        } finally {
+            scanningRef.current.delete(key);
+            setScanning((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
         }
     };
 
-    const pollExtractionStatus = (key, attempt = 0) => {
-        if (!key || attempt > 24) return;
+    /*
+     * Extraction polling.
+     *
+     * The backend may legitimately spend several minutes on a document
+     * (per-attempt timeout plus retries with backoff), so the client must not
+     * give up after a fixed short window — the previous implementation stopped
+     * at 60s and left live scans looking abandoned.
+     *
+     * Intervals widen as the wait grows, one poller exists per document, a
+     * short run of network errors is tolerated, and everything is torn down on
+     * unmount.
+     */
+    const POLL_MAX_MS = 8 * 60 * 1000;
+    const POLL_MAX_CONSECUTIVE_ERRORS = 5;
 
-        window.setTimeout(async () => {
+    const pollDelayFor = (attempt) => {
+        if (attempt < 10) return 2500;
+        if (attempt < 25) return 5000;
+        return 10000;
+    };
+
+    const isTerminalExtraction = (status) => ['completed', 'failed'].includes(status);
+
+    const isTerminalDocument = (status) =>
+        ['needs_review', 'converted', 'failed', 'archived'].includes(status);
+
+    const stopPolling = (key) => {
+        const poller = pollersRef.current.get(key);
+
+        if (poller) {
+            window.clearTimeout(poller.timeoutId);
+            pollersRef.current.delete(key);
+        }
+    };
+
+    const startPolling = (key) => {
+        if (!key || pollersRef.current.has(key)) return;
+
+        const state = {
+            timeoutId: null,
+            attempt: 0,
+            errors: 0,
+            startedAt: Date.now(),
+        };
+
+        pollersRef.current.set(key, state);
+        setPolling((prev) => ({ ...prev, [key]: true }));
+
+        const finish = ({ timedOut = false } = {}) => {
+            stopPolling(key);
+
+            if (!mountedRef.current) return;
+
+            setPolling((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+
+            if (timedOut) {
+                antMessage.warning(
+                    'The scan is still running. You can safely leave this page — use Refresh to check again.',
+                );
+            }
+
+            fetchDocs();
+        };
+
+        const tick = async () => {
+            if (!mountedRef.current) {
+                stopPolling(key);
+                return;
+            }
+
+            if (Date.now() - state.startedAt > POLL_MAX_MS) {
+                finish({ timedOut: true });
+                return;
+            }
+
             try {
                 const { data } = await axios.get(`/api/document-uploads/${key}/extraction`);
-                const status = data?.extraction?.status;
 
-                if (['completed', 'failed'].includes(status)) {
-                    fetchDocs();
+                if (!mountedRef.current) {
+                    stopPolling(key);
                     return;
                 }
 
-                pollExtractionStatus(key, attempt + 1);
-            } catch {
-                if (attempt < 3) pollExtractionStatus(key, attempt + 1);
+                state.errors = 0;
+
+                if (
+                    isTerminalExtraction(data?.extraction?.status) ||
+                    isTerminalDocument(data?.document?.status)
+                ) {
+                    finish();
+                    return;
+                }
+            } catch (e) {
+                if (axios.isCancel?.(e)) {
+                    stopPolling(key);
+                    return;
+                }
+
+                // A deleted document will never reach a terminal state.
+                if (e.response?.status === 404) {
+                    finish();
+                    return;
+                }
+
+                // Permission/auth changes are not going to resolve by waiting.
+                if ([401, 403].includes(e.response?.status)) {
+                    finish();
+                    return;
+                }
+
+                state.errors += 1;
+
+                if (state.errors >= POLL_MAX_CONSECUTIVE_ERRORS) {
+                    finish({ timedOut: true });
+                    return;
+                }
             }
-        }, 2500);
+
+            if (!mountedRef.current || !pollersRef.current.has(key)) return;
+
+            state.attempt += 1;
+            state.timeoutId = window.setTimeout(tick, pollDelayFor(state.attempt));
+        };
+
+        state.timeoutId = window.setTimeout(tick, pollDelayFor(0));
     };
 
     const openExtraction = async (doc) => {
@@ -910,6 +1125,7 @@ export default function DocumentUploadIndex() {
                     onPreview={() => setPreviewDoc(record)}
                     onEdit={() => openEdit(record)}
                     onScan={() => scanDoc(record)}
+                    scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
                     onExtraction={() => openExtraction(record)}
                     onMatch={() => openMatch(record)}
                     onReview={() => openReview(record)}
@@ -1194,8 +1410,12 @@ function DocumentActionMenu({
     onCreateProposal,
     onDownload,
     onDelete,
+    scanBusy = false,
 }) {
+    // 'queued' and 'processing' are deliberately excluded: a scan is already
+    // in flight and the server would reject a second one anyway.
     const canScan = ['uploaded', 'failed', 'needs_review', 'extracted'].includes(doc.status)
+        && !scanBusy
         && hasPerm(permissions, 'document_upload.scan_ai');
 
     const hasExtraction = !!doc.extraction;
