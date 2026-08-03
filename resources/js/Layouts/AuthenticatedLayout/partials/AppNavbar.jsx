@@ -1,4 +1,3 @@
-import ApplicationLogo from '@/Components/ApplicationLogo';
 import BranchToggle from '@/Components/BranchToggle';
 import FiscalYearToggle from '@/Components/FiscalYearToggle';
 import GlobalSearch from '@/Components/GlobalSearch';
@@ -273,9 +272,10 @@ export default function AppNavbar({
                             className="app-navbar__brand-link"
                             aria-label={t('Go to dashboard')}
                         >
-                            <ApplicationLogo
+                            <img
+                                src="/branding/dark_logo.png"
+                                alt={t('Application logo')}
                                 className="app-navbar__logo"
-                                dark={false}
                                 style={{ width: logoWidth, maxWidth: '100%' }}
                             />
                         </Link>

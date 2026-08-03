@@ -58,7 +58,7 @@ function HeaderTitle({ token, compact = false }) {
                     height: iconSize,
                     flex: `0 0 ${iconSize}px`,
                     borderRadius: radius,
-                    background: `linear-gradient(145deg, ${token.colorPrimary}, ${token.colorPrimaryActive})`,
+                    background: token.colorPrimary,
                     border: `1px solid ${token.colorPrimaryBorderHover}`,
                     boxShadow: token.boxShadowTertiary || token.boxShadowSecondary,
                     color: token.colorTextLightSolid,
@@ -130,12 +130,12 @@ function PremiumCopilotStyles({ token }) {
             }
 
             .kl-premium-page .kl-message-bubble {
-                transition: transform 160ms ease, box-shadow 160ms ease;
+                transition: border-color 160ms ease, box-shadow 160ms ease;
             }
 
             .kl-premium-page .kl-message-bubble:hover {
-                transform: translateY(-1px);
-                box-shadow: ${token.boxShadowSecondary || token.boxShadow} !important;
+                border-color: ${token.colorBorder} !important;
+                box-shadow: ${token.boxShadowTertiary} !important;
             }
 
             .kl-premium-page .kl-message-bubble .kl-copy-button {
@@ -316,10 +316,10 @@ function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionSta
     };
 
     if (isUser) {
-        bubbleStyle.background = `linear-gradient(145deg, ${token.colorPrimary}, ${token.colorPrimaryActive})`;
-        bubbleStyle.color = token.colorTextLightSolid;
-        bubbleStyle.border = `1px solid ${token.colorPrimaryBorderHover}`;
-        bubbleStyle.boxShadow = token.boxShadowSecondary || token.boxShadow;
+        bubbleStyle.background = token.colorPrimaryBg;
+        bubbleStyle.color = token.colorText;
+        bubbleStyle.border = `1px solid ${token.colorPrimaryBorder}`;
+        bubbleStyle.boxShadow = token.boxShadowTertiary;
     }
 
     if (isSystem) {
@@ -541,7 +541,7 @@ export default function Assistant() {
         return {
             page: {
                 padding: isMobile ? 10 : 22,
-                background: `radial-gradient(circle at 12% 0%, ${token.colorPrimaryBg} 0, transparent 32%), ${token.colorBgLayout}`,
+                background: token.colorBgLayout,
                 minHeight: 'calc(100vh - 64px)',
             },
             shell: {
@@ -577,7 +577,7 @@ export default function Assistant() {
                 maxHeight: isMobile ? 'calc(100vh - 292px)' : 'calc(100vh - 232px)',
                 overflowY: 'auto',
                 padding: isMobile ? '14px 12px 18px' : '22px 26px 28px',
-                background: `radial-gradient(circle at 100% 0%, ${token.colorPrimaryBg} 0, transparent 26%), linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorFillQuaternary} 100%)`,
+                background: token.colorBgLayout,
             },
             composer: {
                 padding: isMobile ? 10 : 14,
@@ -601,7 +601,7 @@ export default function Assistant() {
             statBox: {
                 padding: 13,
                 borderRadius: token.borderRadiusLG,
-                background: `linear-gradient(145deg, ${token.colorPrimaryBg}, ${token.colorFillQuaternary})`,
+                background: token.colorPrimaryBg,
                 border: `1px solid ${token.colorPrimaryBorder}`,
             },
             sidebarSection: {

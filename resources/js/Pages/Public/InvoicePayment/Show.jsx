@@ -1,28 +1,63 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    Alert, Button, Card, Col, Divider, Form, Input, InputNumber, Row,
-    Select, Skeleton, Space, Spin, Steps, Table, Tag, Typography
+    Alert, Button, Card, Col, Divider, InputNumber, Row,
+    Space, Spin, Table, Tag, Typography
 } from 'antd';
 import {
-    CheckCircleOutlined, CreditCardOutlined, FileTextOutlined,
+    CheckCircleOutlined, CreditCardOutlined,
     LockOutlined, SafetyOutlined, WalletOutlined
 } from '@ant-design/icons';
 import { theme } from 'antd';
 import axios from 'axios';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 const PROVIDER_LABELS = {
-    stripe: 'Stripe',
+    stripe: 'Credit or debit card',
     paypal: 'PayPal',
     razorpay: 'Razorpay',
 };
 
 const PROVIDER_COLORS = {
-    stripe: '#635BFF',
+    stripe: '#1677ff',
     paypal: '#003087',
     razorpay: '#3395FF',
 };
+
+const CARD_BRANDS = ['VISA', 'Mastercard', 'AMEX'];
+
+function PayPalWordmark({ compact = false }) {
+    return (
+        <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            fontSize: compact ? 14 : 21, fontWeight: 800,
+            fontStyle: 'italic', letterSpacing: -0.7, lineHeight: 1,
+        }}>
+            <span style={{ color: '#003087' }}>Pay</span>
+            <span style={{ color: '#0070e0' }}>Pal</span>
+        </span>
+    );
+}
+
+function CardBrandMarks() {
+    return (
+        <Space size={6} wrap>
+            {CARD_BRANDS.map(brand => (
+                <span
+                    key={brand}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', height: 23,
+                        padding: '0 7px', border: '1px solid #d9d9d9', borderRadius: 4,
+                        background: '#fff', color: brand === 'VISA' ? '#1a1f71' : '#344054',
+                        fontSize: brand === 'Mastercard' ? 9 : 10, fontWeight: 800,
+                    }}
+                >
+                    {brand}
+                </span>
+            ))}
+        </Space>
+    );
+}
 
 // Razorpay uses a JS checkout widget; load its script on demand.
 const loadRazorpayScript = () =>
@@ -148,9 +183,8 @@ function InvoiceSummary({ invoice, company }) {
     );
 }
 
-function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, onSuccess }) {
+function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods }) {
     const { token } = theme.useToken();
-    const [form] = Form.useForm();
     const [selectedProvider, setSelectedProvider] = useState(null);
     const [amount, setAmount] = useState(Number(invoice.balance_due));
     const [submitting, setSubmitting] = useState(false);
@@ -188,9 +222,51 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
                 window.location.href = data.redirect_url;
             }
         } catch (e) {
-            setError(e.response?.data?.message || 'Payment initiation failed. Please try again.');
+            const message = e.response?.data?.message || 'Payment initiation failed. Please try again.';
+            setError(selectedProvider === 'stripe' ? message.replace(/stripe/gi, 'card payment') : message);
             setSubmitting(false);
         }
+    };
+
+    const selectPaymentMethod = (provider) => {
+        setSelectedProvider(provider);
+        setError(null);
+    };
+
+    const providerTitle = (pm) => pm.provider === 'stripe'
+        ? PROVIDER_LABELS.stripe
+        : (pm.display_name || PROVIDER_LABELS[pm.provider]);
+
+    const actionButton = () => {
+        if (selectedProvider === 'stripe') {
+            return {
+                icon: <CreditCardOutlined />,
+                content: <>Pay using cards <span style={{ opacity: 0.75 }}>- {invoice.currency_symbol}{amount?.toFixed(2)}</span></>,
+                style: {
+                    height: 52, fontSize: 16, fontWeight: 700,
+                    background: '#1677ff', borderColor: '#1677ff',
+                    boxShadow: '0 6px 16px rgba(22, 119, 255, 0.22)',
+                },
+            };
+        }
+
+        if (selectedProvider === 'paypal') {
+            return {
+                icon: null,
+                content: <Space size={10}><span>Pay with</span><PayPalWordmark /></Space>,
+                style: {
+                    height: 52, fontSize: 16, fontWeight: 700,
+                    color: '#111820', background: '#ffc439', borderColor: '#ffc439',
+                    boxShadow: '0 6px 16px rgba(0, 48, 135, 0.18)',
+                },
+            };
+        }
+
+        return {
+            icon: <LockOutlined />,
+            content: <>Pay {invoice.currency_symbol}{amount?.toFixed(2)} Securely</>,
+            style: { height: 48, fontSize: 16 },
+        };
     };
 
     const openRazorpay = async (data) => {
@@ -281,26 +357,73 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
                     {paymentMethods.map(pm => (
                         <div
                             key={pm.provider}
-                            onClick={() => setSelectedProvider(pm.provider)}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={selectedProvider === pm.provider}
+                            onClick={() => selectPaymentMethod(pm.provider)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    selectPaymentMethod(pm.provider);
+                                }
+                            }}
                             style={{
-                                padding: '12px 16px',
-                                borderRadius: token.borderRadius,
+                                padding: '14px 16px',
+                                borderRadius: token.borderRadiusLG,
                                 border: `2px solid ${selectedProvider === pm.provider ? PROVIDER_COLORS[pm.provider] || token.colorPrimary : token.colorBorderSecondary}`,
                                 cursor: 'pointer',
                                 background: selectedProvider === pm.provider ? (PROVIDER_COLORS[pm.provider] || token.colorPrimary) + '0F' : token.colorBgContainer,
-                                transition: 'all 0.2s',
+                                transition: 'border-color 0.2s, background 0.2s, box-shadow 0.2s',
+                                boxShadow: selectedProvider === pm.provider ? `0 4px 14px ${(PROVIDER_COLORS[pm.provider] || token.colorPrimary)}1F` : 'none',
+                                outline: 'none',
                             }}
                         >
-                            <Space justify="space-between" style={{ width: '100%' }}>
-                                <Text strong style={{ color: PROVIDER_COLORS[pm.provider] }}>
-                                    {pm.display_name || PROVIDER_LABELS[pm.provider]}
-                                </Text>
-                                {pm.mode === 'test' && <Tag color="blue">TEST</Tag>}
-                            </Space>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                                <Space size={12} style={{ flex: '1 1 210px', minWidth: 0 }}>
+                                    <span style={{
+                                        width: pm.provider === 'paypal' ? 52 : 38, height: 38,
+                                        flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        borderRadius: 10, background: pm.provider === 'paypal' ? '#fff4cc' : token.colorFillTertiary,
+                                        color: PROVIDER_COLORS[pm.provider] || token.colorPrimary, fontSize: 20,
+                                    }}>
+                                        {pm.provider === 'paypal' ? <PayPalWordmark compact /> : <CreditCardOutlined />}
+                                    </span>
+                                    <span>
+                                        <Text strong style={{ display: 'block', color: pm.provider === 'paypal' ? '#003087' : token.colorText }}>
+                                            {providerTitle(pm)}
+                                        </Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            {pm.provider === 'stripe' && 'Visa, Mastercard and American Express'}
+                                            {pm.provider === 'paypal' && 'Pay securely with your PayPal account'}
+                                            {pm.provider === 'razorpay' && 'Fast and secure online payment'}
+                                        </Text>
+                                    </span>
+                                </Space>
+                                <Space direction="vertical" align="end" size={6} style={{ marginLeft: 'auto' }}>
+                                    {pm.mode === 'test' && <Tag color="blue" style={{ margin: 0 }}>TEST</Tag>}
+                                    {pm.provider === 'stripe' && <CardBrandMarks />}
+                                </Space>
+                            </div>
                         </div>
                     ))}
                 </div>
             </div>
+
+            {selectedProvider === 'stripe' && (
+                <div style={{
+                    marginBottom: 16, padding: '13px 14px', borderRadius: token.borderRadiusLG,
+                    background: token.colorInfoBg, border: `1px solid ${token.colorInfoBorder}`,
+                    display: 'flex', gap: 11, alignItems: 'flex-start',
+                }}>
+                    <LockOutlined style={{ color: token.colorPrimary, marginTop: 3 }} />
+                    <div>
+                        <Text strong style={{ display: 'block' }}>Secure card checkout</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            Enter your card details securely on the next step. Your card information is never stored here.
+                        </Text>
+                    </div>
+                </div>
+            )}
 
             {/* Amount input (only for partial payments) */}
             {settings.allow_partial_payment && (
@@ -325,18 +448,23 @@ function PaymentPanel({ token: publicToken, invoice, settings, paymentMethods, o
                 </div>
             )}
 
-            <Button
-                type="primary"
-                size="large"
-                block
-                icon={<LockOutlined />}
-                loading={submitting}
-                onClick={handlePay}
-                disabled={!selectedProvider}
-                style={{ height: 48, fontSize: 16 }}
-            >
-                Pay {invoice.currency_symbol}{amount?.toFixed(2)} Securely
-            </Button>
+            {(() => {
+                const action = actionButton();
+                return (
+                    <Button
+                        type="primary"
+                        size="large"
+                        block
+                        icon={action.icon}
+                        loading={submitting}
+                        onClick={handlePay}
+                        disabled={!selectedProvider}
+                        style={action.style}
+                    >
+                        {action.content}
+                    </Button>
+                );
+            })()}
 
             <div style={{ textAlign: 'center', marginTop: 16 }}>
                 <Space>

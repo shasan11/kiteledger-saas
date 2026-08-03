@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Select } from 'antd';
 import axios from 'axios';
-import { asArray, optionLabel } from '../Upload/documentUtils';
+import { asArray, isUuidLike, optionLabel, safeDisplay } from '../Upload/documentUtils';
 
 /*
  * Searchable select backed by a paginated API endpoint.

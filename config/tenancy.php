@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Domain;
 use App\Models\Tenant;
-use Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper;
+use App\Tenancy\Bootstrappers\PrefixCacheTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper;
 use Stancl\Tenancy\Bootstrappers\QueueTenancyBootstrapper;
@@ -20,7 +20,7 @@ return [
     'central_domains' => array_values(array_filter(array_map('trim', explode(',', (string) env('CENTRAL_DOMAINS', '127.0.0.1,localhost'))))),
     'bootstrappers' => [
         DatabaseTenancyBootstrapper::class,
-        CacheTenancyBootstrapper::class,
+        PrefixCacheTenancyBootstrapper::class,
         FilesystemTenancyBootstrapper::class,
         QueueTenancyBootstrapper::class,
     ],
@@ -36,7 +36,8 @@ return [
             'pgsql' => PostgreSQLDatabaseManager::class,
         ],
     ],
-    'cache' => ['tag_base' => 'tenant'],
+    // tag_base is kept for BC; prefix_base is what PrefixCacheTenancyBootstrapper uses.
+    'cache' => ['tag_base' => 'tenant', 'prefix_base' => 'tenant_'],
     'filesystem' => [
         'suffix_base' => 'tenant',
         'disks' => ['local', 'public'],
