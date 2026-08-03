@@ -20,17 +20,9 @@ class AiPermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
 
-        // Assistant permissions belong to the future add-on. Keep only generic
-        // provider settings plus the core report-summary permission.
-        Permission::query()
-            ->where('guard_name', 'web')
-            ->where('name', 'like', 'ai.%')
-            ->whereNotIn('name', ['ai.settings.view', 'ai.settings.update'])
-            ->delete();
-
         // Permission names are resolved through Spatie's cache when assigning
-        // them to roles. Refresh it after creating and pruning permissions so
-        // this seeder is safe on both fresh and already-installed databases.
+        // them to roles. Refresh it after creating permissions so this seeder
+        // is safe on both fresh and already-installed databases.
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Admin / Super Admin / Owner roles get every AI permission

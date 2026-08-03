@@ -160,7 +160,7 @@ class ReportMatrixTest extends TestCase
         }
     }
 
-    public function test_report_summary_endpoint_is_isolated_from_the_removed_assistant(): void
+    public function test_report_summary_endpoint_remains_permission_isolated_from_copilot(): void
     {
         $this->mock(ReportAiSummaryService::class)
             ->shouldReceive('summarize')
@@ -183,7 +183,7 @@ class ReportMatrixTest extends TestCase
         $viewer = $this->userWith(['reports.financial.view']);
         $this->actingAs($viewer)
             ->postJson('/api/ai/chat', ['message' => 'Show trial balance'])
-            ->assertNotFound();
+            ->assertForbidden();
 
         $this->actingAs($viewer)
             ->postJson('/api/reports/accounting/trial-balance/ai-summary', [

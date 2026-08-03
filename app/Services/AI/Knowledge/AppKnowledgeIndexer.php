@@ -63,7 +63,7 @@ class AppKnowledgeIndexer
             $this->help('branch-scope', 'Administration', 'Branch Scope', 'Branch scope limits records to branches assigned to a user. Above-branch roles can select all branches; branch-limited users can only access assigned branch records.', null, ['branch', 'scope', 'permissions', 'access']),
             $this->help('trial-balance', 'Reports', 'Trial Balance Report', 'Trial Balance lists account debit and credit balances for a selected period. Total debits and credits should balance. Open Reports > Accounting > Trial Balance and apply branch and fiscal-period filters.', '/reports/accounting/trial-balance', ['trial balance', 'debit', 'credit', 'accounting report']),
             $this->help('payment-gateway', 'Settings', 'Payment Gateway Setup', 'Open Settings > Online Payments to enable a gateway, enter credentials, choose test or live mode, save, and verify the connection before sharing payment links.', '/settings/payment-gateways', ['payment gateway', 'online payment', 'stripe', 'paypal']),
-            $this->help('ai-settings', 'Settings', 'AI Assistant Settings', 'Open Settings > AI to enable the assistant and configure its provider credentials. Normal users do not see provider, model, or technical retrieval details.', '/settings/ai', ['ai settings', 'assistant', 'api key']),
+            $this->help('ai-settings', 'Settings', 'KiteLedger Copilot Settings', 'Open Settings > AI to enable Copilot and configure its platform-managed provider credentials. Normal users do not see provider, model, or technical retrieval details.', '/settings/ai', ['ai settings', 'copilot', 'api key']),
             $this->help('inventory-low-stock', 'Inventory', 'Inventory Low Stock', 'Use the inventory and low-stock reports to compare available quantity with each product reorder level. Filter by branch and warehouse for an accurate view.', '/reports/inventory', ['inventory', 'low stock', 'reorder']),
             $this->help('customer-payment', 'Sales', 'Customer Payment Workflow', 'Open Sales > Customer Payments, choose the customer, enter payment details, and allocate the amount to outstanding invoices. Review the unallocated amount before saving.', '/payment-in/customer-payments', ['customer payment', 'invoice allocation', 'receivable']),
             $this->help('quotation-sales-order', 'Sales', 'Quotation and Sales Order Difference', 'A quotation is an offer sent before customer commitment. A sales order records the confirmed customer order. A quotation can be converted into a sales order and later invoiced.', '/payment-in/quotations', ['quotation', 'sales order', 'difference']),
@@ -90,12 +90,15 @@ class AppKnowledgeIndexer
             }
             preg_match('/^#{1,3}\s+(.+)$/m', $part, $match);
             $title = trim($match[1] ?? pathinfo($path, PATHINFO_FILENAME));
+            $permission = preg_match('/\b(install|deployment|environment|database|cpanel|super admin|administrator|queue|scheduler|worker|cron|credential|api key|secret|password|artisan|shell)\b/i', $title.' '.$part)
+                ? 'ai.debug.view'
+                : null;
             $this->write([
                 'source_type' => 'documentation',
                 'source_id' => 'doc:'.sha1($path.':'.$index),
                 'module' => 'Documentation', 'title' => $title,
                 'content' => Str::limit(strip_tags($part), 3500, ''),
-                'route' => null, 'permission' => null,
+                'route' => null, 'permission' => $permission,
                 'keywords' => explode(' ', Str::lower($title)),
                 'metadata' => ['file' => basename($path)],
             ], $embed, $stats, $progress);

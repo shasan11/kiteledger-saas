@@ -89,6 +89,8 @@ export default function AiSettings() {
     const [error, setError] = useState(null);
     const [testResult, setTestResult] = useState(null);
     const [form] = Form.useForm();
+    const centralManaged = !!data?.central_managed;
+    const canEdit = canManage && !centralManaged;
     const currentProvider = Form.useWatch('ai_provider', form) || data?.settings?.ai_provider || 'openai';
 
     const providers = useMemo(() => {
@@ -191,7 +193,7 @@ export default function AiSettings() {
     };
 
     const save = async () => {
-        if (!canManage) return;
+        if (!canEdit) return;
 
         try {
             setSaving(true);
@@ -223,7 +225,7 @@ export default function AiSettings() {
     };
 
     const test = async () => {
-        if (!canManage) return;
+        if (!canEdit) return;
 
         try {
             setTesting(true);
@@ -272,7 +274,7 @@ export default function AiSettings() {
                         <Form
                             form={form}
                             layout="vertical"
-                            disabled={!canManage}
+                            disabled={!canEdit}
                             onValuesChange={(changed) => {
                                 if (changed.ai_provider) patchProviderDefaults(changed.ai_provider);
                                 if (!changed.ai_provider) setTestResult(null);
@@ -374,15 +376,18 @@ export default function AiSettings() {
                             )}
 
                             <Space wrap>
-                                <Button type="primary" icon={<SaveOutlined />} loading={saving && !testing} onClick={save} disabled={!canManage}>
+                                <Button type="primary" icon={<SaveOutlined />} loading={saving && !testing} onClick={save} disabled={!canEdit}>
                                     Save
                                 </Button>
-                                <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canManage}>
+                                <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canEdit}>
                                     Save & Test Connection
                                 </Button>
-                                <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canManage}>
+                                <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canEdit}>
                                     Reset Recommended Defaults
                                 </Button>
+                                {centralManaged && (
+                                    <Text type="secondary">Read-only - provider settings are managed by the central administrator.</Text>
+                                )}
                                 {!canManage && (
                                     <Text type="secondary">Read-only - you do not have permission to edit AI settings.</Text>
                                 )}

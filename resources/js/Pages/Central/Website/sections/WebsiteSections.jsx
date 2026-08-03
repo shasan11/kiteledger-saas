@@ -175,8 +175,38 @@ function CtaSection({ section }) {
     return <section className={sectionClass(section, "kl-cta")} style={sectionStyle(section)}><WebsiteContainer><div><p className="kl-eyebrow">{section.eyebrow}</p><h2>{section.title}</h2>{(section.subtitle || section.content) && <p>{section.subtitle || section.content}</p>}</div><SectionActions section={section} /></WebsiteContainer></section>;
 }
 
-function SecuritySection({ section }) {
-    return <ProductSection section={{ ...section, background_style: section.background_style || "subtle" }} />;
+function SecuritySection({ section, items = [] }) {
+    const visible = itemsFor(section, items).slice(0, 3);
+    const secureSection = { ...section, background_style: section.background_style || "dark" };
+    return <section className={sectionClass(secureSection, "kl-security")} style={sectionStyle(secureSection)}>
+        <WebsiteContainer className="kl-security-shell">
+            <div className="kl-security-copy">
+                {section.eyebrow && <p className="kl-eyebrow">{section.eyebrow}</p>}
+                {section.title && <h2>{section.title}</h2>}
+                {(section.subtitle || section.content) && <p className="kl-lead">{section.subtitle || section.content}</p>}
+                <SectionActions section={section} />
+            </div>
+            <div className="kl-security-panel" aria-label="KiteLedger trust controls">
+                <div className="kl-security-panel__header">
+                    <span>Workspace protection</span>
+                    <strong>Always scoped</strong>
+                </div>
+                {visible.length > 0 && <ul className="kl-security-list">
+                    {visible.map((item, index) => <li key={item.id || index}>
+                        <span className="kl-security-check"><CheckIcon /></span>
+                        <span>
+                            {item.title && <strong>{item.title}</strong>}
+                            {item.content && <small>{item.content}</small>}
+                        </span>
+                    </li>)}
+                </ul>}
+                <div className="kl-security-metrics">
+                    <span><strong>{Math.max(visible.length, 3)}</strong><small>core safeguards</small></span>
+                    <span><strong>24/7</strong><small>activity visibility</small></span>
+                </div>
+            </div>
+        </WebsiteContainer>
+    </section>;
 }
 
 const registry = {

@@ -80,6 +80,26 @@ const fmtNum = (v) => (v == null || v === '' ? DASH : numFmt.format(Number(v || 
 const fmtDate = (v) => (v ? dayjs(v).format('DD MMM YYYY') : DASH);
 const toNum = (v) => Number(v || 0);
 const visit = (url) => { if (url && url !== '#') router.visit(url); };
+const dateOnly = (value) => (value ? dayjs(value).format('YYYY-MM-DD') : undefined);
+
+const initialDashboardPeriod = (context = {}) => {
+    const fiscalYear = context.current_fiscal_year || context.currentFiscalYear || {};
+
+    return {
+        date_from: dateOnly(fiscalYear.start_date) || dayjs().startOf('month').format('YYYY-MM-DD'),
+        date_to: dateOnly(fiscalYear.end_date) || dayjs().format('YYYY-MM-DD'),
+    };
+};
+
+const periodLabel = (filters = {}) => {
+    if (!filters.date_from || !filters.date_to) return 'Selected period';
+
+    return `${dayjs(filters.date_from).format('D MMM YYYY')} – ${dayjs(filters.date_to).format('D MMM YYYY')}`;
+};
+
+const profitTone = (value) => (toNum(value) >= 0 ? 'positive' : 'negative');
+
+const compactMoney = (value) => (value == null || value === '' ? DASH : compactFmt.format(Number(value || 0)));
 
 function calcTrend(sparkline) {
     if (!sparkline || sparkline.length < 6) return null;
@@ -100,11 +120,10 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [data, setData] = useState({});
-    const [filters, setFilters] = useState({
+    const [filters, setFilters] = useState(() => ({
         branch_id: bc.selectedBranchId || 'all',
-        date_from: dayjs().startOf('month').format('YYYY-MM-DD'),
-        date_to: dayjs().format('YYYY-MM-DD'),
-    });
+        ...initialDashboardPeriod(bc),
+    }));
 
     const fetch = useCallback(async () => {
         setLoading(true);
@@ -129,7 +148,6 @@ export default function Dashboard() {
 
     const m = useMemo(() => buildModel(data), [data]);
     const branches = data.branches || bc.branches || [];
-
     return (
         <AuthenticatedLayout
             header={<DashHeader branches={branches} filters={filters} loading={loading} onRefresh={fetch} onChange={setFilters} />}
@@ -144,50 +162,79 @@ export default function Dashboard() {
                     )}
                     {loading ? <DashSkeleton /> : (
                         <>
-                            {/* KPI Strip */}
-                            <section className="kd-kpis">
-                                {m.kpis.map((k) => <KpiCard key={k.key} {...k} />)}
+                            <section className="kd-signal-grid">
+                                {m.signalCards.map((card) => <SignalCard key={card.key} card={card} />)}
                             </section>
 
-                            {/* Row 2: Financial overview */}
-                            <section className="kd-row-2">
-                                <FinancialChart data={m.chartData} />
+                            <section className="kd-focus-grid">
+                                <FinancialChart data={m.chartData} summary={m.executive} />
+                                <AttentionPanel summary={m.cashPosition} items={m.attentionItems} />
                             </section>
 
-                            {/* Row 3: Expense Breakdown + Cash Flow */}
-                            <section className="kd-cash-expense-row">
-                                <ExpenseDonut data={m.expenseBreakdown} />
-                                <CashFlowChart data={m.cashflowChart} />
-                            </section>
-
-                            {/* Row 4: Ageing */}
-                            <section className="kd-row-3">
-                                <AgeingChart data={m.ageingData} />
-                            </section>
-
-                            {/* Business Cards */}
                             {m.bizCards.length > 0 && (
-                                <section className="kd-biz-grid">
-                                    {m.bizCards.map((c) => <BizCard key={c.key} card={c} />)}
-                                </section>
+                                <ModuleOverview cards={m.bizCards} />
                             )}
 
-                            <ProjectDeadlines approaching={m.approachingProjects} overdue={m.overdueProjects} />
-
-                            {/* Transactions Table */}
                             <TxnTable transactions={m.transactions} />
-
-                            {/* Bottom: Top Parties + Bank Accounts */}
-                            <section className="kd-bottom">
-                                {m.topCustomers.length > 0 && <TopPartiesBar title="Top Customers" data={m.topCustomers} color={THEME_COLOURS.primary} />}
-                                {m.topSuppliers.length > 0 && <TopPartiesBar title="Top Suppliers" data={m.topSuppliers} color={THEME_COLOURS.warning} />}
-                                {m.bankAccounts.length > 0 && <BankList accounts={m.bankAccounts} />}
-                            </section>
                         </>
                     )}
                 </div>
             </main>
         </AuthenticatedLayout>
+    );
+}
+
+function SignalCard({ card }) {
+    return (
+        <Card className="kd-card kd-signal" style={{ '--kd-accent': card.color }} styles={{ body: { padding: 0 } }}>
+            <div className="kd-signal__body">
+                <div className="kd-signal__top">
+                    <Text type="secondary" className="kd-signal__label">{card.label}</Text>
+                </div>
+                <div className="kd-signal__value">{fmtMoney(card.value)}</div>
+                <Text type="secondary" className="kd-signal__helper">{card.helper}</Text>
+            </div>
+        </Card>
+    );
+}
+
+function AttentionPanel({ summary, items }) {
+    const visibleItems = items.slice(0, 4);
+    return (
+        <Card className="kd-card kd-attention" styles={{ body: { padding: 0 } }}>
+            <div className="kd-section-head">
+                <div>
+                    <span className="kd-card-hdr__t">Attention</span>
+                    <Text type="secondary">Items worth reviewing</Text>
+                </div>
+                <span className={`kd-status ${visibleItems.length ? 'kd-status--warn' : 'kd-status--good'}`}>
+                    {visibleItems.length ? `${visibleItems.length} open` : 'All clear'}
+                </span>
+            </div>
+            <div className="kd-liquidity">
+                <div>
+                    <Text type="secondary">Net liquidity</Text>
+                    <strong>{fmtMoney(summary.netLiquidity)}</strong>
+                </div>
+                <Text type="secondary">Cash & bank {compactMoney(summary.cashBankBalance)}</Text>
+            </div>
+            <div className="kd-attention__list">
+                {visibleItems.length ? visibleItems.map((item) => (
+                    <button type="button" className="kd-attention__item" key={item.key} onClick={() => visit(item.href)}>
+                        <span>
+                            <b>{item.label}</b>
+                            <small>{item.module}</small>
+                        </span>
+                        <strong>{item.format === 'money' ? fmtMoney(item.value, true) : fmtNum(item.value)}</strong>
+                    </button>
+                )) : (
+                    <div className="kd-attention__empty">
+                        <span className="kd-health-dot kd-health-dot--good" />
+                        <Text type="secondary">No overdue or exceptional items</Text>
+                    </div>
+                )}
+            </div>
+        </Card>
     );
 }
 
@@ -199,7 +246,7 @@ function DashHeader({ branches, filters, loading, onRefresh, onChange }) {
         <div className="kd-hdr">
             <div>
                 <Title level={5} style={{ margin: '0 0 1px', fontWeight: 650 }}>Dashboard</Title>
-                <Text type="secondary" style={{ fontSize: 11 }}>Financial overview for the selected period</Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Financial overview for the selected fiscal period</Text>
             </div>
             <div className="kd-hdr__ctl">
                 <Select value={filters.branch_id} options={opts} style={{ width: 150 }}
@@ -270,17 +317,24 @@ function KpiCard({ label, value, sparkline, color, trend, invertTrend, helper })
 }
 
 
-function FinancialChart({ data }) {
+function FinancialChart({ data, summary }) {
     const hasData = data.some((d) => toNum(d.revenue) || toNum(d.expenses) || toNum(d.profit));
 
     return (
-        <Card className="kd-card kd-chart-main" styles={{ body: { padding: 8 } }}>
-            <div className="kd-card-hdr">
-                <span className="kd-card-hdr__t">Financial Performance</span>
-                <Text type="secondary" style={{ fontSize: 11 }}>Revenue, expenses & net profit trend</Text>
+        <Card className="kd-card kd-chart-main kd-performance" styles={{ body: { padding: 0 } }}>
+            <div className="kd-performance__head">
+                <div>
+                    <span className="kd-card-hdr__t">Financial performance</span>
+                    <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Revenue, expenses & net profit trend</Text>
+                </div>
+                <div className="kd-performance__stats">
+                    <span>Revenue <b>{compactMoney(summary.revenue)}</b></span>
+                    <span>Expenses <b>{compactMoney(summary.expenses)}</b></span>
+                    <span>Profit <b>{compactMoney(summary.netProfit)}</b></span>
+                </div>
             </div>
             {hasData ? (
-                <div style={{ height: 180 }}>
+                <div className="kd-performance__chart">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data} margin={{ top: 4, right: 10, bottom: 0, left: 0 }}>
                             <CartesianGrid stroke="var(--kd-grid)" vertical={false} />
@@ -291,7 +345,7 @@ function FinancialChart({ data }) {
                             <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                             <Line type="monotone" dataKey="revenue" name="Revenue" stroke={THEME_COLOURS.primary} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
                             <Line type="monotone" dataKey="expenses" name="Expenses" stroke={THEME_COLOURS.warning} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={THEME_COLOURS.success} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="profit" name="Net Profit" stroke={THEME_COLOURS.text} strokeWidth={1.8} dot={false} activeDot={{ r: 3 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -432,25 +486,53 @@ function MoneyTip({ active, payload, label }) {
     );
 }
 
-function BizCard({ card }) {
+function ModuleOverview({ cards }) {
     return (
-        <Card className="kd-card kd-biz" styles={{ body: { padding: 8 } }}>
-            <div className="kd-biz__head">
-                <Text strong style={{ fontSize: 12, fontWeight: 650 }}>{card.title}</Text>
-                {card.href && <Button type="link" size="small" style={{ padding: 0, fontSize: 11, fontWeight: 600 }} onClick={() => visit(card.href)}>{card.linkText || 'View'}</Button>}
+        <Card className="kd-card kd-modules" styles={{ body: { padding: 0 } }}>
+            <div className="kd-section-head">
+                <div>
+                    <span className="kd-card-hdr__t">Modules</span>
+                    <Text type="secondary">Key operating numbers at a glance</Text>
+                </div>
             </div>
-            <div className="kd-biz__rows">
-                {card.items.map((i) => (
-                    <div className="kd-biz__row" key={i.label}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>{i.label}</Text>
-                        <Text strong style={{ fontSize: 11 }}>
-                            {i.format === 'money' ? fmtMoney(i.value, true) : i.format === 'text' ? (i.value || DASH) : fmtNum(i.value)}
-                        </Text>
-                    </div>
-                ))}
+            <div className="kd-modules__grid">
+                {cards.map((card) => {
+                    const primary = card.items[0];
+                    return (
+                        <article className="kd-module" key={card.key}>
+                            <div className="kd-module__head">
+                                <Text strong>{card.title}</Text>
+                                {card.href && (
+                                    <Button type="link" size="small" onClick={() => visit(card.href)}>
+                                        View
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="kd-module__primary">
+                                <Text type="secondary">{primary?.label}</Text>
+                                <strong>{formatModuleValue(primary)}</strong>
+                            </div>
+                            <div className="kd-module__facts">
+                                {card.items.slice(1, 4).map((item) => (
+                                    <span key={item.label}>
+                                        <small>{item.label}</small>
+                                        <b>{formatModuleValue(item)}</b>
+                                    </span>
+                                ))}
+                            </div>
+                        </article>
+                    );
+                })}
             </div>
         </Card>
     );
+}
+
+function formatModuleValue(item) {
+    if (!item) return DASH;
+    if (item.format === 'money') return fmtMoney(item.value, true);
+    if (item.format === 'text') return item.value || DASH;
+    return fmtNum(item.value);
 }
 
 function TxnTable({ transactions }) {
@@ -550,16 +632,14 @@ function EmptyState({ title, desc, compact }) {
 
 function DashSkeleton() {
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 8 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
-            <div className="kd-row-2">
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--kd-gap)' }}>
+            <div className="kd-signal-grid">{[1, 2, 3, 4].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 14 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
+            <div className="kd-focus-grid">
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
             </div>
-            <div className="kd-cash-expense-row">
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
-                <Card className="kd-card"><Skeleton active paragraph={{ rows: 8 }} /></Card>
-            </div>
-            <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
+            <Card className="kd-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
+            <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
         </div>
     );
 }
@@ -593,6 +673,27 @@ function buildModel(data) {
     const recSparkline = (sparklines.receivables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
     const paySparkline = (sparklines.payables || []).map((d) => ({ date: d.date, value: toNum(d.value) }));
 
+    const executive = {
+        revenue: toNum(fin.revenue),
+        expenses: toNum(fin.expenses),
+        netProfit: toNum(fin.net_profit),
+        receivables: toNum(fin.receivables),
+        payables: toNum(fin.payables),
+        cash: toNum(fin.cash_bank_balance),
+        currency: fin.currency || data.currency || 'NPR',
+        margin: toNum(fin.revenue) > 0 ? (toNum(fin.net_profit) / toNum(fin.revenue)) * 100 : 0,
+        message: toNum(fin.net_profit) >= 0
+            ? 'Revenue is covering costs for this period. Keep an eye on receivables so profit turns into cash.'
+            : 'Expenses are ahead of revenue for this period. The fastest wins are collecting receivables and reviewing major costs.',
+    };
+
+    const signalCards = [
+        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'Approved invoice value' },
+        { key: 'profit', label: 'Net profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline), helper: 'Revenue minus expenses' },
+        { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: THEME_COLOURS.info, helper: 'Customer money to collect' },
+        { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: THEME_COLOURS.warning, helper: 'Supplier and expense dues', invertTrend: true },
+    ];
+
     const kpis = [
         { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'This period' },
         { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: THEME_COLOURS.warning, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
@@ -607,6 +708,12 @@ function buildModel(data) {
     const ageingData = mergeAgeing(data.receivable_ageing, data.payable_ageing);
 
     const cp = data.cash_position || {};
+    const cashPosition = {
+        cashBankBalance: toNum(fin.cash_bank_balance ?? cp.cash_bank_balance),
+        receivables: toNum(fin.receivables),
+        payables: toNum(fin.payables),
+        netLiquidity: toNum(fin.cash_bank_balance ?? cp.cash_bank_balance) + toNum(fin.receivables) - toNum(fin.payables),
+    };
     const bankAccounts = Array.isArray(cp.bank_accounts) ? cp.bank_accounts : [];
     const transactions = Array.isArray(data.recent_transactions) ? data.recent_transactions : [];
     const topCustomers = Array.isArray(data.top_customers) ? data.top_customers : [];
@@ -619,10 +726,10 @@ function buildModel(data) {
             key: 'sales', title: 'Sales', href: '/payment-in/invoices', linkText: 'View invoices',
             items: [
                 { label: 'Total sales', value: sales.sales_total, format: 'money' },
+                { label: 'Overdue', value: sales.overdue_amount, format: 'money' },
+                { label: 'Unpaid', value: sales.unpaid_amount, format: 'money' },
                 { label: 'Invoices', value: sales.invoice_count },
                 { label: 'Paid', value: sales.paid_amount, format: 'money' },
-                { label: 'Unpaid', value: sales.unpaid_amount, format: 'money' },
-                { label: 'Overdue', value: sales.overdue_amount, format: 'money' },
             ],
         });
     }
@@ -632,12 +739,11 @@ function buildModel(data) {
             key: 'purchase', title: 'Purchases', href: '/payment-out/purchase-bills', linkText: 'View bills',
             items: [
                 { label: 'Total purchases', value: purchase.purchase_total, format: 'money' },
-                { label: 'Bills', value: purchase.bill_count },
-                { label: 'Paid', value: purchase.paid_amount, format: 'money' },
-                { label: 'Unpaid bills', value: purchase.unpaid_amount, format: 'money' },
-                { label: 'Expense payables', value: purchase.expense_payables, format: 'money' },
                 { label: 'Total payables', value: purchase.total_payables ?? purchase.unpaid_amount, format: 'money' },
                 { label: 'Upcoming', value: purchase.upcoming_payables, format: 'money' },
+                { label: 'Bills', value: purchase.bill_count },
+                { label: 'Paid', value: purchase.paid_amount, format: 'money' },
+                { label: 'Expense payables', value: purchase.expense_payables, format: 'money' },
             ],
         });
     }
@@ -648,8 +754,6 @@ function buildModel(data) {
             { label: 'Cash out', value: cf.cash_out, format: 'money' },
             { label: 'Net cash flow', value: cf.net_cash_flow, format: 'money' },
         ];
-        if (cf.biggest_inflow) items.push({ label: 'Top inflow', value: cf.biggest_inflow, format: 'text' });
-        if (cf.biggest_outflow) items.push({ label: 'Top outflow', value: cf.biggest_outflow, format: 'text' });
         bizCards.push({ key: 'cashflow', title: 'Cash Flow', items });
     }
     const inv = data.inventory_summary;
@@ -695,7 +799,23 @@ function buildModel(data) {
         bizCards.push({ key: 'projects', title: 'Projects', href: '/hrm/projects', linkText: 'View', items });
     }
 
+    const attentionItems = [
+        sales && toNum(sales.overdue_amount) > 0
+            ? { key: 'overdue-sales', module: 'Sales', label: 'Overdue invoices', value: sales.overdue_amount, format: 'money', href: '/payment-in/invoices' }
+            : null,
+        purchase && toNum(purchase.upcoming_payables) > 0
+            ? { key: 'upcoming-payables', module: 'Purchases', label: 'Upcoming payables', value: purchase.upcoming_payables, format: 'money', href: '/payment-out/purchase-bills' }
+            : null,
+        inv && toNum(inv.low_stock_items) > 0
+            ? { key: 'low-stock', module: 'Inventory', label: 'Low stock items', value: inv.low_stock_items, href: '/inventory/products' }
+            : null,
+        proj && toNum(proj.overdue_tasks) > 0
+            ? { key: 'overdue-tasks', module: 'Projects', label: 'Overdue tasks', value: proj.overdue_tasks, href: '/hrm/projects' }
+            : null,
+    ].filter(Boolean);
+
     return {
+        executive, signalCards, cashPosition, attentionItems,
         kpis, chartData, cashflowChart, expenseBreakdown, ageingData, bizCards,
         transactions, topCustomers, topSuppliers, bankAccounts,
         approachingProjects: Array.isArray(data.approaching_deadline_projects) ? data.approaching_deadline_projects : [],
@@ -804,14 +924,14 @@ function Styles({ token }) {
                 --kd-radius: ${token.borderRadiusLG}px;
                 --kd-radius-sm: ${token.borderRadius}px;
                 --kd-radius-xs: ${token.borderRadiusSM}px;
-                --kd-gap: ${token.paddingXS}px;
-                --kd-pad: ${token.paddingSM}px;
+                --kd-gap: clamp(9px, .8vw, 12px);
+                --kd-pad: clamp(10px, 1vw, 14px);
                 min-height: calc(100vh - 96px);
                 background: var(--kd-bg);
-                padding: clamp(${token.paddingXS}px, 1vw, ${token.paddingMD}px);
+                padding: clamp(10px, 1.2vw, 16px);
             }
             .kd-wrap {
-                width: min(1480px, 100%);
+                width: min(1440px, 100%);
                 margin: 0 auto;
                 display: flex;
                 flex-direction: column;
@@ -850,13 +970,14 @@ function Styles({ token }) {
             .kd-card {
                 background: var(--kd-card) !important;
                 border: 1px solid var(--kd-border) !important;
-                border-radius: var(--kd-radius) !important;
-                box-shadow: var(--kd-shadow) !important;
+                border-radius: 10px !important;
+                box-shadow: none !important;
                 overflow: hidden;
+                transition: border-color 140ms ease;
             }
             .kd-card:hover {
                 border-color: var(--kd-border-strong) !important;
-                box-shadow: var(--kd-shadow-strong) !important;
+                box-shadow: none !important;
             }
             .kd-card-hdr {
                 display: flex;
@@ -869,6 +990,203 @@ function Styles({ token }) {
                 font-weight: 700;
                 line-height: 1.2;
                 color: var(--kd-text);
+            }
+
+            .kd-hero {
+                position: relative;
+                overflow: hidden;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+                gap: clamp(16px, 2vw, 28px);
+                align-items: stretch;
+                padding: clamp(18px, 2.2vw, 28px);
+                border-radius: 18px;
+                border: 1px solid var(--kd-border);
+                border-left: 4px solid var(--kd-primary);
+                background: var(--kd-card);
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            }
+            .kd-hero--negative {
+                border-left-color: var(--kd-warning);
+            }
+            .kd-hero__main,
+            .kd-hero__score {
+                position: relative;
+                z-index: 1;
+            }
+            .kd-eyebrow {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                width: fit-content;
+                color: var(--kd-muted);
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+            }
+            .kd-eyebrow__dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 999px;
+                background: var(--kd-success);
+            }
+            .kd-hero__title {
+                color: var(--kd-text) !important;
+                margin: 12px 0 8px !important;
+                font-size: clamp(25px, 2.5vw, 38px) !important;
+                line-height: 1.08 !important;
+                letter-spacing: -0.035em;
+                max-width: 700px;
+            }
+            .kd-hero__copy {
+                display: block;
+                max-width: 680px;
+                color: var(--kd-muted) !important;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            .kd-hero__meta {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 18px;
+            }
+            .kd-hero__meta span {
+                display: inline-flex;
+                align-items: center;
+                min-height: 28px;
+                padding: 5px 10px;
+                border-radius: 999px;
+                background: var(--kd-soft);
+                color: var(--kd-muted);
+                font-size: 12px;
+                font-weight: 650;
+            }
+            .kd-hero__score {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: clamp(16px, 2vw, 24px);
+                border-radius: 16px;
+                background: var(--kd-soft);
+                border: 1px solid var(--kd-grid);
+            }
+            .kd-hero__status {
+                width: fit-content;
+                padding: 4px 8px;
+                border-radius: 999px;
+                font-size: 12px;
+                font-weight: 800;
+                line-height: 1;
+            }
+            .kd-hero__status--positive {
+                color: var(--kd-success);
+                background: var(--kd-success-bg);
+            }
+            .kd-hero__status--negative {
+                color: var(--kd-warning);
+                background: var(--kd-warning-bg);
+            }
+            .kd-hero__amount {
+                margin-top: 12px;
+                color: var(--kd-text);
+                font-size: clamp(30px, 3.1vw, 48px);
+                line-height: 1;
+                font-weight: 900;
+                letter-spacing: -0.05em;
+                overflow-wrap: anywhere;
+            }
+            .kd-hero__sub {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                margin-top: 16px;
+            }
+            .kd-hero__sub span {
+                color: var(--kd-muted);
+                font-size: 12px;
+                font-weight: 700;
+            }
+
+            .kd-signal-grid {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: var(--kd-gap);
+            }
+            .kd-signal {
+                min-height: 132px;
+                position: relative;
+            }
+            .kd-signal::before {
+                content: '';
+                position: absolute;
+                inset: 0 auto 0 0;
+                width: 3px;
+                background: var(--kd-accent);
+                pointer-events: none;
+            }
+            .kd-signal__body {
+                position: relative;
+                z-index: 1;
+                min-height: 132px;
+                padding: 16px;
+                display: flex;
+                flex-direction: column;
+            }
+            .kd-signal__top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .kd-signal__icon {
+                width: 26px;
+                height: 3px;
+                border-radius: 999px;
+                background: var(--kd-accent);
+            }
+            .kd-signal__trend {
+                display: inline-flex;
+                align-items: center;
+                padding: 3px 7px;
+                border-radius: 999px;
+                color: var(--kd-trend);
+                background: transparent;
+                border: 1px solid var(--kd-border);
+                font-size: 11px;
+                font-weight: 800;
+            }
+            .kd-signal__label {
+                margin-top: 12px;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: .07em;
+                text-transform: uppercase;
+            }
+            .kd-signal__value {
+                margin-top: 6px;
+                color: var(--kd-text);
+                font-size: clamp(21px, 1.7vw, 28px);
+                line-height: 1.05;
+                font-weight: 900;
+                letter-spacing: -0.04em;
+                overflow-wrap: anywhere;
+            }
+            .kd-signal__helper {
+                display: block;
+                margin-top: auto;
+                padding-top: 12px;
+                font-size: 12px;
+            }
+            .kd-signal__spark {
+                position: absolute;
+                right: 0;
+                bottom: 0;
+                width: 58%;
+                height: 42px;
+                opacity: .28;
+                pointer-events: none;
             }
 
             .kd-kpis {
@@ -962,6 +1280,24 @@ function Styles({ token }) {
                 gap: var(--kd-gap);
                 align-items: stretch;
             }
+            .kd-main-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr);
+                gap: var(--kd-gap);
+                align-items: stretch;
+            }
+            .kd-side-stack {
+                display: grid;
+                grid-template-rows: auto 1fr;
+                gap: var(--kd-gap);
+                min-width: 0;
+            }
+            .kd-insight-grid {
+                display: grid;
+                grid-template-columns: minmax(280px, .7fr) minmax(0, 1fr);
+                gap: var(--kd-gap);
+                align-items: stretch;
+            }
             .kd-row-2,
             .kd-row-3 {
                 grid-template-columns: minmax(0, 1fr);
@@ -973,11 +1309,94 @@ function Styles({ token }) {
             .kd-chart-side {
                 min-height: 222px;
             }
+            .kd-performance__head {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 16px 16px 8px;
+            }
+            .kd-performance__stats {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                gap: 8px;
+            }
+            .kd-performance__stats span {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 5px 8px;
+                border-radius: 999px;
+                color: var(--kd-muted);
+                border: 1px solid var(--kd-border);
+                font-size: 11px;
+                white-space: nowrap;
+            }
+            .kd-performance__stats b {
+                color: var(--kd-text);
+            }
+            .kd-performance__chart {
+                height: 300px;
+                padding: 4px 12px 16px 6px;
+            }
+            .kd-cash-card__head {
+                display: flex;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 16px 16px 6px;
+            }
+            .kd-health-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 999px;
+                margin-top: 3px;
+                background: var(--kd-health);
+            }
+            .kd-health-dot--good { --kd-health: var(--kd-success); }
+            .kd-health-dot--bad { --kd-health: var(--kd-error); }
+            .kd-cash-card__total {
+                padding: 4px 16px 14px;
+                color: var(--kd-text);
+                font-size: clamp(24px, 2.4vw, 36px);
+                line-height: 1.05;
+                font-weight: 900;
+                letter-spacing: -0.05em;
+                overflow-wrap: anywhere;
+            }
+            .kd-cash-card__rows {
+                display: grid;
+                gap: 1px;
+                background: var(--kd-grid);
+                border-top: 1px solid var(--kd-grid);
+            }
+            .kd-cash-card__row {
+                display: grid;
+                grid-template-columns: 10px 1fr auto;
+                align-items: center;
+                gap: 9px;
+                padding: 9px 16px;
+                background: var(--kd-card);
+                font-size: 12px;
+            }
+            .kd-mini-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 999px;
+                background: var(--kd-dot);
+            }
+            .kd-mini-dot--good { --kd-dot: var(--kd-success); }
+            .kd-mini-dot--info { --kd-dot: var(--kd-info); }
+            .kd-mini-dot--warn { --kd-dot: var(--kd-warning); }
+            .kd-mini-dot--bad { --kd-dot: var(--kd-error); }
 
             .kd-biz-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
                 gap: var(--kd-gap);
+            }
+            .kd-biz-grid--premium {
+                align-items: stretch;
             }
             .kd-biz {
                 position: relative;
@@ -985,8 +1404,8 @@ function Styles({ token }) {
             .kd-biz::before {
                 content: '';
                 position: absolute;
-                inset: 0 0 auto 0;
-                height: ${Math.max(token.lineWidthBold || 2, 3)}px;
+                inset: 0 auto 0 0;
+                width: 3px;
                 background: var(--kd-primary);
                 opacity: 0.8;
             }
@@ -995,23 +1414,27 @@ function Styles({ token }) {
                 align-items: center;
                 justify-content: space-between;
                 gap: ${token.marginXXS}px;
-                margin-bottom: ${token.marginXS}px;
+                margin-bottom: 10px;
             }
             .kd-biz__rows {
-                display: flex;
-                flex-direction: column;
-                gap: ${token.marginXXS}px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
             }
             .kd-biz__row {
                 display: flex;
-                justify-content: space-between;
-                align-items: baseline;
-                gap: ${token.marginXXS}px;
-                padding: 1px 0;
-                border-bottom: 1px solid var(--kd-grid);
+                flex-direction: column;
+                gap: 3px;
+                min-width: 0;
+                padding: 8px 9px;
+                border: 1px solid var(--kd-grid);
+                border-radius: 10px;
+                background: var(--kd-card);
             }
-            .kd-biz__row:last-child {
-                border-bottom: 0;
+            .kd-biz__row:first-child {
+                grid-column: 1 / -1;
+                background: var(--kd-soft);
+                border-color: var(--kd-border);
             }
 
             .kd-bottom {
@@ -1035,6 +1458,250 @@ function Styles({ token }) {
             .kd-bank-row:last-child {
                 border-bottom: 0;
                 padding-bottom: 0;
+            }
+
+            .kd-signal {
+                min-height: 104px;
+                border-top: 2px solid var(--kd-accent) !important;
+            }
+            .kd-signal::before,
+            .kd-signal__icon,
+            .kd-signal__spark {
+                display: none;
+            }
+            .kd-signal__body {
+                min-height: 102px;
+                padding: 12px 14px;
+            }
+            .kd-signal__label {
+                margin: 0;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0;
+                text-transform: none;
+            }
+            .kd-signal__value {
+                margin-top: 7px;
+                font-size: clamp(20px, 1.5vw, 25px);
+                font-weight: 750;
+                letter-spacing: -0.025em;
+            }
+            .kd-signal__helper {
+                padding-top: 6px;
+                font-size: 10px;
+            }
+            .kd-signal__trend {
+                padding: 0;
+                border: 0;
+                border-radius: 0;
+                font-size: 10px;
+                font-weight: 700;
+            }
+
+            .kd-focus-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1.75fr) minmax(285px, .75fr);
+                gap: var(--kd-gap);
+                align-items: stretch;
+            }
+            .kd-section-head {
+                min-height: 52px;
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 12px 14px;
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-section-head > div {
+                display: grid;
+                gap: 2px;
+            }
+            .kd-section-head .ant-typography {
+                font-size: 10px;
+            }
+            .kd-performance__head {
+                min-height: 52px;
+                align-items: center;
+                padding: 11px 14px;
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-performance__stats {
+                gap: 10px;
+            }
+            .kd-performance__stats span {
+                padding: 0;
+                border: 0;
+                border-radius: 0;
+                font-size: 10px;
+            }
+            .kd-performance__chart {
+                height: 238px;
+                padding: 10px 12px 12px 4px;
+            }
+
+            .kd-status {
+                display: inline-flex;
+                align-items: center;
+                min-height: 22px;
+                padding: 2px 7px;
+                border-radius: 999px;
+                font-size: 10px;
+                font-weight: 650;
+                white-space: nowrap;
+            }
+            .kd-status--warn {
+                color: var(--kd-warning);
+                background: var(--kd-warning-bg);
+            }
+            .kd-status--good {
+                color: var(--kd-success);
+                background: var(--kd-success-bg);
+            }
+            .kd-liquidity {
+                display: flex;
+                align-items: flex-end;
+                justify-content: space-between;
+                gap: 10px;
+                padding: 12px 14px;
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-liquidity > div {
+                display: grid;
+                gap: 3px;
+            }
+            .kd-liquidity .ant-typography {
+                font-size: 10px;
+            }
+            .kd-liquidity strong {
+                color: var(--kd-text);
+                font-size: 20px;
+                line-height: 1.1;
+                letter-spacing: -.025em;
+            }
+            .kd-attention__list {
+                display: grid;
+            }
+            .kd-attention__item {
+                appearance: none;
+                width: 100%;
+                min-height: 49px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 8px 14px;
+                border: 0;
+                border-bottom: 1px solid var(--kd-grid);
+                background: transparent;
+                color: var(--kd-text);
+                text-align: left;
+                cursor: pointer;
+            }
+            .kd-attention__item:last-child {
+                border-bottom: 0;
+            }
+            .kd-attention__item:hover {
+                background: var(--kd-hover);
+            }
+            .kd-attention__item > span {
+                min-width: 0;
+                display: grid;
+                gap: 1px;
+            }
+            .kd-attention__item b,
+            .kd-attention__item strong {
+                font-size: 11px;
+                font-weight: 650;
+            }
+            .kd-attention__item small {
+                color: var(--kd-muted);
+                font-size: 10px;
+            }
+            .kd-attention__item strong {
+                white-space: nowrap;
+            }
+            .kd-attention__empty {
+                min-height: 86px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                padding: 14px;
+            }
+
+            .kd-modules__grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .kd-module {
+                min-width: 0;
+                padding: 11px 14px 12px;
+                border-right: 1px solid var(--kd-grid);
+                border-bottom: 1px solid var(--kd-grid);
+            }
+            .kd-module:nth-child(3n) {
+                border-right: 0;
+            }
+            .kd-module:nth-last-child(-n + 3) {
+                border-bottom: 0;
+            }
+            .kd-module__head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .kd-module__head > .ant-typography {
+                font-size: 12px;
+            }
+            .kd-module__head .ant-btn {
+                height: auto;
+                padding: 0;
+                font-size: 10px;
+            }
+            .kd-module__primary {
+                display: grid;
+                gap: 2px;
+                margin-top: 8px;
+            }
+            .kd-module__primary .ant-typography {
+                font-size: 10px;
+            }
+            .kd-module__primary strong {
+                color: var(--kd-text);
+                font-size: 18px;
+                line-height: 1.15;
+                letter-spacing: -.02em;
+            }
+            .kd-module__facts {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px 14px;
+                margin-top: 9px;
+            }
+            .kd-module__facts span {
+                display: inline-flex;
+                align-items: baseline;
+                gap: 4px;
+            }
+            .kd-module__facts small {
+                color: var(--kd-muted);
+                font-size: 9px;
+            }
+            .kd-module__facts b {
+                color: var(--kd-text);
+                font-size: 10px;
+                font-weight: 650;
+            }
+
+            .kd .ant-table-small .ant-table-cell {
+                padding: 7px 10px !important;
+                font-size: 11px;
+            }
+            .kd .ant-table-wrapper .ant-table-thead > tr > th {
+                font-size: 10px;
+                font-weight: 650;
             }
 
             .kd-pill {
@@ -1098,18 +1765,40 @@ function Styles({ token }) {
             }
 
             @media (max-width: 1280px) {
+                .kd-signal-grid,
                 .kd-kpis {
-                    grid-template-columns: repeat(6, minmax(0, 1fr));
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
+                .kd-hero,
+                .kd-focus-grid,
+                .kd-main-grid,
+                .kd-insight-grid,
                 .kd-row-2,
                 .kd-row-3,
                 .kd-cash-expense-row {
                     grid-template-columns: minmax(0, 1fr);
                 }
+                .kd-performance__chart {
+                    height: 238px;
+                }
+                .kd-modules__grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                .kd-module:nth-child(3n) { border-right: 1px solid var(--kd-grid); }
+                .kd-module:nth-child(2n) { border-right: 0; }
+                .kd-module:nth-last-child(-n + 3) { border-bottom: 1px solid var(--kd-grid); }
+                .kd-module:nth-last-child(-n + 2) { border-bottom: 0; }
             }
             @media (max-width: 768px) {
                 .kd {
                     padding: ${token.paddingXS}px;
+                }
+                .kd-hero {
+                    border-radius: 22px;
+                    padding: 18px;
+                }
+                .kd-hero__score {
+                    padding: 16px;
                 }
                 .kd-hdr {
                     flex-direction: column;
@@ -1125,14 +1814,39 @@ function Styles({ token }) {
                 .kd-kpis {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
                 }
+                .kd-signal-grid,
                 .kd-biz-grid,
                 .kd-bottom {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+                .kd-modules__grid {
+                    grid-template-columns: minmax(0, 1fr);
+                }
+                .kd-module,
+                .kd-module:nth-child(2n),
+                .kd-module:nth-child(3n),
+                .kd-module:nth-last-child(-n + 2) {
+                    border-right: 0;
+                    border-bottom: 1px solid var(--kd-grid);
+                }
+                .kd-module:last-child {
+                    border-bottom: 0;
+                }
+                .kd-performance__head,
+                .kd-performance__stats {
+                    align-items: flex-start;
+                    justify-content: flex-start;
+                }
+                .kd-performance__head {
+                    flex-direction: column;
+                }
+                .kd-biz__rows {
                     grid-template-columns: minmax(0, 1fr);
                 }
             }
             @media (max-width: 520px) {
                 .kd-kpis {
-                    grid-template-columns: minmax(0, fr);
+                    grid-template-columns: minmax(0, 1fr);
                 }
                 .kd-card-hdr__t {
                     font-size: ${token.fontSize}px;

@@ -12,6 +12,7 @@ import {
     InfoCircleOutlined,
     ProfileOutlined,
     ProjectOutlined,
+    RobotOutlined,
     SettingOutlined,
     ShopOutlined,
     SwapOutlined,
@@ -101,6 +102,16 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
+            ...(can('ai.use') || can('ai.chat') || can('ai.manage')
+                ? [
+                      {
+                          key: 'ai-copilot',
+                          icon: <RobotOutlined />,
+                          label: 'KiteLedger Copilot',
+                          onClick: () => visit('ai.assistant', '/ai/assistant'),
+                      },
+                  ]
+                : []),
             ...(can('document_upload.view')
                 ? [
                       {

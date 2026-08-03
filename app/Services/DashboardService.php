@@ -1584,17 +1584,18 @@ class DashboardService
 
     protected function periodRevenue(array $filters, string $from, string $to): float
     {
-        return $this->ledgerTypeNetTotal(['income'], $filters, $from, $to, creditPositive: true);
+        return $this->sumApproved('invoices', 'total', 'invoice_date', $filters, $from, $to);
     }
 
     protected function periodPurchases(array $filters, string $from, string $to): float
     {
-        return $this->ledgerTypeNetTotal(['expense'], $filters, $from, $to);
+        return $this->sumApproved('purchase_bills', 'total', 'bill_date', $filters, $from, $to);
     }
 
     protected function periodExpenses(array $filters, string $from, string $to): float
     {
-        return $this->ledgerTypeNetTotal(['expense'], $filters, $from, $to);
+        return $this->periodPurchases($filters, $from, $to)
+            + $this->sumApproved('expenses', 'total', 'expense_date', $filters, $from, $to);
     }
 
     protected function payableBalance(array $filters): float
@@ -1673,12 +1674,15 @@ class DashboardService
 
     protected function dailyRevenue(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->dailyLedgerTypeNetTotals(['income'], $filters, $from, $to, creditPositive: true);
+        return $this->dailySums('invoices', 'total', 'invoice_date', $filters, $from, $to);
     }
 
     protected function dailyExpenses(array $filters, Carbon $from, Carbon $to): array
     {
-        return $this->dailyLedgerTypeNetTotals(['expense'], $filters, $from, $to);
+        return $this->combineDailySums([
+            $this->dailySums('purchase_bills', 'total', 'bill_date', $filters, $from, $to),
+            $this->dailySums('expenses', 'total', 'expense_date', $filters, $from, $to),
+        ]);
     }
 
     protected function dailyCashIn(array $filters, Carbon $from, Carbon $to): array
@@ -1936,12 +1940,13 @@ class DashboardService
 
     protected function customerReceivableBalance(array $filters): float
     {
-        return $this->contactAccountBalance($filters, 'customer');
+        return $this->sumApproved('invoices', 'balance_due', 'invoice_date', $filters);
     }
 
     protected function supplierPayableBalance(array $filters): float
     {
-        return $this->contactAccountBalance($filters, 'supplier');
+        return $this->sumApproved('purchase_bills', 'balance_due', 'bill_date', $filters)
+            + $this->expensePayableBalance($filters);
     }
 
     protected function employeePayableBalance(array $filters): float
@@ -2431,12 +2436,43 @@ class DashboardService
 
     protected function filterStart(array $filters, Carbon $fallback): Carbon
     {
-        return ! empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : $fallback->copy()->startOfDay();
+        if (! empty($filters['date_from'])) {
+            return Carbon::parse($filters['date_from'])->startOfDay();
+        }
+
+        return $this->currentFiscalYearBoundary('start_date')
+            ?: $fallback->copy()->startOfDay();
     }
 
     protected function filterEnd(array $filters, Carbon $fallback): Carbon
     {
-        return ! empty($filters['date_to']) ? Carbon::parse($filters['date_to'])->endOfDay() : $fallback->copy()->endOfDay();
+        if (! empty($filters['date_to'])) {
+            return Carbon::parse($filters['date_to'])->endOfDay();
+        }
+
+        return $this->currentFiscalYearBoundary('end_date')
+            ?: $fallback->copy()->endOfDay();
+    }
+
+    protected function currentFiscalYearBoundary(string $column): ?Carbon
+    {
+        if (! $this->tableExists('fiscal_years') || ! $this->hasColumn('fiscal_years', $column)) {
+            return null;
+        }
+
+        $query = DB::table('fiscal_years');
+
+        if ($this->hasColumn('fiscal_years', 'active')) {
+            $query->where('active', true);
+        }
+
+        if ($this->hasColumn('fiscal_years', 'is_current')) {
+            $query->where('is_current', true);
+        }
+
+        $value = $query->value($column);
+
+        return $value ? Carbon::parse($value)->{$column === 'end_date' ? 'endOfDay' : 'startOfDay'}() : null;
     }
 
     protected function activeProductsQuery(): Builder

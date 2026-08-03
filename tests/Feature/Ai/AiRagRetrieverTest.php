@@ -160,7 +160,10 @@ class AiRagRetrieverTest extends TestCase
             ->assertJsonPath('answer.headline', 'Create an invoice from Sales > Invoices.')
             ->assertJsonPath('debug', null);
 
-        $json = json_encode($response->json());
+        $payload = $response->json();
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/i', $payload['request_id']);
+        unset($payload['request_id']);
+        $json = json_encode($payload);
         $this->assertStringNotContainsString('hidden-model', $json);
         $this->assertStringNotContainsString('openai', $json);
         $this->assertDoesNotMatchRegularExpression('/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i', $json);

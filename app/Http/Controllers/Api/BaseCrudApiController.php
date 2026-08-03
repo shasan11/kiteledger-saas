@@ -4,10 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\Concerns\HasReportingTags;
+use App\Models\Currency;
 use App\Models\FiscalYear;
+use App\Services\AppContextService;
 use App\Services\BranchScopeService;
 use App\Services\DocumentNumberingService;
-use App\Services\AppContextService;
+use App\Services\ParallelJournalVoucherService;
+use App\Services\ReportingTagValueService;
 use App\Services\TransactionApprovalService;
 use App\Services\TransactionVoidService;
 use App\Traits\ValidatesBusinessRules;
@@ -225,7 +229,7 @@ abstract class BaseCrudApiController extends Controller
             $this->blockIfBusinessRuleErrors($result);
         }
 
-        if (($parentData['approved'] ?? null) && !(bool) ($record->approved ?? false)) {
+        if (($parentData['approved'] ?? null) && ! (bool) ($record->approved ?? false)) {
             $result = $this->validateBusinessRulesForApproval(
                 $this->businessRuleModule(),
                 $this->businessRulePayload(array_merge($record->toArray(), $parentData), $nestedData, $record)
@@ -236,7 +240,7 @@ abstract class BaseCrudApiController extends Controller
         $record = DB::transaction(function () use ($record, $parentData, $nestedData, $deletedIds, $reportingTags) {
             $parentData = $this->mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
 
-            if (!empty($parentData)) {
+            if (! empty($parentData)) {
                 $record->update($parentData);
             }
 
@@ -287,7 +291,7 @@ abstract class BaseCrudApiController extends Controller
 
         $records = $request->input('records');
 
-        if (!is_array($records) || count($records) < 1) {
+        if (! is_array($records) || count($records) < 1) {
             $this->throwValidation([
                 'records' => ['The records field is required and must contain at least one item.'],
             ]);
@@ -297,8 +301,9 @@ abstract class BaseCrudApiController extends Controller
         $errors = [];
 
         foreach ($records as $index => $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $errors["records.$index"] = ['Each record must be an object.'];
+
                 continue;
             }
 
@@ -357,7 +362,7 @@ abstract class BaseCrudApiController extends Controller
     {
         $records = $request->input('records', []);
 
-        if (!is_array($records)) {
+        if (! is_array($records)) {
             $this->throwValidation([
                 'records' => ['The records field must be an array.'],
             ]);
@@ -370,7 +375,7 @@ abstract class BaseCrudApiController extends Controller
     {
         $records = $request->all();
 
-        if (!is_array($records) || !$this->isListArray($records)) {
+        if (! is_array($records) || ! $this->isListArray($records)) {
             $this->throwValidation([
                 'non_field_errors' => ['Expected an array of records.'],
             ]);
@@ -393,20 +398,23 @@ abstract class BaseCrudApiController extends Controller
         $errors = [];
 
         foreach ($records as $index => $row) {
-            if (!is_array($row)) {
+            if (! is_array($row)) {
                 $errors["records.$index"] = ['Each record must be an object.'];
+
                 continue;
             }
 
-            if (!isset($row[$this->primaryKeyName()])) {
-                $errors["records.$index." . $this->primaryKeyName()] = ['The id field is required.'];
+            if (! isset($row[$this->primaryKeyName()])) {
+                $errors["records.$index.".$this->primaryKeyName()] = ['The id field is required.'];
+
                 continue;
             }
 
             $record = $this->findRecordOrNull($row[$this->primaryKeyName()]);
 
-            if (!$record) {
-                $errors["records.$index." . $this->primaryKeyName()] = ['Record not found.'];
+            if (! $record) {
+                $errors["records.$index.".$this->primaryKeyName()] = ['Record not found.'];
+
                 continue;
             }
 
@@ -451,7 +459,7 @@ abstract class BaseCrudApiController extends Controller
 
                 $parentData = $this->mutateParentDataBeforeUpdate($parentData, $nestedData, $record);
 
-                if (!empty($parentData)) {
+                if (! empty($parentData)) {
                     $record->update($parentData);
                 }
 
@@ -643,7 +651,7 @@ abstract class BaseCrudApiController extends Controller
             abort(403, 'You do not have access to one or more of the selected records.');
         }
 
-        $filename = Str::slug(class_basename($this->modelClass)) . '-selected-' . now()->format('YmdHis') . '.csv';
+        $filename = Str::slug(class_basename($this->modelClass)).'-selected-'.now()->format('YmdHis').'.csv';
 
         return response()->streamDownload(function () use ($records) {
             $handle = fopen('php://output', 'w');
@@ -712,7 +720,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function updateRules(Request $request, Model $record): array
     {
-        if (!empty($this->updateRules)) {
+        if (! empty($this->updateRules)) {
             return $this->updateRules;
         }
 
@@ -794,7 +802,7 @@ abstract class BaseCrudApiController extends Controller
                     $relationPath = implode('.', $parts);
                     $rootRelation = explode('.', $relationPath)[0];
 
-                    if (!method_exists($model, $rootRelation)) {
+                    if (! method_exists($model, $rootRelation)) {
                         continue;
                     }
 
@@ -802,7 +810,7 @@ abstract class BaseCrudApiController extends Controller
                         $q->where($column, 'like', "%{$search}%");
                     });
                 } else {
-                    if (!$this->tableHasColumn($field)) {
+                    if (! $this->tableHasColumn($field)) {
                         continue;
                     }
 
@@ -828,7 +836,7 @@ abstract class BaseCrudApiController extends Controller
         }
 
         foreach ($this->filterable as $field) {
-            if (!$this->tableHasColumn($field)) {
+            if (! $this->tableHasColumn($field)) {
                 continue;
             }
 
@@ -840,19 +848,19 @@ abstract class BaseCrudApiController extends Controller
         }
 
         foreach ($this->searchable as $field) {
-            if (Str::contains($field, '.') || !$this->tableHasColumn($field)) {
+            if (Str::contains($field, '.') || ! $this->tableHasColumn($field)) {
                 continue;
             }
 
             $value = $this->requestParam($request, $field);
 
             if ($value !== null && $value !== '') {
-                $query->where($this->qualifiedColumn($field), 'like', '%' . $value . '%');
+                $query->where($this->qualifiedColumn($field), 'like', '%'.$value.'%');
             }
         }
 
         foreach ($this->booleanFilters as $field) {
-            if (!$this->tableHasColumn($field)) {
+            if (! $this->tableHasColumn($field)) {
                 continue;
             }
 
@@ -874,7 +882,7 @@ abstract class BaseCrudApiController extends Controller
             $maxKey = is_array($config) ? ($config['max'] ?? "{$column}_max") : "{$config}_max";
             $actualColumn = is_array($config) ? $column : $config;
 
-            if (!$this->tableHasColumn($actualColumn)) {
+            if (! $this->tableHasColumn($actualColumn)) {
                 continue;
             }
 
@@ -901,7 +909,7 @@ abstract class BaseCrudApiController extends Controller
 
             $actualColumn = is_array($config) ? $column : $config;
 
-            if (!$this->tableHasColumn($actualColumn)) {
+            if (! $this->tableHasColumn($actualColumn)) {
                 continue;
             }
 
@@ -947,7 +955,7 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        if (!$applied) {
+        if (! $applied) {
             $sortBy = $request->query('sort_by');
 
             $sortOrder = strtolower((string) $request->query('sort_order', 'asc')) === 'desc'
@@ -962,19 +970,19 @@ abstract class BaseCrudApiController extends Controller
             }
         }
 
-        if (!$applied && $this->tableHasColumn('created_at')) {
+        if (! $applied && $this->tableHasColumn('created_at')) {
             $query->orderBy($this->qualifiedColumn('created_at'), 'desc');
             $applied = true;
         }
 
-        if (!$applied && $this->tableHasColumn($this->primaryKeyName())) {
+        if (! $applied && $this->tableHasColumn($this->primaryKeyName())) {
             $query->orderBy($this->qualifiedColumn($this->primaryKeyName()), 'desc');
         }
     }
 
     protected function resolveSortColumn(?string $field): ?string
     {
-        if (!$field) {
+        if (! $field) {
             return null;
         }
 
@@ -1001,14 +1009,14 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchScope(Builder $query, Request $request): void
     {
-        if (!$this->usesBranchScope()) {
+        if (! $this->usesBranchScope()) {
             return;
         }
 
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             abort(401, 'Unauthenticated.');
         }
 
@@ -1023,14 +1031,14 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchToCreatePayload(array $data, Request $request): array
     {
-        if (!$this->usesBranchScope()) {
+        if (! $this->usesBranchScope()) {
             return $data;
         }
 
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             abort(401, 'Unauthenticated.');
         }
 
@@ -1041,7 +1049,7 @@ abstract class BaseCrudApiController extends Controller
             $providedBranchId = null;
         }
 
-        if (!empty($providedBranchId)) {
+        if (! empty($providedBranchId)) {
             $scope->assertCanAccessBranch($user, (string) $providedBranchId);
             $data[$this->branchColumn] = (string) $providedBranchId;
 
@@ -1071,7 +1079,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyBranchToUpdatePayload(array $data, Request $request, Model $record): array
     {
-        if (!$this->usesBranchScope()) {
+        if (! $this->usesBranchScope()) {
             return $data;
         }
 
@@ -1080,12 +1088,13 @@ abstract class BaseCrudApiController extends Controller
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             abort(401, 'Unauthenticated.');
         }
 
         if ($scope->isBranchLimited($user) || $this->preventBranchChangeOnUpdate) {
             unset($data[$this->branchColumn]);
+
             return $data;
         }
 
@@ -1095,7 +1104,7 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
-        if (!empty($data[$this->branchColumn])) {
+        if (! empty($data[$this->branchColumn])) {
             $scope->assertCanAccessBranch($user, (string) $data[$this->branchColumn]);
             $data[$this->branchColumn] = (string) $data[$this->branchColumn];
         }
@@ -1105,13 +1114,13 @@ abstract class BaseCrudApiController extends Controller
 
     protected function assertRecordBranchAccess(Request $request, Model $record): void
     {
-        if (!$this->usesBranchScope()) {
+        if (! $this->usesBranchScope()) {
             return;
         }
 
         $branchId = $record->{$this->branchColumn} ?? null;
 
-        if (!$branchId) {
+        if (! $branchId) {
             return;
         }
 
@@ -1142,7 +1151,7 @@ abstract class BaseCrudApiController extends Controller
         $scope = app(BranchScopeService::class);
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return null;
         }
 
@@ -1177,7 +1186,7 @@ abstract class BaseCrudApiController extends Controller
             }
 
             foreach (['is_main', 'is_default', 'default', 'main'] as $column) {
-                if (!Schema::hasColumn('branches', $column)) {
+                if (! Schema::hasColumn('branches', $column)) {
                     continue;
                 }
 
@@ -1201,7 +1210,7 @@ abstract class BaseCrudApiController extends Controller
             $branchId = (clone $query)->value('id');
 
             return $branchId ? (string) $branchId : null;
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }
@@ -1218,18 +1227,36 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyFiscalYearScope(Builder $query, Request $request): void
     {
-        if (!$this->usesFiscalYearScope()) {
+        if (! $this->usesFiscalYearScope()) {
             return;
         }
 
         $fiscalYear = $this->requestedFiscalYear($request);
 
-        if (!$fiscalYear) {
+        if (! $fiscalYear) {
             return;
         }
 
         if ($this->tableHasColumn($this->fiscalYearColumn)) {
-            $query->where($this->qualifiedColumn($this->fiscalYearColumn), $fiscalYear->id);
+            $fiscalYearColumn = $this->qualifiedColumn($this->fiscalYearColumn);
+
+            if ($this->businessDateColumn && $this->tableHasColumn($this->businessDateColumn)) {
+                $businessDateColumn = $this->qualifiedColumn($this->businessDateColumn);
+
+                $query->where(function (Builder $query) use ($fiscalYear, $fiscalYearColumn, $businessDateColumn) {
+                    $query->where($fiscalYearColumn, $fiscalYear->id)
+                        ->orWhere(function (Builder $query) use ($fiscalYear, $fiscalYearColumn, $businessDateColumn) {
+                            $query->whereNull($fiscalYearColumn)
+                                ->whereDate($businessDateColumn, '>=', $fiscalYear->start_date)
+                                ->whereDate($businessDateColumn, '<=', $fiscalYear->end_date);
+                        });
+                });
+
+                return;
+            }
+
+            $query->where($fiscalYearColumn, $fiscalYear->id);
+
             return;
         }
 
@@ -1241,14 +1268,15 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyFiscalYearToCreatePayload(array $data, Request $request): array
     {
-        if (!$this->usesFiscalYearScope()) {
+        if (! $this->usesFiscalYearScope()) {
             return $data;
         }
 
         $providedFiscalYearId = $data[$this->fiscalYearColumn] ?? null;
 
-        if (!empty($providedFiscalYearId)) {
+        if (! empty($providedFiscalYearId)) {
             $data[$this->fiscalYearColumn] = (string) $providedFiscalYearId;
+
             return $data;
         }
 
@@ -1265,11 +1293,11 @@ abstract class BaseCrudApiController extends Controller
 
     protected function applyFiscalYearToUpdatePayload(array $data, Request $request, Model $record): array
     {
-        if (!$this->usesFiscalYearScope()) {
+        if (! $this->usesFiscalYearScope()) {
             return $data;
         }
 
-        if (!$this->tableHasColumn($this->fiscalYearColumn)) {
+        if (! $this->tableHasColumn($this->fiscalYearColumn)) {
             return $data;
         }
 
@@ -1289,11 +1317,11 @@ abstract class BaseCrudApiController extends Controller
     {
         $fiscalYearId = $request->header($this->fiscalYearHeaderKey);
 
-        if (!$fiscalYearId) {
+        if (! $fiscalYearId) {
             $fiscalYearId = $request->query($this->fiscalYearRequestKey);
         }
 
-        if (!$fiscalYearId) {
+        if (! $fiscalYearId) {
             $fiscalYearId = $request->input($this->fiscalYearRequestKey);
         }
 
@@ -1314,7 +1342,7 @@ abstract class BaseCrudApiController extends Controller
             if ($fiscalYear) {
                 return (string) $fiscalYear->id;
             }
-        } catch (\Throwable) {
+        } catch (Throwable) {
             //
         }
 
@@ -1330,7 +1358,7 @@ abstract class BaseCrudApiController extends Controller
     {
         $date = $this->fiscalDateValue($recordOrData);
 
-        if (!$date) {
+        if (! $date) {
             return;
         }
 
@@ -1347,7 +1375,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function fiscalDateValue(array|Model $recordOrData): ?string
     {
-        if (!$this->businessDateColumn) {
+        if (! $this->businessDateColumn) {
             return null;
         }
 
@@ -1360,7 +1388,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function withFiscalYearRules(array $rules, bool $update = false): array
     {
-        if (!$this->usesFiscalYearScope() || !$this->tableHasColumn($this->fiscalYearColumn)) {
+        if (! $this->usesFiscalYearScope() || ! $this->tableHasColumn($this->fiscalYearColumn)) {
             return $rules;
         }
 
@@ -1376,7 +1404,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function assertFiscalYearWriteAllowed(array|Model $recordOrData, Request $request, ?Model $record = null): void
     {
-        if (!$this->usesFiscalYearScope()) {
+        if (! $this->usesFiscalYearScope()) {
             return;
         }
 
@@ -1384,17 +1412,17 @@ abstract class BaseCrudApiController extends Controller
             ? ($recordOrData[$this->fiscalYearColumn] ?? $record?->{$this->fiscalYearColumn} ?? $this->defaultWriteFiscalYearId($request))
             : ($recordOrData->{$this->fiscalYearColumn} ?? $this->defaultWriteFiscalYearId($request));
 
-        if (!$fiscalYearId) {
+        if (! $fiscalYearId) {
             return;
         }
 
         $fiscalYear = FiscalYear::query()->whereKey($fiscalYearId)->where('active', true)->first();
 
-        if (!$fiscalYear) {
+        if (! $fiscalYear) {
             $this->throwValidation([$this->fiscalYearColumn => ['The selected fiscal year is invalid or inactive.']]);
         }
 
-        if (app(AppContextService::class)->isFiscalYearLocked($fiscalYear) && !app(AppContextService::class)->canOverrideFiscalYearLock($request->user())) {
+        if (app(AppContextService::class)->isFiscalYearLocked($fiscalYear) && ! app(AppContextService::class)->canOverrideFiscalYearLock($request->user())) {
             $this->throwValidation([$this->fiscalYearColumn => ['The selected fiscal year is closed or locked.']]);
         }
 
@@ -1424,7 +1452,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function usesFiscalYearScope(): bool
     {
-        if (!$this->fiscalYearScoped) {
+        if (! $this->fiscalYearScoped) {
             return false;
         }
 
@@ -1444,7 +1472,7 @@ abstract class BaseCrudApiController extends Controller
         $data = $this->prepareForWrite($data, $this->relationDetails);
 
         foreach ($this->nested as $field => $config) {
-            if (!isset($data[$field]) || !is_array($data[$field])) {
+            if (! isset($data[$field]) || ! is_array($data[$field])) {
                 continue;
             }
 
@@ -1535,14 +1563,14 @@ abstract class BaseCrudApiController extends Controller
             $hasRows = array_key_exists($field, $nestedData);
             $rows = $nestedData[$field] ?? [];
 
-            if ($isUpdate && !empty($deletedIds[$field])) {
+            if ($isUpdate && ! empty($deletedIds[$field])) {
                 $childModel::query()
                     ->where($foreignKey, $parent->getKey())
                     ->whereIn($this->primaryKeyName($childModel), $deletedIds[$field])
                     ->delete();
             }
 
-            if (!$hasRows) {
+            if (! $hasRows) {
                 continue;
             }
 
@@ -1551,7 +1579,7 @@ abstract class BaseCrudApiController extends Controller
             foreach ($rows as $row) {
                 $row = $this->prepareForWrite($row, $childRelationDetails);
 
-                if (!empty($row['_destroy']) && !empty($row[$this->primaryKeyName($childModel)])) {
+                if (! empty($row['_destroy']) && ! empty($row[$this->primaryKeyName($childModel)])) {
                     $childModel::query()
                         ->where($foreignKey, $parent->getKey())
                         ->where($this->primaryKeyName($childModel), $row[$this->primaryKeyName($childModel)])
@@ -1612,7 +1640,7 @@ abstract class BaseCrudApiController extends Controller
                 ->where($childKey, $id)
                 ->first();
 
-            if (!$child) {
+            if (! $child) {
                 $this->throwValidation([
                     $relation ?: 'items' => ['One or more child record IDs do not belong to this parent.'],
                 ]);
@@ -1635,7 +1663,7 @@ abstract class BaseCrudApiController extends Controller
         $min = (int) ($config['min'] ?? 0);
         $relation = $config['relation'] ?? null;
 
-        if (!$relation || $min < 1 || !method_exists($parent, $relation)) {
+        if (! $relation || $min < 1 || ! method_exists($parent, $relation)) {
             return;
         }
 
@@ -1673,7 +1701,7 @@ abstract class BaseCrudApiController extends Controller
             $model = $this->newModelInstance();
             $mapping = app(DocumentNumberingService::class)->getMappingForModel($model);
 
-            if (!$mapping) {
+            if (! $mapping) {
                 return $parentData;
             }
 
@@ -1693,12 +1721,12 @@ abstract class BaseCrudApiController extends Controller
             $field = $mapping['field'] ?? null;
             $documentType = $mapping['document_type'] ?? null;
 
-            if (!$field || !$documentType || !empty($parentData[$field])) {
+            if (! $field || ! $documentType || ! empty($parentData[$field])) {
                 return $parentData;
             }
 
             $parentData[$field] = app(DocumentNumberingService::class)->generate($documentType);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             //
         }
 
@@ -1711,25 +1739,25 @@ abstract class BaseCrudApiController extends Controller
             $model = $this->newModelInstance();
             $mapping = app(DocumentNumberingService::class)->getMappingForModel($model);
 
-            if (!$mapping || !($mapping['approval_required'] ?? false)) {
+            if (! $mapping || ! ($mapping['approval_required'] ?? false)) {
                 return $parentData;
             }
 
             $field = $mapping['field'] ?? null;
             $documentType = $mapping['document_type'] ?? null;
 
-            if (!$field || !$documentType) {
+            if (! $field || ! $documentType) {
                 return $parentData;
             }
 
             $existing = $parentData[$field] ?? $record?->{$field} ?? null;
 
-            if ($existing && !str_starts_with((string) $existing, '#draft')) {
+            if ($existing && ! str_starts_with((string) $existing, '#draft')) {
                 return $parentData;
             }
 
             $parentData[$field] = app(DocumentNumberingService::class)->generate($documentType);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             //
         }
 
@@ -1748,39 +1776,39 @@ abstract class BaseCrudApiController extends Controller
     {
         $prefix = $partial ? ['sometimes', 'nullable'] : ['nullable'];
 
-        if ($this->tableHasColumn('approved') && !array_key_exists('approved', $rules)) {
+        if ($this->tableHasColumn('approved') && ! array_key_exists('approved', $rules)) {
             $rules['approved'] = [...$prefix, 'boolean'];
         }
 
-        if ($this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $rules)) {
+        if ($this->tableHasColumn('approved_at') && ! array_key_exists('approved_at', $rules)) {
             $rules['approved_at'] = [...$prefix, 'date'];
         }
 
-        if ($this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $rules)) {
+        if ($this->tableHasColumn('approved_by_id') && ! array_key_exists('approved_by_id', $rules)) {
             $rules['approved_by_id'] = [...$prefix, 'integer', 'exists:users,id'];
         }
 
-        if ($this->tableHasColumn('active') && !array_key_exists('active', $rules)) {
+        if ($this->tableHasColumn('active') && ! array_key_exists('active', $rules)) {
             $rules['active'] = [...$prefix, 'boolean'];
         }
 
-        if ($this->tableHasColumn('void') && !array_key_exists('void', $rules)) {
+        if ($this->tableHasColumn('void') && ! array_key_exists('void', $rules)) {
             $rules['void'] = [...$prefix, 'boolean'];
         }
 
-        if ($this->tableHasColumn('voided') && !array_key_exists('voided', $rules)) {
+        if ($this->tableHasColumn('voided') && ! array_key_exists('voided', $rules)) {
             $rules['voided'] = [...$prefix, 'boolean'];
         }
 
-        if ($this->tableHasColumn('voided_reason') && !array_key_exists('voided_reason', $rules)) {
+        if ($this->tableHasColumn('voided_reason') && ! array_key_exists('voided_reason', $rules)) {
             $rules['voided_reason'] = [...$prefix, 'string', 'max:500'];
         }
 
-        if ($this->tableHasColumn('voided_at') && !array_key_exists('voided_at', $rules)) {
+        if ($this->tableHasColumn('voided_at') && ! array_key_exists('voided_at', $rules)) {
             $rules['voided_at'] = [...$prefix, 'date'];
         }
 
-        if ($this->tableHasColumn('voided_by_id') && !array_key_exists('voided_by_id', $rules)) {
+        if ($this->tableHasColumn('voided_by_id') && ! array_key_exists('voided_by_id', $rules)) {
             $rules['voided_by_id'] = [...$prefix, 'integer', 'exists:users,id'];
         }
 
@@ -1789,13 +1817,13 @@ abstract class BaseCrudApiController extends Controller
 
     protected function normalizeApprovalData(array $parentData, ?Model $record = null): array
     {
-        if ($record && $this->isTransactionVoided($record) && !(($parentData['void'] ?? false) || ($parentData['voided'] ?? false))) {
+        if ($record && $this->isTransactionVoided($record) && ! (($parentData['void'] ?? false) || ($parentData['voided'] ?? false))) {
             $this->throwValidation([
                 'status' => ['Voided records cannot be edited.'],
             ]);
         }
 
-        if ($record && $this->isTransactionApproved($record) && !$this->isApprovalOnlyUpdate($parentData)) {
+        if ($record && $this->isTransactionApproved($record) && ! $this->isApprovalOnlyUpdate($parentData)) {
             $this->throwValidation([
                 'status' => ['Approved records cannot be edited.'],
             ]);
@@ -1819,11 +1847,11 @@ abstract class BaseCrudApiController extends Controller
                 $parentData['approved_at'] = now();
             }
 
-            if (!$approved && $this->tableHasColumn('approved_at') && !array_key_exists('approved_at', $parentData)) {
+            if (! $approved && $this->tableHasColumn('approved_at') && ! array_key_exists('approved_at', $parentData)) {
                 $parentData['approved_at'] = null;
             }
 
-            if (!$approved && $this->tableHasColumn('approved_by_id') && !array_key_exists('approved_by_id', $parentData)) {
+            if (! $approved && $this->tableHasColumn('approved_by_id') && ! array_key_exists('approved_by_id', $parentData)) {
                 $parentData['approved_by_id'] = null;
             }
         }
@@ -1922,7 +1950,7 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        app(\App\Services\ParallelJournalVoucherService::class)->createForApprovedSource($record->refresh());
+        app(ParallelJournalVoucherService::class)->createForApprovedSource($record->refresh());
     }
 
     protected function assertTransactionDestroyable(Model $record): void
@@ -1992,7 +2020,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function bulkExportRows($records): array
     {
-        if (!$this->tableHasColumn('approved') && !$this->tableHasColumn('void')) {
+        if (! $this->tableHasColumn('approved') && ! $this->tableHasColumn('void')) {
             return $this->serializeCollection($records);
         }
 
@@ -2105,13 +2133,13 @@ abstract class BaseCrudApiController extends Controller
 
     protected function updateParentTotalsFromNested(Model $parent, array $config): void
     {
-        if (!isset($config['parent_total_field'], $config['child_total_field'])) {
+        if (! isset($config['parent_total_field'], $config['child_total_field'])) {
             return;
         }
 
         $relation = $config['relation'] ?? null;
 
-        if (!$relation || !method_exists($parent, $relation)) {
+        if (! $relation || ! method_exists($parent, $relation)) {
             return;
         }
 
@@ -2143,7 +2171,7 @@ abstract class BaseCrudApiController extends Controller
         foreach ($this->nested as $field => $config) {
             $relation = $config['relation'] ?? $field;
 
-            if (!$record->relationLoaded($relation)) {
+            if (! $record->relationLoaded($relation)) {
                 continue;
             }
 
@@ -2163,7 +2191,7 @@ abstract class BaseCrudApiController extends Controller
         $model = $model ?: $this->newModelInstance();
 
         return in_array(
-            \App\Models\Concerns\HasReportingTags::class,
+            HasReportingTags::class,
             class_uses_recursive($model),
             true
         );
@@ -2207,7 +2235,7 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        app(\App\Services\ReportingTagValueService::class)->sync($record, $items);
+        app(ReportingTagValueService::class)->sync($record, $items);
     }
 
     protected function attachReportingTags(array $data, Model $record): array
@@ -2216,7 +2244,7 @@ abstract class BaseCrudApiController extends Controller
             return $data;
         }
 
-        $data['reporting_tags'] = app(\App\Services\ReportingTagValueService::class)->serializeFor($record);
+        $data['reporting_tags'] = app(ReportingTagValueService::class)->serializeFor($record);
 
         return $data;
     }
@@ -2239,7 +2267,7 @@ abstract class BaseCrudApiController extends Controller
     protected function attachRelationDetails(array $data, Model $record, array $relationDetails): array
     {
         foreach ($relationDetails as $relation => $foreignKey) {
-            if (!method_exists($record, $relation)) {
+            if (! method_exists($record, $relation)) {
                 continue;
             }
 
@@ -2260,13 +2288,13 @@ abstract class BaseCrudApiController extends Controller
 
     protected function serializeRelated($model): ?array
     {
-        if (!$model) {
+        if (! $model) {
             return null;
         }
 
         $data = method_exists($model, 'toArray') ? $model->toArray() : [];
 
-        $label = $model instanceof \App\Models\Currency
+        $label = $model instanceof Currency
             ? trim(sprintf(
                 '%s - %s%s',
                 (string) data_get($model, 'code'),
@@ -2366,7 +2394,7 @@ abstract class BaseCrudApiController extends Controller
         $valid = [];
 
         foreach ($relations as $relation) {
-            if (!$relation || !is_string($relation)) {
+            if (! $relation || ! is_string($relation)) {
                 continue;
             }
 
@@ -2414,7 +2442,7 @@ abstract class BaseCrudApiController extends Controller
             return;
         }
 
-        if (!$this->usePolicyAuthorization) {
+        if (! $this->usePolicyAuthorization) {
             return;
         }
 
@@ -2447,11 +2475,11 @@ abstract class BaseCrudApiController extends Controller
 
     protected function userHasAdministrativeBypass(mixed $user): bool
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
-        if (!empty($user->is_super_admin)) {
+        if (! empty($user->is_super_admin)) {
             return true;
         }
 
@@ -2523,7 +2551,7 @@ abstract class BaseCrudApiController extends Controller
 
     protected function isValidationOverrideConfirmed(string $warningType): bool
     {
-        return !empty(request()->input("validation_overrides.{$warningType}"));
+        return ! empty(request()->input("validation_overrides.{$warningType}"));
     }
 
     protected function makeRulesPartial(array $rules): array
@@ -2536,10 +2564,10 @@ abstract class BaseCrudApiController extends Controller
                 : (is_array($fieldRules) ? $fieldRules : [$fieldRules]);
 
             $items = array_values(array_filter($items, function ($rule) {
-                return !(is_string($rule) && $rule === 'required');
+                return ! (is_string($rule) && $rule === 'required');
             }));
 
-            if (!in_array('sometimes', $items, true)) {
+            if (! in_array('sometimes', $items, true)) {
                 array_unshift($items, 'sometimes');
             }
 
@@ -2570,7 +2598,7 @@ abstract class BaseCrudApiController extends Controller
     {
         $class = $class ?: $this->modelClass;
 
-        return new $class();
+        return new $class;
     }
 
     protected function tableName(?string $class = null): string
@@ -2589,7 +2617,7 @@ abstract class BaseCrudApiController extends Controller
             return $column;
         }
 
-        return $this->tableName() . '.' . $column;
+        return $this->tableName().'.'.$column;
     }
 
     protected function tableHasColumn(string $column, ?string $class = null): bool
@@ -2604,14 +2632,14 @@ abstract class BaseCrudApiController extends Controller
 
         try {
             return Schema::hasColumn($this->tableName($class), $column);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             return true;
         }
     }
 
     protected function usesBranchScope(): bool
     {
-        if (!$this->branchScoped) {
+        if (! $this->branchScoped) {
             return false;
         }
 

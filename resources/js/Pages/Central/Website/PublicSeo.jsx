@@ -106,12 +106,21 @@ function validId(value, pattern) {
 }
 
 function formatTitle(rawTitle, siteTitle, site) {
-    if (String(rawTitle).includes(siteTitle)) return rawTitle;
-    const separator = site['seo.title_separator'] || '|';
+    if (String(rawTitle).includes(siteTitle)) return normalizeTitleDashes(rawTitle);
+    const separator = normalizeTitleSeparator(site['seo.title_separator']);
     const template = site['seo.default_title_template'];
     if (!template) return `${rawTitle} ${separator} ${siteTitle}`;
-    return String(template)
+    return normalizeTitleDashes(String(template)
         .replaceAll('{title}', rawTitle).replaceAll('%title%', rawTitle)
         .replaceAll('{site_name}', siteTitle).replaceAll('%site_name%', siteTitle)
-        .replaceAll('{separator}', separator).replaceAll('%separator%', separator);
+        .replaceAll('{separator}', separator).replaceAll('%separator%', separator));
+}
+
+function normalizeTitleSeparator(value) {
+    const separator = String(value || '|').trim();
+    return ['—', '–', '-'].includes(separator) ? '|' : separator || '|';
+}
+
+function normalizeTitleDashes(value) {
+    return String(value).replace(/\s+[—–]\s+/g, ' | ');
 }

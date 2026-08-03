@@ -22,6 +22,8 @@ class AiKnowledgeChunkWriter
         $content = trim((string) ($chunk['content'] ?? ''));
         $hash = hash('sha256', implode('|', [
             $chunk['title'] ?? '', $content, $chunk['route'] ?? '',
+            $chunk['module'] ?? '', $chunk['permission'] ?? '',
+            $chunk['branch_id'] ?? '', $chunk['fiscal_year_id'] ?? '',
             json_encode($chunk['keywords'] ?? []), json_encode($chunk['metadata'] ?? []),
         ]));
 
@@ -50,6 +52,8 @@ class AiKnowledgeChunkWriter
         $embedding = AiEmbedding::query()->where([
             'source_type' => 'knowledge',
             'source_id' => (string) $record->id,
+            'provider' => $this->settings->embeddingProvider(),
+            'model' => $this->settings->embeddingModel(),
         ])->first();
 
         if ($embedding && $embedding->content_hash === $hash && $embedding->model === $this->settings->embeddingModel()) {
@@ -67,15 +71,19 @@ class AiKnowledgeChunkWriter
             }
 
             AiEmbedding::query()->updateOrCreate(
-                ['source_type' => 'knowledge', 'source_id' => (string) $record->id],
                 [
+                    'source_type' => 'knowledge',
+                    'source_id' => (string) $record->id,
+                    'provider' => $this->settings->embeddingProvider(),
+                    'model' => $this->settings->embeddingModel(),
+                ],
+                [
+                    'knowledge_chunk_id' => $record->id,
                     'branch_id' => $record->branch_id,
                     'content' => mb_substr($embeddingText, 0, 4000),
                     'content_hash' => $hash,
                     'vector' => $vector,
                     'dims' => count($vector),
-                    'provider' => $this->settings->provider(),
-                    'model' => $this->settings->embeddingModel(),
                 ],
             );
             $stats['embeddings_created']++;
@@ -90,6 +98,6 @@ class AiKnowledgeChunkWriter
     {
         return $this->settings->enabled()
             && $this->settings->supportsEmbeddings()
-            && ($this->settings->provider() === 'ollama' || $this->settings->hasApiKey());
+            && ($this->settings->embeddingProvider() === 'ollama' || $this->settings->embeddingApiKey());
     }
 }

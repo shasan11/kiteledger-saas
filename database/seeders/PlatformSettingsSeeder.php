@@ -99,7 +99,38 @@ class PlatformSettingsSeeder extends Seeder
             'domains' => [['Base domain', 'text', config('saas.tenant_base_domain')], ['Default scheme', 'select', 'https'], ['Custom domains enabled', 'switch', false], ['Domain verification required', 'switch', true], ['Automatic SSL', 'switch', true], ['SSL provider', 'select'], ['SSL-expiry warning period', 'number', 30], ['DNS verification interval', 'number', 15], ['Maximum custom domains', 'number', 3], ['Reserved subdomains', 'multiselect', config('saas.reserved_subdomains', [])], ['Force HTTPS', 'switch', true]],
             'storage' => [['Storage driver', 'select', 'public'], ['Maximum upload size', 'number', 10240], ['Allowed file types', 'multiselect', ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx']], ['Image limit', 'number', 5120], ['Document limit', 'number', 10240], ['Virus scanning', 'switch', false], ['Private files', 'switch', true], ['Temporary URL expiry', 'number', 15], ['Temporary-file cleanup', 'number', 24]],
             'usage' => [['Usage tracking', 'switch', true], ['Collection interval', 'number', 60], ['Warning percentage', 'number', 80], ['Hard limits', 'switch', true], ['Temporary overage', 'switch', false], ['Overage grace period', 'number', 3], ['Storage tracking', 'switch', true], ['AI request tracking', 'switch', true], ['API request tracking', 'switch', true], ['Retention period', 'number', 365], ['Notify tenant', 'switch', true], ['Notify administrator', 'switch', true]],
-            'ai' => [['AI enabled', 'switch', true], ['AI provider', 'select', config('ai.default_provider', 'openai')], ['AI model', 'text', 'gpt-4o-mini'], ['AI API key', 'secret', null, true], ['AI base URL', 'url', 'https://api.openai.com/v1'], ['AI temperature', 'decimal', 0.2], ['AI max tokens', 'number', 500], ['AI timeout seconds', 'number', 180], ['AI connect timeout seconds', 'number', 15], ['AI stream enabled', 'switch', false], ['AI cache enabled', 'switch', true], ['AI cache TTL', 'number', 600], ['AI context max rows', 'number', 15], ['AI context max chars', 'number', 5000], ['AI fast mode', 'switch', true], ['AI embedding model', 'text', 'text-embedding-3-small']],
+            'ai' => [
+                ['AI enabled', 'switch', true],
+                ['AI Copilot enabled', 'switch', true],
+                ['AI Copilot engine', 'select', 'neuron'],
+                ['AI Copilot read only', 'switch', false],
+                ['AI RAG enabled', 'switch', true],
+                ['AI financial tools enabled', 'switch', true],
+                ['AI write actions enabled', 'switch', false],
+                ['AI action execution enabled', 'switch', false],
+                ['AI provider', 'select', config('ai.default_provider', 'openai')],
+                ['AI model', 'text', $this->defaultAiModel()],
+                ['AI API key', 'secret', null, true],
+                ['AI base URL', 'url', $this->defaultAiBaseUrl()],
+                ['AI temperature', 'decimal', 0.2],
+                ['AI max tokens', 'number', 500],
+                ['AI timeout seconds', 'number', 180],
+                ['AI connect timeout seconds', 'number', 15],
+                ['AI stream enabled', 'switch', false],
+                ['AI cache enabled', 'switch', true],
+                ['AI cache TTL', 'number', 600],
+                ['AI context max rows', 'number', 15],
+                ['AI context max chars', 'number', 5000],
+                ['AI fast mode', 'switch', true],
+                ['AI embedding provider', 'select', config('ai.embedding.provider', config('ai.default_provider', 'openai'))],
+                ['AI embedding model', 'text', $this->defaultAiEmbeddingModel()],
+                ['AI embedding dimensions', 'number'],
+                ['AI RAG top K', 'number', 8],
+                ['AI RAG candidate pool', 'number', 800],
+                ['AI RAG max candidate pool', 'number', 2000],
+                ['AI RAG min vector score', 'decimal', 0.05],
+                ['AI RAG context max chars', 'number', 12000],
+            ],
             'queue_scheduler' => [['Queue enabled', 'switch', true], ['Queue connection', 'select', 'database'], ['Default queue', 'text', 'default'], ['Failed-job retention', 'number', 30], ['Retry attempts', 'number', 3], ['Retry delay', 'number', 60], ['Long-job timeout', 'number', 1800], ['Failure notifications', 'switch', true], ['Scheduler enabled', 'switch', true], ['Scheduler health interval', 'number', 5], ['Scheduler stale threshold', 'number', 15]],
             'monitoring' => [['Monitoring enabled', 'switch', true], ['Error tracking', 'switch', false], ['Error-tracking DSN', 'secret', null, true], ['Performance tracking', 'switch', true], ['Slow-request threshold', 'number', 2000], ['Health checks', 'switch', true], ['Health-check interval', 'number', 5], ['Log retention', 'number', 30], ['Sensitive-data masking', 'switch', true], ['Status page URL', 'url']],
             'api' => [['API enabled', 'switch', false], ['Default rate limit', 'number', 60], ['Maximum rate limit', 'number', 1000], ['Token expiry', 'number', 1440], ['Personal access tokens', 'switch', true], ['Tenant webhooks', 'switch', true], ['Webhook retry attempts', 'number', 3], ['Webhook timeout', 'number', 15], ['Webhook signatures', 'switch', true], ['Allowed origins', 'multiselect', []], ['Documentation URL', 'url'], ['API version', 'text', 'v1']],
@@ -124,6 +155,45 @@ class PlatformSettingsSeeder extends Seeder
         }
 
         return 'text';
+    }
+
+    private function defaultAiModel(): string
+    {
+        $configured = (string) config('ai.default_model', '');
+        $provider = strtolower((string) config('ai.default_provider', 'openai'));
+
+        if ($configured !== '' && ! ($provider === 'gemini' && $configured === 'gpt-4o-mini')) {
+            return $configured;
+        }
+
+        return match ($provider) {
+            'gemini' => 'gemini-2.5-flash',
+            'groq' => 'llama-3.1-8b-instant',
+            'openrouter' => 'google/gemini-2.5-flash',
+            'ollama' => 'llama3.1:8b',
+            default => 'gpt-4o-mini',
+        };
+    }
+
+    private function defaultAiBaseUrl(): string
+    {
+        return match (strtolower((string) config('ai.default_provider', 'openai'))) {
+            'gemini' => 'https://generativelanguage.googleapis.com/v1beta/models',
+            'groq' => 'https://api.groq.com/openai/v1',
+            'openrouter' => 'https://openrouter.ai/api/v1',
+            'ollama' => 'http://localhost:11434',
+            default => 'https://api.openai.com/v1',
+        };
+    }
+
+    private function defaultAiEmbeddingModel(): string
+    {
+        return match (strtolower((string) config('ai.embedding.provider', config('ai.default_provider', 'openai')))) {
+            'gemini' => 'gemini-embedding-001',
+            'openrouter' => 'openai/text-embedding-3-small',
+            'ollama' => 'nomic-embed-text',
+            default => 'text-embedding-3-small',
+        };
     }
 
     private function storageType(string $input): string
@@ -210,7 +280,9 @@ class PlatformSettingsSeeder extends Seeder
             'domains.Default scheme' => ['https', 'http'], 'domains.SSL provider' => ['letsencrypt', 'custom'],
             'storage.Storage driver' => ['public', 'local', 's3'], 'queue_scheduler.Queue connection' => ['database', 'redis', 'sync'],
             'analytics.Provider' => ['none', 'google', 'plausible', 'matomo'],
-            'ai.AI provider' => ['openai', 'groq', 'gemini', 'openrouter', 'ollama'],
+            'ai.AI provider' => ['openai', 'groq', 'gemini', 'anthropic', 'openrouter', 'ollama'],
+            'ai.AI Copilot engine' => ['neuron', 'legacy'],
+            'ai.AI embedding provider' => ['openai', 'gemini', 'openrouter', 'ollama'],
             'seo.Default X/Twitter card' => ['summary', 'summary_large_image'],
             'invoice_customization.Safe font selection' => ['DejaVu Sans', 'Helvetica', 'Times New Roman'],
             'invoice_customization.Language' => ['en', 'de', 'es', 'fr', 'pt', 'ne'],

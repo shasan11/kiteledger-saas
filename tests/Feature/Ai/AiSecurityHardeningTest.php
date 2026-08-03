@@ -7,6 +7,7 @@ use App\Models\AiPendingAction;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiProviderManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -156,5 +157,24 @@ class AiSecurityHardeningTest extends TestCase
             ->getJson('/api/ai/health')
             ->assertOk()
             ->assertJsonPath('provider', 'openai');
+    }
+
+    public function test_cached_answers_are_never_shared_between_users(): void
+    {
+        $first = $this->userWith(['ai.chat']);
+        $second = $this->userWith(['ai.chat']);
+
+        $this->mock(AiProviderManager::class, function ($mock): void {
+            $mock->shouldReceive('chat')->twice()->andReturn(
+                ['provider' => 'openai', 'model' => 'test', 'text' => 'First private answer', 'usage' => []],
+                ['provider' => 'openai', 'model' => 'test', 'text' => 'Second private answer', 'usage' => []],
+            );
+        });
+
+        $this->actingAs($first)->postJson('/api/ai/chat', ['message' => 'hello'])
+            ->assertOk()->assertJsonPath('message.content', 'First private answer');
+        $this->actingAs($second)->postJson('/api/ai/chat', ['message' => 'hello'])
+            ->assertOk()->assertJsonPath('message.content', 'Second private answer')
+            ->assertJsonPath('cached', false);
     }
 }

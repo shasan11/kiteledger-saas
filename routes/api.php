@@ -1,7 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\AI\AiActionApprovalController;
+use App\Http\Controllers\Api\AI\AiAssistantController;
+use App\Http\Controllers\Api\AI\AiSemanticSearchController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
+use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -1184,8 +1188,26 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
         |--------------------------------------------------------------------------
         */
         Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->prefix('ai')->group(function () {
-            // Provider settings retained for report summarization. The general AI
-            // assistant, conversation, semantic-search, and action APIs are add-on code.
+            Route::get('health', [AiAssistantController::class, 'health'])->middleware('throttle:60,1');
+            Route::post('chat', [AiAssistantController::class, 'chat'])->middleware('throttle:30,1');
+            Route::post('stream', [AiAssistantController::class, 'stream'])->middleware('throttle:30,1');
+
+            Route::get('conversations', [AiAssistantController::class, 'conversations']);
+            Route::get('conversations/{id}', [AiAssistantController::class, 'showConversation']);
+            Route::delete('conversations/{id}', [AiAssistantController::class, 'deleteConversation']);
+
+            Route::post('semantic-search', AiSemanticSearchController::class)->middleware('throttle:30,1');
+            Route::post('report-summary', [AiAssistantController::class, 'reportSummary'])->middleware('throttle:20,1');
+            Route::post('business-insight', [AiAssistantController::class, 'businessInsight'])->middleware('throttle:20,1');
+
+            Route::get('actions', [AiActionApprovalController::class, 'index']);
+            Route::get('actions/{id}', [AiActionApprovalController::class, 'show']);
+            Route::post('actions/{id}/approve', [AiActionApprovalController::class, 'approve'])->middleware('throttle:20,1');
+            Route::post('actions/{id}/reject', [AiActionApprovalController::class, 'reject'])->middleware('throttle:20,1');
+            Route::post('actions/{id}/execute', [AiActionApprovalController::class, 'execute'])->middleware('throttle:20,1');
+            Route::get('actions/{id}/audit', [AiActionApprovalController::class, 'audit']);
+            Route::get('usage-logs', [AiUsageLogController::class, 'index']);
+
             Route::get('settings', [AiSettingsController::class, 'show']);
             Route::put('settings', [AiSettingsController::class, 'update']);
             // Connection tests hit the upstream provider — throttle to curb abuse / cost.

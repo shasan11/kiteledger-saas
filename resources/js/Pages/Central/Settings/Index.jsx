@@ -53,6 +53,21 @@ const selectOptions = {
 
 const wideInputs = new Set(['textarea', 'code editor', 'key-value editor', 'rich-text editor', 'image']);
 
+const aiProviderDefaults = {
+    openai: { model: 'gpt-4o-mini', baseUrl: 'https://api.openai.com/v1', embeddingProvider: 'openai', embeddingModel: 'text-embedding-3-small' },
+    groq: { model: 'llama-3.1-8b-instant', baseUrl: 'https://api.groq.com/openai/v1' },
+    gemini: { model: 'gemini-2.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models', embeddingProvider: 'gemini', embeddingModel: 'gemini-embedding-001' },
+    openrouter: { model: 'google/gemini-2.5-flash', baseUrl: 'https://openrouter.ai/api/v1', embeddingProvider: 'openrouter', embeddingModel: 'openai/text-embedding-3-small' },
+    ollama: { model: 'llama3.1:8b', baseUrl: 'http://localhost:11434', embeddingProvider: 'ollama', embeddingModel: 'nomic-embed-text' },
+};
+
+const aiEmbeddingDefaults = {
+    openai: 'text-embedding-3-small',
+    gemini: 'gemini-embedding-001',
+    openrouter: 'openai/text-embedding-3-small',
+    ollama: 'nomic-embed-text',
+};
+
 const sectionDescriptions = {
     general: 'Core defaults used across the platform.',
     branding: 'Control how your product and organization appear.',
@@ -128,6 +143,34 @@ export default function Settings({ groups, activeGroup }) {
         setDirty(false);
         setChangedKeys(new Set());
         setErrorCount(0);
+    };
+
+    const handleValuesChange = (changed) => {
+        const keys = Object.keys(changed);
+        const dependent = {};
+
+        if (section === 'ai' && Object.prototype.hasOwnProperty.call(changed, 'ai.ai_provider')) {
+            const defaults = aiProviderDefaults[changed['ai.ai_provider']];
+            if (defaults) {
+                dependent['ai.ai_model'] = defaults.model;
+                dependent['ai.ai_base_url'] = defaults.baseUrl;
+                if (defaults.embeddingProvider) dependent['ai.ai_embedding_provider'] = defaults.embeddingProvider;
+                if (defaults.embeddingModel) dependent['ai.ai_embedding_model'] = defaults.embeddingModel;
+            }
+        }
+
+        if (section === 'ai' && Object.prototype.hasOwnProperty.call(changed, 'ai.ai_embedding_provider')) {
+            const model = aiEmbeddingDefaults[changed['ai.ai_embedding_provider']];
+            if (model) dependent['ai.ai_embedding_model'] = model;
+        }
+
+        if (Object.keys(dependent).length) {
+            form.setFieldsValue(dependent);
+            keys.push(...Object.keys(dependent));
+        }
+
+        setDirty(true);
+        setChangedKeys((current) => new Set([...current, ...keys]));
     };
 
     const prepare = (values) => {
@@ -304,7 +347,7 @@ export default function Settings({ groups, activeGroup }) {
                             `Manage ${currentLabel.toLowerCase()} preferences for your organization.`
                         }
                     >
-                        <Form form={form} layout="vertical" onValuesChange={(changed) => { setDirty(true); setChangedKeys((current) => new Set([...current, ...Object.keys(changed)])); }}>
+                        <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
                             {section === 'provisioning' && (
                                 <Alert
                                     type={provisioningQueueEnabled ? 'warning' : 'info'}

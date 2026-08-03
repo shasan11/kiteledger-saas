@@ -62,9 +62,10 @@ Then open `/install` or run `php artisan kiteledger:install`. Use
 
 See [KiteLedger Control Center](docs/SUPERADMIN_CONTROL_CENTER.md) for central modules, installation seeding, settings, payments, CMS/blog/SEO, support tickets, queues, security, and production verification.
 
-## AI knowledge indexes
+## KiteLedger Copilot and AI knowledge indexes
 
-KiteLedger's AI Assistant uses exact, keyword, metadata, and optional embedding
+KiteLedger Copilot uses deterministic financial tools, Neuron orchestration,
+exact, keyword, metadata, and optional embedding
 ranking. The exact and keyword paths work on normal MySQL/MariaDB hosting without
 an external vector database.
 
@@ -78,3 +79,6 @@ php artisan ai:index-status
 Use `--no-embeddings` with the indexing commands when provider embeddings are
 not configured. Re-run indexing after adding routes/help documentation or after
 material business-data changes; it is idempotent and skips unchanged chunks.
+
+See [docs/ai-copilot.md](docs/ai-copilot.md) for provider setup, tenant commands,
+queues, permissions, feature flags, security, action approval, deployment, and rollback.

@@ -16,7 +16,7 @@ class PlatformSettingsService
 {
     public function get(string $key, mixed $default = null): mixed
     {
-        return Cache::remember('platform-setting:'.$key, now()->addHour(), fn () => PlatformSetting::query()->where('key', $key)->first()?->value ?? $default);
+        return $this->remember('platform-setting:'.$key, fn () => PlatformSetting::query()->where('key', $key)->first()?->value ?? $default);
     }
 
     public function set(string $group, string $key, mixed $value, string $type = 'string', bool $encrypted = false): PlatformSetting
@@ -36,7 +36,7 @@ class PlatformSettingsService
 
     public function getGroup(string $group): array
     {
-        return Cache::remember('platform-settings:group:'.$group, now()->addHour(), fn () => PlatformSetting::query()
+        return $this->remember('platform-settings:group:'.$group, fn () => PlatformSetting::query()
             ->where('group', $group)->get()->mapWithKeys(fn (PlatformSetting $setting) => [$setting->key => $setting->safeValue()])->all());
     }
 
@@ -128,7 +128,7 @@ class PlatformSettingsService
 
     public function publicSettings(): array
     {
-        return Cache::remember('platform-settings:public', now()->addHour(), fn () => PlatformSetting::where('is_public', true)->get()->mapWithKeys(fn ($setting) => [$setting->key => $setting->safeValue()])->all());
+        return $this->remember('platform-settings:public', fn () => PlatformSetting::where('is_public', true)->get()->mapWithKeys(fn ($setting) => [$setting->key => $setting->safeValue()])->all());
     }
 
     public function applyMailConfiguration(): string
@@ -217,5 +217,14 @@ class PlatformSettingsService
         }
 
         return is_scalar($value) ? (string) $value : json_encode($value, JSON_THROW_ON_ERROR);
+    }
+
+    private function remember(string $key, callable $callback): mixed
+    {
+        if (function_exists('tenancy') && tenancy()->initialized) {
+            return $callback();
+        }
+
+        return Cache::remember($key, now()->addHour(), $callback);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Services\AI\Tools;
 
 use App\Models\AiConversation;
 use App\Models\AiPendingAction;
+use App\Services\AI\AiDomainAuthorizationService;
 use App\Services\AI\AiSettingsService;
 use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Tools\Actions\CreateCashTransferDraftAction;
@@ -121,7 +122,11 @@ class AiToolRouter
         'action.create_contact_draft' => [CreateContactDraftAction::class, 'contacts'],
     ];
 
-    public function __construct(private AiUsageLogger $usage, private AiSettingsService $settings) {}
+    public function __construct(
+        private AiUsageLogger $usage,
+        private AiSettingsService $settings,
+        private AiDomainAuthorizationService $domainAuthorization,
+    ) {}
 
     public function classify(string $message, array $payload = []): array
     {
@@ -205,6 +210,8 @@ class AiToolRouter
         if (! $config) {
             throw ValidationException::withMessages(['tool' => 'Unsupported AI action tool.']);
         }
+
+        $this->domainAuthorization->assertCanProposeAction($request->user(), $config[1], $tool);
 
         return app($config[0])->propose($request, $conversation, $message, $payload);
     }

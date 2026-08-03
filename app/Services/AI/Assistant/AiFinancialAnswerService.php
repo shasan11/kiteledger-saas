@@ -2,11 +2,13 @@
 
 namespace App\Services\AI\Assistant;
 
+use App\Services\AI\AiDomainAuthorizationService;
 use App\Services\AI\AiPermissionService;
 use App\Services\AI\AiProviderException;
 use App\Services\AI\AiProviderManager;
 use App\Services\AI\AiSettingsService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class AiFinancialAnswerService
 {
@@ -19,6 +21,7 @@ class AiFinancialAnswerService
         private readonly AiPermissionService $permissions,
         private readonly AiProviderManager $provider,
         private readonly AiSettingsService $settings,
+        private readonly AiDomainAuthorizationService $domainAuthorization,
     ) {}
 
     public function answer(Request $request, string $message, array $payload = []): ?array
@@ -62,6 +65,22 @@ class AiFinancialAnswerService
 
         $required = $plan['tool']['required_permission'] ?? 'ai.use';
         if (! $this->permissions->hasAny($request->user(), [$required, 'ai.chat', 'ai.manage'])) {
+            return [
+                'ok' => true,
+                'intent' => $intent,
+                'answer_type' => 'permission_denied',
+                'message' => 'You do not have access to this information.',
+                'cards' => [],
+                'tables' => [],
+                'warnings' => [],
+                'source_note' => null,
+                'followups' => [],
+            ];
+        }
+
+        try {
+            $this->domainAuthorization->assertCanReadFinancialIntent($request->user(), $intent);
+        } catch (ValidationException) {
             return [
                 'ok' => true,
                 'intent' => $intent,
@@ -123,6 +142,7 @@ class AiFinancialAnswerService
             return trim((string) ($response['text'] ?? '')) ?: $display['message'];
         } catch (AiProviderException) {
             $display['warnings'][] = 'The report was prepared, but AI explanation is temporarily unavailable.';
+
             return $display['message'];
         } catch (\Throwable) {
             return $display['message'];

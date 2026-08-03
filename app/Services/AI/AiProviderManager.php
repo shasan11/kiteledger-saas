@@ -108,7 +108,7 @@ class AiProviderManager
      */
     public function embed(array $texts): array
     {
-        $provider = strtolower((string) $this->settings->provider());
+        $provider = strtolower((string) $this->settings->embeddingProvider());
 
         if (! $this->settings->enabled()) {
             $this->throwError('AI_DISABLED', 'AI is disabled in settings.');
@@ -116,8 +116,8 @@ class AiProviderManager
         if (! $this->settings->supportsEmbeddings()) {
             $this->throwError('AI_EMBEDDINGS_UNSUPPORTED', "Provider '{$provider}' does not support embeddings. Use OpenAI, Gemini, Ollama, or OpenRouter.");
         }
-        if ($provider !== 'ollama' && ! $this->settings->hasApiKey()) {
-            $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
+        if ($provider !== 'ollama' && ! $this->settings->embeddingApiKey()) {
+            $this->throwError('AI_EMBEDDING_PROVIDER_NOT_CONFIGURED', 'The embedding provider key is missing. Configure it in central AI Settings.');
         }
 
         $model = $this->settings->embeddingModel();
@@ -134,13 +134,14 @@ class AiProviderManager
             $text = trim((string) $text);
             if ($text === '') {
                 $out[] = [];
+
                 continue;
             }
 
             try {
                 $response = Prism::embeddings()
                     ->using($this->providerEnum($provider), $model)
-                    ->usingProviderConfig($this->providerConfig($provider))
+                    ->usingProviderConfig($this->embeddingProviderConfig($provider))
                     ->withClientOptions($this->clientOptions($timeout, $connectTimeout))
                     ->fromInput($text)
                     ->asEmbeddings();
@@ -246,11 +247,13 @@ class AiProviderManager
 
             if ($role === 'system') {
                 $systemParts[] = $content;
+
                 continue;
             }
 
             if ($role === 'assistant') {
                 $chatMessages[] = new AssistantMessage($content);
+
                 continue;
             }
 
@@ -310,12 +313,36 @@ class AiProviderManager
         };
     }
 
+    private function embeddingProviderConfig(string $provider): array
+    {
+        $url = rtrim($this->settings->embeddingBaseUrl(), '/');
+        if ($provider === 'gemini' && ! str_ends_with($url, '/models')) {
+            $url .= '/models';
+        }
+        $apiKey = $this->settings->embeddingApiKey() ?? '';
+
+        return match ($provider) {
+            'openai' => ['url' => $url, 'api_key' => $apiKey],
+            'gemini' => ['url' => $url, 'api_key' => $apiKey],
+            'openrouter' => [
+                'url' => $url,
+                'api_key' => $apiKey,
+                'site' => [
+                    'http_referer' => config('prism.providers.openrouter.site.http_referer'),
+                    'x_title' => config('prism.providers.openrouter.site.x_title') ?: config('app.name'),
+                ],
+            ],
+            'ollama' => ['url' => $url],
+            default => [],
+        };
+    }
+
     private function normalizedBaseUrl(string $provider): string
     {
         $url = rtrim($this->settings->baseUrl(), '/');
 
-        if ($provider === 'gemini' && !str_ends_with($url, '/models')) {
-            return $url . '/models';
+        if ($provider === 'gemini' && ! str_ends_with($url, '/models')) {
+            return $url.'/models';
         }
 
         return $url;
@@ -325,19 +352,19 @@ class AiProviderManager
     {
         $provider = strtolower((string) $this->settings->provider());
 
-        if (!$this->settings->enabled()) {
+        if (! $this->settings->enabled()) {
             $this->throwError('AI_DISABLED', 'AI report summarizer is disabled in settings.');
         }
 
-        if (!in_array($provider, ['openai', 'groq', 'gemini', 'ollama', 'openrouter'], true)) {
+        if (! in_array($provider, ['openai', 'groq', 'gemini', 'ollama', 'openrouter'], true)) {
             $this->throwError('AI_PROVIDER_UNSUPPORTED', "Unsupported AI provider: {$provider}");
         }
 
-        if (!$this->settings->model()) {
+        if (! $this->settings->model()) {
             $this->throwError('AI_MODEL_MISSING', 'AI model is missing. Please configure it in AI Settings.');
         }
 
-        if ($provider !== 'ollama' && !$this->settings->hasApiKey()) {
+        if ($provider !== 'ollama' && ! $this->settings->hasApiKey()) {
             $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
         }
     }

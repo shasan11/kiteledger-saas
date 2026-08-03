@@ -24,18 +24,31 @@ class AiToolAgentTest extends TestCase
         foreach (AiPermissionService::ALL as $permission) {
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
-        Permission::firstOrCreate(['name' => 'reports.financial.view', 'guard_name' => 'web']);
+        foreach ([
+            'reports.financial.view',
+            'reports.inventory.view',
+            'master.product.view',
+            'accounting.bank_account.view',
+            'accounting.journal_voucher.view',
+            'sales.invoice.create',
+            'sales.invoice.update',
+        ] as $permission) {
+            Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Write actions are disabled by default now; this suite exercises the
         // draft pipeline, so opt in explicitly.
-        app(AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
+        app(AiSettingsService::class)->setMany([
+            'ai_write_actions_enabled' => true,
+            'ai_action_execution_enabled' => true,
+        ]);
     }
 
     public function test_cheapest_product_query_returns_a_clean_non_technical_answer(): void
     {
-        $user = $this->userWith(['ai.chat']);
+        $user = $this->userWith(['ai.chat', 'master.product.view']);
         $cheapestId = $this->insertProduct('Medium Packaging Box', 55);
         $this->insertProduct('Premium Packaging Box', 185);
 
@@ -58,7 +71,7 @@ class AiToolAgentTest extends TestCase
 
     public function test_product_most_expensive_returns_empty_result_if_no_products_exist(): void
     {
-        $user = $this->userWith(['ai.chat', 'ai.debug.view']);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view', 'master.product.view']);
 
         $this->actingAs($user)
             ->postJson('/api/ai/chat', ['message' => 'Most expensive product'])
@@ -71,7 +84,7 @@ class AiToolAgentTest extends TestCase
     public function test_bank_account_most_transactions_uses_journal_voucher_lines(): void
     {
         [$branch, $currency] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view', 'accounting.bank_account.view'], $branch);
         [$bankOne] = $this->bankAccountWithJournalLines($branch, $currency, 'Nabil Bank', 3);
         $this->bankAccountWithJournalLines($branch, $currency, 'Everest Bank', 1);
 
@@ -86,7 +99,7 @@ class AiToolAgentTest extends TestCase
     public function test_cash_balance_uses_approved_non_void_journal_voucher_lines(): void
     {
         [$branch, $currency] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view', 'accounting.journal_voucher.view'], $branch);
         $account = $this->account('Cash in Hand', 'cash');
         $coa = $this->chartOfAccount($account, $branch);
         $this->journalVoucher($branch, $currency, $account, $coa, 100, 20, true, false);
@@ -116,7 +129,7 @@ class AiToolAgentTest extends TestCase
     public function test_create_invoice_request_creates_pending_action_only(): void
     {
         [$branch] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.action.propose', 'sales.invoice.create'], $branch);
         $contact = $this->contact('Sachin');
 
         $response = $this->actingAs($user)
@@ -134,7 +147,7 @@ class AiToolAgentTest extends TestCase
     public function test_pending_action_approval_creates_draft_invoice(): void
     {
         [$branch] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.chat', 'ai.actions.approve'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.action.propose', 'ai.actions.approve', 'sales.invoice.create'], $branch);
         $this->contact('Sachin');
 
         $actionId = $this->actingAs($user)
@@ -157,7 +170,7 @@ class AiToolAgentTest extends TestCase
     public function test_update_approved_record_is_blocked(): void
     {
         [$branch] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.actions.approve'], $branch);
+        $user = $this->userWith(['ai.actions.approve', 'sales.invoice.update'], $branch);
         $invoice = $this->invoice($branch, approved: true, void: false);
         $action = $this->pendingUpdateInvoice($user, $branch, $invoice);
 
@@ -170,7 +183,7 @@ class AiToolAgentTest extends TestCase
     public function test_voided_record_update_is_blocked(): void
     {
         [$branch] = $this->branchAndCurrency();
-        $user = $this->userWith(['ai.actions.approve'], $branch);
+        $user = $this->userWith(['ai.actions.approve', 'sales.invoice.update'], $branch);
         $invoice = $this->invoice($branch, approved: false, void: true);
         $action = $this->pendingUpdateInvoice($user, $branch, $invoice);
 
@@ -189,11 +202,22 @@ class AiToolAgentTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_ai_chat_permission_does_not_grant_product_module_access(): void
+    {
+        $user = $this->userWith(['ai.chat']);
+        $this->insertProduct('Restricted Product', 100);
+
+        $this->actingAs($user)
+            ->postJson('/api/ai/chat', ['message' => 'Which product is most expensive?'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('permission');
+    }
+
     public function test_branch_limited_user_cannot_see_other_branch_data(): void
     {
         [$ownBranch, $currency] = $this->branchAndCurrency('OWN');
         [$otherBranch] = $this->branchAndCurrency('OTHER');
-        $user = $this->userWith(['ai.chat', 'ai.debug.view'], $ownBranch);
+        $user = $this->userWith(['ai.chat', 'ai.debug.view', 'accounting.bank_account.view'], $ownBranch);
         $this->bankAccountWithJournalLines($otherBranch, $currency, 'Other Branch Bank', 2);
 
         $this->actingAs($user)

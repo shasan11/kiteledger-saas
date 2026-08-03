@@ -12,6 +12,7 @@ class AiEmbedding extends Model
     protected $fillable = [
         'source_type',
         'source_id',
+        'knowledge_chunk_id',
         'branch_id',
         'content',
         'content_hash',
@@ -25,4 +26,9 @@ class AiEmbedding extends Model
         'vector' => 'array',
         'dims' => 'integer',
     ];
+
+    public function knowledgeChunk()
+    {
+        return $this->belongsTo(AiKnowledgeChunk::class, 'knowledge_chunk_id');
+    }
 }

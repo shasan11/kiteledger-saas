@@ -62,6 +62,7 @@ class DemoSeeder extends Seeder
             PosSeeder::class,
             RolesAndPermissionsSeeder::class,
             FullPermissionUserSeeder::class,
+            DocumentUploadPermissionSeeder::class,
             TransactionalRecordSeeder::class,
             AccountingTransactionVolumeSeeder::class,
             AiPermissionSeeder::class,

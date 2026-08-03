@@ -22,6 +22,8 @@ use App\Services\AI\AiResponseCacheService;
 use App\Services\AI\AiSettingsService;
 use App\Services\AI\AiUsageLogger;
 use App\Services\AI\Assistant\AiFinancialAnswerService;
+use App\Services\AI\Copilot\CopilotContextFactory;
+use App\Services\AI\Copilot\KiteLedgerCopilotService;
 use App\Services\AI\Rag\AiGroundedAnswerService;
 use App\Services\AI\Rag\AiRagRetriever;
 use App\Services\AI\Rag\AiSourceSanitizer;
@@ -29,6 +31,8 @@ use App\Services\AI\Tools\AiToolRouter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class AiAgentChatController extends Controller
@@ -52,6 +56,8 @@ class AiAgentChatController extends Controller
         protected AiAnswerComposer $answerComposer,
         protected AiGroundedAnswerService $groundedAnswers,
         protected AiSourceSanitizer $sourceSanitizer,
+        protected CopilotContextFactory $copilotContexts,
+        protected KiteLedgerCopilotService $copilot,
     ) {}
 
     public function chat(Request $request): JsonResponse
@@ -63,14 +69,14 @@ class AiAgentChatController extends Controller
 
         $data = $request->validate([
             'message' => 'required|string|max:4000',
-            'conversation_id' => 'nullable|string',
-            'context_type' => 'nullable|string|max:60',
+            'conversation_id' => 'nullable|string|max:2048',
+            'context_type' => ['nullable', 'string', Rule::in(['auto', 'general', 'sales', 'purchase', 'inventory', 'accounting', 'reports', 'contacts'])],
             'context_payload' => 'nullable|array',
             'cache' => 'nullable|boolean',
         ]);
 
         $message = trim($data['message']);
-        $payload = $data['context_payload'] ?? [];
+        $payload = $this->normalizeContextPayload($data['context_payload'] ?? []);
         $toolClassification = $this->toolRouter->classify($message, $payload);
         $intent = in_array($toolClassification['type'] ?? '', ['query', 'report', 'action'], true)
             ? $toolClassification
@@ -99,7 +105,9 @@ class AiAgentChatController extends Controller
             'context' => ['type' => $contextType, 'intent' => $intent],
         ]);
 
-        if (! in_array($toolClassification['type'] ?? null, ['report', 'query'], true) && $displayAnswer = $this->financialAnswers->answer($request, $message, $payload)) {
+        if ($this->settings->financialToolsEnabled()
+            && ! in_array($toolClassification['type'] ?? null, ['report', 'query'], true)
+            && $displayAnswer = $this->financialAnswers->answer($request, $message, $payload)) {
             $financialIntent = [
                 'type' => 'controlled_business_answer',
                 'tool' => $this->compatToolName($displayAnswer['intent'] ?? null, $displayAnswer['selected_tool'] ?? null),
@@ -276,9 +284,14 @@ class AiAgentChatController extends Controller
         }
 
         $cacheKey = $this->cache->key($user?->id, $branchScope['branch_id'] ?? null, $message, $context);
-        $useCache = ($data['cache'] ?? true) && empty($payload['private']);
+        $useCache = ($data['cache'] ?? true)
+            && empty($payload['private'])
+            && ! preg_match('/\b(current|currently|live|right now|today|latest|up[- ]to[- ]date|just posted)\b/i', $message);
         if ($useCache && ($cached = $this->cache->get($cacheKey))) {
-            return response()->json(array_merge($cached, ['cached' => true]));
+            return response()->json(array_merge($cached, [
+                'cached' => true,
+                'request_id' => (string) Str::uuid(),
+            ]));
         }
 
         $history = $conversation->messages()
@@ -288,11 +301,16 @@ class AiAgentChatController extends Controller
             ->map(fn ($m) => ['role' => $m->role, 'content' => $m->content])
             ->toArray();
 
-        $messages = $this->prompts->build($message, $context, $history);
         $startedAt = microtime(true);
 
         try {
-            $providerResult = $this->provider->chat($messages);
+            if ($this->settings->copilotEngine() === 'neuron' && ! app()->runningUnitTests()) {
+                $trustedContext = $this->copilotContexts->make($request, $conversation, $contextType);
+                $providerResult = $this->copilot->respond($trustedContext, $conversation);
+            } else {
+                $messages = $this->prompts->build($message, $context, $history);
+                $providerResult = $this->provider->chat($messages);
+            }
         } catch (AiProviderException $e) {
             $this->usage->log([
                 'user_id' => $user?->id,
@@ -412,6 +430,7 @@ class AiAgentChatController extends Controller
             'source_note' => $publicDisplay['source_note'] ?? null,
             'followups' => $publicDisplay['followups'] ?? [],
             'cached' => false,
+            'request_id' => (string) Str::uuid(),
             'debug' => $canDebug ? $debug : null,
         ];
 
@@ -618,7 +637,7 @@ class AiAgentChatController extends Controller
         return [
             'type' => 'query_result',
             'tool' => $intent['tool'] ?? null,
-            'title' => $display['answer_type'] ?? 'AI Assistant Answer',
+            'title' => $display['answer_type'] ?? 'KiteLedger Copilot Answer',
             'summary' => $display['message'] ?? null,
             'records' => $records,
             'filters' => $display['filters'] ?? [],
@@ -703,9 +722,30 @@ class AiAgentChatController extends Controller
     {
         return response()->json([
             'ok' => false,
-            'message' => 'You do not have permission to use AI Assistant.',
+            'message' => 'You do not have permission to use KiteLedger Copilot.',
             'code' => 'AI_PERMISSION_DENIED',
             'required_permission' => $perm,
         ], 403);
+    }
+
+    private function normalizeContextPayload(array $payload): array
+    {
+        $allowed = array_flip([
+            'module', 'url', 'record_type', 'record_number', 'record_id', 'id',
+            'customer_reference', 'supplier_reference', 'date_from', 'date_to',
+            'status', 'private', 'changes', 'filters',
+        ]);
+        $payload = array_intersect_key($payload, $allowed);
+
+        return collect($payload)->map(function ($value) {
+            if (is_string($value)) {
+                return mb_substr(strip_tags($value), 0, 500);
+            }
+            if (is_array($value)) {
+                return collect($value)->take(30)->map(fn ($item) => is_string($item) ? mb_substr(strip_tags($item), 0, 500) : $item)->all();
+            }
+
+            return $value;
+        })->all();
     }
 }

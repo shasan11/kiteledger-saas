@@ -2,6 +2,8 @@
 
 namespace App\Services\AI\Knowledge;
 
+use App\Models\AiEmbedding;
+use App\Models\AiKnowledgeChunk;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -45,9 +47,59 @@ class BusinessKnowledgeIndexer
         return $stats;
     }
 
-    private function sources(): array
+    public function indexRecord(string $sourceType, string|int $recordId, bool $embed = true): array
     {
-        return [
+        $cfg = $this->sources()[$sourceType] ?? null;
+        if (! $cfg || ! Schema::hasTable($cfg['table'])) {
+            throw new \InvalidArgumentException("Unsupported AI knowledge source [{$sourceType}].");
+        }
+
+        $row = DB::table($cfg['table'])->where('id', $recordId)->first();
+        if (! $row) {
+            return $this->deleteRecord($sourceType, $recordId);
+        }
+
+        $chunk = $this->chunk($sourceType, $cfg, (array) $row, Schema::getColumnListing($cfg['table']));
+
+        return $this->writer->write($chunk, $embed);
+    }
+
+    public function deleteRecord(string $sourceType, string|int $recordId): array
+    {
+        $chunk = AiKnowledgeChunk::query()
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceType.':'.$recordId)
+            ->first();
+
+        if (! $chunk) {
+            return ['deleted' => 0];
+        }
+
+        AiEmbedding::query()
+            ->where('knowledge_chunk_id', $chunk->id)
+            ->orWhere(fn ($query) => $query
+                ->where('source_type', 'knowledge')
+                ->where('source_id', (string) $chunk->id))
+            ->delete();
+        $chunk->delete();
+
+        return ['deleted' => 1];
+    }
+
+    public function sourceTypeForTable(string $table): ?string
+    {
+        foreach ($this->sources() as $sourceType => $cfg) {
+            if ($cfg['table'] === $table) {
+                return $sourceType;
+            }
+        }
+
+        return null;
+    }
+
+    public function sources(): array
+    {
+        $sources = [
             'invoice' => $this->cfg('invoices', 'Sales', '/payment-in/invoices', ['invoice_no', 'invoice_number'], ['invoice_date', 'date'], ['notes', 'remarks', 'reference'], 'invoice_lines', 'invoice_id'),
             'quotation' => $this->cfg('quotations', 'Sales', '/payment-in/quotations', ['quotation_no'], ['quotation_date', 'date'], ['notes', 'remarks', 'reference', 'terms_and_conditions'], 'quotation_lines', 'quotation_id'),
             'sales_order' => $this->cfg('sales_orders', 'Sales', '/payment-in/sales-orders', ['sales_order_no', 'order_no'], ['sales_order_date', 'order_date', 'date'], ['notes', 'remarks', 'reference'], 'sales_order_lines', 'sales_order_id'),
@@ -65,6 +117,32 @@ class BusinessKnowledgeIndexer
             'warehouse_stock' => $this->cfg('warehouse_items', 'Inventory', '/inventory/warehouse-items', ['sku', 'product_name'], ['updated_at', 'created_at'], ['product_name', 'quantity', 'available_quantity']),
             'pos_sale' => $this->cfg('pos_sales', 'POS', '/pos/sales', ['sale_no', 'invoice_no'], ['sale_date', 'date', 'created_at'], ['notes', 'reference']),
         ];
+
+        $permissions = [
+            'invoice' => 'sales.invoice.view',
+            'quotation' => 'sales.quotation.view',
+            'sales_order' => 'sales.sales_order.view',
+            'purchase_bill' => 'purchase.purchase_bill.view',
+            'purchase_order' => 'purchase.purchase_order.view',
+            'expense' => 'accounting.expense.view',
+            'customer_payment' => 'receivable.customer_payment.view',
+            'supplier_payment' => 'payable.supplier_payment.view',
+            'journal_voucher' => 'accounting.journal_voucher.view',
+            'account' => 'accounting.chart_of_account.view',
+            'contact' => 'master.contact.view',
+            'product' => 'master.product.view',
+            'product_variant' => 'master.product.view',
+            'warehouse' => 'master.warehouse.view',
+            'warehouse_stock' => 'master.product.view',
+            'pos_sale' => 'pos.sale.view',
+        ];
+
+        foreach ($sources as $sourceType => &$source) {
+            $source['permission'] = $permissions[$sourceType] ?? null;
+        }
+        unset($source);
+
+        return $sources;
     }
 
     private function cfg(string $table, string $module, string $route, array $numbers, array $dates, array $text, ?string $lineTable = null, ?string $foreignKey = null): array
@@ -113,7 +191,7 @@ class BusinessKnowledgeIndexer
             'content' => implode(' ', $sentences),
             // Internal UUID routes are deliberately omitted from normal source cards.
             'route' => null,
-            'permission' => null,
+            'permission' => $cfg['permission'] ?? null,
             'keywords' => array_values(array_filter([$number, $contact, $status, $type, $cfg['module']])),
             'metadata' => array_filter([
                 'display_number' => $number, 'module_route' => $cfg['route'],

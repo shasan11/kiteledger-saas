@@ -4,17 +4,23 @@ namespace App\Services\AI\Agent;
 
 use App\Models\AiConversation;
 use App\Models\AiPendingAction;
+use App\Services\AI\AiDomainAuthorizationService;
 use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class AiActionProposalService
 {
-    public function __construct(protected BranchScopeService $scope) {}
+    public function __construct(
+        protected BranchScopeService $scope,
+        protected AiDomainAuthorizationService $domainAuthorization,
+    ) {}
 
     public function propose(Request $request, AiConversation $conversation, array $intent, string $message, array $payload = []): AiPendingAction
     {
         $module = $this->normalizeModule($intent['module'] ?? ($payload['module'] ?? 'records'));
         $actionType = $this->actionType($intent['name'] ?? 'create_record', $module);
+        $this->domainAuthorization->assertCanProposeAction($request->user(), $module, $actionType);
         $branchId = $this->scope->selectedBranchId($request, $request->user());
 
         $targetId = $payload['record_id'] ?? $payload['id'] ?? null;
@@ -40,6 +46,14 @@ class AiActionProposalService
             'risk_level' => $this->riskLevel($intent['name'] ?? 'create_record', $module),
             'risk_reasons' => $this->riskReasons($intent['name'] ?? 'create_record', $module),
             'status' => 'pending',
+            'idempotency_key' => hash('sha256', implode('|', [
+                $conversation->id,
+                $request->user()?->id,
+                $actionType,
+                $targetId ?? '',
+                Str::squish(mb_strtolower($message)),
+            ])),
+            'expires_at' => now()->addMinutes((int) config('ai.copilot.action_ttl_minutes', 30)),
             'metadata' => [
                 'intent' => $intent,
                 'missing_fields' => [],
@@ -50,17 +64,18 @@ class AiActionProposalService
     private function actionType(string $intent, string $module): string
     {
         return match ($intent) {
-            'update_record' => 'update_' . $module,
-            default => 'create_' . $module . '_draft',
+            'update_record' => 'update_'.$module,
+            default => 'create_'.$module.'_draft',
         };
     }
 
     private function title(string $intent, string $module): string
     {
         $label = ucwords(str_replace('_', ' ', $module));
+
         return match ($intent) {
-            'update_record' => 'Update ' . $label,
-            default => 'Create Draft ' . $label,
+            'update_record' => 'Update '.$label,
+            default => 'Create Draft '.$label,
         };
     }
 
@@ -68,15 +83,19 @@ class AiActionProposalService
     {
         $label = str_replace('_', ' ', $module);
         if ($intent === 'update_record') {
-            return 'AI proposes to update ' . $label . ($targetId ? ' #' . $targetId : '') . ' based on: ' . $message;
+            return 'AI proposes to update '.$label.($targetId ? ' #'.$targetId : '').' based on: '.$message;
         }
-        return 'AI proposes to create a draft ' . $label . ' based on: ' . $message;
+
+        return 'AI proposes to create a draft '.$label.' based on: '.$message;
     }
 
     private function riskLevel(string $intent, string $module): string
     {
         $accountingModules = ['invoices', 'purchase_bills', 'customer_payments', 'supplier_payments', 'expenses', 'journal_vouchers', 'cash_transfers', 'credit_notes', 'debit_notes'];
-        if ($intent === 'update_record') return 'medium';
+        if ($intent === 'update_record') {
+            return 'medium';
+        }
+
         return in_array($module, $accountingModules, true) ? 'medium' : 'low';
     }
 
@@ -89,6 +108,7 @@ class AiActionProposalService
         if (in_array($module, ['invoices', 'purchase_bills', 'customer_payments', 'supplier_payments', 'expenses', 'journal_vouchers', 'cash_transfers', 'credit_notes', 'debit_notes'], true)) {
             $reasons[] = 'May affect accounting or business reports.';
         }
+
         return $reasons;
     }
 

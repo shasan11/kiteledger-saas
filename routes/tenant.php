@@ -53,6 +53,8 @@ Route::middleware(['auth:tenant', 'verified', 'tenant.active', 'subscription.val
     });
 
     Route::get('/dashboard-data', DashboardController::class)->name('dashboard.data');
+    Route::get('/ai/assistant', fn () => Inertia::render('App/AI/Assistant'))
+        ->name('ai.assistant');
 
     require __DIR__.'/menu/pos.php';
     require __DIR__.'/menu/crm.php';

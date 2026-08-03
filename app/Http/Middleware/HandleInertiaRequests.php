@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\AppSetting;
 use App\Models\Central\CentralNotification;
+use App\Services\AppContextService;
 use App\Services\BranchScopeService;
 use App\Services\LocalizationService;
 use Database\Seeders\CentralRolesAndPermissionsSeeder;
@@ -79,7 +80,10 @@ class HandleInertiaRequests extends Middleware
                 'canBypassPermissions' => fn () => $this->canBypassPermissions($user),
                 'currentBranchId' => fn () => $scope->selectedBranchId($request, $user),
             ],
-            'branchContext' => fn () => $scope->resolveContext($request),
+            'branchContext' => fn () => array_merge(
+                $scope->resolveContext($request),
+                $this->fiscalYearContext($request),
+            ),
             'defaultCurrency' => fn () => $this->defaultCurrencyPayload(),
             'locale' => [
                 'current' => $locale,
@@ -166,6 +170,29 @@ class HandleInertiaRequests extends Middleware
             'super-admin',
             'admin',
         ]);
+    }
+
+    protected function fiscalYearContext(Request $request): array
+    {
+        try {
+            $context = app(AppContextService::class)->context($request);
+
+            return [
+                'current_fiscal_year' => $context['current_fiscal_year'] ?? null,
+                'current_fiscal_year_id' => $context['current_fiscal_year_id'] ?? null,
+                'available_fiscal_years' => $context['available_fiscal_years'] ?? [],
+                'fiscal_year_expired' => (bool) ($context['fiscal_year_expired'] ?? false),
+                'fiscal_year_locked' => (bool) ($context['fiscal_year_locked'] ?? false),
+            ];
+        } catch (\Throwable) {
+            return [
+                'current_fiscal_year' => null,
+                'current_fiscal_year_id' => null,
+                'available_fiscal_years' => [],
+                'fiscal_year_expired' => false,
+                'fiscal_year_locked' => false,
+            ];
+        }
     }
 
     private function centralNotifications(int $adminId): array

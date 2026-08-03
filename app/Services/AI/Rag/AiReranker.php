@@ -13,8 +13,15 @@ class AiReranker
         foreach (array_slice($ranked, 0, 20) as $candidate) {
             $type = $candidate['source_type'] ?? 'other';
             $penalty = ($sourceCounts[$type] ?? 0) * ($understanding['broad_summary'] ? .06 : .025);
-            if ($understanding['prefer_app_knowledge'] && in_array($type, ['app_help', 'route', 'report', 'workflow', 'documentation'], true)) {
-                $candidate['final_score'] = min(1, $candidate['final_score'] + .12);
+            if ($understanding['prefer_app_knowledge']) {
+                $boost = match ($type) {
+                    'app_help' => .28,
+                    'workflow', 'report' => .18,
+                    'route' => .12,
+                    'documentation' => .04,
+                    default => 0.0,
+                };
+                $candidate['final_score'] = min(1, $candidate['final_score'] + $boost);
             }
             $candidate['final_score'] = max(0, $candidate['final_score'] - $penalty);
             $selected[] = $candidate;

@@ -12,6 +12,23 @@ class TransactionalRecordSeeder extends Seeder
 {
     protected int $perTypeCount = 1000;
 
+    protected array $fiscalYearIdByDate = [];
+
+    protected array $businessDateColumnsByTable = [
+        'quotations' => 'quotation_date',
+        'sales_orders' => 'sales_order_date',
+        'proforma_invoices' => 'proforma_date',
+        'invoices' => 'invoice_date',
+        'customer_payments' => 'payment_date',
+        'sales_returns' => 'sales_return_date',
+        'purchase_orders' => 'purchase_order_date',
+        'purchase_bills' => 'bill_date',
+        'expenses' => 'expense_date',
+        'debit_notes' => 'debit_note_date',
+        'supplier_payments' => 'payment_date',
+        'journal_vouchers' => 'voucher_date',
+    ];
+
     public function run(): void
     {
         DB::transaction(function () {
@@ -195,7 +212,7 @@ class TransactionalRecordSeeder extends Seeder
 
     protected function deleteRowsByPattern(string $table, string $numberColumn, string $pattern): void
     {
-        if (!Schema::hasTable($table) || !Schema::hasColumn($table, $numberColumn)) {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $numberColumn)) {
             return;
         }
 
@@ -212,11 +229,11 @@ class TransactionalRecordSeeder extends Seeder
         string $pattern
     ): void {
         if (
-            !Schema::hasTable($childTable) ||
-            !Schema::hasTable($parentTable) ||
-            !Schema::hasColumn($childTable, $foreignKey) ||
-            !Schema::hasColumn($parentTable, 'id') ||
-            !Schema::hasColumn($parentTable, $numberColumn)
+            ! Schema::hasTable($childTable) ||
+            ! Schema::hasTable($parentTable) ||
+            ! Schema::hasColumn($childTable, $foreignKey) ||
+            ! Schema::hasColumn($parentTable, 'id') ||
+            ! Schema::hasColumn($parentTable, $numberColumn)
         ) {
             return;
         }
@@ -879,7 +896,7 @@ class TransactionalRecordSeeder extends Seeder
         ?string $nameColumn = 'custom_product_name',
         bool $includeDiscount = true
     ): void {
-        if (!Schema::hasTable($table)) {
+        if (! Schema::hasTable($table)) {
             return;
         }
 
@@ -950,16 +967,19 @@ class TransactionalRecordSeeder extends Seeder
     ): void {
         if (Schema::hasColumn($table, $preferredColumn)) {
             $row[$preferredColumn] = $value;
+
             return;
         }
 
         if (Schema::hasColumn($table, 'product_name')) {
             $row['product_name'] = $value;
+
             return;
         }
 
         if (Schema::hasColumn($table, 'custom_product_name')) {
             $row['custom_product_name'] = $value;
+
             return;
         }
 
@@ -981,8 +1001,17 @@ class TransactionalRecordSeeder extends Seeder
 
     protected function insertSafe(string $table, array $row): void
     {
-        if (!Schema::hasTable($table)) {
+        if (! Schema::hasTable($table)) {
             return;
+        }
+
+        if (
+            Schema::hasColumn($table, 'fiscal_year_id') &&
+            empty($row['fiscal_year_id']) &&
+            ($dateColumn = $this->businessDateColumnsByTable[$table] ?? null) &&
+            ! empty($row[$dateColumn])
+        ) {
+            $row['fiscal_year_id'] = $this->fiscalYearIdForDate((string) $row[$dateColumn]);
         }
 
         $columns = Schema::getColumnListing($table);
@@ -993,9 +1022,22 @@ class TransactionalRecordSeeder extends Seeder
             ARRAY_FILTER_USE_KEY
         );
 
-        if (!empty($safeRow)) {
+        if (! empty($safeRow)) {
             DB::table($table)->insert($safeRow);
         }
+    }
+
+    protected function fiscalYearIdForDate(string $date): ?string
+    {
+        if (array_key_exists($date, $this->fiscalYearIdByDate)) {
+            return $this->fiscalYearIdByDate[$date];
+        }
+
+        return $this->fiscalYearIdByDate[$date] = DB::table('fiscal_years')
+            ->where('active', true)
+            ->whereDate('start_date', '<=', $date)
+            ->whereDate('end_date', '>=', $date)
+            ->value('id');
     }
 
     protected function amount(int $index): float
@@ -1201,6 +1243,7 @@ class TransactionalRecordSeeder extends Seeder
 
             if ($existingId) {
                 $ids[] = $existingId;
+
                 continue;
             }
 
@@ -1212,7 +1255,7 @@ class TransactionalRecordSeeder extends Seeder
                 'contact_type' => $type,
                 'name' => sprintf('Transactional Seed %s %03d', ucfirst($type), $i),
                 'code' => $code,
-                'email' => strtolower($code) . '@example.test',
+                'email' => strtolower($code).'@example.test',
                 'accept_purchase' => $type === 'supplier',
                 'active' => true,
                 'is_system_generated' => true,

@@ -133,14 +133,18 @@ class AiAssistantApiTest extends TestCase
         $this->assertEquals(1, AiUsageLog::where('user_id', $user->id)->where('status', 'error')->count());
     }
 
-    public function test_tenant_cannot_view_centrally_managed_ai_provider_settings(): void
+    public function test_tenant_can_view_read_only_centrally_managed_ai_provider_settings(): void
     {
         $user = $this->userWith(['ai.settings.view']);
 
         $this->actingAs($user)
             ->getJson('/api/ai/settings')
-            ->assertForbidden()
-            ->assertJsonPath('code', 'AI_SETTINGS_CENTRALLY_MANAGED');
+            ->assertOk()
+            ->assertJsonPath('central_managed', true)
+            ->assertJsonPath('editable', false)
+            ->assertJsonPath('settings.ai_provider', 'openai')
+            ->assertJsonPath('settings.ai_copilot_engine', 'neuron')
+            ->assertJsonMissingPath('settings.ai_api_key');
     }
 
     public function test_settings_update_requires_manage_permission(): void

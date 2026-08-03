@@ -8,18 +8,21 @@ use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 abstract class BaseDraftAction
 {
     protected string $actionType;
+
     protected string $module;
+
     protected string $title;
+
     protected string $riskLevel = 'medium';
+
     protected array $riskReasons = ['Requires human approval before execution.'];
 
-    public function __construct(protected BranchScopeService $scope)
-    {
-    }
+    public function __construct(protected BranchScopeService $scope) {}
 
     public function propose(Request $request, AiConversation $conversation, string $message, array $contextPayload = []): AiPendingAction
     {
@@ -45,6 +48,14 @@ abstract class BaseDraftAction
             'risk_level' => $this->riskLevel,
             'risk_reasons' => $this->riskReasons,
             'status' => 'pending',
+            'idempotency_key' => hash('sha256', implode('|', [
+                $conversation->id,
+                $request->user()?->id,
+                $this->actionType,
+                $payload['target_id'] ?? '',
+                Str::squish(mb_strtolower($message)),
+            ])),
+            'expires_at' => now()->addMinutes((int) config('ai.copilot.action_ttl_minutes', 30)),
             'metadata' => array_merge([
                 'missing_fields' => $missing,
                 'requires_approval' => true,
@@ -67,7 +78,7 @@ abstract class BaseDraftAction
     {
         $verb = strtoupper(trim(str_replace(['create_', 'update_', '_draft', '_'], ['', '', '', ' '], $this->actionType)));
 
-        return 'CONFIRM ' . $verb;
+        return 'CONFIRM '.$verb;
     }
 
     /**
@@ -114,7 +125,7 @@ abstract class BaseDraftAction
 
     protected function summaryFor(string $message, array $payload): string
     {
-        return $this->title . ' based on: ' . $message;
+        return $this->title.' based on: '.$message;
     }
 
     protected function extractAmount(string $message): ?float
@@ -128,16 +139,16 @@ abstract class BaseDraftAction
 
     protected function resolveContact(string $message, ?string $type = null): array
     {
-        if (!Schema::hasTable('contacts')) {
+        if (! Schema::hasTable('contacts')) {
             return ['missing' => ['field' => 'contact_id', 'reason' => 'Contacts table is not available.', 'options' => []]];
         }
 
         $name = $this->extractNameAfterFor($message);
-        if (!$name) {
+        if (! $name) {
             return ['missing' => ['field' => 'contact_id', 'reason' => 'No contact name was provided.', 'options' => []]];
         }
 
-        $query = DB::table('contacts')->where('name', 'like', '%' . $name . '%');
+        $query = DB::table('contacts')->where('name', 'like', '%'.$name.'%');
         if ($type && Schema::hasColumn('contacts', 'contact_type')) {
             $query->where('contact_type', $type);
         }
@@ -156,7 +167,7 @@ abstract class BaseDraftAction
         return [
             'missing' => [
                 'field' => 'contact_id',
-                'reason' => count($matches) ? 'Multiple contacts matched ' . $name . '.' : 'No contact matched ' . $name . '.',
+                'reason' => count($matches) ? 'Multiple contacts matched '.$name.'.' : 'No contact matched '.$name.'.',
                 'options' => $matches,
             ],
         ];

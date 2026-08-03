@@ -21,10 +21,14 @@ class AiCandidateGenerator
             foreach ($this->semantic->search($query['original'], [
                 'limit' => 30,
                 'branch_id' => $filters['branch_id'] ?? $user?->branch_id,
+                'fiscal_year_id' => $filters['fiscal_year_id'] ?? null,
                 'model' => $filters['embedding_model'] ?? null,
                 'min_score' => 0.05,
             ]) as $hit) {
-                $candidate = $this->fromVectorHit($hit);
+                $candidate = $this->fromVectorHit($hit, $user, $filters);
+                if (! $candidate) {
+                    continue;
+                }
                 $key = $candidate['source_type'].':'.$candidate['source_id'];
                 if (isset($candidates[$key])) {
                     $candidates[$key]['vector_score'] = max($candidates[$key]['vector_score'], (float) $hit['score']);
@@ -135,11 +139,18 @@ class AiCandidateGenerator
         ];
     }
 
-    private function fromVectorHit(array $hit): array
+    private function fromVectorHit(array $hit, ?User $user, array $filters): ?array
     {
         if ($hit['source_type'] === 'knowledge') {
             $chunk = AiKnowledgeChunk::query()->find($hit['source_id']);
             if ($chunk) {
+                $branchId = $filters['branch_id'] ?? $user?->branch_id;
+                $fiscalYearId = $filters['fiscal_year_id'] ?? null;
+                if (! $this->permitted($user, $chunk->permission)
+                    || ($branchId && $chunk->branch_id && (string) $chunk->branch_id !== (string) $branchId)
+                    || ($fiscalYearId && $chunk->fiscal_year_id && (string) $chunk->fiscal_year_id !== (string) $fiscalYearId)) {
+                    return null;
+                }
                 $candidate = $this->fromChunk($chunk, 0, 0);
                 $candidate['vector_score'] = (float) $hit['score'];
 

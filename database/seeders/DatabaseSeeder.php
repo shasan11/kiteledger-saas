@@ -41,6 +41,7 @@ class DatabaseSeeder extends Seeder
             MasterProductDataSeeder::class,
             WalkInCustomerSeeder::class,
             FullPermissionUserSeeder::class,
+            DocumentUploadPermissionSeeder::class,
             AiPermissionSeeder::class,
         ]);
     }

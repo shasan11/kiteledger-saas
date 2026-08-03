@@ -50,6 +50,7 @@ use App\Models\SalesReturn;
 use App\Models\SupplierPayment;
 use App\Models\SupplierPaymentLine;
 use App\Models\WarehouseTransfer;
+use App\Observers\AiKnowledgeObserver;
 use App\Observers\AssignsDefaultBranchObserver;
 use App\Observers\BankAccountObserver;
 use App\Observers\BranchObserver;
@@ -326,6 +327,23 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(ProductObserver::class);
         Lead::observe(LeadObserver::class);
         Deal::observe(DealObserver::class);
+
+        foreach ([
+            Invoice::class,
+            Quotation::class,
+            SalesOrder::class,
+            PurchaseBill::class,
+            PurchaseOrder::class,
+            Expense::class,
+            CustomerPayment::class,
+            SupplierPayment::class,
+            JournalVoucher::class,
+            Contact::class,
+            Product::class,
+            PosSale::class,
+        ] as $aiSearchableModel) {
+            $aiSearchableModel::observe(AiKnowledgeObserver::class);
+        }
 
         PosShift::observe(PosShiftObserver::class);
         PosSale::observe(PosSaleObserver::class);

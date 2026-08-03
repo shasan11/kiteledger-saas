@@ -12,6 +12,7 @@ class CentralDatabaseSeeder extends Seeder
             CentralRolesAndPermissionsSeeder::class,
             CentralAdminSeeder::class,
             PlatformSettingsSeeder::class,
+            AiSettingsSeeder::class,
             PlansAndFeaturesSeeder::class,
             PaymentGatewaySeeder::class,
             DefaultDataTemplateSeeder::class,

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import { Head, usePage, router } from '@inertiajs/react';
 import {
     Alert,
     Button,
     Card,
+    Drawer,
     Empty,
     Grid,
     Input,
@@ -27,6 +28,8 @@ import {
     SettingOutlined,
     CheckCircleOutlined,
     ExclamationCircleOutlined,
+    HistoryOutlined,
+    PlusOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 import AiMessageRenderer from '@/Components/AI/AiMessageRenderer';
@@ -37,14 +40,14 @@ import AiSourceCards from '@/Components/AI/AiSourceCards';
 const { Title, Paragraph, Text } = Typography;
 
 const SUGGESTED_PROMPTS = [
-    'How do I create an invoice?',
-    'Where can I configure cheque format?',
-    'What does trial balance show?',
-    'Show invoices related to VAT.',
-    'Explain customer ABC Trading.',
-    'What reports are available for receivables?',
-    'How do I configure a payment gateway?',
-    'Explain inventory value.',
+    'Give me a financial overview for this fiscal year.',
+    'Which customer receivables need attention?',
+    'Summarize supplier payables due soon.',
+    'Show the largest expenses this month.',
+    'Explain current inventory value and low stock.',
+    'Find invoice INV-0001.',
+    'Which report should I use for trial balance?',
+    'How do I create and send an invoice?',
 ];
 
 function hasAnyPermission(perms = [], required = []) {
@@ -54,7 +57,7 @@ function hasAnyPermission(perms = [], required = []) {
 
 function HeaderTitle({ token }) {
     return (
-        <Space size={10} align="center">
+        <Space size={10} align="center" style={{ minWidth: 0 }}>
             <div
                 style={{
                     width: 32,
@@ -71,11 +74,11 @@ function HeaderTitle({ token }) {
                 <RobotOutlined />
             </div>
 
-            <div>
+            <div style={{ minWidth: 0 }}>
                 <Title level={5} style={{ margin: 0, lineHeight: 1.1 }}>
-                    AI Assistant
+                    KiteLedger Copilot
                 </Title>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 12 }} ellipsis>
                     Ask about your business data or how to use KiteLedger.
                 </Text>
             </div>
@@ -115,13 +118,13 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
     );
 }
 
-function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, onApprove, onReject }) {
+function MessageBubble({ message, token, isMobile, onCopy, onFollowup, actionStates = {}, onApprove, onReject }) {
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
     const isSystem = message.role === 'system';
 
     const bubbleStyle = {
-        maxWidth: isUser ? 'min(680px, 82%)' : 'min(860px, 94%)',
+        maxWidth: isMobile ? '100%' : isUser ? 'min(680px, 82%)' : 'min(860px, 94%)',
         borderRadius: isUser
             ? `${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px ${token.borderRadiusXL}px`
             : `${token.borderRadiusXL}px ${token.borderRadiusXL}px ${token.borderRadiusXL}px 4px`,
@@ -152,7 +155,7 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
         <List.Item
             style={{
                 border: 'none',
-                padding: '8px 0',
+                padding: isMobile ? '6px 0' : '8px 0',
                 display: 'flex',
                 justifyContent: isUser ? 'flex-end' : 'flex-start',
             }}
@@ -165,7 +168,7 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
                             color={isAssistant ? 'blue' : 'warning'}
                             style={{ marginInlineEnd: 0 }}
                         >
-                            {isAssistant ? 'Assistant' : 'System'}
+                            {isAssistant ? 'Copilot' : 'System'}
                         </Tag>
                     </Space>
                 )}
@@ -196,6 +199,7 @@ function MessageBubble({ message, token, onCopy, onFollowup, actionStates = {}, 
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             gap: 8,
+                            flexWrap: 'wrap',
                         }}
                     >
                         <Space size={4} wrap>
@@ -247,6 +251,9 @@ export default function Assistant() {
     const [conversationId, setConversationId] = useState(null);
     const [error, setError] = useState(null);
     const [actionStates, setActionStates] = useState({});
+    const [conversations, setConversations] = useState([]);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
@@ -255,6 +262,18 @@ export default function Assistant() {
         if (!health) return false;
         return health.ok && health.ai_enabled && health.provider_configured;
     }, [health]);
+
+    const refreshConversations = useCallback(async () => {
+        if (!canUseAi) return;
+
+        try {
+            const response = await axios.get('/api/ai/conversations');
+            const items = response.data?.conversations?.data || response.data?.conversations || [];
+            setConversations(Array.isArray(items) ? items : []);
+        } catch {
+            // Chat remains usable when history cannot be loaded.
+        }
+    }, [canUseAi]);
 
     const styles = useMemo(() => {
         return {
@@ -265,26 +284,33 @@ export default function Assistant() {
             },
             shell: {
                 display: 'grid',
-                 gap: 16,
+                gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : '280px minmax(0, 1fr)',
+                gap: 16,
                 alignItems: 'stretch',
+                width: '100%',
+                maxWidth: 1320,
+                margin: '0 auto',
             },
             sideCard: {
                 height: '100%',
                 borderRadius: token.borderRadiusLG,
                 border: `1px solid ${token.colorBorderSecondary}`,
                 boxShadow: token.boxShadowTertiary,
+                position: 'sticky',
+                top: 16,
             },
             mainCard: {
                 borderRadius: token.borderRadiusLG,
                 border: `1px solid ${token.colorBorderSecondary}`,
                 boxShadow: token.boxShadowTertiary,
                 overflow: 'hidden',
+                minWidth: 0,
             },
             chatArea: {
-                minHeight: isMobile ? 420 : 520,
-                maxHeight: isMobile ? 'calc(100vh - 330px)' : 'calc(100vh - 260px)',
+                minHeight: isMobile ? 440 : 540,
+                maxHeight: isMobile ? 'calc(100vh - 300px)' : 'calc(100vh - 235px)',
                 overflowY: 'auto',
-                padding: isMobile ? 12 : 18,
+                padding: isMobile ? 12 : 20,
                 background: `linear-gradient(180deg, ${token.colorBgLayout} 0%, ${token.colorFillQuaternary} 100%)`,
             },
             composer: {
@@ -310,6 +336,25 @@ export default function Assistant() {
                 borderRadius: token.borderRadiusLG,
                 background: token.colorFillQuaternary,
                 border: `1px solid ${token.colorBorderSecondary}`,
+            },
+            toolbar: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                flexWrap: 'wrap',
+                width: '100%',
+            },
+            toolbarActions: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isMobile ? 'stretch' : 'flex-end',
+                flexWrap: 'wrap',
+                gap: 8,
+                width: isMobile ? '100%' : 'auto',
+            },
+            compactButton: {
+                flex: isMobile ? '1 1 calc(50% - 8px)' : '0 0 auto',
             },
         };
     }, [token, isMobile]);
@@ -353,6 +398,10 @@ export default function Assistant() {
             cancelled = true;
         };
     }, [canUseAi]);
+
+    useEffect(() => {
+        refreshConversations();
+    }, [refreshConversations]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -401,6 +450,7 @@ export default function Assistant() {
             const reply = res.data?.message?.content || '(no reply)';
 
             setConversationId(res.data?.conversation_id || conversationId);
+            refreshConversations();
 
             setMessages((prev) => [
                 ...prev,
@@ -442,7 +492,7 @@ export default function Assistant() {
                 }
 
                 if (code === 'AI_PERMISSION_DENIED' && data?.required_permission) {
-                    msg = data.message || 'You do not have permission to use AI Assistant.';
+                    msg = data.message || 'You do not have permission to use KiteLedger Copilot.';
                 }
 
                 setError({ message: msg, code });
@@ -476,6 +526,40 @@ export default function Assistant() {
         setConversationId(null);
         setError(null);
         setActionStates({});
+    };
+
+    const openConversation = async (id) => {
+        setHistoryLoading(true);
+        try {
+            const response = await axios.get(`/api/ai/conversations/${encodeURIComponent(id)}`);
+            const stored = response.data?.messages?.data || response.data?.messages || [];
+            setMessages(
+                stored.map((item, index) => ({
+                    ...item,
+                    id: `${id}-${index}-${item.created_at || ''}`,
+                }))
+            );
+            setConversationId(id);
+            setHistoryOpen(false);
+            setError(null);
+            setActionStates({});
+        } catch (err) {
+            antMessage.error(err.response?.data?.message || 'Could not open that conversation.');
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const deleteConversation = async (event, id) => {
+        event.stopPropagation();
+        try {
+            await axios.delete(`/api/ai/conversations/${encodeURIComponent(id)}`);
+            if (conversationId === id) clearConversation();
+            await refreshConversations();
+            antMessage.success('Conversation deleted.');
+        } catch (err) {
+            antMessage.error(err.response?.data?.message || 'Could not delete that conversation.');
+        }
     };
 
     const patchActionInMessages = (actionId, patch) => {
@@ -546,13 +630,13 @@ export default function Assistant() {
     if (!canUseAi) {
         return (
             <AuthenticatedLayout header={<HeaderTitle token={token} />}>
-                <Head title="AI Assistant" />
+                <Head title="KiteLedger Copilot" />
 
                 <div style={styles.page}>
                     <Alert
                         type="warning"
                         showIcon
-                        message="You do not have permission to use AI Assistant."
+                        message="You do not have permission to use KiteLedger Copilot."
                         description="Please contact your administrator if you need access."
                     />
                 </div>
@@ -562,11 +646,15 @@ export default function Assistant() {
 
     return (
         <AuthenticatedLayout header={<HeaderTitle token={token} />}>
-            <Head title="AI Assistant" />
+            <Head title="KiteLedger Copilot" />
 
             <div style={styles.page}>
                 {(healthError || error || (!healthLoading && health && !aiReady)) && (
-                    <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 12 }}>
+                    <Space
+                        direction="vertical"
+                        size={10}
+                        style={{ width: '100%', maxWidth: 1320, margin: '0 auto 12px' }}
+                    >
                         {healthError && (
                             <Alert
                                 type="error"
@@ -580,7 +668,7 @@ export default function Assistant() {
                             <Alert
                                 type="warning"
                                 showIcon
-                                message="AI Assistant is disabled by the central administrator."
+                            message="KiteLedger Copilot is disabled by the central administrator."
                                 description="Contact the platform administrator to enable AI for the application."
                             />
                         )}
@@ -607,26 +695,151 @@ export default function Assistant() {
                 )}
 
                 <div style={styles.shell}>
-                     
+                    {!isMobile && (
+                        <Card
+                            size="small"
+                            style={styles.sideCard}
+                            title={<HeaderTitle token={token} />}
+                            styles={{ body: { padding: 14 } }}
+                        >
+                            <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                                <div style={styles.statBox}>
+                                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                        <div style={styles.toolbar}>
+                                            <Text strong>Status</Text>
+                                            <StatusBadge
+                                                health={health}
+                                                healthLoading={healthLoading}
+                                                healthError={healthError}
+                                                aiReady={aiReady}
+                                            />
+                                        </div>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            {aiReady
+                                                ? 'Ready to answer with your allowed business data.'
+                                                : health?.provider_configured === false
+                                                  ? 'Waiting for central AI provider configuration.'
+                                                  : 'Checking configuration and permissions.'}
+                                        </Text>
+                                    </Space>
+                                </div>
+
+                                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                    <Text strong>Useful prompts</Text>
+                                    {SUGGESTED_PROMPTS.slice(0, 5).map((prompt) => (
+                                        <Button
+                                            key={prompt}
+                                            size="small"
+                                            style={styles.promptButton}
+                                            onClick={() => send(prompt)}
+                                            disabled={!aiReady || sending}
+                                        >
+                                            {prompt}
+                                        </Button>
+                                    ))}
+                                </Space>
+
+                                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                    <div style={styles.toolbar}>
+                                        <Text strong>Recent chats</Text>
+                                        <Button
+                                            size="small"
+                                            type="link"
+                                            onClick={() => setHistoryOpen(true)}
+                                            style={{ paddingInline: 0 }}
+                                        >
+                                            View all
+                                        </Button>
+                                    </div>
+                                    {conversations.length ? (
+                                        <List
+                                            size="small"
+                                            dataSource={conversations.slice(0, 4)}
+                                            renderItem={(item) => (
+                                                <List.Item
+                                                    onClick={() => openConversation(item.id)}
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        paddingInline: 0,
+                                                    }}
+                                                >
+                                                    <List.Item.Meta
+                                                        title={
+                                                            <Text ellipsis style={{ maxWidth: 220 }}>
+                                                                {item.title || 'Untitled conversation'}
+                                                            </Text>
+                                                        }
+                                                        description={
+                                                            item.updated_at
+                                                                ? new Date(item.updated_at).toLocaleString()
+                                                                : item.module
+                                                        }
+                                                    />
+                                                </List.Item>
+                                            )}
+                                        />
+                                    ) : (
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            Your recent conversations will appear here.
+                                        </Text>
+                                    )}
+                                </Space>
+                            </Space>
+                        </Card>
+                    )}
 
                     <Card
                         size="small"
                         style={styles.mainCard}
-                        styles={{ body: { padding: 0 } }}
+                        styles={{
+                            body: { padding: 0 },
+                            header: { flexWrap: 'wrap', gap: 8, alignItems: 'center' },
+                            title: { minWidth: 0, flex: '1 1 260px' },
+                            extra: { marginInlineStart: 0 },
+                        }}
                         title={
-                            <Space size={8} wrap>
-                                <RobotOutlined style={{ color: token.colorPrimary }} />
-                                <Text strong>Conversation</Text>
-                                <Tag bordered={false}>{messages.length} messages</Tag>
-                            </Space>
+                            <div style={styles.toolbar}>
+                                <Space size={8} wrap>
+                                    <RobotOutlined style={{ color: token.colorPrimary }} />
+                                    <Text strong>Conversation</Text>
+                                    <Tag bordered={false}>{messages.length} messages</Tag>
+                                </Space>
+                                {isMobile && (
+                                    <StatusBadge
+                                        health={health}
+                                        healthLoading={healthLoading}
+                                        healthError={healthError}
+                                        aiReady={aiReady}
+                                    />
+                                )}
+                            </div>
                         }
                         extra={
-                            <Space>
+                            <div style={styles.toolbarActions}>
+                                <Button
+                                    size="small"
+                                    icon={<HistoryOutlined />}
+                                    onClick={() => setHistoryOpen(true)}
+                                    style={styles.compactButton}
+                                >
+                                    History
+                                </Button>
+
+                                <Button
+                                    size="small"
+                                    icon={<PlusOutlined />}
+                                    onClick={clearConversation}
+                                    style={styles.compactButton}
+                                >
+                                    New
+                                </Button>
+
                                 <Button
                                     size="small"
                                     icon={<ReloadOutlined />}
                                     onClick={retry}
                                     disabled={sending || !messages.length}
+                                    style={styles.compactButton}
                                 >
                                     Retry
                                 </Button>
@@ -637,10 +850,11 @@ export default function Assistant() {
                                     icon={<DeleteOutlined />}
                                     onClick={clearConversation}
                                     disabled={!messages.length}
+                                    style={styles.compactButton}
                                 >
                                     Clear
                                 </Button>
-                            </Space>
+                            </div>
                         }
                     >
                         <div ref={scrollRef} style={styles.chatArea}>
@@ -677,12 +891,17 @@ export default function Assistant() {
                                         />
 
                                         <Space wrap size={[8, 8]} style={{ justifyContent: 'center' }}>
-                                            {SUGGESTED_PROMPTS.slice(0, 6).map((prompt) => (
+                                            {SUGGESTED_PROMPTS.slice(0, isMobile ? 4 : 6).map((prompt) => (
                                                 <Button
                                                     key={prompt}
                                                     size="small"
                                                     onClick={() => send(prompt)}
                                                     disabled={!aiReady || sending}
+                                                    style={{
+                                                        whiteSpace: 'normal',
+                                                        height: 'auto',
+                                                        minHeight: 30,
+                                                    }}
                                                 >
                                                     {prompt}
                                                 </Button>
@@ -702,6 +921,7 @@ export default function Assistant() {
                                             key={item.id}
                                             message={item}
                                             token={token}
+                                            isMobile={isMobile}
                                             onCopy={copy}
                                             onFollowup={send}
                                             actionStates={actionStates}
@@ -730,7 +950,7 @@ export default function Assistant() {
                                     placeholder={
                                         aiReady
                                             ? 'Ask about invoices, reports, customers, inventory, settings, or how to use KiteLedger...'
-                                            : 'AI assistant is not ready.'
+                                            : 'KiteLedger Copilot is not ready.'
                                     }
                                     autoSize={{ minRows: 1, maxRows: 5 }}
                                     disabled={!aiReady || sending}
@@ -749,6 +969,7 @@ export default function Assistant() {
                                 <Space.Compact
                                     style={{
                                         width: isMobile ? '100%' : 'auto',
+                                        minWidth: isMobile ? 0 : 190,
                                     }}
                                 >
                                     {sending ? (
@@ -810,6 +1031,39 @@ export default function Assistant() {
                         </div>
                     </Card>
                 </div>
+                <Drawer
+                    title="Conversation history"
+                    open={historyOpen}
+                    onClose={() => setHistoryOpen(false)}
+                    width={isMobile ? '100%' : 420}
+                >
+                    <List
+                        loading={historyLoading}
+                        dataSource={conversations}
+                        locale={{ emptyText: 'No saved conversations yet.' }}
+                        renderItem={(item) => (
+                            <List.Item
+                                onClick={() => openConversation(item.id)}
+                                style={{ cursor: 'pointer' }}
+                                actions={[
+                                    <Button
+                                        key="delete"
+                                        type="text"
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        aria-label="Delete conversation"
+                                        onClick={(event) => deleteConversation(event, item.id)}
+                                    />,
+                                ]}
+                            >
+                                <List.Item.Meta
+                                    title={item.title || 'Untitled conversation'}
+                                    description={item.updated_at ? new Date(item.updated_at).toLocaleString() : item.module}
+                                />
+                            </List.Item>
+                        )}
+                    />
+                </Drawer>
             </div>
         </AuthenticatedLayout>
     );

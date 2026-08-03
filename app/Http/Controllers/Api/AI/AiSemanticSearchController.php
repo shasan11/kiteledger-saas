@@ -50,6 +50,7 @@ class AiSemanticSearchController extends Controller
             $results = $this->search->search($data['query'], [
                 'limit' => $data['limit'] ?? 5,
                 'branch_id' => $user?->branch_id,
+                'fiscal_year_id' => $request->header('X-Fiscal-Year-Id'),
             ]);
         } catch (AiProviderException $e) {
             return response()->json(['ok' => false, 'code' => $e->getErrorCode(), 'message' => $e->getMessage()], 422);

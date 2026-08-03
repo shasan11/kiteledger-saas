@@ -15,6 +15,14 @@ class AiAssistantController extends AiAgentChatController
 {
     public function chat(Request $request): JsonResponse
     {
+        if (! $this->settings->enabled() || ! $this->settings->copilotEnabled()) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'AI_DISABLED',
+                'message' => 'KiteLedger Copilot is disabled for this deployment.',
+            ], 503);
+        }
+
         $data = $request->validate([
             'message' => 'required|string|max:4000',
             'conversation_id' => 'nullable|string',
@@ -30,7 +38,7 @@ class AiAssistantController extends AiAgentChatController
             return response()->json([
                 'ok' => false,
                 'code' => 'AI_REPORTS_ONLY',
-                'message' => 'AI Assistant is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full assistant in AI Settings.',
+                'message' => 'KiteLedger Copilot is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full Copilot in AI Settings.',
             ], 422);
         }
 
@@ -51,6 +59,8 @@ class AiAssistantController extends AiAgentChatController
         return response()->json(array_filter([
             'ok' => true,
             'ai_enabled' => $this->settings->enabled(),
+            'copilot_enabled' => $this->settings->copilotEnabled(),
+            'ready' => $this->settings->enabled() && $this->settings->copilotEnabled() && ($this->settings->hasApiKey() || $this->settings->provider() === 'ollama'),
             'provider_configured' => $this->settings->hasApiKey() || $this->settings->provider() === 'ollama',
             'provider' => $canSeeProvider ? $this->settings->provider() : null,
             'model' => $canSeeProvider ? $this->settings->model() : null,
@@ -60,6 +70,7 @@ class AiAssistantController extends AiAgentChatController
             'scope' => $this->settings->assistantMode(),
             'assistant_mode' => $this->settings->assistantMode(),
             'write_actions_enabled' => $this->settings->writeActionsEnabled(),
+            'action_execution_enabled' => $this->settings->actionExecutionEnabled(),
             'semantic_search_available' => $this->settings->enabled() && $this->settings->supportsEmbeddings(),
             'permissions' => $this->permissions->summary($user),
         ], fn ($v) => $v !== null));

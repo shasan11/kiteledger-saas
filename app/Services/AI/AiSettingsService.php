@@ -23,15 +23,26 @@ class AiSettingsService
         'ai_context_max_rows' => 15,
         'ai_context_max_chars' => 5000,
         'ai_fast_mode' => true,
-        // Compatibility defaults for the unregistered add-on candidate. These
-        // are intentionally excluded from the core settings API and UI.
+        // Platform-managed Copilot defaults. Tenant users cannot edit these.
         'ai_default_financial_date_scope' => 'current_fiscal_year',
         'ai_allow_developer_details' => false,
         'ai_financial_assistant_enabled' => false,
         'ai_document_assistant_enabled' => false,
         'ai_write_actions_enabled' => false,
+        'ai_action_execution_enabled' => false,
         'ai_fallback_provider' => '',
-        'ai_assistant_mode' => 'reports_only',
+        'ai_assistant_mode' => 'full',
+        'ai_copilot_enabled' => true,
+        'ai_copilot_engine' => 'neuron',
+        'ai_copilot_read_only' => false,
+        'ai_embedding_provider' => 'openai',
+        'ai_embedding_model' => 'text-embedding-3-small',
+        'ai_embedding_dimensions' => null,
+        'ai_rag_top_k' => 8,
+        'ai_rag_candidate_pool' => 800,
+        'ai_rag_max_candidate_pool' => 2000,
+        'ai_rag_min_vector_score' => 0.05,
+        'ai_rag_context_max_chars' => 12000,
     ];
 
     public function __construct(protected PlatformSettingsService $platform) {}
@@ -181,7 +192,34 @@ class AiSettingsService
 
     public function writeActionsEnabled(): bool
     {
-        return filter_var($this->value('ai_write_actions_enabled', self::DEFAULTS['ai_write_actions_enabled']), FILTER_VALIDATE_BOOL);
+        if ($this->copilotReadOnly()) {
+            return false;
+        }
+
+        return filter_var($this->value('ai_write_actions_enabled', config('ai.copilot.write_actions_enabled', self::DEFAULTS['ai_write_actions_enabled'])), FILTER_VALIDATE_BOOL);
+    }
+
+    public function actionExecutionEnabled(): bool
+    {
+        return ! $this->copilotReadOnly()
+            && filter_var($this->value('ai_action_execution_enabled', config('ai.copilot.action_execution_enabled', false)), FILTER_VALIDATE_BOOL);
+    }
+
+    public function incrementalIndexingEnabled(): bool
+    {
+        return filter_var(config('ai.copilot.incremental_indexing_enabled', true), FILTER_VALIDATE_BOOL);
+    }
+
+    public function ragEnabled(): bool
+    {
+        return $this->copilotEnabled()
+            && filter_var($this->value('ai_rag_enabled', config('ai.copilot.rag_enabled', true)), FILTER_VALIDATE_BOOL);
+    }
+
+    public function financialToolsEnabled(): bool
+    {
+        return $this->copilotEnabled()
+            && filter_var($this->value('ai_financial_tools_enabled', config('ai.copilot.financial_tools_enabled', true)), FILTER_VALIDATE_BOOL);
     }
 
     public function assistantMode(): string
@@ -196,6 +234,82 @@ class AiSettingsService
         return $this->assistantMode() === 'reports_only';
     }
 
+    public function copilotEnabled(): bool
+    {
+        return filter_var($this->value('ai_copilot_enabled', config('ai.copilot.enabled', true)), FILTER_VALIDATE_BOOL);
+    }
+
+    public function copilotEngine(): string
+    {
+        $engine = strtolower(trim((string) $this->value('ai_copilot_engine', config('ai.copilot.engine', 'neuron'))));
+
+        return in_array($engine, ['legacy', 'neuron'], true) ? $engine : 'neuron';
+    }
+
+    public function copilotReadOnly(): bool
+    {
+        return filter_var($this->value('ai_copilot_read_only', config('ai.copilot.read_only', true)), FILTER_VALIDATE_BOOL);
+    }
+
+    public function embeddingProvider(): string
+    {
+        return strtolower(trim((string) $this->value('ai_embedding_provider', config('ai.embedding.provider', $this->provider())))) ?: $this->provider();
+    }
+
+    public function embeddingDimensions(): ?int
+    {
+        $value = $this->value('ai_embedding_dimensions', config('ai.embedding.dimensions'));
+        $dimensions = $value === null || $value === '' ? null : (int) $value;
+
+        return $dimensions && $dimensions > 0 ? min(65535, $dimensions) : null;
+    }
+
+    public function embeddingApiKey(): ?string
+    {
+        if ($this->embeddingProvider() === $this->provider()) {
+            return $this->apiKey();
+        }
+
+        $key = config('ai.providers.'.$this->embeddingProvider().'.api_key')
+            ?: config('prism.providers.'.$this->embeddingProvider().'.api_key');
+
+        return is_string($key) && trim($key) !== '' ? $key : null;
+    }
+
+    public function embeddingBaseUrl(): string
+    {
+        if ($this->embeddingProvider() === $this->provider()) {
+            return $this->baseUrl();
+        }
+
+        return rtrim((string) (config('ai.providers.'.$this->embeddingProvider().'.base_url') ?: $this->defaultBaseUrlFor($this->embeddingProvider())), '/');
+    }
+
+    public function ragTopK(): int
+    {
+        return max(1, min(50, (int) $this->value('ai_rag_top_k', config('ai.rag.top_k', 8))));
+    }
+
+    public function ragCandidatePool(): int
+    {
+        return max(50, min($this->ragMaxCandidatePool(), (int) $this->value('ai_rag_candidate_pool', config('ai.rag.candidate_pool', 800))));
+    }
+
+    public function ragMaxCandidatePool(): int
+    {
+        return max(100, min(5000, (int) $this->value('ai_rag_max_candidate_pool', config('ai.rag.max_candidate_pool', 2000))));
+    }
+
+    public function ragMinimumVectorScore(): float
+    {
+        return max(-1.0, min(1.0, (float) $this->value('ai_rag_min_vector_score', config('ai.rag.min_vector_score', 0.05))));
+    }
+
+    public function ragContextMaxChars(): int
+    {
+        return max(1000, min(100000, (int) $this->value('ai_rag_context_max_chars', config('ai.rag.context_max_chars', 12000))));
+    }
+
     public function setApiKey(string $key): void
     {
         $this->platform->set(self::GROUP, self::GROUP.'.ai_api_key', $key, 'string', true);
@@ -207,10 +321,10 @@ class AiSettingsService
             if ($value === null) {
                 continue;
             }
+            $type = is_bool($value) ? 'boolean' : (is_int($value) ? 'integer' : (is_float($value) ? 'decimal' : 'string'));
             if (is_bool($value)) {
                 $value = $value ? '1' : '0';
             }
-            $type = is_bool($value) ? 'boolean' : (is_int($value) ? 'integer' : (is_float($value) ? 'decimal' : 'string'));
             $this->platform->set(self::GROUP, self::GROUP.'.'.$key, $value, $type);
         }
     }
@@ -226,6 +340,10 @@ class AiSettingsService
             'stream_enabled' => $this->streamEnabled(),
             'cache_enabled' => $this->cacheEnabled(),
             'fast_mode' => $this->fastMode(),
+            'copilot_enabled' => $this->copilotEnabled(),
+            'copilot_engine' => $this->copilotEngine(),
+            'embedding_provider' => $this->embeddingProvider(),
+            'embedding_model' => $this->embeddingModel(),
             'runtime_timeout_seconds' => $this->timeoutSeconds(),
             'runtime_connect_timeout_seconds' => $this->connectTimeoutSeconds(),
         ];
@@ -252,13 +370,28 @@ class AiSettingsService
             'ai_context_max_rows' => $this->contextMaxRows(),
             'ai_context_max_chars' => $this->contextMaxChars(),
             'ai_fast_mode' => $this->fastMode(),
+            'ai_copilot_enabled' => $this->copilotEnabled(),
+            'ai_copilot_engine' => $this->copilotEngine(),
+            'ai_copilot_read_only' => $this->copilotReadOnly(),
+            'ai_rag_enabled' => $this->ragEnabled(),
+            'ai_financial_tools_enabled' => $this->financialToolsEnabled(),
+            'ai_write_actions_enabled' => $this->writeActionsEnabled(),
+            'ai_action_execution_enabled' => $this->actionExecutionEnabled(),
+            'ai_embedding_provider' => $this->embeddingProvider(),
+            'ai_embedding_model' => $this->embeddingModel(),
+            'ai_embedding_dimensions' => $this->embeddingDimensions(),
+            'ai_rag_top_k' => $this->ragTopK(),
+            'ai_rag_candidate_pool' => $this->ragCandidatePool(),
+            'ai_rag_max_candidate_pool' => $this->ragMaxCandidatePool(),
+            'ai_rag_min_vector_score' => $this->ragMinimumVectorScore(),
+            'ai_rag_context_max_chars' => $this->ragContextMaxChars(),
         ];
     }
 
-    /** Providers Prism can generate embeddings with (RAG). Groq has none. */
+    /** Providers available through the configured embedding adapter. */
     public function supportsEmbeddings(): bool
     {
-        return in_array($this->provider(), ['openai', 'gemini', 'ollama', 'openrouter'], true);
+        return in_array($this->embeddingProvider(), ['openai', 'gemini', 'ollama', 'openrouter'], true);
     }
 
     public function embeddingModel(): string
@@ -268,13 +401,15 @@ class AiSettingsService
             return $m;
         }
 
-        return $this->defaultEmbeddingModelFor($this->provider());
+        $configured = (string) config('ai.embedding.model', '');
+
+        return $configured ?: $this->defaultEmbeddingModelFor($this->embeddingProvider());
     }
 
     private function defaultEmbeddingModelFor(string $provider): string
     {
         return match ($provider) {
-            'gemini' => 'text-embedding-004',
+            'gemini' => 'gemini-embedding-001',
             'ollama' => 'nomic-embed-text',
             'openrouter' => 'openai/text-embedding-3-small',
             default => 'text-embedding-3-small', // openai
@@ -285,7 +420,7 @@ class AiSettingsService
     {
         return match ($provider) {
             'groq' => 'llama-3.1-8b-instant',
-            'gemini' => 'gemini-2.0-flash',
+            'gemini' => 'gemini-2.5-flash',
             'ollama' => 'llama3.1:8b',
             'openrouter' => 'google/gemini-2.0-flash-001',
             default => 'gpt-4o-mini',

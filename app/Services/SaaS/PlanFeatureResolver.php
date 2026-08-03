@@ -4,8 +4,8 @@ namespace App\Services\SaaS;
 
 use App\Contracts\SaaS\FeatureResolver;
 use App\Models\Central\Feature;
-use App\Models\Central\Tenant;
 use App\Models\Central\TenantFeatureOverride;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\Cache;
 
 class PlanFeatureResolver implements FeatureResolver
@@ -24,6 +24,10 @@ class PlanFeatureResolver implements FeatureResolver
 
     public function value(Tenant $tenant, string $feature, mixed $default = null): mixed
     {
+        if (function_exists('tenancy') && tenancy()->initialized) {
+            return $this->resolve($tenant, $feature, $default);
+        }
+
         $version = (int) Cache::get('feature-registry-version', 1);
 
         return Cache::remember("tenant-features:{$tenant->id}:{$feature}:{$version}", now()->addMinutes(30), fn () => $this->resolve($tenant, $feature, $default));

@@ -87,7 +87,7 @@ class AiEmbeddingIndexer
     public function index(?string $only = null, ?callable $progress = null): array
     {
         $model = $this->settings->embeddingModel();
-        $provider = $this->settings->provider();
+        $provider = $this->settings->embeddingProvider();
         $stats = ['indexed' => 0, 'skipped' => 0, 'empty' => 0];
 
         foreach ($this->sources() as $type => $cfg) {
@@ -114,6 +114,8 @@ class AiEmbeddingIndexer
                     $existing = AiEmbedding::query()
                         ->where('source_type', $type)
                         ->where('source_id', $sourceId)
+                        ->where('provider', $provider)
+                        ->where('model', $model)
                         ->first();
 
                     if ($existing && $existing->content_hash === $hash && $existing->model === $model) {
@@ -130,15 +132,13 @@ class AiEmbeddingIndexer
                     }
 
                     AiEmbedding::query()->updateOrCreate(
-                        ['source_type' => $type, 'source_id' => $sourceId],
+                        ['source_type' => $type, 'source_id' => $sourceId, 'provider' => $provider, 'model' => $model],
                         [
                             'branch_id' => $cfg['branch'] ? (string) ($row->{$cfg['branch']} ?? '') ?: null : null,
                             'content' => mb_substr($text, 0, 4000),
                             'content_hash' => $hash,
                             'vector' => $vector,
                             'dims' => count($vector),
-                            'provider' => $provider,
-                            'model' => $model,
                         ],
                     );
 

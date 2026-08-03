@@ -27,8 +27,8 @@ class TenancyServiceProvider extends ServiceProvider
             if ($this->app->environment('testing')) {
                 // The legacy ERP suite predates host-based tenancy and exercises
                 // tenant routes against localhost. Production never enters this branch.
-                Route::domain('localhost')->middleware('web')->group(base_path('routes/tenant.php'));
-                Route::domain('localhost')->prefix('api')->middleware('api')->group(base_path('routes/api.php'));
+                Route::middleware('web')->group(base_path('routes/tenant.php'));
+                Route::prefix('api')->middleware('api')->group(base_path('routes/api.php'));
 
                 return;
             }

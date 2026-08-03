@@ -69,6 +69,29 @@ class AiSemanticSearchTest extends TestCase
         $this->assertSame($match->source_id, $results[0]['source_id']);
     }
 
+    public function test_filters_by_embedding_model_and_returns_only_top_k(): void
+    {
+        $expected = $this->embed(['vector' => [1.0, 0.0, 0.0], 'content' => 'expected model']);
+        $this->embed(['vector' => [1.0, 0.0, 0.0], 'model' => 'other-model', 'content' => 'wrong model']);
+        $this->embed(['vector' => [0.8, 0.2, 0.0], 'content' => 'second match']);
+
+        $results = $this->service()->searchByVector([1.0, 0.0, 0.0], ['limit' => 1]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame($expected->source_id, $results[0]['source_id']);
+    }
+
+    public function test_zero_vector_and_corrupted_vector_are_safely_excluded(): void
+    {
+        $this->embed(['vector' => [0.0, 0.0, 0.0], 'content' => 'zero vector']);
+        $match = $this->embed(['vector' => [1.0, 0.0, 0.0], 'content' => 'valid vector']);
+
+        $results = $this->service()->searchByVector([1.0, 0.0, 0.0], ['limit' => 5]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame($match->source_id, $results[0]['source_id']);
+    }
+
     public function test_branch_scope_includes_own_branch_and_global_excludes_others(): void
     {
         $mine = $this->embed(['vector' => [1.0, 0.0, 0.0], 'branch_id' => 'branch-1', 'content' => 'mine']);
