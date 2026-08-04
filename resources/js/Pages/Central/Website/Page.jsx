@@ -4,7 +4,7 @@ import PublicSeo from './PublicSeo';
 import WebsiteLayout from './components/WebsiteLayout';
 import WebsiteFooter from './components/WebsiteFooter';
 import WebsiteHeader from './components/WebsiteHeader';
-import { PageHeader, WebsiteContainer } from './components/WebsitePrimitives';
+import { PageHeader, WebsiteButton, WebsiteContainer, WebsiteImage, WebsiteLink } from './components/WebsitePrimitives';
 import { PricingSection, WebsiteSectionRenderer } from './sections/WebsiteSections';
 
 function FieldError({ id, message }) { return message ? <small id={id} className="kl-field-error" role="alert">{message}</small> : null; }
@@ -25,10 +25,84 @@ function ContactLocations({locations=[],site={}}){
     const cards=locations.length?locations:fallback;
     return <aside className="kl-contact-sidebar" aria-label="Contact details"><div className="kl-contact-sidebar__intro"><span>Contact details</span><h2>Reach the right team faster</h2><p>Use the form for new enquiries, or pick the most relevant contact card for direct details.</p></div><div className="kl-contact-layout">{cards.map(location=><article key={location.id}><h3>{location.name}</h3>{location.address&&<address>{location.address}</address>}{location.email&&<a href={`mailto:${location.email}`}>{location.email}</a>}{location.phone&&<a href={`tel:${location.phone}`}>{location.phone}</a>}{location.business_hours&&<p>{location.business_hours}</p>}{location.map_embed_url&&<iframe title={`${location.name} map`} src={location.map_embed_url} loading="lazy" referrerPolicy="no-referrer-when-downgrade"/>}</article>)}</div></aside>;
 }
-function WebsiteFeatures({features=[]}){return <WebsiteContainer><div className="kl-feature-grid kl-feature-cms">{features.map(feature=><article key={feature.id}>{feature.featured_media&&<img src={feature.featured_media.url} alt={feature.featured_media.alt_text||feature.title} loading="lazy"/>}<h2>{feature.title}</h2><p>{feature.excerpt}</p><div className="kl-prose" dangerouslySetInnerHTML={{__html:feature.body}}/></article>)}</div></WebsiteContainer>}
+const FEATURE_GROUPS = [
+    {
+        id: 'finance',
+        eyebrow: 'Core money workflows',
+        title: 'Finance & reporting',
+        description: 'See the numbers, send invoices, collect payments, and keep every balance connected.',
+        matches: title => /financial|reports|invoicing|online payment|customer payments/.test(title),
+    },
+    {
+        id: 'automation',
+        eyebrow: 'Less manual work',
+        title: 'Documents & controls',
+        description: 'Turn incoming documents into reviewed transactions while business rules stay in force.',
+        matches: title => /document|approval/.test(title),
+    },
+    {
+        id: 'operations',
+        eyebrow: 'Everyday execution',
+        title: 'Sales & operations',
+        description: 'Keep tills, receipts, returns, shifts, and stock-aware selling in one dependable flow.',
+        matches: title => /point of sale|receipts and returns|cashier/.test(title),
+    },
+    {
+        id: 'customers',
+        eyebrow: 'Work that stays connected',
+        title: 'Customers, projects & people',
+        description: 'Carry context from the first enquiry through delivery, follow-up, and team operations.',
+        matches: title => /lead capture|deals|project|hr and leave/.test(title),
+    },
+];
+
+function WebsiteFeatures({features=[]}){
+    if(!features.length) return null;
+    const groupedIds = new Set();
+    const groups = FEATURE_GROUPS.map(group => {
+        const entries = features.filter(feature => group.matches(String(feature.title || '').toLowerCase()));
+        entries.forEach(feature => groupedIds.add(feature.id));
+        return {...group, features: entries};
+    }).filter(group => group.features.length);
+    const remaining = features.filter(feature => !groupedIds.has(feature.id));
+    if(remaining.length) groups.push({id:'more',eyebrow:'One connected platform',title:'More ways to work',description:'Additional capabilities that keep daily work and business data together.',features:remaining});
+
+    return <section className="kl-features-page">
+        <WebsiteContainer>
+            <nav className="kl-feature-index" aria-label="Feature categories">
+                <span className="kl-feature-index__label">Explore by workflow</span>
+                <div>{groups.map((group,index)=><WebsiteLink key={group.id} href={`#feature-${group.id}`}>
+                    <span>{String(index+1).padStart(2,'0')}</span>{group.title}<small>{group.features.length}</small>
+                </WebsiteLink>)}</div>
+            </nav>
+
+            <div className="kl-feature-cms">{groups.map((group,groupIndex)=>{
+                const [lead,...supporting]=group.features;
+                return <section className="kl-feature-group" id={`feature-${group.id}`} key={group.id} aria-labelledby={`feature-${group.id}-title`}>
+                    <header className="kl-feature-group__header">
+                        <div><p className="kl-eyebrow">{String(groupIndex+1).padStart(2,'0')} · {group.eyebrow}</p><h2 id={`feature-${group.id}-title`}>{group.title}</h2></div>
+                        <p>{group.description}</p>
+                    </header>
+
+                    <article className={`kl-feature-lead${groupIndex%2 ? ' kl-feature-lead--reverse' : ''}`}>
+                        {lead.featured_media&&<div className="kl-feature-lead__media"><WebsiteImage src={lead.featured_media.url} alt={lead.featured_media.alt_text||lead.title} width={lead.featured_media.width} height={lead.featured_media.height} fit="contain" position="top"/></div>}
+                        <div className="kl-feature-lead__body"><span>Featured workspace</span><h3>{lead.title}</h3><p>{lead.excerpt}</p><small>{String(groupIndex+1).padStart(2,'0')} / {String(groups.length).padStart(2,'0')}</small></div>
+                    </article>
+
+                    {supporting.length>0&&<div className="kl-feature-supporting">{supporting.map((feature,index)=><article key={feature.id} className="kl-feature-card">
+                        {feature.featured_media&&<div className="kl-feature-card__media"><WebsiteImage src={feature.featured_media.url} alt={feature.featured_media.alt_text||feature.title} width={feature.featured_media.width} height={feature.featured_media.height} fit="contain" position="top"/></div>}
+                        <div className="kl-feature-card__body"><span>{String(index+2).padStart(2,'0')}</span><h3>{feature.title}</h3><p>{feature.excerpt}</p></div>
+                    </article>)}</div>}
+                </section>;
+            })}</div>
+
+            <aside className="kl-feature-cta"><div><p className="kl-eyebrow">One source of truth</p><h2>Ready to connect the way your whole business works?</h2><p>Start with the workflows you need today and add more without rebuilding your data.</p></div><div><WebsiteButton href="/pricing">Start free</WebsiteButton><WebsiteButton href="/contact" variant="secondary">Talk to our team</WebsiteButton></div></aside>
+        </WebsiteContainer>
+    </section>;
+}
 
 export default function Page({page,plans=[],menus={},faqs=[],testimonials=[],announcements=[],navbarNotifications=[],websitePopup,socialLinks=[],content={},site={},locations=[],websiteFeatures=[],isPreview=false}){
     const brand=site['general.platform_name']||'KiteLedger'; const isHome=page?.page_type==='home'; const sections=(page?.sections||[]).filter(section=>isHome||section.section_type!=='hero'); const hasHomeHero=isHome&&sections.some(section=>section.section_type==='hero'&&section.title); const hasPricing=sections.some(section=>section.section_type==='pricing');
-    return <WebsiteLayout menus={menus} site={site} announcements={announcements} navbarNotifications={navbarNotifications} websitePopup={websitePopup} socialLinks={socialLinks} previewMessage={isPreview?`Previewing ${page.status} content. This private URL is visible only to authorized administrators.`:null}><PublicSeo record={page} site={site} isPreview={isPreview} pageType={page?.page_type}/><Head><meta name="theme-color" content={site['branding.primary_color']||'#176b5b'}/></Head>{!isHome&&<PageHeader eyebrow={page?.page_type?.replaceAll('_',' ')} title={page?.title} description={page?.excerpt} image={page?.featured_media} imageAlt={page?.featured_image_alt} breadcrumbs={[{label:'Home',href:'/'},{label:page?.title}]} compact={['privacy','terms','cookies','legal'].includes(page?.page_type)}/>} {isHome&&!hasHomeHero&&<PageHeader title={page?.title||brand} description={page?.excerpt}/>} {!isHome&&page?.body&&<WebsiteContainer as="article" className={`kl-prose-wrap${['privacy','terms','cookies','legal'].includes(page?.page_type)?' kl-prose-wrap--legal':''}`}><div className="kl-prose" dangerouslySetInnerHTML={{__html:page.body}}/></WebsiteContainer>} {page?.page_type==='contact'&&<WebsiteContainer><div className="kl-contact-shell"><ContactForm platformName={brand}/><ContactLocations locations={locations} site={site}/></div></WebsiteContainer>} {page?.page_type==='features'&&<WebsiteFeatures features={websiteFeatures}/>}<WebsiteSectionRenderer sections={sections} plans={plans} content={content} faqs={faqs} testimonials={testimonials}/>{page?.page_type==='pricing'&&!hasPricing&&<PricingSection section={{title:page.title,subtitle:page.excerpt}} plans={plans}/>}</WebsiteLayout>;
+    return <WebsiteLayout menus={menus} site={site} announcements={announcements} navbarNotifications={navbarNotifications} websitePopup={websitePopup} socialLinks={socialLinks} previewMessage={isPreview?`Previewing ${page.status} content. This private URL is visible only to authorized administrators.`:null}><PublicSeo record={page} site={site} isPreview={isPreview} pageType={page?.page_type}/><Head><meta name="theme-color" content={site['branding.primary_color']||'#176b5b'}/></Head>{!isHome&&<PageHeader eyebrow={page?.page_type?.replaceAll('_',' ')} title={page?.title} description={page?.excerpt} image={page?.featured_media} imageAlt={page?.featured_image_alt} breadcrumbs={[{label:'Home',href:'/'},{label:page?.title}]} compact={['privacy','terms','cookies','legal'].includes(page?.page_type)} className={page?.page_type==='features'?'kl-page-header--features':''}/>} {isHome&&!hasHomeHero&&<PageHeader title={page?.title||brand} description={page?.excerpt}/>} {!isHome&&page?.body&&<WebsiteContainer as="article" className={`kl-prose-wrap${['privacy','terms','cookies','legal'].includes(page?.page_type)?' kl-prose-wrap--legal':''}`}><div className="kl-prose" dangerouslySetInnerHTML={{__html:page.body}}/></WebsiteContainer>} {page?.page_type==='contact'&&<WebsiteContainer><div className="kl-contact-shell"><ContactForm platformName={brand}/><ContactLocations locations={locations} site={site}/></div></WebsiteContainer>} {page?.page_type==='features'&&<WebsiteFeatures features={websiteFeatures}/>}<WebsiteSectionRenderer sections={sections} plans={plans} content={content} faqs={faqs} testimonials={testimonials}/>{page?.page_type==='pricing'&&!hasPricing&&<PricingSection section={{title:page.title,subtitle:page.excerpt}} plans={plans}/>}</WebsiteLayout>;
 }
 export {WebsiteHeader as PublicHeader,WebsiteFooter as PublicFooter};

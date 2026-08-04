@@ -91,8 +91,8 @@ export function Breadcrumbs({ items = [] }) {
     return <nav className="kl-breadcrumbs" aria-label="Breadcrumb"><ol>{visible.map((item, index) => <li key={`${item.label}-${index}`}>{item.href && index < visible.length - 1 ? <WebsiteLink href={item.href}>{item.label}</WebsiteLink> : <span aria-current={index === visible.length - 1 ? "page" : undefined}>{item.label}</span>}</li>)}</ol></nav>;
 }
 
-export function PageHeader({ eyebrow, title, description, image, imageAlt, breadcrumbs = [], compact = false }) {
-    return <section className={`kl-page-header${compact ? " kl-page-header--compact" : ""}`}>
+export function PageHeader({ eyebrow, title, description, image, imageAlt, breadcrumbs = [], compact = false, className = "" }) {
+    return <section className={`kl-page-header${compact ? " kl-page-header--compact" : ""}${className ? ` ${className}` : ""}`}>
         <WebsiteContainer>
             <Breadcrumbs items={breadcrumbs} />
             <div className="kl-page-header__grid">

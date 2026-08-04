@@ -3,6 +3,7 @@
 namespace Tests\Feature\SaaS;
 
 use App\Models\Central\WebsiteContentItem;
+use App\Models\Central\WebsiteFeature;
 use Database\Seeders\PlatformSettingsSeeder;
 use Database\Seeders\WebsiteSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,10 +21,43 @@ class PremiumWebsiteTest extends TestCase
         $this->get(route('central.home'))->assertOk()->assertInertia(fn ($page) => $page
             ->component('Central/Website/Page')
             ->where('page.page_type', 'home')
-            ->has('page.sections', 11)
+            ->has('page.sections', 12)
             ->has('content.faq', 8)
             ->has('content.testimonial', 3)
             ->has('announcements', 1));
+
+        $sections = collect(Cache::get('website-page:v2:home')['sections']);
+
+        // Screenshots are confined to the hero and the "Move from work to cash"
+        // block; every other section stays on the lighter icon treatment.
+        $withScreenshot = $sections->filter(fn (array $section) => filled($section['image'] ?? null))
+            ->pluck('section_key')->values()->all();
+        $this->assertSame(['hero', 'invoice'], $withScreenshot);
+        $this->assertStringContainsString('customer_payment_interface', $sections->firstWhere('section_key', 'invoice')['image']);
+
+        // The tabbed tour sits directly after the "One connected platform" grid.
+        $order = $sections->pluck('section_key')->values()->all();
+        $this->assertSame(array_search('platform', $order, true) + 1, array_search('showcase', $order, true));
+
+        // Homepage accordion stays short while the CMS keeps all eight entries.
+        $this->assertSame(5, $sections->firstWhere('section_key', 'faq')['settings']['limit']);
+
+        $showcase = $sections->firstWhere('section_key', 'showcase');
+        $this->assertSame('features_mini', $showcase['section_type']);
+        $this->assertCount(8, $showcase['items']);
+        foreach ($showcase['items'] as $tab) {
+            $this->assertNotEmpty($tab['title'], 'each tab needs a label');
+            $this->assertNotEmpty($tab['content'], 'each tab needs a description beside the label');
+            $this->assertNotEmpty($tab['image'], 'each tab needs a screenshot');
+        }
+
+        // Icon cards must survive: the grids are explicitly not screenshot-based.
+        $platform = $sections->firstWhere('section_key', 'platform')['items'];
+        $this->assertCount(6, $platform);
+        $this->assertNotEmpty($platform[0]['icon']);
+        $this->assertArrayNotHasKey('image', $platform[0]);
+
+        $this->assertSame(15, WebsiteFeature::whereNotNull('featured_media_id')->count());
 
         $this->assertIsArray(Cache::get('website-page:v2:home'));
         $this->assertIsArray(Cache::get('website-content:v1'));

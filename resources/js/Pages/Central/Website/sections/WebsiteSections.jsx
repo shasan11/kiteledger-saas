@@ -113,6 +113,80 @@ function ScreenshotSection({ section }) {
     </WebsiteContainer></section>;
 }
 
+/*
+ * Screenshot tour driven by tabs. Keeps a long list of product shots to a
+ * single viewport instead of stacking them down the page, so the homepage can
+ * show real screens without turning into a scroll marathon.
+ */
+function FeaturesMiniSection({ section, items = [] }) {
+    const tabs = items.filter((item) => mediaFor(item) && item.title);
+    const [active, setActive] = useState(0);
+    if (!tabs.length) return null;
+    const index = Math.min(active, tabs.length - 1);
+    const current = tabs[index];
+    const panelId = `${section.section_key || "features-mini"}-panel`;
+    const selectTab = (position, moveFocus = false) => {
+        setActive(position);
+        if (moveFocus) {
+            window.requestAnimationFrame(() => document.getElementById(`${panelId}-tab-${position}`)?.focus());
+        }
+    };
+    return <section className={sectionClass(section, "kl-features-mini")} style={sectionStyle(section)}>
+        <WebsiteContainer>
+            <SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle || section.content} alignment={section.alignment || "center"} />
+            <div className="kl-features-mini__shell">
+                <div className="kl-features-mini__rail">
+                    <p className="kl-features-mini__rail-label">Explore the workspace</p>
+                    <div className="kl-features-mini__tabs" role="tablist" aria-label={section.title || "Product features"}>
+                        {tabs.map((item, position) => <button
+                            key={item.id || position}
+                            type="button"
+                            role="tab"
+                            id={`${panelId}-tab-${position}`}
+                            aria-selected={position === index}
+                            aria-controls={panelId}
+                            tabIndex={position === index ? 0 : -1}
+                            className={`kl-features-mini__tab${position === index ? " is-active" : ""}`}
+                            onClick={() => selectTab(position)}
+                            onKeyDown={(event) => {
+                                const next = event.key === "ArrowRight" || event.key === "ArrowDown"
+                                    ? (position + 1) % tabs.length
+                                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                                        ? (position - 1 + tabs.length) % tabs.length
+                                        : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
+                                if (next === null) return;
+                                event.preventDefault();
+                                selectTab(next, true);
+                            }}
+                        >
+                            <span className="kl-features-mini__number">{String(position + 1).padStart(2, "0")}</span>
+                            <span>{item.title}</span>
+                            <ArrowIcon />
+                        </button>)}
+                    </div>
+                </div>
+                <div className="kl-features-mini__panel" id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${index}`} aria-live="polite">
+                    <div className="kl-features-mini__intro">
+                        <div>
+                            <span className="kl-features-mini__kicker">Now viewing</span>
+                            <h3>{current.title}</h3>
+                        </div>
+                        {current.content && <p>{current.content}</p>}
+                    </div>
+                    <div className="kl-features-mini__media">
+                        <WebsiteImage className="kl-product-image" src={mediaFor(current)} alt={current.image_alt || current.media?.alt_text || current.title} width={current.media?.width} height={current.media?.height} fit="contain" />
+                    </div>
+                    <div className="kl-features-mini__progress" aria-hidden="true">
+                        <span style={{ width: `${((index + 1) / tabs.length) * 100}%` }} />
+                    </div>
+                    <span className="kl-features-mini__count" aria-hidden="true">{String(index + 1).padStart(2, "0")} / {String(tabs.length).padStart(2, "0")}</span>
+                </div>
+            </div>
+            <SectionActions section={section} />
+        </WebsiteContainer>
+    </section>;
+}
+
 function LogoSection({ section, items }) {
     const visible = items.filter((item) => mediaFor(item));
     if (!visible.length) return null;
@@ -159,7 +233,10 @@ function PricingSection({ section, plans }) {
 
 function FaqSection({ section, items }) {
     const [openItems, setOpenItems] = useState(() => new Set([0]));
-    const visible = items.filter((item) => item.title && item.content);
+    // settings.limit keeps the homepage list short without deleting the extra
+    // entries from the CMS, where they stay available for other pages.
+    const limit = Number(section.settings?.limit) > 0 ? Number(section.settings.limit) : undefined;
+    const visible = items.filter((item) => item.title && item.content).slice(0, limit);
     if (!visible.length) return null;
     const toggle = (index) => setOpenItems((current) => { const next = new Set(current); next.has(index) ? next.delete(index) : next.add(index); return next; });
     return <section className={sectionClass(section, "kl-faq")} style={sectionStyle(section)}><WebsiteContainer className="kl-faq-layout"><SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle} />
@@ -222,6 +299,7 @@ const registry = {
     security: SecuritySection,
     screenshot: ScreenshotSection,
     screenshots: ScreenshotSection,
+    features_mini: FeaturesMiniSection,
     logos: LogoSection,
     statistics: StatisticsSection,
     steps: FeatureSection,

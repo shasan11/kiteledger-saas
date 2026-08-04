@@ -14,7 +14,6 @@ use App\Models\Central\ResourceCategory;
 use App\Models\Central\WebsiteFeature;
 use App\Models\Central\WebsiteSocialLink;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Storage;
 
 class WebsiteSeeder extends Seeder
 {
@@ -58,6 +57,7 @@ class WebsiteSeeder extends Seeder
                 ['title' => 'People operations', 'content' => 'Manage employee records, attendance, leave, payroll, and everyday HR workflows.', 'icon' => 'people'],
                 ['title' => 'Governance and security', 'content' => 'Roles, approvals, audit history, and isolated customer workspaces protect critical work.', 'icon' => 'shield'],
             ], null],
+            ['showcase', 'features_mini', 'Inside the product', 'See the workspace your team will actually use', 'Pick an area to see the real screen your team works in every day.', 'Explore the platform', '/features', null, null, [], 'mist'],
             ['invoice', 'product', 'Move from work to cash', 'Create polished invoices. Get paid with less follow-up.', 'Build estimates, convert them into invoices, record payments, and understand what is outstanding without stitching reports together.', 'Explore invoicing', '/features', null, null, [
                 ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],
                 ['title' => 'Live payment status', 'content' => 'See paid, partial, overdue, and outstanding balances instantly.'],
@@ -110,7 +110,69 @@ class WebsiteSeeder extends Seeder
         }
 
         $this->seedContent();
-        $this->seedStructuredContent();
+
+        $featureMedia = $this->seedFeatureMedia();
+        $this->seedStructuredContent($featureMedia);
+        $this->attachHomeSectionMedia($home, $featureMedia);
+    }
+
+    /**
+     * Attaches packaged screenshots to the homepage.
+     *
+     * Deliberately narrow: only the hero carries a screenshot, so the top of
+     * the page shows the real product and everything below it stays on the
+     * lighter icon treatment. The tabbed "showcase" section is the one other
+     * place screenshots appear, and it keeps them inside a single viewport.
+     *
+     * @param array<string, Media> $featureMedia
+     */
+    private function attachHomeSectionMedia(WebsitePage $home, array $featureMedia): void
+    {
+        $section = fn (string $key): ?WebsiteSection => WebsiteSection::where('page_id', $home->id)
+            ->where('section_key', $key)->first();
+
+        foreach (['hero' => 'homedashboard', 'invoice' => 'customer_payment_interface'] as $key => $stem) {
+            if (! ($target = $section($key)) || ! isset($featureMedia[$stem])) {
+                continue;
+            }
+            // Saved through the model so the casts and page-cache hook both run.
+            $target->update(['media_id' => $featureMedia[$stem]->id, 'image' => $featureMedia[$stem]->url]);
+        }
+
+        // The section loop above rewrites items but not image/media_id/settings,
+        // so art attached by an earlier seed run has to be cleared explicitly or
+        // it survives forever.
+        foreach (['platform', 'operations', 'security', 'final', 'showcase'] as $key) {
+            $section($key)?->update(['media_id' => null, 'image' => null, 'settings' => null]);
+        }
+
+        // Keep the homepage accordion short; the remaining entries stay in the
+        // CMS for the support page and for admins to promote.
+        $section('faq')?->update(['settings' => ['limit' => 5]]);
+
+        $tabs = [];
+        foreach ([
+            'homedashboard' => ['Dashboard', 'Revenue, expenses, profit, and cash for any branch and date range.'],
+            'invoice-details' => ['Invoicing', 'Every invoice with its customer, approval state, and payment history.'],
+            'reports' => ['Reports', 'Sixty-three built-in reports across accounting, sales, tax, and stock.'],
+            'pos' => ['Point of sale', 'A fast till that posts straight to inventory and accounts.'],
+            'document-intellegence' => ['Documents', 'Upload a bill and track it from scan to posted transaction.'],
+            'invoice-payment-link' => ['Online payments', 'Share a payment link or QR code straight from the invoice.'],
+            'leads' => ['CRM', 'Track enquiries and opportunities through to a won deal.'],
+            'transactionapproval' => ['Approvals', 'Credit limits, stock, and pricing rules checked before posting.'],
+        ] as $stem => [$label, $caption]) {
+            if (! isset($featureMedia[$stem])) {
+                continue;
+            }
+            $tabs[] = [
+                'title' => $label, 'content' => $caption,
+                'image' => $featureMedia[$stem]->url, 'image_alt' => $label.' in KiteLedger',
+            ];
+        }
+
+        if (($showcase = $section('showcase')) && $tabs !== []) {
+            $showcase->update(['items' => $tabs]);
+        }
     }
 
     private function seedContent(): void
@@ -153,28 +215,88 @@ class WebsiteSeeder extends Seeder
         }
     }
 
-    private function seedStructuredContent(): void
+    /**
+     * Product screenshots shipped in public/screenshots, keyed by file stem.
+     *
+     * Order matters: it drives both the /features page and which screenshot
+     * each homepage section picks up.
+     *
+     * @var array<string, array{0: string, 1: string, 2: string}> stem => [title, slug, excerpt]
+     */
+    private const FEATURE_SCREENSHOTS = [
+        'homedashboard' => ['Financial command center', 'financial-command-center', 'Revenue, expenses, profit, cash, receivables, and payables for any branch and date range on one screen.'],
+        'reports' => ['63 reports, ready to run', 'business-reports', 'Ledgers, trial balance, ageing, sales, purchase, tax, inventory, and production reporting grouped for fast access.'],
+        'invoice-details' => ['Invoicing with full context', 'invoicing', 'Every invoice carries its customer, branch, currency, approval state, and payment history in one view.'],
+        'invoice-payment-link' => ['Online payment links and QR', 'online-payment-links', 'Share a secure payment link or QR code and let customers settle an invoice without a phone call.'],
+        'customer_payment_interface' => ['Customer payments and receipts', 'customer-payments', 'Record receipts, allocate them across open invoices, and keep customer balances accurate as you go.'],
+        'document-intellegence' => ['Document intelligence', 'document-intelligence', 'Upload bills, invoices, and receipts, then track them from scan through review to a posted transaction.'],
+        'ai_document_extraction' => ['AI document extraction', 'ai-document-extraction', 'AI reads each uploaded document, matches customers and products, and prepares a draft you simply confirm.'],
+        'transactionapproval' => ['Approvals and business rules', 'approval-workflows', 'Credit limits, negative stock, and pricing rules are checked before a transaction is approved and posted.'],
+        'pos' => ['Point of sale', 'point-of-sale', 'A fast touch-friendly till that posts straight to inventory and accounts with no end-of-day re-entry.'],
+        'pos-receipt' => ['Receipts and returns', 'pos-receipts', 'Print or share receipts instantly and process returns against the original sale.'],
+        'pos-shifts-report' => ['Cashier shifts and cash control', 'pos-shift-control', 'Open and close shifts per terminal, count cash, and see expected against counted totals for every cashier.'],
+        'leads' => ['Lead capture and pipeline', 'lead-management', 'Track every enquiry with owners, stages, and follow-up activity so nothing quietly goes cold.'],
+        'deals' => ['Deals and opportunities', 'deal-pipeline', 'Move opportunities through your pipeline and carry them into quotations, orders, and invoices.'],
+        'project_management' => ['Project management', 'project-management', 'Plan projects, assign tasks, and keep delivery work connected to the customers and costs behind it.'],
+        'hrm_leave_applications' => ['HR and leave management', 'hr-leave-management', 'Employee records, attendance, and a clear leave request and approval trail for your whole team.'],
+    ];
+
+    /**
+     * Registers each packaged screenshot in the media library.
+     *
+     * Files stay where they ship (public/screenshots) and are referenced through
+     * the "features" disk, so no copying is done and no storage symlink is
+     * needed for the seeded marketing site to render.
+     *
+     * @return array<string, Media> stem => media
+     */
+    private function seedFeatureMedia(): array
     {
-        $media = null;
-        $source = base_path('docs/screenshots/kiteledger-home-desktop.png');
-        if (is_file($source)) {
-            $path = 'website/seed/kiteledger-home-desktop.png';
-            if (! Storage::disk('public')->exists($path)) Storage::disk('public')->put($path, file_get_contents($source));
-            [$width, $height] = getimagesize($source) ?: [null, null];
-            $media = Media::updateOrCreate(['path' => $path], ['disk'=>'public','original_filename'=>'kiteledger-home-desktop.png','mime_type'=>'image/png','size'=>filesize($source),'width'=>$width,'height'=>$height,'title'=>'KiteLedger dashboard','alt_text'=>'KiteLedger business dashboard overview']);
+        $media = [];
+
+        foreach (self::FEATURE_SCREENSHOTS as $stem => [$title, , $excerpt]) {
+            $file = public_path('screenshots/'.$stem.'.png');
+            if (! is_file($file)) {
+                continue;
+            }
+            [$width, $height] = getimagesize($file) ?: [null, null];
+            $media[$stem] = Media::updateOrCreate(['path' => $stem.'.png'], [
+                'disk' => 'screenshots', 'original_filename' => $stem.'.png', 'mime_type' => 'image/png',
+                'size' => filesize($file), 'width' => $width, 'height' => $height,
+                'title' => $title, 'alt_text' => $title.' in KiteLedger', 'caption' => $excerpt,
+            ]);
         }
-        foreach ([
-            ['Connected accounting','connected-accounting','Keep journals, receivables, payables, tax, and financial reports in one dependable flow.'],
-            ['Inventory visibility','inventory-visibility','Understand stock, purchasing, warehouses, and movement without disconnected spreadsheets.'],
-            ['Customer relationships','customer-relationships','Connect conversations, opportunities, invoices, payments, and support history.'],
-        ] as $order => [$title,$slug,$excerpt]) WebsiteFeature::updateOrCreate(['slug'=>$slug], ['title'=>$title,'excerpt'=>$excerpt,'body'=>'<p>'.$excerpt.'</p>','featured_media_id'=>$media?->id,'status'=>'published','published_at'=>now(),'sort_order'=>$order,'seo_title'=>$title.' | KiteLedger','meta_description'=>$excerpt]);
+
+        return $media;
+    }
+
+    /** @param array<string, Media> $featureMedia */
+    private function seedStructuredContent(array $featureMedia): void
+    {
+        $media = $featureMedia['homedashboard'] ?? null;
+
+        $order = 0;
+        foreach (self::FEATURE_SCREENSHOTS as $stem => [$title, $slug, $excerpt]) {
+            WebsiteFeature::updateOrCreate(['slug' => $slug], [
+                'title' => $title, 'excerpt' => $excerpt, 'body' => '<p>'.$excerpt.'</p>',
+                'featured_media_id' => ($featureMedia[$stem] ?? null)?->id, 'status' => 'published',
+                'published_at' => now(), 'sort_order' => $order++,
+                'seo_title' => $title.' | KiteLedger', 'meta_description' => $excerpt,
+            ]);
+        }
+
+        // Superseded by the screenshot-backed entries above.
+        WebsiteFeature::whereIn('slug', ['connected-accounting', 'inventory-visibility', 'customer-relationships'])->delete();
 
         $category = ResourceCategory::updateOrCreate(['slug'=>'getting-started'], ['name'=>'Getting Started','description'=>'Short guides for configuring a new KiteLedger workspace.','status'=>'active','sort_order'=>0]);
         foreach ([
-            ['Set up your company','set-up-your-company','Configure company identity, currency, dates, and branding.','Open Settings, review the company profile, choose your working currency and timezone, then upload the light and dark logo variants.'],
-            ['Invite your team','invite-your-team','Add users and give each person a clear role.','Create users from the administration area, assign the smallest practical role, and verify access before sharing credentials.'],
-            ['Create your first invoice','create-your-first-invoice','Move from customer details to a polished invoice.','Add the customer, create an invoice with clear line items and due dates, then record or collect payment from the invoice workflow.'],
-        ] as $order => [$title,$slug,$excerpt,$body]) ResourceArticle::updateOrCreate(['slug'=>$slug], ['category_id'=>$category->id,'title'=>$title,'excerpt'=>$excerpt,'body'=>'<h2>'.$title.'</h2><p>'.$body.'</p>','featured_media_id'=>$media?->id,'gallery_media_ids'=>$media?->id?[$media->id]:[],'status'=>'published','published_at'=>now(),'sort_order'=>$order,'seo_title'=>$title.' | KiteLedger Resources','meta_description'=>$excerpt]);
+            ['Set up your company','set-up-your-company','Configure company identity, currency, dates, and branding.','Open Settings, review the company profile, choose your working currency and timezone, then upload the light and dark logo variants.','homedashboard'],
+            ['Invite your team','invite-your-team','Add users and give each person a clear role.','Create users from the administration area, assign the smallest practical role, and verify access before sharing credentials.','hrm_leave_applications'],
+            ['Create your first invoice','create-your-first-invoice','Move from customer details to a polished invoice.','Add the customer, create an invoice with clear line items and due dates, then record or collect payment from the invoice workflow.','invoice-details'],
+        ] as $order => [$title,$slug,$excerpt,$body,$stem]) {
+            $articleMedia = $featureMedia[$stem] ?? $media;
+            ResourceArticle::updateOrCreate(['slug'=>$slug], ['category_id'=>$category->id,'title'=>$title,'excerpt'=>$excerpt,'body'=>'<h2>'.$title.'</h2><p>'.$body.'</p>','featured_media_id'=>$articleMedia?->id,'gallery_media_ids'=>$articleMedia?->id?[$articleMedia->id]:[],'status'=>'published','published_at'=>now(),'sort_order'=>$order,'seo_title'=>$title.' | KiteLedger Resources','meta_description'=>$excerpt]);
+        }
 
         ContactLocation::firstOrCreate(['name'=>'Main Office'], ['address'=>'Update this address in Website → Contact Locations','email'=>'hello@example.com','business_hours'=>'Monday–Friday, 9:00–17:00','is_active'=>true,'sort_order'=>0]);
         foreach ([['LinkedIn','https://www.linkedin.com/'],['Facebook','https://www.facebook.com/'],['Instagram','https://www.instagram.com/']] as $order => [$platform,$url]) WebsiteSocialLink::firstOrCreate(['platform'=>$platform], ['url'=>$url,'icon'=>$platform,'is_active'=>false,'sort_order'=>$order]);
