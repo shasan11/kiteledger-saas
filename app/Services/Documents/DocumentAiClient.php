@@ -3,6 +3,7 @@
 namespace App\Services\Documents;
 
 use App\Services\AI\AiProviderException;
+use App\Services\AI\AiReadinessService;
 use App\Services\AI\AiSettingsService;
 use Illuminate\Support\Facades\Log;
 use Prism\Prism\Enums\Provider;
@@ -21,12 +22,12 @@ class DocumentAiClient
 
     public function provider(): string
     {
-        return strtolower((string) (config('documents.ai_provider') ?: $this->settings->provider()));
+        return $this->settings->documentProvider();
     }
 
     public function model(): string
     {
-        return (string) (config('documents.ai_model') ?: $this->settings->model());
+        return $this->settings->documentModel();
     }
 
     public function supportsVision(?string $mime = null): bool
@@ -54,7 +55,7 @@ class DocumentAiClient
          * Groq should not receive PDFs.
          */
         if ($provider === 'groq') {
-            return $mime !== 'application/pdf' && !str_contains($mime, 'pdf');
+            return $mime !== 'application/pdf' && ! str_contains($mime, 'pdf');
         }
 
         return false;
@@ -68,36 +69,74 @@ class DocumentAiClient
     }
 
     /**
+     * Verifies the configured document override with a real multimodal call.
+     * A one-pixel image keeps the check cheap while still exercising media
+     * serialization, authentication, the selected model and provider adapter.
+     */
+    public function testCapability(): array
+    {
+        try {
+            if (! $this->supportsVision('application/pdf') || ! $this->supportsVision('image/png')) {
+                $this->fail('AI_VISION_UNSUPPORTED', 'The selected document provider does not support both PDF and image inputs.');
+            }
+
+            $result = $this->extract(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
+                'image/png',
+                'This is a model capability check. Reply with OK.',
+                'Confirm that you can read this image by replying with OK.',
+                30,
+            );
+
+            app(AiReadinessService::class)->recordDocumentVerification(true);
+
+            return ['success' => true, 'response' => $result['text'] ?? 'OK'];
+        } catch (AiProviderException $e) {
+            app(AiReadinessService::class)->recordDocumentVerification(false, $e->getErrorCode());
+
+            return ['success' => false, 'code' => $e->getErrorCode(), 'message' => $e->getMessage()];
+        } catch (Throwable $e) {
+            report($e);
+            app(AiReadinessService::class)->recordDocumentVerification(false, 'AI_PROVIDER_ERROR');
+
+            return [
+                'success' => false,
+                'code' => 'AI_PROVIDER_ERROR',
+                'message' => 'The document model capability test failed. Check the configuration and application log.',
+            ];
+        }
+    }
+
+    /**
      * Run a Prism extraction call.
      *
-     * @param string $base64 base64-encoded file contents or base64-encoded plain text
-     * @param string $mime mime type: application/pdf, image/png, text/plain, etc.
-     * @param string $systemPrompt
-     * @param string $userPrompt
+     * @param  string  $base64  base64-encoded file contents or base64-encoded plain text
+     * @param  string  $mime  mime type: application/pdf, image/png, text/plain, etc.
+     * @param  int|null  $timeoutOverride  Shorter timeout for an explicit health check
      * @return array{ok:bool,text:string,provider:string,model:string,usage:array}
      */
-    public function extract(string $base64, string $mime, string $systemPrompt, string $userPrompt): array
+    public function extract(string $base64, string $mime, string $systemPrompt, string $userPrompt, ?int $timeoutOverride = null): array
     {
         $provider = $this->provider();
         $model = $this->model();
         $mime = strtolower(trim($mime ?: 'application/octet-stream'));
 
-        if (!$this->settings->enabled()) {
+        if (! $this->settings->enabled() || ! $this->settings->documentScanningEnabled()) {
             $this->fail('AI_DISABLED', 'AI Assistant is disabled in settings.');
         }
 
-        if (!$this->supportsVision($mime)) {
+        if (! $this->supportsVision($mime)) {
             $this->fail(
                 'AI_VISION_UNSUPPORTED',
                 "Provider {$provider} is not supported for this document type. Use Gemini/OpenAI/OpenRouter for PDFs, or upload DOCX files so they can be converted to text."
             );
         }
 
-        if ($provider !== 'ollama' && !$this->settings->hasApiKey()) {
+        if (! $this->settings->hasApiKeyFor($provider)) {
             $this->fail('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
         }
 
-        $timeout = $this->timeoutSeconds();
+        $timeout = $timeoutOverride ?? $this->timeoutSeconds();
 
         if (function_exists('set_time_limit')) {
             @set_time_limit($timeout + 30);
@@ -175,10 +214,10 @@ class DocumentAiClient
         }
 
         $prompt = $userPrompt
-            . "\n\n--- DOCUMENT TEXT START ---\n"
-            . $text
-            . "\n--- DOCUMENT TEXT END ---\n"
-            . "\nExtract the required structured data from the document text above. Return valid JSON only.";
+            ."\n\n--- DOCUMENT TEXT START ---\n"
+            .$text
+            ."\n--- DOCUMENT TEXT END ---\n"
+            ."\nExtract the required structured data from the document text above. Return valid JSON only.";
 
         $response = Prism::text()
             ->using($this->providerEnum($provider), $model)
@@ -246,7 +285,7 @@ class DocumentAiClient
 
         if (str_starts_with($mime, 'image/')) {
             return Image::fromBase64($base64)
-                ->as('uploaded-document.' . $this->extensionForMime($mime));
+                ->as('uploaded-document.'.$this->extensionForMime($mime));
         }
 
         /*
@@ -308,7 +347,7 @@ class DocumentAiClient
     private function providerConfig(string $provider): array
     {
         $url = $this->normalizedBaseUrl($provider);
-        $apiKey = $this->settings->apiKey() ?? '';
+        $apiKey = $this->settings->apiKeyFor($provider) ?? '';
 
         return match ($provider) {
             'openai' => $this->cleanConfig([
@@ -343,14 +382,14 @@ class DocumentAiClient
 
     private function normalizedBaseUrl(string $provider): string
     {
-        $url = rtrim((string) $this->settings->baseUrl(), '/');
+        $url = rtrim($this->settings->baseUrlFor($provider), '/');
 
         if ($url === '') {
             return '';
         }
 
-        if ($provider === 'gemini' && !str_ends_with($url, '/models')) {
-            return $url . '/models';
+        if ($provider === 'gemini' && ! str_ends_with($url, '/models')) {
+            return $url.'/models';
         }
 
         return $url;
@@ -371,7 +410,8 @@ class DocumentAiClient
             $options['verify'] = $caBundle;
         }
 
-        if (filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
+        if (app()->environment(['local', 'testing'])
+            && filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
             $options['verify'] = false;
         }
 

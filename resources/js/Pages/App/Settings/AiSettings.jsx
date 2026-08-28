@@ -75,6 +75,53 @@ function extractApiError(err, fallback) {
     return fallback;
 }
 
+function CentrallyManagedCapabilities({ data }) {
+    const readiness = data?.readiness || {};
+    const capabilities = [
+        ['KiteLedger Copilot', readiness.copilot_ready],
+        ['Verified provider connection', readiness.provider_connection_verified],
+        ['Chat', readiness.chat_capability_available],
+        ['Financial tools', readiness.financial_tools_available],
+        ['Knowledge search (RAG)', readiness.rag_index_ready],
+        ['Document scanning', readiness.document_scanning_available],
+        ['Write proposals', readiness.write_proposals_available],
+        ['Approved action execution', readiness.action_execution_available],
+    ];
+
+    return (
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+                type="info"
+                showIcon
+                message="AI is managed centrally"
+                description="Provider credentials, models, timeouts, document scanning, and safety controls are managed by the platform administrator. Contact your administrator if a required capability is unavailable."
+            />
+            <Card size="small" title="Capabilities available to this tenant">
+                <Row gutter={[12, 12]}>
+                    {capabilities.map(([label, available]) => (
+                        <Col xs={24} md={12} key={label}>
+                            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                                <Text>{label}</Text>
+                                <Tag color={available ? 'success' : 'default'}>
+                                    {available ? 'Available' : 'Unavailable'}
+                                </Tag>
+                            </Space>
+                        </Col>
+                    ))}
+                </Row>
+            </Card>
+            {Array.isArray(readiness.issues) && readiness.issues.length > 0 && (
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="Administrator attention is required"
+                    description={readiness.issues.map((issue) => issue.message).join(' ')}
+                />
+            )}
+        </Space>
+    );
+}
+
 export default function AiSettings() {
     const page = usePage();
     const permissions = page.props?.auth?.permissions || [];
@@ -269,6 +316,8 @@ export default function AiSettings() {
             <div style={{ padding: 16 }}>
                 {loading ? <Spin /> : error ? (
                     <Alert type="error" showIcon message={error} />
+                ) : centralManaged ? (
+                    <CentrallyManagedCapabilities data={data} />
                 ) : (
                     <Card size="small" title="AI Report Summarizer">
                         <Form

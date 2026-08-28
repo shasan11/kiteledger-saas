@@ -7,10 +7,12 @@ use App\Models\Central\DefaultDataTemplate;
 use App\Models\Central\Plan;
 use App\Models\Central\PlatformSetting;
 use App\Services\AI\AiProviderManager;
+use App\Services\AI\AiReadinessService;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -45,8 +47,8 @@ class SettingsController extends Controller
             ],
             'status' => $status,
             'commands' => [
-                'worker' => 'php artisan queue:work central --queue=provisioning,billing,communication,notifications,mail,default --tries=3 --timeout=1800',
-                'worker_once' => 'php artisan queue:work central --queue=provisioning,billing,communication,notifications,mail,default --stop-when-empty --tries=3 --timeout=1800',
+                'worker' => 'php artisan queue:work central --queue=documents,ai-index,ai-embedding,ai-copilot,provisioning,billing,communication,notifications,mail,default --tries=3 --timeout=3600',
+                'worker_once' => 'php artisan queue:work central --queue=documents,ai-index,ai-embedding,ai-copilot,provisioning,billing,communication,notifications,mail,default --stop-when-empty --tries=3 --timeout=3600',
                 'scheduler' => '* * * * * cd /absolute/path/to/kiteledger && php artisan schedule:run >> /dev/null 2>&1',
                 'windows_scheduler' => 'php artisan schedule:run',
                 'inspect_schedule' => 'php artisan schedule:list',
@@ -65,7 +67,7 @@ class SettingsController extends Controller
         ]);
     }
 
-    public function index(Request $request)
+    public function index(Request $request, AiReadinessService $aiReadiness)
     {
         $dynamicOptions = [
             'tenant_registration.default_plan' => Plan::query()->where('is_active', true)->orderBy('sort_order')->get(['id', 'name'])->map(fn (Plan $plan) => ['value' => $plan->id, 'label' => $plan->name])->values(),
@@ -78,13 +80,18 @@ class SettingsController extends Controller
             'options' => $dynamicOptions[$setting->key] ?? $setting->options, 'validation_rules' => $setting->validation_rules,
             'environment' => $setting->environment, 'default_value' => $setting->is_encrypted ? null : $setting->default_value,
             'value' => $setting->safeValue(), 'has_secret' => $setting->is_encrypted && filled($setting->getRawOriginal('value')),
-            'preview_url' => $this->previewUrl($setting),
+            'preview_url' => $this->previewUrl($setting), 'last_tested_at' => $setting->last_tested_at?->toIso8601String(),
             'is_encrypted' => $setting->is_encrypted, 'is_required' => $setting->is_required, 'is_readonly' => $setting->is_readonly,
             'requires_confirmation' => $setting->requires_confirmation, 'requires_restart' => $setting->requires_restart,
         ])->values())->toArray();
         $requestedGroup = (string) ($request->route('group') ?: $request->query('group', ''));
+        $activeGroup = $requestedGroup ?: array_key_first($groups);
 
-        return Inertia::render('Central/Settings/Index', ['groups' => $groups, 'activeGroup' => $requestedGroup ?: array_key_first($groups)]);
+        return Inertia::render('Central/Settings/Index', [
+            'groups' => $groups,
+            'activeGroup' => $activeGroup,
+            'aiReadiness' => $activeGroup === 'ai' ? $aiReadiness->evaluate() : null,
+        ]);
     }
 
     public function update(Request $request, string $group, PlatformSettingsService $settings, CentralAuditService $audit)
@@ -162,6 +169,29 @@ class SettingsController extends Controller
         $audit->log($request, 'settings.configuration_tested', null, [], ['group' => $group]);
 
         return back()->with('success', ucfirst($group).' configuration test succeeded.');
+    }
+
+    public function reindexAi(Request $request, AiReadinessService $readiness, CentralAuditService $audit)
+    {
+        $status = $readiness->evaluate();
+        if (! ($status['embedding_provider_configured'] ?? false)) {
+            throw ValidationException::withMessages(['ai_index' => 'Configure the embedding provider before rebuilding tenant indexes.']);
+        }
+        if (! ($status['queue_configured'] ?? false) || ! ($status['queue_worker_healthy'] ?? false)) {
+            throw ValidationException::withMessages(['ai_index' => 'Start a healthy asynchronous queue worker before rebuilding tenant indexes.']);
+        }
+        if (($status['queue_retry_after_seconds'] ?? null) !== null && (int) $status['queue_retry_after_seconds'] <= 3660) {
+            throw ValidationException::withMessages(['ai_index' => 'Increase the queue retry-after setting above 3660 seconds before rebuilding tenant indexes.']);
+        }
+
+        $exit = Artisan::call('ai:index-tenants', ['--queue' => true]);
+        if ($exit !== 0) {
+            throw ValidationException::withMessages(['ai_index' => 'One or more tenant index jobs could not be queued. Check the application log.']);
+        }
+
+        $audit->log($request, 'settings.ai_reindex_queued', null, [], ['scope' => 'all_tenants']);
+
+        return back()->with('success', 'AI knowledge re-indexing was queued for all tenants.');
     }
 
     private function previewUrl(PlatformSetting $setting): ?string

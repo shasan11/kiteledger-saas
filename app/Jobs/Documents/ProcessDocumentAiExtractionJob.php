@@ -5,9 +5,11 @@ namespace App\Jobs\Documents;
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
 use App\Services\AI\AiProviderException;
+use App\Services\AI\AiSettingsService;
 use App\Services\Documents\DocumentAiExtractionService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentEntityMatcher;
+use App\Services\Documents\Pipeline\DocumentErrorCode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -45,10 +47,14 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
         'DOCUMENT_TEXT_INVALID',
     ];
 
+    /** A hard worker timeout must invoke failed() and persist a terminal state. */
+    public bool $failOnTimeout = true;
+
     public function __construct(
         public string $documentUploadId,
         public string $documentExtractionId,
     ) {
+        $this->onConnection((string) config('documents.queue_connection', 'central'));
         $this->onQueue((string) config('documents.queue', 'default'));
     }
 
@@ -69,14 +75,14 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
      */
     public function retryUntil(): Carbon
     {
-        $timeout = max(60, (int) config('documents.scan_timeout_seconds', 120));
+        $timeout = $this->effectiveProviderTimeout();
 
         return now()->addSeconds(($timeout + 60) * $this->tries());
     }
 
     public function timeout(): int
     {
-        return max(60, (int) config('documents.scan_timeout_seconds', 120)) + 60;
+        return $this->effectiveProviderTimeout() + 60;
     }
 
     public function handle(
@@ -118,6 +124,24 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
                 return;
             }
 
+            // The extraction service records the immediate failure details.
+            // While attempts remain, replace that terminal-looking state with
+            // an honest retrying state so users cannot start a competing scan.
+            if ($this->attempts() < $this->tries()) {
+                $publicError = DocumentErrorCode::fromThrowableMessage(
+                    $e->getMessage(),
+                    $e instanceof AiProviderException ? $e->getErrorCode() : '',
+                );
+                $extraction->update([
+                    'status' => 'retrying',
+                    'stage' => 'retrying',
+                    'error_code' => $publicError->value,
+                    'error_message' => 'A temporary AI service problem interrupted this attempt. KiteLedger will retry automatically.',
+                    'completed_at' => null,
+                ]);
+                $doc->update(['status' => 'processing']);
+            }
+
             throw $e;
         }
 
@@ -137,7 +161,10 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
 
     public function failed(?Throwable $e): void
     {
-        $message = mb_substr($e?->getMessage() ?: 'Document AI scan failed.', 0, 500);
+        $publicError = DocumentErrorCode::fromThrowableMessage(
+            $e?->getMessage(),
+            $e instanceof AiProviderException ? $e->getErrorCode() : '',
+        );
 
         $extraction = DocumentExtraction::query()->find($this->documentExtractionId);
 
@@ -148,10 +175,12 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
         // Only the attempt this job owns may be marked failed, and only if it
         // has not already reached a terminal state. This stops a late failure
         // from overwriting a newer attempt that already succeeded.
-        if (in_array($extraction->status, ['queued', 'processing'], true)) {
+        if (in_array($extraction->status, ['queued', 'processing', 'retrying'], true)) {
             $extraction->update([
                 'status' => 'failed',
-                'error_message' => $message,
+                'stage' => 'failed',
+                'error_code' => $publicError->value,
+                'error_message' => $publicError->message(),
                 'completed_at' => now(),
             ]);
         }
@@ -184,5 +213,14 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
         // Structural problems raised by the extraction service (missing file,
         // unreadable DOCX, unsupported type) are deterministic.
         return $e instanceof \RuntimeException;
+    }
+
+    private function effectiveProviderTimeout(): int
+    {
+        try {
+            return max(60, (int) config('documents.scan_timeout_seconds', 120), app(AiSettingsService::class)->timeoutSeconds());
+        } catch (Throwable) {
+            return max(60, (int) config('documents.scan_timeout_seconds', 120));
+        }
     }
 }

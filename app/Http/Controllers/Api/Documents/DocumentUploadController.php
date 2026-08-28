@@ -5,11 +5,11 @@ namespace App\Http\Controllers\Api\Documents;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DocumentUploadResource;
 use App\Models\DocumentUpload;
+use App\Services\BranchScopeService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentStorageService;
 use App\Services\Documents\Review\DocumentReviewService;
-use App\Services\BranchScopeService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -182,9 +182,11 @@ class DocumentUploadController extends Controller
         try {
             $stored = $this->storage->store($request->file('file'));
         } catch (\Throwable $e) {
+            report($e);
+
             return response()->json([
                 'ok' => false,
-                'message' => $e->getMessage(),
+                'message' => 'The document could not be stored. Check the file and try again.',
                 'code' => 'DOCUMENT_UPLOAD_FAILED',
             ], 422);
         }
@@ -251,6 +253,20 @@ class DocumentUploadController extends Controller
             // the review service rather than trusted.
             'review_edits' => ['nullable', 'array'],
             'review_edits.*' => ['nullable'],
+            'review_lines' => ['nullable', 'array', 'max:500'],
+            'review_lines.*' => ['array'],
+            'review_lines.*.description' => ['nullable', 'string', 'max:1000'],
+            'review_lines.*.product_code' => ['nullable', 'string', 'max:255'],
+            'review_lines.*.product_name' => ['nullable', 'string', 'max:500'],
+            'review_lines.*.quantity' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.unit' => ['nullable', 'string', 'max:60'],
+            'review_lines.*.rate' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.discount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.tax_rate' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.amount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.product_id' => ['nullable', 'string', 'max:100'],
+            'review_lines.*.account_id' => ['nullable', 'string', 'max:100'],
         ]);
 
         $doc->update(array_filter(
@@ -260,13 +276,13 @@ class DocumentUploadController extends Controller
 
         $corrections = null;
 
-        if (! empty($data['review_edits'])) {
+        if (! empty($data['review_edits']) || ! empty($data['review_lines'])) {
             // Editing extracted values changes what a draft will be built from,
             // so it needs proposal-update rights, not merely view.
             $this->perms->authorize($request->user(), 'document_upload.proposal.update');
 
             $corrections = app(DocumentReviewService::class)
-                ->applyCorrections($doc, $data['review_edits']);
+                ->applyCorrections($doc, $data['review_edits'] ?? [], $data['review_lines'] ?? []);
         }
 
         return response()->json(array_filter([
@@ -287,6 +303,7 @@ class DocumentUploadController extends Controller
             $this->authorize('update', $doc);
             $doc->update(['status' => 'archived']);
             $this->audit->log('document.archived', ['document_upload_id' => $doc->id]);
+
             return response()->json(['ok' => true, 'message' => 'Document archived (linked transactions exist).']);
         }
 
@@ -299,6 +316,7 @@ class DocumentUploadController extends Controller
         $this->storage->deletePath($path);
 
         $this->audit->log('document.deleted', ['document_upload_id' => $doc->id]);
+
         return response()->json(['ok' => true]);
     }
 
@@ -330,7 +348,7 @@ class DocumentUploadController extends Controller
     {
         $user = $request->user();
 
-        if (!$doc->branch_id) {
+        if (! $doc->branch_id) {
             return;
         }
 
@@ -349,7 +367,7 @@ class DocumentUploadController extends Controller
         $user = $request->user();
         $selected = $this->branchScope->selectedBranchId($request, $user);
 
-        if ($this->branchScope->canViewAllBranches($user) && !$selected) {
+        if ($this->branchScope->canViewAllBranches($user) && ! $selected) {
             return;
         }
 

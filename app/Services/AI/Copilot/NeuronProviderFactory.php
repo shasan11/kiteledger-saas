@@ -42,7 +42,8 @@ class NeuronProviderFactory
     {
         $caBundle = trim((string) config('ai.ssl.ca_bundle', ''));
 
-        if (filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
+        if (app()->environment(['local', 'testing'])
+            && filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
             return ['verify' => false];
         }
 

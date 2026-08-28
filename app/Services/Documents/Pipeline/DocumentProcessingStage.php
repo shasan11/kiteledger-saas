@@ -15,6 +15,7 @@ enum DocumentProcessingStage: string
 {
     case Uploaded = 'uploaded';
     case Queued = 'queued';
+    case Retrying = 'retrying';
     case Preparing = 'preparing';
     case Reading = 'reading';
     case Extracting = 'extracting';
@@ -30,6 +31,7 @@ enum DocumentProcessingStage: string
         return match ($this) {
             self::Uploaded => 'Uploaded',
             self::Queued => 'Waiting to start',
+            self::Retrying => 'Waiting to retry',
             self::Preparing => 'Preparing document',
             self::Reading => 'Reading pages',
             self::Extracting => 'Extracting information',

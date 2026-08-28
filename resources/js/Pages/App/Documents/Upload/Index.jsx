@@ -11,9 +11,12 @@ import {
     Drawer,
     Dropdown,
     Form,
+    Grid,
     Input,
     InputNumber,
+    List,
     Modal,
+    Pagination,
     Select,
     Space,
     Statistic,
@@ -68,13 +71,17 @@ import {
 import DocumentActionMenu from '../Components/DocumentActionMenu';
 import RemoteSelect from '../Components/RemoteSelect';
 import DocumentSummaryCards from '../Components/DocumentSummaryCards';
+import DocumentPreview from '../Components/DocumentPreview';
 
 
 export default function DocumentUploadIndex() {
     const { token } = theme.useToken();
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.md;
     const { props } = usePage();
     const config = props.config || {};
     const permissions = props.permissions || {};
+    const aiReadiness = config.ai_readiness || {};
 
     const [documents, setDocuments] = useState({ data: [], total: 0 });
     const [summary, setSummary] = useState(null);
@@ -714,6 +721,44 @@ export default function DocumentUploadIndex() {
 
     const canUpdate = hasPerm(permissions, 'document_upload.update') || hasPerm(permissions, 'document_upload.edit');
 
+    const primaryAction = (record) => {
+        const busy = Boolean(scanning[docKey(record)] || polling[docKey(record)]);
+        const canScan = hasPerm(permissions, 'document_upload.scan_ai');
+        const canReview = hasPerm(permissions, 'document_upload.extract.view');
+
+        if (['queued', 'processing'].includes(record.status) || busy) {
+            return { label: 'Scanning…', disabled: true, reason: 'The AI extraction job is currently running.' };
+        }
+
+        if (record.status === 'failed' || record.status === 'uploaded') {
+            return {
+                label: record.status === 'failed' ? 'Retry scan' : 'Scan document',
+                icon: <ScanOutlined />,
+                disabled: !canScan || aiReadiness.document_scanning_available === false,
+                reason: !canScan
+                    ? 'You do not have permission to scan documents.'
+                    : aiReadiness.issues?.[0]?.message,
+                onClick: () => scanDoc(record),
+            };
+        }
+
+        if (record.extraction) {
+            return {
+                label: record.status === 'converted' ? 'Open draft' : 'Review & continue',
+                icon: <SwapOutlined />,
+                disabled: !canReview,
+                reason: canReview ? null : 'You do not have permission to review extracted document data.',
+                onClick: () => openReviewWorkspace(record),
+            };
+        }
+
+        return {
+            label: 'Preview',
+            icon: <EyeOutlined />,
+            onClick: () => setPreviewDoc(record),
+        };
+    };
+
     const columns = [
         {
             title: 'Document',
@@ -734,7 +779,7 @@ export default function DocumentUploadIndex() {
             render: (value) => <Tag>{humanize(value || 'unknown')}</Tag>,
         },
         {
-            title: 'Status',
+            title: 'Workflow status',
             dataIndex: 'status',
             width: 150,
             render: (value) => (
@@ -744,10 +789,10 @@ export default function DocumentUploadIndex() {
             ),
         },
         {
-            title: 'AI Status',
+            title: 'AI extraction',
             width: 140,
             render: (_, record) => record.extraction
-                ? <Tag color="blue">{humanize(record.extraction.status)}</Tag>
+                ? <Tag color="blue">{record.extraction.stage?.label || humanize(record.extraction.status)}</Tag>
                 : <Tag>No Scan</Tag>,
         },
         {
@@ -766,24 +811,44 @@ export default function DocumentUploadIndex() {
             title: '',
             key: 'actions',
             fixed: 'right',
-            width: 72,
-            render: (_, record) => (
-                <DocumentActionMenu
-                    doc={record}
-                    permissions={permissions}
-                    canUpdate={canUpdate}
-                    onPreview={() => setPreviewDoc(record)}
-                    onEdit={() => openEdit(record)}
-                    onScan={() => scanDoc(record)}
-                    scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
-                    onExtraction={() => openExtraction(record)}
-                    onMatch={() => openMatch(record)}
-                    onReview={() => openReviewWorkspace(record)}
-                    onCreateProposal={() => openReview(record, true)}
-                    onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
-                    onDelete={() => deleteDoc(record)}
-                />
-            ),
+            width: 220,
+            render: (_, record) => {
+                const next = primaryAction(record);
+
+                return (
+                    <Space size={6}>
+                        <Tooltip title={next.reason}>
+                            <span>
+                                <Button
+                                    size="small"
+                                    type="primary"
+                                    icon={next.icon}
+                                    disabled={next.disabled}
+                                    onClick={next.onClick}
+                                >
+                                    {next.label}
+                                </Button>
+                            </span>
+                        </Tooltip>
+                        <DocumentActionMenu
+                            doc={record}
+                            permissions={permissions}
+                            canUpdate={canUpdate}
+                            onPreview={() => setPreviewDoc(record)}
+                            onEdit={() => openEdit(record)}
+                            onScan={() => scanDoc(record)}
+                            scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
+                            scanUnavailableReason={aiReadiness.document_scanning_available === false ? aiReadiness.issues?.[0]?.message : null}
+                            onExtraction={() => openExtraction(record)}
+                            onMatch={() => openMatch(record)}
+                            onReview={() => openReviewWorkspace(record)}
+                            onCreateProposal={() => openReview(record, true)}
+                            onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
+                            onDelete={() => deleteDoc(record)}
+                        />
+                    </Space>
+                );
+            },
         },
     ];
 
@@ -806,13 +871,6 @@ export default function DocumentUploadIndex() {
                     </div>
 
                     <Space wrap>
-                        <Button
-                            icon={<ScanOutlined />}
-                            onClick={() => documentRows[0] && scanDoc(documentRows[0])}
-                            disabled={!documentRows[0] || !hasPerm(permissions, 'document_upload.scan_ai')}
-                        >
-                            Run AI Scan
-                        </Button>
                         <Button icon={<ReloadOutlined />} onClick={() => fetchDocs({ page })}>
                             Refresh
                         </Button>
@@ -909,25 +967,95 @@ export default function DocumentUploadIndex() {
                 </Card>
 
                 <Card size="small" style={styles.card}>
-                    <Table
-                        size="small"
-                        rowKey="public_id"
-                        loading={loading}
-                        dataSource={documentRows}
-                        columns={columns}
-                        scroll={{ x: 1100 }}
-                        pagination={{
-                            current: page,
-                            pageSize,
-                            total: documents.meta?.total || documents.total || 0,
-                            showSizeChanger: true,
-                            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
-                            onChange: (nextPage, nextPageSize) => {
-                                setPage(nextPage);
-                                setPageSize(nextPageSize);
-                            },
-                        }}
-                    />
+                    {isMobile ? (
+                        <>
+                            <List
+                                loading={loading}
+                                dataSource={documentRows}
+                                locale={{ emptyText: 'No documents found.' }}
+                                renderItem={(record) => {
+                                    const next = primaryAction(record);
+                                    return (
+                                        <List.Item style={{ padding: '8px 0' }}>
+                                            <Card size="small" style={{ width: '100%' }}>
+                                                <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                                    <div>
+                                                        <Text strong>{record.label || 'Untitled Document'}</Text>
+                                                        <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{record.original_name || '-'}</Text>
+                                                    </div>
+                                                    <Space wrap size={6}>
+                                                        <Tag color={STATUS_COLORS[record.status] || 'default'}>
+                                                            Workflow: {STATUS_LABELS[record.status] || humanize(record.status)}
+                                                        </Tag>
+                                                        <Tag color={record.extraction ? 'blue' : 'default'}>
+                                                            AI: {record.extraction?.stage?.label || humanize(record.extraction?.status || 'not scanned')}
+                                                        </Tag>
+                                                        <Tag>{humanize(record.document_type || 'unknown')}</Tag>
+                                                    </Space>
+                                                    <Space wrap>
+                                                        <Tooltip title={next.reason}>
+                                                            <span>
+                                                                <Button type="primary" icon={next.icon} disabled={next.disabled} onClick={next.onClick}>
+                                                                    {next.label}
+                                                                </Button>
+                                                            </span>
+                                                        </Tooltip>
+                                                        <DocumentActionMenu
+                                                            doc={record}
+                                                            permissions={permissions}
+                                                            canUpdate={canUpdate}
+                                                            onPreview={() => setPreviewDoc(record)}
+                                                            onEdit={() => openEdit(record)}
+                                                            onScan={() => scanDoc(record)}
+                                                            scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
+                                                            scanUnavailableReason={aiReadiness.document_scanning_available === false ? aiReadiness.issues?.[0]?.message : null}
+                                                            onExtraction={() => openExtraction(record)}
+                                                            onMatch={() => openMatch(record)}
+                                                            onReview={() => openReviewWorkspace(record)}
+                                                            onCreateProposal={() => openReview(record, true)}
+                                                            onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
+                                                            onDelete={() => deleteDoc(record)}
+                                                        />
+                                                    </Space>
+                                                </Space>
+                                            </Card>
+                                        </List.Item>
+                                    );
+                                }}
+                            />
+                            <Pagination
+                                size="small"
+                                current={page}
+                                pageSize={pageSize}
+                                total={documents.meta?.total || documents.total || 0}
+                                showSizeChanger
+                                onChange={(nextPage, nextPageSize) => {
+                                    setPage(nextPage);
+                                    setPageSize(nextPageSize);
+                                }}
+                                style={{ marginTop: 12 }}
+                            />
+                        </>
+                    ) : (
+                        <Table
+                            size="small"
+                            rowKey="public_id"
+                            loading={loading}
+                            dataSource={documentRows}
+                            columns={columns}
+                            pagination={{
+                                current: page,
+                                pageSize,
+                                total: documents.meta?.total || documents.total || 0,
+                                showSizeChanger: true,
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+                                onChange: (nextPage, nextPageSize) => {
+                                    setPage(nextPage);
+                                    setPageSize(nextPageSize);
+                                },
+                            }}
+                        />
+                    )}
                 </Card>
 
                 <UploadModal
@@ -962,7 +1090,6 @@ export default function DocumentUploadIndex() {
 
                 <PreviewModal
                     doc={previewDoc}
-                    styles={styles}
                     onClose={() => setPreviewDoc(null)}
                 />
 
@@ -1723,7 +1850,7 @@ function EditModal({
     );
 }
 
-function PreviewModal({ doc, styles, onClose }) {
+function PreviewModal({ doc, onClose }) {
     return (
         <Modal
             title={doc?.label || 'Preview'}
@@ -1733,13 +1860,12 @@ function PreviewModal({ doc, styles, onClose }) {
             onCancel={onClose}
             destroyOnClose
         >
-            {doc && (
-                <iframe
-                    src={`/api/document-uploads/${docKey(doc)}/preview`}
-                    style={styles.iframe}
-                    title={doc.label || 'Document Preview'}
+            {doc && <div style={{ height: '72vh' }}>
+                <DocumentPreview
+                    document={doc}
+                    onDownload={(document) => window.open(`/api/document-uploads/${docKey(document)}/preview`, '_blank')}
                 />
-            )}
+            </div>}
         </Modal>
     );
 }

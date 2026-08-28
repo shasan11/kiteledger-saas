@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\Documents;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DocumentExtractionResource;
+use App\Http\Resources\DocumentTransactionProposalResource;
 use App\Http\Resources\DocumentUploadResource;
 use App\Models\DocumentTransactionProposal;
 use App\Models\DocumentUpload;
+use App\Services\BranchScopeService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentDuplicateChecker;
 use App\Services\Documents\DocumentPermissionService;
@@ -14,7 +16,6 @@ use App\Services\Documents\DocumentReviewSchemaBuilder;
 use App\Services\Documents\DocumentTransactionConverter;
 use App\Services\Documents\DocumentTransactionPayloadValidator;
 use App\Services\Documents\DocumentTransactionProposalService;
-use App\Services\BranchScopeService;
 use Illuminate\Http\Request;
 
 class DocumentProposalController extends Controller
@@ -35,7 +36,11 @@ class DocumentProposalController extends Controller
         $this->perms->authorize($request->user(), 'document_upload.view');
         $doc = $this->findDocument($publicId);
         $this->assertDocumentAccess($request, $doc);
-        return response()->json(['ok' => true, 'proposals' => $doc->proposals()->latest()->get()]);
+
+        return response()->json([
+            'ok' => true,
+            'proposals' => DocumentTransactionProposalResource::collection($doc->proposals()->latest()->get()),
+        ]);
     }
 
     public function store(Request $request, string $publicId)
@@ -46,7 +51,7 @@ class DocumentProposalController extends Controller
         $this->assertDocumentAccess($request, $doc);
 
         $data = $request->validate([
-            'transaction_type' => ['required', 'string', 'in:' . implode(',', DocumentTransactionProposalService::SUPPORTED_TYPES)],
+            'transaction_type' => ['required', 'string', 'in:'.implode(',', DocumentTransactionProposalService::SUPPORTED_TYPES)],
             'payload' => ['nullable', 'array'],
         ]);
 
@@ -58,13 +63,21 @@ class DocumentProposalController extends Controller
             $data['payload'] ?? [],
         );
 
-        $proposal = $this->proposalService->create(
-            $doc,
-            $data['transaction_type'],
-            $review['mapped_payload'],
-            $review['warnings'],
-            $doc->extraction?->id,
-        );
+        $proposal = $doc->proposals()
+            ->where('transaction_type', $data['transaction_type'])
+            ->whereNotIn('status', ['converted'])
+            ->latest()
+            ->first();
+
+        $proposal = $proposal
+            ? $this->proposalService->update($proposal, $review['mapped_payload'], $review['warnings'])
+            : $this->proposalService->create(
+                $doc,
+                $data['transaction_type'],
+                $review['mapped_payload'],
+                $review['warnings'],
+                $doc->extraction?->id,
+            );
 
         $this->audit->log('proposal.created', [
             'document_upload_id' => $doc->id,
@@ -138,7 +151,11 @@ class DocumentProposalController extends Controller
             $data['payload'],
         );
         $proposal = $this->proposalService->update($proposal, $review['mapped_payload'], $data['warnings'] ?? $review['warnings']);
-        return response()->json(['ok' => true, 'proposal' => $proposal]);
+
+        return response()->json([
+            'ok' => true,
+            'proposal' => new DocumentTransactionProposalResource($proposal),
+        ]);
     }
 
     public function convert(Request $request, string $publicId, string $proposalId)
@@ -151,7 +168,7 @@ class DocumentProposalController extends Controller
         $this->assertDocumentAccess($request, $doc);
         $validation = $this->validator->validateForConversion($proposal->transaction_type, $proposal->payload ?? []);
 
-        if (!$validation['ok']) {
+        if (! $validation['ok']) {
             $schema = $this->schemaBuilder->build($proposal->transaction_type, $proposal->payload ?? [], $validation['missing_fields']);
             $proposal->update([
                 'missing_fields' => $validation['missing_fields'],
@@ -171,7 +188,7 @@ class DocumentProposalController extends Controller
         $duplicates = $this->duplicates->check($proposal->transaction_type, $proposal->payload ?? [], $doc->file_hash);
 
         $override = $request->boolean('override_duplicate');
-        if ($duplicates && !$override) {
+        if ($duplicates && ! $override) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Possible duplicate transaction detected.',
@@ -188,6 +205,7 @@ class DocumentProposalController extends Controller
         } catch (\Throwable $e) {
             report($e);
             $proposal->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+
             return response()->json([
                 'ok' => false,
                 'message' => $e->getMessage(),
@@ -197,11 +215,11 @@ class DocumentProposalController extends Controller
 
         return response()->json([
             'ok' => true,
-            'message' => 'Draft ' . str_replace('_', ' ', $proposal->transaction_type) . ' created.',
+            'message' => 'Draft '.str_replace('_', ' ', $proposal->transaction_type).' created.',
             'transaction_type' => $proposal->transaction_type,
             'record_id' => $result['record_id'],
             'open_url' => $result['open_url'],
-            'proposal' => $proposal->fresh(),
+            'proposal' => new DocumentTransactionProposalResource($proposal->fresh()),
         ]);
     }
 
@@ -221,7 +239,7 @@ class DocumentProposalController extends Controller
             'ok' => true,
             'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
             'extraction' => $doc->extraction ? new DocumentExtractionResource($doc->extraction->load('documentUpload')) : null,
-            'proposal' => $proposal,
+            'proposal' => new DocumentTransactionProposalResource($proposal),
             'transaction_type' => $proposal->transaction_type,
             'initial_values' => $review['initial_values'],
             'mapped_payload' => $review['mapped_payload'],

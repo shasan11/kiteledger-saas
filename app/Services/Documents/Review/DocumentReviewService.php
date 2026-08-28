@@ -45,10 +45,10 @@ final class DocumentReviewService
     ) {}
 
     /**
-     * @param array<string, mixed> $edits dotted field key => new value
+     * @param  array<string, mixed>  $edits  dotted field key => new value
      * @return array{applied: int, ignored: string[], issue_count: int}
      */
-    public function applyCorrections(DocumentUpload $document, array $edits): array
+    public function applyCorrections(DocumentUpload $document, array $edits, array $lineEdits = []): array
     {
         $extraction = $document->extraction;
 
@@ -60,11 +60,13 @@ final class DocumentReviewService
         $fields = $structured['fields'] ?? [];
 
         $applied = 0;
+        $linesApplied = 0;
         $ignored = [];
 
         foreach ($edits as $key => $value) {
             if (! in_array($key, self::EDITABLE_FIELDS, true) || ! isset($fields[$key])) {
                 $ignored[] = (string) $key;
+
                 continue;
             }
 
@@ -74,15 +76,54 @@ final class DocumentReviewService
 
         $structured['fields'] = $fields;
 
+        if ($lineEdits !== []) {
+            $lines = array_values(is_array($structured['lines'] ?? null) ? $structured['lines'] : []);
+            $allowed = ['description', 'product_code', 'product_name', 'quantity', 'unit', 'rate', 'discount', 'tax_rate', 'tax_amount', 'amount', 'product_id', 'account_id'];
+
+            foreach ($lineEdits as $index => $changes) {
+                if (! isset($lines[$index]) || ! is_array($changes)) {
+                    $ignored[] = "lines.{$index}";
+
+                    continue;
+                }
+
+                foreach (array_intersect_key($changes, array_flip($allowed)) as $key => $value) {
+                    if (! isset($lines[$index]['original_values'][$key])) {
+                        $lines[$index]['original_values'][$key] = $lines[$index][$key] ?? null;
+                    }
+                    $lines[$index][$key] = is_string($value) ? trim($value) : $value;
+                    $linesApplied++;
+                }
+
+                $lines[$index]['edited_by_user'] = true;
+                $lines[$index]['needs_review'] = false;
+                $lines[$index]['amount_origin'] = 'user';
+            }
+
+            $structured['lines'] = $lines;
+        }
+
         // Corrections can resolve or create problems, so validation re-runs
         // against the corrected values rather than the original extraction.
         $structured = $this->validator->revalidate($structured);
-        $structured['review_issue_count'] = $this->countIssues($structured['fields']);
-        $structured['has_blocking_issues'] = $this->hasBlocking($structured['fields']);
+        $structured['review_issue_count'] = $this->countIssues($structured['fields'])
+            + count(array_filter($structured['lines'] ?? [], static fn ($line) => (bool) ($line['needs_review'] ?? false)));
+        $structured['has_blocking_issues'] = $this->hasBlocking($structured['fields'])
+            || (bool) array_filter($structured['lines'] ?? [], static fn ($line) => (bool) ($line['needs_review'] ?? false));
 
-        DB::transaction(function () use ($extraction, $structured, $document): void {
+        // Proposal creation consumes normalized_json. Keep it in lockstep with
+        // the corrected review payload so a user's saved values are the values
+        // used to build the draft.
+        $normalized = is_array($extraction->normalized_json) ? $extraction->normalized_json : [];
+        foreach ($structured['fields'] as $key => $field) {
+            data_set($normalized, $key, $field['value'] ?? null);
+        }
+        $normalized['lines'] = array_values($structured['lines'] ?? []);
+
+        DB::transaction(function () use ($extraction, $structured, $normalized, $document): void {
             $extraction->update([
                 'structured_json' => $structured,
+                'normalized_json' => $normalized,
                 'review_issue_count' => $structured['review_issue_count'],
             ]);
 
@@ -95,13 +136,14 @@ final class DocumentReviewService
 
         return [
             'applied' => $applied,
+            'line_values_applied' => $linesApplied,
             'ignored' => $ignored,
             'issue_count' => $structured['review_issue_count'],
         ];
     }
 
     /**
-     * @param array<string, mixed> $field
+     * @param  array<string, mixed>  $field
      * @return array<string, mixed>
      */
     private function applyOne(array $field, mixed $value): array

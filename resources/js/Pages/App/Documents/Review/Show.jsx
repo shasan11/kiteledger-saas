@@ -7,9 +7,13 @@ import {
     Card,
     Col,
     Grid,
+    Input,
+    InputNumber,
+    Modal,
     Row,
     Skeleton,
     Space,
+    Table,
     Tabs,
     Tag,
     Typography,
@@ -36,7 +40,13 @@ const SUMMARY_FIELDS = [
     'document_date',
     'due_date',
     'currency_code',
+];
+
+const PARTY_FIELDS = [
     'party.name',
+    'party.email',
+    'party.phone',
+    'party.tax_number',
 ];
 
 const TOTAL_FIELDS = [
@@ -45,6 +55,8 @@ const TOTAL_FIELDS = [
     'totals.tax_total',
     'totals.shipping',
     'totals.grand_total',
+    'totals.paid_amount',
+    'totals.balance_due',
 ];
 
 /**
@@ -54,7 +66,7 @@ const TOTAL_FIELDS = [
  * source visible beside the extracted values, rather than a drawer stacked on
  * top of a list.
  */
-export default function DocumentReviewShow({ publicId }) {
+export default function DocumentReviewShow({ publicId, aiReadiness = {} }) {
     const { token } = theme.useToken();
     const screens = useBreakpoint();
     const isMobile = !screens.lg;
@@ -64,6 +76,15 @@ export default function DocumentReviewShow({ publicId }) {
     const [document, setDocument] = useState(null);
     const [extraction, setExtraction] = useState(null);
     const [edits, setEdits] = useState({});
+    const [lineEdits, setLineEdits] = useState({});
+    const [readiness, setReadiness] = useState(null);
+    const [permissions, setPermissions] = useState({});
+    const [matches, setMatches] = useState([]);
+    const [matching, setMatching] = useState(false);
+    const [matchActionId, setMatchActionId] = useState(null);
+    const [proposalBusy, setProposalBusy] = useState(false);
+    const [converting, setConverting] = useState(false);
+    const [draftUrl, setDraftUrl] = useState(null);
     const [error, setError] = useState(null);
 
     const mountedRef = useRef(true);
@@ -95,6 +116,9 @@ export default function DocumentReviewShow({ publicId }) {
 
             setDocument(data.document);
             setExtraction(data.extraction);
+            setReadiness(data.readiness || null);
+            setPermissions(data.permissions || {});
+            setMatches(data.matches || []);
             setError(null);
         } catch (e) {
             if (axios.isCancel?.(e) || e.name === 'CanceledError') return;
@@ -147,10 +171,22 @@ export default function DocumentReviewShow({ publicId }) {
             };
         });
 
-        return { ...base, fields };
-    }, [extraction, edits]);
+        const lines = (base.lines || []).map((line, index) => ({
+            ...line,
+            ...(lineEdits[index] || {}),
+        }));
+
+        return { ...base, fields, lines };
+    }, [extraction, edits, lineEdits]);
 
     const handleChange = (key, value) => setEdits((prev) => ({ ...prev, [key]: value }));
+    const handleLineChange = (index, key, value) => setLineEdits((prev) => ({
+        ...prev,
+        [index]: { ...(prev[index] || {}), [key]: value },
+    }));
+    const can = (permission) => Boolean(permissions?.[permission]);
+    const unsavedCount = Object.keys(edits).length
+        + Object.values(lineEdits).reduce((total, line) => total + Object.keys(line).length, 0);
 
     const focusIssue = (issue) => {
         const node = fieldRefs.current[issue.key];
@@ -159,24 +195,228 @@ export default function DocumentReviewShow({ publicId }) {
     };
 
     const save = async () => {
-        if (Object.keys(edits).length === 0) {
+        if (unsavedCount === 0) {
             antMessage.info('No changes to save.');
-            return;
+            return true;
         }
 
         setSaving(true);
 
         try {
-            await axios.patch(`/api/document-uploads/${publicId}`, { review_edits: edits });
+            await axios.patch(`/api/document-uploads/${publicId}`, {
+                review_edits: edits,
+                review_lines: lineEdits,
+            });
             antMessage.success('Your corrections were saved.');
             setEdits({});
-            load();
+            setLineEdits({});
+            await load();
+            return true;
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Your corrections could not be saved.');
+            return false;
         } finally {
             if (mountedRef.current) setSaving(false);
         }
     };
+
+    const createProposal = async ({ notify = true } = {}) => {
+        if (!readiness?.conversion_target || !can('document_upload.proposal.create')) return null;
+        if (unsavedCount > 0 && !await save()) return null;
+
+        setProposalBusy(true);
+        try {
+            const { data } = await axios.post(`/api/document-uploads/${publicId}/proposals`, {
+                transaction_type: readiness.conversion_target,
+            });
+            if (notify) antMessage.success('Draft proposal is ready for review.');
+            await load();
+            return data;
+        } catch (e) {
+            antMessage.error(e.response?.data?.message || 'The proposal could not be created.');
+            return null;
+        } finally {
+            if (mountedRef.current) setProposalBusy(false);
+        }
+    };
+
+    const runMatching = async () => {
+        if (unsavedCount > 0 && !await save()) return;
+        setMatching(true);
+        try {
+            const { data } = await axios.post(`/api/document-uploads/${publicId}/match-entities`);
+            setMatches(data.matches || []);
+            antMessage.success('ERP record matching completed.');
+            await load();
+        } catch (e) {
+            antMessage.error(e.response?.data?.message || 'ERP record matching could not be completed.');
+        } finally {
+            if (mountedRef.current) setMatching(false);
+        }
+    };
+
+    const chooseMatch = async (match, suggestion) => {
+        setMatchActionId(`${match.id}:${suggestion.id}`);
+        try {
+            await axios.post(`/api/document-uploads/matches/${match.id}/choose`, {
+                matched_id: suggestion.id,
+            });
+            antMessage.success(`${suggestion.name || suggestion.code || 'Record'} linked.`);
+            await load();
+        } catch (e) {
+            antMessage.error(e.response?.data?.message || 'The selected record could not be linked.');
+        } finally {
+            if (mountedRef.current) setMatchActionId(null);
+        }
+    };
+
+    const createMissingRecord = (match) => {
+        Modal.confirm({
+            title: `Create missing ${String(match.entity_type || 'record').replaceAll('_', ' ')}?`,
+            content: `KiteLedger will create “${match.extracted_name}” and link it to this draft proposal. Review and approve the resulting transaction separately.`,
+            okText: 'Create and link',
+            onOk: async () => {
+                setMatchActionId(`${match.id}:create`);
+                try {
+                    await axios.post(`/api/document-uploads/${publicId}/create-missing-fk`, {
+                        match_id: match.id,
+                        fields: { name: match.extracted_name },
+                    });
+                    antMessage.success('The record was created and linked.');
+                    await load();
+                } catch (e) {
+                    antMessage.error(e.response?.data?.message || 'The missing record could not be created.');
+                } finally {
+                    if (mountedRef.current) setMatchActionId(null);
+                }
+            },
+        });
+    };
+
+    const createDraft = async (overrideDuplicate = false) => {
+        const proposalData = await createProposal({ notify: false });
+        const proposal = proposalData?.proposal;
+        if (!proposal) return;
+
+        setConverting(true);
+        try {
+            const { data } = await axios.post(
+                `/api/document-uploads/${publicId}/proposals/${proposal.id}/convert`,
+                { override_duplicate: overrideDuplicate },
+            );
+            setDraftUrl(data.open_url || null);
+            antMessage.success(data.message || 'Draft transaction created.');
+            await load();
+            if (data.open_url) window.open(data.open_url, '_blank');
+        } catch (e) {
+            const response = e.response?.data;
+            if (response?.code === 'DOCUMENT_DUPLICATE_DETECTED') {
+                Modal.confirm({
+                    title: 'Possible duplicate found',
+                    content: response.message,
+                    okText: 'Create draft anyway',
+                    onOk: () => createDraft(true),
+                });
+            } else {
+                antMessage.error(response?.message || 'The draft transaction could not be created.');
+            }
+        } finally {
+            if (mountedRef.current) setConverting(false);
+        }
+    };
+
+    const lineColumns = [
+        {
+            title: 'Description',
+            dataIndex: 'description',
+            render: (value, _line, index) => (
+                <Input value={value ?? ''} onChange={(event) => handleLineChange(index, 'description', event.target.value)} />
+            ),
+        },
+        {
+            title: 'Quantity',
+            dataIndex: 'quantity',
+            width: 110,
+            render: (value, _line, index) => (
+                <InputNumber min={0} value={value} onChange={(next) => handleLineChange(index, 'quantity', next)} style={{ width: '100%' }} />
+            ),
+        },
+        {
+            title: 'Rate',
+            dataIndex: 'rate',
+            width: 130,
+            render: (value, _line, index) => (
+                <InputNumber min={0} value={value} onChange={(next) => handleLineChange(index, 'rate', next)} style={{ width: '100%' }} />
+            ),
+        },
+        {
+            title: 'Amount',
+            dataIndex: 'amount',
+            width: 140,
+            render: (value, _line, index) => (
+                <InputNumber min={0} value={value} onChange={(next) => handleLineChange(index, 'amount', next)} style={{ width: '100%' }} />
+            ),
+        },
+    ];
+
+    const matchColumns = [
+        {
+            title: 'ERP record',
+            dataIndex: 'entity_type',
+            width: 130,
+            render: (value) => String(value || 'record').replaceAll('_', ' '),
+        },
+        { title: 'Extracted value', dataIndex: 'extracted_name' },
+        {
+            title: 'Match status',
+            dataIndex: 'match_status',
+            width: 130,
+            render: (value) => (
+                <Tag color={['matched', 'created', 'user_selected'].includes(value) ? 'success' : value === 'suggested' ? 'warning' : 'default'}>
+                    {String(value || 'unmatched').replaceAll('_', ' ')}
+                </Tag>
+            ),
+        },
+        {
+            title: 'Review match',
+            key: 'actions',
+            render: (_, match) => {
+                if (['matched', 'created', 'user_selected'].includes(match.match_status)) {
+                    return <Text type="success">Linked{match.confidence_score ? ` · ${Math.round(match.confidence_score * 100)}%` : ''}</Text>;
+                }
+                const suggestions = match.options?.suggestions || [];
+                const canCreate = ['customer', 'supplier', 'product', 'currency', 'warehouse'].includes(match.entity_type);
+                return (
+                    <Space direction="vertical" size={6}>
+                        {suggestions.map((suggestion) => (
+                            <Button
+                                key={suggestion.id}
+                                size="small"
+                                loading={matchActionId === `${match.id}:${suggestion.id}`}
+                                disabled={!can('document_upload.entity_match') || Boolean(matchActionId)}
+                                onClick={() => chooseMatch(match, suggestion)}
+                            >
+                                Link {suggestion.name || suggestion.code}
+                                {suggestion.reason ? ` · ${suggestion.reason}` : ''}
+                            </Button>
+                        ))}
+                        {canCreate && (
+                            <Button
+                                size="small"
+                                type={suggestions.length ? 'default' : 'primary'}
+                                loading={matchActionId === `${match.id}:create`}
+                                disabled={!can('document_upload.create_fk') || Boolean(matchActionId)}
+                                onClick={() => createMissingRecord(match)}
+                            >
+                                Create missing record
+                            </Button>
+                        )}
+                        {!suggestions.length && !canCreate && <Text type="secondary">Select this record in proposal review.</Text>}
+                    </Space>
+                );
+            },
+        },
+    ];
 
     const renderFields = (keys) => (
         <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -232,23 +472,97 @@ export default function DocumentReviewShow({ publicId }) {
             )}
 
             {review && (
+                <Card size="small" title="Supplier or customer and tax details">
+                    {renderFields(PARTY_FIELDS)}
+                </Card>
+            )}
+
+            {review && (
                 <Card size="small" title="Totals">
                     {renderFields(TOTAL_FIELDS)}
                 </Card>
+            )}
+
+            {review && (
+                <Card size="small" title="Line items">
+                    <Table
+                        size="small"
+                        rowKey={(line, index) => line.index ?? index}
+                        dataSource={review.lines || []}
+                        columns={lineColumns}
+                        pagination={false}
+                        scroll={{ x: 650 }}
+                        locale={{ emptyText: 'No line items were extracted. Add them in proposal review before creating a draft.' }}
+                    />
+                </Card>
+            )}
+
+            {review && (
+                <Card
+                    size="small"
+                    title="ERP record matches"
+                    extra={(
+                        <Button
+                            size="small"
+                            loading={matching}
+                            disabled={!can('document_upload.entity_match')}
+                            onClick={runMatching}
+                        >
+                            {matches.length ? 'Run matching again' : 'Match records'}
+                        </Button>
+                    )}
+                >
+                    <Table
+                        size="small"
+                        rowKey="id"
+                        dataSource={matches}
+                        columns={matchColumns}
+                        pagination={false}
+                        scroll={{ x: 720 }}
+                        locale={{ emptyText: 'Run matching to link suppliers, customers, products, accounts, currencies, and warehouses.' }}
+                    />
+                </Card>
+            )}
+
+            {readiness && !readiness.ready && (
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="This document cannot be converted yet"
+                    description={(readiness.blockers || []).map((blocker) => <div key={blocker}>{blocker}</div>)}
+                />
             )}
 
             {review && <ConversionSummary review={review} documentType={document?.document_type} />}
         </Space>
     );
 
-    async function rescan() {
+    async function startRescan() {
         try {
             await axios.post(`/api/document-uploads/${publicId}/scan-ai`);
             antMessage.success('Scanning again.');
+            setEdits({});
+            setLineEdits({});
             load();
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'The scan could not be started.');
         }
+    }
+
+    function rescan() {
+        if (unsavedCount === 0) {
+            return startRescan();
+        }
+
+        Modal.confirm({
+            title: 'Discard unsaved corrections and scan again?',
+            content:
+                'Scanning again replaces the current extraction. Save your corrections first, or explicitly discard them to continue.',
+            okText: 'Discard and rescan',
+            okButtonProps: { danger: true },
+            cancelText: 'Keep corrections',
+            onOk: startRescan,
+        });
     }
 
     return (
@@ -349,23 +663,56 @@ export default function DocumentReviewShow({ publicId }) {
                         }}
                     >
                         <Text type="secondary" style={{ flex: 1, fontSize: 12, alignSelf: 'center' }}>
-                            {Object.keys(edits).length > 0
-                                ? `${Object.keys(edits).length} unsaved change(s)`
+                            {unsavedCount > 0
+                                ? `${unsavedCount} unsaved change(s)`
                                 : 'No unsaved changes'}
                         </Text>
 
-                        <Button icon={<ReloadOutlined />} onClick={rescan}>
-                            Scan again
-                        </Button>
+                        <Tooltip title={aiReadiness.document_scanning_available === false ? aiReadiness.issues?.[0]?.message : null}>
+                            <span>
+                                <Button
+                                    icon={<ReloadOutlined />}
+                                    disabled={aiReadiness.document_scanning_available === false}
+                                    onClick={rescan}
+                                >
+                                    Scan again
+                                </Button>
+                            </span>
+                        </Tooltip>
 
                         <Button
                             type="primary"
                             loading={saving}
-                            disabled={Object.keys(edits).length === 0}
+                            disabled={unsavedCount === 0 || !can('document_upload.proposal.update')}
                             onClick={save}
                         >
                             Save corrections
                         </Button>
+
+                        <Button
+                            loading={proposalBusy}
+                            disabled={!readiness?.conversion_target || !can('document_upload.proposal.create')}
+                            onClick={() => createProposal()}
+                        >
+                            Create or update proposal
+                        </Button>
+
+                        {readiness?.ready && (
+                            <Button
+                                type="primary"
+                                loading={converting}
+                                disabled={!can('document_upload.convert') || !can('document_upload.proposal.create')}
+                                onClick={() => createDraft(false)}
+                            >
+                                Create draft transaction
+                            </Button>
+                        )}
+
+                        {draftUrl && (
+                            <Button type="link" onClick={() => window.open(draftUrl, '_blank')}>
+                                Open created draft
+                            </Button>
+                        )}
                     </div>
                 )}
             </div>

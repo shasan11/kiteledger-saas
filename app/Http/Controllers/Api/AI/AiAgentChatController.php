@@ -338,10 +338,10 @@ class AiAgentChatController extends Controller
 
             return response()->json([
                 'ok' => false,
-                'message' => $e->getMessage(),
+                'message' => $e->publicMessage(),
                 'code' => $e->getErrorCode(),
                 'conversation_id' => $this->conversationToken($conversation),
-            ], 422);
+            ], $e->httpStatus());
         } catch (Throwable $e) {
             report($e);
 
@@ -396,7 +396,7 @@ class AiAgentChatController extends Controller
     /**
      * Thin V2 entry point: build a trusted request, delegate, render.
      *
-     * @param array<string, mixed> $data validated input
+     * @param  array<string, mixed>  $data  validated input
      */
     private function handleV2(Request $request, array $data): JsonResponse
     {

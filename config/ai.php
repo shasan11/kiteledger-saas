@@ -113,6 +113,10 @@ return [
             'api_key' => env('OPENAI_API_KEY', ''),
             'base_url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
         ],
+        'groq' => [
+            'api_key' => env('GROQ_API_KEY', ''),
+            'base_url' => env('GROQ_URL', 'https://api.groq.com/openai/v1'),
+        ],
         'openrouter' => [
             'api_key' => env('OPENROUTER_API_KEY', ''),
             'base_url' => env('OPENROUTER_URL', 'https://openrouter.ai/api/v1'),

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Documents;
 
 use App\Http\Controllers\Controller;
+use App\Services\AI\AiReadinessService;
 use App\Services\Documents\DocumentPermissionService;
 use Inertia\Inertia;
 
@@ -16,17 +17,18 @@ class DocumentUploadPageController extends Controller
      * passed through; all scope and permission checks happen on the API call
      * the page makes, so this route cannot be used to widen access.
      */
-    public function review(DocumentPermissionService $perms, string $publicId)
+    public function review(DocumentPermissionService $perms, AiReadinessService $aiReadiness, string $publicId)
     {
         $perms->authorize(auth()->user(), 'document_upload.extract.view');
 
         return Inertia::render('App/Documents/Review/Show', [
             'publicId' => $publicId,
             'permissions' => $perms->summary(auth()->user()),
+            'aiReadiness' => $this->safeAiReadiness($aiReadiness),
         ]);
     }
 
-    public function index(DocumentPermissionService $perms)
+    public function index(DocumentPermissionService $perms, AiReadinessService $aiReadiness)
     {
         $perms->authorize(auth()->user(), 'document_upload.view');
 
@@ -34,7 +36,7 @@ class DocumentUploadPageController extends Controller
             'permissions' => $perms->summary(auth()->user()),
             'config' => [
                 'max_upload_mb' => (int) config('documents.max_upload_mb', 10),
-                'allowed_extensions' => ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+                'allowed_extensions' => ['pdf', 'docx', 'jpg', 'jpeg', 'png', 'webp'],
                 'transaction_types' => [
                     ['value' => 'purchase_bill', 'label' => 'Purchase Bill'],
                     ['value' => 'invoice', 'label' => 'Invoice'],
@@ -54,7 +56,26 @@ class DocumentUploadPageController extends Controller
                     'quotation', 'warehouse_transfer', 'inventory_adjustment',
                     'bank_statement', 'other',
                 ],
+                'ai_readiness' => $this->safeAiReadiness($aiReadiness),
             ],
         ]);
+    }
+
+    private function safeAiReadiness(AiReadinessService $readiness): array
+    {
+        $status = $readiness->evaluate();
+
+        return [
+            'document_scanning_available' => (bool) ($status['document_scanning_available'] ?? false),
+            'issues' => collect($status['issues'] ?? [])
+                ->filter(fn (array $issue) => ($issue['code'] ?? null) === 'AI_DISABLED'
+                    || str_contains((string) ($issue['code'] ?? ''), 'DOCUMENT')
+                    || str_contains((string) ($issue['code'] ?? ''), 'QUEUE')
+                    || str_contains((string) ($issue['code'] ?? ''), 'PROVIDER'))
+                ->map(fn (array $issue) => [
+                    'code' => $issue['code'] ?? 'AI_NOT_READY',
+                    'message' => $issue['message'] ?? 'AI is not ready.',
+                ])->values()->all(),
+        ];
     }
 }

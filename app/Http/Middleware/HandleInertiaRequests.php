@@ -84,6 +84,11 @@ class HandleInertiaRequests extends Middleware
                 $scope->resolveContext($request),
                 $this->fiscalYearContext($request),
             ),
+            'tenantContext' => fn () => [
+                'companyName' => tenant()?->company_name,
+                'timezone' => tenant()?->timezone ?: config('app.timezone'),
+                'currency' => tenant()?->currency,
+            ],
             'defaultCurrency' => fn () => $this->defaultCurrencyPayload(),
             'locale' => [
                 'current' => $locale,

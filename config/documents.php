@@ -22,6 +22,7 @@ return [
      * dedicated worker is running for it, otherwise scans will never execute.
      */
     'queue' => env('DOCUMENT_SCAN_QUEUE', 'default'),
+    'queue_connection' => env('DOCUMENT_SCAN_QUEUE_CONNECTION', 'central'),
     'scan_tries' => (int) env('DOCUMENT_SCAN_TRIES', 3),
 
     /* Upper bound on DOCX text handed to the model, to protect the context window. */

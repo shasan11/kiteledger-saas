@@ -42,7 +42,7 @@ class AiSemanticSearchController extends Controller
         if (! $this->settings->enabled() || ! $this->settings->supportsEmbeddings()) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Semantic search needs an embeddings-capable AI provider (OpenAI, Gemini, Ollama, or OpenRouter). Configure it in AI Settings, then run "php artisan ai:index".',
+                'message' => 'Semantic search is not available because the shared embedding provider or knowledge index is not ready. Ask the platform administrator to check AI readiness.',
             ], 422);
         }
 
@@ -53,7 +53,7 @@ class AiSemanticSearchController extends Controller
                 'fiscal_year_id' => $request->header('X-Fiscal-Year-Id'),
             ]);
         } catch (AiProviderException $e) {
-            return response()->json(['ok' => false, 'code' => $e->getErrorCode(), 'message' => $e->getMessage()], 422);
+            return response()->json(['ok' => false, 'code' => $e->getErrorCode(), 'message' => $e->publicMessage()], $e->httpStatus());
         }
 
         return response()->json([

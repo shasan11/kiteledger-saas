@@ -109,12 +109,27 @@ models; retrieval filters provider and model explicitly.
 
 ## Queues and scheduler
 
-Incremental jobs use `ai-index`; embedding jobs use `ai-embedding`. Add both to
-the production tenant-aware worker:
+Incremental jobs use `ai-index`; embedding jobs use `ai-embedding`; document
+scans use the queue in `DOCUMENT_SCAN_QUEUE` (`default` by default). All are
+dispatched through `DOCUMENT_SCAN_QUEUE_CONNECTION=central`. The connection
+must use a real queue driver, never `sync`, in production. Run the tenant-aware
+worker with every required queue:
 
 ```bash
-php artisan queue:work central --queue=ai-index,ai-embedding,ai-copilot,default --tries=3 --timeout=3600
+php artisan queue:work central --queue=documents,ai-index,ai-embedding,ai-copilot,default --tries=3 --timeout=3600
 ```
+
+Set `DB_QUEUE_RETRY_AFTER` higher than every worker job timeout. It must exceed the effective document timeout (`max(DOCUMENT_SCAN_TIMEOUT, AI timeout) + 60`) and the 3600-second tenant re-index timeout. The example uses 3700 seconds; a shorter reservation can cause two workers to process the same attempt.
+
+For shared hosting, run the bounded equivalent every minute:
+
+```bash
+php artisan queue:work central --queue=documents,ai-index,ai-embedding,ai-copilot,default --stop-when-empty --tries=3 --timeout=3600
+```
+
+`DB_QUEUE_RETRY_AFTER` must be greater than the longest worker/job timeout.
+KiteLedger readiness treats a missing or older-than-five-minutes queue
+heartbeat as unhealthy and disables document scanning readiness.
 
 Keep Laravel's scheduler cron running every minute. Schedule a periodic
 `ai:index-tenants --queue` and `ai:prune-index --tenant=...` from the hosting
@@ -205,7 +220,9 @@ prohibited actions remain unavailable through Copilot.
 ## Troubleshooting
 
 `AI_PROVIDER_NOT_CONFIGURED`: save a valid central chat provider key, model, and
-base URL. `AI_EMBEDDING_PROVIDER_NOT_CONFIGURED`: configure embeddings or run
+base URL, then run the central connection test. A key alone never reports the
+provider or model as verified; changing provider, model, URL, or key invalidates
+the previous test. `AI_EMBEDDING_PROVIDER_NOT_CONFIGURED`: configure embeddings or run
 indexing with `--no-embeddings`; exact and keyword retrieval still work.
 
 If results are stale, check the `ai-index` worker, failed jobs, and

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\AI;
 
 use App\Http\Controllers\Controller;
 use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiReadinessService;
 use App\Services\AI\AiSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +42,7 @@ class AiSettingsController extends Controller
             'central_managed' => true,
             'editable' => false,
             'message' => 'AI provider settings are managed by the central administrator.',
+            'readiness' => app(AiReadinessService::class)->evaluate(),
         ]);
     }
 

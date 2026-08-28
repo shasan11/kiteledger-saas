@@ -33,11 +33,13 @@ export default function DocumentActionMenu({
     onDownload,
     onDelete,
     scanBusy = false,
+    scanUnavailableReason = null,
 }) {
     // 'queued' and 'processing' are deliberately excluded: a scan is already
     // in flight and the server would reject a second one anyway.
     const canScan = ['uploaded', 'failed', 'needs_review', 'extracted'].includes(doc.status)
         && !scanBusy
+        && !scanUnavailableReason
         && hasPerm(permissions, 'document_upload.scan_ai');
 
     const hasExtraction = !!doc.extraction;
@@ -48,29 +50,40 @@ export default function DocumentActionMenu({
         {
             key: 'scan',
             icon: <ScanOutlined />,
-            label: doc.status === 'failed' ? 'Retry AI Scan' : 'Run AI Scan',
+            label: !hasPerm(permissions, 'document_upload.scan_ai')
+                ? 'Run AI Scan (permission required)'
+                : scanUnavailableReason
+                    ? `Run AI Scan (${scanUnavailableReason})`
+                    : doc.status === 'failed' ? 'Retry AI Scan' : 'Run AI Scan',
             disabled: !canScan,
             onClick: onScan,
         },
         {
             key: 'extraction',
             icon: <FileTextOutlined />,
-            label: 'View Extraction',
+            label: hasPerm(permissions, 'document_upload.extract.view')
+                ? 'View Extraction'
+                : 'View Extraction (permission required)',
             disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.extract.view'),
             onClick: onExtraction,
         },
         {
             key: 'match',
             icon: <ToolOutlined />,
-            label: 'Entity Matches',
+            label: hasPerm(permissions, 'document_upload.entity_match')
+                ? 'Entity Matches'
+                : 'Entity Matches (permission required)',
             disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.entity_match'),
             onClick: onMatch,
         },
         {
             key: 'proposal',
             icon: <PlusOutlined />,
-            label: 'Create Proposal',
-            disabled: !hasExtraction || doc.status === 'converted',
+            disabled: !hasExtraction || doc.status === 'converted'
+                || !hasPerm(permissions, 'document_upload.proposal.create'),
+            label: hasPerm(permissions, 'document_upload.proposal.create')
+                ? 'Create Proposal'
+                : 'Create Proposal (permission required)',
             onClick: onCreateProposal,
         },
         {
@@ -99,4 +112,3 @@ export default function DocumentActionMenu({
         </Dropdown>
     );
 }
-

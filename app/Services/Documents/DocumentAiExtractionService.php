@@ -50,6 +50,7 @@ class DocumentAiExtractionService
         $extraction = DocumentExtraction::create([
             'document_upload_id' => $doc->id,
             'status' => 'queued',
+            'attempt_number' => $this->nextAttemptNumber($doc),
         ]);
 
         return $this->process($doc, $extraction);
@@ -79,7 +80,9 @@ class DocumentAiExtractionService
             'completed_at' => null,
             'error_message' => null,
             'error_code' => null,
-            'attempt_number' => $this->nextAttemptNumber($doc),
+            // One extraction row is one scan attempt. Queue retries of that
+            // same row retain its number instead of appearing as new scans.
+            'attempt_number' => $extraction->attempt_number ?: $this->nextAttemptNumber($doc),
         ]);
 
         $doc->update(['status' => 'processing']);
@@ -255,7 +258,7 @@ class DocumentAiExtractionService
                 'base64' => base64_encode($text),
                 'mime' => 'text/plain',
                 'user_prompt' => DocumentExtractionPrompt::user()
-                    . "\n\nThe uploaded Word document was converted to plain text before extraction. Extract the accounting/document data from the text content.",
+                    ."\n\nThe uploaded Word document was converted to plain text before extraction. Extract the accounting/document data from the text content.",
             ];
         }
 
@@ -264,7 +267,7 @@ class DocumentAiExtractionService
                 'base64' => $base64,
                 'mime' => $mime,
                 'user_prompt' => DocumentExtractionPrompt::user()
-                    . "\n\nThe uploaded document is an image. Extract visible accounting/document data from the image.",
+                    ."\n\nThe uploaded document is an image. Extract visible accounting/document data from the image.",
             ];
         }
 
@@ -361,7 +364,7 @@ class DocumentAiExtractionService
         try {
             file_put_contents($tempFile, $binary);
 
-            $zip = new ZipArchive();
+            $zip = new ZipArchive;
 
             if ($zip->open($tempFile) !== true) {
                 throw new RuntimeException('Invalid DOCX file. The file could not be opened.');

@@ -165,6 +165,7 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::put('settings/{group}', [SettingsController::class, 'update'])->middleware('central.admin:settings.manage')->name('settings.update');
             Route::post('settings/{group}/reset', [SettingsController::class, 'reset'])->middleware('central.admin:settings.manage')->name('settings.reset');
             Route::post('settings/{group}/test', [SettingsController::class, 'test'])->middleware('central.admin:settings.manage')->name('settings.test');
+            Route::post('settings/ai/reindex', [SettingsController::class, 'reindexAi'])->middleware('central.admin:settings.manage')->name('settings.ai.reindex');
             Route::middleware('central.admin:invoice.customize')->group(function (): void {
                 Route::get('invoice-customization', [InvoiceCustomizationController::class, 'index'])->name('invoice-customization.index');
                 Route::put('invoice-customization', [InvoiceCustomizationController::class, 'update'])->name('invoice-customization.update');

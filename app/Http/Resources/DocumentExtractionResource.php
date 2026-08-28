@@ -90,6 +90,15 @@ class DocumentExtractionResource extends JsonResource
             return null;
         }
 
+        if ($this->status === 'retrying') {
+            return [
+                'code' => (string) $this->error_code,
+                'message' => $this->safeErrorMessage(),
+                'actions' => ['view_progress'],
+                'transient' => true,
+            ];
+        }
+
         $code = DocumentErrorCode::tryFrom((string) $this->error_code);
 
         return $code?->toArray() ?? [

@@ -11,6 +11,7 @@ use App\Services\AI\AiSettingsService;
 use App\Services\AI\Copilot\CopilotException;
 use App\Services\AI\Copilot\CopilotOrchestrator;
 use App\Services\AI\Copilot\CopilotRequestFactory;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
@@ -35,7 +36,7 @@ final class CopilotStreamController extends Controller
         private readonly CopilotOrchestrator $orchestrator,
     ) {}
 
-    public function stream(Request $request): StreamedResponse|\Illuminate\Http\JsonResponse
+    public function stream(Request $request): StreamedResponse|JsonResponse
     {
         $user = $request->user();
 
@@ -47,7 +48,9 @@ final class CopilotStreamController extends Controller
             ], 403);
         }
 
-        if (! config('ai.copilot.streaming_enabled', false) || ! $this->settings->copilotV2Enabled()) {
+        if (! $this->settings->streamEnabled()
+            || ! config('ai.copilot.streaming_enabled', false)
+            || ! $this->settings->copilotV2Enabled()) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Streaming is not enabled.',

@@ -9,6 +9,7 @@ import {
     Grid,
     Input,
     List,
+    Modal,
     Space,
     Spin,
     Tag,
@@ -43,6 +44,87 @@ const { Title, Text } = Typography;
 function hasAnyPermission(perms = [], required = []) {
     if (!Array.isArray(perms)) return false;
     return required.some((r) => perms.includes(r));
+}
+
+async function postCopilotStream(payload, signal, onStage) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const response = await fetch('/api/ai/chat/stream', {
+        method: 'POST',
+        credentials: 'same-origin',
+        signal,
+        headers: {
+            Accept: 'text/event-stream',
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok || !contentType.includes('text/event-stream') || !response.body) {
+        let errorPayload = {};
+        try {
+            errorPayload = await response.json();
+        } catch {
+            // Proxies can replace API errors with an HTML response.
+        }
+        const error = new Error(errorPayload.message || 'Streaming is unavailable.');
+        error.code = errorPayload.code || 'AI_STREAM_UNAVAILABLE';
+        error.allowFallback = !response.ok && [404, 406, 415, 422, 501].includes(response.status);
+        error.status = response.status;
+        throw error;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let answer = null;
+    let streamError = null;
+
+    const consume = (frame) => {
+        let event = 'message';
+        const data = [];
+        frame.split(/\r?\n/).forEach((line) => {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+        });
+        if (!data.length) return;
+
+        let payloadData;
+        try {
+            payloadData = JSON.parse(data.join('\n'));
+        } catch {
+            return;
+        }
+
+        if (event === 'stage') onStage(payloadData.label || 'Working on your request');
+        if (event === 'answer') answer = payloadData;
+        if (event === 'error') streamError = payloadData;
+    };
+
+    while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const frames = buffer.split(/\r?\n\r?\n/);
+        buffer = frames.pop() || '';
+        frames.forEach(consume);
+        if (done) break;
+    }
+    if (buffer.trim()) consume(buffer);
+
+    if (streamError) {
+        const error = new Error(streamError.message || 'Copilot could not complete the request.');
+        error.code = streamError.code || 'AI_PROVIDER_ERROR';
+        throw error;
+    }
+    if (!answer) {
+        const error = new Error('Copilot ended the response before an answer was received.');
+        error.code = 'AI_STREAM_INCOMPLETE';
+        throw error;
+    }
+
+    return answer;
 }
 
 function HeaderTitle({ token, compact = false }) {
@@ -229,7 +311,7 @@ function StatusBadge({ health, healthLoading, healthError, aiReady }) {
                 bordered={false}
                 style={sharedStyle}
             >
-                Ready
+                Copilot ready
             </Tag>
         );
     }
@@ -473,6 +555,9 @@ export default function Assistant() {
     const [conversations, setConversations] = useState([]);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState(null);
+    const [lastFailedPrompt, setLastFailedPrompt] = useState(null);
+    const [progressLabel, setProgressLabel] = useState('Working on your request');
 
     const abortRef = useRef(null);
     const scrollRef = useRef(null);
@@ -518,19 +603,53 @@ export default function Assistant() {
         if (health.provider_configured === false) {
             return 'The shared AI provider has not been configured.';
         }
+        if (health.provider_connection_verified === false) {
+            return 'The shared AI provider and selected model have not passed the administrator connection test.';
+        }
+        if (health.selected_model_valid === false) {
+            return 'The selected AI model is unavailable. Ask the platform administrator to test another model.';
+        }
 
         return 'KiteLedger Copilot is not ready.';
     }, [health, healthError, healthLoading, aiReady, canUseAi]);
+
+    const activeContext = useMemo(() => {
+        const branch = page.props?.branchContext || {};
+        const tenantContext = page.props?.tenantContext || {};
+        const fiscalYear = branch.current_fiscal_year || null;
+        const parts = [
+            tenantContext.companyName ? `Tenant: ${tenantContext.companyName}` : null,
+            `Page: ${(page.url || '/').split('?')[0]}`,
+            branch.selectedBranchName
+                ? `Branch: ${branch.selectedBranchName}`
+                : branch.selectedBranchId
+                  ? `Branch ID: ${branch.selectedBranchId}`
+                  : 'Branch: all permitted branches',
+        ];
+
+        if (fiscalYear?.name || fiscalYear?.label) {
+            parts.push(`Fiscal year: ${fiscalYear.name || fiscalYear.label}`);
+        }
+        const from = fiscalYear?.start_date || fiscalYear?.from_date || fiscalYear?.starts_at;
+        const to = fiscalYear?.end_date || fiscalYear?.to_date || fiscalYear?.ends_at;
+        if (from || to) parts.push(`Date range: ${from || 'start'} to ${to || 'present'}`);
+
+        return parts.filter(Boolean).join(' · ');
+    }, [page.props, page.url]);
 
     const refreshConversations = useCallback(async () => {
         if (!canUseAi) return;
 
         try {
+            setHistoryError(null);
             const response = await axios.get('/api/ai/conversations');
             const items = response.data?.conversations?.data || response.data?.conversations || [];
             setConversations(Array.isArray(items) ? items : []);
-        } catch {
-            // Chat remains usable when history cannot be loaded.
+        } catch (err) {
+            setHistoryError(
+                err.response?.data?.message ||
+                    'Conversation history could not be loaded. Chat remains available.',
+            );
         }
     }, [canUseAi]);
 
@@ -714,6 +833,7 @@ export default function Assistant() {
         }
 
         setError(null);
+        setLastFailedPrompt(null);
 
         const userMsg = {
             role: 'user',
@@ -724,31 +844,53 @@ export default function Assistant() {
         setMessages((prev) => [...prev, userMsg]);
         setInput('');
         setSending(true);
+        setProgressLabel('Understanding your request');
 
         const controller = new AbortController();
         abortRef.current = controller;
+        let timedOut = false;
+        const requestTimeout = (Number(health?.runtime_timeout_seconds || 180) + 30) * 1000;
+        const timeoutId = window.setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+        }, requestTimeout);
+
+        const payload = {
+            message: text,
+            conversation_id: conversationId,
+            context_type: 'auto',
+            context_payload: {
+                url: page.url,
+            },
+            cache: true,
+        };
 
         try {
-            const res = await axios.post(
-                '/api/ai/chat',
-                {
-                    message: text,
-                    conversation_id: conversationId,
-                    context_type: 'auto',
-                    context_payload: {
-                        url: page.url,
-                    },
-                    cache: true,
-                },
-                {
-                    signal: controller.signal,
-                    timeout: 90000,
+            let responseData;
+            if (health?.stream_enabled) {
+                try {
+                    responseData = await postCopilotStream(payload, controller.signal, setProgressLabel);
+                } catch (streamError) {
+                    // Only fall back when the server/proxy rejects streaming
+                    // before orchestration starts. Retrying a broken active
+                    // stream could duplicate tool calls or action proposals.
+                    if (!streamError.allowFallback || controller.signal.aborted) throw streamError;
+                    setProgressLabel('Streaming unavailable; preparing the answer normally');
+                    responseData = (await axios.post('/api/ai/chat', payload, {
+                        signal: controller.signal,
+                        timeout: requestTimeout,
+                    })).data;
                 }
-            );
+            } else {
+                responseData = (await axios.post('/api/ai/chat', payload, {
+                    signal: controller.signal,
+                    timeout: requestTimeout,
+                })).data;
+            }
 
-            const reply = res.data?.message?.content || '(no reply)';
+            const reply = responseData?.message?.content || '(no reply)';
 
-            setConversationId(res.data?.conversation_id || conversationId);
+            setConversationId(responseData?.conversation_id || conversationId);
             refreshConversations();
 
             setMessages((prev) => [
@@ -757,40 +899,44 @@ export default function Assistant() {
                     role: 'assistant',
                     content: reply,
                     id: `${Date.now()}-assistant`,
-                    cached: res.data?.cached,
-                    actions: res.data?.actions || [],
-                    sources: res.data?.sources || [],
-                    cards: res.data?.cards || [],
-                    tables: res.data?.tables || [],
-                    warnings: res.data?.warnings || [],
-                    source_note: res.data?.source_note || null,
-                    followups: res.data?.followups || [],
-                    answer_type: res.data?.answer_type || null,
-                    answer: res.data?.answer || null,
+                    cached: responseData?.cached,
+                    actions: responseData?.actions || [],
+                    sources: responseData?.sources || [],
+                    cards: responseData?.cards || [],
+                    tables: responseData?.tables || [],
+                    warnings: responseData?.warnings || [],
+                    source_note: responseData?.source_note || null,
+                    followups: responseData?.followups || [],
+                    answer_type: responseData?.answer_type || null,
+                    answer: responseData?.answer || null,
                     // V2 evidence metadata: lets the user tell a verified live
                     // figure apart from a documentation answer.
-                    evidence: res.data?.evidence || null,
+                    evidence: responseData?.evidence || null,
                 },
             ]);
         } catch (err) {
-            if (axios.isCancel(err) || err.name === 'CanceledError') {
+            if ((axios.isCancel(err) || err.name === 'CanceledError' || err.name === 'AbortError') && !timedOut) {
                 setMessages((prev) => [
                     ...prev,
                     {
                         role: 'system',
-                        content: 'Request stopped.',
+                        content:
+                            'Response display was stopped. The provider may still be finishing the request on the server.',
                         id: `${Date.now()}-system`,
                     },
                 ]);
             } else {
+                setLastFailedPrompt(text);
                 const data = err.response?.data;
-                const code = data?.code || (err.code === 'ECONNABORTED' ? 'AI_TIMEOUT' : null);
+                const code = timedOut || err.code === 'ECONNABORTED'
+                    ? 'AI_TIMEOUT'
+                    : (data?.code || err.code || null);
 
                 let msg = data?.message || err.message || 'AI request failed.';
 
                 if (code === 'AI_TIMEOUT') {
                     msg =
-                        'AI request timed out. Try a shorter prompt, reduce context size, or pick a faster model in AI Settings.';
+                        'AI request timed out. Try a shorter prompt. If this continues, ask the platform administrator to review the shared model and timeout settings.';
                 }
 
                 if (code === 'AI_PERMISSION_DENIED' && data?.required_permission) {
@@ -800,7 +946,9 @@ export default function Assistant() {
                 setError({ message: msg, code });
             }
         } finally {
+            window.clearTimeout(timeoutId);
             setSending(false);
+            setProgressLabel('Working on your request');
             abortRef.current = null;
         }
     };
@@ -810,8 +958,17 @@ export default function Assistant() {
     };
 
     const retry = () => {
-        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-        if (lastUser) send(lastUser.content);
+        const prompt = lastFailedPrompt || [...messages].reverse().find((m) => m.role === 'user')?.content;
+        if (!prompt) return;
+
+        // Replace the failed visible attempt instead of silently adding a
+        // second identical user message.
+        setMessages((current) => {
+            const index = current.findLastIndex((item) => item.role === 'user' && item.content === prompt);
+            return index >= 0 ? current.slice(0, index) : current;
+        });
+        setError(null);
+        send(prompt);
     };
 
     const copy = async (text) => {
@@ -823,11 +980,19 @@ export default function Assistant() {
         }
     };
 
-    const clearConversation = () => {
+    const newConversation = () => {
         setMessages([]);
         setConversationId(null);
         setError(null);
         setActionStates({});
+        setLastFailedPrompt(null);
+    };
+
+    const clearScreen = () => {
+        setMessages([]);
+        setError(null);
+        setActionStates({});
+        setLastFailedPrompt(null);
     };
 
     const openConversation = async (id) => {
@@ -854,14 +1019,24 @@ export default function Assistant() {
 
     const deleteConversation = async (event, id) => {
         event.stopPropagation();
-        try {
-            await axios.delete(`/api/ai/conversations/${encodeURIComponent(id)}`);
-            if (conversationId === id) clearConversation();
-            await refreshConversations();
-            antMessage.success('Conversation deleted.');
-        } catch (err) {
-            antMessage.error(err.response?.data?.message || 'Could not delete that conversation.');
-        }
+        Modal.confirm({
+            title: 'Delete this conversation permanently?',
+            content: 'Its messages cannot be recovered. This does not delete accounting records or drafts.',
+            okText: 'Delete conversation',
+            okButtonProps: { danger: true },
+            cancelText: 'Keep conversation',
+            onOk: async () => {
+                try {
+                    await axios.delete(`/api/ai/conversations/${encodeURIComponent(id)}`);
+                    if (conversationId === id) newConversation();
+                    await refreshConversations();
+                    antMessage.success('Conversation deleted.');
+                } catch (err) {
+                    antMessage.error(err.response?.data?.message || 'Could not delete that conversation.');
+                    throw err;
+                }
+            },
+        });
     };
 
     const patchActionInMessages = (actionId, patch) => {
@@ -1016,7 +1191,7 @@ export default function Assistant() {
                                     size="large"
                                     block
                                     icon={<PlusOutlined />}
-                                    onClick={clearConversation}
+                                    onClick={newConversation}
                                     style={{
                                         height: 44,
                                         borderRadius: token.borderRadiusLG,
@@ -1242,7 +1417,7 @@ export default function Assistant() {
                                 <Button
                                     size="small"
                                     icon={<PlusOutlined />}
-                                    onClick={clearConversation}
+                                    onClick={newConversation}
                                     style={styles.compactButton}
                                 >
                                     New
@@ -1255,7 +1430,7 @@ export default function Assistant() {
                                         danger
                                         icon={<DeleteOutlined />}
                                         aria-label="Clear conversation"
-                                        onClick={clearConversation}
+                                        onClick={clearScreen}
                                         disabled={!messages.length}
                                         style={{ borderRadius: token.borderRadiusLG }}
                                     />
@@ -1270,6 +1445,12 @@ export default function Assistant() {
                                         onSelect={send}
                                         disabled={!aiReady || sending}
                                         isMobile={isMobile}
+                                        capabilities={{
+                                            financialTools: Boolean(health?.financial_tools_available),
+                                            toolCalling: Boolean(health?.tool_calling_available),
+                                            rag: Boolean(health?.rag_index_ready),
+                                            writeProposals: Boolean(health?.write_proposals_available),
+                                        }}
                                     />
                                 </div>
                             ) : (
@@ -1299,7 +1480,7 @@ export default function Assistant() {
                                 />
                             )}
 
-                            {sending && <AiThinkingIndicator isMobile={isMobile} />}
+                            {sending && <AiThinkingIndicator isMobile={isMobile} label={progressLabel} />}
                         </div>
 
                         <div style={styles.composer}>
@@ -1409,7 +1590,7 @@ export default function Assistant() {
                                             }}
                                         />
                                         <Text type="secondary" style={{ fontSize: 11 }}>
-                                            Context · Auto
+                                            {activeContext}
                                         </Text>
                                     </Space>
                                 </div>
@@ -1428,6 +1609,16 @@ export default function Assistant() {
                         body: { padding: 12 },
                     }}
                 >
+                    {historyError && (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            closable
+                            message={historyError}
+                            onClose={() => setHistoryError(null)}
+                            style={{ marginBottom: 12 }}
+                        />
+                    )}
                     <Text
                         type="secondary"
                         style={{ display: 'block', margin: '2px 4px 12px', fontSize: 12 }}

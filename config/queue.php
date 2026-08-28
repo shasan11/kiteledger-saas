@@ -49,7 +49,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION', env('DB_CONNECTION', 'mysql')),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 330),
+            // Longer than the 3600-second AI re-index job timeout. A shorter
+            // reservation can release a live job to a second worker.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 3700),
             'after_commit' => true,
         ],
 

@@ -78,12 +78,13 @@ const sectionDescriptions = {
     billing: 'Set billing defaults, currencies, and invoice behavior.',
 };
 
-export default function Settings({ groups, activeGroup }) {
+export default function Settings({ groups, activeGroup, aiReadiness = null }) {
     const [section, setSection] = useState(activeGroup);
     const [search, setSearch] = useState('');
     const [dirty, setDirty] = useState(false);
     const [changedKeys, setChangedKeys] = useState(() => new Set());
     const [processing, setProcessing] = useState(false);
+    const [reindexing, setReindexing] = useState(false);
     const [errorCount, setErrorCount] = useState(0);
     const [confirmation, setConfirmation] = useState(null);
     const [confirmationPassword, setConfirmationPassword] = useState('');
@@ -289,6 +290,21 @@ export default function Settings({ groups, activeGroup }) {
               )
             : submit(confirmation.values, confirmationPassword);
 
+    const queueAiReindex = () => {
+        Modal.confirm({
+            title: 'Re-index AI knowledge for every tenant?',
+            content: 'This queues isolated background rebuilds. Existing indexes remain available until each tenant rebuild completes.',
+            okText: 'Queue re-index',
+            onOk: () => router.post(route('central.settings.ai.reindex'), {}, {
+                preserveScroll: true,
+                onStart: () => setReindexing(true),
+                onSuccess: () => message.success('AI re-index jobs queued.'),
+                onError: (errors) => message.error(errors.ai_index || 'AI re-indexing could not be queued.'),
+                onFinish: () => setReindexing(false),
+            }),
+        });
+    };
+
     return (
         <CentralLayout title="Platform Settings">
             <PageHeader
@@ -299,6 +315,11 @@ export default function Settings({ groups, activeGroup }) {
                         {['email', 'storage', 'notifications', 'ai'].includes(section) && (
                             <Button onClick={() => router.post(route('central.settings.test', section))}>
                                 Test configuration
+                            </Button>
+                        )}
+                        {section === 'ai' && (
+                            <Button icon={<DatabaseOutlined />} onClick={queueAiReindex} loading={reindexing}>
+                                Re-index tenant knowledge
                             </Button>
                         )}
                         <Button icon={<ReloadOutlined />} onClick={reset}>
@@ -348,6 +369,65 @@ export default function Settings({ groups, activeGroup }) {
                         }
                     >
                         <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
+                            {section === 'ai' && aiReadiness && (
+                                <div className="platform-ai-readiness">
+                                    <div className="platform-ai-readiness__header">
+                                        <div>
+                                            <Typography.Title level={5}>AI readiness control center</Typography.Title>
+                                            <Text type="secondary">Live checks are separate from saved configuration. A key alone never counts as ready.</Text>
+                                        </div>
+                                        <Tag color={aiReadiness.operational_ready ? 'success' : 'warning'}>
+                                            {aiReadiness.operational_ready ? 'Operational' : 'Needs attention'}
+                                        </Tag>
+                                    </div>
+                                    <div className="platform-ai-readiness__grid">
+                                        {[
+                                            ['Master AI', aiReadiness.master_ai_enabled],
+                                            ['Copilot V2', aiReadiness.copilot_v2_enabled],
+                                            ['Streaming', aiReadiness.streaming_available],
+                                            ['Provider configured', aiReadiness.provider_configured],
+                                            ['Connection verified', aiReadiness.provider_connection_verified, aiReadiness.provider_verified_at],
+                                            ['Selected model', aiReadiness.selected_model_valid],
+                                            ['Chat capability', aiReadiness.chat_capability_available],
+                                            ['Tool calling', aiReadiness.tool_calling_available],
+                                            ['Document vision', aiReadiness.document_vision_capability_available],
+                                            ['Embedding provider', aiReadiness.embedding_provider_configured],
+                                            ['RAG index', aiReadiness.rag_index_checked ? aiReadiness.rag_index_ready : null, aiReadiness.rag_last_indexed_at],
+                                            ['Queue configured', aiReadiness.queue_configured],
+                                            ['Queue retry window', aiReadiness.queue_retry_after_safe],
+                                            ['Queue worker', aiReadiness.queue_worker_healthy, aiReadiness.queue_worker_last_seen_at],
+                                            ['Document scanning', aiReadiness.document_scanning_available],
+                                            ['Financial tools', aiReadiness.financial_tools_available],
+                                            ['Write proposals', aiReadiness.write_proposals_available],
+                                            ['Action execution', aiReadiness.action_execution_available],
+                                        ].map(([label, ready, timestamp]) => (
+                                            <div className="platform-ai-readiness__item" key={label}>
+                                                <Text>{label}</Text>
+                                                <span>
+                                                    <Tag color={ready === true ? 'success' : ready === null ? 'processing' : 'default'}>
+                                                        {ready === true ? 'Ready' : ready === null ? 'Tenant-scoped' : 'Not ready'}
+                                                    </Tag>
+                                                    {timestamp && <Text type="secondary">{new Date(timestamp).toLocaleString()}</Text>}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {aiReadiness.issues?.length > 0 && (
+                                        <Alert
+                                            type="warning"
+                                            showIcon
+                                            message="Readiness blockers"
+                                            description={<ul>{aiReadiness.issues.map((issue) => <li key={issue.code}>{issue.message}</li>)}</ul>}
+                                        />
+                                    )}
+                                    <Alert
+                                        type="info"
+                                        showIcon
+                                        message="Capability dependencies"
+                                        description="Streaming requires Copilot V2, the streaming switch, and AI_COPILOT_STREAMING_ENABLED. Document scanning requires a verified PDF/image-capable document model and a healthy asynchronous worker. RAG requires embeddings plus an index in each tenant. Write proposals and execution remain separate safety switches; execution never approves or posts accounting records."
+                                    />
+                                </div>
+                            )}
                             {section === 'provisioning' && (
                                 <Alert
                                     type={provisioningQueueEnabled ? 'warning' : 'info'}
@@ -479,6 +559,12 @@ export default function Settings({ groups, activeGroup }) {
                     width: 100%;
                     max-width: 1040px;
                 }
+                .platform-ai-readiness { display: grid; gap: 16px; margin-bottom: 22px; padding: 18px; border: 1px solid #dbe5ee; border-radius: 12px; background: #f8fafc; }
+                .platform-ai-readiness__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+                .platform-ai-readiness__header h5 { margin: 0 0 4px; }
+                .platform-ai-readiness__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 10px; background: #e2e8f0; }
+                .platform-ai-readiness__item { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 11px 12px; background: #fff; }
+                .platform-ai-readiness__item > span { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; text-align: right; }
                 .platform-settings-panel {
                     overflow: hidden;
                     margin-top: 22px;
@@ -606,6 +692,8 @@ export default function Settings({ groups, activeGroup }) {
                     }
                 }
                 @media (max-width: 760px) {
+                    .platform-ai-readiness__grid { grid-template-columns: minmax(0, 1fr); }
+                    .platform-ai-readiness__header { flex-direction: column; }
                     .platform-settings-nav { display: none; }
                     .platform-settings-mobile { display: grid; gap: 10px; }
                     .platform-settings-nav__list,

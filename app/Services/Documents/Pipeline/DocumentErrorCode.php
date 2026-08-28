@@ -101,7 +101,9 @@ enum DocumentErrorCode: string
         return match (true) {
             $has('password') || $has('encrypted') => self::PasswordProtected,
             $has('file is missing') || $has('could not be read') || $has('document_file_missing') => self::FileMissing,
-            $has('ai_api_key_missing') || $has('ai_disabled') || $has('not configured') => self::AiNotConfigured,
+            $has('ai_api_key_missing') || $has('ai_disabled') || $has('ai_provider_auth_failed')
+                || $has('ai_model_invalid') || $has('ai_ssl_certificate_error')
+                || $has('not configured') => self::AiNotConfigured,
             $has('ai_vision_unsupported') || $has('invalid file type') || $has('unsupported') => self::TypeUnsupported,
             $has('timed out') || $has('timeout') => self::AiTimeout,
             $hasStatus('429') || $has('rate limit') || $has('quota') => self::AiRateLimit,

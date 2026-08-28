@@ -19,6 +19,7 @@ class RebuildTenantAiKnowledge implements ShouldQueue
 
     public function __construct(public bool $embeddings = true)
     {
+        $this->onConnection((string) config('documents.queue_connection', 'central'));
         $this->onQueue('ai-index');
     }
 

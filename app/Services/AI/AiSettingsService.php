@@ -28,6 +28,9 @@ class AiSettingsService
         'ai_allow_developer_details' => false,
         'ai_financial_assistant_enabled' => false,
         'ai_document_assistant_enabled' => false,
+        'ai_document_scanning_enabled' => true,
+        'ai_document_provider' => '',
+        'ai_document_model' => '',
         'ai_write_actions_enabled' => false,
         'ai_action_execution_enabled' => false,
         'ai_fallback_provider' => '',
@@ -92,6 +95,36 @@ class AiSettingsService
         $key = $this->apiKey();
 
         return is_string($key) && trim($key) !== '';
+    }
+
+    public function apiKeyFor(string $provider): ?string
+    {
+        $provider = strtolower(trim($provider));
+        if ($provider === $this->provider()) {
+            return $this->apiKey();
+        }
+
+        $key = config("ai.providers.{$provider}.api_key")
+            ?: config("prism.providers.{$provider}.api_key");
+
+        return is_string($key) && trim($key) !== '' ? $key : null;
+    }
+
+    public function hasApiKeyFor(string $provider): bool
+    {
+        return strtolower(trim($provider)) === 'ollama' || filled($this->apiKeyFor($provider));
+    }
+
+    public function baseUrlFor(string $provider): string
+    {
+        $provider = strtolower(trim($provider));
+        if ($provider === $this->provider()) {
+            return $this->baseUrl();
+        }
+
+        return rtrim((string) (config("ai.providers.{$provider}.base_url")
+            ?: config("prism.providers.{$provider}.url")
+            ?: $this->defaultBaseUrlFor($provider)), '/');
     }
 
     public function maskedApiKey(): ?string
@@ -188,6 +221,28 @@ class AiSettingsService
     public function financialAssistantEnabled(): bool
     {
         return filter_var($this->value('ai_financial_assistant_enabled', self::DEFAULTS['ai_financial_assistant_enabled']), FILTER_VALIDATE_BOOL);
+    }
+
+    public function documentScanningEnabled(): bool
+    {
+        return filter_var(
+            $this->value('ai_document_scanning_enabled', config('documents.ai_scan_enabled', true)),
+            FILTER_VALIDATE_BOOL,
+        );
+    }
+
+    public function documentProvider(): string
+    {
+        return strtolower(trim((string) (config('documents.ai_provider')
+            ?: $this->value('ai_document_provider', '')
+            ?: $this->provider())));
+    }
+
+    public function documentModel(): string
+    {
+        return trim((string) (config('documents.ai_model')
+            ?: $this->value('ai_document_model', '')
+            ?: $this->model()));
     }
 
     public function writeActionsEnabled(): bool
@@ -353,6 +408,7 @@ class AiSettingsService
             'cache_enabled' => $this->cacheEnabled(),
             'fast_mode' => $this->fastMode(),
             'copilot_enabled' => $this->copilotEnabled(),
+            'copilot_v2_enabled' => $this->copilotV2Enabled(),
             'copilot_engine' => $this->copilotEngine(),
             'embedding_provider' => $this->embeddingProvider(),
             'embedding_model' => $this->embeddingModel(),
@@ -383,10 +439,14 @@ class AiSettingsService
             'ai_context_max_chars' => $this->contextMaxChars(),
             'ai_fast_mode' => $this->fastMode(),
             'ai_copilot_enabled' => $this->copilotEnabled(),
+            'ai_copilot_v2_enabled' => $this->copilotV2Enabled(),
             'ai_copilot_engine' => $this->copilotEngine(),
             'ai_copilot_read_only' => $this->copilotReadOnly(),
             'ai_rag_enabled' => $this->ragEnabled(),
             'ai_financial_tools_enabled' => $this->financialToolsEnabled(),
+            'ai_document_scanning_enabled' => $this->documentScanningEnabled(),
+            'ai_document_provider' => $this->documentProvider(),
+            'ai_document_model' => $this->documentModel(),
             'ai_write_actions_enabled' => $this->writeActionsEnabled(),
             'ai_action_execution_enabled' => $this->actionExecutionEnabled(),
             'ai_embedding_provider' => $this->embeddingProvider(),

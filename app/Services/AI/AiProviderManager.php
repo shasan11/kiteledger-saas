@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use App\Services\Documents\DocumentAiClient;
 use Illuminate\Support\Facades\Log;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Exceptions\PrismException;
@@ -170,23 +171,43 @@ class AiProviderManager
                 ['role' => 'user', 'content' => 'Reply with OK'],
             ], ['max_tokens' => 16, 'timeout' => $timeout]);
 
+            app(AiReadinessService::class)->recordProviderVerification(true);
+
+            $documentCapability = null;
+            if ($this->settings->documentScanningEnabled()) {
+                $documentCapability = app(DocumentAiClient::class)->testCapability();
+            }
+
             return [
-                'success' => true,
+                'success' => ($documentCapability['success'] ?? true) === true,
                 'provider' => $this->settings->provider(),
                 'model' => $this->settings->model(),
                 'response' => $res['text'] ?? '',
+                'document_capability' => $documentCapability,
+                'message' => ($documentCapability['success'] ?? true) === true
+                    ? 'Chat and enabled model capabilities were verified.'
+                    : ($documentCapability['message'] ?? 'The document model capability test failed.'),
             ];
         } catch (AiProviderException $e) {
+            app(AiReadinessService::class)->recordProviderVerification(false, $e->getErrorCode());
+
             return [
                 'success' => false,
                 'code' => $e->getErrorCode(),
                 'message' => $e->getMessage(),
             ];
         } catch (Throwable $e) {
+            app(AiReadinessService::class)->recordProviderVerification(false, 'AI_PROVIDER_ERROR');
+            Log::error('AI provider connection test failed unexpectedly.', [
+                'provider' => $this->settings->provider(),
+                'model' => $this->settings->model(),
+                'message' => $e->getMessage(),
+            ]);
+
             return [
                 'success' => false,
                 'code' => 'AI_PROVIDER_ERROR',
-                'message' => $e->getMessage(),
+                'message' => 'The AI provider connection test failed. Check the provider configuration and server logs.',
             ];
         }
     }
@@ -226,7 +247,8 @@ class AiProviderManager
             $options['verify'] = $caBundle;
         }
 
-        if (filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
+        if (app()->environment(['local', 'testing'])
+            && filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
             $options['verify'] = false;
         }
 

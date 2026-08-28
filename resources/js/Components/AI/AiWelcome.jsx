@@ -19,7 +19,14 @@ const { Title, Text } = Typography;
  */
 const GROUPS = [
     {
+        key: 'general',
+        label: 'Start a conversation',
+        icon: <BankOutlined />,
+        prompts: ['Hello — what can you help me with?'],
+    },
+    {
         key: 'financial',
+        requires: 'financial',
         label: 'Financial position',
         icon: <LineChartOutlined />,
         prompts: [
@@ -29,6 +36,7 @@ const GROUPS = [
     },
     {
         key: 'receivables',
+        requires: 'financial',
         label: 'Money owed',
         icon: <WalletOutlined />,
         prompts: [
@@ -38,6 +46,7 @@ const GROUPS = [
     },
     {
         key: 'records',
+        requires: 'tools',
         label: 'Find a record',
         icon: <FileSearchOutlined />,
         prompts: [
@@ -47,6 +56,7 @@ const GROUPS = [
     },
     {
         key: 'help',
+        requires: 'rag',
         label: 'How to use KiteLedger',
         icon: <BookOutlined />,
         prompts: [
@@ -63,8 +73,15 @@ const GROUPS = [
  * nothing to act on; showing what the assistant is actually good at is what
  * turns a blank screen into a starting point.
  */
-export default function AiWelcome({ onSelect, disabled = false, isMobile = false }) {
+export default function AiWelcome({ onSelect, disabled = false, isMobile = false, capabilities = {} }) {
     const { token } = theme.useToken();
+    const groups = GROUPS.filter((group) => {
+        if (!group.requires) return true;
+        if (group.requires === 'financial') return capabilities.financialTools;
+        if (group.requires === 'tools') return capabilities.toolCalling;
+        if (group.requires === 'rag') return capabilities.rag;
+        return false;
+    });
 
     return (
         <div className="kl-rise" style={{ padding: isMobile ? '24px 4px' : '40px 8px', maxWidth: 760, margin: '0 auto' }}>
@@ -98,7 +115,7 @@ export default function AiWelcome({ onSelect, disabled = false, isMobile = false
             </Space>
 
             <Row gutter={[12, 12]}>
-                {GROUPS.map((group) => (
+                {groups.map((group) => (
                     <Col xs={24} sm={12} key={group.key}>
                         <div
                             style={{
@@ -155,7 +172,9 @@ export default function AiWelcome({ onSelect, disabled = false, isMobile = false
                 style={{ fontSize: 11, display: 'block', textAlign: 'center', marginTop: 20 }}
             >
                 <ShoppingOutlined style={{ marginRight: 4 }} />
-                Copilot prepares drafts for your approval. It never posts or approves anything on its own.
+                {capabilities.writeProposals
+                    ? 'Copilot can prepare drafts for your approval. It never posts or approves anything on its own.'
+                    : 'Copilot is currently read-only. It never posts or approves accounting transactions.'}
             </Text>
         </div>
     );

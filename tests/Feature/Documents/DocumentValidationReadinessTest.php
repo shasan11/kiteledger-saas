@@ -102,6 +102,30 @@ class DocumentValidationReadinessTest extends TestCase
         $this->assertSame('INV-1042', $field['original_value'], 'The document value must survive.');
         $this->assertSame('user', $field['origin']);
         $this->assertTrue($field['edited_by_user']);
+        $this->assertSame(
+            'INV-9999',
+            $doc->fresh()->extraction->normalized_json['document_number'],
+            'Proposal input must use the saved correction rather than the stale extraction.',
+        );
+    }
+
+    public function test_line_item_correction_is_persisted_and_used_by_proposals(): void
+    {
+        $doc = $this->makeDocument();
+
+        $result = app(DocumentReviewService::class)->applyCorrections($doc, [], [[
+            'description' => 'Corrected widget',
+            'quantity' => 3,
+            'rate' => 125,
+            'amount' => 375,
+        ]]);
+
+        $this->assertSame(4, $result['line_values_applied']);
+        $extraction = $doc->fresh()->extraction;
+        $this->assertSame('Corrected widget', $extraction->structured_json['lines'][0]['description']);
+        $this->assertSame('Widget', $extraction->structured_json['lines'][0]['original_values']['description']);
+        $this->assertSame(3, $extraction->normalized_json['lines'][0]['quantity']);
+        $this->assertSame(375, $extraction->normalized_json['lines'][0]['amount']);
     }
 
     public function test_unknown_fields_are_ignored_rather_than_written(): void
@@ -173,6 +197,30 @@ class DocumentValidationReadinessTest extends TestCase
             'INV-2024',
             $doc->fresh()->extraction->structured_json['fields']['document_number']['value'],
         );
+    }
+
+    public function test_corrections_endpoint_applies_line_item_edits(): void
+    {
+        $doc = $this->makeDocument();
+        $user = $this->userWith([
+            'document_upload.view',
+            'document_upload.update',
+            'document_upload.proposal.update',
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson("/api/document-uploads/{$doc->public_id}", [
+                'review_lines' => [[
+                    'description' => 'Corrected service',
+                    'quantity' => 2,
+                    'rate' => 50,
+                    'amount' => 100,
+                ]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('corrections.line_values_applied', 4);
+
+        $this->assertSame('Corrected service', $doc->fresh()->extraction->normalized_json['lines'][0]['description']);
     }
 
     // ---------- Deterministic validation (Milestone 4) ----------
