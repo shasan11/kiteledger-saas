@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Central\CentralAdmin;
+use App\Models\Central\CentralUser;
 use App\Models\User;
 
 return [
@@ -45,6 +46,8 @@ return [
         ],
         'tenant' => ['driver' => 'session', 'provider' => 'tenant_users'],
         'central' => ['driver' => 'session', 'provider' => 'central_admins'],
+        // Customer/platform account holders. Always resolved centrally.
+        'platform' => ['driver' => 'session', 'provider' => 'platform_users'],
     ],
 
     /*
@@ -71,6 +74,7 @@ return [
         ],
         'tenant_users' => ['driver' => 'eloquent', 'model' => User::class],
         'central_admins' => ['driver' => 'eloquent', 'model' => CentralAdmin::class],
+        'platform_users' => ['driver' => 'eloquent', 'model' => CentralUser::class],
 
         // 'users' => [
         //     'driver' => 'database',
@@ -113,6 +117,13 @@ return [
         'central_users' => [
             'provider' => 'central_admins',
             'table' => 'central_password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
+        'platform_users' => [
+            'provider' => 'platform_users',
+            'table' => 'platform_password_reset_tokens',
+            'connection' => env('DB_CONNECTION', 'central'),
             'expire' => 60,
             'throttle' => 60,
         ],

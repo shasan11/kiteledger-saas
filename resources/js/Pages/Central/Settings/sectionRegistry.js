@@ -1,6 +1,7 @@
 export const sectionRegistry = [
     ['general', 'General', 'core', 'Core platform defaults', ['platform', 'defaults']],
     ['branding', 'Branding', 'core', 'Logos, colors, and product identity', ['logo', 'theme']],
+    ['design', 'Website Design', 'core', 'Theme presets, type, layout, corners, cards, and buttons', ['website', 'theme', 'colors', 'typography', 'layout']],
     ['website', 'Public Website', 'core', 'Website availability, maintenance notice, and cookie consent', ['maintenance', 'cookie']],
     ['company', 'Company', 'core', 'Organization identity and contact details', ['address', 'contact']],
     ['tenant_registration', 'Tenant Registration', 'core', 'Customer signup and workspace defaults', ['signup', 'onboarding']],

@@ -563,7 +563,7 @@ export default function Assistant() {
     const scrollRef = useRef(null);
 
     /*
-     * The backend `ready` flag is authoritative — it already accounts for the
+     * The backend `ready` flag is authoritative - it already accounts for the
      * master switch, the Copilot switch, provider credentials and providers
      * that need no key. Recomputing readiness here from a subset of those
      * fields is how the UI ended up enabling the composer while the server

@@ -39,7 +39,7 @@ class WebsiteSeeder extends Seeder
                 'visibility' => 'public', 'published_at' => now(), 'robots_index' => true,
                 'robots_follow' => true, 'sitemap_include' => true, 'sitemap_priority' => $slug === 'home' ? .9 : .6,
                 'sitemap_change_frequency' => in_array($type, ['home', 'blog'], true) ? 'weekly' : 'monthly',
-                'meta_title' => ($slug === 'home' ? 'KiteLedger — Run your business from one workspace' : $title.' | KiteLedger'),
+                'meta_title' => ($slug === 'home' ? 'KiteLedger | Run your business from one workspace' : $title.' | KiteLedger'),
                 'meta_description' => $excerpt,
             ]);
         }
@@ -300,6 +300,6 @@ class WebsiteSeeder extends Seeder
 
         ContactLocation::firstOrCreate(['name'=>'Main Office'], ['address'=>'Update this address in Website → Contact Locations','email'=>'hello@example.com','business_hours'=>'Monday–Friday, 9:00–17:00','is_active'=>true,'sort_order'=>0]);
         foreach ([['LinkedIn','https://www.linkedin.com/'],['Facebook','https://www.facebook.com/'],['Instagram','https://www.instagram.com/']] as $order => [$platform,$url]) WebsiteSocialLink::firstOrCreate(['platform'=>$platform], ['url'=>$url,'icon'=>$platform,'is_active'=>false,'sort_order'=>$order]);
-        NavbarNotification::firstOrCreate(['content'=>'Welcome to KiteLedger—one connected workspace for your business.'], ['link_label'=>'Explore features','link_url'=>'/features','target'=>'same_tab','is_dismissible'=>true,'is_active'=>false,'sort_order'=>0]);
+        NavbarNotification::firstOrCreate(['content'=>'Welcome to KiteLedger - one connected workspace for your business.'], ['link_label'=>'Explore features','link_url'=>'/features','target'=>'same_tab','is_dismissible'=>true,'is_active'=>false,'sort_order'=>0]);
     }
 }

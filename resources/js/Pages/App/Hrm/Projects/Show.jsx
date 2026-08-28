@@ -1129,7 +1129,7 @@ export default function ProjectShow({auth,id}) {
     <AuthenticatedLayout user={auth?.user}>
       <Head title={project?.name||'Project'}/>
 
-      {/* One minimal <style> block — only structural rules that can't be expressed as inline styles */}
+      {/* One minimal <style> block - only structural rules that can't be expressed as inline styles */}
       <style>{`
         .ps-kanban-board::-webkit-scrollbar { height: 6px; }
         .ps-kanban-board::-webkit-scrollbar-track { background: ${token.colorFillAlter}; border-radius: ${token.borderRadius}px; }

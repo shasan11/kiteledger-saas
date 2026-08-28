@@ -15,7 +15,7 @@ export const formatMoney = (value, currency = 'USD', compact = false) => {
 };
 
 export const formatDate = (value, withTime = false) => {
-    if (!value) return '—';
+    if (!value) return '-';
     const date = dayjs(value);
     return date.isValid() ? date.format(withTime ? 'DD MMM YYYY, HH:mm' : 'DD MMM YYYY') : value;
 };

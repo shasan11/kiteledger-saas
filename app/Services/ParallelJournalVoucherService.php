@@ -4,15 +4,19 @@ namespace App\Services;
 
 use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\Account;
+use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\JournalVoucher;
 use App\Models\JournalVoucherLine;
+use App\Services\Accounting\FiscalPeriodGuard;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 class ParallelJournalVoucherService
 {
@@ -59,10 +63,7 @@ class ParallelJournalVoucherService
         $rate = $this->resolveJournalExchangeRate($invoice, $invoice->currency_id);
         $creditLines = [];
 
-        $arAccount = $this->accountResolver->getAccountsReceivableAccount();
-        if ($invoice->contact_id && $invoice->contact?->account_id) {
-            $arAccount = $this->resolveChartAccount($invoice->contact->account_id, $arAccount);
-        }
+        $arAccount = $this->contactReceivableChartAccount($invoice->contact, $this->accountResolver->getAccountsReceivableAccount());
 
         foreach ($invoice->invoiceLines as $line) {
             $salesAccount = $this->accountResolver->getSalesIncomeAccount();
@@ -158,10 +159,7 @@ class ParallelJournalVoucherService
             ];
         }
 
-        $arAccount = $this->accountResolver->getAccountsReceivableAccount();
-        if ($payment->contact_id && $payment->contact?->account_id) {
-            $arAccount = $this->resolveChartAccount($payment->contact->account_id, $arAccount);
-        }
+        $arAccount = $this->contactReceivableChartAccount($payment->contact, $this->accountResolver->getAccountsReceivableAccount());
 
         $totalDebit = round(array_sum(array_column($lines, 'debit')), 2);
         $arCredit = $this->customerPaymentReceivableBaseAmount($payment, $rate);
@@ -229,9 +227,16 @@ class ParallelJournalVoucherService
         }
 
         foreach ($bill->purchaseBillLines as $line) {
-            $account = $this->accountResolver->getPurchaseExpenseAccount();
-            if ($line->product_id && $line->product?->purchase_account_id) {
-                $account = $this->resolveChartAccount($line->product->purchase_account_id, $account);
+            // Perpetual costing: stock-tracked goods capitalise into Inventory
+            // and are expensed later, when they are sold. Only non-tracked lines
+            // (services, consumables) hit an expense account directly.
+            if ($line->product?->track_inventory) {
+                $account = $this->accountResolver->getInventoryAccount();
+            } else {
+                $account = $this->accountResolver->getPurchaseExpenseAccount();
+                if ($line->product_id && $line->product?->purchase_account_id) {
+                    $account = $this->resolveChartAccount($line->product->purchase_account_id, $account);
+                }
             }
 
             $foreignDebit = (float) $line->line_total - (float) ($line->tax_amount ?? 0);
@@ -557,10 +562,7 @@ class ParallelJournalVoucherService
             ];
         }
 
-        $arAccount = $this->accountResolver->getAccountsReceivableAccount();
-        if ($return->contact_id && $return->contact?->account_id) {
-            $arAccount = $this->resolveChartAccount($return->contact->account_id, $arAccount);
-        }
+        $arAccount = $this->contactReceivableChartAccount($return->contact, $this->accountResolver->getAccountsReceivableAccount());
 
         $totalDebit = round(array_sum(array_column($debitLines, 'debit')), 2);
         $foreignTotal = (float) $return->salesReturnLines->sum('line_total');
@@ -690,9 +692,28 @@ class ParallelJournalVoucherService
         );
     }
 
+    /**
+     * Stock movements whose value is already booked by the parent document.
+     * A purchase bill debits Inventory itself, and a production journal has its
+     * own entry, so posting the generated adjustment as well would double-count.
+     */
+    private const ADJUSTMENT_SOURCES_WITHOUT_OWN_JOURNAL = [
+        'purchase_bill',
+        'purchase_bill_reversal',
+        'production_journal',
+    ];
+
     public function createForInventoryAdjustment($adjustment): ?JournalVoucher
     {
         $adjustment->loadMissing('inventoryAdjustmentLines');
+
+        $source = (string) ($adjustment->source_type ?? '');
+        if (in_array($source, self::ADJUSTMENT_SOURCES_WITHOUT_OWN_JOURNAL, true)) {
+            return null;
+        }
+
+        // Stock leaving on a sale is cost of goods sold, not shrinkage.
+        $sellingStock = in_array($source, ['invoice', 'invoice_reversal'], true);
 
         $rate = $this->resolveJournalExchangeRate($adjustment, $adjustment->currency_id);
         $lines = [];
@@ -705,9 +726,13 @@ class ParallelJournalVoucherService
                 continue;
             }
 
+            $inventoryAccount = $this->accountResolver->getInventoryAccount();
+
             if ($line->adjustment_type === 'increase') {
-                $inventoryAccount = $this->accountResolver->getInventoryAccount();
-                $gainAccount = $this->accountResolver->getInventoryAdjustmentGainAccount();
+                $counterAccount = $sellingStock
+                    ? $this->accountResolver->getCostOfGoodsSoldAccount()
+                    : $this->accountResolver->getInventoryAdjustmentGainAccount();
+                $counterLabel = $sellingStock ? 'Cost of Goods Sold Reversal' : 'Gain on Adjustment';
 
                 $lines[] = [
                     'account_id' => $this->resolvePostingAccountId($inventoryAccount->id),
@@ -719,24 +744,26 @@ class ParallelJournalVoucherService
                 ];
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($gainAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($counterAccount->id),
                     'debit' => 0,
                     'credit' => $baseAmount,
                     'foreign_debit' => 0,
                     'foreign_credit' => $foreignAmount,
-                    'description' => 'Gain on Adjustment',
+                    'description' => $counterLabel,
                 ];
             } else {
-                $inventoryAccount = $this->accountResolver->getInventoryAccount();
-                $lossAccount = $this->accountResolver->getInventoryAdjustmentLossAccount();
+                $counterAccount = $sellingStock
+                    ? $this->accountResolver->getCostOfGoodsSoldAccount()
+                    : $this->accountResolver->getInventoryAdjustmentLossAccount();
+                $counterLabel = $sellingStock ? 'Cost of Goods Sold' : 'Loss on Adjustment';
 
                 $lines[] = [
-                    'account_id' => $this->resolvePostingAccountId($lossAccount->id),
+                    'account_id' => $this->resolvePostingAccountId($counterAccount->id),
                     'debit' => $baseAmount,
                     'credit' => 0,
                     'foreign_debit' => $foreignAmount,
                     'foreign_credit' => 0,
-                    'description' => 'Loss on Adjustment',
+                    'description' => $counterLabel,
                 ];
 
                 $lines[] = [
@@ -1138,6 +1165,10 @@ class ParallelJournalVoucherService
         ?string $currencyId,
     ): JournalVoucher {
         return DB::transaction(function () use ($sourceModel, $lines, $date, $sourceType, $sourceId, $sourceNo, $branchId, $currencyId) {
+            // Single choke point for every automatic posting, so a closed or
+            // locked period cannot be restated from any document type.
+            app(FiscalPeriodGuard::class)->assertOpen($date, 'voucher_date');
+
             $exchangeRate = $this->resolveJournalExchangeRate($sourceModel, $currencyId);
             $currencyId = $this->resolveJournalCurrencyId($sourceModel, $currencyId);
 
@@ -1414,11 +1445,82 @@ class ParallelJournalVoucherService
 
     protected function contactPayableChartAccount($contact, ChartOfAccount $fallback): ChartOfAccount
     {
-        $accountId = $contact?->payable_account_id ?: $contact?->account_id;
+        return $this->contactControlAccount($contact?->payable_account_id ?: $contact?->account_id, $fallback, 'liability');
+    }
 
-        return $accountId
-            ? $this->resolveChartAccount($accountId, $fallback)
-            : $fallback;
+    protected function contactReceivableChartAccount($contact, ChartOfAccount $fallback): ChartOfAccount
+    {
+        return $this->contactControlAccount($contact?->receivable_account_id ?: $contact?->account_id, $fallback, 'asset');
+    }
+
+    /**
+     * A contact may override its own control account, but only with an account
+     * of the right nature. Without this check a contact wired to a cash or bank
+     * account silently redirects every receivable/payable posting there, so a
+     * credit sale books as if the money had already been collected.
+     */
+    protected function contactControlAccount(?string $accountId, ChartOfAccount $fallback, string $expectedType): ChartOfAccount
+    {
+        if (! $accountId) {
+            return $fallback;
+        }
+
+        $resolved = $this->resolveChartAccount($accountId, $fallback);
+
+        // Wrong side of the balance sheet, or a cash/bank account. Either way it
+        // is not a control account: posting there would report an unpaid credit
+        // sale as money already banked.
+        $rejected = $resolved->type !== $expectedType || $this->isCashOrBankAccount($resolved);
+
+        if ($rejected) {
+            Log::warning('Ignoring contact control account of the wrong kind; falling back to the default.', [
+                'chart_of_account_id' => $resolved->id,
+                'resolved_type' => $resolved->type,
+                'expected_type' => $expectedType,
+                'fallback_account' => $fallback->code,
+            ]);
+
+            return $fallback;
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * Treasury accounts can be recognised three ways, and all three are needed:
+     * ChartOfAccountService::syncLinkedAccount() rewrites the linked account's
+     * nature to 'coa' whenever a chart account is saved, so nature alone is not
+     * dependable.
+     */
+    protected function isCashOrBankAccount(ChartOfAccount $chartAccount): bool
+    {
+        $nature = $chartAccount->relationLoaded('account')
+            ? $chartAccount->account?->nature
+            : $chartAccount->account()->value('nature');
+
+        if (in_array((string) $nature, ['cash', 'bank'], true)) {
+            return true;
+        }
+
+        if ($chartAccount->account_id && BankAccount::query()->where('account_id', $chartAccount->account_id)->exists()) {
+            return true;
+        }
+
+        foreach (['cash', 'bank'] as $type) {
+            try {
+                $treasury = $type === 'cash'
+                    ? $this->accountResolver->getCashAccount()
+                    : $this->accountResolver->getDefaultBankAccount();
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if ($treasury->id === $chartAccount->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function customerPaymentReceivableBaseAmount($payment, float $paymentRate): float
@@ -1467,6 +1569,10 @@ class ParallelJournalVoucherService
     /**
      * Adjusts the largest line on the deficient side by the rounding difference
      * so that total debit equals total credit.
+     *
+     * Only genuine sub-cent rounding drift is absorbed. Anything larger is a
+     * calculation error, not rounding, and silently folding it into a real
+     * revenue or receivable account would hide the bug and misstate the account.
      */
     protected function balanceRoundingDifference(array $lines): array
     {
@@ -1476,6 +1582,18 @@ class ParallelJournalVoucherService
 
         if ($diff === 0.0) {
             return $lines;
+        }
+
+        // One cent of tolerance per line, since each line is rounded once.
+        $allowance = max(0.05, 0.01 * count($lines));
+        if (abs($diff) > $allowance + 1.0E-9) {
+            throw new InvalidArgumentException(sprintf(
+                'Journal voucher is out of balance by %s, which exceeds the %s rounding allowance. Total Debit: %s, Total Credit: %s.',
+                number_format(abs($diff), 2, '.', ''),
+                number_format($allowance, 2, '.', ''),
+                number_format($totalDebit, 2, '.', ''),
+                number_format($totalCredit, 2, '.', ''),
+            ));
         }
 
         if ($diff > 0) {

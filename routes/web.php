@@ -15,6 +15,8 @@ use App\Http\Controllers\Central\InvoiceCustomizationController;
 use App\Http\Controllers\Central\MediaController;
 use App\Http\Controllers\Central\NotificationController;
 use App\Http\Controllers\Central\PlanController;
+use App\Http\Controllers\Central\PlatformMembershipController;
+use App\Http\Controllers\Central\PlatformUserController;
 use App\Http\Controllers\Central\ProfileController;
 use App\Http\Controllers\Central\ResourceController;
 use App\Http\Controllers\Central\RoleController;
@@ -27,6 +29,13 @@ use App\Http\Controllers\Central\WebsiteContentController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Central\WebsiteLeadController;
 use App\Http\Controllers\Central\WebsiteStructuredContentController;
+use App\Http\Controllers\Platform\AuthController as PlatformAuthController;
+use App\Http\Controllers\Platform\BillingController as PlatformBillingController;
+use App\Http\Controllers\Platform\DashboardController as PlatformDashboardController;
+use App\Http\Controllers\Platform\InvitationController as PlatformInvitationController;
+use App\Http\Controllers\Platform\ProfileController as PlatformProfileController;
+use App\Http\Controllers\Platform\TenantContextController as PlatformTenantContextController;
+use App\Http\Controllers\Platform\TenantController as PlatformTenantController;
 use App\Http\Controllers\Installer\DatabaseController as InstallerDatabaseController;
 use App\Http\Controllers\Installer\EnvironmentController as InstallerEnvironmentController;
 use App\Http\Controllers\Installer\InstallTypeController;
@@ -144,6 +153,21 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
                 Route::patch('central-admins/{centralAdmin}', [CentralAdminController::class, 'update'])->name('central-admins.update');
                 Route::delete('central-admins/{centralAdmin}', [CentralAdminController::class, 'destroy'])->name('central-admins.destroy');
             });
+            Route::get('platform-users', [PlatformUserController::class, 'index'])->middleware('central.admin:platform-users.view')->name('platform-users.index');
+            Route::post('platform-users', [PlatformUserController::class, 'store'])->middleware('central.admin:platform-users.create')->name('platform-users.store');
+            Route::get('platform-users/{platformUser}', [PlatformUserController::class, 'show'])->middleware('central.admin:platform-users.view')->name('platform-users.show');
+            Route::match(['put', 'patch'], 'platform-users/{platformUser}', [PlatformUserController::class, 'update'])->middleware('central.admin:platform-users.update')->name('platform-users.update');
+            Route::put('platform-users/{platformUser}/profile', [PlatformUserController::class, 'updateProfile'])->middleware('central.admin:platform-users.update')->name('platform-users.profile.update');
+            Route::post('platform-users/{platformUser}/security', [PlatformUserController::class, 'security'])->middleware('central.admin:platform-users.suspend')->name('platform-users.security');
+            Route::middleware('central.admin:tenant-memberships.manage')->group(function (): void {
+                Route::post('platform-users/{platformUser}/memberships', [PlatformMembershipController::class, 'store'])->name('platform-users.memberships.store');
+                Route::match(['put', 'patch'], 'platform-users/{platformUser}/memberships/{membership}', [PlatformMembershipController::class, 'update'])->name('platform-users.memberships.update');
+                Route::post('platform-users/{platformUser}/memberships/{membership}/primary', [PlatformMembershipController::class, 'setPrimary'])->name('platform-users.memberships.primary');
+                Route::delete('platform-users/{platformUser}/memberships/{membership}', [PlatformMembershipController::class, 'destroy'])->name('platform-users.memberships.destroy');
+                Route::post('platform-user-invitations', [PlatformMembershipController::class, 'invite'])->name('platform-user-invitations.store');
+                Route::delete('platform-user-invitations/{invitation}', [PlatformMembershipController::class, 'revokeInvitation'])->name('platform-user-invitations.destroy');
+            });
+
             Route::middleware('central.admin:role.manage')->group(function (): void {
                 Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
                 Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
@@ -301,13 +325,67 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
 // Domain constraints keep identical tenant and central paths (/, /login, etc.)
 // from shadowing one another. Reverse registration keeps the first configured
 // domain as the URL-generation default while every configured host still works.
+// Customer account portal. Platform users (App\Models\Central\CentralUser) sign
+// in here on the central domain and reach only the tenants they are a member of.
+$platformRoutes = function (string $namePrefix = 'central.'): void {
+    Route::prefix('account')->name($namePrefix.'account.')->group(function (): void {
+        Route::get('/login', [PlatformAuthController::class, 'create'])->name('login');
+        Route::post('/login', [PlatformAuthController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+        Route::get('/forgot-password', [PlatformAuthController::class, 'forgot'])->name('password.request');
+        Route::post('/forgot-password', [PlatformAuthController::class, 'emailResetLink'])->middleware('throttle:3,1')->name('password.email');
+        Route::get('/reset-password/{token}', [PlatformAuthController::class, 'reset'])->name('password.reset');
+        Route::post('/reset-password', [PlatformAuthController::class, 'updatePassword'])->middleware('throttle:5,1')->name('password.update');
+        Route::get('/invitations/{token}', [PlatformInvitationController::class, 'show'])->name('invitations.show');
+        Route::post('/invitations', [PlatformInvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
+
+        Route::middleware('platform.user')->group(function (): void {
+            Route::post('/logout', [PlatformAuthController::class, 'destroy'])->name('logout');
+            Route::get('/password/force', [PlatformAuthController::class, 'forcedPassword'])->name('password.force');
+            Route::post('/password/force', [PlatformAuthController::class, 'updateForcedPassword'])->middleware('throttle:5,1')->name('password.force.update');
+
+            Route::get('/', PlatformDashboardController::class)->name('dashboard');
+            Route::get('/profile', [PlatformProfileController::class, 'edit'])->name('profile.edit');
+            Route::match(['put', 'patch'], '/profile', [PlatformProfileController::class, 'update'])->name('profile.update');
+            Route::get('/security', [PlatformProfileController::class, 'security'])->name('security');
+            Route::put('/security/password', [PlatformProfileController::class, 'updatePassword'])->middleware('throttle:5,1')->name('security.password');
+            Route::post('/security/sign-out-others', [PlatformProfileController::class, 'signOutOtherSessions'])->name('security.sign-out-others');
+
+            Route::get('/tenants', [PlatformTenantContextController::class, 'index'])->name('tenants.index');
+            Route::post('/tenants/switch', [PlatformTenantContextController::class, 'switch'])->name('tenants.switch');
+
+            Route::prefix('tenants/{tenant}')->group(function (): void {
+                Route::get('/', [PlatformTenantController::class, 'show'])->middleware('platform.tenant')->name('tenants.show');
+                Route::get('/settings', [PlatformTenantController::class, 'settings'])->middleware('platform.tenant')->name('tenants.settings');
+                Route::match(['put', 'patch'], '/settings', [PlatformTenantController::class, 'updateSettings'])->middleware('platform.tenant:can_manage_company')->name('tenants.settings.update');
+
+                Route::middleware('platform.tenant:can_manage_users')->group(function (): void {
+                    Route::get('/members', [PlatformTenantController::class, 'members'])->name('tenants.members');
+                    Route::post('/members/invite', [PlatformTenantController::class, 'inviteMember'])->name('tenants.members.invite');
+                    Route::match(['put', 'patch'], '/members/{membership}', [PlatformTenantController::class, 'updateMember'])->name('tenants.members.update');
+                    Route::delete('/members/{membership}', [PlatformTenantController::class, 'revokeMember'])->name('tenants.members.revoke');
+                });
+
+                Route::get('/billing', [PlatformBillingController::class, 'index'])->middleware('platform.tenant:can_manage_billing')->name('tenants.billing');
+                Route::get('/billing/invoices/{invoice}', [PlatformBillingController::class, 'showInvoice'])->middleware('platform.tenant:can_view_invoices')->name('tenants.billing.invoice');
+                Route::post('/billing/invoices/{invoice}/pay', [PlatformBillingController::class, 'payInvoice'])->middleware('platform.tenant:can_make_payments')->name('tenants.billing.invoice.pay');
+                Route::middleware('platform.tenant:can_manage_plan')->group(function (): void {
+                    Route::post('/billing/plan', [PlatformBillingController::class, 'changePlan'])->name('tenants.billing.plan.change');
+                    Route::post('/billing/plan/cancel', [PlatformBillingController::class, 'cancelPlan'])->name('tenants.billing.plan.cancel');
+                    Route::post('/billing/plan/resume', [PlatformBillingController::class, 'resumePlan'])->name('tenants.billing.plan.resume');
+                });
+            });
+        });
+    });
+};
+
 $centralDomains = array_values(array_unique(config('tenancy.central_domains', [])));
 $defaultCentralDomain = $centralDomains[0] ?? null;
 
 foreach (array_reverse($centralDomains, true) as $index => $centralDomain) {
     $namePrefix = $centralDomain === $defaultCentralDomain ? 'central.' : 'central.hosts.'.($index + 1).'.';
 
-    Route::domain($centralDomain)->middleware('central.domain')->group(function () use ($centralRoutes, $namePrefix, $index): void {
+    Route::domain($centralDomain)->middleware('central.domain')->group(function () use ($centralRoutes, $platformRoutes, $namePrefix, $index): void {
+        $platformRoutes($namePrefix);
         $centralRoutes($namePrefix);
         if (config('saas.admin_path', 'superadmin') !== 'admin') {
             $centralRoutes('central.legacy.'.($index + 1).'.', 'admin', false);

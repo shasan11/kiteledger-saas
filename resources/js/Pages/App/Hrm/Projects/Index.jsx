@@ -301,7 +301,7 @@ export default function Projects(props) {
       width: 145,
       render: (value) => (
         <Tag color={PROJECT_STATUS_COLORS[value] || 'default'}>
-          {value ? value.replace(/_/g, ' ') : '—'}
+          {value ? value.replace(/_/g, ' ') : '-'}
         </Tag>
       ),
     },

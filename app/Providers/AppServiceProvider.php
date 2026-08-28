@@ -14,7 +14,10 @@ use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
 use App\Models\Central\BlogPost;
 use App\Models\Central\PaymentGateway;
+use App\Models\Central\CentralUser;
 use App\Models\Central\SupportTicket;
+use App\Models\Central\Tenant as CentralTenant;
+use App\Models\Central\TenantMembership;
 use App\Models\Central\TenantInvoice;
 use App\Models\Central\WebsitePage;
 use App\Models\ChartOfAccount;
@@ -94,6 +97,10 @@ use App\Policies\Central\SupportTicketPolicy;
 use App\Policies\Central\TenantInvoicePolicy;
 use App\Policies\Central\WebsitePagePolicy;
 use App\Policies\DocumentUploadPolicy;
+use App\Policies\Platform\CentralUserPolicy;
+use App\Policies\Platform\TenantBillingPolicy;
+use App\Policies\Platform\TenantMembershipPolicy;
+use App\Policies\Platform\TenantPolicy as PlatformTenantPolicy;
 use App\Services\SaaS\AtomicQuotaManager;
 use App\Services\SaaS\PlanFeatureResolver;
 use App\Services\SaaS\SubscriptionService;
@@ -223,6 +230,15 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(PaymentGateway::class, PaymentGatewayPolicy::class);
         Gate::policy(TenantInvoice::class, TenantInvoicePolicy::class);
         Gate::policy(SupportTicket::class, SupportTicketPolicy::class);
+        Gate::policy(CentralTenant::class, PlatformTenantPolicy::class);
+        Gate::policy(TenantMembership::class, TenantMembershipPolicy::class);
+        Gate::policy(CentralUser::class, CentralUserPolicy::class);
+        // Billing stays a separate ability set so `can_manage_billing`,
+        // `can_manage_plan`, `can_view_invoices` and `can_make_payments` remain
+        // independently enforceable from the general tenant abilities.
+        foreach (['manageBilling', 'managePlan', 'viewInvoices', 'makePayment'] as $ability) {
+            Gate::define('tenant-billing.'.$ability, [TenantBillingPolicy::class, $ability]);
+        }
 
         if (! $this->app->runningInConsole() && request()->is('install*')) {
             app()->setLocale('en');

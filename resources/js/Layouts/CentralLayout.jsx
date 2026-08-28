@@ -305,6 +305,12 @@ const navigation = [
             "admin.manage",
         ),
         entry(
+            "central.platform-users.index",
+            "Platform Users",
+            <TeamOutlined />,
+            "platform-users.view",
+        ),
+        entry(
             "central.roles.index",
             "Roles and Permissions",
             <SafetyCertificateOutlined />,

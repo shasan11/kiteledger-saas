@@ -167,7 +167,9 @@ class Invoice extends Model
             ->sum('allocated_amount');
 
         $total = (float) ($this->total ?? 0);
-        $balanceDue = max($total - $paidTotal, 0);
+        // Not clamped at zero: an overpayment is a real credit owed back to the
+        // customer, and hiding it as a zero balance loses it from AR entirely.
+        $balanceDue = $total - $paidTotal;
 
         $status = $this->status;
         if ((bool) $this->approved || $status !== 'draft') {
@@ -197,6 +199,11 @@ class Invoice extends Model
             ->each(fn (self $invoice) => $invoice->recalculatePaymentTotals());
     }
 
+    /**
+     * Only invoices this contact actually has an allocation against can have
+     * moved, so recalculating every invoice they have ever had is wasted work —
+     * and it ran one query per invoice inside the approval transaction.
+     */
     public static function recalculatePaymentTotalsForContact(?string $contactId): void
     {
         if (! $contactId) {
@@ -205,7 +212,14 @@ class Invoice extends Model
 
         static::query()
             ->where('contact_id', $contactId)
-            ->get()
-            ->each(fn (self $invoice) => $invoice->recalculatePaymentTotals());
+            ->where(function ($query): void {
+                // Invoices with an allocation today, plus any that carry a
+                // paid_total from an allocation that has since been removed and
+                // therefore still needs clearing back down.
+                $query->whereHas('customerPaymentLines')->orWhere('paid_total', '>', 0);
+            })
+            ->chunkById(200, function ($invoices): void {
+                $invoices->each(fn (self $invoice) => $invoice->recalculatePaymentTotals());
+            });
     }
 }

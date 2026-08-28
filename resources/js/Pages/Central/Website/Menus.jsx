@@ -19,7 +19,7 @@ export default function Menus({ location, locations, menus, pages }) {
         { title: 'Label', dataIndex: 'label', render: (value, row) => <><strong>{value}</strong>{row.parent_id && <Tag style={{ marginLeft: 8 }}>Nested</Tag>}</> },
         { title: 'Destination', render: (_, row) => row.page ? `${row.page.title} (${row.page.slug === 'home' ? '/' : `/${row.page.slug}`})` : row.url },
         { title: 'Target', dataIndex: 'target' },
-        { title: 'Icon', dataIndex: 'icon', render: (value) => value || '—' },
+        { title: 'Icon', dataIndex: 'icon', render: (value) => value || '-' },
         { title: 'Status', dataIndex: 'is_active', render: (value) => <Tag color={value ? 'green' : 'default'}>{value ? 'Active' : 'Hidden'}</Tag> },
         { title: '', width: 130, render: (_, row) => <Space><Button icon={<EditOutlined/>} onClick={() => edit(row)}/><Button danger icon={<DeleteOutlined/>} onClick={() => remove(row)}/></Space> },
     ];

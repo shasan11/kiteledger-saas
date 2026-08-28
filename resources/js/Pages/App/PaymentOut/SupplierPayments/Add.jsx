@@ -322,7 +322,7 @@ export default function SupplierPaymentAdd({ initialRecord = null, isEdit = fals
 
                 <FormSection title="Bill allocations">
                     <Table rowKey="_key" size="small" columns={itemColumns} dataSource={items} pagination={false} bordered
-                        locale={{ emptyText: 'No bill allocations yet — payment will be unallocated' }}
+                        locale={{ emptyText: 'No bill allocations yet - payment will be unallocated' }}
                         footer={() => (
                             <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                                 <Button icon={<PlusOutlined />} onClick={addItem} type="dashed">Add Bill</Button>

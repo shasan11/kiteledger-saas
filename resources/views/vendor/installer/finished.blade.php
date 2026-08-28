@@ -27,7 +27,7 @@
         @foreach ($diagnostics as $check)
             <div class="diagnostic">
                 <strong class="{{ $check['ok'] ? 'ok' : 'bad' }}">{{ $check['ok'] ? 'PASS' : 'ACTION NEEDED' }}</strong>
-                — {{ $check['label'] }}: {{ $check['detail'] }}
+ - {{ $check['label'] }}: {{ $check['detail'] }}
             </div>
         @endforeach
     </div>

@@ -119,7 +119,7 @@ export default function ShiftClosingSummary({ id }) {
 
             <div style={{ padding: '18px 24px' }}>
                 <PrintablePdfEmailWrapper
-                    title={`Shift Report — ${shiftNo}`}
+                    title={`Shift Report - ${shiftNo}`}
                     fileName={`shift-report-${shiftNo}.pdf`}
                     allowEmail={false}
                     toolbarExtra={
@@ -338,7 +338,7 @@ export default function ShiftClosingSummary({ id }) {
                         {/* Footer */}
                         <div style={{ marginTop: 24, paddingTop: 10, borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#aaa' }}>
                             <span>Generated on {dayjs().format('DD MMM YYYY, HH:mm')}</span>
-                            <span>{companyName} — Shift Closing Report</span>
+                            <span>{companyName} - Shift Closing Report</span>
                         </div>
                     </div>
                 </PrintablePdfEmailWrapper>

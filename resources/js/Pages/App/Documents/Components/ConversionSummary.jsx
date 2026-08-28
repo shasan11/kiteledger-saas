@@ -87,7 +87,7 @@ export default function ConversionSummary({ review, documentType }) {
                 <Descriptions.Item label="Total">
                     <Text strong>
                         {currency ? `${currency} ` : ''}
-                        {total ?? '—'}
+                        {total ?? '-'}
                     </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Lines">

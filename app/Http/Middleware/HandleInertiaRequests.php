@@ -7,6 +7,7 @@ use App\Models\Central\CentralNotification;
 use App\Services\AppContextService;
 use App\Services\BranchScopeService;
 use App\Services\LocalizationService;
+use App\Services\SaaS\TenantAccessService;
 use Database\Seeders\CentralRolesAndPermissionsSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -45,8 +46,27 @@ class HandleInertiaRequests extends Middleware
 
             return [
                 ...parent::share($request),
+                'flash' => fn () => $this->flash($request),
                 'auth' => ['user' => $centralUser, 'permissions' => $permissions, 'roles' => $centralUser->roles()->pluck('name')->all(), 'canBypassPermissions' => $centralUser->role === 'super_admin'],
                 'centralNotifications' => fn () => $this->centralNotifications($centralUser->id),
+                'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
+                'translations' => [],
+            ];
+        }
+
+        // Resolved only on central requests: the platform guard never applies
+        // inside an initialized tenant context.
+        $platformUser = tenancy()->initialized ? null : ($request->attributes->get('platformUser') ?? $request->user('platform'));
+
+        if ($platformUser) {
+            return [
+                ...parent::share($request),
+                'flash' => fn () => $this->flash($request),
+                'auth' => ['user' => $platformUser->only(['id', 'uuid', 'name', 'first_name', 'last_name', 'email', 'avatar', 'timezone']), 'permissions' => [], 'roles' => []],
+                'platform' => [
+                    'tenants' => fn () => app(TenantAccessService::class)->tenantCards($platformUser),
+                    'activeTenantId' => $request->session()->get('platform_active_tenant_id'),
+                ],
                 'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
                 'translations' => [],
             ];
@@ -55,6 +75,7 @@ class HandleInertiaRequests extends Middleware
         if (! tenancy()->initialized && ! (app()->environment('testing') && config('saas.allow_uninitialized_tenant_models'))) {
             return [
                 ...parent::share($request),
+                'flash' => fn () => $this->flash($request),
                 'auth' => ['user' => null, 'permissions' => []],
                 'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
                 'translations' => [],
@@ -69,6 +90,7 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'flash' => fn () => $this->flash($request),
             'auth' => [
                 'user' => $user,
                 'permissions' => fn () => $user && method_exists($user, 'getAllPermissions')
@@ -98,6 +120,24 @@ class HandleInertiaRequests extends Middleware
             ],
             'translations' => fn () => $localization->translationsFor($locale),
             'impersonation' => fn () => $request->session()->get('impersonation'),
+        ];
+    }
+
+    /**
+     * Session flash messages, so `back()->with('success', ...)` surfaces in the
+     * UI instead of being silently dropped.
+     *
+     * @return array<string, string|null>
+     */
+    protected function flash(Request $request): array
+    {
+        if (! $request->hasSession()) {
+            return ['success' => null, 'error' => null];
+        }
+
+        return [
+            'success' => $request->session()->get('success'),
+            'error' => $request->session()->get('error'),
         ];
     }
 

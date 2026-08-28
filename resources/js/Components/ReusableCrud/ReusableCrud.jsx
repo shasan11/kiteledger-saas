@@ -5153,7 +5153,7 @@ function ValidationWarningModal({ warnings, onConfirm, onCancel }) {
         <div style={{ fontWeight: 700, color: "#d97706", marginBottom: 6 }}>Negative Stock</div>
         {items.map((item, idx) => (
           <div key={idx} style={{ marginBottom: 8, padding: "8px 10px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.product_name} — {item.warehouse}</div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.product_name} - {item.warehouse}</div>
             <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
               <tbody>
                 <tr><td style={{ padding: "1px 8px 1px 0", color: "#6b7280" }}>Available Stock</td><td>{item.available_stock}</td></tr>

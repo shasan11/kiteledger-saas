@@ -948,8 +948,8 @@ function GatewaySection({ providerKey, gateways, onSaved }) {
                     label="Mode"
                     description={
                         values.mode === 'live'
-                            ? '⚠ Live mode — real money will be charged to customers.'
-                            : 'Test mode — no real charges. Use test cards/credentials.'
+                            ? '⚠ Live mode - real money will be charged to customers.'
+                            : 'Test mode - no real charges. Use test cards/credentials.'
                     }
                 >
                     <Select
@@ -1033,7 +1033,7 @@ function GatewaySection({ providerKey, gateways, onSaved }) {
                     showIcon
                     icon={<LockOutlined />}
                     message="Credentials are encrypted at rest using AES-256 encryption."
-                    description="Secrets are never returned to the browser. Masked values are shown — leave a field blank to keep the existing value."
+                    description="Secrets are never returned to the browser. Masked values are shown - leave a field blank to keep the existing value."
                     style={{ marginBottom: 20, borderRadius: token.borderRadius }}
                 />
 
@@ -1052,7 +1052,7 @@ function GatewaySection({ providerKey, gateways, onSaved }) {
                                 {field.isSecret ? (
                                     <Input.Password
                                         style={{ width: 320 }}
-                                        placeholder={credentials[field.key]?.includes('****') ? '(unchanged — enter new value to replace)' : field.placeholder}
+                                        placeholder={credentials[field.key]?.includes('****') ? '(unchanged - enter new value to replace)' : field.placeholder}
                                         value={credentials[field.key]?.includes('****') ? '' : (credentials[field.key] ?? '')}
                                         onChange={e => setCred(field.key, e.target.value)}
                                         iconRender={v => v ? <EyeTwoTone /> : <EyeInvisibleOutlined />}
@@ -1192,7 +1192,7 @@ function WebhookLogsSection() {
             dataIndex: 'created_at',
             key: 'date',
             width: 160,
-            render: v => v ? new Date(v).toLocaleString() : '—',
+            render: v => v ? new Date(v).toLocaleString() : '-',
         },
         {
             title: 'Provider',
@@ -1208,7 +1208,7 @@ function WebhookLogsSection() {
             title: 'Invoice',
             dataIndex: 'invoice',
             key: 'invoice',
-            render: v => v?.invoice_no || '—',
+            render: v => v?.invoice_no || '-',
         },
         {
             title: 'Amount',
@@ -1230,7 +1230,7 @@ function WebhookLogsSection() {
             title: 'Reference',
             dataIndex: 'provider_payment_id',
             key: 'ref',
-            render: v => v ? <Text code style={{ fontSize: 11 }}>{v.substring(0, 24)}...</Text> : '—',
+            render: v => v ? <Text code style={{ fontSize: 11 }}>{v.substring(0, 24)}...</Text> : '-',
         },
     ];
 

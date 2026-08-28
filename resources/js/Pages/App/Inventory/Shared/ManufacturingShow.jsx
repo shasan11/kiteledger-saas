@@ -204,7 +204,7 @@ export default function ManufacturingShow({ id, documentType, ...props }) {
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title={`${cfg.title} — ${docNo}`} />
+      <Head title={`${cfg.title} - ${docNo}`} />
 
       {/* ── Header ───────────────────────────────────────────── */}
       <div style={{ background: '#fff', borderBottom: '1px solid #f0f0f0', padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -436,7 +436,7 @@ function getOverviewItems(record, documentType, isApproved, isPosted, isVoid) {
 
 function getCostSummary(record, documentType) {
   if (documentType === 'bom') {
-    return [{ label: 'BOM is a template only — no cost impact', value: '', isTotal: true }];
+    return [{ label: 'BOM is a template only - no cost impact', value: '', isTotal: true }];
   }
 
   if (documentType === 'production_order') {

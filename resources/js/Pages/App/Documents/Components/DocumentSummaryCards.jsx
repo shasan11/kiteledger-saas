@@ -10,7 +10,7 @@ import {
 const { Text } = Typography;
 
 /*
- * Counts cover the whole filtered dataset, not the current page — a "3 need
+ * Counts cover the whole filtered dataset, not the current page - a "3 need
  * review" that only counts page one is worse than showing nothing, because it
  * reads as complete.
  */

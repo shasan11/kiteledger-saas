@@ -8,7 +8,7 @@ import { Alert, Button, DatePicker, Drawer, Form, Input, InputNumber, Modal, Sel
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
 
-const display = (value) => value === null || value === undefined ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+const display = (value) => value === null || value === undefined ? '-' : typeof value === 'object' ? JSON.stringify(value) : String(value);
 
 export default function Overrides({ tenants, selectedTenant, rows, expiring }) {
     const [editing, setEditing] = useState(null);

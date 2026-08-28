@@ -211,7 +211,7 @@ export default function Index({ auth }) {
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', paddingBottom: 4 }}>
                         <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Bill of Materials</div>
-                            {/* BOM is just a reference — the fkSelect below handles the ID via onFormValuesChange */}
+                            {/* BOM is just a reference - the fkSelect below handles the ID via onFormValuesChange */}
                         </div>
                         <Tooltip title="Load raw materials and by-products from the selected BOM">
                             <Button
@@ -241,7 +241,7 @@ export default function Index({ auth }) {
             fkLabel: (row) => {
                 const no = row?.bom_number || row?.code || '';
                 const name = row?.product?.name || row?.finished_product?.name || '';
-                return [no, name ? `— ${name}` : ''].filter(Boolean).join(' ');
+                return [no, name ? `- ` : ''].filter(Boolean).join(' ');
             },
             placeholder: 'Select BOM (optional)',
         },

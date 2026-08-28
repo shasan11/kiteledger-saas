@@ -35,7 +35,8 @@ class AccountingReportService extends BaseReportService
             ->leftJoin('branches', 'branches.id', '=', 'journal_vouchers.branch_id');
 
         $this->applyBranchFilter($query, $filters, 'journal_vouchers.branch_id');
-        $this->applyStatusApprovalFilters($query, $filters);
+        // The line table carries no status/approved/void columns — the header does.
+        $this->applyStatusApprovalFilters($query, $filters, 'journal_vouchers');
 
         return $query;
     }
@@ -426,16 +427,33 @@ class AccountingReportService extends BaseReportService
             ->orderBy('code')
             ->get()
             ->map(function ($account) use ($filters) {
+                $balance = $this->ledgerBalance($account->id, null, $filters['as_of_date'], $filters);
+
                 return [
                     'section' => ucfirst($account->type),
                     'account_code' => $account->code,
                     'account_name' => $account->name,
-                    'balance' => $this->ledgerBalance($account->id, null, $filters['as_of_date'], $filters),
+                    // Liabilities and equity carry credit balances; present them
+                    // credit-positive instead of as negative debit balances.
+                    'balance' => $account->type === 'asset' ? $balance : round(-$balance, 2),
                 ];
             })
             ->filter(fn ($row) => abs($row['balance']) > 0.0001)
             ->values()
             ->all();
+
+        // Income and expense accounts are not closed into equity anywhere, so
+        // without this line the sheet is out of balance by exactly the period's
+        // result and A = L + E never holds.
+        $earnings = $this->currentPeriodEarnings($filters);
+        if (abs($earnings) > 0.0001) {
+            $rows[] = [
+                'section' => 'Equity',
+                'account_code' => '',
+                'account_name' => 'Current Period Earnings',
+                'balance' => $earnings,
+            ];
+        }
 
         $asset = collect($rows)->where('section', 'Asset')->sum('balance');
         $liability = collect($rows)->where('section', 'Liability')->sum('balance');
@@ -450,11 +468,30 @@ class AccountingReportService extends BaseReportService
             ['label' => 'Total Assets', 'value' => round($asset, 2)],
             ['label' => 'Total Liabilities', 'value' => round($liability, 2)],
             ['label' => 'Total Equity', 'value' => round($equity, 2)],
+            ['label' => 'Difference', 'value' => round($asset - ($liability + $equity), 2)],
         ], [
             'asset' => round($asset, 2),
             'liability' => round($liability, 2),
             'equity' => round($equity, 2),
+            'difference' => round($asset - ($liability + $equity), 2),
         ]);
+    }
+
+    /**
+     * Net result of every income and expense account up to the reporting date.
+     * Credit-positive, so it can be added straight into the equity section.
+     */
+    protected function currentPeriodEarnings(array $filters): float
+    {
+        $earnings = 0.0;
+
+        // credit - debit for both: income adds, expense (a debit balance) subtracts.
+        foreach (ChartOfAccount::query()->whereIn('type', ['income', 'expense'])->get() as $account) {
+            $movement = $this->ledgerMovement($account->id, null, $filters['as_of_date'], $filters);
+            $earnings += $movement['credit'] - $movement['debit'];
+        }
+
+        return round($earnings, 2);
     }
 
     protected function cashFlowSummary(string $reportKey, array $filters, array $meta): array
@@ -522,8 +559,16 @@ class AccountingReportService extends BaseReportService
             $query->where('journal_vouchers.voucher_date', '<=', $to);
         }
 
+        // select() (not selectRaw/addSelect) so the aggregate REPLACES the
+        // `journal_voucher_lines.*` projection from baseQuery(). Appending to it
+        // yields "SELECT lines.*, SUM(...)" with no GROUP BY, which MySQL
+        // rejects outright under ONLY_FULL_GROUP_BY (on by default, and set by
+        // 'strict' => true in config/database.php).
         $result = $query
-            ->selectRaw('COALESCE(SUM(journal_voucher_lines.debit), 0) as debit, COALESCE(SUM(journal_voucher_lines.credit), 0) as credit')
+            ->select(
+                DB::raw('COALESCE(SUM(journal_voucher_lines.debit), 0) as debit'),
+                DB::raw('COALESCE(SUM(journal_voucher_lines.credit), 0) as credit'),
+            )
             ->first();
 
         return [

@@ -4,7 +4,7 @@ import { theme } from 'antd';
  * Shared motion and surface treatment for the Copilot.
  *
  * Injected once rather than repeated inline so every surface shares one
- * elevation scale and one animation rhythm — inconsistent shadows and
+ * elevation scale and one animation rhythm - inconsistent shadows and
  * timings are the main reason an interface reads as "assembled" rather
  * than designed.
  *
@@ -61,7 +61,7 @@ export default function AiCopilotStyles() {
             .kl-prompt-card:hover {
                 border-color: ${token.colorPrimaryBorderHover};
                 box-shadow: ${token.boxShadowTertiary};
-                /* Transform only — animating size would reflow the grid. */
+                /* Transform only - animating size would reflow the grid. */
                 transform: translateY(-2px);
             }
 

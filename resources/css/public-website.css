@@ -859,3 +859,90 @@
     .kl-site *::before,
     .kl-site *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* -------------------------------------------------------------------------
+   KiteLedger public design system contract
+   These aliases keep the legacy section classes compatible while giving the
+   CMS a small, predictable set of brand controls to drive.
+------------------------------------------------------------------------- */
+.kl-site {
+    --website-container: 1200px;
+    --website-container-wide: 1320px;
+    --website-container-narrow: 760px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+    --space-9: 80px;
+    --space-10: 96px;
+    --space-11: 120px;
+    --font-heading: var(--website-font-heading), Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
+    --font-body: var(--website-font-body), Inter, Manrope, ui-sans-serif, system-ui, sans-serif;
+    --color-primary: var(--website-primary);
+    --color-primary-hover: var(--website-primary-hover);
+    --color-secondary: var(--website-secondary);
+    --color-accent: var(--website-accent);
+    --color-background: var(--website-background);
+    --color-background-subtle: var(--website-surface-subtle);
+    --color-surface: var(--website-surface);
+    --color-surface-raised: var(--website-surface-raised);
+    --color-heading: var(--website-text-strong);
+    --color-text: var(--website-text);
+    --color-muted: var(--website-text-muted);
+    --color-border: var(--website-border);
+    --color-border-strong: var(--website-border-strong);
+    --color-success: var(--website-success);
+    --color-warning: var(--website-warning);
+    --color-danger: var(--website-error);
+    --color-footer-background: var(--website-footer);
+    --color-footer-text: #d9e3df;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-card: 16px;
+    --radius-large: 24px;
+    --shadow-none: none;
+    --shadow-sm: 0 1px 2px rgb(18 44 36 / 5%);
+    --shadow-md: 0 24px 60px -28px rgb(18 44 36 / 26%);
+    font-family: var(--font-body);
+}
+.kl-site[data-density="compact"] { --space-8: 48px; --space-9: 64px; --space-10: 80px; }
+.kl-site[data-density="spacious"] { --space-8: 80px; --space-9: 96px; --space-10: 120px; }
+.kl-site[data-corners="square"] { --radius-sm: 4px; --radius-md: 6px; --radius-card: 8px; --radius-large: 12px; }
+.kl-site[data-corners="rounded"] { --radius-sm: 12px; --radius-md: 16px; --radius-card: 20px; --radius-large: 28px; }
+.kl-site[data-scale="compact"] { font-size: 15px; }
+.kl-site[data-scale="large"] { font-size: 17px; }
+.kl-site[data-buttons="square"] .kl-button { border-radius: var(--radius-sm); }
+.kl-site[data-buttons="rounded"] .kl-button { border-radius: var(--radius-large); }
+.kl-site[data-buttons="pill"] .kl-button { border-radius: 999px; }
+.kl-site[data-cards="flat"] .kl-feature-grid article, .kl-site[data-cards="flat"] .kl-price-card, .kl-site[data-cards="flat"] .kl-testimonial-grid article { border-color: transparent; box-shadow: none; }
+.kl-site[data-cards="soft-shadow"] .kl-feature-grid article, .kl-site[data-cards="soft-shadow"] .kl-price-card, .kl-site[data-cards="soft-shadow"] .kl-testimonial-grid article { border-color: transparent; box-shadow: var(--shadow-sm); }
+.kl-site[data-cards="elevated"] .kl-feature-grid article, .kl-site[data-cards="elevated"] .kl-price-card, .kl-site[data-cards="elevated"] .kl-testimonial-grid article { border-color: transparent; box-shadow: var(--shadow-md); }
+.kl-site h1, .kl-site h2, .kl-site h3 { font-family: var(--font-heading); }
+.kl-container { width: min(calc(100% - 64px), var(--website-container)); }
+.kl-section { padding-block: var(--space-10); }
+.kl-section-header { max-width: var(--website-container-narrow); margin-block-end: var(--space-7); }
+.kl-section-header h1 { font-size: clamp(2.5rem, 5vw, 3.75rem); line-height: 1.08; }
+.kl-section-header h2 { font-size: clamp(2rem, 3.4vw, 2.625rem); line-height: 1.12; }
+.kl-hero { padding-block: clamp(var(--space-10), 9vw, var(--space-11)); }
+.kl-hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.05; }
+.kl-header { box-shadow: var(--shadow-sm); }
+.kl-nav { min-height: 72px; }
+.kl-button { min-height: 44px; border-radius: var(--radius-md); }
+.kl-button--large { min-height: 48px; padding-inline: 20px; }
+.kl-feature-grid article, .kl-price-card, .kl-testimonial-grid article, .kl-related-grid article { border-radius: var(--radius-card); }
+.kl-product-media, .kl-hero-media, .kl-product-image { border-radius: var(--radius-card); }
+
+@media (max-width: 991px) {
+    .kl-section { padding-block: var(--space-9); }
+}
+@media (max-width: 767px) {
+    .kl-container { width: min(calc(100% - 40px), var(--website-container)); }
+    .kl-section { padding-block: var(--space-8); }
+    .kl-section-header { margin-block-end: var(--space-6); }
+    .kl-hero { padding-block: var(--space-9); }
+    .kl-hero h1 { font-size: clamp(2.35rem, 10vw, 3rem); }
+}

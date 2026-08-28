@@ -110,7 +110,7 @@ export default function TaxAdvanced({ auth }) {
                     type="warning"
                     showIcon
                     style={{ marginBottom: 28 }}
-                    message="Advanced area — proceed carefully"
+                    message="Advanced area - proceed carefully"
                     description="Changes here affect how tax is calculated across all invoices and bills. If you are unsure, use Tax Settings instead."
                     action={
                         <Button size="small" onClick={() => router.visit('/tax/settings')}>

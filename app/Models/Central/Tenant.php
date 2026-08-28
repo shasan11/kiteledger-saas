@@ -2,7 +2,9 @@
 
 namespace App\Models\Central;
 
+use App\Enums\TenantMembershipRole;
 use App\Enums\TenantStatus;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -65,5 +67,33 @@ class Tenant extends \App\Models\Tenant
     public function isOperational(): bool
     {
         return $this->status === TenantStatus::Active->value;
+    }
+
+    /** Platform-user access records. Cross-tenant mapping lives centrally. */
+    public function memberships(): HasMany
+    {
+        return $this->hasMany(TenantMembership::class, 'tenant_id', $this->getTenantKeyName());
+    }
+
+    public function platformUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(CentralUser::class, 'central_user_tenant_memberships', 'tenant_id', 'central_user_id')
+            ->withPivot(array_merge(['id', 'role', 'is_active', 'is_primary', 'accepted_at', 'revoked_at'], TenantMembershipRole::PERMISSIONS))
+            ->withTimestamps();
+    }
+
+    public function owners(): BelongsToMany
+    {
+        return $this->platformUsers()->wherePivot('is_active', true)->wherePivot('role', TenantMembershipRole::Owner->value);
+    }
+
+    public function billingManagers(): BelongsToMany
+    {
+        return $this->platformUsers()->wherePivot('is_active', true)->wherePivot('can_manage_billing', true);
+    }
+
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(CentralUserInvitation::class, 'tenant_id', $this->getTenantKeyName());
     }
 }

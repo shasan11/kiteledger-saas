@@ -25,5 +25,10 @@ class CentralDatabaseSeeder extends Seeder
         if (filter_var(env('SAAS_SEED_DEMO_TENANT', false), FILTER_VALIDATE_BOOL)) {
             $this->call(DemoTenantSeeder::class);
         }
+
+        // Sample platform account spanning two tenants. Development only.
+        if (filter_var(env('SAAS_SEED_DEMO_PLATFORM_USERS', false), FILTER_VALIDATE_BOOL)) {
+            $this->call(PlatformUsersDemoSeeder::class);
+        }
     }
 }

@@ -15,7 +15,7 @@ const INLINE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'
 /**
  * Source document preview.
  *
- * Always renders through the authorized preview endpoint — never a direct
+ * Always renders through the authorized preview endpoint - never a direct
  * storage path, so tenant and branch checks still apply to every byte served.
  * DOCX has no safe in-browser renderer here, so it offers a download instead of
  * an iframe that would either fail or trigger a download anyway.

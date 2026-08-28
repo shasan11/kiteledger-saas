@@ -643,7 +643,7 @@ export function buildSmsConfigCrud() {
       ],
     },
 
-    // Twilio fields — shown only when provider === 'twilio'
+    // Twilio fields - shown only when provider === 'twilio'
     {
       name: 'account_sid', label: 'Account SID', type: 'text', col: 12,
       condition: (v) => v?.provider === 'twilio',
@@ -659,7 +659,7 @@ export function buildSmsConfigCrud() {
       placeholder: '+1XXXXXXXXXX',
     },
 
-    // Infobip fields — shown only when provider === 'infobip'
+    // Infobip fields - shown only when provider === 'infobip'
     {
       name: 'api_key', label: 'API Key', type: 'password', col: 12,
       condition: (v) => v?.provider === 'infobip',

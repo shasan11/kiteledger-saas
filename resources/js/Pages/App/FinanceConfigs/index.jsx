@@ -14,7 +14,7 @@ export const renderStatusTag = (statusColorMap = {}, fallback = 'draft') => (val
 export const renderApprovedTag = (value) => <Tag color={value ? 'green' : 'default'}>{value ? 'Approved' : 'Pending'}</Tag>;
 export const renderOverdueTag = (dueDate, record) => {
   const date = dueDate || record?.due_date;
-  if (!date) return <span style={{ color: '#bbb' }}>—</span>;
+  if (!date) return <span style={{ color: '#bbb' }}>-</span>;
   const overdue = dayjs(date).isBefore(dayjs(), 'day') && !['paid', 'posted', 'approved'].includes(record?.status);
   return overdue ? <Tag color="red">Overdue</Tag> : <Tag>On time</Tag>;
 };

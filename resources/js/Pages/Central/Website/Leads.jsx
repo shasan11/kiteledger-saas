@@ -29,7 +29,7 @@ export default function Leads({ leads, filters }) {
         {
             title: "Company",
             dataIndex: "company",
-            render: (value) => value || "—",
+            render: (value) => value || "-",
         },
         {
             title: "Request",

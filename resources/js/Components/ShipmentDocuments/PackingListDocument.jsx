@@ -1,6 +1,6 @@
 import React from 'react';
 
-const v = (val, fallback = '—') => val ?? fallback;
+const v = (val, fallback = '-') => val ?? fallback;
 
 const palette = {
   primary: '#1a3a5c',
@@ -170,7 +170,7 @@ function InfoCell({ label, value }) {
 }
 
 const formatDate = (d) => {
-  if (!d) return '—';
+  if (!d) return '-';
   try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
   catch { return d; }
 };
@@ -272,7 +272,7 @@ export default function PackingListDocument({ snapshot }) {
             {packages.map((pkg, idx) => {
               const dims = (pkg.length || pkg.width || pkg.height)
                 ? `${v(pkg.length, '?')} × ${v(pkg.width, '?')} × ${v(pkg.height, '?')}`
-                : '—';
+                : '-';
               const hasHUs = pkg.handling_units && pkg.handling_units.length > 0;
 
               return (
@@ -284,9 +284,9 @@ export default function PackingListDocument({ snapshot }) {
                     <td style={s.td}>{v(pkg.marks_and_numbers)}</td>
                     <td style={s.tdRight}>{v(pkg.quantity)}</td>
                     <td style={s.td}>{dims}</td>
-                    <td style={s.tdRight}>{pkg.gross_weight != null ? Number(pkg.gross_weight).toFixed(2) : '—'}</td>
-                    <td style={s.tdRight}>{pkg.net_weight != null ? Number(pkg.net_weight).toFixed(2) : '—'}</td>
-                    <td style={s.tdRight}>{pkg.volume_cbm != null ? Number(pkg.volume_cbm).toFixed(3) : '—'}</td>
+                    <td style={s.tdRight}>{pkg.gross_weight != null ? Number(pkg.gross_weight).toFixed(2) : '-'}</td>
+                    <td style={s.tdRight}>{pkg.net_weight != null ? Number(pkg.net_weight).toFixed(2) : '-'}</td>
+                    <td style={s.tdRight}>{pkg.volume_cbm != null ? Number(pkg.volume_cbm).toFixed(3) : '-'}</td>
                     <td style={s.tdCenter}>
                       {pkg.fragile && (
                         <span style={s.badge('#ea580c', '#fff7ed')}>FRAGILE</span>
@@ -299,7 +299,7 @@ export default function PackingListDocument({ snapshot }) {
                       <td style={s.td} colSpan={2}>
                         <span style={{ marginLeft: '14px', color: '#555', fontStyle: 'italic', fontSize: '10px' }}>
                           ↳ HU: <strong>{v(hu.hu_number)}</strong>
-                          {hu.description && <> — {hu.description}</>}
+                          {hu.description && <> - {hu.description}</>}
                         </span>
                       </td>
                       <td style={s.td} colSpan={7}></td>
@@ -312,7 +312,7 @@ export default function PackingListDocument({ snapshot }) {
             <tr style={s.trTotals}>
               <td style={s.td} colSpan={4}><strong>TOTALS</strong></td>
               <td style={s.tdRight}><strong>{totalPkgs}</strong></td>
-              <td style={s.td}>—</td>
+              <td style={s.td}>-</td>
               <td style={s.tdRight}><strong>{totalGross.toFixed(2)}</strong></td>
               <td style={s.tdRight}><strong>{totalNet.toFixed(2)}</strong></td>
               <td style={s.tdRight}><strong>{totalCBM.toFixed(3)}</strong></td>
@@ -353,13 +353,13 @@ export default function PackingListDocument({ snapshot }) {
 
       {addInfo.contain_dangerous_goods && (
         <div style={s.infoBox(palette.red, palette.redLight, palette.red)}>
-          ⚠ DANGEROUS GOODS DECLARATION — This shipment contains hazardous / dangerous goods.
+          ⚠ DANGEROUS GOODS DECLARATION - This shipment contains hazardous / dangerous goods.
           All applicable regulations and labeling requirements must be strictly observed.
         </div>
       )}
       {addInfo.has_damaged_items && (
         <div style={s.infoBox(palette.orange, palette.orangeLight, palette.orange)}>
-          ⚠ DAMAGED ITEMS NOTED — One or more items in this shipment have been recorded as damaged.
+          ⚠ DAMAGED ITEMS NOTED - One or more items in this shipment have been recorded as damaged.
           Please inspect and document all affected packages on receipt.
         </div>
       )}
@@ -373,7 +373,7 @@ export default function PackingListDocument({ snapshot }) {
           marginBottom: '8px',
           fontSize: '11px',
         }}>
-          ℹ ADDITIONAL PACKING LIST ATTACHED — Please refer to supplementary packing list document.
+          ℹ ADDITIONAL PACKING LIST ATTACHED - Please refer to supplementary packing list document.
         </div>
       )}
 
@@ -406,9 +406,9 @@ export default function PackingListDocument({ snapshot }) {
                       fontWeight: 'bold',
                     }}>{v(c.status)}</span>
                   </td>
-                  <td style={s.tdRight}>{c.tare_weight != null ? Number(c.tare_weight).toFixed(2) : '—'}</td>
-                  <td style={s.tdRight}>{c.gross_weight != null ? Number(c.gross_weight).toFixed(2) : '—'}</td>
-                  <td style={s.tdRight}>{c.net_weight != null ? Number(c.net_weight).toFixed(2) : '—'}</td>
+                  <td style={s.tdRight}>{c.tare_weight != null ? Number(c.tare_weight).toFixed(2) : '-'}</td>
+                  <td style={s.tdRight}>{c.gross_weight != null ? Number(c.gross_weight).toFixed(2) : '-'}</td>
+                  <td style={s.tdRight}>{c.net_weight != null ? Number(c.net_weight).toFixed(2) : '-'}</td>
                 </tr>
               ))}
             </tbody>

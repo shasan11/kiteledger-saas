@@ -22,7 +22,7 @@ const GROUPS = [
         key: 'general',
         label: 'Start a conversation',
         icon: <BankOutlined />,
-        prompts: ['Hello — what can you help me with?'],
+        prompts: ['Hello - what can you help me with?'],
     },
     {
         key: 'financial',

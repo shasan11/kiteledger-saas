@@ -65,7 +65,7 @@ export const fetchBrandSettings = async () => {
     const response = await axios.get(api('/api/app-settings/current'));
     settings = response.data || {};
   } catch (error) {
-    // Guests (e.g. the login page) can't read the gated endpoint — fall back to
+    // Guests (e.g. the login page) can't read the gated endpoint - fall back to
     // the public brand endpoint so the logo/favicon still render.
     const response = await axios.get(api('/api/brand'));
     settings = response.data || {};

@@ -21,4 +21,4 @@ export default function SupportShow({ ticket, categories, admins, savedReplies, 
     </CentralLayout>;
 }
 
-function Data({ label, value }) { return <div className="central-data-item"><span className="central-data-item__label">{label}</span><span>{value || '—'}</span></div>; }
+function Data({ label, value }) { return <div className="central-data-item"><span className="central-data-item__label">{label}</span><span>{value || '-'}</span></div>; }

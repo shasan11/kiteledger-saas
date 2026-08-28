@@ -31,7 +31,7 @@ export default function OperationsGuide({ runtime, status, commands, scheduledTa
         <SectionCard title="Cron scheduler setup" description="Create exactly one scheduler entry. Laravel decides which individual tasks are due.">
             <Title level={5}>Linux or hosting control panel</Title><Command>{commands.scheduler}</Command>
             <Title level={5}>Windows Task Scheduler</Title><Paragraph>Run every minute from the project directory:</Paragraph><Command>{commands.windows_scheduler}</Command>
-            <Paragraph>When Scheduler enabled is turned off, the next scheduler invocation skips KiteLedger tasks. Manual administrator actions—such as pausing or reactivating a subscription—still happen immediately. Automatic expiry, suspension, timed resume, invoice generation, usage collection, and publishing wait until the scheduler is enabled again.</Paragraph>
+            <Paragraph>When Scheduler enabled is turned off, the next scheduler invocation skips KiteLedger tasks. Manual administrator actions, such as pausing or reactivating a subscription, still happen immediately. Automatic expiry, suspension, timed resume, invoice generation, usage collection, and publishing wait until the scheduler is enabled again.</Paragraph>
         </SectionCard>
 
         <SectionCard title="Scheduled task reference"><Table rowKey="name" pagination={false} dataSource={scheduledTasks} columns={[{ title: 'Task', dataIndex: 'name' }, { title: 'Frequency', dataIndex: 'frequency' }, { title: 'What it does', dataIndex: 'effect' }]} scroll={{ x: 760 }}/></SectionCard>

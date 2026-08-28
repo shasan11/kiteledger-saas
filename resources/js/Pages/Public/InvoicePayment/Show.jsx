@@ -136,7 +136,7 @@ function InvoiceSummary({ invoice, company }) {
                 <Col span={12} style={{ marginTop: 8 }}>
                     <Text type="secondary">Due Date</Text>
                     <br />
-                    <Text>{invoice.due_date || '—'}</Text>
+                    <Text>{invoice.due_date || '-'}</Text>
                 </Col>
                 <Col span={24} style={{ marginTop: 8 }}>
                     <Text type="secondary">Bill To</Text>

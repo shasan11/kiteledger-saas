@@ -165,7 +165,7 @@ export default function SupplierPayments() {
             key: 'bank_charges',
             width: 120,
             align: 'right',
-            render: v => toNum(v) > 0 ? money(v) : <span style={{ color: '#bbb' }}>—</span>,
+            render: v => toNum(v) > 0 ? money(v) : <span style={{ color: '#bbb' }}>-</span>,
         },
         {
             title: 'TDS',
@@ -173,7 +173,7 @@ export default function SupplierPayments() {
             key: 'tds_charges',
             width: 100,
             align: 'right',
-            render: v => toNum(v) > 0 ? money(v) : <span style={{ color: '#bbb' }}>—</span>,
+            render: v => toNum(v) > 0 ? money(v) : <span style={{ color: '#bbb' }}>-</span>,
         },
         {
             title: 'Status',

@@ -96,7 +96,7 @@ const ReviewField = forwardRef(function ReviewField(
                 onFocus={() => onFocusEvidence?.(field)}
                 disabled={disabled}
                 status={isConflict ? 'error' : undefined}
-                placeholder={field.state === 'missing' ? 'Not found — please enter' : undefined}
+                placeholder={field.state === 'missing' ? 'Not found - please enter' : undefined}
             />
 
             {/* A conflict shows both numbers and lets the user decide; KiteLedger

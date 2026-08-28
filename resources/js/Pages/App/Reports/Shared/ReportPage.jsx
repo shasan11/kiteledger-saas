@@ -559,7 +559,7 @@ export default function ReportPage() {
             background: #fff !important;
           }
 
-          /* Tag rendering — plain text-ish */
+          /* Tag rendering - plain text-ish */
           .report-print-area .ant-tag {
             background: transparent !important;
             border: 1px solid #888 !important;
@@ -678,7 +678,7 @@ export default function ReportPage() {
           <Alert
             type="warning"
             showIcon
-            message="Filters changed — click Generate Report to refresh results."
+            message="Filters changed - click Generate Report to refresh results."
             style={{ marginBottom: 16 }}
             className="report-no-print"
             closable

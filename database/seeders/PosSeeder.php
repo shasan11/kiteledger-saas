@@ -46,7 +46,7 @@ class PosSeeder extends Seeder
 
     private function seedWalkInCustomer(): Contact
     {
-        // Single source of truth — also used by the lightweight normal install.
+        // Single source of truth - also used by the lightweight normal install.
         $this->call(WalkInCustomerSeeder::class);
 
         return Contact::query()->where('code', WalkInCustomerSeeder::CODE)->firstOrFail()->fresh();

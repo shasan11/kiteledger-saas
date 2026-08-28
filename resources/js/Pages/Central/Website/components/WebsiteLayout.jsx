@@ -61,18 +61,33 @@ function CookieConsent({ site }) {
 }
 
 export default function WebsiteLayout({ children, menus = {}, site = {}, announcements = [], navbarNotifications = [], websitePopup = null, socialLinks = [], previewMessage }) {
-    const primary = site['branding.primary_color'] || '#176b5b';
-    const secondary = site['branding.secondary_color'] || '#10211d';
+    const primary = site['design.primary_color'] || site['branding.primary_color'] || '#176b5b';
+    const secondary = site['design.secondary_color'] || site['branding.secondary_color'] || '#10211d';
+    const density = site['design.layout_density'] || 'standard';
+    const scale = site['design.typography_scale'] || 'standard';
+    const corners = site['design.corner_style'] || 'soft';
+    const cards = site['design.card_style'] || 'bordered';
+    const buttons = site['design.button_style'] || 'soft';
     const theme = {
         '--website-primary': primary,
         '--website-secondary': secondary,
-        '--website-accent': site['branding.website_accent_color'] || '#d97706',
-        '--website-background': site['branding.website_background_color'] || '#ffffff',
-        '--website-surface-subtle': site['branding.website_surface_color'] || '#f6f8f7',
-        '--website-text': site['branding.website_text_color'] || '#3d4d48',
-        '--website-footer': site['branding.website_footer_color'] || secondary,
+        '--website-accent': site['design.accent_color'] || site['branding.website_accent_color'] || '#d97706',
+        '--website-background': site['design.background_color'] || site['branding.website_background_color'] || '#ffffff',
+        '--website-surface-subtle': site['design.surface_color'] || site['branding.website_surface_color'] || '#f6f8f7',
+        '--website-text-strong': site['design.heading_color'] || '#14231f',
+        '--website-text': site['design.text_color'] || site['branding.website_text_color'] || '#3d4d48',
+        '--website-text-muted': site['design.muted_color'] || '#687772',
+        '--website-border': site['design.border_color'] || '#dce4e1',
+        '--website-footer': site['design.footer_background'] || site['branding.website_footer_color'] || secondary,
+        '--website-font-heading': site['design.heading_font'] || 'Manrope',
+        '--website-font-body': site['design.body_font'] || 'Manrope',
+        '--website-density': density,
+        '--website-scale': scale,
+        '--website-corners': corners,
+        '--website-cards': cards,
+        '--website-buttons': buttons,
     };
-    return <div className="kl-site" style={theme}>
+    return <div className="kl-site" data-density={density} data-scale={scale} data-corners={corners} data-cards={cards} data-buttons={buttons} style={theme}>
         <a className="kl-skip-link" href="#main-content">Skip to main content</a>
         {previewMessage && <div className="kl-preview" role="status">{previewMessage}</div>}
         <Announcement item={navbarNotifications[0] || announcements[0]}/>

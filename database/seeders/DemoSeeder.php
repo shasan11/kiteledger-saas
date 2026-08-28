@@ -6,7 +6,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 /**
- * Full demo dataset — config/master data PLUS heavy sample business records
+ * Full demo dataset - config/master data PLUS heavy sample business records
  * (products, ~5,000 transactions, bulk accounting volume). This is what the old
  * DatabaseSeeder ran. It is NOT used by the installer (it takes minutes and
  * trips proxy timeouts); run it manually for a demo environment:

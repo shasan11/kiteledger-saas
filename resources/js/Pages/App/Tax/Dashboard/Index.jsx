@@ -110,7 +110,7 @@ export default function TaxDashboard({ auth }) {
     const [loading, setLoading]       = useState(true);
     const [summaryLoading, setSummaryLoading] = useState(true);
 
-    /* date range state — defaults to current calendar month */
+    /* date range state - defaults to current calendar month */
     const [dateRange, setDateRange] = useState([
         dayjs().startOf('month'),
         dayjs().endOf('month'),
@@ -181,7 +181,7 @@ export default function TaxDashboard({ auth }) {
                             value={selectedCountry}
                             placeholder="All countries"
                             allowClear
-                            options={countryOptions.map((c) => ({ value: c.value, label: `${c.value} — ${c.label}` }))}
+                            options={countryOptions.map((c) => ({ value: c.value, label: `${c.value} - ${c.label}` }))}
                             onChange={setSelectedCountry}
                             size="small"
                         />
@@ -228,12 +228,12 @@ export default function TaxDashboard({ auth }) {
                     <Space style={{ marginBottom: 16 }} wrap>
                         {settings.sales_tax_enabled && (
                             <Tag color="green">
-                                {settings.sales_tax_name || 'Sales Tax'} {settings.sales_tax_rate_percent}% — Active
+                                {settings.sales_tax_name || 'Sales Tax'} {settings.sales_tax_rate_percent}% - Active
                             </Tag>
                         )}
                         {settings.purchase_tax_enabled && (
                             <Tag color="blue">
-                                {settings.purchase_tax_name || 'Purchase Tax'} {settings.purchase_tax_rate_percent}% — Active
+                                {settings.purchase_tax_name || 'Purchase Tax'} {settings.purchase_tax_rate_percent}% - Active
                             </Tag>
                         )}
                         {!settings.sales_tax_enabled && !settings.purchase_tax_enabled && (
@@ -337,7 +337,7 @@ export default function TaxDashboard({ auth }) {
                                     Period
                                 </Text>
                                 <Text style={{ fontSize: 13, fontWeight: 600 }}>
-                                    {dateRange[0]?.format('D MMM YYYY')} — {dateRange[1]?.format('D MMM YYYY')}
+                                    {dateRange[0]?.format('D MMM YYYY')} - {dateRange[1]?.format('D MMM YYYY')}
                                 </Text>
                                 <div style={{ marginTop: 6 }}>
                                     <Text type="secondary" style={{ fontSize: 12 }}>

@@ -1549,7 +1549,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
 
             // Branch-scoped administrator. May administer their assigned
-            // branch but MUST NOT see other branch data — enforced by
+            // branch but MUST NOT see other branch data - enforced by
             // BranchScopeService denying system.branch.view_all/manage_all.
             'Branch Admin' => [
                 'allow' => ['*'],

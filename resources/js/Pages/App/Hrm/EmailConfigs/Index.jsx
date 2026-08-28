@@ -91,7 +91,7 @@ function EmailConfigContent() {
     try {
       const values = form.getFieldsValue();
       const payload = { ...values, to: testTo };
-      // Empty password means "use the saved one" — drop the key so the
+      // Empty password means "use the saved one" - drop the key so the
       // backend falls back to the stored credential instead of validating
       // an empty string.
       if (!payload.email_pass) delete payload.email_pass;

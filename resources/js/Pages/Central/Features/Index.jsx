@@ -20,7 +20,7 @@ export default function FeatureIndex({ features, categories, filters }) {
     const columns = [
         { title: 'Feature', render: (_, item) => <><Typography.Text strong>{item.name}</Typography.Text><br/><Typography.Text type="secondary">{item.key}</Typography.Text></> },
         { title: 'Category', dataIndex: 'category' }, { title: 'Type', dataIndex: 'type' },
-        { title: 'Default', render: (_, item) => <Typography.Text code>{typeof item.default_value === 'object' ? JSON.stringify(item.default_value) : String(item.default_value ?? '—')}</Typography.Text> },
+        { title: 'Default', render: (_, item) => <Typography.Text code>{typeof item.default_value === 'object' ? JSON.stringify(item.default_value) : String(item.default_value ?? '-')}</Typography.Text> },
         { title: 'Plans', dataIndex: 'plans_count' }, { title: 'Status', render: (_, item) => <StatusBadge value={item.is_active ? 'active' : 'inactive'}/> },
         { title: '', width: 130, render: (_, item) => <Space><Button icon={<EditOutlined/>} onClick={() => open(item)}/><Button danger type="text" icon={<DeleteOutlined/>} onClick={() => remove(item)}/></Space> },
     ];

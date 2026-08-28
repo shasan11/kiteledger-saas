@@ -303,7 +303,7 @@ export default function DocumentUploadIndex() {
             const errors = e.response?.data?.errors;
 
             if (status === 422 && errors) {
-                // Correctable validation problem — surface it on the fields and
+                // Correctable validation problem - surface it on the fields and
                 // keep the chosen file so the user does not reselect it.
                 uploadForm.setFields(
                     Object.entries(errors).map(([name, messages]) => ({
@@ -365,7 +365,7 @@ export default function DocumentUploadIndex() {
      *
      * The backend may legitimately spend several minutes on a document
      * (per-attempt timeout plus retries with backoff), so the client must not
-     * give up after a fixed short window — the previous implementation stopped
+     * give up after a fixed short window - the previous implementation stopped
      * at 60s and left live scans looking abandoned.
      *
      * Intervals widen as the wait grows, one poller exists per document, a
@@ -421,7 +421,7 @@ export default function DocumentUploadIndex() {
 
             if (timedOut) {
                 antMessage.warning(
-                    'The scan is still running. You can safely leave this page — use Refresh to check again.',
+                    'The scan is still running. You can safely leave this page - use Refresh to check again.',
                 );
             }
 

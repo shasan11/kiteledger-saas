@@ -260,14 +260,14 @@ export default function Designations({ auth, embedded = false }) {
       {
         title: 'Department',
         key: 'department',
-        render: (_, record) => record.department?.name || <Text type="secondary">—</Text>,
+        render: (_, record) => record.department?.name || <Text type="secondary">-</Text>,
       },
       {
         title: 'Level / Grade',
         key: 'level_grade',
         render: (_, record) => {
           const parts = [record.level, record.grade].filter(Boolean);
-          return parts.length ? <Text>{parts.join(' / ')}</Text> : <Text type="secondary">—</Text>;
+          return parts.length ? <Text>{parts.join(' / ')}</Text> : <Text type="secondary">-</Text>;
         },
       },
       {
@@ -275,7 +275,7 @@ export default function Designations({ auth, embedded = false }) {
         key: 'default_basic_salary',
         align: 'right',
         render: (_, record) => {
-          if (!record.default_basic_salary) return <Text type="secondary">—</Text>;
+          if (!record.default_basic_salary) return <Text type="secondary">-</Text>;
           return (
             <Space direction="vertical" size={0} style={{ textAlign: 'right' }}>
               <Text strong>

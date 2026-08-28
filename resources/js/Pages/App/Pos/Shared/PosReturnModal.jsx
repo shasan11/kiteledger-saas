@@ -222,7 +222,7 @@ export default function PosReturnModal({ open, saleId, sale: initialSale = null,
 
     return (
         <Modal
-            title={`Create Return — ${sale?.sale_no || ''}`}
+            title={`Create Return - ${sale?.sale_no || ''}`}
             open={open}
             onCancel={handleClose}
             width={1180}

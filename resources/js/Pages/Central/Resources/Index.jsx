@@ -59,14 +59,14 @@ export default function Index({ resource, rows, columns = [], editable = false, 
         router.post(target,values,{preserveScroll:true,onSuccess:()=>{setFinancialAction(null);actionForm.resetFields();}});
     };
     const renderValue = (key,value,row) => {
-        if (key === 'changes') return value?.length ? value.map(change=><div key={change.field}><strong>{change.field}:</strong> {String(change.from ?? '—')} → {String(change.to ?? '—')}</div>) : 'No field changes';
+        if (key === 'changes') return value?.length ? value.map(change=><div key={change.field}><strong>{change.field}:</strong> {String(change.from ?? '-')} → {String(change.to ?? '-')}</div>) : 'No field changes';
         if (key === 'storage_mb') return `${Number(value||0).toLocaleString()} MB`;
         if (key === 'status') return <StatusBadge value={value}/>;
         if (key.startsWith('is_') || key === 'enabled') return <StatusBadge value={value ? 'active' : 'disabled'}/>;
         if (moneyColumns.includes(key)) return formatMoney(value,row.currency || 'USD');
         if (dateColumns.includes(key)) return formatDate(value,key.includes('_at'));
         if (value && typeof value === 'object') return <Typography.Text ellipsis={{tooltip:JSON.stringify(value)}} style={{maxWidth:260}}>{JSON.stringify(value)}</Typography.Text>;
-        return String(value ?? '—');
+        return String(value ?? '-');
     };
     const actionItems = (row) => [
         editable && {label:'Edit',icon:<EditOutlined/>,disabled:isAllocated(row),onClick:()=>edit(row)},

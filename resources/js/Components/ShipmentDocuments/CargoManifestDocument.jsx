@@ -1,6 +1,6 @@
 import React from 'react';
 
-const v = (val, fallback = '—') => val ?? fallback;
+const v = (val, fallback = '-') => val ?? fallback;
 
 const styles = {
   page: {
@@ -188,7 +188,7 @@ export default function CargoManifestDocument({ snapshot }) {
   const totalCBM = manifestPackages.reduce((acc, p) => acc + (Number(p.volume_cbm) || 0), 0);
 
   const formatDate = (d) => {
-    if (!d) return '—';
+    if (!d) return '-';
     try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
     catch { return d; }
   };
@@ -196,19 +196,19 @@ export default function CargoManifestDocument({ snapshot }) {
   const carrierInfo = mainLeg.carrier?.name
     || mainLeg.vessel_name
     || mainLeg.flight_no
-    || '—';
+    || '-';
 
   return (
     <div style={styles.page}>
       {/* Banners */}
       {s.roro && (
         <div style={styles.banner('#7c3aed', '#ede9fe')}>
-          RO-RO SHIPMENT — Roll-on/Roll-off cargo handling applies
+          RO-RO SHIPMENT - Roll-on/Roll-off cargo handling applies
         </div>
       )}
       {addInfo.contain_dangerous_goods && (
         <div style={styles.banner('#dc2626', '#fee2e2')}>
-          ⚠ DANGEROUS GOODS — This shipment contains hazardous materials
+          ⚠ DANGEROUS GOODS - This shipment contains hazardous materials
         </div>
       )}
 
@@ -349,11 +349,11 @@ export default function CargoManifestDocument({ snapshot }) {
                   </td>
                   <td style={cellStyle}>{v(shipment.shipper?.name || shipment.shipper?.display)}</td>
                   <td style={cellStyle}>{v(shipment.consignee?.name || shipment.consignee?.display)}</td>
-                  <td style={cellStyle}>{shipment.origin_port?.code || shipment.origin_port?.name || '—'}</td>
-                  <td style={cellStyle}>{shipment.destination_port?.code || shipment.destination_port?.name || '—'}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalQty || '—'}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalGrossW ? totalGrossW.toFixed(2) : '—'}</td>
-                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalCbm ? totalCbm.toFixed(3) : '—'}</td>
+                  <td style={cellStyle}>{shipment.origin_port?.code || shipment.origin_port?.name || '-'}</td>
+                  <td style={cellStyle}>{shipment.destination_port?.code || shipment.destination_port?.name || '-'}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalQty || '-'}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalGrossW ? totalGrossW.toFixed(2) : '-'}</td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>{totalCbm ? totalCbm.toFixed(3) : '-'}</td>
                   <td style={cellStyle}>{v(houseShip.house_number)}</td>
                   <td style={cellStyle}>{v(houseShip.waybill_no)}</td>
                   <td style={styles.tdCenter}><CheckMark value={bk.is_loaded} /></td>
@@ -430,9 +430,9 @@ export default function CargoManifestDocument({ snapshot }) {
                 <td style={styles.td}>{v(pkg.package_number)}</td>
                 <td style={styles.td}>{v(pkg.description)}</td>
                 <td style={{ ...styles.td, textAlign: 'right' }}>{v(pkg.quantity)}</td>
-                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.gross_weight != null ? Number(pkg.gross_weight).toFixed(2) : '—'}</td>
-                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.net_weight != null ? Number(pkg.net_weight).toFixed(2) : '—'}</td>
-                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.volume_cbm != null ? Number(pkg.volume_cbm).toFixed(3) : '—'}</td>
+                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.gross_weight != null ? Number(pkg.gross_weight).toFixed(2) : '-'}</td>
+                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.net_weight != null ? Number(pkg.net_weight).toFixed(2) : '-'}</td>
+                <td style={{ ...styles.td, textAlign: 'right' }}>{pkg.volume_cbm != null ? Number(pkg.volume_cbm).toFixed(3) : '-'}</td>
                 <td style={styles.td}>{v(pkg.marks_and_numbers)}</td>
               </tr>
             ))}
@@ -441,7 +441,7 @@ export default function CargoManifestDocument({ snapshot }) {
               <td style={styles.td} colSpan={4}><strong>TOTALS</strong></td>
               <td style={{ ...styles.td, textAlign: 'right' }}><strong>{totalPkgs}</strong></td>
               <td style={{ ...styles.td, textAlign: 'right' }}><strong>{totalGross.toFixed(2)}</strong></td>
-              <td style={{ ...styles.td, textAlign: 'right' }}>—</td>
+              <td style={{ ...styles.td, textAlign: 'right' }}>-</td>
               <td style={{ ...styles.td, textAlign: 'right' }}><strong>{totalCBM.toFixed(3)}</strong></td>
               <td style={styles.td}></td>
             </tr>

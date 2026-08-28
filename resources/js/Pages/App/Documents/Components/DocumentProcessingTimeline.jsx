@@ -45,7 +45,7 @@ export default function DocumentProcessingTimeline({ stage, startedAt, compact =
 
             <Text type="secondary" style={{ fontSize: 12 }}>
                 {elapsed !== null ? `Running for ${elapsed}s. ` : ''}
-                You can safely leave this page — processing continues in the background.
+                You can safely leave this page - processing continues in the background.
             </Text>
         </div>
     );

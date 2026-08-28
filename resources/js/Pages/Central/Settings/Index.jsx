@@ -76,6 +76,15 @@ const sectionDescriptions = {
     notifications: 'Manage system notifications and delivery behavior.',
     security: 'Review authentication and security-related preferences.',
     billing: 'Set billing defaults, currencies, and invoice behavior.',
+    design: 'Shape the public KiteLedger website with safe, reusable brand controls. No CSS editing required.',
+};
+
+const designPresets = {
+    'kiteledger-default': { primary: '#176b5b', secondary: '#10211d', accent: '#d97706', background: '#fbfcfb', surface: '#f2f6f4', heading: '#14231f', text: '#3d4d48', muted: '#687772', border: '#dce4e1', footer: '#10211d' },
+    minimal: { primary: '#334155', secondary: '#0f172a', accent: '#64748b', background: '#ffffff', surface: '#f8fafc', heading: '#0f172a', text: '#334155', muted: '#64748b', border: '#e2e8f0', footer: '#0f172a' },
+    corporate: { primary: '#1d4ed8', secondary: '#172554', accent: '#0ea5e9', background: '#ffffff', surface: '#eff6ff', heading: '#172554', text: '#334155', muted: '#64748b', border: '#dbeafe', footer: '#172554' },
+    fintech: { primary: '#0f766e', secondary: '#042f2e', accent: '#f59e0b', background: '#f8fafc', surface: '#ecfdf5', heading: '#042f2e', text: '#134e4a', muted: '#5f7470', border: '#cbd5e1', footer: '#042f2e' },
+    dark: { primary: '#34d399', secondary: '#061a16', accent: '#fbbf24', background: '#0b1714', surface: '#11241f', heading: '#ecfdf5', text: '#c7ddd6', muted: '#8eaaa0', border: '#23463d', footer: '#061a16' },
 };
 
 export default function Settings({ groups, activeGroup, aiReadiness = null }) {
@@ -149,6 +158,17 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
     const handleValuesChange = (changed) => {
         const keys = Object.keys(changed);
         const dependent = {};
+
+        if (section === 'design' && Object.prototype.hasOwnProperty.call(changed, 'design.design_preset')) {
+            const preset = designPresets[changed['design.design_preset']];
+            if (preset) {
+                Object.entries({
+                    'design.primary_color': preset.primary, 'design.secondary_color': preset.secondary, 'design.accent_color': preset.accent,
+                    'design.background_color': preset.background, 'design.surface_color': preset.surface, 'design.heading_color': preset.heading,
+                    'design.text_color': preset.text, 'design.muted_color': preset.muted, 'design.border_color': preset.border, 'design.footer_background': preset.footer,
+                }).forEach(([key, value]) => { dependent[key] = value; keys.push(key); });
+            }
+        }
 
         if (section === 'ai' && Object.prototype.hasOwnProperty.call(changed, 'ai.ai_provider')) {
             const defaults = aiProviderDefaults[changed['ai.ai_provider']];
@@ -368,6 +388,7 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
                             `Manage ${currentLabel.toLowerCase()} preferences for your organization.`
                         }
                     >
+                        {section === 'design' && <DesignPreview form={form} />}
                         <Form form={form} layout="vertical" onValuesChange={handleValuesChange}>
                             {section === 'ai' && aiReadiness && (
                                 <div className="platform-ai-readiness">
@@ -713,9 +734,38 @@ export default function Settings({ groups, activeGroup, aiReadiness = null }) {
                         flex-direction: column;
                     }
                 }
+                .design-preview { display: grid; gap: 18px; margin: 0 0 22px; padding: 20px; border: 1px solid #dbe5e1; border-radius: 16px; color: var(--preview-text); background: #fff; overflow: hidden; }
+                .design-preview__toolbar { display: flex; align-items: center; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid #e7eeeb; font-size: 12px; }
+                .design-preview__toolbar strong { margin-right: auto; color: var(--preview-heading); font-size: 15px; }
+                .design-preview button { min-height: 34px; padding: 7px 13px; border: 0; border-radius: var(--preview-radius); color: #fff; background: var(--preview-primary); font: inherit; font-size: 11px; font-weight: 600; }
+                .design-preview__hero { padding: 28px 24px; border-radius: var(--preview-radius); background: var(--preview-surface); }
+                .design-preview__hero small { color: var(--preview-primary); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+                .design-preview__hero h3 { max-width: 430px; margin: 8px 0 8px; color: var(--preview-heading); font-size: clamp(24px, 4vw, 36px); line-height: 1.05; letter-spacing: -.04em; }
+                .design-preview__hero p { max-width: 470px; margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
+                .design-preview__hero div, .design-preview__cards { display: flex; flex-wrap: wrap; gap: 8px; }
+                .design-preview .is-secondary { color: var(--preview-heading); border: 1px solid #cbd8d3; background: transparent; }
+                .design-preview__cards article { display: grid; flex: 1 1 150px; gap: 5px; min-height: 76px; padding: 14px; border: 1px solid #dbe5e1; border-radius: var(--preview-radius); background: #fff; }
+                .design-preview__cards b { color: var(--preview-heading); font-size: 12px; }
+                .design-preview__cards span { font-size: 11px; }
+                @media (max-width: 760px) { .design-preview__toolbar span { display: none; } .design-preview__toolbar { gap: 8px; } }
             `}</style>
         </CentralLayout>
     );
+}
+
+function DesignPreview({ form }) {
+    const values = Form.useWatch([], form) || {};
+    const primary = values['design.primary_color'] || '#176b5b';
+    const secondary = values['design.secondary_color'] || '#10211d';
+    const surface = values['design.surface_color'] || '#f2f6f4';
+    const heading = values['design.heading_color'] || '#14231f';
+    const text = values['design.text_color'] || '#3d4d48';
+    const radius = values['design.corner_style'] === 'square' ? 8 : values['design.corner_style'] === 'rounded' ? 20 : 14;
+    return <div className="design-preview" style={{ '--preview-primary': primary, '--preview-secondary': secondary, '--preview-surface': surface, '--preview-heading': heading, '--preview-text': text, '--preview-radius': `${radius}px` }}>
+        <div className="design-preview__toolbar"><strong>KiteLedger</strong><span>Product</span><span>Solutions</span><span>Pricing</span><button>Start free</button></div>
+        <div className="design-preview__hero"><small>ONE CONNECTED WORKSPACE</small><h3>Clarity for every part of your business.</h3><p>Finance, operations, and customer work in one calm, connected system.</p><div><button>Start free</button><button className="is-secondary">Book a demo</button></div></div>
+        <div className="design-preview__cards"><article><b>Financial control</b><span>See the numbers that matter.</span></article><article><b>Connected workflows</b><span>Move work forward together.</span></article><article><b>Built for trust</b><span>Clear controls from day one.</span></article></div>
+    </div>;
 }
 
 function SettingField({ item }) {

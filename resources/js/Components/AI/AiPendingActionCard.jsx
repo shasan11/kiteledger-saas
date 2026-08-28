@@ -71,8 +71,8 @@ function BeforeAfterBlock({ before, after }) {
             rowKey="field"
             dataSource={keys.map((k) => ({
                 field: humanizeKey(k),
-                before: before?.[k] ?? '—',
-                after: after?.[k] ?? '—',
+                before: before?.[k] ?? '-',
+                after: after?.[k] ?? '-',
             }))}
             columns={[
                 { title: 'Field', dataIndex: 'field', key: 'field' },
@@ -183,7 +183,7 @@ export default function AiPendingActionCard({ action, state = {}, onApprove, onR
                         type="info"
                         showIcon
                         style={{ marginTop: 10, marginBottom: 10 }}
-                        message="AI prepared this action. Review carefully before approval — it will only run after you approve."
+                        message="AI prepared this action. Review carefully before approval - it will only run after you approve."
                     />
 
                     {needsConfirmation && confirmationText && (

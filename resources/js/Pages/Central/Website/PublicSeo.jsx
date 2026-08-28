@@ -109,7 +109,7 @@ function formatTitle(rawTitle, siteTitle, site) {
     if (String(rawTitle).includes(siteTitle)) return normalizeTitleDashes(rawTitle);
     const separator = normalizeTitleSeparator(site['seo.title_separator']);
     const template = site['seo.default_title_template'];
-    if (!template) return `${rawTitle} ${separator} ${siteTitle}`;
+    if (!template) return normalizeTitleDashes(`${rawTitle} ${separator} ${siteTitle}`);
     return normalizeTitleDashes(String(template)
         .replaceAll('{title}', rawTitle).replaceAll('%title%', rawTitle)
         .replaceAll('{site_name}', siteTitle).replaceAll('%site_name%', siteTitle)
@@ -121,6 +121,8 @@ function normalizeTitleSeparator(value) {
     return ['—', '–', '-'].includes(separator) ? '|' : separator || '|';
 }
 
+// Titles never show a long dash: a spaced em/en dash becomes the separator,
+// a tight one becomes a plain hyphen.
 function normalizeTitleDashes(value) {
-    return String(value).replace(/\s+[—–]\s+/g, ' | ');
+    return String(value).replace(/\s+[—–]\s+/g, ' | ').replace(/[—–]/g, '-');
 }

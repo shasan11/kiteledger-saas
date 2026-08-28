@@ -32,16 +32,16 @@ export default function BillingIndex({ kind, rows, filters = {}, schedulerEnable
     const apply = (extra = {}) => router.get(window.location.pathname, { ...filters, search: search || undefined, ...extra }, { preserveState: true, replace: true });
     const render = (key, value, row) => {
         if (key === 'tenant') return row.tenant?.company_name || row.tenant_id;
-        if (key === 'plan') return row.plan?.name || row.subscription?.plan?.name || row.plan_id || '—';
-        if (key === 'invoice') return row.invoice?.invoice_number || row.invoice_number || row.invoice_id || '—';
-        if (key === 'added_by') return row.added_by?.name || row.added_by || '—';
+        if (key === 'plan') return row.plan?.name || row.subscription?.plan?.name || row.plan_id || '-';
+        if (key === 'invoice') return row.invoice?.invoice_number || row.invoice_number || row.invoice_id || '-';
+        if (key === 'added_by') return row.added_by?.name || row.added_by || '-';
         if (key === 'billing_cycle') return humanize(value);
         if (key === 'status' || key === 'webhook_health') return <StatusBadge value={value === 'trialing' ? 'trial' : value}/>;
         if (key === 'is_active') return <StatusBadge value={value ? 'active' : 'inactive'}/>;
         if (['subtotal', 'discount', 'tax', 'total', 'paid_amount', 'balance', 'amount', 'refunded_amount'].includes(key)) return formatMoney(value, row.currency || 'USD');
         if (key.endsWith('_at') || key.endsWith('_date')) return formatDate(value, key.endsWith('_at'));
         if (Array.isArray(value)) return value.map((item) => <Tag key={item}>{item}</Tag>);
-        return String(value ?? '—');
+        return String(value ?? '-');
     };
     const editGateway = (row) => { setGateway(row); form.setFieldsValue({ ...row, secret_key: '', webhook_secret: '', config: row.safe_config || {} }); };
     const saveGateway = (values) => router.put(route('central.gateways.update', gateway.id), values, { onSuccess: () => setGateway(null) });
@@ -51,7 +51,7 @@ export default function BillingIndex({ kind, rows, filters = {}, schedulerEnable
     const columns = definitions[kind].map(([key, title]) => ({ key, dataIndex: key, title, render: (value, row) => render(key, value, row) }));
     if (kind === 'subscriptions') columns.push({ title: 'Actions', key: 'actions', render: (_, row) => <Space><Button onClick={() => subscriptionAction(row, row.status === 'paused' || row.status === 'cancelled' ? 'reactivate' : 'pause')}>{row.status === 'paused' || row.status === 'cancelled' ? 'Reactivate' : 'Pause'}</Button><Button danger onClick={() => subscriptionAction(row, 'cancel')}>Cancel</Button></Space> });
     if (kind === 'invoices') columns.push({ title: 'Actions', key: 'actions', render: (_, row) => <Space><Button title="Download PDF" icon={<FilePdfOutlined/>} onClick={() => window.location.assign(route('central.invoices.pdf', row.id))}/>{row.status !== 'paid' && <Button type="primary" onClick={() => router.visit(route('central.payments.manual.create', { invoice_id: row.id, tenant_id: row.tenant_id }))}>Add payment</Button>}<Button onClick={() => router.post(route('central.invoices.send', row.id))}>Send</Button></Space> });
-    if (kind === 'payments') columns.push({ title: 'Proof', key: 'proof', render: (_, row) => row.has_proof ? <Button icon={<PaperClipOutlined/>} href={route('central.payments.proof', row.id)}>Download</Button> : '—' }, { title: 'Actions', key: 'actions', render: (_, row) => row.status === 'success' && Number(row.refunded_amount || 0) < Number(row.amount) ? <Button danger onClick={() => openRefund(row)}>Refund</Button> : '—' });
+    if (kind === 'payments') columns.push({ title: 'Proof', key: 'proof', render: (_, row) => row.has_proof ? <Button icon={<PaperClipOutlined/>} href={route('central.payments.proof', row.id)}>Download</Button> : '-' }, { title: 'Actions', key: 'actions', render: (_, row) => row.status === 'success' && Number(row.refunded_amount || 0) < Number(row.amount) ? <Button danger onClick={() => openRefund(row)}>Refund</Button> : '-' });
     if (kind === 'gateways') columns.push({ title: 'Actions', key: 'actions', render: (_, row) => <Space><Button onClick={() => router.post(route('central.gateways.test', row.id))}>Test</Button><Button icon={<EditOutlined/>} onClick={() => editGateway(row)}>Configure</Button></Space> });
 
     return <CentralLayout title={copy[kind][0]}>
