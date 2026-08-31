@@ -20,13 +20,21 @@ Cloudflare must use Full (strict) TLS. Configure only known Cloudflare/cPanel pr
 
 ## Databases
 
-Run central migrations once. Choose exactly one `TENANT_DATABASE_PROVISIONING_MODE`:
+Run central migrations once. KiteLedger uses one central database plus one isolated database per tenant. Choose exactly one `TENANT_DATABASE_PROVISIONING_MODE`:
 
-- `pool` (recommended): pre-create prefixed databases in cPanel, grant the application user privileges, and register each database in the central pool.
-- `cpanel_uapi`: set the HTTPS cPanel host, account, API token, database user, and `CPANEL_DATABASE_PASSWORD` when that user differs from `DB_USERNAME`. The provider must permit MySQL UAPI create, privilege, and delete operations.
-- `automatic`: the configured MySQL account must pass a real temporary create/drop database probe; this is uncommon on shared hosting.
+- `pool` (recommended for shared hosting): pre-create prefixed databases in cPanel, grant the application user privileges, and register each database under **Admin → Tenant Databases**.
+- `cpanel_uapi`: set the HTTPS cPanel host, account, API token, and fully prefixed database user. The provider must permit MySQL UAPI operations.
+- `automatic`: the configured MySQL account must have `CREATE DATABASE`; this is uncommon on shared hosting.
 
-Identifiers must include the cPanel account prefix and remain at most 64 characters. KiteLedger never falls back to shared-table tenancy.
+For pool mode:
+
+1. Create the central database, for example `cpuser_kiteledger`.
+2. Create tenant databases such as `cpuser_klt_001`, `cpuser_klt_002`, and `cpuser_klt_003`.
+3. Grant the application MySQL user full privileges on the central database and every tenant database.
+4. Set `TENANT_DATABASE_PROVISIONING_MODE=pool` and `TENANT_DB_PREFIX=cpuser_klt_`.
+5. Add and validate each tenant database from the central admin panel before creating companies.
+
+Identifiers must include the cPanel account prefix and remain at most 64 characters. The number of databases allowed by the hosting plan limits the number of active tenants. KiteLedger never falls back to shared-table tenancy.
 
 ## Pool-mode installation
 
@@ -101,11 +109,7 @@ Automatic mode is uncommon on shared hosting. Enable it only after this probe su
 
 ## Environment and runtime
 
-Copy `.env.example`, set a unique `APP_KEY`, use `APP_ENV=production`, `APP_DEBUG=false`, and an HTTPS `APP_URL`. Keep `SESSION_DOMAIN=null` so tenant cookies remain host-only. Tenant requests also use a tenant-specific session cookie name and pin database sessions to the central connection before CSRF validation. Database sessions, cache, locks, queues, and failed jobs use the explicit central connection. Configure SMTP before onboarding tenants.
-
-### Tenant login returns 419 Page Expired
-
-After deploying or changing domains, confirm `SESSION_DOMAIN=null`, `SESSION_SECURE_COOKIE=true`, and `APP_URL=https://yourdomain.com`. If Cloudflare or another reverse proxy terminates TLS, configure its actual IP ranges in `TRUSTED_PROXY_IPS`. Then run `php artisan optimize:clear` and retry in a fresh browser window. The tenant-specific cookie prefix defaults to `kiteledger-tenant-session`; changing `TENANT_SESSION_COOKIE_PREFIX` logs tenant users out once. Old parent-domain session cookies are ignored by the tenant routes after this release.
+Copy `.env.example`, set a unique `APP_KEY`, use `APP_ENV=production`, `APP_DEBUG=false`, and an HTTPS `APP_URL`. Keep `SESSION_DOMAIN=null` so tenant cookies remain host-only. Use `QUEUE_CONNECTION=database`; database sessions, cache, locks, queues, and failed jobs use the explicit central connection. Configure SMTP before onboarding tenants.
 
 If symlinks are allowed, run `php artisan storage:link`. Without symlinks, Laravel serves authorized files through application routes; private documents, PDFs, exports, and database dumps must never be copied into public storage.
 
@@ -115,7 +119,7 @@ Replace the PHP and application paths with the values shown by cPanel:
 
 ```cron
 * * * * * /usr/local/bin/php /home/account/kiteledger/artisan schedule:run >> /home/account/kiteledger/storage/logs/scheduler.log 2>&1
-* * * * * /usr/local/bin/php /home/account/kiteledger/artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300 >> /home/account/kiteledger/storage/logs/queue.log 2>&1
+* * * * * /usr/local/bin/php /home/account/kiteledger/artisan queue:work --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300 >> /home/account/kiteledger/storage/logs/queue.log 2>&1
 ```
 
 Laravel overlap locks prevent duplicate scheduled work. `DB_QUEUE_RETRY_AFTER` must exceed the worker timeout. If queue cron is unavailable, set `TENANT_PROVISION_SYNC=true` only for controlled administrator provisioning; migrations may exceed web-request limits.
