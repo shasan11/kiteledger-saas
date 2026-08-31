@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\InventoryAdjustment;
 use App\Models\WarehouseItem;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceStockPostingService
 {
@@ -36,7 +37,7 @@ class InvoiceStockPostingService
             if ($existing->stock_posted) {
                 return $existing;
             }
-            // Found but not yet posted — drive it through the service.
+            // Found but not yet posted - drive it through the service.
             return $this->warehouseStockService->postInventoryAdjustment($existing);
         }
 
@@ -84,7 +85,21 @@ class InvoiceStockPostingService
                     ->where('product_id', $line->product_id)
                     ->first();
 
-                $unitCost = $warehouseItem ? (float) ($warehouseItem->avg_cost ?? 0) : 0;
+                // Falling straight to 0 when the warehouse has no costed row
+                // means the stock leaves with no cost of goods sold at all, so
+                // fall back to the product's purchase price before giving up.
+                $unitCost = (float) ($warehouseItem?->avg_cost ?? 0);
+                if ($unitCost <= 0) {
+                    $unitCost = (float) ($line->product?->purchase_price ?? 0);
+                }
+                if ($unitCost <= 0) {
+                    Log::warning('Stock is leaving with no known cost, so this line contributes nothing to cost of goods sold.', [
+                        'invoice_id' => $invoice->id,
+                        'invoice_no' => $invoice->invoice_no,
+                        'product_id' => $line->product_id,
+                        'warehouse_id' => $invoice->warehouse_id,
+                    ]);
+                }
 
                 $adjustment->inventoryAdjustmentLines()->create([
                     'product_id'      => $line->product_id,
@@ -162,7 +177,7 @@ class InvoiceStockPostingService
                     'adjustment_type' => $line->adjustment_type === 'decrease' ? 'increase' : 'decrease',
                     'qty'             => $line->qty,
                     'unit_cost'       => $line->unit_cost,
-                    'remarks'         => 'Reversal — ' . $reason,
+                    'remarks'         => 'Reversal - ' . $reason,
                 ]);
             }
 

@@ -71,9 +71,19 @@ const createNumberFormatter = (locale, options = {}) => {
     }
 };
 
-const currFmt = createNumberFormatter('en-NP', { style: 'currency', currency: 'NPR', maximumFractionDigits: 0 });
-const compactFmt = createNumberFormatter('en-NP', { style: 'currency', currency: 'NPR', notation: 'compact', maximumFractionDigits: 1 });
-const numFmt = createNumberFormatter('en-NP');
+const LOCALE = 'en-NP';
+let activeCurrency = 'NPR';
+let currFmt = createNumberFormatter(LOCALE, { style: 'currency', currency: activeCurrency, maximumFractionDigits: 0 });
+let compactFmt = createNumberFormatter(LOCALE, { style: 'currency', currency: activeCurrency, notation: 'compact', maximumFractionDigits: 1 });
+const numFmt = createNumberFormatter(LOCALE);
+
+const applyCurrency = (currency) => {
+    const next = String(currency || '').toUpperCase();
+    if (!/^[A-Z]{3}$/.test(next) || next === activeCurrency) return;
+    activeCurrency = next;
+    currFmt = createNumberFormatter(LOCALE, { style: 'currency', currency: next, maximumFractionDigits: 0 });
+    compactFmt = createNumberFormatter(LOCALE, { style: 'currency', currency: next, notation: 'compact', maximumFractionDigits: 1 });
+};
 
 const fmtMoney = (v, compact) => (v == null || v === '' ? DASH : (compact ? compactFmt : currFmt).format(Number(v || 0)));
 const fmtNum = (v) => (v == null || v === '' ? DASH : numFmt.format(Number(v || 0)));
@@ -162,8 +172,8 @@ export default function Dashboard() {
                     )}
                     {loading ? <DashSkeleton /> : (
                         <>
-                            <section className="kd-signal-grid">
-                                {m.signalCards.map((card) => <SignalCard key={card.key} card={card} />)}
+                            <section className="kd-kpis">
+                                {m.kpis.map((kpi) => <KpiCard key={kpi.key} {...kpi} />)}
                             </section>
 
                             <section className="kd-focus-grid">
@@ -171,8 +181,29 @@ export default function Dashboard() {
                                 <AttentionPanel summary={m.cashPosition} items={m.attentionItems} />
                             </section>
 
+                            <section className="kd-cash-expense-row">
+                                <ExpenseDonut data={m.expenseBreakdown} />
+                                <CashFlowChart data={m.cashflowChart} />
+                            </section>
+
+                            <section className={m.bankAccounts.length ? 'kd-row-2' : 'kd-row-1'}>
+                                <AgeingChart data={m.ageingData} />
+                                {m.bankAccounts.length > 0 && <BankList accounts={m.bankAccounts} />}
+                            </section>
+
+                            {(m.topCustomers.length > 0 || m.topSuppliers.length > 0) && (
+                                <section className="kd-row-2">
+                                    <TopPartiesBar title={t('Top customers')} data={m.topCustomers} color={THEME_COLOURS.primary} />
+                                    <TopPartiesBar title={t('Top suppliers')} data={m.topSuppliers} color={THEME_COLOURS.warning} />
+                                </section>
+                            )}
+
                             {m.bizCards.length > 0 && (
                                 <ModuleOverview cards={m.bizCards} />
+                            )}
+
+                            {(m.approachingProjects.length > 0 || m.overdueProjects.length > 0) && (
+                                <ProjectDeadlines approaching={m.approachingProjects} overdue={m.overdueProjects} />
                             )}
 
                             <TxnTable transactions={m.transactions} />
@@ -181,20 +212,6 @@ export default function Dashboard() {
                 </div>
             </main>
         </AuthenticatedLayout>
-    );
-}
-
-function SignalCard({ card }) {
-    return (
-        <Card className="kd-card kd-signal" style={{ '--kd-accent': card.color }} styles={{ body: { padding: 0 } }}>
-            <div className="kd-signal__body">
-                <div className="kd-signal__top">
-                    <Text type="secondary" className="kd-signal__label">{card.label}</Text>
-                </div>
-                <div className="kd-signal__value">{fmtMoney(card.value)}</div>
-                <Text type="secondary" className="kd-signal__helper">{card.helper}</Text>
-            </div>
-        </Card>
     );
 }
 
@@ -633,12 +650,19 @@ function EmptyState({ title, desc, compact }) {
 function DashSkeleton() {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--kd-gap)' }}>
-            <div className="kd-signal-grid">{[1, 2, 3, 4].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 14 } }}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div>
+            <div className="kd-kpis">{[1, 2, 3, 4, 5, 6].map((i) => <Card key={i} className="kd-card" styles={{ body: { padding: 14 } }}><Skeleton active paragraph={{ rows: 1 }} /></Card>)}</div>
             <div className="kd-focus-grid">
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
                 <Card className="kd-card"><Skeleton active paragraph={{ rows: 7 }} /></Card>
             </div>
-            <Card className="kd-card"><Skeleton active paragraph={{ rows: 6 }} /></Card>
+            <div className="kd-cash-expense-row">
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 5 }} /></Card>
+            </div>
+            <div className="kd-row-2">
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
+                <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
+            </div>
             <Card className="kd-card"><Skeleton active paragraph={{ rows: 4 }} /></Card>
         </div>
     );
@@ -646,6 +670,7 @@ function DashSkeleton() {
 
 function buildModel(data) {
     const fin = data.financial_summary || {};
+    applyCurrency(fin.currency || data.currency);
     const sparklines = data.metric_sparklines || {};
     const chartRaw = data.revenue_expense_profit_chart || [];
     const cashflowRaw = data.cashflow_chart || [];
@@ -687,17 +712,10 @@ function buildModel(data) {
             : 'Expenses are ahead of revenue for this period. The fastest wins are collecting receivables and reviewing major costs.',
     };
 
-    const signalCards = [
-        { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'Approved invoice value' },
-        { key: 'profit', label: 'Net profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline), helper: 'Revenue minus expenses' },
-        { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: THEME_COLOURS.info, helper: 'Customer money to collect' },
-        { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: THEME_COLOURS.warning, helper: 'Supplier and expense dues', invertTrend: true },
-    ];
-
     const kpis = [
         { key: 'revenue', label: 'Revenue', value: fin.revenue, sparkline: revSparkline, color: THEME_COLOURS.primary, trend: calcTrend(revSparkline), helper: 'This period' },
         { key: 'expenses', label: 'Expenses', value: fin.expenses, sparkline: expSparkline, color: THEME_COLOURS.warning, trend: calcTrend(expSparkline), invertTrend: true, helper: 'This period' },
-        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline) },
+        { key: 'profit', label: 'Net Profit', value: fin.net_profit, sparkline: profitSparkline, color: THEME_COLOURS.success, trend: calcTrend(profitSparkline), helper: toNum(fin.revenue) > 0 ? `${((toNum(fin.net_profit) / toNum(fin.revenue)) * 100).toFixed(1)}% margin` : 'This period' },
         { key: 'cash', label: 'Cash & Bank', value: fin.cash_bank_balance, sparkline: cashSparkline, color: THEME_COLOURS.info, trend: calcTrend(cashSparkline), helper: 'Available' },
         { key: 'receivables', label: 'Receivables', value: fin.receivables, sparkline: recSparkline, color: THEME_COLOURS.info, helper: 'Outstanding' },
         { key: 'payables', label: 'Payables', value: fin.payables, sparkline: paySparkline, color: THEME_COLOURS.error, helper: 'Outstanding' },
@@ -815,7 +833,7 @@ function buildModel(data) {
     ].filter(Boolean);
 
     return {
-        executive, signalCards, cashPosition, attentionItems,
+        executive, cashPosition, attentionItems,
         kpis, chartData, cashflowChart, expenseBreakdown, ageingData, bizCards,
         transactions, topCustomers, topSuppliers, bankAccounts,
         approachingProjects: Array.isArray(data.approaching_deadline_projects) ? data.approaching_deadline_projects : [],
@@ -1191,15 +1209,13 @@ function Styles({ token }) {
 
             .kd-kpis {
     display: grid;
-    grid-template-columns: repeat(6, minmax(140px, 2fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: var(--kd-gap);
-    overflow-x: auto;
-    overflow-y: hidden;
     padding-bottom: 2px;
 }
     
             .kd-kpi {
-                min-height: 86px;
+                min-height: 116px;
                 position: relative;
             }
             .kd-kpi::before {
@@ -1221,8 +1237,8 @@ function Styles({ token }) {
                 z-index: 1;
                 display: flex;
                 flex-direction: column;
-                min-height: 86px;
-                padding: ${token.paddingXS}px ${token.paddingSM}px;
+                min-height: 116px;
+                padding: ${token.paddingXS}px ${token.paddingSM}px ${token.paddingLG}px;
             }
             .kd-kpi__top {
                 display: flex;
@@ -1265,11 +1281,10 @@ function Styles({ token }) {
             }
             .kd-kpi__spark {
                 position: absolute;
-                right: ${token.paddingXXS}px;
-                bottom: ${token.paddingXXS}px;
-                width: 58%;
-                height: 34px;
-                opacity: 0.55;
+                inset: auto 0 0 0;
+                width: 100%;
+                height: 40px;
+                opacity: 0.85;
                 pointer-events: none;
             }
 
@@ -1298,9 +1313,16 @@ function Styles({ token }) {
                 gap: var(--kd-gap);
                 align-items: stretch;
             }
-            .kd-row-2,
-            .kd-row-3 {
+            .kd-row-1 {
+                display: grid;
+                gap: var(--kd-gap);
                 grid-template-columns: minmax(0, 1fr);
+            }
+            .kd-row-2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .kd-row-3 {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
             .kd-cash-expense-row {
                 grid-template-columns: minmax(250px, 30%) minmax(0, 70%);
@@ -1765,9 +1787,11 @@ function Styles({ token }) {
             }
 
             @media (max-width: 1280px) {
-                .kd-signal-grid,
-                .kd-kpis {
+                .kd-signal-grid {
                     grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+                .kd-kpis {
+                    grid-template-columns: repeat(3, minmax(0, 1fr));
                 }
                 .kd-hero,
                 .kd-focus-grid,

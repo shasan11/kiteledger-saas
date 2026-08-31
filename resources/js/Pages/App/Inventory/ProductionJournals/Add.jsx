@@ -8,7 +8,7 @@ import TransactionFormShell, { FormSection } from '@/Components/Accounting/Trans
 import BackendSelect from '@/Components/Accounting/BackendSelect.jsx';
 import { getJson, postJson, patchJson, applyServerErrors } from '@/Components/Transactions/txnApi.js';
 import { toNumber, asId, nullIfEmpty, formatDate, toDayjs } from '@/Components/Transactions/transactionCalculations.js';
-import { displayDocumentNumber } from '@/Components/Transactions/documentNumber.js';
+import { displayDocumentNumber, formatDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { DescriptionRemarksCollapse } from '@/Components/Transactions';
 
 const BACKEND = import.meta.env.VITE_APP_BACKEND_URL || '';
@@ -287,7 +287,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
                       detailValue={poDetail}
                       fkUrl="/api/production-orders/"
                       labelKey="code"
-                      labelFn={(r) => `${r.code || '#draft'} - ${r.finishedProduct?.name || r.finished_product_id || ''}`}
+                      labelFn={(r) => `${formatDocumentNumber(r.code)} - ${r.finishedProduct?.name || r.finished_product_id || ''}`}
                       placeholder="Search approved production orders"
                       extraParams={{ approved: true }}
                       onChange={(v, raw) => { setPoId(v); setPoDetail(raw); }}

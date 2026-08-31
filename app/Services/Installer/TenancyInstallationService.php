@@ -2,11 +2,10 @@
 
 namespace App\Services\Installer;
 
-use App\Models\Central\CentralAdmin;
+use App\Support\Central\SuperAdministratorProvisioner;
 use App\Support\Installer\InstalledState;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 
 class TenancyInstallationService
 {
@@ -39,10 +38,11 @@ class TenancyInstallationService
         $this->artisan('migrate', ['--force' => true]);
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\CentralDatabaseSeeder', '--force' => true]);
         if (filled($admin['email'] ?? null)) {
-            CentralAdmin::query()->updateOrCreate(['email' => $admin['email']], [
-                'name' => $admin['name'] ?? 'Super Administrator',
-                'password' => Hash::make((string) $admin['password']), 'role' => 'super_admin', 'is_active' => true,
-            ]);
+            SuperAdministratorProvisioner::ensure(
+                (string) $admin['email'],
+                $admin['name'] ?? 'Super Administrator',
+                (string) ($admin['password'] ?? ''),
+            );
         }
         InstalledState::mark();
     }

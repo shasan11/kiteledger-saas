@@ -42,7 +42,13 @@ return [
             'driver' => 'local',
             'root' => storage_path('app/public'),
             'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
-            'serve' => true,
+            // Laravel's automatic serve=>true route is registered with no
+            // middleware, so it never runs behind tenancy initialization and
+            // always reads the central storage root - see
+            // App\Http\Controllers\StorageServeController, which is
+            // registered in its place inside both the tenant and central
+            // route groups so the tenant-suffixed disk root is respected.
+            'serve' => false,
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

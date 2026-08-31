@@ -11,15 +11,24 @@ use InvalidArgumentException;
 class DocumentNumberingService
 {
     /**
-     * Draft placeholder numbers must fit the smallest document-number column.
-     * Every approval-required number column is at least varchar(40), so the
-     * placeholder is capped to 40 characters. It keeps the "#draft" marker that
-     * isDraftNumber()/looksLikeDraft() rely on, plus enough random token to
-     * stay unique on the column's unique index.
+     * Draft placeholder numbers must fit the smallest document-number column
+     * (varchar(40) on MySQL) and stay unique on its unique index.
+     *
+     * The token is deliberately short and readable. It used to embed a raw
+     * 32-character UUID, which leaked an internal identifier onto the screen and
+     * onto anything printed from a draft. Six characters of unambiguous base32
+     * give ~1.07 billion combinations, which is ample for a placeholder that
+     * only lives until the document is approved.
      */
     private const DRAFT_MAX_LENGTH = 40;
-    private const DRAFT_MARKER = '#draft-';
-    private const DRAFT_MIN_TOKEN = 12;
+    private const DRAFT_PREFIX = 'DRAFT-';
+    private const DRAFT_TOKEN_LENGTH = 6;
+
+    /** Crockford-style base32: no I, L, O or U, so nothing reads ambiguously. */
+    private const DRAFT_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+    /** Legacy prefixes still present on documents drafted before the change. */
+    private const LEGACY_DRAFT_MARKERS = ['#draft', 'draft-'];
 
     protected array $modelMapping = [
         'Invoice' => ['document_type' => 'invoice', 'field' => 'invoice_no', 'approval_required' => true, 'accounting_impact' => true],
@@ -110,11 +119,7 @@ class DocumentNumberingService
 
     protected function isDraftNumber(string $number): bool
     {
-        $normalized = strtolower(trim($number));
-
-        return $normalized === ''
-            || str_starts_with($normalized, '#draft')
-            || str_starts_with($normalized, 'draft-');
+        return $this->looksLikeDraft($number);
     }
 
     public function assignNumberIfMissing(Model $model): Model
@@ -148,21 +153,65 @@ class DocumentNumberingService
         $modelClass = class_basename($model);
         $mapping = $this->modelMapping[$modelClass] ?? null;
         $documentType = $mapping['document_type'] ?? 'document';
-        $prefix = strtoupper(str_replace('_', '-', (string) $documentType));
+        $head = self::DRAFT_PREFIX.$this->draftTypeAbbreviation((string) $documentType).'-';
 
-        // A dash-stripped UUID is the uniqueness guarantee. The previous format
-        // ("#draft-{TYPE}-{Ymd}-{uuid}") ran to ~60 chars and overflowed the
-        // varchar(40) number columns on MySQL (SQLite never enforced the length,
-        // so it only failed in production). Keep the document-type prefix only
-        // when a healthy token still fits; otherwise fall back to the bare
-        // marker so the suffix keeps its full entropy. Always capped at 40.
-        $token = str_replace('-', '', (string) Str::uuid());
-        $head = self::DRAFT_MARKER . $prefix . '-';
+        // Guaranteed to fit: the abbreviation is capped, so this never
+        // approaches the varchar(40) limit the way the old UUID format did.
+        return substr($head, 0, self::DRAFT_MAX_LENGTH - self::DRAFT_TOKEN_LENGTH).$this->draftToken();
+    }
 
-        if (strlen($head) + self::DRAFT_MIN_TOKEN > self::DRAFT_MAX_LENGTH) {
-            $head = self::DRAFT_MARKER;
+    /**
+     * Is this a placeholder rather than a real, issued document number?
+     *
+     * Recognises the current DRAFT- form and the legacy "#draft-…" numbers still
+     * sitting on documents created before the format changed.
+     */
+    public function looksLikeDraft(?string $number): bool
+    {
+        $normalized = strtolower(trim((string) $number));
+
+        if ($normalized === '') {
+            return true;
         }
 
-        return substr($head . $token, 0, self::DRAFT_MAX_LENGTH);
+        foreach (self::LEGACY_DRAFT_MARKERS as $marker) {
+            if (str_starts_with($normalized, $marker)) {
+                return true;
+            }
+        }
+
+        return str_starts_with($normalized, strtolower(self::DRAFT_PREFIX));
+    }
+
+    /**
+     * A compact, pronounceable stand-in for the document type: INVOICE stays
+     * INVOICE, but PURCHASE-BILL becomes PB so the token never crowds the
+     * column. Single-word types keep their name when it is already short.
+     */
+    protected function draftTypeAbbreviation(string $documentType): string
+    {
+        $words = array_values(array_filter(preg_split('/[^A-Za-z0-9]+/', $documentType) ?: []));
+
+        if (! $words) {
+            return 'DOC';
+        }
+
+        if (count($words) === 1) {
+            return strtoupper(substr($words[0], 0, 12));
+        }
+
+        return strtoupper(implode('', array_map(fn (string $word): string => substr($word, 0, 1), $words)));
+    }
+
+    protected function draftToken(): string
+    {
+        $alphabet = self::DRAFT_ALPHABET;
+        $token = '';
+
+        for ($i = 0; $i < self::DRAFT_TOKEN_LENGTH; $i++) {
+            $token .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        return $token;
     }
 }

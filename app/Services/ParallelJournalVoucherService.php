@@ -103,6 +103,10 @@ class ParallelJournalVoucherService
             $creditLines
         );
 
+        // Balanced by construction (the receivable is the sum of the credits),
+        // but run through the same guard as every other posting method so the
+        // rounding allowance is enforced consistently.
+        $lines = $this->balanceRoundingDifference($lines);
         $this->validationService->validateBalanced($lines);
 
         return $this->createJournal(

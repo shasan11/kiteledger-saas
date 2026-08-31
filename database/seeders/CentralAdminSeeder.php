@@ -2,10 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\Central\CentralAdmin;
-use App\Models\Central\CentralRole;
+use App\Support\Central\SuperAdministratorProvisioner;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class CentralAdminSeeder extends Seeder
 {
@@ -20,15 +18,10 @@ class CentralAdminSeeder extends Seeder
             return;
         }
 
-        $admin = CentralAdmin::firstOrCreate(['email' => $email], [
-            'name' => env('CENTRAL_ADMIN_NAME', 'KiteLedger Super Administrator'),
-            'password' => Hash::make($password), 'role' => 'super_admin', 'is_active' => true,
-        ]);
-        if (! $admin->roles()->exists()) {
-            $role = CentralRole::where('name', 'super_administrator')->first();
-            if ($role) {
-                $admin->roles()->sync([$role->id]);
-            }
-        }
+        SuperAdministratorProvisioner::ensure(
+            $email,
+            (string) env('CENTRAL_ADMIN_NAME', 'KiteLedger Super Administrator'),
+            $password,
+        );
     }
 }

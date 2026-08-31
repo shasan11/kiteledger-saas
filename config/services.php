@@ -39,4 +39,15 @@ return [
         'ca_bundle' => env('PAYMENT_GATEWAY_CA_BUNDLE'),
     ],
 
+    /*
+     * Optional "Continue with Google" for the customer account portal. The
+     * button only appears once both values are set, so leaving them empty
+     * simply keeps the portal on email and password.
+     */
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
 ];

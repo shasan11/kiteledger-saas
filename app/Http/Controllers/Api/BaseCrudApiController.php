@@ -1752,7 +1752,7 @@ abstract class BaseCrudApiController extends Controller
 
             $existing = $parentData[$field] ?? $record?->{$field} ?? null;
 
-            if ($existing && ! str_starts_with((string) $existing, '#draft')) {
+            if ($existing && ! app(DocumentNumberingService::class)->looksLikeDraft((string) $existing)) {
                 return $parentData;
             }
 

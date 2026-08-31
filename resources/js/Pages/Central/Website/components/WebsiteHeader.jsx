@@ -87,7 +87,7 @@ export default function WebsiteHeader({ menus = {}, site = {} }) {
             <nav id="public-navigation" className={`kl-menu${mobileOpen ? " is-open" : ""}`} aria-label="Main navigation">
                 {(menus.header || []).map((item) => <MenuItem item={item} key={item.id || item.label} onNavigate={closeMobile} />)}
                 <div className="kl-menu-actions">
-                    <WebsiteLink className="kl-signin" href={typeof route === "function" ? route("central.login") : "/login"} onClick={closeMobile}>Sign in</WebsiteLink>
+                    <WebsiteLink className="kl-signin" href={typeof route === "function" ? route("central.account.login") : "/account/login"} onClick={closeMobile}>Sign in</WebsiteLink>
                     <WebsiteButton size="small" href={site["branding.primary_cta_url"] || "/pricing"} onClick={closeMobile}>{site["branding.primary_cta_label"] || "View pricing"}</WebsiteButton>
                 </div>
             </nav>

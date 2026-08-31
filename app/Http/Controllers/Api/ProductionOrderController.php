@@ -245,7 +245,7 @@ class ProductionOrderController extends BaseCrudApiController
                 'unit_cost' => $record->finished_goods_unit_cost,
             ],
         ], $data['byproducts'] ?? []);
-        $data['stock_posting_status'] = (bool) $record->void ? 'Voided' : ((bool) $record->approved ? 'Approved — Pending Journal' : 'Draft');
+        $data['stock_posting_status'] = (bool) $record->void ? 'Voided' : ((bool) $record->approved ? 'Approved - Pending Journal' : 'Draft');
 
         return $data;
     }

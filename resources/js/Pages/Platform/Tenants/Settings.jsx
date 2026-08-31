@@ -1,8 +1,9 @@
 import { router } from '@inertiajs/react';
 import { Alert, Button, Col, Descriptions, Form, Input, Row, Space, Tag } from 'antd';
-import PageHeader from '@/Components/Central/PageHeader';
 import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
+import { initials } from '@/Components/Central/formatters';
+import { PortalDetailHeader } from '@/Components/Platform/PortalDetailHeader';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 
 export default function PlatformTenantSettings({ tenant, abilities }) {
@@ -11,7 +12,20 @@ export default function PlatformTenantSettings({ tenant, abilities }) {
 
     return (
         <PlatformLayout title={`${tenant.company_name} · Company`}>
-            <PageHeader eyebrow={tenant.company_name} title="Company settings" description="Business details used across invoices and documents." />
+            <PortalDetailHeader
+                avatar={initials(tenant.company_name)}
+                eyebrow={tenant.company_name}
+                title="Company details"
+                description="Business information used across invoices and documents."
+                badges={<StatusBadge value={tenant.status} />}
+                backHref={route('central.account.tenants.index')}
+                tabs={[
+                    { label: 'Overview', href: route('central.account.tenants.show', tenant.id) },
+                    { label: 'Company details', href: route('central.account.tenants.settings', tenant.id), active: true },
+                    { label: 'Members', href: route('central.account.tenants.members', tenant.id), visible: abilities.can_manage_users },
+                    { label: 'Billing', href: route('central.account.tenants.billing', tenant.id), visible: abilities.can_manage_billing },
+                ]}
+            />
 
             {!editable && <Alert type="info" showIcon message="You have read-only access to these company details." style={{ marginBottom: 16 }} />}
 

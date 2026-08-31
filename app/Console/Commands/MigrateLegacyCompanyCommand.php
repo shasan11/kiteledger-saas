@@ -91,7 +91,7 @@ class MigrateLegacyCompanyCommand extends Command
 
         $this->newLine();
         if ($dryRun) {
-            $this->info('DRY RUN complete — no tenant database was modified.');
+            $this->info('DRY RUN complete - no tenant database was modified.');
             $this->table(['Table', 'Rows to copy'], collect($result['verification'] ?? [])->map(fn ($c, $t) => [$t, $c])->values()->all());
 
             return self::SUCCESS;
@@ -100,7 +100,7 @@ class MigrateLegacyCompanyCommand extends Command
         $v = $result['verification'];
         $this->info("Migration complete for tenant {$result['tenant_id']}.");
         $this->line('Verification: '.($v['ok'] ? '<info>row counts match</info>' : '<error>MISMATCH: '.implode(', ', $v['mismatched_tables']).'</error>'));
-        $this->table(['Metric', 'Value'], collect($v['summary'])->map(fn ($val, $k) => [$k, $val ?? '—'])->values()->all());
+        $this->table(['Metric', 'Value'], collect($v['summary'])->map(fn ($val, $k) => [$k, $val ?? '-'])->values()->all());
         $this->newLine();
         $this->line('<comment>The legacy database was NOT deleted.</comment> Verify the tenant, then archive/remove the legacy ERP tables manually once satisfied.');
 

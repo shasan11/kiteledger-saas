@@ -4,17 +4,19 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Documents\DocumentUploadPageController;
 use App\Http\Controllers\LocalizationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StorageServeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CentralSupportController;
 use App\Http\Controllers\Tenant\ImpersonationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-// Note: GET /storage/{path} is served by Laravel's built-in route (named
-// storage.public, registered because the "public" disk has 'serve' => true in
-// config/filesystems.php). That makes uploaded images work even when the
-// public/storage symlink is missing — the installer also clears away any
-// broken symlink so requests actually reach this route. No custom route needed.
+// Serves the tenant's own storage/{tenant}/app/public directory. Registered
+// here (rather than relying on Laravel's automatic serve=>true route, which
+// is disabled in config/filesystems.php) so it runs after
+// InitializeTenancyByVerifiedDomain has already repointed the "public" disk
+// root to this tenant's suffixed storage path.
+Route::get('/storage/{path}', StorageServeController::class)->where('path', '.*')->name('storage.public');
 
 Route::redirect('/', '/dashboard')->name('home');
 

@@ -28,14 +28,14 @@ class PremiumWebsiteTest extends TestCase
 
         $sections = collect(Cache::get('website-page:v2:home')['sections']);
 
-        // Screenshots are confined to the hero and the "Move from work to cash"
-        // block; every other section stays on the lighter icon treatment.
+        // The public marketing site has one product screenshot: the hero.
         $withScreenshot = $sections->filter(fn (array $section) => filled($section['image'] ?? null))
             ->pluck('section_key')->values()->all();
-        $this->assertSame(['hero', 'invoice'], $withScreenshot);
-        $this->assertStringContainsString('customer_payment_interface', $sections->firstWhere('section_key', 'invoice')['image']);
+        $this->assertSame(['hero'], $withScreenshot);
+        $this->assertStringContainsString('homedashboard', $sections->firstWhere('section_key', 'hero')['image']);
+        $this->assertEmpty($sections->firstWhere('section_key', 'invoice')['image']);
 
-        // The tabbed tour sits directly after the "One connected platform" grid.
+        // The plain capability showcase sits directly after the core grid.
         $order = $sections->pluck('section_key')->values()->all();
         $this->assertSame(array_search('platform', $order, true) + 1, array_search('showcase', $order, true));
 
@@ -43,12 +43,12 @@ class PremiumWebsiteTest extends TestCase
         $this->assertSame(5, $sections->firstWhere('section_key', 'faq')['settings']['limit']);
 
         $showcase = $sections->firstWhere('section_key', 'showcase');
-        $this->assertSame('features_mini', $showcase['section_type']);
-        $this->assertCount(8, $showcase['items']);
-        foreach ($showcase['items'] as $tab) {
-            $this->assertNotEmpty($tab['title'], 'each tab needs a label');
-            $this->assertNotEmpty($tab['content'], 'each tab needs a description beside the label');
-            $this->assertNotEmpty($tab['image'], 'each tab needs a screenshot');
+        $this->assertSame('features', $showcase['section_type']);
+        $this->assertCount(3, $showcase['items']);
+        foreach ($showcase['items'] as $item) {
+            $this->assertNotEmpty($item['title'], 'each capability needs a label');
+            $this->assertNotEmpty($item['content'], 'each capability needs a description');
+            $this->assertArrayNotHasKey('image', $item, 'capability cards stay text and icon led');
         }
 
         // Icon cards must survive: the grids are explicitly not screenshot-based.

@@ -1,8 +1,8 @@
 import { useForm } from '@inertiajs/react';
 import { Button, Col, Descriptions, Form, Input, Row } from 'antd';
-import PageHeader from '@/Components/Central/PageHeader';
 import SectionCard from '@/Components/Central/SectionCard';
 import { formatDate } from '@/Components/Central/formatters';
+import { PortalDetailHeader } from '@/Components/Platform/PortalDetailHeader';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 
 export default function PlatformSecurity({ security }) {
@@ -11,7 +11,17 @@ export default function PlatformSecurity({ security }) {
 
     return (
         <PlatformLayout title="Security">
-            <PageHeader eyebrow="Your account" title="Security" description="Password and active session controls for your KiteLedger account." />
+            <PortalDetailHeader
+                avatar={security.email?.slice(0, 2).toUpperCase()}
+                eyebrow="Your account"
+                title="Security"
+                description="Password and active session controls for your KiteLedger account."
+                backHref={route('central.account.tenants.index')}
+                tabs={[
+                    { label: 'Profile details', href: route('central.account.profile.edit') },
+                    { label: 'Security', href: route('central.account.security'), active: true },
+                ]}
+            />
             <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
                     <SectionCard title="Account">

@@ -60,9 +60,9 @@ class TransactionVoidService
                     ->reverse($fresh, $reason, $voidedById);
             }
 
-            if (in_array('void', $fresh->getFillable(), true)) {
+            if ($this->validationService->hasColumn($fresh, 'void')) {
                 $fresh->void = true;
-            } elseif (in_array('voided', $fresh->getFillable(), true)) {
+            } elseif ($this->validationService->hasColumn($fresh, 'voided')) {
                 $fresh->voided = true;
             }
 
@@ -73,7 +73,7 @@ class TransactionVoidService
                 $fresh->voided_by_id = $voidedById;
             }
 
-            if (in_array('active', $fresh->getFillable(), true)) {
+            if ($this->validationService->hasColumn($fresh, 'active')) {
                 $fresh->active = false;
             }
 

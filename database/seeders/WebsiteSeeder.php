@@ -20,7 +20,7 @@ class WebsiteSeeder extends Seeder
     public function run(): void
     {
         $pages = [
-            'home' => ['Home', 'home', 'One intelligent workspace for finance and operations.'],
+            'home' => ['Home', 'home', 'Accounting software that keeps your ledger, invoicing, and reporting in one place.'],
             'features' => ['Features', 'features', 'Explore connected tools for accounting, sales, inventory, CRM, people, and reporting.'],
             'pricing' => ['Pricing', 'pricing', 'Straightforward plans built to grow with your business.'],
             'contact' => ['Talk to our team', 'contact', 'Tell us how your business works and we will help map the right setup.'],
@@ -39,7 +39,7 @@ class WebsiteSeeder extends Seeder
                 'visibility' => 'public', 'published_at' => now(), 'robots_index' => true,
                 'robots_follow' => true, 'sitemap_include' => true, 'sitemap_priority' => $slug === 'home' ? .9 : .6,
                 'sitemap_change_frequency' => in_array($type, ['home', 'blog'], true) ? 'weekly' : 'monthly',
-                'meta_title' => ($slug === 'home' ? 'KiteLedger | Run your business from one workspace' : $title.' | KiteLedger'),
+                'meta_title' => ($slug === 'home' ? 'KiteLedger | Accounting and finance software for growing businesses' : $title.' | KiteLedger'),
                 'meta_description' => $excerpt,
             ]);
         }
@@ -47,39 +47,50 @@ class WebsiteSeeder extends Seeder
 
         $home = WebsitePage::where('slug', 'home')->firstOrFail();
         $sections = [
-            ['hero', 'hero', 'A clearer way to run your business', 'Run your entire business from one intelligent workspace.', 'Connect accounting, invoicing, inventory, CRM, HR, reporting, and daily operations in one powerful platform built for growing companies.', 'Start free', '/pricing', 'Explore the platform', '/features', [], null],
-            ['trusted', 'logos', null, 'Trusted by teams that value clarity', null, null, null, null, null, [], null],
-            ['platform', 'features', 'One connected platform', 'Everything your team needs. Nothing your data has to fight.', 'Replace disconnected tools and fragile spreadsheets with workflows that share the same source of truth.', null, null, null, null, [
-                ['title' => 'Financial control', 'content' => 'General ledger, journal entries, receivables, payables, tax, and close-ready reports.', 'icon' => 'chart'],
-                ['title' => 'Sales and invoicing', 'content' => 'From estimate to payment with clear ownership and a complete customer history.', 'icon' => 'spark'],
-                ['title' => 'Inventory and purchasing', 'content' => 'Know what is in stock, what is moving, and what needs to be replenished.', 'icon' => 'box'],
-                ['title' => 'CRM and customers', 'content' => 'Bring conversations, opportunities, orders, and balances into one useful view.', 'icon' => 'people'],
-                ['title' => 'People operations', 'content' => 'Manage employee records, attendance, leave, payroll, and everyday HR workflows.', 'icon' => 'people'],
-                ['title' => 'Governance and security', 'content' => 'Roles, approvals, audit history, and isolated customer workspaces protect critical work.', 'icon' => 'shield'],
+            ['hero', 'hero', 'Accounting and finance software', 'Your books, closed on time. Every month.', 'General ledger, invoicing, receivables, payables, tax, and reporting in one connected system — with the operational detail behind every number.', 'Start free', '/pricing', 'Explore the platform', '/features', [
+                ['title' => 'Set up in minutes'], ['title' => 'Built for growing teams'], ['title' => 'Secure cloud workspace'],
             ], null],
-            ['showcase', 'features_mini', 'Inside the product', 'See the workspace your team will actually use', 'Pick an area to see the real screen your team works in every day.', 'Explore the platform', '/features', null, null, [], 'mist'],
-            ['invoice', 'product', 'Move from work to cash', 'Create polished invoices. Get paid with less follow-up.', 'Build estimates, convert them into invoices, record payments, and understand what is outstanding without stitching reports together.', 'Explore invoicing', '/features', null, null, [
-                ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],
-                ['title' => 'Live payment status', 'content' => 'See paid, partial, overdue, and outstanding balances instantly.'],
-                ['title' => 'Customer context', 'content' => 'Keep transactions, contacts, and communication connected.'],
+            ['trusted', 'logos', null, 'Trusted by finance teams that value clarity', null, null, null, null, null, [], null],
+            ['platform', 'features', 'Built around the ledger', 'Everything the finance function actually runs on.', 'Double-entry accounting at the core, with the day-to-day workflows that feed it already connected.', null, null, null, null, [
+                ['title' => 'General ledger and journals', 'content' => 'Double-entry postings, journal vouchers, opening balances, and a chart of accounts you control.', 'icon' => 'chart'],
+                ['title' => 'Invoicing and receivables', 'content' => 'Estimates through to payment, with ageing and outstanding balances always current.', 'icon' => 'invoice'],
+                ['title' => 'Payables and expenses', 'content' => 'Bills, purchase invoices, and expense claims tracked against the right supplier and account.', 'icon' => 'workflow'],
+                ['title' => 'Tax and compliance', 'content' => 'Tax rates and groups applied at the transaction, so returns and filings reconcile.', 'icon' => 'shield'],
+                ['title' => 'Financial reporting', 'content' => 'Trial balance, P&L, balance sheet, cash flow, and ledgers ready whenever you are.', 'icon' => 'layers'],
+                ['title' => 'Multi-branch and multi-currency', 'content' => 'Branch-level books and foreign-currency transactions that consolidate cleanly.', 'icon' => 'box'],
+            ], null],
+            ['showcase', 'features_mini', 'Inside the product', 'The screens your finance team works in every day', 'Every figure traces back to the transaction that produced it.', 'Explore the platform', '/features', null, null, [
+                ['title' => 'Financial dashboard', 'content' => 'Revenue, expenses, profit, and cash for any branch and date range.', 'icon' => 'chart'],
+                ['title' => 'Invoicing', 'content' => 'Every invoice with its customer, approval state, and payment history.', 'icon' => 'invoice'],
+                ['title' => 'Reports', 'content' => 'Sixty-three built-in reports across accounting, sales, tax, and stock.', 'icon' => 'box'],
+                ['title' => 'General ledger', 'content' => 'Drill from any balance down to the journal line behind it.', 'icon' => 'layers'],
+                ['title' => 'Bank and reconciliation', 'content' => 'Match statement lines, clear differences, and finalise the period.', 'icon' => 'check'],
+                ['title' => 'Documents', 'content' => 'Upload a bill and track it from scan to posted transaction.', 'icon' => 'workflow'],
+                ['title' => 'Tax settings', 'content' => 'Rates, groups, and treatments applied consistently across documents.', 'icon' => 'shield'],
+                ['title' => 'Approvals', 'content' => 'Credit limits, stock, and pricing rules checked before anything posts.', 'icon' => 'clock'],
             ], 'mist'],
-            ['operations', 'features', 'Operations, in context', 'Make faster decisions with the whole picture in view.', 'Each workspace connects daily activity to the financial result, so teams spend less time reconciling and more time improving.', null, null, null, null, [
-                ['title' => 'Multi-branch command center', 'content' => 'Compare performance while preserving clear branch-level responsibility.', 'icon' => 'chart'],
-                ['title' => 'Warehouse visibility', 'content' => 'Track stock movement, transfers, batches, and reorder pressure.', 'icon' => 'box'],
-                ['title' => 'Approvals that keep moving', 'content' => 'Route purchases, expenses, and sensitive actions to the right people.', 'icon' => 'shield'],
+            ['invoice', 'product', 'Receivables', 'Invoice, collect, and reconcile without the chase.', 'Raise estimates, convert them to invoices, record payments against the ledger, and see what is outstanding without exporting anything.', 'Explore invoicing', '/features', null, null, [
+                ['title' => 'Flexible document numbering', 'content' => 'Consistent sequences across branches and document types.'],
+                ['title' => 'Live receivables position', 'content' => 'Paid, partial, overdue, and ageing balances always current.'],
+                ['title' => 'Posted on approval', 'content' => 'Every invoice and receipt lands in the ledger with its full audit trail.'],
+            ], 'mist'],
+            ['operations', 'features', 'Where the numbers come from', 'The operations behind every posting.', 'Stock, sales, and payroll are part of the same system, so the ledger reflects what actually happened instead of what was re-keyed.', null, null, null, null, [
+                ['title' => 'Inventory and stock valuation', 'content' => 'Movements, transfers, and batches post straight to inventory and cost of sales.', 'icon' => 'box'],
+                ['title' => 'Sales and point of sale', 'content' => 'Counter sales and receipts reach revenue and cash without an overnight import.', 'icon' => 'spark'],
+                ['title' => 'Payroll and people costs', 'content' => 'Employee records, attendance, and payroll land against the right expense accounts.', 'icon' => 'people'],
             ], null],
-            ['metrics', 'statistics', null, 'Built for confident daily operations', 'Useful scale, dependable controls, and a workspace your team can understand.', null, null, null, null, [
-                ['value' => '360°', 'content' => 'Business visibility'], ['value' => '20+', 'content' => 'Connected modules'], ['value' => '24/7', 'content' => 'Operational access'], ['value' => '1', 'content' => 'Source of truth'],
+            ['metrics', 'statistics', null, 'Books you can defend', 'Traceable postings, dependable controls, and reporting your accountant will recognise.', null, null, null, null, [
+                ['value' => '63', 'content' => 'Built-in financial reports'], ['value' => 'Double-entry', 'content' => 'At the core of every module'], ['value' => 'Multi-currency', 'content' => 'With forex revaluation'], ['value' => 'Full', 'content' => 'Audit trail on every posting'],
             ], null],
-            ['security', 'security', 'Trust is a product feature', 'Control access without slowing good work down.', 'KiteLedger is designed around clear boundaries, traceable actions, and practical safeguards for sensitive business information.', 'Explore security', '/features', null, null, [
-                ['title' => 'Role-based access', 'content' => 'Give people only the capabilities their work requires.'],
-                ['title' => 'Audit-ready activity', 'content' => 'Understand who changed what, and when.'],
-                ['title' => 'Customer isolation', 'content' => 'Dedicated data boundaries keep customer workspaces separate.'],
+            ['ai', 'ai', 'AI built into the workflow', 'Your AI copilot for everyday accounting.', 'Ask questions in plain language, let KiteLedger draft the work from your own data, and approve what you trust. Every suggestion stays auditable.', 'Explore AI features', '/features', null, null, [
+                ['title' => 'Ask your data anything', 'content' => 'Question balances, ageing, stock, or sales in plain language and get answers from your live workspace.'],
+                ['title' => 'Documents that read themselves', 'content' => 'Upload a bill or receipt and AI extracts it, matches the customer and products, and prepares a draft.'],
+                ['title' => 'Proposals, never surprises', 'content' => 'The copilot proposes an action; a person approves it. Nothing posts to your ledger unreviewed.'],
             ], 'dark'],
-            ['testimonials', 'testimonials', 'From the people doing the work', 'A calmer operating rhythm for every team.', null, null, null, null, null, [], null],
-            ['pricing', 'pricing', 'Simple, flexible pricing', 'Start with what fits. Grow without starting over.', 'Every plan keeps the same connected KiteLedger foundation.', null, null, null, null, [], 'mist'],
-            ['faq', 'faq', 'Questions, answered', 'Everything you need to know before getting started.', null, null, null, null, null, [], null],
-            ['final', 'cta', 'Your next clear decision starts here', 'Bring finance, operations, customers, inventory, and people together.', 'See how KiteLedger can fit the way your company actually works.', 'Start free', '/pricing', 'Talk to our team', '/contact', [], null],
+            ['testimonials', 'testimonials', 'From the finance teams using it', 'A calmer close, month after month.', null, null, null, null, null, [], null],
+            ['pricing', 'pricing', 'Simple, flexible pricing', 'Start with what fits. Grow without starting over.', 'Every plan keeps the same double-entry accounting foundation.', null, null, null, null, [], null],
+            ['faq', 'faq', 'Questions, answered', 'Everything you need to know before moving your books.', null, null, null, null, null, [], 'mist'],
+            ['final', 'cta', 'Your next close starts here', 'Put your accounting on a foundation you can trust.', 'See how KiteLedger handles your ledger, invoicing, tax, and reporting.', 'Start free', '/pricing', 'Talk to our team', '/contact', [], null],
         ];
 
         foreach ($sections as $order => [$key, $type, $eyebrow, $title, $subtitle, $button, $url, $secondary, $secondaryUrl, $items, $background]) {
@@ -119,10 +130,8 @@ class WebsiteSeeder extends Seeder
     /**
      * Attaches packaged screenshots to the homepage.
      *
-     * Deliberately narrow: only the hero carries a screenshot, so the top of
-     * the page shows the real product and everything below it stays on the
-     * lighter icon treatment. The tabbed "showcase" section is the one other
-     * place screenshots appear, and it keeps them inside a single viewport.
+     * Deliberately narrow: only the hero carries a product screenshot. The
+     * remaining homepage sections use text and icon-led layouts.
      *
      * @param array<string, Media> $featureMedia
      */
@@ -131,48 +140,43 @@ class WebsiteSeeder extends Seeder
         $section = fn (string $key): ?WebsiteSection => WebsiteSection::where('page_id', $home->id)
             ->where('section_key', $key)->first();
 
-        foreach (['hero' => 'homedashboard', 'invoice' => 'customer_payment_interface'] as $key => $stem) {
+        foreach (['hero' => 'homedashboard'] as $key => $stem) {
             if (! ($target = $section($key)) || ! isset($featureMedia[$stem])) {
                 continue;
             }
             // Saved through the model so the casts and page-cache hook both run.
-            $target->update(['media_id' => $featureMedia[$stem]->id, 'image' => $featureMedia[$stem]->url]);
+            $target->update(['media_id' => $featureMedia[$stem]->id, 'image' => $featureMedia[$stem]->url, 'settings' => ['layout' => 'centered']]);
         }
 
         // The section loop above rewrites items but not image/media_id/settings,
         // so art attached by an earlier seed run has to be cleared explicitly or
-        // it survives forever.
-        foreach (['platform', 'operations', 'security', 'final', 'showcase'] as $key) {
+        // it survives forever. Settings are then re-applied below.
+        foreach (['platform', 'operations', 'ai', 'final', 'showcase', 'invoice'] as $key) {
             $section($key)?->update(['media_id' => null, 'image' => null, 'settings' => null]);
         }
 
-        // Keep the homepage accordion short; the remaining entries stay in the
-        // CMS for the support page and for admins to promote.
-        $section('faq')?->update(['settings' => ['limit' => 5]]);
-
-        $tabs = [];
-        foreach ([
-            'homedashboard' => ['Dashboard', 'Revenue, expenses, profit, and cash for any branch and date range.'],
-            'invoice-details' => ['Invoicing', 'Every invoice with its customer, approval state, and payment history.'],
-            'reports' => ['Reports', 'Sixty-three built-in reports across accounting, sales, tax, and stock.'],
-            'pos' => ['Point of sale', 'A fast till that posts straight to inventory and accounts.'],
-            'document-intellegence' => ['Documents', 'Upload a bill and track it from scan to posted transaction.'],
-            'invoice-payment-link' => ['Online payments', 'Share a payment link or QR code straight from the invoice.'],
-            'leads' => ['CRM', 'Track enquiries and opportunities through to a won deal.'],
-            'transactionapproval' => ['Approvals', 'Credit limits, stock, and pricing rules checked before posting.'],
-        ] as $stem => [$label, $caption]) {
-            if (! isset($featureMedia[$stem])) {
-                continue;
-            }
-            $tabs[] = [
-                'title' => $label, 'content' => $caption,
-                'image' => $featureMedia[$stem]->url, 'image_alt' => $label.' in KiteLedger',
-            ];
+        // Consecutive feature sections pick different layouts on purpose: three
+        // identical card walls in a row is what makes a homepage feel generic.
+        $sectionSettings = [
+            'platform' => ['layout' => 'bento'],
+            'showcase' => ['layout' => 'compact'],
+            'operations' => ['layout' => 'rows'],
+            'ai' => [
+                'panel_label' => 'AI copilot',
+                'panel_badge' => 'Approval gated',
+                'metrics' => [
+                    ['value' => 'Plain language', 'label' => 'ask anything'],
+                    ['value' => '100%', 'label' => 'human approved'],
+                ],
+            ],
+            // Keep the homepage accordion short; the remaining entries stay in
+            // the CMS for the support page and for admins to promote.
+            'faq' => ['limit' => 5],
+        ];
+        foreach ($sectionSettings as $key => $settings) {
+            $section($key)?->update(['settings' => $settings]);
         }
 
-        if (($showcase = $section('showcase')) && $tabs !== []) {
-            $showcase->update(['items' => $tabs]);
-        }
     }
 
     private function seedContent(): void

@@ -59,7 +59,7 @@ class ForexAdjustmentService
 
             if (abs($gainLoss) < 0.01) {
                 throw ValidationException::withMessages([
-                    'new_rate' => 'No forex difference to post — gain/loss is zero.',
+                    'new_rate' => 'No forex difference to post - gain/loss is zero.',
                 ]);
             }
 

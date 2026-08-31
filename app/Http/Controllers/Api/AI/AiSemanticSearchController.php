@@ -61,14 +61,14 @@ class AiSemanticSearchController extends Controller
             'query' => $data['query'],
             'results' => $results,
             'summary' => $this->summarize($data['query'], $results),
-            'note' => 'Matches are retrieved from your own records by meaning. Open a record for exact figures — amounts are never generated.',
+            'note' => 'Matches are retrieved from your own records by meaning. Open a record for exact figures - amounts are never generated.',
         ]);
     }
 
     /**
      * Best-effort plain-language summary, grounded ONLY on the retrieved
      * snippets. Returns null if there is nothing to summarize or AI is briefly
-     * unavailable — the cited results are the source of truth either way.
+     * unavailable - the cited results are the source of truth either way.
      *
      * @param  array<int, array{snippet: string}>  $results
      */

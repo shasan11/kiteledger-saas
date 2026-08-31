@@ -82,7 +82,7 @@ class PlatformSettingsSeeder extends Seeder
                 ['Email logo', 'image'],
                 ['Invoice logo', 'image'],
                 ['Login background', 'image'],
-                ['Footer text', 'textarea', 'One intelligent workspace for finance, operations, customers, inventory, and people.'],
+                ['Footer text', 'textarea', 'Accounting and finance software for growing businesses — ledger, invoicing, tax, and reporting in one place.'],
             ],
             'company' => ['Legal company name', 'Registration number', 'Tax number', ['Email', 'email'], 'Phone', ['Website', 'url'], 'Address line 1', 'Address line 2', 'City', 'State', 'Postal code', ['Country', 'country'], 'Authorized signatory'],
             'tenant_registration' => [['Allow public signup', 'switch', false], ['Require email verification', 'switch', true], ['Require administrator approval', 'switch', false], ['Default plan', 'select'], ['Default trial days', 'number', 14], ['Default country', 'country'], ['Default currency', 'currency', env('SAAS_BILLING_CURRENCY', 'USD')], ['Default timezone', 'timezone', 'UTC'], ['Default data template', 'select'], ['Allow custom domains', 'switch', false], ['Allow subdomain selection', 'switch', true], ['Minimum subdomain length', 'number', 3], ['Reserved subdomains', 'multiselect', config('saas.reserved_subdomains', [])], ['Owner invitation expiration', 'number', 72], ['Automatically activate after provisioning', 'switch', true], ['Suspend on expiration', 'switch', true], ['Delete expired tenants after configured days', 'number', 0]],

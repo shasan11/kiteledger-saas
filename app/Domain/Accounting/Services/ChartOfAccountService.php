@@ -74,6 +74,14 @@ class ChartOfAccountService
                     ->first();
 
                 if ($account) {
+                    // 'coa' is only the default for an account this sync had to
+                    // create. Overwriting an existing nature erased the fact that
+                    // an account was cash, bank or contact-linked, which broke the
+                    // cash-flow report's lookup and any other nature-based rule.
+                    if (filled($account->nature) && $account->nature !== 'coa') {
+                        unset($payload['nature']);
+                    }
+
                     $account->forceFill($payload)->saveQuietly();
                 } else {
                     $account = Account::query()->create($payload);

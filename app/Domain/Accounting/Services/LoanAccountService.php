@@ -155,8 +155,8 @@ class LoanAccountService
      * Record a principal repayment for a loan account.
      *
      * Accounting entry:
-     *   Dr  Loan Liability Account (related_account_id)   — reduces liability
-     *   Cr  Bank / Cash Account (paid_from_account_id)    — cash paid out
+     *   Dr  Loan Liability Account (related_account_id) - reduces liability
+     *   Cr  Bank / Cash Account (paid_from_account_id) - cash paid out
      *
      * @param  LoanAccount  $loanAccount
      * @param  array{
@@ -205,7 +205,7 @@ class LoanAccountService
             $jv = JournalVoucher::create([
                 'voucher_date'         => $data['payback_date'],
                 'reference'            => $data['reference'] ?? null,
-                'narration'            => 'Principal repayment — ' . $loanAccount->name,
+                'narration'            => 'Principal repayment - ' . $loanAccount->name,
                 'remarks'              => $data['notes'] ?? null,
                 'source_type'          => LoanPayback::class,
                 'source_id'            => $payback->id,
@@ -225,7 +225,7 @@ class LoanAccountService
             JournalVoucherLine::create([
                 'journal_voucher_id' => $jv->id,
                 'account_id'         => $loanAccount->related_account_id,
-                'description'        => 'Principal repayment — ' . $loanAccount->name,
+                'description'        => 'Principal repayment - ' . $loanAccount->name,
                 'debit'              => $amount,
                 'credit'             => 0,
                 'exchange_rate'      => 1,
@@ -235,7 +235,7 @@ class LoanAccountService
             JournalVoucherLine::create([
                 'journal_voucher_id' => $jv->id,
                 'account_id'         => $data['paid_from_account_id'],
-                'description'        => 'Principal repayment — ' . $loanAccount->name,
+                'description'        => 'Principal repayment - ' . $loanAccount->name,
                 'debit'              => 0,
                 'credit'             => $amount,
                 'exchange_rate'      => 1,

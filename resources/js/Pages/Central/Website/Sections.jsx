@@ -53,6 +53,8 @@ const SECTION_TYPES = [
     { value: "solutions", label: "Solutions", description: "Present solutions for teams, industries, or use cases.", tone: "magenta" },
     { value: "integrations", label: "Integrations", description: "Show connected tools and integration benefits.", tone: "volcano" },
     { value: "security", label: "Security highlight", description: "Communicate trust, privacy, and security controls.", tone: "red" },
+    { value: "ai", label: "AI highlight", description: "Show what the built-in AI copilot does and how it stays approval-gated.", tone: "purple" },
+    { value: "features_mini", label: "Compact feature board", description: "A dense tile board for many short capability blurbs.", tone: "cyan" },
     { value: "pricing", label: "Pricing plans", description: "Display the active plans configured in billing.", tone: "green" },
     { value: "testimonials", label: "Testimonials", description: "Build trust with customer quotes and attribution.", tone: "purple" },
     { value: "faq", label: "Frequently asked questions", description: "Answer common questions in an expandable list.", tone: "orange" },
@@ -79,16 +81,33 @@ const LAYOUT_OPTIONS = {
     ],
     features: [
         { value: "grid", label: "Card grid" },
+        { value: "bento", label: "Bento grid (first item featured)" },
+        { value: "compact", label: "Compact tile board" },
+        { value: "rows", label: "Numbered rows" },
         { value: "list", label: "Simple list" },
         { value: "image", label: "Image with cards" },
     ],
     solutions: [
         { value: "grid", label: "Card grid" },
+        { value: "bento", label: "Bento grid (first item featured)" },
+        { value: "compact", label: "Compact tile board" },
+        { value: "rows", label: "Numbered rows" },
         { value: "list", label: "Simple list" },
         { value: "image", label: "Image with cards" },
     ],
     integrations: [
         { value: "grid", label: "Card grid" },
+        { value: "bento", label: "Bento grid (first item featured)" },
+        { value: "compact", label: "Compact tile board" },
+        { value: "rows", label: "Numbered rows" },
+        { value: "list", label: "Simple list" },
+        { value: "image", label: "Image with cards" },
+    ],
+    features_mini: [
+        { value: "grid", label: "Card grid" },
+        { value: "bento", label: "Bento grid (first item featured)" },
+        { value: "compact", label: "Compact tile board" },
+        { value: "rows", label: "Numbered rows" },
         { value: "list", label: "Simple list" },
         { value: "image", label: "Image with cards" },
     ],
@@ -351,9 +370,9 @@ export default function Sections({ pages = [], selectedPage, sections = [] }) {
         onOk: () => router.delete(route("central.website-sections.destroy", section.id)),
     });
 
-    const supportsItemLinks = ["features", "content", "product", "solutions", "integrations", "security", "steps"].includes(sectionType);
+    const supportsItemLinks = ["features", "features_mini", "content", "product", "solutions", "integrations", "security", "ai", "steps"].includes(sectionType);
     const supportsItemMedia = !["faq", "statistics"].includes(sectionType);
-    const supportsIcons = ["features", "solutions", "integrations", "security", "steps"].includes(sectionType);
+    const supportsIcons = ["features", "features_mini", "solutions", "integrations", "security", "ai", "steps"].includes(sectionType);
     const layoutOptions = LAYOUT_OPTIONS[sectionType] || [];
 
     const editorTabs = [

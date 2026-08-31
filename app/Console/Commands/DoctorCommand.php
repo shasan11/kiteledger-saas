@@ -54,14 +54,14 @@ class DoctorCommand extends Command
             'APP_KEY missing. Run: php artisan key:generate'
         );
 
-        // Shared placeholder key from an old .env.example — insecure, every
+        // Shared placeholder key from an old .env.example - insecure, every
         // install must have its own.
         if ($appKey === 'base64:vsErht3mQKV4WSCC6R+0fgr00Th1X9WvfCeIAI7J4Kg=') {
             $this->line('<fg=red>FAIL</> APP_KEY is the shared placeholder. Run: php artisan key:generate');
             $this->failures++;
         }
 
-        // Stale cached config masks .env edits — a frequent "persistent error".
+        // Stale cached config masks .env edits - a frequent "persistent error".
         if (is_file(base_path('bootstrap/cache/config.php'))) {
             $this->line('INFO config is cached (bootstrap/cache/config.php). If .env changes are not taking effect, run: php artisan optimize:clear');
         }
@@ -135,7 +135,7 @@ class DoctorCommand extends Command
 
         // Skip silently if DB is not configured yet (pre-installer state).
         if (empty($database) || $database === 'kiteledger') {
-            $this->line('INFO database not configured yet — the web installer will set DB credentials.');
+            $this->line('INFO database not configured yet - the web installer will set DB credentials.');
 
             return;
         }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Platform\GoogleAuthController;
 use App\Models\Central\CentralUser;
 use App\Services\SaaS\CentralAuditService;
 use App\Services\SaaS\PlatformSettingsService;
@@ -25,8 +26,8 @@ class AuthController extends Controller
     public function create()
     {
         return Auth::guard('platform')->check()
-            ? redirect()->route('central.account.dashboard')
-            : Inertia::render('Platform/Auth/Login');
+            ? redirect()->route('central.account.tenants.index')
+            : Inertia::render('Platform/Auth/Login', ['googleEnabled' => GoogleAuthController::configured()]);
     }
 
     public function store(Request $request, CentralAuditService $audit)
@@ -57,7 +58,7 @@ class AuthController extends Controller
         $user->forceFill(['last_login_at' => now(), 'last_login_ip' => $request->ip(), 'last_active_at' => now()])->save();
         $audit->log($request, 'platform-user.login', $user);
 
-        return redirect()->intended(route('central.account.dashboard'));
+        return redirect()->intended(route('central.account.tenants.index'));
     }
 
     public function destroy(Request $request)
@@ -132,6 +133,6 @@ class AuthController extends Controller
         $user->forceFill(['password' => Hash::make($data['password']), 'password_changed_at' => now(), 'force_password_reset' => false])->save();
         $audit->log($request, 'platform-user.password_changed', $user);
 
-        return redirect()->route('central.account.dashboard')->with('success', 'Your password has been updated.');
+        return redirect()->route('central.account.tenants.index')->with('success', 'Your password has been updated.');
     }
 }

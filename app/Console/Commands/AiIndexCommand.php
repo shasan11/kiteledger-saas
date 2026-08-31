@@ -23,7 +23,7 @@ class AiIndexCommand extends Command
     public function handle(AiSettingsService $settings, AiEmbeddingIndexer $indexer): int
     {
         if (! $settings->enabled()) {
-            $this->error('AI is disabled in settings — enable it before indexing.');
+            $this->error('AI is disabled in settings - enable it before indexing.');
 
             return self::FAILURE;
         }

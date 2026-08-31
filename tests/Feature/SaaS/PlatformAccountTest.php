@@ -8,6 +8,7 @@ use App\Models\Central\CentralAdmin;
 use App\Models\Central\CentralUser;
 use App\Models\Central\CentralUserInvitation;
 use App\Models\Central\Plan;
+use App\Models\Central\OrganizationRequest;
 use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantInvoice;
@@ -130,6 +131,24 @@ class PlatformAccountTest extends TestCase
         $this->put(self::HOST.'/account/profile', ['first_name' => 'Shasan', 'last_name' => 'D', 'job_title' => 'CEO', 'city' => 'Kathmandu'])
             ->assertRedirect();
         $this->assertDatabaseHas('central_user_profiles', ['central_user_id' => $user->id, 'job_title' => 'CEO', 'city' => 'Kathmandu']);
+    }
+
+    public function test_platform_user_can_submit_and_track_an_organization_request(): void
+    {
+        $user = $this->platformUser();
+        $other = $this->platformUser('other@example.com');
+        OrganizationRequest::create(['central_user_id' => $other->id, 'company_name' => 'Hidden Company', 'contact_email' => $other->email, 'status' => 'pending']);
+        $this->signIn($user);
+
+        $this->post(self::HOST.'/account/requests', [
+            'company_name' => 'New Horizon LLC', 'legal_name' => 'New Horizon Limited',
+            'contact_email' => $user->email, 'country' => 'AE', 'notes' => 'Two branches.',
+        ])->assertRedirect(self::HOST.'/account/requests');
+
+        $this->assertDatabaseHas('central_organization_requests', ['central_user_id' => $user->id, 'company_name' => 'New Horizon LLC', 'status' => 'pending']);
+        $response = $this->get(self::HOST.'/account/requests')->assertOk();
+        $requests = collect($response->viewData('page')['props']['requests']);
+        $this->assertSame(['New Horizon LLC'], $requests->pluck('company_name')->all());
     }
 
     // ----------------------------------------------------------- memberships
@@ -260,7 +279,7 @@ class PlatformAccountTest extends TestCase
         $this->actingAs($user, 'platform')->withSession(['platform_login_at' => now()->getTimestamp(), 'platform_active_tenant_id' => 'cortifox']);
 
         app(TenantMembershipService::class)->revoke($membership);
-        $this->get(self::HOST.'/account')->assertOk()->assertSessionMissing('platform_active_tenant_id');
+        $this->get(self::HOST.'/account')->assertRedirect(self::HOST.'/account/tenants')->assertSessionMissing('platform_active_tenant_id');
     }
 
     // -------------------------------------------------------------- billing
@@ -285,6 +304,32 @@ class PlatformAccountTest extends TestCase
         $this->assertFalse($numbers->contains('INV-00099'));
 
         $this->get(self::HOST.'/account/tenants/cortifox/billing')->assertForbidden();
+    }
+
+    public function test_global_invoice_list_only_contains_permitted_organizations(): void
+    {
+        $allowed = $this->tenant('allowed', 'Allowed Company');
+        $hidden = $this->tenant('hidden', 'Hidden Company');
+        TenantInvoice::create(['invoice_number' => 'INV-ALLOWED', 'tenant_id' => $allowed->id, 'total' => 49, 'currency' => 'USD', 'status' => 'issued']);
+        TenantInvoice::create(['invoice_number' => 'INV-PAID', 'tenant_id' => $allowed->id, 'total' => 29, 'currency' => 'USD', 'status' => 'paid']);
+        TenantInvoice::create(['invoice_number' => 'INV-HIDDEN', 'tenant_id' => $hidden->id, 'total' => 99, 'currency' => 'USD', 'status' => 'issued']);
+
+        $user = $this->platformUser();
+        $this->membership($user, $allowed, TenantMembershipRole::BillingManager);
+        $this->membership($user, $hidden, TenantMembershipRole::Member);
+        $this->signIn($user);
+
+        $response = $this->get(self::HOST.'/account/invoices')->assertOk();
+        $numbers = collect($response->viewData('page')['props']['invoices']['data'])->pluck('invoice_number');
+        $this->assertTrue($numbers->contains('INV-ALLOWED'));
+        $this->assertFalse($numbers->contains('INV-PAID'));
+        $this->assertFalse($numbers->contains('INV-HIDDEN'));
+
+        $paid = $this->get(self::HOST.'/account/invoices?status=paid')->assertOk();
+        $paidNumbers = collect($paid->viewData('page')['props']['invoices']['data'])->pluck('invoice_number');
+        $this->assertTrue($paidNumbers->contains('INV-PAID'));
+        $this->assertFalse($paidNumbers->contains('INV-ALLOWED'));
+        $this->assertSame('paid', $paid->viewData('page')['props']['filter']);
     }
 
     public function test_a_user_without_billing_permission_is_refused(): void

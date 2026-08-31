@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import * as Yup from 'yup';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { branchColumn } from '@/Components/Transactions';
+import { formatDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import axios from 'axios';
 const { Text } = Typography;
 
@@ -226,7 +227,7 @@ export default function Index() {
                 fkLabelKey: 'code',
                 fkExtraParams: { approved: true },
                 fkLabel: (row) => {
-                    const code = row?.code?.startsWith?.('#draft') ? 'DRAFT' : (row?.code || '-');
+                    const code = formatDocumentNumber(row?.code, { draftLabel: 'DRAFT' });
                     const name = row?.finishedProduct?.name || row?.finished_product?.name || '';
                     return [code, name ? `- ` : ''].filter(Boolean).join(' ');
                 },

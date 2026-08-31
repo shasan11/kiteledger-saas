@@ -1,11 +1,12 @@
 import { router } from '@inertiajs/react';
 import { Alert, Button, Col, Descriptions, Empty, Modal, Popconfirm, Radio, Row, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import { useState } from 'react';
-import PageHeader from '@/Components/Central/PageHeader';
 import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate, formatMoney } from '@/Components/Central/formatters';
+import { PortalDetailHeader } from '@/Components/Platform/PortalDetailHeader';
 import PlatformLayout from '@/Layouts/PlatformLayout';
+import { PortalList, PortalListCard, PortalSection } from '@/Components/Platform/PortalListCard';
 
 export default function PlatformTenantBilling({ tenant, abilities, subscription, plans, usage, invoices, payments }) {
     const [planChange, setPlanChange] = useState(null);
@@ -48,7 +49,20 @@ export default function PlatformTenantBilling({ tenant, abilities, subscription,
 
     return (
         <PlatformLayout title={`${tenant.company_name} · Billing`}>
-            <PageHeader eyebrow={tenant.company_name} title="Billing" description="Subscription, invoices and payments for this company only." />
+            <PortalDetailHeader
+                avatar={tenant.company_name?.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}
+                eyebrow={tenant.company_name}
+                title="Billing"
+                description="Subscription, invoices and payments for this organization."
+                backHref={route('central.account.tenants.index')}
+                tabs={[
+                    { label: 'Overview', href: route('central.account.tenants.show', tenant.id) },
+                    { label: 'Company details', href: route('central.account.tenants.settings', tenant.id) },
+                    { label: 'Members', href: route('central.account.tenants.members', tenant.id), visible: abilities.can_manage_users },
+                    { label: 'Billing', href: route('central.account.tenants.billing', tenant.id), active: true },
+                ]}
+                badges={subscription?.status ? <StatusBadge value={subscription.status} /> : null}
+            />
 
             <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
                 <Col xs={24} lg={14}>
@@ -107,24 +121,14 @@ export default function PlatformTenantBilling({ tenant, abilities, subscription,
             )}
 
             {abilities.can_view_invoices ? (
-                <SectionCard>
-                    <Tabs
-                        items={[
-                            {
-                                key: 'invoices', label: 'Invoices',
-                                children: <Table rowKey="id" size="middle" scroll={{ x: 780 }} dataSource={invoices?.data || []} columns={invoiceColumns}
-                                    locale={{ emptyText: <Empty description="No invoices yet." /> }}
-                                    pagination={invoices ? { current: invoices.current_page, total: invoices.total, pageSize: invoices.per_page, showSizeChanger: false, onChange: (page) => router.get(route('central.account.tenants.billing', tenant.id), { invoices: page }, { preserveState: true, preserveScroll: true }) } : false} />,
-                            },
-                            {
-                                key: 'payments', label: 'Payments',
-                                children: <Table rowKey="id" size="middle" scroll={{ x: 700 }} dataSource={payments?.data || []} columns={paymentColumns}
-                                    locale={{ emptyText: <Empty description="No payments recorded." /> }}
-                                    pagination={payments ? { current: payments.current_page, total: payments.total, pageSize: payments.per_page, showSizeChanger: false, onChange: (page) => router.get(route('central.account.tenants.billing', tenant.id), { payments: page }, { preserveState: true, preserveScroll: true }) } : false} />,
-                            },
-                        ]}
-                    />
-                </SectionCard>
+                <>
+                    <PortalSection title="Invoices" description={`${invoices?.total || 0} billing invoice${invoices?.total === 1 ? '' : 's'}`}>
+                        <PortalList emptyText="No invoices yet.">{(invoices?.data || []).map((invoice) => <PortalListCard key={invoice.id} title={invoice.invoice_number} subtitle={tenant.company_name} badges={<StatusBadge value={invoice.status} />} meta={[{ label: 'Issued', value: formatDate(invoice.issue_date) }, { label: 'Due', value: formatDate(invoice.due_date) }, { label: 'Total', value: formatMoney(invoice.total, invoice.currency) }, { label: 'Balance', value: formatMoney(invoice.balance, invoice.currency) }]} actions={<Space><Button onClick={() => router.visit(route('central.account.tenants.billing.invoice', { tenant: tenant.id, invoice: invoice.id }))}>View</Button>{abilities.can_make_payments && !['paid', 'void'].includes(invoice.status) && <Button type="primary" onClick={() => router.post(route('central.account.tenants.billing.invoice.pay', { tenant: tenant.id, invoice: invoice.id }))}>Pay</Button>}</Space>} />)}</PortalList>
+                    </PortalSection>
+                    <PortalSection title="Payments" description={`${payments?.total || 0} payment${payments?.total === 1 ? '' : 's'}`}>
+                        <PortalList emptyText="No payments recorded.">{(payments?.data || []).map((payment) => <PortalListCard key={payment.id} title={payment.invoice?.invoice_number || 'Payment'} subtitle={payment.gateway} badges={<StatusBadge value={payment.status} />} meta={[{ label: 'Method', value: payment.payment_method || '-' }, { label: 'Amount', value: formatMoney(payment.amount, payment.currency) }, { label: 'Paid', value: formatDate(payment.paid_at, true) }]} />)}</PortalList>
+                    </PortalSection>
+                </>
             ) : (
                 <Alert type="info" showIcon message="You do not have permission to view invoices for this company." />
             )}

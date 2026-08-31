@@ -88,7 +88,7 @@ class InvoiceCustomizationController extends Controller
             'seller_snapshot' => $seller, 'buyer_snapshot' => ['legal_name' => 'Acme Trading Company', 'address' => '88 Market Street', 'email' => 'accounts@acme.example', 'tax_number' => 'TAX-88310'],
             'customization_snapshot' => $snapshot, 'tax_snapshot' => ['rate' => 10],
             'line_items_snapshot' => [
-                ['type' => 'plan', 'description' => 'KiteLedger Professional — annual subscription', 'quantity' => 1, 'unit_amount' => 1100, 'amount' => 1100],
+                ['type' => 'plan', 'description' => 'KiteLedger Professional - annual subscription', 'quantity' => 1, 'unit_amount' => 1100, 'amount' => 1100],
                 ['type' => 'capacity', 'description' => 'Additional branch capacity', 'quantity' => 3, 'unit_amount' => 50, 'amount' => 150],
             ],
             'notes' => 'Thank you for choosing KiteLedger.',

@@ -1,3 +1,4 @@
+import { formatDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { useEffect, useMemo, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import {
@@ -530,7 +531,7 @@ export default function WarehouseShow({ id, ...props }) {
           className="warehouse-link-btn"
           onClick={() => router.visit(route('inventory.warehouse-transfers.show', row.id))}
         >
-          {value || '#draft'}
+          {formatDocumentNumber(value)}
         </Button>
       ),
     },
@@ -604,7 +605,7 @@ export default function WarehouseShow({ id, ...props }) {
           className="warehouse-link-btn"
           onClick={() => router.visit(route('inventory.adjustments.show', row.id))}
         >
-          {value || '#draft'}
+          {formatDocumentNumber(value)}
         </Button>
       ),
     },
@@ -665,7 +666,7 @@ export default function WarehouseShow({ id, ...props }) {
           className="warehouse-link-btn"
           onClick={() => router.visit(route('inventory.production-journals.show', row.id))}
         >
-          {value || '#draft'}
+          {formatDocumentNumber(value)}
         </Button>
       ),
     },

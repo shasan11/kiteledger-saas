@@ -3,7 +3,8 @@ import { router } from '@inertiajs/react';
 import { Avatar, Button, Drawer, Empty, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 import PermissionSwitches from '@/Components/Platform/PermissionSwitches';
-import PageHeader from '@/Components/Central/PageHeader';
+import { PortalDetailHeader } from '@/Components/Platform/PortalDetailHeader';
+import { PortalList, PortalListCard, PortalSection } from '@/Components/Platform/PortalListCard';
 import SectionCard from '@/Components/Central/SectionCard';
 import StatusBadge from '@/Components/Central/StatusBadge';
 import { formatDate, humanize, initials } from '@/Components/Central/formatters';
@@ -11,7 +12,7 @@ import PlatformLayout from '@/Layouts/PlatformLayout';
 
 const yesNo = (value) => (value ? <CheckCircleTwoTone twoToneColor="#52c41a" /> : <CloseCircleOutlined style={{ color: '#bfbfbf' }} />);
 
-export default function PlatformTenantMembers({ tenant, members, invitations, roleOptions, permissionKeys }) {
+export default function PlatformTenantMembers({ tenant, abilities, members, invitations, roleOptions, permissionKeys }) {
     const [inviteOpen, setInviteOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [inviteForm] = Form.useForm();
@@ -69,25 +70,42 @@ export default function PlatformTenantMembers({ tenant, members, invitations, ro
 
     return (
         <PlatformLayout title={`${tenant.company_name} · Members`}>
-            <PageHeader
+            <PortalDetailHeader
+                avatar={initials(tenant.company_name)}
                 eyebrow={tenant.company_name}
                 title="Members"
                 description="People with a KiteLedger account who can access this company."
+                badges={<Tag color={abilities.is_owner ? 'gold' : 'blue'}>{abilities.role_label}</Tag>}
+                backHref={route('central.account.tenants.index')}
+                tabs={[
+                    { label: 'Overview', href: route('central.account.tenants.show', tenant.id) },
+                    { label: 'Company details', href: route('central.account.tenants.settings', tenant.id) },
+                    { label: 'Members', href: route('central.account.tenants.members', tenant.id), active: true },
+                    { label: 'Billing', href: route('central.account.tenants.billing', tenant.id), visible: abilities.can_manage_billing },
+                ]}
                 actions={<Button type="primary" icon={<PlusOutlined />} onClick={openInvite}>Invite member</Button>}
             />
 
-            <SectionCard>
-                <Table rowKey="id" size="middle" scroll={{ x: 820 }} dataSource={members} columns={columns} pagination={members.length > 20 ? { pageSize: 20 } : false} locale={{ emptyText: <Empty description="No members yet." /> }} />
-            </SectionCard>
+            <PortalSection title="Organization members" description={`${members.length} member${members.length === 1 ? '' : 's'}`}>
+                <PortalList emptyText="No members yet.">{members.map((member) => <PortalListCard
+                    key={member.id}
+                    avatar={member.user?.avatar || initials(member.user?.name)}
+                    title={member.user?.name}
+                    subtitle={member.user?.email}
+                    badges={<><Tag color={member.role === 'owner' ? 'gold' : 'blue'}>{humanize(member.role)}</Tag><StatusBadge value={member.revoked_at ? 'cancelled' : member.is_active ? 'active' : 'suspended'} /></>}
+                    meta={[
+                        { label: 'Billing', value: member.can_manage_billing ? 'Allowed' : 'No access' },
+                        { label: 'Users', value: member.can_manage_users ? 'Allowed' : 'No access' },
+                        { label: 'Joined', value: formatDate(member.accepted_at) },
+                    ]}
+                    actions={<Space wrap><Button onClick={() => openEdit(member)}>Permissions</Button>{member.is_active && <Popconfirm title={`Remove ${member.user?.name || 'this member'}?`} description="They lose access immediately. Accounting data is not deleted." okText="Revoke" okButtonProps={{ danger: true }} onConfirm={() => router.delete(route('central.account.tenants.members.revoke', { tenant: tenant.id, membership: member.id }), { preserveScroll: true })}><Button danger>Revoke</Button></Popconfirm>}</Space>}
+                />)}</PortalList>
+            </PortalSection>
 
             {invitations.length > 0 && (
-                <SectionCard title="Pending invitations" style={{ marginTop: 16 }}>
-                    <Table rowKey="id" size="small" pagination={false} dataSource={invitations} columns={[
-                        { title: 'Email', dataIndex: 'email' },
-                        { title: 'Role', dataIndex: 'role', render: (value) => humanize(value) },
-                        { title: 'Expires', dataIndex: 'expires_at', render: (value) => formatDate(value, true) },
-                    ]} />
-                </SectionCard>
+                <PortalSection title="Pending invitations" description="Invitations waiting to be accepted.">
+                    <PortalList>{invitations.map((invitation) => <PortalListCard key={invitation.id} icon={<PlusOutlined />} title={invitation.email} subtitle={`Invited as ${humanize(invitation.role)}`} badges={<StatusBadge value="invited" />} meta={[{ label: 'Sent', value: formatDate(invitation.created_at, true) }, { label: 'Expires', value: formatDate(invitation.expires_at, true) }]} />)}</PortalList>
+                </PortalSection>
             )}
 
             <Drawer

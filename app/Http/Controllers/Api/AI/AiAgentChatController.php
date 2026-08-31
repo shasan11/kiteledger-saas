@@ -203,7 +203,7 @@ class AiAgentChatController extends Controller
         }
 
         if (($toolClassification['type'] ?? null) === 'action') {
-            // Dangerous / disabled writes never become a pending action — explain
+            // Dangerous / disabled writes never become a pending action - explain
             // the safe path instead (spec §12).
             if (($toolClassification['tool'] ?? null) === 'action.blocked') {
                 $this->logToolCall($conversation, $user, 'action.blocked', ['message' => $message], ['reason' => $toolClassification['reason'] ?? null], 'blocked');
@@ -635,7 +635,7 @@ class AiAgentChatController extends Controller
         $m = mb_strtolower($message);
 
         if (str_contains($m, 'delete') || str_contains($m, 'remove')) {
-            return 'I can’t delete records — that would damage your accounting history. If your permissions allow it, I can prepare a void/reversal instead. Want me to do that?';
+            return 'I can’t delete records - that would damage your accounting history. If your permissions allow it, I can prepare a void/reversal instead. Want me to do that?';
         }
 
         if (str_contains($m, 'void')) {
@@ -643,7 +643,7 @@ class AiAgentChatController extends Controller
         }
 
         if (str_contains($m, 'mark paid') || str_contains($m, 'paid')) {
-            return 'I won’t mark invoices paid automatically — that posts money movements. I can prepare a customer-payment draft for your review instead. Shall I?';
+            return 'I won’t mark invoices paid automatically - that posts money movements. I can prepare a customer-payment draft for your review instead. Shall I?';
         }
 
         if (str_contains($m, 'approve') || str_contains($m, 'post ')) {

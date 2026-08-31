@@ -39,7 +39,7 @@ class AiAssistantController extends AiAgentChatController
             return response()->json([
                 'ok' => false,
                 'code' => 'AI_REPORTS_ONLY',
-                'message' => 'KiteLedger Copilot is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full Copilot in AI Settings.',
+                'message' => 'KiteLedger Copilot is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report - or enable the full Copilot in AI Settings.',
             ], 422);
         }
 
@@ -54,7 +54,7 @@ class AiAssistantController extends AiAgentChatController
         }
 
         // Provider/model/base_url are infrastructure config. Normal users only
-        // need to know the assistant is ready — not which vendor powers it.
+        // need to know the assistant is ready - not which vendor powers it.
         $canSeeProvider = $this->permissions->canViewSettings($user);
         $readiness = app(AiReadinessService::class)->evaluate();
 

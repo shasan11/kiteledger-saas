@@ -19,6 +19,12 @@ export function FeatureIcon({ name = "check" }) {
         box: "M3 6.5 10 3l7 3.5v7L10 17l-7-3.5zM3 6.5l7 3.5m7-3.5L10 10m0 7v-7",
         people: "M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6 1a2.5 2.5 0 1 0 0-5M2 17c.5-4 2-6 5-6s4.5 2 5 6m1-6c2.8 0 4.3 2 4.7 5",
         shield: "M10 2 17 5v5c0 4-2.6 6.7-7 8-4.4-1.3-7-4-7-8V5zM7 10l2 2 4-5",
+        spark: "m10 2 1.4 4.6L16 8l-4.6 1.4L10 14l-1.4-4.6L4 8l4.6-1.4zM15.5 13l.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7z",
+        invoice: "M5 2h8l3 3v13H5zM13 2v4h3M8 10h5m-5 3h5",
+        workflow: "M5 5h4m2 0h4M5 15h4m2 0h4M7 5v10m6-10v10M9 10h4",
+        clock: "M10 3a7 7 0 1 1-7 7 7 7 0 0 1 7-7Zm0 3v4l3 2",
+        layers: "m10 3 7 4-7 4-7-4zm-7 8 7 4 7-4m-14 4 7 4 7-4",
+        bolt: "m11 2-6 9h5l-1 7 6-9h-5z",
         check: "m5 10 3 3 7-7",
     };
     return <span className="kl-feature-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d={paths[name] || paths.check} /></svg></span>;

@@ -24,9 +24,33 @@ class AiReadinessService
 
     public function __construct(private readonly AiSettingsService $settings) {}
 
+    /**
+     * The AI provider is platform-wide config (AiSettingsService reads it off
+     * the central connection via PlatformSettingsService), but the default
+     * cache store gets a tenant-suffixed path/prefix the moment tenancy is
+     * bootstrapped (see PrefixCacheTenancyBootstrapper). Left alone, a
+     * connection test run from Central Settings (no tenant active) writes
+     * into the central cache namespace, while every tenant reads its own,
+     * tenant-suffixed namespace - so no tenant would ever see the platform's
+     * connection as verified, and the Copilot composer stays disabled
+     * everywhere. Running the cache read/write in the central context via
+     * tenancy()->central() keeps this one flag in the same namespace the
+     * shared setting itself lives in, regardless of which tenant is active
+     * when it's checked.
+     */
+    private function rememberCentrally(string $key, mixed $value): void
+    {
+        tenancy()->central(fn () => Cache::forever($key, $value));
+    }
+
+    private function recallCentrally(string $key): mixed
+    {
+        return tenancy()->central(fn () => Cache::get($key));
+    }
+
     public function recordProviderVerification(bool $success, ?string $code = null): void
     {
-        Cache::forever($this->verificationKey(), [
+        $this->rememberCentrally($this->verificationKey(), [
             'success' => $success,
             'code' => $code,
             'verified_at' => now()->toISOString(),
@@ -35,7 +59,7 @@ class AiReadinessService
 
     public function recordDocumentVerification(bool $success, ?string $code = null): void
     {
-        Cache::forever($this->documentVerificationKey(), [
+        $this->rememberCentrally($this->documentVerificationKey(), [
             'success' => $success,
             'code' => $code,
             'verified_at' => now()->toISOString(),
@@ -48,7 +72,7 @@ class AiReadinessService
         $masterEnabled = $this->settings->enabled();
         $copilotEnabled = $this->settings->copilotEnabled();
         $providerConfigured = $this->settings->provider() === 'ollama' || $this->settings->hasApiKey();
-        $verification = Cache::get($this->verificationKey());
+        $verification = $this->recallCentrally($this->verificationKey());
         $connectionVerified = $providerConfigured && (bool) ($verification['success'] ?? false);
         $capabilities = $this->modelCapabilities();
         $modelValid = $connectionVerified && trim($this->settings->model()) !== '';
@@ -58,7 +82,7 @@ class AiReadinessService
         $documentModel = $this->settings->documentModel();
         $documentProviderConfigured = $this->settings->hasApiKeyFor($documentProvider);
         $documentCapabilities = $this->capabilitiesFor($documentProvider, $documentModel);
-        $documentVerification = Cache::get($this->documentVerificationKey());
+        $documentVerification = $this->recallCentrally($this->documentVerificationKey());
         $documentConnectionVerified = $documentProviderConfigured && (bool) ($documentVerification['success'] ?? false);
         $documentModelValid = $documentConnectionVerified && $documentModel !== '';
 

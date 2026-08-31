@@ -346,7 +346,7 @@ class WebsiteContentController extends Controller
     {
         $data = $request->validate([
             'page_id' => ['required', 'exists:website_pages,id'], 'section_key' => ['required', 'alpha_dash', Rule::unique('website_sections')->where('page_id', $request->integer('page_id'))->ignore($section)],
-            'section_type' => ['required', Rule::in(['hero', 'logos', 'features', 'content', 'product', 'statistics', 'steps', 'solutions', 'integrations', 'security', 'pricing', 'testimonials', 'faq', 'cta', 'newsletter', 'footer'])], 'title' => ['nullable', 'string', 'max:255'], 'subtitle' => ['nullable', 'string', 'max:500'], 'eyebrow' => ['nullable', 'string', 'max:100'],
+            'section_type' => ['required', Rule::in(['hero', 'logos', 'features', 'features_mini', 'content', 'product', 'statistics', 'steps', 'solutions', 'integrations', 'security', 'ai', 'pricing', 'testimonials', 'faq', 'cta', 'newsletter', 'footer'])], 'title' => ['nullable', 'string', 'max:255'], 'subtitle' => ['nullable', 'string', 'max:500'], 'eyebrow' => ['nullable', 'string', 'max:100'],
             'content' => ['nullable', 'string'], 'image' => ['nullable', 'string', 'max:2048'], 'media_type' => ['nullable', Rule::in(['image', 'video'])], 'video_url' => ['nullable', 'url', 'max:2048'],
             'media_id' => ['nullable', Rule::exists('central_media', 'id')->where(fn ($query) => $query->where('mime_type', 'like', 'image/%'))], 'image_alt' => ['nullable', 'string', 'max:255'],
             'button_text' => ['nullable', 'string', 'max:100'], 'button_url' => ['nullable', 'string', 'max:2048'], 'secondary_button_text' => ['nullable', 'string', 'max:100'], 'secondary_button_url' => ['nullable', 'string', 'max:2048'],

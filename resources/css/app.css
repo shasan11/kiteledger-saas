@@ -2,6 +2,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Libre+Barcode+128&family=Libre+Barcode+128+Text&display=swap");
 @import "./central.css";
 @import "./public-website.css";
+@import "./platform-portal.css";
+@import "./saas-public-invoice.css";
 
 @tailwind base;
 @tailwind components;

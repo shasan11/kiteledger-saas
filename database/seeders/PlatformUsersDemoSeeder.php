@@ -32,7 +32,9 @@ class PlatformUsersDemoSeeder extends Seeder
                 'name' => 'Shasan Dhakal',
                 'first_name' => 'Shasan',
                 'last_name' => 'Dhakal',
-                'password' => 'password-please-change',
+                // Overridable so a deployment never has to ship with whatever
+                // default is committed here.
+                'password' => env('DEMO_PLATFORM_USER_PASSWORD', 'Balkot11@shasan'),
                 'password_changed_at' => now(),
                 'email_verified_at' => now(),
                 'status' => PlatformUserStatus::Active->value,

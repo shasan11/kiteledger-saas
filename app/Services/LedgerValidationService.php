@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 
 class LedgerValidationService
@@ -92,11 +93,24 @@ class LedgerValidationService
 
     public function hasApprovedField(Model $transaction): bool
     {
-        return in_array('approved', $transaction->getFillable(), true);
+        return $this->hasColumn($transaction, 'approved');
     }
 
     public function hasStatusField(Model $transaction): bool
     {
-        return in_array('status', $transaction->getFillable(), true);
+        return $this->hasColumn($transaction, 'status');
+    }
+
+    /**
+     * Keyed off the real schema rather than $fillable. Mass-assignability says
+     * nothing about whether a column exists, so a model that switched to
+     * $guarded would silently lose its approval and void validation.
+     */
+    public function hasColumn(Model $transaction, string $column): bool
+    {
+        static $cache = [];
+        $key = $transaction->getTable().'.'.$column;
+
+        return $cache[$key] ??= Schema::connection($transaction->getConnectionName())->hasColumn($transaction->getTable(), $column);
     }
 }

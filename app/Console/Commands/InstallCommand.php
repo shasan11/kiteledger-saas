@@ -2,13 +2,12 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Central\CentralAdmin;
 use App\Services\Installer\InstallerDatabaseService;
+use App\Support\Central\SuperAdministratorProvisioner;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -114,14 +113,11 @@ class InstallCommand extends Command
 
     private function updateAdministrator(array $values): void
     {
-        $admin = CentralAdmin::query()->orderBy('id')->firstOrFail();
-        $admin->forceFill([
-            'name' => $values['admin_name'],
-            'email' => $values['admin_email'],
-            'password' => Hash::make($values['admin_password']),
-            'role' => 'super_admin',
-            'is_active' => true,
-        ])->save();
+        SuperAdministratorProvisioner::ensurePrimary(
+            $values['admin_email'],
+            $values['admin_name'],
+            $values['admin_password'],
+        );
     }
 
     private function writeEnvironment(array $values): void

@@ -1,54 +1,55 @@
-import { CreditCardOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
+import { BankOutlined, EnvironmentOutlined, GlobalOutlined, LoginOutlined, SettingOutlined } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
-import { Button, Col, Descriptions, Row, Space, Statistic, Tag } from 'antd';
-import PageHeader from '@/Components/Central/PageHeader';
-import SectionCard from '@/Components/Central/SectionCard';
+import { Button, Space, Tag } from 'antd';
 import StatusBadge from '@/Components/Central/StatusBadge';
-import { formatDate } from '@/Components/Central/formatters';
+import { initials } from '@/Components/Central/formatters';
+import { PortalDetailHeader, PortalDetailPanel } from '@/Components/Platform/PortalDetailHeader';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 
-export default function PlatformTenantShow({ tenant, abilities, memberCount }) {
-    return (
-        <PlatformLayout title={tenant.company_name}>
-            <PageHeader
-                eyebrow="Company"
-                title={tenant.company_name}
-                description={tenant.legal_name || undefined}
-                actions={(
-                    <Space wrap>
-                        <Button icon={<SettingOutlined />} onClick={() => router.visit(route('central.account.tenants.settings', tenant.id))}>Company</Button>
-                        {abilities.can_manage_users && <Button icon={<TeamOutlined />} onClick={() => router.visit(route('central.account.tenants.members', tenant.id))}>Members</Button>}
-                        {abilities.can_manage_billing && <Button type="primary" icon={<CreditCardOutlined />} onClick={() => router.visit(route('central.account.tenants.billing', tenant.id))}>Billing</Button>}
-                    </Space>
-                )}
-            >
-                <Space style={{ marginTop: 12 }} wrap>
-                    <Tag color={abilities.is_owner ? 'gold' : 'blue'}>{abilities.role_label}</Tag>
-                    <StatusBadge value={tenant.status} />
-                </Space>
-            </PageHeader>
+export default function PlatformTenantShow({ tenant, abilities }) {
+    const tabs = [
+        { label: 'Overview', href: route('central.account.tenants.show', tenant.id), active: true },
+        { label: 'Company details', href: route('central.account.tenants.settings', tenant.id) },
+        { label: 'Members', href: route('central.account.tenants.members', tenant.id), visible: abilities.can_manage_users },
+        { label: 'Billing', href: route('central.account.tenants.billing', tenant.id), visible: abilities.can_manage_billing },
+    ];
 
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-                <Col xs={12} md={8}><SectionCard><Statistic title="Plan" value={tenant.plan || 'None'} /></SectionCard></Col>
-                <Col xs={12} md={8}><SectionCard><Statistic title="Members" value={memberCount} /></SectionCard></Col>
-                <Col xs={24} md={8}><SectionCard><Statistic title="Renews" value={tenant.subscription?.current_period_ends_at ? formatDate(tenant.subscription.current_period_ends_at) : '-'} /></SectionCard></Col>
-            </Row>
+    return <PlatformLayout title={tenant.company_name}>
+        <PortalDetailHeader
+            avatar={initials(tenant.company_name)}
+            eyebrow="Organization overview"
+            title={tenant.company_name}
+            description={tenant.legal_name || 'Organization details and workspace access'}
+            badges={<><Tag color={abilities.is_owner ? 'gold' : 'blue'}>{abilities.role_label}</Tag><StatusBadge value={tenant.status} /></>}
+            backHref={route('central.account.tenants.index')}
+            tabs={tabs}
+            actions={<Button type="primary" icon={<LoginOutlined />} onClick={() => router.post(route('central.account.tenants.switch'), { tenant_id: tenant.id })}>Open organization</Button>}
+        />
 
-            <SectionCard title="Company details">
-                <Descriptions column={{ xs: 1, md: 2 }} size="small" bordered items={[
-                    { key: 'company', label: 'Company name', children: tenant.company_name },
-                    { key: 'legal', label: 'Legal name', children: tenant.legal_name || '-' },
-                    { key: 'owner', label: 'Owner', children: tenant.owner_name || '-' },
-                    { key: 'email', label: 'Owner email', children: tenant.owner_email || '-' },
-                    { key: 'phone', label: 'Owner phone', children: tenant.owner_phone || '-' },
-                    { key: 'country', label: 'Country', children: tenant.country || '-' },
-                    { key: 'address', label: 'Address', children: tenant.address || '-' },
-                    { key: 'timezone', label: 'Timezone', children: tenant.timezone || '-' },
-                    { key: 'currency', label: 'Currency', children: tenant.currency || '-' },
-                    { key: 'domains', label: 'Domains', children: tenant.domains?.length ? <Space wrap>{tenant.domains.map((domain) => <Tag key={domain.domain} color={domain.is_primary ? 'blue' : 'default'}>{domain.domain}</Tag>)}</Space> : '-' },
-                    { key: 'subscription', label: 'Subscription', children: tenant.subscription?.status ? <StatusBadge value={tenant.subscription.status} /> : 'None' },
-                ]} />
-            </SectionCard>
-        </PlatformLayout>
-    );
+        <div className="portal-detail-grid">
+            <PortalDetailPanel icon={<BankOutlined />} title="Business details" description="Registered organization information" items={[
+                { label: 'Display name', value: tenant.company_name },
+                { label: 'Legal name', value: tenant.legal_name || 'Not provided' },
+                { label: 'Organization status', value: <StatusBadge value={tenant.status} /> },
+                { label: 'Account owner', value: tenant.owner_name || 'Not provided' },
+            ]} />
+            <PortalDetailPanel icon={<EnvironmentOutlined />} title="Contact & location" description="Primary contact information" items={[
+                { label: 'Email', value: tenant.owner_email || 'Not provided' },
+                { label: 'Phone', value: tenant.owner_phone || 'Not provided' },
+                { label: 'Country', value: tenant.country || 'Not provided' },
+                { label: 'Address', value: tenant.address || 'Not provided' },
+            ]} />
+            <PortalDetailPanel icon={<SettingOutlined />} title="Workspace setup" description="Plan and localization preferences" items={[
+                { label: 'Current plan', value: tenant.plan || 'No plan' },
+                { label: 'Subscription', value: tenant.subscription?.status ? <StatusBadge value={tenant.subscription.status} /> : 'Not active' },
+                { label: 'Timezone', value: tenant.timezone || 'Not set' },
+                { label: 'Currency', value: tenant.currency || 'Not set' },
+            ]} />
+            <PortalDetailPanel icon={<GlobalOutlined />} title="Domains" description="Web addresses connected to this organization">
+                <div className="portal-domain-list">
+                    {tenant.domains?.length ? tenant.domains.map((domain) => <div key={domain.domain}><span>{domain.domain}</span><Space size={6}>{domain.is_primary && <Tag color="blue">Primary</Tag>}<StatusBadge value={domain.status || 'active'} /></Space></div>) : <span className="central-muted">No domains connected.</span>}
+                </div>
+            </PortalDetailPanel>
+        </div>
+    </PlatformLayout>;
 }

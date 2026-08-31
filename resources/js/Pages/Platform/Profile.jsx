@@ -1,8 +1,8 @@
 import { useForm } from '@inertiajs/react';
 import { Avatar, Button, Col, Form, Input, Row, Space, Typography } from 'antd';
-import PageHeader from '@/Components/Central/PageHeader';
 import SectionCard from '@/Components/Central/SectionCard';
 import { initials } from '@/Components/Central/formatters';
+import { PortalDetailHeader } from '@/Components/Platform/PortalDetailHeader';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 
 export default function PlatformProfile({ profile, account }) {
@@ -23,7 +23,17 @@ export default function PlatformProfile({ profile, account }) {
 
     return (
         <PlatformLayout title="Profile">
-            <PageHeader eyebrow="Your account" title="Profile" description="These details are shared across every company you belong to." />
+            <PortalDetailHeader
+                avatar={account.avatar || initials(account.name)}
+                eyebrow="Your account"
+                title={account.name || 'Profile'}
+                description={account.email}
+                backHref={route('central.account.tenants.index')}
+                tabs={[
+                    { label: 'Profile details', href: route('central.account.profile.edit'), active: true },
+                    { label: 'Security', href: route('central.account.security') },
+                ]}
+            />
             <SectionCard>
                 <Space align="center" style={{ marginBottom: 16 }}>
                     <Avatar size={56} src={form.data.avatar || undefined}>{initials(`${form.data.first_name} ${form.data.last_name}`)}</Avatar>

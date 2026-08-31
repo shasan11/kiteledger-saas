@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Accounting;
 
+use App\Domain\Accounting\Services\JournalVoucherService;
 use App\Models\Account;
 use App\Models\BankAccount;
 use App\Models\Branch;
+use App\Models\Contact;
+use App\Models\Invoice;
+use App\Services\Inventory\InvoiceStockPostingService;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
 use App\Models\FiscalYear;
@@ -247,6 +251,140 @@ class AccountingCorrectnessTest extends TestCase
         $this->assertContains('posted-line', $descriptions);
         $this->assertNotContains('draft-line', $descriptions, 'Draft vouchers must not appear in reports.');
         $this->assertNotContains('voided-line', $descriptions, 'Voided vouchers must not appear in reports.');
+    }
+
+    // ------------------------------------------------- phase 7: cost gaps
+
+    public function test_stock_leaving_without_a_warehouse_cost_falls_back_to_the_product_price(): void
+    {
+        [$branch, $currency] = $this->baseData();
+        $warehouse = Warehouse::create(['branch_id' => $branch->id, 'name' => 'WH', 'code' => 'WH-9', 'active' => true]);
+        // Without events: ContactObserver wants a document-numbering config that
+        // this bare fixture has no reason to seed.
+        $contact = Contact::withoutEvents(fn () => Contact::create(['name' => 'Acme', 'type' => 'customer', 'active' => true]));
+        $product = Product::create([
+            'name' => 'Widget', 'code' => 'W-9', 'sku' => 'W-9', 'type' => 'simple',
+            'track_inventory' => true, 'active' => true, 'purchase_price' => 12, 'sales_price' => 30,
+        ]);
+
+        $invoice = Invoice::create([
+            'branch_id' => $branch->id, 'invoice_no' => 'INV-9', 'invoice_date' => '2026-05-01',
+            'contact_id' => $contact->id, 'warehouse_id' => $warehouse->id, 'currency_id' => $currency->id,
+            'status' => 'draft', 'approved' => false, 'void' => false, 'active' => true,
+            'exchange_rate' => 1, 'total' => 60, 'paid_total' => 0, 'balance_due' => 60,
+        ]);
+        $invoice->invoiceLines()->create([
+            'product_id' => $product->id, 'product_name' => 'Widget',
+            'qty' => 2, 'unit_price' => 30, 'tax_amount' => 0, 'line_total' => 60,
+        ]);
+
+        // Stock is on hand but carries no cost, which is what happens to any
+        // product whose opening balance was entered without a value.
+        WarehouseItem::create([
+            'warehouse_id' => $warehouse->id, 'product_id' => $product->id,
+            'branch_id' => $branch->id, 'qty_on_hand' => 10, 'avg_cost' => 0,
+        ]);
+
+        app(InvoiceStockPostingService::class)->post($invoice->fresh());
+
+        $adjustment = InventoryAdjustment::where('source_type', 'invoice')->where('source_id', $invoice->id)->firstOrFail();
+        $this->assertSame(12.0, (float) $adjustment->inventoryAdjustmentLines()->value('unit_cost'), 'Cost should fall back to the product purchase price, not silently become zero.');
+    }
+
+    public function test_syncing_a_chart_account_preserves_a_cash_or_bank_nature(): void
+    {
+        [$branch, $currency] = $this->baseData();
+        $chart = $this->chartAccount('1120', 'Bank', 'asset', $branch, $currency);
+
+        Account::whereKey($chart->account_id)->update(['nature' => 'cash']);
+        $chart->refresh()->update(['name' => 'Bank Renamed']);
+
+        $this->assertSame('cash', Account::whereKey($chart->refresh()->account_id)->value('nature'), 'Re-saving a chart account must not erase a cash/bank nature.');
+    }
+
+    // ------------------------------------------- phase 8: void integrity
+
+    public function test_voiding_inside_a_closed_period_posts_a_reversal_and_leaves_the_original(): void
+    {
+        [$branch, $currency] = $this->baseData();
+        $cash = $this->chartAccount('1110', 'Cash in Hand', 'asset', $branch, $currency);
+        $sales = $this->chartAccount('4100', 'Sales Income', 'income', $branch, $currency);
+        $original = $this->voucher($branch, $currency, 'posted', ['approved' => true, 'void' => false], $cash, $sales, 1000, 'closed-period-line');
+        $original->forceFill(['voucher_date' => '2025-09-01'])->saveQuietly();
+
+        FiscalYear::create([
+            'name' => 'FY Closed', 'code' => 'FY-C', 'start_date' => '2025-04-01',
+            'end_date' => '2026-03-31', 'status' => 'CLOSED', 'active' => true,
+        ]);
+
+        $cashBefore = (float) Account::whereKey($cash->account_id)->value('balance');
+
+        app(JournalVoucherService::class)->void($original->refresh(), 'disputed');
+
+        // The reversal is built without model events, so its balance effect is
+        // applied once here rather than once per line by the line observer.
+        $cashAfter = (float) Account::whereKey($cash->account_id)->value('balance');
+        $this->assertSame(-1000.0, round($cashAfter - $cashBefore, 2), 'The reversal must move the account exactly once.');
+
+        $after = $original->refresh();
+        $this->assertFalse((bool) $after->void, 'An entry in a closed period must not be mutated.');
+        $this->assertNotNull($after->reversed_journal_voucher_id);
+
+        $reversal = JournalVoucher::with('journalVoucherLines')->findOrFail($after->reversed_journal_voucher_id);
+        $this->assertSame(now()->toDateString(), $reversal->voucher_date->toDateString(), 'The reversal belongs in the current open period.');
+        // Debits and credits are swapped, never negated.
+        $this->assertSame(1000.0, (float) $reversal->journalVoucherLines->sum('debit'));
+        $this->assertSame(1000.0, (float) $reversal->journalVoucherLines->sum('credit'));
+        // Cash was debited 1000 originally, so the reversal credits it.
+        $this->assertSame(1000.0, (float) $reversal->journalVoucherLines->where('chart_of_account_id', $cash->id)->sum('credit'));
+        $this->assertSame(0.0, (float) $reversal->journalVoucherLines->where('chart_of_account_id', $cash->id)->sum('debit'));
+    }
+
+    public function test_voiding_inside_an_open_period_still_voids_in_place(): void
+    {
+        [$branch, $currency] = $this->baseData();
+        $cash = $this->chartAccount('1110', 'Cash in Hand', 'asset', $branch, $currency);
+        $sales = $this->chartAccount('4100', 'Sales Income', 'income', $branch, $currency);
+        $voucher = $this->voucher($branch, $currency, 'posted', ['approved' => true, 'void' => false], $cash, $sales, 500, 'open-period-line');
+
+        app(JournalVoucherService::class)->void($voucher->refresh(), 'keyed twice');
+
+        $after = $voucher->refresh();
+        $this->assertTrue((bool) $after->void);
+        $this->assertNull($after->reversed_journal_voucher_id, 'No contra entry is needed while the period is still open.');
+    }
+
+    // -------------------------------------- phase 9: account column drift
+
+    public function test_a_line_saved_with_only_one_account_reference_gains_the_other(): void
+    {
+        [$branch, $currency] = $this->baseData();
+        $cash = $this->chartAccount('1110', 'Cash in Hand', 'asset', $branch, $currency);
+        $sales = $this->chartAccount('4100', 'Sales Income', 'income', $branch, $currency);
+        $voucher = $this->voucher($branch, $currency, 'posted', ['approved' => true, 'void' => false], $cash, $sales, 100, 'drift-line');
+
+        // Reports join on chart_of_account_id; postings write account_id.
+        $onlyChart = JournalVoucherLine::create([
+            'journal_voucher_id' => $voucher->id, 'chart_of_account_id' => $cash->id,
+            'debit' => 10, 'credit' => 0, 'description' => 'chart only',
+        ]);
+        $this->assertNotNull($onlyChart->refresh()->account_id);
+
+        $onlyAccount = JournalVoucherLine::create([
+            'journal_voucher_id' => $voucher->id, 'account_id' => $sales->account_id,
+            'debit' => 0, 'credit' => 10, 'description' => 'account only',
+        ]);
+        $this->assertSame($sales->id, $onlyAccount->refresh()->chart_of_account_id, 'A line written with only account_id would be invisible to every report.');
+    }
+
+    public function test_approval_checks_read_the_schema_not_the_fillable_list(): void
+    {
+        $validator = app(LedgerValidationService::class);
+
+        $this->assertTrue($validator->hasApprovedField(new Invoice));
+        $this->assertTrue($validator->hasStatusField(new Invoice));
+        // journal_voucher_lines has neither column, and never claimed to.
+        $this->assertFalse($validator->hasApprovedField(new JournalVoucherLine));
     }
 
     // ----------------------------------------------------------- helpers

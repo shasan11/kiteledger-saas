@@ -48,7 +48,7 @@ class InvitationController extends Controller
             $request->session()->regenerate();
             $request->session()->put('platform_login_at', now()->getTimestamp());
 
-            return redirect()->route('central.account.dashboard')->with('success', 'Welcome to KiteLedger.');
+            return redirect()->route('central.account.tenants.index')->with('success', 'Welcome to KiteLedger.');
         }
 
         return redirect()->route('central.account.login')->with('success', 'Invitation accepted. Sign in to open your new company.');

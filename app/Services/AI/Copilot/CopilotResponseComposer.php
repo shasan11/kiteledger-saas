@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 /**
  * Turns a verified tool result into a user-facing answer.
  *
- * The figures here come straight from the deterministic result — this class
+ * The figures here come straight from the deterministic result - this class
  * formats and labels, it never computes. Anything the model contributes is
  * narration layered on top of numbers that are already fixed.
  */
@@ -125,7 +125,7 @@ final class CopilotResponseComposer
             }
 
             if ($parts !== []) {
-                return $metricLabel.' — '.implode(', ', $parts).'.';
+                return $metricLabel.'-'.implode(', ', $parts).'.';
             }
         }
 

@@ -2,6 +2,7 @@ import { useMemo, useCallback } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
 import ReusableCrud from '@/Components/ReusableCrud';
 import { branchColumn } from '@/Components/Transactions';
+import { formatDocumentNumber } from '@/Components/Transactions/documentNumber.js';
 import { Head, router } from '@inertiajs/react';
 import { Button, Tag, Typography, message, Tooltip } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
@@ -89,7 +90,7 @@ export default function Index({ auth }) {
             width: 160,
             backendSort: true,
             sortField: 'code',
-            render: (v) => <Text strong>{v?.startsWith('#draft') ? 'DRAFT' : (v || 'DRAFT')}</Text>,
+            render: (v) => <Text strong>{formatDocumentNumber(v, { draftLabel: 'DRAFT', emptyLabel: 'DRAFT' })}</Text>,
         },
         branchColumn(),
         {

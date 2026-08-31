@@ -233,11 +233,9 @@ class TransactionApprovalService
 
     protected function isDraftNumber(string $number): bool
     {
-        $normalized = strtolower(trim($number));
-
-        return $normalized === ''
-            || str_starts_with($normalized, '#draft')
-            || str_starts_with($normalized, 'draft-');
+        // One definition, in DocumentNumberingService, so the draft format can
+        // change without leaving stale copies of the check behind.
+        return $this->numberingService->looksLikeDraft($number);
     }
 
     protected function approvedStatusFor(Model $transaction): string

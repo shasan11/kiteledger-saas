@@ -153,7 +153,7 @@ class BillOfMaterialController extends BaseCrudApiController
             $parentData['approved']      = true;
             $parentData['status']        = 'approved';
             $parentData['approved_at']   = now();
-            if (empty($parentData['code']) || str_starts_with((string) $parentData['code'], '#draft')) {
+            if (empty($parentData['code']) || app(\App\Services\DocumentNumberingService::class)->looksLikeDraft((string) $parentData['code'])) {
                 $parentData['code'] = app(\App\Services\DocumentNumberingService::class)->generate('bill_of_material');
             }
         }
@@ -169,7 +169,7 @@ class BillOfMaterialController extends BaseCrudApiController
         if (!empty($parentData['approved']) && !(bool) $record->approved) {
             $parentData['status']        = 'approved';
             $parentData['approved_at']   = $record->approved_at ?: now();
-            if (!$record->code || str_starts_with((string) $record->code, '#draft')) {
+            if (!$record->code || app(\App\Services\DocumentNumberingService::class)->looksLikeDraft((string) $record->code)) {
                 $parentData['code'] = app(\App\Services\DocumentNumberingService::class)->generate('bill_of_material');
             }
         }

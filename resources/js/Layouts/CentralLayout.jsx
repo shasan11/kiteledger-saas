@@ -335,7 +335,9 @@ const CentralSidebarContent = memo(function CentralSidebarContent({
 }) {
     return (
         <>
-            <div className="central-sider__brand">
+            <div
+                className={`central-sider__brand${isCollapsed ? " central-sider__brand--collapsed" : ""}`}
+            >
                 <ApplicationLogo
                     dark
                     className="central-sider__logo"
@@ -629,7 +631,7 @@ export default function CentralLayout({
             <Head title={title} />
             <Sider
                 className="central-sider"
-                width={230}
+                width={250}
                 collapsedWidth={80}
                 collapsed={collapsed}
                 trigger={null}
@@ -686,7 +688,6 @@ export default function CentralLayout({
                             items={trail}
                         />
                     </div>
-                    <div className="central-topbar__spacer" />
                     <button
                         className="central-topbar__search"
                         onClick={() => setSearchOpen(true)}
@@ -695,7 +696,9 @@ export default function CentralLayout({
                         <span>
                             Search customers, invoices, tickets, content...
                         </span>
+                        <span className="central-topbar__shortcut">Ctrl K</span>
                     </button>
+                    <div className="central-topbar__actions">
                     <Button
                         type="text"
                         shape="circle"
@@ -746,6 +749,7 @@ export default function CentralLayout({
                             </span>
                         </button>
                     </Dropdown>
+                    </div>
                 </Header>
                 <Content className="central-content">
                     <div className="central-content__inner">

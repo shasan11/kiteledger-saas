@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Central\CentralAdmin;
 use App\Models\Central\CentralPermission;
 use App\Models\Central\CentralRole;
 use Illuminate\Database\Seeder;
@@ -40,10 +41,26 @@ class CentralRolesAndPermissionsSeeder extends Seeder
             'read_only_auditor' => ['Read-only Auditor', ['dashboard.view', 'tenant.view', 'plan.view', 'feature.view', 'subscription.view', 'invoice.view', 'payment.view', 'gateway.view', 'cms.view', 'lead.view', 'blog.view', 'ticket.view', 'settings.view', 'audit.view', 'system_health.view', 'platform-users.view', 'tenant-memberships.view', 'tenant-billing.view']],
         ];
 
+        $superRoleId = null;
+
         foreach ($roles as $name => [$label, $permissions]) {
             $role = CentralRole::updateOrCreate(['name' => $name], ['label' => $label]);
             $names = $permissions === ['*'] ? self::PERMISSIONS : $permissions;
             $role->permissions()->sync(collect($names)->map(fn (string $permission) => $permissionIds[$permission])->all());
+
+            if ($name === 'super_administrator') {
+                $superRoleId = $role->id;
+            }
+        }
+
+        // Super administrators created by an installer before the role was
+        // attached automatically would otherwise carry no role at all.
+        if ($superRoleId) {
+            CentralAdmin::query()
+                ->where('role', 'super_admin')
+                ->whereDoesntHave('roles')
+                ->get()
+                ->each(fn (CentralAdmin $admin) => $admin->roles()->syncWithoutDetaching([$superRoleId]));
         }
     }
 }

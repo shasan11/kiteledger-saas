@@ -33,7 +33,7 @@ PROMPT;
         }
 
         $numbered = collect($sources)
-            ->map(fn ($s, $i) => ($i + 1).'. ['.($s['module'] ?? 'Record').'] '.($s['title'] ?? '').' — '.($s['snippet'] ?? ''))
+            ->map(fn ($s, $i) => ($i + 1).'. ['.($s['module'] ?? 'Record').'] '.($s['title'] ?? '').'-'.($s['snippet'] ?? ''))
             ->implode("\n");
 
         try {

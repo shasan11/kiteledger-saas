@@ -2,8 +2,8 @@
 
 namespace App\Services\SaaS;
 
-use App\Models\Central\Tenant;
 use App\Models\Central\TenantUsageMetric;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 

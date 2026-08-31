@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\StorageServeController;
 use App\Http\Controllers\Central\AuthController;
 use App\Http\Controllers\Central\BillingController;
 use App\Http\Controllers\Central\BillingWebhookController;
@@ -24,15 +25,20 @@ use App\Http\Controllers\Central\SaaSInvoicePaymentController;
 use App\Http\Controllers\Central\SettingsController;
 use App\Http\Controllers\Central\SupportController;
 use App\Http\Controllers\Central\TenantController;
+use App\Http\Controllers\Central\TenantDomainController;
+use App\Http\Controllers\Central\TenantSubscriptionController;
 use App\Http\Controllers\Central\WebsiteAdminController;
 use App\Http\Controllers\Central\WebsiteContentController;
 use App\Http\Controllers\Central\WebsiteController;
 use App\Http\Controllers\Central\WebsiteLeadController;
 use App\Http\Controllers\Central\WebsiteStructuredContentController;
 use App\Http\Controllers\Platform\AuthController as PlatformAuthController;
+use App\Http\Controllers\Platform\GoogleAuthController as PlatformGoogleAuthController;
 use App\Http\Controllers\Platform\BillingController as PlatformBillingController;
-use App\Http\Controllers\Platform\DashboardController as PlatformDashboardController;
 use App\Http\Controllers\Platform\InvitationController as PlatformInvitationController;
+use App\Http\Controllers\Platform\OrganizationRequestController as PlatformOrganizationRequestController;
+use App\Http\Controllers\Platform\PortalInvitationController as PlatformPortalInvitationController;
+use App\Http\Controllers\Platform\PortalInvoiceController as PlatformPortalInvoiceController;
 use App\Http\Controllers\Platform\ProfileController as PlatformProfileController;
 use App\Http\Controllers\Platform\TenantContextController as PlatformTenantContextController;
 use App\Http\Controllers\Platform\TenantController as PlatformTenantController;
@@ -134,6 +140,16 @@ $centralRoutes = function (string $namePrefix = 'central.', ?string $adminPath =
             Route::get('tenants/{tenant}/health', [TenantController::class, 'health'])->middleware('central.admin:system_health.view')->name('tenants.health');
             Route::delete('tenants/{tenant}', [TenantController::class, 'destroy'])->middleware('central.admin:tenant.delete')->name('tenants.destroy');
             Route::post('tenants/{tenant}/impersonate', [TenantController::class, 'impersonate'])->middleware('central.admin:tenant.impersonate')->name('tenants.impersonate');
+            Route::middleware('central.admin:tenant.manage_domains')->group(function (): void {
+                Route::post('tenants/{tenant}/domains', [TenantDomainController::class, 'store'])->name('tenants.domains.store');
+                Route::post('tenants/{tenant}/domains/{domain}/verify', [TenantDomainController::class, 'verify'])->name('tenants.domains.verify');
+                Route::post('tenants/{tenant}/domains/{domain}/primary', [TenantDomainController::class, 'primary'])->name('tenants.domains.primary');
+                Route::delete('tenants/{tenant}/domains/{domain}', [TenantDomainController::class, 'destroy'])->name('tenants.domains.destroy');
+            });
+            Route::middleware('central.admin:subscription.manage')->group(function (): void {
+                Route::post('tenants/{tenant}/subscription', [TenantSubscriptionController::class, 'store'])->name('tenants.subscription.store');
+                Route::post('tenants/{tenant}/subscription/plan', [TenantSubscriptionController::class, 'changePlan'])->name('tenants.subscription.plan');
+            });
             Route::get('plans', [PlanController::class, 'index'])->middleware('central.admin:plan.view')->name('plans.index');
             Route::get('plans/create', [PlanController::class, 'create'])->middleware('central.admin:plan.manage')->name('plans.create');
             Route::post('plans', [PlanController::class, 'store'])->middleware('central.admin:plan.manage')->name('plans.store');
@@ -334,6 +350,8 @@ $platformRoutes = function (string $namePrefix = 'central.'): void {
         Route::get('/forgot-password', [PlatformAuthController::class, 'forgot'])->name('password.request');
         Route::post('/forgot-password', [PlatformAuthController::class, 'emailResetLink'])->middleware('throttle:3,1')->name('password.email');
         Route::get('/reset-password/{token}', [PlatformAuthController::class, 'reset'])->name('password.reset');
+        Route::get('/auth/google', [PlatformGoogleAuthController::class, 'redirect'])->middleware('throttle:10,1')->name('google.redirect');
+        Route::get('/auth/google/callback', [PlatformGoogleAuthController::class, 'callback'])->middleware('throttle:10,1')->name('google.callback');
         Route::post('/reset-password', [PlatformAuthController::class, 'updatePassword'])->middleware('throttle:5,1')->name('password.update');
         Route::get('/invitations/{token}', [PlatformInvitationController::class, 'show'])->name('invitations.show');
         Route::post('/invitations', [PlatformInvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -343,7 +361,7 @@ $platformRoutes = function (string $namePrefix = 'central.'): void {
             Route::get('/password/force', [PlatformAuthController::class, 'forcedPassword'])->name('password.force');
             Route::post('/password/force', [PlatformAuthController::class, 'updateForcedPassword'])->middleware('throttle:5,1')->name('password.force.update');
 
-            Route::get('/', PlatformDashboardController::class)->name('dashboard');
+            Route::redirect('/', '/account/tenants')->name('dashboard');
             Route::get('/profile', [PlatformProfileController::class, 'edit'])->name('profile.edit');
             Route::match(['put', 'patch'], '/profile', [PlatformProfileController::class, 'update'])->name('profile.update');
             Route::get('/security', [PlatformProfileController::class, 'security'])->name('security');
@@ -352,6 +370,11 @@ $platformRoutes = function (string $namePrefix = 'central.'): void {
 
             Route::get('/tenants', [PlatformTenantContextController::class, 'index'])->name('tenants.index');
             Route::post('/tenants/switch', [PlatformTenantContextController::class, 'switch'])->name('tenants.switch');
+            Route::get('/requests', [PlatformOrganizationRequestController::class, 'index'])->name('requests.index');
+            Route::get('/requests/create', [PlatformOrganizationRequestController::class, 'create'])->name('requests.create');
+            Route::post('/requests', [PlatformOrganizationRequestController::class, 'store'])->middleware('throttle:5,1')->name('requests.store');
+            Route::get('/invitations', [PlatformPortalInvitationController::class, 'index'])->name('invitations.index');
+            Route::get('/invoices', [PlatformPortalInvoiceController::class, 'index'])->name('invoices.index');
 
             Route::prefix('tenants/{tenant}')->group(function (): void {
                 Route::get('/', [PlatformTenantController::class, 'show'])->middleware('platform.tenant')->name('tenants.show');
@@ -385,6 +408,11 @@ foreach (array_reverse($centralDomains, true) as $index => $centralDomain) {
     $namePrefix = $centralDomain === $defaultCentralDomain ? 'central.' : 'central.hosts.'.($index + 1).'.';
 
     Route::domain($centralDomain)->middleware('central.domain')->group(function () use ($centralRoutes, $platformRoutes, $namePrefix, $index): void {
+        // See routes/tenant.php for why this is registered explicitly instead
+        // of relying on Laravel's automatic serve=>true route (disabled in
+        // config/filesystems.php). On the central domain the "public" disk
+        // root is never tenant-suffixed, so this just serves storage/app/public.
+        Route::get('/storage/{path}', StorageServeController::class)->where('path', '.*')->name($namePrefix.'storage.public');
         $platformRoutes($namePrefix);
         $centralRoutes($namePrefix);
         if (config('saas.admin_path', 'superadmin') !== 'admin') {

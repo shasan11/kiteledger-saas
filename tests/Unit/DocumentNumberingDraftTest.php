@@ -54,8 +54,26 @@ class DocumentNumberingDraftTest extends TestCase
             $draft = $this->service->generateDraft($model);
 
             $this->assertLessThanOrEqual(40, strlen($draft), "Draft for {$model} exceeds varchar(40): {$draft}");
-            $this->assertStringStartsWith('#draft', strtolower($draft), "Draft for {$model} is not detectable as a draft: {$draft}");
+            $this->assertTrue($this->service->looksLikeDraft($draft), "Draft for {$model} is not detectable as a draft: {$draft}");
+
+            // The placeholder used to embed a raw 32-character UUID, which put an
+            // internal identifier on screen and on anything printed from a draft.
+            $this->assertDoesNotMatchRegularExpression('/[0-9a-f]{16,}/i', $draft, "Draft for {$model} still exposes a UUID-like token: {$draft}");
+            $this->assertLessThanOrEqual(26, strlen($draft), "Draft for {$model} is longer than a person can read: {$draft}");
         }
+    }
+
+    public function test_legacy_and_real_numbers_are_classified_correctly(): void
+    {
+        // Documents drafted before the format changed must still be recognised.
+        $this->assertTrue($this->service->looksLikeDraft('#draft-INVOICE-18f23a8e70e74dc29b2109a03'));
+        $this->assertTrue($this->service->looksLikeDraft('draft-something'));
+        $this->assertTrue($this->service->looksLikeDraft(''));
+        $this->assertTrue($this->service->looksLikeDraft(null));
+
+        // Issued numbers must never be mistaken for placeholders.
+        $this->assertFalse($this->service->looksLikeDraft('INV-2026-00042'));
+        $this->assertFalse($this->service->looksLikeDraft('TRX-INV-0127'));
     }
 
     public function test_draft_numbers_are_unique(): void
@@ -65,8 +83,10 @@ class DocumentNumberingDraftTest extends TestCase
         $this->assertCount(50, array_unique($drafts), 'generateDraft produced a collision.');
     }
 
-    public function test_draft_keeps_document_type_prefix_when_it_fits(): void
+    public function test_draft_names_the_document_type(): void
     {
         $this->assertStringContainsString('INVOICE', $this->service->generateDraft('Invoice'));
+        // Multi-word types collapse to initials so the token stays short.
+        $this->assertStringStartsWith('DRAFT-PB-', $this->service->generateDraft('PurchaseBill'));
     }
 }

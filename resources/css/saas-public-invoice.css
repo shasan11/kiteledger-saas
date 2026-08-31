@@ -1,0 +1,97 @@
+.saas-invoice-page {
+  --invoice-accent: var(--central-primary, #0f766e);
+  --invoice-ink: #172033;
+  --invoice-muted: #667085;
+  --invoice-line: #e5e9f0;
+  min-height: 100vh;
+  padding: 28px;
+  color: var(--invoice-ink);
+  background: #eef2f6;
+}
+.saas-invoice-toolbar { display: flex; max-width: 1180px; align-items: center; justify-content: space-between; gap: 20px; margin: 0 auto 18px; }
+.saas-invoice-toolbar__brand { display: inline-flex; align-items: center; }
+.saas-invoice-toolbar__brand img, .saas-invoice-toolbar__brand svg { width: auto; max-width: 175px; height: 36px; }
+.saas-invoice-toolbar .ant-btn { min-height: 40px; border-radius: 9px; }
+.saas-invoice-alerts { display: grid; max-width: 1180px; gap: 10px; margin: 0 auto 16px; }
+.saas-invoice-layout { display: grid; max-width: 1180px; grid-template-columns: minmax(0, 820px) minmax(280px, 340px); align-items: start; gap: 20px; margin-inline: auto; }
+.saas-invoice-paper { min-height: 1040px; padding: 52px 56px 38px; border: 1px solid #e1e6ed; background: #fff; box-shadow: 0 18px 55px rgb(15 23 42 / 10%); }
+.saas-invoice-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 42px; padding-block-end: 32px; border-block-end: 2px solid var(--invoice-ink); }
+.saas-invoice-seller { max-width: 390px; }
+.saas-invoice-seller__logo { max-width: 190px; max-height: 58px; margin-block-end: 18px; object-fit: contain; object-position: left center; }
+.saas-invoice-seller h1 { margin: 0 0 8px; color: var(--invoice-ink); font-size: 1.3rem; letter-spacing: -.025em; }
+.saas-invoice-address { display: grid; gap: 3px; color: var(--invoice-muted); font-size: .76rem; line-height: 1.55; }
+.saas-invoice-title { min-width: 225px; text-align: right; }
+.saas-invoice-title > span { display: block; color: var(--invoice-accent); font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.saas-invoice-title h2 { margin: 4px 0 12px; color: var(--invoice-ink); font-size: 2.5rem; font-weight: 780; letter-spacing: -.055em; }
+.saas-invoice-status { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; font-size: .68rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.saas-invoice-status--paid { color: #166534; background: #dcfce7; }
+.saas-invoice-status--unpaid, .saas-invoice-status--issued { color: #9a3412; background: #ffedd5; }
+.saas-invoice-status--partially_paid { color: #1d4ed8; background: #dbeafe; }
+.saas-invoice-status--draft { color: #475569; background: #f1f5f9; }
+.saas-invoice-parties { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, .65fr); gap: 48px; padding-block: 32px; }
+.saas-invoice-label { display: block; margin-block-end: 9px; color: var(--invoice-muted); font-size: .65rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.saas-invoice-buyer h3 { margin: 0 0 7px; color: var(--invoice-ink); font-size: 1rem; }
+.saas-invoice-meta { display: grid; gap: 8px; margin: 0; }
+.saas-invoice-meta div { display: flex; justify-content: space-between; gap: 18px; }
+.saas-invoice-meta dt { color: var(--invoice-muted); font-size: .73rem; }
+.saas-invoice-meta dd { margin: 0; color: var(--invoice-ink); font-size: .73rem; font-weight: 650; text-align: right; }
+.saas-invoice-table { width: 100%; border-collapse: collapse; }
+.saas-invoice-table th { padding: 11px 10px; border-block: 1px solid var(--invoice-line); color: var(--invoice-muted); background: #f8fafc; font-size: .65rem; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; }
+.saas-invoice-table th:not(:first-child), .saas-invoice-table td:not(:first-child) { text-align: right; }
+.saas-invoice-table td { padding: 15px 10px; border-block-end: 1px solid var(--invoice-line); color: #344054; font-size: .76rem; vertical-align: top; }
+.saas-invoice-table td:first-child { color: var(--invoice-ink); font-weight: 600; }
+.saas-invoice-totals-wrap { display: flex; justify-content: flex-end; padding-block: 26px; }
+.saas-invoice-totals { width: min(100%, 330px); margin: 0; }
+.saas-invoice-totals div { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 7px 0; }
+.saas-invoice-totals dt { color: var(--invoice-muted); font-size: .75rem; }
+.saas-invoice-totals dd { margin: 0; color: var(--invoice-ink); font-size: .78rem; font-weight: 650; }
+.saas-invoice-totals .is-total { margin-block-start: 7px; padding-block: 13px; border-block: 1px solid var(--invoice-ink); }
+.saas-invoice-totals .is-total dt, .saas-invoice-totals .is-total dd { color: var(--invoice-ink); font-size: .9rem; font-weight: 800; }
+.saas-invoice-totals .is-balance { margin-block-start: 5px; padding: 13px 14px; border-radius: 8px; background: color-mix(in srgb, var(--invoice-accent) 9%, #fff); }
+.saas-invoice-totals .is-balance dt, .saas-invoice-totals .is-balance dd { color: var(--invoice-accent); font-size: .92rem; font-weight: 800; }
+.saas-invoice-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; margin-block-start: 12px; padding-block-start: 24px; border-block-start: 1px solid var(--invoice-line); }
+.saas-invoice-notes p { margin: 0; color: var(--invoice-muted); font-size: .73rem; line-height: 1.65; white-space: pre-line; }
+.saas-invoice-foot { margin-block-start: 54px; padding-block-start: 18px; border-block-start: 1px solid var(--invoice-line); color: #98a2b3; font-size: .66rem; text-align: center; }
+.saas-invoice-payment { position: sticky; top: 20px; padding: 22px; border: 1px solid #e1e6ed; border-radius: 14px; background: #fff; box-shadow: 0 14px 40px rgb(15 23 42 / 8%); }
+.saas-invoice-payment h3 { margin: 0 0 5px; color: var(--invoice-ink); font-size: 1rem; }
+.saas-invoice-payment__amount { margin-block: 18px; padding: 16px; border-radius: 10px; background: #f8fafc; }
+.saas-invoice-payment__amount span { display: block; color: var(--invoice-muted); font-size: .7rem; }
+.saas-invoice-payment__amount strong { display: block; margin-block-start: 3px; color: var(--invoice-ink); font-size: 1.55rem; letter-spacing: -.04em; }
+.saas-invoice-payment .ant-btn { min-height: 44px; border-radius: 9px; }
+.saas-invoice-payment__secure { display: block; margin-block-start: 14px; color: var(--invoice-muted); font-size: .68rem; line-height: 1.5; text-align: center; }
+@media (max-width: 900px) {
+  .saas-invoice-page { padding: 18px; }
+  .saas-invoice-layout { grid-template-columns: 1fr; }
+  .saas-invoice-paper { min-height: 0; padding: 36px 30px; }
+  .saas-invoice-payment { position: static; }
+}
+@media (max-width: 580px) {
+  .saas-invoice-page { padding: 12px; }
+  .saas-invoice-toolbar__brand img, .saas-invoice-toolbar__brand svg { max-width: 140px; height: 30px; }
+  .saas-invoice-paper { padding: 26px 18px; }
+  .saas-invoice-head, .saas-invoice-parties { grid-template-columns: 1fr; flex-direction: column; gap: 24px; }
+  .saas-invoice-title { min-width: 0; text-align: left; }
+  .saas-invoice-title h2 { font-size: 2rem; }
+  .saas-invoice-parties { display: grid; }
+  .saas-invoice-table { min-width: 590px; }
+  .saas-invoice-table-wrap { overflow-x: auto; }
+  .saas-invoice-notes { grid-template-columns: 1fr; }
+}
+@media print {
+  @page { size: A4; margin: 0; }
+  .saas-invoice-page { padding: 0; background: #fff; }
+  .saas-invoice-toolbar, .saas-invoice-alerts, .saas-invoice-payment { display: none !important; }
+  .saas-invoice-layout { display: block; max-width: none; }
+  .saas-invoice-paper { min-height: 297mm; padding: 17mm 16mm 12mm; border: 0; box-shadow: none; }
+}
+
+/* Tax breakdown: the taxable base and the tax charged, per rate. Sits between
+   the line table and the totals so it reads as part of the arithmetic. */
+.saas-invoice-taxbreak { padding-block: 4px 18px; }
+.saas-invoice-taxbreak .saas-invoice-label { display: block; margin-block-end: 8px; }
+.saas-invoice-table--compact { width: min(100%, 420px); }
+.saas-invoice-table--compact th { padding: 8px 10px; }
+.saas-invoice-table--compact td { padding: 9px 10px; font-size: .74rem; }
+.saas-invoice-taxbreak__note { margin: 8px 0 0; color: var(--invoice-muted); font-size: .72rem; }
+.saas-invoice-words { margin: -10px 0 22px; color: var(--invoice-ink); font-size: .74rem; }
+.saas-invoice-words .saas-invoice-label { display: block; margin-block-end: 4px; }

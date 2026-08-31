@@ -27,7 +27,7 @@ class WebsiteLeadController extends Controller
         $data['metadata'] = ['ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'user_agent' => mb_substr((string) $request->userAgent(), 0, 500)];
         WebsiteLead::create($data);
 
-        return back()->with('success', 'Thanks — your message is safely with our team.');
+        return back()->with('success', 'Thanks - your message is safely with our team.');
     }
 
     public function index(Request $request)

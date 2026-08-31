@@ -158,8 +158,185 @@ function OnboardingWizard({ plans = [], templates = [], billingCycles = ["monthl
 }
 
 function EditTenant({ tenant, plans = [], templates = [], defaults = {} }) {
-    const codes=defaults.calling_codes||{};const callingCode=codes[tenant.country]||'+1';const localPhone=String(tenant.owner_phone||'').startsWith(callingCode)?String(tenant.owner_phone).slice(callingCode.length):tenant.owner_phone||'';
-    const form = useForm({ company_name: tenant.company_name || "", legal_name: tenant.legal_name || "", owner_name: tenant.owner_name || "", owner_phone: localPhone, phone_country_code: callingCode, country: tenant.country || defaults.country || "US", address: tenant.address || "", timezone: tenant.timezone || "UTC", currency: tenant.currency || "USD", plan_id: tenant.plan_id || null, default_template_id: tenant.default_template_id || null, tenancy_db_host: tenant.tenancy_db_host || "127.0.0.1", tenancy_db_port: tenant.tenancy_db_port || 3306, tenancy_db_name: tenant.tenancy_db_name || tenant.database_name || "", tenancy_db_username: tenant.tenancy_db_username || "", tenancy_db_password: "" });
-    const field = (name, label, node, required = false) => <Form.Item label={label} required={required} validateStatus={form.errors[name] ? "error" : ""} help={form.errors[name]}>{node || <Input value={form.data[name]} onChange={(event) => form.setData(name, event.target.value)} />}</Form.Item>;
-    return <CentralLayout title="Edit tenant"><PageHeader eyebrow="Tenant" title={`Edit ${tenant.company_name}`} description="Update workspace identity and its existing database connection." /><Form layout="vertical" onFinish={() => form.put(route("central.tenants.update", tenant.id))}><SectionCard><Row gutter={16}><Col xs={24} md={12}>{field("company_name", "Company name", null, true)}</Col><Col xs={24} md={12}>{field("legal_name", "Legal name")}</Col><Col xs={24} md={12}>{field("owner_name", "Owner name", null, true)}</Col><Col xs={24} md={12}>{field("owner_phone", "Owner phone")}</Col><Col xs={24} md={12}>{field("timezone", "Timezone", null, true)}</Col><Col xs={24} md={12}>{field("currency", "Currency", <Select value={form.data.currency} onChange={(value) => form.setData("currency", value)} options={currencies.map((value) => ({ value, label: value }))} />, true)}</Col><Col xs={24} md={12}>{field("plan_id", "Plan", <Select allowClear value={form.data.plan_id} onChange={(value) => form.setData("plan_id", value)} options={plans.map((plan) => ({ value: plan.id, label: plan.name }))} />)}</Col><Col xs={24} md={12}>{field("default_template_id", "Template", <Select allowClear value={form.data.default_template_id} onChange={(value) => form.setData("default_template_id", value)} options={templates.map((item) => ({ value: item.id, label: item.name }))} />)}</Col><Col xs={24}>{field("tenancy_db_host", "Database host", null, true)}</Col><Col xs={24}>{field("tenancy_db_name", "Database name", null, true)}</Col><Col xs={24}>{field("tenancy_db_username", "Database username", null, true)}</Col><Col xs={24}>{field("tenancy_db_password", "Database password (leave blank to keep)", <Input.Password value={form.data.tenancy_db_password} onChange={(event) => form.setData("tenancy_db_password", event.target.value)} />)}</Col></Row><Space><Button onClick={() => window.history.back()}>Cancel</Button><Button type="primary" htmlType="submit" loading={form.processing}>Save changes</Button></Space></SectionCard></Form></CentralLayout>;
+    const codes = defaults.calling_codes || {};
+    const callingCode = codes[tenant.country] || "+1";
+    const localPhone = String(tenant.owner_phone || "").startsWith(callingCode)
+        ? String(tenant.owner_phone).slice(callingCode.length)
+        : tenant.owner_phone || "";
+    const form = useForm({
+        company_name: tenant.company_name || "",
+        legal_name: tenant.legal_name || "",
+        owner_name: tenant.owner_name || "",
+        owner_email: tenant.owner_email || "",
+        owner_phone: localPhone,
+        phone_country_code: callingCode,
+        country: tenant.country || defaults.country || "US",
+        address: tenant.address || "",
+        timezone: tenant.timezone || "UTC",
+        currency: tenant.currency || "USD",
+        plan_id: tenant.plan_id || null,
+        default_template_id: tenant.default_template_id || null,
+        is_internal: Boolean(tenant.is_internal),
+        status_reason: tenant.status_reason || "",
+        tenancy_db_host: tenant.tenancy_db_host || "127.0.0.1",
+        tenancy_db_port: tenant.tenancy_db_port || 3306,
+        tenancy_db_name: tenant.tenancy_db_name || tenant.database_name || "",
+        tenancy_db_username: tenant.tenancy_db_username || "",
+        tenancy_db_password: "",
+    });
+    const field = (name, label, node, required = false, extra = null) => (
+        <Form.Item
+            label={label}
+            required={required}
+            extra={extra}
+            validateStatus={form.errors[name] ? "error" : ""}
+            help={form.errors[name]}
+        >
+            {node || <Input value={form.data[name]} onChange={(event) => form.setData(name, event.target.value)} />}
+        </Form.Item>
+    );
+
+    return (
+        <CentralLayout title="Edit customer" breadcrumbs={[{ title: "Customers" }, { title: tenant.company_name }]}>
+            <PageHeader
+                eyebrow="Customer"
+                title={`Edit ${tenant.company_name}`}
+                description="Company identity, ownership, commercial defaults, and the workspace database connection."
+            />
+            <Form layout="vertical" onFinish={() => form.put(route("central.tenants.update", tenant.id))}>
+                <SectionCard title="Company" description="How this customer is identified across the platform">
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>{field("company_name", "Company name", null, true)}</Col>
+                        <Col xs={24} md={12}>{field("legal_name", "Legal name")}</Col>
+                        <Col xs={24} md={12}>
+                            {field("country", "Country", (
+                                <Select
+                                    showSearch
+                                    optionFilterProp="label"
+                                    value={form.data.country}
+                                    onChange={(value) => form.setData("country", value)}
+                                    options={Object.keys(codes).map((code) => ({ value: code, label: code }))}
+                                />
+                            ))}
+                        </Col>
+                        <Col xs={24} md={12}>{field("timezone", "Timezone", null, true)}</Col>
+                        <Col xs={24}>
+                            {field("address", "Address", (
+                                <Input.TextArea
+                                    rows={2}
+                                    value={form.data.address}
+                                    onChange={(event) => form.setData("address", event.target.value)}
+                                />
+                            ))}
+                        </Col>
+                    </Row>
+                </SectionCard>
+
+                <SectionCard title="Owner" description="Primary contact for this workspace" style={{ marginTop: 16 }}>
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>{field("owner_name", "Owner name", null, true)}</Col>
+                        <Col xs={24} md={12}>
+                            {field("owner_email", "Owner email", null, true, "Used for billing and platform notices. Changing it does not rename the workspace login.")}
+                        </Col>
+                        <Col xs={24} md={8}>
+                            {field("phone_country_code", "Calling code", (
+                                <Select
+                                    showSearch
+                                    optionFilterProp="label"
+                                    value={form.data.phone_country_code}
+                                    onChange={(value) => form.setData("phone_country_code", value)}
+                                    options={[...new Set(Object.values(codes))].sort().map((code) => ({ value: code, label: code }))}
+                                />
+                            ))}
+                        </Col>
+                        <Col xs={24} md={16}>{field("owner_phone", "Owner phone")}</Col>
+                    </Row>
+                </SectionCard>
+
+                <SectionCard title="Commercial" description="Plan assignment and workspace defaults" style={{ marginTop: 16 }}>
+                    <Row gutter={16}>
+                        <Col xs={24} md={12}>
+                            {field("plan_id", "Plan", (
+                                <Select
+                                    allowClear
+                                    value={form.data.plan_id}
+                                    onChange={(value) => form.setData("plan_id", value)}
+                                    options={plans.map((plan) => ({ value: plan.id, label: plan.name }))}
+                                />
+                            ), false, "With an active subscription this performs an immediate plan change.")}
+                        </Col>
+                        <Col xs={24} md={12}>
+                            {field("currency", "Currency", (
+                                <Select
+                                    value={form.data.currency}
+                                    onChange={(value) => form.setData("currency", value)}
+                                    options={currencies.map((value) => ({ value, label: value }))}
+                                />
+                            ), true)}
+                        </Col>
+                        <Col xs={24} md={12}>
+                            {field("default_template_id", "Template", (
+                                <Select
+                                    allowClear
+                                    value={form.data.default_template_id}
+                                    onChange={(value) => form.setData("default_template_id", value)}
+                                    options={templates.map((item) => ({ value: item.id, label: item.name }))}
+                                />
+                            ))}
+                        </Col>
+                        <Col xs={24} md={12}>
+                            {field("is_internal", "Internal account", (
+                                <Checkbox
+                                    checked={form.data.is_internal}
+                                    onChange={(event) => form.setData("is_internal", event.target.checked)}
+                                >
+                                    Exempt from subscription enforcement
+                                </Checkbox>
+                            ), false, "Internal accounts keep access without a valid subscription.")}
+                        </Col>
+                        <Col xs={24}>
+                            {field("status_reason", "Account note", (
+                                <Input.TextArea
+                                    rows={2}
+                                    value={form.data.status_reason}
+                                    onChange={(event) => form.setData("status_reason", event.target.value)}
+                                />
+                            ), false, "Shown on the customer page, typically the reason for the current status.")}
+                        </Col>
+                    </Row>
+                </SectionCard>
+
+                <SectionCard title="Workspace database" description="Existing connection for this customer" style={{ marginTop: 16 }}>
+                    <Row gutter={16}>
+                        <Col xs={24} md={16}>{field("tenancy_db_host", "Database host", null, true)}</Col>
+                        <Col xs={24} md={8}>
+                            {field("tenancy_db_port", "Port", (
+                                <InputNumber
+                                    style={{ width: "100%" }}
+                                    min={1}
+                                    max={65535}
+                                    value={form.data.tenancy_db_port}
+                                    onChange={(value) => form.setData("tenancy_db_port", value)}
+                                />
+                            ), true)}
+                        </Col>
+                        <Col xs={24} md={12}>{field("tenancy_db_name", "Database name", null, true)}</Col>
+                        <Col xs={24} md={12}>{field("tenancy_db_username", "Database username", null, true)}</Col>
+                        <Col xs={24}>
+                            {field("tenancy_db_password", "Database password", (
+                                <Input.Password
+                                    value={form.data.tenancy_db_password}
+                                    onChange={(event) => form.setData("tenancy_db_password", event.target.value)}
+                                />
+                            ), false, "Leave blank to keep the stored password.")}
+                        </Col>
+                    </Row>
+                    <Space style={{ marginTop: 8 }}>
+                        <Button onClick={() => window.history.back()}>Cancel</Button>
+                        <Button type="primary" htmlType="submit" loading={form.processing}>Save changes</Button>
+                    </Space>
+                </SectionCard>
+            </Form>
+        </CentralLayout>
+    );
 }

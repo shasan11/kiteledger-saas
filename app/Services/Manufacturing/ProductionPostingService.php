@@ -66,7 +66,7 @@ class ProductionPostingService
 
             $locked = $this->costingService->syncLineCosts($locked->fresh(['rawMaterials', 'expenses', 'byproducts']));
 
-            if (!$locked->code || str_starts_with((string) $locked->code, '#draft')) {
+            if (!$locked->code || app(\App\Services\DocumentNumberingService::class)->looksLikeDraft((string) $locked->code)) {
                 $locked->code = app(\App\Services\DocumentNumberingService::class)->generate('production_order');
                 $locked->saveQuietly();
             }

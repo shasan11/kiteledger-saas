@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { ArrowIcon, CheckIcon, FeatureIcon, isSafeHref, SectionActions, SectionHeader, WebsiteButton, WebsiteContainer, WebsiteImage, WebsiteLink } from "../components/WebsitePrimitives";
 
 const mediaFor = (value = {}) => value.media?.url || value.image || value.image_url || value.settings?.image_url || value.data?.image;
+const featureIconNames = ["chart", "invoice", "box", "people", "workflow", "shield", "spark", "clock", "layers", "bolt"];
 const itemsFor = (section, fallback) => section.items?.length ? section.items : fallback || [];
 const isHexColor = (value) => /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(String(value || ""));
 const sectionClass = (section, name) => {
@@ -42,7 +43,7 @@ const sectionStyle = (section) => {
 function HeroSection({ section }) {
     if (!section.title) return null;
     const image = mediaFor(section);
-    const layout = ["centered", "reverse", "split"].includes(section.settings?.layout) ? section.settings.layout : section.alignment === "center" ? "centered" : section.settings?.image_position === "left" ? "reverse" : "split";
+    const layout = section.section_key === "hero" ? "centered" : ["centered", "reverse", "split"].includes(section.settings?.layout) ? section.settings.layout : section.alignment === "center" ? "centered" : section.settings?.image_position === "left" ? "reverse" : "split";
     const trustPoints = section.settings?.trust_points || section.items || [];
     return <section className={sectionClass(section, `kl-hero kl-hero--${layout}`)} style={sectionStyle(section)}>
         <WebsiteContainer className="kl-hero-grid">
@@ -60,17 +61,18 @@ function HeroSection({ section }) {
 
 function FeatureSection({ section, items = [] }) {
     if (!section.title && !items.length) return null;
-    const style = ["list", "image", "grid"].includes(section.settings?.layout) ? section.settings.layout : "grid";
-    const image = mediaFor(section);
+    // "grid" is the default card wall. The other variants exist so consecutive
+    // feature sections on one page do not all render as the same three cards.
+    const style = ["list", "image", "grid", "bento", "compact", "rows"].includes(section.settings?.layout) ? section.settings.layout : "grid";
+    const image = null;
     return <section className={sectionClass(section, `kl-features kl-features--${style}`)} style={sectionStyle(section)}>
         <WebsiteContainer>
             <SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle || section.content} alignment={section.alignment || "start"} />
             <div className="kl-feature-layout">
                 {image && <WebsiteImage className="kl-product-image" src={image} alt={section.image_alt || section.media?.alt_text || section.title} width={section.media?.width} height={section.media?.height} fit="contain" />}
                 <div className="kl-feature-grid">{items.map((item, index) => {
-                    const itemImage = mediaFor(item);
-                    return <article key={item.id || index}>
-                        {itemImage ? <WebsiteImage className="kl-card-image" src={itemImage} alt={item.image_alt || item.media?.alt_text || item.title} width={item.media?.width} height={item.media?.height} fit={item.data?.image_fit || "cover"} /> : item.icon || item.data?.icon ? <FeatureIcon name={item.icon || item.data?.icon} /> : null}
+                    return <article key={item.id || index} style={{ "--kl-item-index": `"${String(index + 1).padStart(2, "0")}"` }}>
+                        <FeatureIcon name={item.icon || item.data?.icon || featureIconNames[index % featureIconNames.length]} />
                         {item.title && <h3>{item.title}</h3>}
                         {(item.content || item.description) && <p>{item.content || item.description}</p>}
                         {(item.url || item.data?.url) && <WebsiteLink className="kl-text-link" href={item.url || item.data.url}>{item.cta_label || item.data?.cta_label || "Learn more"}<ArrowIcon /></WebsiteLink>}
@@ -84,10 +86,10 @@ function FeatureSection({ section, items = [] }) {
 
 function ProductSection({ section }) {
     const items = section.items || [];
-    const image = mediaFor(section);
+    const image = null;
     if (!section.title && !section.content && !image) return null;
     const reverse = section.settings?.image_position === "left" || section.alignment === "right";
-    return <section className={sectionClass(section, `kl-product${reverse ? " kl-product--reverse" : ""}`)} style={sectionStyle(section)}>
+    return <section className={sectionClass(section, `kl-product kl-product--text-only${reverse ? " kl-product--reverse" : ""}`)} style={sectionStyle(section)}>
         <WebsiteContainer className="kl-product-grid">
             <div className="kl-product-copy">
                 <SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle || section.content} />
@@ -100,91 +102,12 @@ function ProductSection({ section }) {
 }
 
 function ScreenshotSection({ section }) {
-    const images = section.items?.filter((item) => mediaFor(item)) || [];
-    const mainImage = mediaFor(section);
-    if (!mainImage && !images.length) return null;
-    return <section className={sectionClass(section, "kl-screenshots")} style={sectionStyle(section)}><WebsiteContainer>
-        <SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle || section.content} alignment={section.alignment || "center"} />
-        <div className={`kl-screenshot-grid${images.length > 1 ? " kl-screenshot-grid--two" : ""}`}>
-            {mainImage && <WebsiteImage className="kl-product-image" src={mainImage} alt={section.image_alt || section.media?.alt_text || section.title} width={section.media?.width} height={section.media?.height} fit="contain" caption={section.settings?.caption} />}
-            {images.slice(0, 2).map((item, index) => <WebsiteImage key={item.id || index} className="kl-product-image" src={mediaFor(item)} alt={item.image_alt || item.media?.alt_text || item.title} width={item.media?.width} height={item.media?.height} fit="contain" caption={item.content} />)}
-        </div>
-        <SectionActions section={section} />
-    </WebsiteContainer></section>;
+    const textItems = (section.items || []).map((item) => ({ ...item, image: null, image_url: null, media: null }));
+    return <FeatureSection section={{ ...section, section_type: "features", image: null, media: null, settings: { ...(section.settings || {}), layout: "grid" } }} items={textItems} />;
 }
 
-/*
- * Screenshot tour driven by tabs. Keeps a long list of product shots to a
- * single viewport instead of stacking them down the page, so the homepage can
- * show real screens without turning into a scroll marathon.
- */
 function FeaturesMiniSection({ section, items = [] }) {
-    const tabs = items.filter((item) => mediaFor(item) && item.title);
-    const [active, setActive] = useState(0);
-    if (!tabs.length) return null;
-    const index = Math.min(active, tabs.length - 1);
-    const current = tabs[index];
-    const panelId = `${section.section_key || "features-mini"}-panel`;
-    const selectTab = (position, moveFocus = false) => {
-        setActive(position);
-        if (moveFocus) {
-            window.requestAnimationFrame(() => document.getElementById(`${panelId}-tab-${position}`)?.focus());
-        }
-    };
-    return <section className={sectionClass(section, "kl-features-mini")} style={sectionStyle(section)}>
-        <WebsiteContainer>
-            <SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle || section.content} alignment={section.alignment || "center"} />
-            <div className="kl-features-mini__shell">
-                <div className="kl-features-mini__rail">
-                    <p className="kl-features-mini__rail-label">Explore the workspace</p>
-                    <div className="kl-features-mini__tabs" role="tablist" aria-label={section.title || "Product features"}>
-                        {tabs.map((item, position) => <button
-                            key={item.id || position}
-                            type="button"
-                            role="tab"
-                            id={`${panelId}-tab-${position}`}
-                            aria-selected={position === index}
-                            aria-controls={panelId}
-                            tabIndex={position === index ? 0 : -1}
-                            className={`kl-features-mini__tab${position === index ? " is-active" : ""}`}
-                            onClick={() => selectTab(position)}
-                            onKeyDown={(event) => {
-                                const next = event.key === "ArrowRight" || event.key === "ArrowDown"
-                                    ? (position + 1) % tabs.length
-                                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
-                                        ? (position - 1 + tabs.length) % tabs.length
-                                        : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : null;
-                                if (next === null) return;
-                                event.preventDefault();
-                                selectTab(next, true);
-                            }}
-                        >
-                            <span className="kl-features-mini__number">{String(position + 1).padStart(2, "0")}</span>
-                            <span>{item.title}</span>
-                            <ArrowIcon />
-                        </button>)}
-                    </div>
-                </div>
-                <div className="kl-features-mini__panel" id={panelId} role="tabpanel" aria-labelledby={`${panelId}-tab-${index}`} aria-live="polite">
-                    <div className="kl-features-mini__intro">
-                        <div>
-                            <span className="kl-features-mini__kicker">Now viewing</span>
-                            <h3>{current.title}</h3>
-                        </div>
-                        {current.content && <p>{current.content}</p>}
-                    </div>
-                    <div className="kl-features-mini__media">
-                        <WebsiteImage className="kl-product-image" src={mediaFor(current)} alt={current.image_alt || current.media?.alt_text || current.title} width={current.media?.width} height={current.media?.height} fit="contain" />
-                    </div>
-                    <div className="kl-features-mini__progress" aria-hidden="true">
-                        <span style={{ width: `${((index + 1) / tabs.length) * 100}%` }} />
-                    </div>
-                    <span className="kl-features-mini__count" aria-hidden="true">{String(index + 1).padStart(2, "0")} / {String(tabs.length).padStart(2, "0")}</span>
-                </div>
-            </div>
-            <SectionActions section={section} />
-        </WebsiteContainer>
-    </section>;
+    return <FeatureSection section={{ ...section, settings: { ...(section.settings || {}), layout: section.settings?.layout || "compact" } }} items={items.map((item) => ({ ...item, image: null, image_url: null, media: null }))} />;
 }
 
 function LogoSection({ section, items }) {
@@ -198,8 +121,20 @@ function LogoSection({ section, items }) {
 function StatisticsSection({ section, items }) {
     const visible = items.filter((item) => item.data?.value || item.value || item.title);
     if (!visible.length) return null;
-    return <section className={sectionClass(section, "kl-statistics")} style={sectionStyle(section)}><WebsiteContainer><SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle} />
-        <div className="kl-stat-grid">{visible.map((item, index) => <article key={item.id || index}><strong>{item.data?.value || item.value || item.title}</strong><span>{item.data?.label || item.content}</span>{item.data?.note && <small>{item.data.note}</small>}</article>)}</div>
+    return <section className={sectionClass(section, `kl-statistics kl-statistics--${section.section_key || "metrics"}`)} style={sectionStyle(section)}><WebsiteContainer><SectionHeader eyebrow={section.eyebrow} title={section.title} description={section.subtitle} />
+        <div className="kl-stat-grid">{visible.map((item, index) => {
+            const value = item.data?.value || item.value || item.title;
+            // A figure ("63") carries the display size; a worded proof point
+            // ("Multi-currency") wraps at that scale and drags the whole row
+            // taller, so it is set as a statement instead.
+            const variant = /\d/.test(String(value)) ? "is-figure" : "is-word";
+            return <article key={item.id || index} className={variant}>
+                <FeatureIcon name={item.icon || item.data?.icon || ["layers", "workflow", "bolt", "shield"][index % 4]} />
+                <strong>{value}</strong>
+                <span>{item.data?.label || item.content}</span>
+                {item.data?.note && <small>{item.data.note}</small>}
+            </article>;
+        })}</div>
     </WebsiteContainer></section>;
 }
 
@@ -252,10 +187,21 @@ function CtaSection({ section }) {
     return <section className={sectionClass(section, "kl-cta")} style={sectionStyle(section)}><WebsiteContainer><div><p className="kl-eyebrow">{section.eyebrow}</p><h2>{section.title}</h2>{(section.subtitle || section.content) && <p>{section.subtitle || section.content}</p>}</div><SectionActions section={section} /></WebsiteContainer></section>;
 }
 
+// Renders both the "security" and "ai" section types: same dark split layout,
+// with every panel label driven from settings so the CMS can retitle it.
 function SecuritySection({ section, items = [] }) {
     const visible = itemsFor(section, items).slice(0, 3);
     const secureSection = { ...section, background_style: section.background_style || "dark" };
-    return <section className={sectionClass(secureSection, "kl-security")} style={sectionStyle(secureSection)}>
+    const settings = section.settings || {};
+    const isAi = section.section_type === "ai";
+    const panelLabel = settings.panel_label || (isAi ? "AI copilot" : "Workspace protection");
+    const panelBadge = settings.panel_badge || (isAi ? "Approval gated" : "Always scoped");
+    const metrics = Array.isArray(settings.metrics) && settings.metrics.length
+        ? settings.metrics.slice(0, 2)
+        : isAi
+            ? [{ value: "Plain language", label: "ask anything" }, { value: "100%", label: "human approved" }]
+            : [{ value: String(Math.max(visible.length, 3)), label: "core safeguards" }, { value: "24/7", label: "activity visibility" }];
+    return <section className={sectionClass(secureSection, `kl-security${isAi ? " kl-security--ai" : ""}`)} style={sectionStyle(secureSection)}>
         <WebsiteContainer className="kl-security-shell">
             <div className="kl-security-copy">
                 {section.eyebrow && <p className="kl-eyebrow">{section.eyebrow}</p>}
@@ -263,10 +209,10 @@ function SecuritySection({ section, items = [] }) {
                 {(section.subtitle || section.content) && <p className="kl-lead">{section.subtitle || section.content}</p>}
                 <SectionActions section={section} />
             </div>
-            <div className="kl-security-panel" aria-label="KiteLedger trust controls">
+            <div className="kl-security-panel" aria-label={`${section.title || panelLabel} highlights`}>
                 <div className="kl-security-panel__header">
-                    <span>Workspace protection</span>
-                    <strong>Always scoped</strong>
+                    <span>{panelLabel}</span>
+                    <strong>{panelBadge}</strong>
                 </div>
                 {visible.length > 0 && <ul className="kl-security-list">
                     {visible.map((item, index) => <li key={item.id || index}>
@@ -278,8 +224,7 @@ function SecuritySection({ section, items = [] }) {
                     </li>)}
                 </ul>}
                 <div className="kl-security-metrics">
-                    <span><strong>{Math.max(visible.length, 3)}</strong><small>core safeguards</small></span>
-                    <span><strong>24/7</strong><small>activity visibility</small></span>
+                    {metrics.map((metric, index) => <span key={metric.label || index}><strong>{metric.value}</strong><small>{metric.label}</small></span>)}
                 </div>
             </div>
         </WebsiteContainer>
@@ -297,6 +242,7 @@ const registry = {
     product: ProductSection,
     content: ProductSection,
     security: SecuritySection,
+    ai: SecuritySection,
     screenshot: ScreenshotSection,
     screenshots: ScreenshotSection,
     features_mini: FeaturesMiniSection,
