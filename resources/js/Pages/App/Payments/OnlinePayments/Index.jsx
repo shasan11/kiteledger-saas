@@ -62,7 +62,7 @@ export default function OnlinePaymentsIndex() {
             dataIndex: 'paid_at',
             key: 'paid_at',
             width: 120,
-            render: v => v ? new Date(v).toLocaleDateString() : '—',
+            render: v => v ? new Date(v).toLocaleDateString() : '-',
         },
         {
             title: 'Provider',
@@ -75,13 +75,13 @@ export default function OnlinePaymentsIndex() {
             title: 'Invoice',
             dataIndex: 'invoice',
             key: 'invoice',
-            render: v => v?.invoice_no || '—',
+            render: v => v?.invoice_no || '-',
         },
         {
             title: 'Customer',
             dataIndex: 'customer_name',
             key: 'customer',
-            render: (v, record) => v || record.contact?.name || '—',
+            render: (v, record) => v || record.contact?.name || '-',
         },
         {
             title: 'Amount',
@@ -101,7 +101,7 @@ export default function OnlinePaymentsIndex() {
             title: 'Reference',
             dataIndex: 'provider_payment_id',
             key: 'ref',
-            render: v => v ? <Text code style={{ fontSize: 11 }}>{v.substring(0, 20)}...</Text> : '—',
+            render: v => v ? <Text code style={{ fontSize: 11 }}>{v.substring(0, 20)}...</Text> : '-',
         },
         {
             title: '',

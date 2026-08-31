@@ -2,14 +2,11 @@
 
 namespace App\Models\Central;
 
-use Stancl\Tenancy\Database\Models\Domain as BaseDomain;
-
-class Domain extends BaseDomain
+/** Backwards-compatible central-admin namespace. */
+class Domain extends \App\Models\Domain
 {
-    protected $guarded = [];
-
     protected function casts(): array
     {
-        return ['is_primary' => 'boolean', 'verified_at' => 'datetime', 'verification_attempted_at' => 'datetime', 'activated_at' => 'datetime', 'disabled_at' => 'datetime', 'verification_token' => 'encrypted', 'metadata' => 'array'];
+        return array_merge(parent::casts(), ['verification_attempted_at' => 'datetime', 'activated_at' => 'datetime', 'disabled_at' => 'datetime', 'metadata' => 'array']);
     }
 }

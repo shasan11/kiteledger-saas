@@ -279,7 +279,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
         <FormSection title="Journal details">
           <Row gutter={16}>
             <Col xs={24} md={14}>
-              <Form.Item label="Production Order (optional — load to auto-fill)">
+              <Form.Item label="Production Order (optional - load to auto-fill)">
                 <Row gutter={8}>
                   <Col flex="1">
                     <BackendSelect
@@ -287,7 +287,7 @@ export default function ProductionJournalAdd({ initialRecord = null, isEdit = fa
                       detailValue={poDetail}
                       fkUrl="/api/production-orders/"
                       labelKey="code"
-                      labelFn={(r) => `${r.code || '#draft'} — ${r.finishedProduct?.name || r.finished_product_id || ''}`}
+                      labelFn={(r) => `${r.code || '#draft'} - ${r.finishedProduct?.name || r.finished_product_id || ''}`}
                       placeholder="Search approved production orders"
                       extraParams={{ approved: true }}
                       onChange={(v, raw) => { setPoId(v); setPoDetail(raw); }}

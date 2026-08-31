@@ -12,7 +12,7 @@ class AiPermissionSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_core_ai_permissions_are_created_and_assistant_permissions_are_pruned(): void
+    public function test_copilot_permissions_are_created_idempotently_and_assigned_to_admins(): void
     {
         $role = Role::query()->create([
             'name' => 'Admin',
@@ -28,8 +28,12 @@ class AiPermissionSeederTest extends TestCase
             'name' => 'reports.ai_summary',
             'guard_name' => 'web',
         ]);
-        $this->assertDatabaseMissing('permissions', [
+        $this->assertDatabaseHas('permissions', [
             'name' => 'ai.chat',
+            'guard_name' => 'web',
+        ]);
+        $this->assertDatabaseHas('permissions', [
+            'name' => 'ai.actions.execute',
             'guard_name' => 'web',
         ]);
 
@@ -39,5 +43,6 @@ class AiPermissionSeederTest extends TestCase
             ->firstOrFail();
 
         $this->assertTrue($role->fresh()->hasPermissionTo($permission));
+        $this->assertTrue($role->fresh()->hasPermissionTo('ai.use'));
     }
 }

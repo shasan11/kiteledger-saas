@@ -75,6 +75,53 @@ function extractApiError(err, fallback) {
     return fallback;
 }
 
+function CentrallyManagedCapabilities({ data }) {
+    const readiness = data?.readiness || {};
+    const capabilities = [
+        ['KiteLedger Copilot', readiness.copilot_ready],
+        ['Verified provider connection', readiness.provider_connection_verified],
+        ['Chat', readiness.chat_capability_available],
+        ['Financial tools', readiness.financial_tools_available],
+        ['Knowledge search (RAG)', readiness.rag_index_ready],
+        ['Document scanning', readiness.document_scanning_available],
+        ['Write proposals', readiness.write_proposals_available],
+        ['Approved action execution', readiness.action_execution_available],
+    ];
+
+    return (
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+                type="info"
+                showIcon
+                message="AI is managed centrally"
+                description="Provider credentials, models, timeouts, document scanning, and safety controls are managed by the platform administrator. Contact your administrator if a required capability is unavailable."
+            />
+            <Card size="small" title="Capabilities available to this tenant">
+                <Row gutter={[12, 12]}>
+                    {capabilities.map(([label, available]) => (
+                        <Col xs={24} md={12} key={label}>
+                            <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+                                <Text>{label}</Text>
+                                <Tag color={available ? 'success' : 'default'}>
+                                    {available ? 'Available' : 'Unavailable'}
+                                </Tag>
+                            </Space>
+                        </Col>
+                    ))}
+                </Row>
+            </Card>
+            {Array.isArray(readiness.issues) && readiness.issues.length > 0 && (
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="Administrator attention is required"
+                    description={readiness.issues.map((issue) => issue.message).join(' ')}
+                />
+            )}
+        </Space>
+    );
+}
+
 export default function AiSettings() {
     const page = usePage();
     const permissions = page.props?.auth?.permissions || [];
@@ -89,6 +136,8 @@ export default function AiSettings() {
     const [error, setError] = useState(null);
     const [testResult, setTestResult] = useState(null);
     const [form] = Form.useForm();
+    const centralManaged = !!data?.central_managed;
+    const canEdit = canManage && !centralManaged;
     const currentProvider = Form.useWatch('ai_provider', form) || data?.settings?.ai_provider || 'openai';
 
     const providers = useMemo(() => {
@@ -191,7 +240,7 @@ export default function AiSettings() {
     };
 
     const save = async () => {
-        if (!canManage) return;
+        if (!canEdit) return;
 
         try {
             setSaving(true);
@@ -223,7 +272,7 @@ export default function AiSettings() {
     };
 
     const test = async () => {
-        if (!canManage) return;
+        if (!canEdit) return;
 
         try {
             setTesting(true);
@@ -267,12 +316,14 @@ export default function AiSettings() {
             <div style={{ padding: 16 }}>
                 {loading ? <Spin /> : error ? (
                     <Alert type="error" showIcon message={error} />
+                ) : centralManaged ? (
+                    <CentrallyManagedCapabilities data={data} />
                 ) : (
                     <Card size="small" title="AI Report Summarizer">
                         <Form
                             form={form}
                             layout="vertical"
-                            disabled={!canManage}
+                            disabled={!canEdit}
                             onValuesChange={(changed) => {
                                 if (changed.ai_provider) patchProviderDefaults(changed.ai_provider);
                                 if (!changed.ai_provider) setTestResult(null);
@@ -374,15 +425,18 @@ export default function AiSettings() {
                             )}
 
                             <Space wrap>
-                                <Button type="primary" icon={<SaveOutlined />} loading={saving && !testing} onClick={save} disabled={!canManage}>
+                                <Button type="primary" icon={<SaveOutlined />} loading={saving && !testing} onClick={save} disabled={!canEdit}>
                                     Save
                                 </Button>
-                                <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canManage}>
+                                <Button icon={<ApiOutlined />} loading={testing} onClick={test} disabled={!canEdit}>
                                     Save & Test Connection
                                 </Button>
-                                <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canManage}>
+                                <Button icon={<ReloadOutlined />} onClick={resetDefaults} disabled={!canEdit}>
                                     Reset Recommended Defaults
                                 </Button>
+                                {centralManaged && (
+                                    <Text type="secondary">Read-only - provider settings are managed by the central administrator.</Text>
+                                )}
                                 {!canManage && (
                                     <Text type="secondary">Read-only - you do not have permission to edit AI settings.</Text>
                                 )}

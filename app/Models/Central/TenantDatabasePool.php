@@ -10,6 +10,6 @@ class TenantDatabasePool extends CentralModel
 
     protected function casts(): array
     {
-        return ['username' => 'encrypted', 'password' => 'encrypted', 'validated_at' => 'datetime'];
+        return ['username' => 'encrypted', 'password' => 'encrypted', 'validated_at' => 'datetime', 'allocated_at' => 'datetime', 'released_at' => 'datetime'];
     }
 }

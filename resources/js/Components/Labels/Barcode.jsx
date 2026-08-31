@@ -30,7 +30,7 @@ export default function Barcode({
         lineColor,
       });
     } catch (err) {
-      // swallow — bad code/value combo
+      // swallow - bad code/value combo
     }
   }, [value, format, width, height, displayValue, margin, fontSize, background, lineColor]);
 

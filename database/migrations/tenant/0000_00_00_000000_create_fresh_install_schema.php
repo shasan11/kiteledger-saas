@@ -80,17 +80,21 @@ return new class extends Migration
             $table->id();
             $table->string('source_type', 60);
             $table->string('source_id', 64);
+            $table->unsignedBigInteger('knowledge_chunk_id')->nullable();
             $table->string('branch_id')->nullable();
             $table->text('content');
             $table->char('content_hash', 64);
-            $table->longText('vector');
+            $table->json('vector');
             $table->unsignedSmallInteger('dims');
             $table->string('provider', 40);
             $table->string('model', 100);
             $table->timestamps();
             $table->index(['dims', 'model'], 'ai_emb_dims_model_idx');
             $table->index(['branch_id'], 'ai_emb_branch_idx');
-            $table->unique(['source_type', 'source_id'], 'ai_emb_source_unique');
+            $table->unique(['source_type', 'source_id', 'provider', 'model'], 'ai_emb_source_provider_model_unique');
+            $table->index(['knowledge_chunk_id'], 'ai_emb_knowledge_chunk_idx');
+            $table->index(['source_type', 'updated_at'], 'ai_emb_source_updated_idx');
+            $table->index(['content_hash'], 'ai_emb_content_hash_idx');
         });
 
         Schema::create('ai_knowledge_chunks', function (Blueprint $table): void {
@@ -143,6 +147,8 @@ return new class extends Migration
             $table->string('risk_level', 40)->default('medium');
             $table->json('risk_reasons')->nullable();
             $table->string('status', 40)->default('pending');
+            $table->string('idempotency_key', 64)->nullable()->unique();
+            $table->timestamp('expires_at')->nullable();
             $table->unsignedBigInteger('approved_by')->nullable();
             $table->timestamp('approved_at')->nullable();
             $table->timestamp('executed_at')->nullable();
@@ -1514,6 +1520,17 @@ return new class extends Migration
             $table->decimal('confidence_score', 5, 4)->nullable();
             $table->string('status')->default('pending');
             $table->text('error_message')->nullable();
+            // Document AI V2 attempt history.
+            $table->string('stage', 40)->nullable();
+            $table->string('error_code', 60)->nullable();
+            $table->string('schema_version', 10)->nullable();
+            $table->unsignedInteger('attempt_number')->default(1);
+            $table->unsignedSmallInteger('page_count')->nullable();
+            $table->boolean('used_ocr')->default(false);
+            $table->boolean('partial')->default(false);
+            $table->unsignedInteger('duration_ms')->nullable();
+            $table->unsignedSmallInteger('review_issue_count')->nullable();
+            $table->json('structured_json')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

@@ -178,7 +178,7 @@ const accountFkBase = {
     fkPageSize: 20,
     fkValueKey: 'id',
     fkLabelKey: 'name',
-    fkLabel: (r) => [r?.code, r?.display_name || r?.name].filter(Boolean).join(' — '),
+    fkLabel: (r) => [r?.code, r?.display_name || r?.name].filter(Boolean).join('-'),
 };
 
 const bankFkBase = {
@@ -303,7 +303,7 @@ function DashboardTab({ onGoToReceived, onGoToIssued }) {
             width: 130,
             render: (v) => (
                 <Text strong style={{ fontSize: token.fontSizeSM }}>
-                    {v || '—'}
+                    {v || '-'}
                 </Text>
             ),
         },
@@ -312,7 +312,7 @@ function DashboardTab({ onGoToReceived, onGoToIssued }) {
             key: 'account',
             render: (_, r) => (
                 <Text style={{ fontSize: token.fontSizeSM }}>
-                    {r?.relatedAccount?.name || r?.related_account?.name || r?.related_account_id_detail?.name || '—'}
+                    {r?.relatedAccount?.name || r?.related_account?.name || r?.related_account_id_detail?.name || '-'}
                 </Text>
             ),
         },
@@ -321,7 +321,7 @@ function DashboardTab({ onGoToReceived, onGoToIssued }) {
             key: 'bank',
             render: (_, r) => (
                 <Text style={{ fontSize: token.fontSizeSM }}>
-                    {r?.account?.name || r?.account_id_detail?.name || '—'}
+                    {r?.account?.name || r?.account_id_detail?.name || '-'}
                 </Text>
             ),
         },
@@ -471,14 +471,14 @@ function ReceivedTab() {
                 r?.relatedAccount?.name ||
                 r?.related_account?.name ||
                 r?.related_account_id_detail?.name ||
-                '—',
+                '-',
         },
         {
             title: 'Cheque No.',
             dataIndex: 'cheque_no',
             key: 'cheque_no',
             width: 130,
-            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v || '—'}</Text>,
+            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v || '-'}</Text>,
         },
         {
             title: 'Cheque Date',
@@ -666,20 +666,20 @@ function IssuedTab() {
                 r?.relatedAccount?.name ||
                 r?.related_account?.name ||
                 r?.related_account_id_detail?.name ||
-                '—',
+                '-',
         },
         {
             title: 'Payee Name',
             dataIndex: 'payee_name',
             key: 'payee_name',
-            render: (v) => v || '—',
+            render: (v) => v || '-',
         },
         {
             title: 'Cheque No.',
             dataIndex: 'cheque_no',
             key: 'cheque_no',
             width: 130,
-            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v || '—'}</Text>,
+            render: (v) => <Text strong style={{ fontSize: token.fontSizeSM }}>{v || '-'}</Text>,
         },
         {
             title: 'Cheque Date',

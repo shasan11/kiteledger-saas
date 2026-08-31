@@ -30,7 +30,7 @@ class HRMTransactionalSeeder extends Seeder
     public function run(): void
     {
         // NOTE: an early `return;` below stops this seeder after the public
-        // holidays — the demo-employee block is intentionally dead code. The
+        // holidays - the demo-employee block is intentionally dead code. The
         // old `PRAGMA foreign_keys = OFF` workaround for those inserts was
         // SQLite-only syntax and crashed MySQL installs (error 1064), so it is
         // removed: nothing that actually runs here violates a foreign key.

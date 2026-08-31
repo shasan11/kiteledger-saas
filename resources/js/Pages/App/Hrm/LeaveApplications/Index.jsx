@@ -230,7 +230,13 @@ export default function LeaveApplications({ auth }) {
         },
       });
 
-      const rows = data?.results || data?.data || data || [];
+      const rows = Array.isArray(data?.results)
+        ? data.results
+        : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+            ? data
+            : [];
 
       const pending = rows.filter((row) => row?.status === 'PENDING').length;
       const approved = rows.filter((row) => row?.status === 'APPROVED').length;

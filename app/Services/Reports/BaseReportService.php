@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 abstract class BaseReportService
 {
@@ -99,31 +100,58 @@ abstract class BaseReportService
         return $query->where($column, $filters['branch_id']);
     }
 
-    protected function applyStatusApprovalFilters(Builder $query, array $filters): Builder
+    /**
+     * Restrict a report query to postings that actually count.
+     *
+     * $table names the table that carries the status/approved/void columns.
+     * It defaults to the query model's own table, but line-level reports must
+     * pass the header table explicitly (e.g. 'journal_vouchers' for a query
+     * built on journal_voucher_lines) — otherwise the guards below silently
+     * find no columns and every draft and voided document leaks into the
+     * report. Columns are qualified so the joined tables cannot collide.
+     */
+    protected function applyStatusApprovalFilters(Builder $query, array $filters, ?string $table = null): Builder
     {
-        if (! empty($filters['status'])) {
-            $query->where('status', $filters['status']);
-        } elseif (array_key_exists('include_draft', $filters) && ! $filters['include_draft']) {
-            $query->where(function (Builder $builder) {
-                $builder->where('status', '!=', 'draft')->orWhereNull('status');
-            });
+        $table ??= $query->getModel()->getTable();
+        $has = fn (string $column): bool => $this->reportColumnExists($table, $column);
+        $column = fn (string $name): string => $table.'.'.$name;
+
+        if ($has('status')) {
+            if (! empty($filters['status'])) {
+                $query->where($column('status'), $filters['status']);
+            } elseif (empty($filters['include_draft'])) {
+                $query->where(function (Builder $builder) use ($column) {
+                    $builder->where($column('status'), '!=', 'draft')->orWhereNull($column('status'));
+                });
+            }
         }
 
-        if ($filters['approved'] !== null && $filters['approved'] !== '') {
-            $query->where('approved', filter_var($filters['approved'], FILTER_VALIDATE_BOOL));
-        } elseif (empty($filters['include_draft']) && $query->getModel()->isFillable('approved')) {
-            $query->where(function (Builder $builder) {
-                $builder->where('approved', true)->orWhereNull('approved');
-            });
+        $approved = $filters['approved'] ?? null;
+        if ($has('approved')) {
+            if ($approved !== null && $approved !== '') {
+                $query->where($column('approved'), filter_var($approved, FILTER_VALIDATE_BOOL));
+            } elseif (empty($filters['include_draft'])) {
+                $query->where(function (Builder $builder) use ($column) {
+                    $builder->where($column('approved'), true)->orWhereNull($column('approved'));
+                });
+            }
         }
 
-        if ($query->getModel()->isFillable('void')) {
-            $query->where(function (Builder $builder) {
-                $builder->where('void', false)->orWhereNull('void');
+        // Voided documents are never reportable, whatever the other filters say.
+        if ($has('void')) {
+            $query->where(function (Builder $builder) use ($column) {
+                $builder->where($column('void'), false)->orWhereNull($column('void'));
             });
         }
 
         return $query;
+    }
+
+    private function reportColumnExists(string $table, string $column): bool
+    {
+        static $cache = [];
+
+        return $cache[$table.'.'.$column] ??= Schema::hasColumn($table, $column);
     }
 
     protected function toFloat(mixed $value): float

@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Api\Documents;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DocumentUploadResource;
 use App\Models\DocumentUpload;
+use App\Services\BranchScopeService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
 use App\Services\Documents\DocumentStorageService;
-use App\Services\BranchScopeService;
+use App\Services\Documents\Review\DocumentReviewService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class DocumentUploadController extends Controller
@@ -31,34 +34,120 @@ class DocumentUploadController extends Controller
             ->latest();
 
         $this->applyDocumentScope($q, $request);
+        $this->applyFilters($q, $request);
 
-        if ($search = $request->get('search')) {
-            $q->where(function ($q) use ($search) {
-                $q->where('label', 'like', "%{$search}%")
-                  ->orWhere('original_file_name', 'like', "%{$search}%");
+        $perPage = min(max((int) $request->get('per_page', 20), 1), 100);
+
+        return DocumentUploadResource::collection($q->paginate($perPage))
+            ->additional(['summary' => $this->summaryCounts($request)]);
+    }
+
+    /**
+     * Status roll-up across the whole filtered dataset — never just the current
+     * page. Computed with a grouped aggregate so it stays a single cheap query.
+     */
+    public function summary(Request $request)
+    {
+        $this->authorize('viewAny', DocumentUpload::class);
+
+        return response()->json([
+            'ok' => true,
+            'summary' => $this->summaryCounts($request),
+        ]);
+    }
+
+    private function summaryCounts(Request $request): array
+    {
+        $q = DocumentUpload::query();
+        $this->applyDocumentScope($q, $request);
+        $this->applyFilters($q, $request, ignoreStatus: true);
+
+        $byStatus = $q->groupBy('status')
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->pluck('aggregate', 'status')
+            ->all();
+
+        $count = static fn (array $statuses) => array_sum(
+            array_map(static fn ($s) => (int) ($byStatus[$s] ?? 0), $statuses)
+        );
+
+        return [
+            'uploaded' => $count(['uploaded']),
+            'processing' => $count(['queued', 'processing']),
+            'needs_review' => $count(['extracted', 'needs_review']),
+            'converted' => $count(['converted']),
+            'failed' => $count(['failed']),
+            'archived' => $count(['archived']),
+            'total' => array_sum(array_map('intval', $byStatus)),
+            'by_status' => array_map('intval', $byStatus),
+        ];
+    }
+
+    /**
+     * Server-side filters. The status filter is skipped for summary counts so
+     * the cards keep showing the full breakdown while a status is selected.
+     */
+    private function applyFilters($query, Request $request, bool $ignoreStatus = false): void
+    {
+        if ($search = trim((string) $request->get('search'))) {
+            $escaped = addcslashes($search, '%_\\');
+            $query->where(function ($inner) use ($escaped) {
+                $inner->where('label', 'like', "%{$escaped}%")
+                    ->orWhere('original_file_name', 'like', "%{$escaped}%")
+                    ->orWhere('notes', 'like', "%{$escaped}%");
             });
         }
-        if ($status = $request->get('status')) {
-            $q->where('status', $status);
-        }
-        if ($type = $request->get('document_type')) {
-            $q->where('document_type', $type);
-        }
-        $perPage = min((int) $request->get('per_page', 20), 100);
 
-        return DocumentUploadResource::collection($q->paginate($perPage));
+        if (! $ignoreStatus && $status = $request->get('status')) {
+            $statuses = array_filter(array_map('trim', (array) $status));
+            if ($statuses) {
+                $query->whereIn('status', $statuses);
+            }
+        }
+
+        if ($type = $request->get('document_type')) {
+            $types = array_filter(array_map('trim', (array) $type));
+            if ($types) {
+                $query->whereIn('document_type', $types);
+            }
+        }
+
+        if ($from = $this->parseDate($request->get('date_from'))) {
+            $query->where('created_at', '>=', $from->startOfDay());
+        }
+
+        if ($to = $this->parseDate($request->get('date_to'))) {
+            $query->where('created_at', '<=', $to->endOfDay());
+        }
+    }
+
+    private function parseDate($value): ?CarbonImmutable
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse((string) $value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function store(Request $request)
     {
         $this->authorize('create', DocumentUpload::class);
 
+        // documents.max_upload_mb is the single application-level authority.
+        // Laravel's file `max` rule is expressed in kilobytes.
+        $maxKilobytes = max(1, (int) config('documents.max_upload_mb', 10)) * 1024;
+
         $validator = Validator::make($request->all(), [
             'label' => ['required', 'string', 'max:255'],
             'file' => [
                 'required',
                 'file',
-                'max:10240',
+                'max:'.$maxKilobytes,
                 'mimes:pdf,docx,jpg,jpeg,png,webp',
                 'mimetypes:application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/webp',
             ],
@@ -76,16 +165,8 @@ class DocumentUploadController extends Controller
             ], 422);
         }
 
-        try {
-            $stored = $this->storage->store($request->file('file'));
-        } catch (\Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'message' => $e->getMessage(),
-                'code' => 'DOCUMENT_UPLOAD_FAILED',
-            ], 422);
-        }
-
+        // Branch authorization must resolve before anything touches the disk,
+        // otherwise a rejected upload leaves an orphaned file behind.
         $selectedBranchId = $this->branchScope->selectedBranchId($request, $request->user());
         $branchId = $request->input('branch_id') ?: $selectedBranchId;
 
@@ -98,16 +179,42 @@ class DocumentUploadController extends Controller
             );
         }
 
-        $doc = DocumentUpload::create([
-            'label' => $request->string('label'),
-            'document_type' => $request->string('document_type', 'unknown') ?: 'unknown',
-            'notes' => $request->string('notes'),
-            'branch_id' => $branchId,
-            'fiscal_year_id' => $request->input('fiscal_year_id'),
-            'uploaded_by' => $request->user()->id ?? null,
-            'status' => 'uploaded',
-            ...$stored,
-        ]);
+        try {
+            $stored = $this->storage->store($request->file('file'));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'The document could not be stored. Check the file and try again.',
+                'code' => 'DOCUMENT_UPLOAD_FAILED',
+            ], 422);
+        }
+
+        try {
+            $doc = DocumentUpload::create([
+                'label' => $request->string('label'),
+                'document_type' => $request->string('document_type', 'unknown') ?: 'unknown',
+                'notes' => $request->string('notes'),
+                'branch_id' => $branchId,
+                'fiscal_year_id' => $request->input('fiscal_year_id'),
+                'uploaded_by' => $request->user()->id ?? null,
+                'status' => 'uploaded',
+                ...$stored,
+            ]);
+        } catch (\Throwable $e) {
+            // Compensating delete: the row never landed, so the file must not
+            // survive as an unreferenced blob on the disk.
+            $this->storage->deletePath($stored['file_path'] ?? null);
+
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'The document could not be saved. Please try again.',
+                'code' => 'DOCUMENT_UPLOAD_FAILED',
+            ], 500);
+        }
 
         $this->audit->log('document.uploaded', ['document_upload_id' => $doc->id, 'label' => $doc->label]);
 
@@ -142,13 +249,47 @@ class DocumentUploadController extends Controller
             'label' => ['nullable', 'string', 'max:255'],
             'document_type' => ['nullable', 'string', 'max:60'],
             'notes' => ['nullable', 'string'],
+            // Reviewer corrections, keyed by field. Unknown keys are ignored by
+            // the review service rather than trusted.
+            'review_edits' => ['nullable', 'array'],
+            'review_edits.*' => ['nullable'],
+            'review_lines' => ['nullable', 'array', 'max:500'],
+            'review_lines.*' => ['array'],
+            'review_lines.*.description' => ['nullable', 'string', 'max:1000'],
+            'review_lines.*.product_code' => ['nullable', 'string', 'max:255'],
+            'review_lines.*.product_name' => ['nullable', 'string', 'max:500'],
+            'review_lines.*.quantity' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.unit' => ['nullable', 'string', 'max:60'],
+            'review_lines.*.rate' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.discount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.tax_rate' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.amount' => ['nullable', 'numeric', 'min:0'],
+            'review_lines.*.product_id' => ['nullable', 'string', 'max:100'],
+            'review_lines.*.account_id' => ['nullable', 'string', 'max:100'],
         ]);
-        $doc->update(array_filter($data, fn ($v) => $v !== null));
 
-        return response()->json([
+        $doc->update(array_filter(
+            array_intersect_key($data, array_flip(['label', 'document_type', 'notes'])),
+            fn ($v) => $v !== null,
+        ));
+
+        $corrections = null;
+
+        if (! empty($data['review_edits']) || ! empty($data['review_lines'])) {
+            // Editing extracted values changes what a draft will be built from,
+            // so it needs proposal-update rights, not merely view.
+            $this->perms->authorize($request->user(), 'document_upload.proposal.update');
+
+            $corrections = app(DocumentReviewService::class)
+                ->applyCorrections($doc, $data['review_edits'] ?? [], $data['review_lines'] ?? []);
+        }
+
+        return response()->json(array_filter([
             'ok' => true,
             'document' => new DocumentUploadResource($doc->fresh(['extraction'])),
-        ]);
+            'corrections' => $corrections,
+        ], fn ($v) => $v !== null));
     }
 
     public function destroy(Request $request, string $publicId)
@@ -162,13 +303,20 @@ class DocumentUploadController extends Controller
             $this->authorize('update', $doc);
             $doc->update(['status' => 'archived']);
             $this->audit->log('document.archived', ['document_upload_id' => $doc->id]);
+
             return response()->json(['ok' => true, 'message' => 'Document archived (linked transactions exist).']);
         }
 
         $this->authorize('delete', $doc);
-        $this->storage->delete($doc);
-        $doc->delete();
+
+        // Drop the row first so a filesystem failure can never leave a
+        // dangling record pointing at a file that is already gone.
+        $path = $doc->file_path;
+        DB::transaction(fn () => $doc->delete());
+        $this->storage->deletePath($path);
+
         $this->audit->log('document.deleted', ['document_upload_id' => $doc->id]);
+
         return response()->json(['ok' => true]);
     }
 
@@ -200,7 +348,7 @@ class DocumentUploadController extends Controller
     {
         $user = $request->user();
 
-        if (!$doc->branch_id) {
+        if (! $doc->branch_id) {
             return;
         }
 
@@ -219,7 +367,7 @@ class DocumentUploadController extends Controller
         $user = $request->user();
         $selected = $this->branchScope->selectedBranchId($request, $user);
 
-        if ($this->branchScope->canViewAllBranches($user) && !$selected) {
+        if ($this->branchScope->canViewAllBranches($user) && ! $selected) {
             return;
         }
 

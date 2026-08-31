@@ -291,7 +291,7 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
         <FormSection title="Production order details">
           <Row gutter={16}>
             <Col xs={24} md={14}>
-              <Form.Item label="Bill of Materials (optional — load to auto-fill)">
+              <Form.Item label="Bill of Materials (optional - load to auto-fill)">
                 <Row gutter={8}>
                   <Col flex="1">
                     <BackendSelect
@@ -299,7 +299,7 @@ export default function ProductionOrderAdd({ initialRecord = null, isEdit = fals
                       detailValue={bomDetail}
                       fkUrl="/api/bills-of-material/"
                       labelKey="code"
-                      labelFn={(r) => `${r.code || '#draft'} — ${r.product?.name || ''}`}
+                      labelFn={(r) => `${r.code || '#draft'} - ${r.product?.name || ''}`}
                       placeholder="Search BOMs"
                       extraParams={{ approved: true }}
                       onChange={(v, raw) => { setBomId(v); setBomDetail(raw); }}

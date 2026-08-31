@@ -2,6 +2,7 @@
 
 namespace App\Models\Central;
 
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TenantInvoice extends CentralModel
@@ -10,7 +11,12 @@ class TenantInvoice extends CentralModel
 
     protected function casts(): array
     {
-        return ['issue_date' => 'date', 'due_date' => 'date', 'period_start' => 'date', 'period_end' => 'date', 'paid_at' => 'datetime', 'locked_at' => 'datetime', 'billing_identity' => 'array', 'metadata' => 'array'];
+        return [
+            'issue_date' => 'date', 'due_date' => 'date', 'period_start' => 'date', 'period_end' => 'date',
+            'paid_at' => 'datetime', 'locked_at' => 'datetime', 'billing_identity' => 'array', 'metadata' => 'array',
+            'seller_snapshot' => 'array', 'buyer_snapshot' => 'array', 'tax_snapshot' => 'array',
+            'customization_snapshot' => 'array', 'line_items_snapshot' => 'array',
+        ];
     }
 
     protected static function booted(): void
@@ -25,5 +31,25 @@ class TenantInvoice extends CentralModel
     public function lines()
     {
         return $this->hasMany(TenantInvoiceLine::class, 'invoice_id');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(PaymentTransaction::class, 'invoice_id');
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
+
+    public function subscription(): BelongsTo
+    {
+        return $this->belongsTo(Subscription::class);
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class);
     }
 }

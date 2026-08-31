@@ -10,12 +10,6 @@
             </div>
         @endif
         <p class="paragraph" style="text-align:center;">Choose how to set up your data.</p>
-        @if (session('kiteledger_provisioning_status'))
-            <div class="alert {{ session('kiteledger_provisioning_mode') === 'pool' ? 'alert-warning' : 'alert-success' }}" style="margin-bottom:14px;">
-                <strong>Company database setup:</strong> {{ session('kiteledger_provisioning_status') }}
-            </div>
-        @endif
-
         <ul class="list" style="text-align:left;">
             <li class="list__item" style="display:block;padding:12px;">
                 <label style="display:block;cursor:pointer;">

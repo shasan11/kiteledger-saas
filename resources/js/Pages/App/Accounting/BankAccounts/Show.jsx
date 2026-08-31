@@ -1218,7 +1218,7 @@ export default function BankAccountShow({ id }) {
                     style={{ marginBottom: token.margin }}
                     message={`Current difference: ${money(summary.reconciliation_difference)}`}
                     description={Math.abs(summary.reconciliation_difference || 0) < 0.01
-                        ? 'Balances agree — safe to finalize.'
+                        ? 'Balances agree - safe to finalize.'
                         : 'Balances do not agree. Toggle "Force finalize" with a remark to proceed anyway.'}
                 />
                 <Form form={finalizeForm} layout="vertical">

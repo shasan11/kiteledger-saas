@@ -39,7 +39,7 @@ const formatDate = (v) => {
  * Reference autocomplete supporting one or more backend sources.
  *
  * Props:
- *   value, onChange — current text value (the reference string the user sees)
+ *   value, onChange - current text value (the reference string the user sees)
  *   sources: [{
  *     key: 'quotation',
  *     label: 'Quotation',
@@ -52,7 +52,7 @@ const formatDate = (v) => {
  *     totalField: 'grand_total',
  *     extraParams: {},
  *   }, ...]
- *   onPick(record, source) — fires when an option is chosen
+ *   onPick(record, source) - fires when an option is chosen
  *   placeholder
  */
 export default function ReferenceAutocomplete({

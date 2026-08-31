@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Installer\EnvironmentController;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use App\Services\Installer\InstallerDiagnosticsService;
 use App\Support\Installer\FroidenDatabaseManager;
@@ -11,6 +12,7 @@ use App\Support\Installer\InstalledState;
 use Froiden\LaravelInstaller\Helpers\DatabaseManager;
 use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\InstalledFileManager;
+use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Mockery;
 use Tests\TestCase;
@@ -36,7 +38,12 @@ class StockFroidenInstallerTest extends TestCase
         $this->get('/install/environment')
             ->assertOk()
             ->assertSee('method="post"', false)
+            ->assertSee('type="submit"', false)
             ->assertSee('Platform administrator')
+            ->assertDontSee('checkEnv', false)
+            ->assertDontSee('provisioning_mode', false)
+            ->assertDontSee('pool_databases', false)
+            ->assertDontSee('cpanel_api_token', false)
             ->assertDontSee('type: "GET"', false);
         $this->get('/install/requirements')->assertOk();
         $this->get('/install/permissions')->assertOk();
@@ -49,8 +56,127 @@ class StockFroidenInstallerTest extends TestCase
         $route = app('router')->getRoutes()->getByName('kiteledger.install.environment.save');
         $this->assertNotNull($route);
         $this->assertContains('POST', $route->methods());
+        $this->assertNotContains('GET', $route->methods());
         $this->assertNull($route->getDomain());
-        $this->get('/install/environment/save?password=must-not-be-accepted')->assertMethodNotAllowed();
+    }
+
+    public function test_permission_errors_are_highlighted_in_red_with_details(): void
+    {
+        $diagnostics = Mockery::mock(InstallerDiagnosticsService::class);
+        $diagnostics->shouldReceive('preflight')->once()->andReturn([
+            ['label' => 'storage/logs', 'ok' => false, 'detail' => 'Not writable: /var/www/app/storage/logs. Recommended permission: 775.'],
+            ['label' => 'bootstrap/cache', 'ok' => true, 'detail' => 'Writable'],
+        ]);
+        $this->app->instance(InstallerDiagnosticsService::class, $diagnostics);
+
+        $this->get('/install/permissions')
+            ->assertOk()
+            ->assertSee('permission-check--error', false)
+            ->assertSee('Permission check failed')
+            ->assertSee('storage/logs')
+            ->assertSee('Recommended permission: 775.')
+            ->assertSee('Error');
+    }
+
+    public function test_apache_rewrites_support_public_and_project_root_document_roots(): void
+    {
+        $rootRules = file_get_contents(base_path('.htaccess'));
+        $publicRules = file_get_contents(public_path('.htaccess'));
+
+        $this->assertStringNotContainsString('<!--', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^(.*)$ public/$1 [L]', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^storage(?:/(.*))?$ public/storage/$1 [L]', $rootRules);
+        $this->assertStringContainsString('RewriteRule ^\\.well-known(?:/|$) - [L]', $rootRules);
+        $this->assertStringContainsString('vendor', $rootRules);
+        $this->assertStringContainsString('DirectoryIndex index.php', $publicRules);
+        $this->assertStringContainsString('(?!well-known(?:/|$))', $publicRules);
+        $this->assertStringContainsString('RewriteRule ^ index.php [L]', $publicRules);
+    }
+
+    public function test_local_composer_dev_server_disables_env_file_reloading(): void
+    {
+        $composer = json_decode((string) file_get_contents(base_path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('php artisan serve --no-reload', implode("\n", $composer['scripts']['dev']));
+    }
+
+    public function test_environment_save_detects_the_php_development_server_restart_risk(): void
+    {
+        $manager = app(FroidenEnvironmentManager::class);
+        $method = new \ReflectionMethod($manager, 'usesPhpDevelopmentServer');
+        $request = Request::create('/install/environment/save', 'POST', server: [
+            'SERVER_SOFTWARE' => 'PHP 8.5 Development Server',
+        ]);
+
+        $this->assertTrue($method->invoke($manager, $request));
+    }
+
+    public function test_environment_save_accepts_a_blank_central_database_password(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldReceive('save')->once()->andReturn(['status' => 'success']);
+
+        $response = app(EnvironmentController::class)(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload(['password' => ''])),
+            $manager,
+        );
+
+        $this->assertSame('success', $response['status'] ?? null);
+    }
+
+    public function test_unreachable_database_returns_an_installer_error_without_waiting_for_php_timeout(): void
+    {
+        $startedAt = microtime(true);
+
+        $response = app(FroidenEnvironmentManager::class)->save(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload([
+                'hostname' => '127.0.0.1',
+                'port' => 1,
+            ])),
+        );
+
+        $this->assertSame('fail', $response['status'] ?? null);
+        $this->assertStringContainsString('Could not reach MySQL', (string) ($response['message'] ?? ''));
+        $this->assertLessThan(10, microtime(true) - $startedAt);
+    }
+
+    public function test_localhost_database_host_is_forced_to_ipv4_tcp(): void
+    {
+        $manager = app(FroidenEnvironmentManager::class);
+        $method = new \ReflectionMethod($manager, 'normalizeDatabaseHost');
+
+        $this->assertSame('127.0.0.1', $method->invoke($manager, 'localhost'));
+        $this->assertSame('127.0.0.1', $method->invoke($manager, ' LOCALHOST '));
+        $this->assertSame('db.internal', $method->invoke($manager, ' db.internal '));
+    }
+
+    public function test_browser_environment_submission_redirects_without_javascript(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldReceive('save')->once()->with(Mockery::on(
+            fn (Request $request): bool => blank($request->input('password')),
+        ))->andReturn(Reply::redirect(route('LaravelInstaller::requirements'), 'Settings saved.'));
+        $this->app->instance(FroidenEnvironmentManager::class, $manager);
+
+        $this->post(route('kiteledger.install.environment.save'), $this->validEnvironmentPayload([
+            '_browser_submit' => '1',
+            'password' => '',
+        ]))->assertRedirect(route('LaravelInstaller::requirements'));
+    }
+
+    public function test_environment_save_does_not_require_or_process_tenant_database_rows(): void
+    {
+        $manager = Mockery::mock(FroidenEnvironmentManager::class);
+        $manager->shouldReceive('save')->once()->with(Mockery::on(function (Request $request): bool {
+            return ! $request->has('provisioning_mode') && ! $request->has('pool_databases');
+        }))->andReturn(['status' => 'success']);
+
+        $response = app(EnvironmentController::class)(
+            Request::create('/install/environment/save', 'POST', $this->validEnvironmentPayload()),
+            $manager,
+        );
+
+        $this->assertSame('success', $response['status'] ?? null);
     }
 
     public function test_unconfigured_tenant_host_does_not_query_database_before_installation(): void
@@ -119,20 +245,35 @@ class StockFroidenInstallerTest extends TestCase
         $response = $this->withSession([
             'kiteledger_install_succeeded' => true,
             'kiteledger_admin_email' => 'buyer@example.com',
-            'kiteledger_provisioning_mode' => 'pool',
-            'kiteledger_provisioning_status' => 'Pool mode selected.',
         ])->get('/install/final');
 
         $response->assertOk()
             ->assertSee('Cron Jobs Setup')
             ->assertSee('artisan schedule:run')
-            ->assertSee('artisan queue:work --queue=provisioning,default --stop-when-empty')
+            ->assertSee('artisan queue:work central --queue=provisioning,default --stop-when-empty --tries=3 --timeout=300')
             ->assertSee('buyer@example.com')
             ->assertDontSee(base64_encode(str_repeat('k', 32)))
             ->assertDontSee('db-secret-must-not-render')
             ->assertDontSee('cpanel-secret-must-not-render');
 
         $this->get('/install')->assertNotFound();
+    }
+
+    public function test_final_step_recovers_when_cpanel_session_handoff_is_lost(): void
+    {
+        config(['app.key' => 'base64:'.base64_encode(str_repeat('k', 32))]);
+        InstalledState::putInstallerStatus([
+            'install_succeeded' => true,
+            'admin_email' => 'buyer@example.com',
+        ]);
+
+        $this->get('/install/final')
+            ->assertOk()
+            ->assertSee('buyer@example.com')
+            ->assertSee('create each tenant database');
+
+        $this->assertFileDoesNotExist(InstalledState::installerStatusPath());
+        $this->assertFileExists(InstalledState::lockPath());
     }
 
     public function test_preflight_reports_marketplace_package_errors_without_secrets(): void
@@ -147,5 +288,23 @@ class StockFroidenInstallerTest extends TestCase
         $this->assertStringContainsString('Frontend build assets are missing', $manifest['detail']);
         $this->assertFalse($vendor['ok']);
         $this->assertStringContainsString('Vendor dependencies are missing', $vendor['detail']);
+    }
+
+    private function validEnvironmentPayload(array $overrides = []): array
+    {
+        return array_replace_recursive([
+            'hostname' => '127.0.0.1',
+            'port' => 3306,
+            'database' => 'kiteledger',
+            'username' => 'kiteledger',
+            'password' => 'secret',
+            'app_url' => 'https://example.test',
+            'central_domains' => 'example.test',
+            'saas_base_domain' => 'example.test',
+            'admin_name' => 'Admin',
+            'admin_email' => 'admin@example.test',
+            'admin_password' => 'VerySecure!123',
+            'admin_password_confirmation' => 'VerySecure!123',
+        ], $overrides);
     }
 }

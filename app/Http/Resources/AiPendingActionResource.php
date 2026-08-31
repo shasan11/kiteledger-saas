@@ -40,6 +40,7 @@ class AiPendingActionResource extends JsonResource
             'result_id' => $metadata['result']['id'] ?? null,
             'error_message' => $this->safeError(),
             'created_at' => optional($this->created_at)->toIso8601String(),
+            'expires_at' => optional($this->expires_at)->toIso8601String(),
             'approved_at' => optional($this->approved_at)->toIso8601String(),
             'executed_at' => optional($this->executed_at)->toIso8601String(),
         ];

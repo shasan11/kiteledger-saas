@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "layer": "deterministic",
+  "description": "Golden extraction cases. Each supplies raw model output and asserts what the deterministic normalizer must produce. Runs without any provider — these measure normalization, origin tracking and validation, not model quality.",
+  "cases": [
+    {
+      "id": "purchase-bill-clean-001",
+      "note": "Fully readable bill: nothing should need review.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-1042",
+        "document_date": "2026-08-01",
+        "currency_code": "NPR",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 2, "rate": 100, "amount": 200 }],
+        "totals": { "subtotal": 200, "grand_total": 200 }
+      },
+      "expect": {
+        "document_type": "purchase_bill",
+        "is_convertible": true,
+        "review_issue_count": 0,
+        "has_blocking_issues": false,
+        "field_origin": { "totals.grand_total": "extracted" }
+      }
+    },
+    {
+      "id": "purchase-bill-derived-total-002",
+      "note": "No printed total: the calculated one must be marked derived.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-2",
+        "document_date": "2026-08-01",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 2, "rate": 100, "amount": 200 }],
+        "totals": { "subtotal": 200, "tax_total": 20 }
+      },
+      "expect": {
+        "field_origin": { "totals.grand_total": "derived" },
+        "field_value": { "totals.grand_total": 220 },
+        "has_blocking_issues": false
+      }
+    },
+    {
+      "id": "purchase-bill-total-conflict-003",
+      "note": "Printed total disagrees with the maths: must block, must not overwrite.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-3",
+        "document_date": "2026-08-01",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 2, "rate": 100, "amount": 200 }],
+        "totals": { "subtotal": 200, "grand_total": 999 }
+      },
+      "expect": {
+        "field_state": { "totals.grand_total": "conflict" },
+        "field_value": { "totals.grand_total": 999 },
+        "has_blocking_issues": true
+      }
+    },
+    {
+      "id": "purchase-bill-missing-party-004",
+      "note": "Required party absent for this type: blocking.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-4",
+        "document_date": "2026-08-01",
+        "lines": [{ "description": "Widget", "quantity": 1, "rate": 50, "amount": 50 }],
+        "totals": { "subtotal": 50, "grand_total": 50 }
+      },
+      "expect": {
+        "field_state": { "party.name": "missing" },
+        "has_blocking_issues": true
+      }
+    },
+    {
+      "id": "sales-invoice-005",
+      "note": "Sales invoice maps to the invoice conversion target.",
+      "raw": {
+        "document_type": "sales_invoice",
+        "document_number": "SI-9",
+        "document_date": "2026-08-02",
+        "party": { "name": "XYZ Limited" },
+        "lines": [{ "description": "Service", "quantity": 1, "rate": 500, "amount": 500 }],
+        "totals": { "subtotal": 500, "grand_total": 500 }
+      },
+      "expect": {
+        "document_type": "sales_invoice",
+        "conversion_target": "invoice",
+        "is_convertible": true
+      }
+    },
+    {
+      "id": "bank-statement-not-convertible-006",
+      "note": "Readable but must never offer draft creation.",
+      "raw": {
+        "document_type": "bank_statement",
+        "document_date": "2026-07-31",
+        "party": { "name": "Nepal Bank" },
+        "totals": { "grand_total": 10000 }
+      },
+      "expect": {
+        "document_type": "bank_statement",
+        "is_convertible": false,
+        "conversion_target": null
+      }
+    },
+    {
+      "id": "journal-voucher-no-party-required-007",
+      "note": "A JV has no counterparty; requiring one would be false noise.",
+      "raw": {
+        "document_type": "journal_voucher",
+        "document_date": "2026-08-01",
+        "totals": { "grand_total": 100 }
+      },
+      "expect": {
+        "document_type": "journal_voucher",
+        "is_convertible": false,
+        "has_blocking_issues": false
+      }
+    },
+    {
+      "id": "unreadable-date-008",
+      "note": "An unparseable date is a conflict carrying the raw text, not a silent null.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-8",
+        "document_date": "the 3rd of never",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 1, "rate": 10, "amount": 10 }],
+        "totals": { "subtotal": 10, "grand_total": 10 }
+      },
+      "expect": {
+        "field_state": { "document_date": "conflict" },
+        "has_blocking_issues": true
+      }
+    },
+    {
+      "id": "low-confidence-009",
+      "note": "A weakly-read field is flagged for review rather than trusted.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-9",
+        "document_date": "2026-08-01",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 1, "rate": 10, "amount": 10 }],
+        "totals": { "subtotal": 10, "grand_total": 10 },
+        "field_confidence": { "document_number": 0.21 }
+      },
+      "expect": {
+        "field_state": { "document_number": "low_confidence" },
+        "has_blocking_issues": false
+      }
+    },
+    {
+      "id": "derived-line-amount-010",
+      "note": "A line amount computed from qty x rate must be flagged derived.",
+      "raw": {
+        "document_type": "purchase_bill",
+        "document_number": "INV-10",
+        "document_date": "2026-08-01",
+        "party": { "name": "ABC Trading" },
+        "lines": [{ "description": "Widget", "quantity": 3, "rate": 50 }],
+        "totals": { "grand_total": 150 }
+      },
+      "expect": {
+        "line_origin": { "0": "derived" }
+      }
+    },
+    {
+      "id": "unknown-type-011",
+      "note": "An unrecognised type falls back safely and offers no conversion.",
+      "raw": {
+        "document_type": "alien_artifact",
+        "document_number": "??",
+        "party": { "name": "Unknown" }
+      },
+      "expect": {
+        "document_type": "unknown",
+        "is_convertible": false
+      }
+    },
+    {
+      "id": "expense-receipt-no-party-required-012",
+      "note": "A receipt often has no readable vendor; that must not block.",
+      "raw": {
+        "document_type": "expense_receipt",
+        "document_date": "2026-08-01",
+        "totals": { "grand_total": 45.5 }
+      },
+      "expect": {
+        "document_type": "expense_receipt",
+        "conversion_target": "expense",
+        "has_blocking_issues": false
+      }
+    }
+  ]
+}

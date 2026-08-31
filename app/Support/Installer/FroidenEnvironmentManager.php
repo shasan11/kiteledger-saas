@@ -6,7 +6,6 @@ use Froiden\LaravelInstaller\Helpers\EnvironmentManager;
 use Froiden\LaravelInstaller\Helpers\Reply;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Http;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -14,6 +13,8 @@ use Throwable;
 
 class FroidenEnvironmentManager extends EnvironmentManager
 {
+    private const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
+
     /** Disable the package's legacy GET endpoint, which exposes DB passwords in URLs. */
     public function saveFile(Request $request)
     {
@@ -23,33 +24,29 @@ class FroidenEnvironmentManager extends EnvironmentManager
     public function save(Request $request): array
     {
         try {
+            // `localhost` is special to PDO MySQL: depending on the OS it may
+            // select an IPv6 address, Unix socket, or Windows named pipe and
+            // silently ignore the port entered in the installer. The wizard
+            // explicitly asks for a TCP port, so make its behaviour consistent
+            // across XAMPP, Laragon, Docker, cPanel, Linux, and Windows.
+            $databaseHost = $this->normalizeDatabaseHost((string) $request->input('hostname'));
+
             $this->ensureDatabaseExists(
-                (string) $request->input('hostname'),
+                $databaseHost,
                 (int) $request->integer('port'),
                 (string) $request->input('database'),
                 (string) $request->input('username'),
                 (string) $request->input('password', ''),
             );
 
-            $mode = (string) $request->input('provisioning_mode');
-            $provisioningStatus = match ($mode) {
-                'automatic' => $this->testAutomaticProvisioning(
-                    (string) $request->input('hostname'),
-                    (int) $request->integer('port'),
-                    (string) $request->input('database'),
-                    (string) $request->input('username'),
-                    (string) $request->input('password', ''),
-                ),
-                'cpanel_uapi' => $this->testCpanel($request),
-                default => 'Pool mode selected. Company creation will fail until at least one tenant database is added to the pool.',
-            };
-
-            $this->writeEnvironment([
+            $environmentValues = [
                 'APP_URL' => rtrim((string) $request->input('app_url'), '/'),
                 'CENTRAL_DOMAINS' => $this->normalizeDomains((string) $request->input('central_domains')),
                 'SAAS_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
-                'DB_CONNECTION' => 'mysql',
-                'DB_HOST' => (string) $request->input('hostname'),
+                'TENANT_BASE_DOMAIN' => strtolower((string) $request->input('saas_base_domain')),
+                'DB_CONNECTION' => 'central',
+                'DB_DRIVER' => 'mysql',
+                'DB_HOST' => $databaseHost,
                 'DB_PORT' => (string) $request->integer('port'),
                 'DB_DATABASE' => (string) $request->input('database'),
                 'DB_USERNAME' => (string) $request->input('username'),
@@ -57,18 +54,33 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'CENTRAL_ADMIN_NAME' => (string) $request->input('admin_name'),
                 'CENTRAL_ADMIN_EMAIL' => strtolower((string) $request->input('admin_email')),
                 'CENTRAL_ADMIN_PASSWORD' => (string) $request->input('admin_password'),
-                'TENANT_DATABASE_PROVISIONING_MODE' => $mode,
-                'CPANEL_HOST' => $mode === 'cpanel_uapi' ? rtrim((string) $request->input('cpanel_host'), '/') : '',
-                'CPANEL_PORT' => $mode === 'cpanel_uapi' ? (string) $request->integer('cpanel_port') : '2083',
-                'CPANEL_USERNAME' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_username') : '',
-                'CPANEL_API_TOKEN' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_api_token') : '',
-                'CPANEL_DATABASE_USER' => $mode === 'cpanel_uapi' ? (string) $request->input('cpanel_database_user') : '',
-            ]);
-            Artisan::call('config:clear');
+                'TENANT_DB_PROVISIONING_MODE' => 'manual',
+                'TENANT_DATABASE_PROVISIONING_MODE' => 'manual',
+                'QUEUE_CONNECTION' => 'central',
+                'DB_QUEUE_CONNECTION' => 'central',
+                'DB_QUEUE_RETRY_AFTER' => '330',
+            ];
+
+            if ($this->usesPhpDevelopmentServer($request)) {
+                $this->assertEnvironmentWritable();
+                // `php artisan serve` watches .env and kills its child process as
+                // soon as the file changes. Writing during the controller action
+                // therefore drops the HTTP response in Firefox/Chrome. Laravel's
+                // terminating callbacks run after the redirect has been sent.
+                app()->terminating(function () use ($environmentValues): void {
+                    $this->writeEnvironment($environmentValues);
+                    Artisan::call('config:clear');
+                });
+            } else {
+                $this->writeEnvironment($environmentValues);
+                Artisan::call('config:clear');
+            }
             session([
-                'kiteledger_provisioning_mode' => $mode,
-                'kiteledger_provisioning_status' => $provisioningStatus,
                 'kiteledger_admin_email' => strtolower((string) $request->input('admin_email')),
+            ]);
+            InstalledState::putInstallerStatus([
+                'admin_email' => strtolower((string) $request->input('admin_email')),
+                'environment_saved_at' => now()->toIso8601String(),
             ]);
 
             return Reply::redirect(
@@ -76,23 +88,30 @@ class FroidenEnvironmentManager extends EnvironmentManager
                 'Database connection and application settings saved.',
             );
         } catch (PDOException $exception) {
-            return Reply::error('Database connection failed: '.$exception->getMessage());
+            report($exception);
+
+            return Reply::error('Database connection failed. Verify the central database host, name, username, password, and privileges.');
         } catch (RuntimeException $exception) {
             return Reply::error($exception->getMessage());
         } catch (Throwable $exception) {
             report($exception);
 
-            return Reply::error('Could not save the installation settings: '.$exception->getMessage());
+            return Reply::error('Could not save the installation settings. Check the application log for details, then retry.');
         }
     }
 
     private function ensureDatabaseExists(string $host, int $port, string $database, string $username, string $password): void
     {
+        $this->assertDatabaseEndpointReachable($host, $port);
+
         $pdo = new PDO(
             "mysql:host={$host};port={$port};charset=utf8mb4",
             $username,
             $password,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            ],
         );
 
         $statement = $pdo->prepare('SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?');
@@ -112,7 +131,10 @@ class FroidenEnvironmentManager extends EnvironmentManager
             "mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4",
             $username,
             $password,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            ],
         );
 
         $tables = $databasePdo->query('SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '.$databasePdo->quote($database))->fetchAll(PDO::FETCH_COLUMN);
@@ -124,39 +146,33 @@ class FroidenEnvironmentManager extends EnvironmentManager
         }
     }
 
-    private function testAutomaticProvisioning(string $host, int $port, string $database, string $username, string $password): string
+    private function assertDatabaseEndpointReachable(string $host, int $port): void
     {
-        $pdo = new PDO("mysql:host={$host};port={$port};dbname={$database};charset=utf8mb4", $username, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-        $probe = substr(preg_replace('/[^A-Za-z0-9_]/', '_', $database).'_kl_probe_'.bin2hex(random_bytes(4)), 0, 64);
+        $socketHost = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) ? "[{$host}]" : $host;
+        $socket = @stream_socket_client(
+            "tcp://{$socketHost}:{$port}",
+            $errorCode,
+            $errorMessage,
+            self::DATABASE_CONNECT_TIMEOUT_SECONDS,
+            STREAM_CLIENT_CONNECT,
+        );
 
-        try {
-            $pdo->exec("CREATE DATABASE `{$probe}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $pdo->exec("DROP DATABASE `{$probe}`");
-        } catch (PDOException $exception) {
-            try {
-                $pdo->exec("DROP DATABASE IF EXISTS `{$probe}`");
-            } catch (Throwable) {
-                // The clear installer error below is safer than exposing SQL details.
-            }
-            throw new RuntimeException('Automatic company database creation is unavailable because this database user does not have the required CREATE/DROP DATABASE privileges. Choose cPanel UAPI or pool mode.');
+        if (is_resource($socket)) {
+            fclose($socket);
+
+            return;
         }
 
-        return 'CREATE DATABASE and cleanup privileges tested successfully. Automatic company provisioning is available.';
+        throw new RuntimeException(
+            "Could not reach MySQL at {$host}:{$port} within ".self::DATABASE_CONNECT_TIMEOUT_SECONDS.' seconds. Confirm that MySQL is running and accepting TCP connections on that host and port.',
+        );
     }
 
-    private function testCpanel(Request $request): string
+    private function normalizeDatabaseHost(string $host): string
     {
-        $host = (string) $request->input('cpanel_host');
-        $url = parse_url($host, PHP_URL_SCHEME).'://'.parse_url($host, PHP_URL_HOST).':'.$request->integer('cpanel_port').'/execute/Mysql/list_databases';
-        $response = Http::acceptJson()->withHeaders([
-            'Authorization' => 'cpanel '.$request->input('cpanel_username').':'.$request->input('cpanel_api_token'),
-        ])->connectTimeout(10)->timeout(30)->get($url);
+        $host = trim($host);
 
-        if (! $response->successful() || (int) $response->json('result.status', 0) !== 1) {
-            throw new RuntimeException('The cPanel UAPI connection test failed. Verify the host, port, username, API token, and database user.');
-        }
-
-        return 'cPanel UAPI connection tested successfully. The API token has been saved and will remain masked.';
+        return strcasecmp($host, 'localhost') === 0 ? '127.0.0.1' : $host;
     }
 
     /** @param array<string, string> $values */
@@ -201,5 +217,19 @@ class FroidenEnvironmentManager extends EnvironmentManager
             static fn (string $domain): string => strtolower(trim($domain)),
             explode(',', $domains),
         )))));
+    }
+
+    private function usesPhpDevelopmentServer(Request $request): bool
+    {
+        return PHP_SAPI === 'cli-server'
+            || str_contains(strtolower((string) $request->server('SERVER_SOFTWARE')), 'development server');
+    }
+
+    private function assertEnvironmentWritable(): void
+    {
+        $path = base_path('.env');
+        if ((is_file($path) && ! is_writable($path)) || (! is_file($path) && ! is_writable(base_path()))) {
+            throw new RuntimeException('The project .env file is not writable.');
+        }
     }
 }

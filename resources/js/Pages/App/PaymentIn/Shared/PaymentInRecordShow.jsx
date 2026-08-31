@@ -1006,7 +1006,7 @@ function DynamicPrintTemplatePreview({
 
     const fileName = getPrintFileName(record, normalizedDocumentType, title);
 
-    // Payment QR — only for active invoice payment links
+    // Payment QR - only for active invoice payment links
     const paymentUrl  = paymentLinkData?.public_url || null;
     const isLinkActive = !!(paymentLinkData?.link?.active && !paymentLinkData?.link?.is_expired && paymentUrl);
     const faviconUrl  = companyInfo?.favicon_url || companyInfo?.favicon || null;
@@ -1686,7 +1686,7 @@ function PaymentLinkDrawer({ open, onClose, invoiceId, invoiceNo, currency }) {
             if (paymentsRes.status === 'fulfilled')
                 setPayments(paymentsRes.value.data?.results || paymentsRes.value.data || []);
         } catch {
-            // silent — individual settled errors handled above
+            // silent - individual settled errors handled above
         } finally {
             setLoading(false);
         }
@@ -1799,7 +1799,7 @@ function PaymentLinkDrawer({ open, onClose, invoiceId, invoiceNo, currency }) {
                         <Card
                             size="small"
                             style={{ borderRadius: token.borderRadiusLG, textAlign: 'center' }}
-                            title={<Space><span>QR Code</span><Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>— customer scans to pay</Typography.Text></Space>}
+                            title={<Space><span>QR Code</span><Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>- customer scans to pay</Typography.Text></Space>}
                         >
                             <div style={{ padding: '12px 0' }}>
                                 <img

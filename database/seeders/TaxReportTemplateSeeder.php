@@ -9,7 +9,7 @@ use Illuminate\Database\Seeder;
 /**
  * Seeds tax_report_templates for every country defined in config/tax_presets.php.
  *
- * Safe to run multiple times — uses firstOrCreate on (country_code, report_key).
+ * Safe to run multiple times - uses firstOrCreate on (country_code, report_key).
  */
 class TaxReportTemplateSeeder extends Seeder
 {

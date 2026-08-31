@@ -12,6 +12,7 @@ import {
     InfoCircleOutlined,
     ProfileOutlined,
     ProjectOutlined,
+    RobotOutlined,
     SettingOutlined,
     ShopOutlined,
     SwapOutlined,
@@ -101,6 +102,16 @@ export default function AuthenticatedLayout({ header, children }) {
                 label: 'Home',
                 onClick: () => visit('dashboard', '/dashboard'),
             },
+            ...(can('ai.use') || can('ai.chat') || can('ai.manage')
+                ? [
+                      {
+                          key: 'ai-copilot',
+                          icon: <RobotOutlined />,
+                          label: 'KiteLedger Copilot',
+                          onClick: () => visit('ai.assistant', '/ai/assistant'),
+                      },
+                  ]
+                : []),
             ...(can('document_upload.view')
                 ? [
                       {
@@ -228,6 +239,11 @@ export default function AuthenticatedLayout({ header, children }) {
                                 'payment-in.sales-orders.index',
                                 '/payment-in/sales-orders',
                             ),
+                    },
+                    {
+                        key: 'pi-proforma-invoices',
+                        label: 'Proforma Invoices',
+                        onClick: () => visit('payment-in.proforma-invoices.index', '/payment-in/proforma-invoices'),
                     },
                     {
                         key: 'pi-invoices',
@@ -359,6 +375,21 @@ export default function AuthenticatedLayout({ header, children }) {
                                 'accounting.journal-vouchers.index',
                                 '/accounting/journal-vouchers',
                             ),
+                    },
+                    {
+                        key: 'quick-bill',
+                        label: 'Quick Bills',
+                        onClick: () => visit('accounting.quick-bills.index', '/accounting/quick-bills'),
+                    },
+                    {
+                        key: 'quick-receipt',
+                        label: 'Quick Receipts',
+                        onClick: () => visit('accounting.quick-receipts.index', '/accounting/quick-receipts'),
+                    },
+                    {
+                        key: 'fixed-asset',
+                        label: 'Fixed Assets',
+                        onClick: () => visit('accounting.fixed-assets.index', '/accounting/fixed-assets'),
                     },
                     {
                         key: 'loan-accounts',

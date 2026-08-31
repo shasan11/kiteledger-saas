@@ -23,12 +23,12 @@ class AiActionApprovalController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->hasAny($user, ['ai.actions.view', 'ai.use', 'ai.chat', 'ai.manage'])) {
+        if (! $this->permissions->hasAny($user, ['ai.actions.view', 'ai.use', 'ai.chat', 'ai.manage'])) {
             return $this->denied('ai.actions.view');
         }
 
         $query = AiPendingAction::query()->orderByDesc('created_at')->limit(100);
-        if (!$this->permissions->canManageData($user)) {
+        if (! $this->permissions->canManageData($user)) {
             $query->where('user_id', $user->id);
         }
 
@@ -39,7 +39,7 @@ class AiActionApprovalController extends Controller
     {
         $user = $request->user();
         $action = AiPendingAction::query()->where('id', $id)->firstOrFail();
-        if (!$this->canAccess($user, $action)) {
+        if (! $this->canAccess($user, $action)) {
             return $this->denied('ai.actions.view');
         }
 
@@ -67,12 +67,12 @@ class AiActionApprovalController extends Controller
     public function reject(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->hasAny($user, ['ai.actions.reject', 'ai.actions.approve', 'ai.manage'])) {
+        if (! $this->permissions->hasAny($user, ['ai.actions.reject', 'ai.actions.approve', 'ai.manage'])) {
             return $this->denied('ai.actions.reject');
         }
 
         $action = AiPendingAction::query()->where('id', $id)->firstOrFail();
-        if (!$this->canAccess($user, $action)) {
+        if (! $this->canAccess($user, $action)) {
             return $this->denied('ai.actions.reject');
         }
 
@@ -94,7 +94,7 @@ class AiActionApprovalController extends Controller
     {
         $user = $request->user();
         $action = AiPendingAction::query()->where('id', $id)->firstOrFail();
-        if (!$this->canAccess($user, $action)) {
+        if (! $this->canAccess($user, $action)) {
             return $this->denied('ai.actions.view');
         }
 
@@ -109,12 +109,12 @@ class AiActionApprovalController extends Controller
     private function runExecution(Request $request, string $id, string $permission): JsonResponse
     {
         $user = $request->user();
-        if (!$this->permissions->hasAny($user, [$permission, 'ai.actions.approve', 'ai.manage'])) {
+        if (! $this->permissions->hasAny($user, [$permission, 'ai.actions.approve', 'ai.manage'])) {
             return $this->denied($permission);
         }
 
         $action = AiPendingAction::query()->where('id', $id)->firstOrFail();
-        if (!$this->canAccess($user, $action)) {
+        if (! $this->canAccess($user, $action)) {
             return $this->denied($permission);
         }
 
@@ -153,19 +153,25 @@ class AiActionApprovalController extends Controller
                 'action' => new AiPendingActionResource($action->fresh()),
             ]);
         } catch (Throwable $e) {
-            $action->forceFill([
-                'status' => 'failed',
-                'error_message' => $e->getMessage(),
-            ])->save();
+            $current = $action->fresh();
+            if ($current && in_array($current->status, ['pending', 'approved'], true)) {
+                $current->forceFill([
+                    'status' => 'failed',
+                    'error_message' => $e->getMessage(),
+                ])->save();
 
-            $this->executor->recordFailure($action, $e->getMessage(), $this->auditContext($request));
+                $this->executor->recordFailure($current, $e->getMessage(), $this->auditContext($request));
+            }
+
+            $status = $current?->status ?? 'failed';
 
             return response()->json([
                 'ok' => false,
-                'status' => 'failed',
+                'code' => 'AI_ACTION_NOT_EXECUTABLE',
+                'status' => $status,
                 'message' => $e->getMessage(),
-                'action' => new AiPendingActionResource($action->fresh()),
-            ], 422);
+                'action' => new AiPendingActionResource($current ?? $action),
+            ], in_array($status, ['executed', 'rejected', 'expired'], true) ? 409 : 422);
         }
     }
 

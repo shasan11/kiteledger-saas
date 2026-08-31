@@ -32,6 +32,14 @@ provisioning.
 php artisan kiteledger:seed-demo --profile=full --force
 ```
 
+For a database-per-tenant installation, always select the demo tenant explicitly:
+
+```bash
+php artisan kiteledger:seed-demo --tenant=TENANT_ID --profile=quick
+```
+
+Public website editing, publishing, media, lead handling, and upgrade commands are documented in [docs/WEBSITE_CMS.md](docs/WEBSITE_CMS.md).
+
 See [INSTALL.md](INSTALL.md) for deployment details and [PACKAGING.md](PACKAGING.md)
 for release builds.
 
@@ -52,9 +60,12 @@ npm run build
 Then open `/install` or run `php artisan kiteledger:install`. Use
 `php artisan kiteledger:doctor` to check a deployment.
 
-## AI knowledge indexes
+See [KiteLedger Control Center](docs/SUPERADMIN_CONTROL_CENTER.md) for central modules, installation seeding, settings, payments, CMS/blog/SEO, support tickets, queues, security, and production verification.
 
-KiteLedger's AI Assistant uses exact, keyword, metadata, and optional embedding
+## KiteLedger Copilot and AI knowledge indexes
+
+KiteLedger Copilot uses deterministic financial tools, Neuron orchestration,
+exact, keyword, metadata, and optional embedding
 ranking. The exact and keyword paths work on normal MySQL/MariaDB hosting without
 an external vector database.
 
@@ -68,3 +79,6 @@ php artisan ai:index-status
 Use `--no-embeddings` with the indexing commands when provider embeddings are
 not configured. Re-run indexing after adding routes/help documentation or after
 material business-data changes; it is idempotent and skips unchanged chunks.
+
+See [docs/ai-copilot.md](docs/ai-copilot.md) for provider setup, tenant commands,
+queues, permissions, feature flags, security, action approval, deployment, and rollback.

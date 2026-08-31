@@ -50,7 +50,10 @@ class InvoiceObserver
             $this->voidService->void($invoice, $invoice->voided_reason ?? 'Voided');
         }
 
-        if ($invoice->wasChanged('status') && in_array($invoice->status, ['cancelled', 'void'], true)) {
+        // Guarded like the shared HandlesAccountingTransactionObserver trait:
+        // without this, setting void and status in the same save runs both
+        // void() and cancel() for one document.
+        if ($invoice->wasChanged('status') && in_array($invoice->status, ['cancelled', 'void'], true) && ! (bool) ($invoice->void ?? false)) {
             $this->voidService->cancel($invoice, $invoice->voided_reason ?? 'Cancelled');
         }
     }

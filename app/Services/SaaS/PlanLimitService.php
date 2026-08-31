@@ -3,7 +3,7 @@
 namespace App\Services\SaaS;
 
 use App\Contracts\SaaS\FeatureResolver;
-use App\Models\Central\Tenant;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 
 class PlanLimitService

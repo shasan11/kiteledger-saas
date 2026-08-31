@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout/index.jsx';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import dayjs from 'dayjs';
 import {
     Alert,
@@ -11,9 +11,12 @@ import {
     Drawer,
     Dropdown,
     Form,
+    Grid,
     Input,
     InputNumber,
+    List,
     Modal,
+    Pagination,
     Select,
     Space,
     Statistic,
@@ -57,352 +60,58 @@ const STATUS_COLORS = {
     archived: 'default',
 };
 
-const STATUS_LABELS = {
-    uploaded: 'Uploaded',
-    queued: 'Queued',
-    processing: 'Processing',
-    extracted: 'Extracted',
-    needs_review: 'Needs Review',
-    converted: 'Converted',
-    failed: 'Failed',
-    archived: 'Archived',
-};
+import {
+    STATUS_LABELS, SUMMARY_FIELDS, TOTAL_FIELDS, LINE_ITEM_KEYS, PARTY_KEYS,
+    EXCLUDED_EXTRACTION_KEYS, hasPerm, docKey, isUuidLike, isIdLikeKey, humanize,
+    safeDisplay, asArray, asObject, cleanExtractionValue, money, fileSize,
+    toOptions, formatList, recalcLines, pickValue, getFirstObject,
+    getExtractedParty, getLineItems, normalizeLineItem, reviewLinesFromData,
+    buildKnownRows, buildObjectRows, getLineValue, optionLabel,
+} from './documentUtils';
+import DocumentActionMenu from '../Components/DocumentActionMenu';
+import RemoteSelect from '../Components/RemoteSelect';
+import DocumentSummaryCards from '../Components/DocumentSummaryCards';
+import DocumentPreview from '../Components/DocumentPreview';
 
-const SUMMARY_FIELDS = [
-    { key: 'document_type', label: 'Document Type' },
-    { key: 'document_number', label: 'Document Number', aliases: ['invoice_number', 'bill_number', 'number', 'reference_number'] },
-    { key: 'document_date', label: 'Document Date', aliases: ['invoice_date', 'bill_date', 'date'] },
-    { key: 'due_date', label: 'Due Date' },
-    { key: 'currency_code', label: 'Currency', aliases: ['currency'] },
-    { key: 'confidence', label: 'Confidence' },
-];
-
-const TOTAL_FIELDS = [
-    { key: 'subtotal', label: 'Subtotal', aliases: ['sub_total'] },
-    { key: 'discount_amount', label: 'Discount' },
-    { key: 'tax_amount', label: 'Tax' },
-    { key: 'shipping_amount', label: 'Shipping' },
-    { key: 'total', label: 'Total', aliases: ['grand_total', 'total_amount', 'amount'] },
-    { key: 'amount_due', label: 'Amount Due', aliases: ['balance_due'] },
-];
-
-const LINE_ITEM_KEYS = ['line_items', 'lines', 'items', 'products', 'services'];
-
-const PARTY_KEYS = [
-    'extracted_party',
-    'party',
-    'vendor',
-    'supplier',
-    'customer',
-    'client',
-    'bill_to',
-    'ship_to',
-];
-
-const EXCLUDED_EXTRACTION_KEYS = [
-    ...LINE_ITEM_KEYS,
-    ...PARTY_KEYS,
-    'warnings',
-    'raw',
-    'raw_text',
-    'metadata',
-    'confidence',
-    'subtotal',
-    'sub_total',
-    'discount_amount',
-    'tax_amount',
-    'shipping_amount',
-    'total',
-    'grand_total',
-    'total_amount',
-    'amount',
-    'amount_due',
-    'balance_due',
-];
-
-function hasPerm(perms, key) {
-    return !!(perms && perms[key]);
-}
-
-function docKey(doc) {
-    return doc?.public_id;
-}
-
-function isUuidLike(value) {
-    if (value === null || value === undefined) return false;
-
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        String(value).trim(),
-    );
-}
-
-function isIdLikeKey(key) {
-    return /(^id$|_id$|uuid|guid|token|hash|password|secret)/i.test(String(key || ''));
-}
-
-function humanize(value) {
-    if (value === null || value === undefined || value === '') return '-';
-
-    return String(value)
-        .replace(/[_-]+/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function safeDisplay(value, fallback = '-') {
-    if (value === null || value === undefined || value === '') return fallback;
-    if (isUuidLike(value)) return fallback;
-
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fallback;
-    }
-
-    return String(value);
-}
-
-function cleanExtractionValue(value, fallback = '-') {
-    if (value === null || value === undefined || value === '') return fallback;
-    if (isUuidLike(value)) return fallback;
-
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : fallback;
-    }
-
-    if (Array.isArray(value)) {
-        const cleaned = value
-            .map((item) => {
-                if (item === null || item === undefined || item === '') return null;
-                if (isUuidLike(item)) return null;
-                if (typeof item === 'object') return null;
-                return safeDisplay(item, null);
-            })
-            .filter(Boolean);
-
-        return cleaned.length ? cleaned.join(', ') : fallback;
-    }
-
-    if (typeof value === 'object') {
-        const cleaned = Object.entries(value)
-            .filter(([key, item]) => !isIdLikeKey(key) && !isUuidLike(item) && item !== null && item !== undefined && item !== '')
-            .map(([key, item]) => `${humanize(key)}: ${safeDisplay(item)}`);
-
-        return cleaned.length ? cleaned.join(', ') : fallback;
-    }
-
-    return safeDisplay(value, fallback);
-}
-
-function money(value) {
-    const numeric = Number(value || 0);
-    return Number.isFinite(numeric) ? numeric.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '-';
-}
-
-function fileSize(bytes) {
-    const size = Number(bytes || 0);
-    if (!size) return '-';
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function toOptions(items = []) {
-    return items.map((item) => (typeof item === 'string'
-        ? { value: item, label: humanize(item) }
-        : { ...item, label: humanize(item.label || item.value) }));
-}
-
-function formatList(items = []) {
-    const cleaned = items
-        .map((item) => cleanExtractionValue(item))
-        .filter((item) => item && item !== '-');
-
-    return cleaned.length ? cleaned.join(', ') : '-';
-}
-
-function recalcLines(lines = []) {
-    const next = lines.map((line) => {
-        const qty = Number(line.qty || 1);
-        const rate = Number(line.unit_price || 0);
-        const discount = Number(line.discount_amount || 0);
-        const tax = Number(line.tax_amount || 0);
-
-        return {
-            ...line,
-            qty,
-            unit_price: rate,
-            discount_amount: discount,
-            tax_amount: tax,
-            line_total: Number(((qty * rate) - discount + tax).toFixed(2)),
-        };
-    });
-
-    const total = next.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
-
-    return { lines: next, total: Number(total.toFixed(2)) };
-}
-
-function pickValue(source = {}, keys = []) {
-    for (const key of keys) {
-        if (source?.[key] !== null && source?.[key] !== undefined && source?.[key] !== '') {
-            return source[key];
-        }
-    }
-
-    return null;
-}
-
-function getFirstObject(source = {}, keys = []) {
-    for (const key of keys) {
-        const value = source?.[key];
-
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-            return value;
-        }
-    }
-
-    return {};
-}
-
-function getExtractedParty(normalized = {}, payload = {}) {
-    return getFirstObject(normalized, PARTY_KEYS)
-        || getFirstObject(payload, PARTY_KEYS)
-        || {};
-}
-
-function getLineItems(normalized = {}, payload = {}) {
-    for (const source of [normalized, payload]) {
-        for (const key of LINE_ITEM_KEYS) {
-            if (Array.isArray(source?.[key])) {
-                return source[key];
-            }
-        }
-    }
-
-    return [];
-}
-
-function normalizeLineItem(line = {}) {
-    const qty = Number(pickValue(line, ['qty', 'quantity']) || 1);
-    const unitPrice = Number(pickValue(line, ['unit_price', 'rate', 'price']) || 0);
-    const discount = Number(pickValue(line, ['discount_amount', 'discount']) || 0);
-    const tax = Number(pickValue(line, ['tax_amount', 'tax']) || 0);
-    const suppliedTotal = pickValue(line, ['line_total', 'total', 'amount']);
-
-    return {
-        ...line,
-        product_id: pickValue(line, ['product_id', 'matched_product_id']) || null,
-        product_name: pickValue(line, ['product_name', 'name', 'item']) || null,
-        description: pickValue(line, ['description', 'details', 'product_name', 'name', 'item']) || '',
-        qty: Number.isFinite(qty) ? qty : 1,
-        unit: pickValue(line, ['unit', 'uom', 'unit_name']) || '',
-        unit_price: Number.isFinite(unitPrice) ? unitPrice : 0,
-        discount_amount: Number.isFinite(discount) ? discount : 0,
-        tax_amount: Number.isFinite(tax) ? tax : 0,
-        line_total: Number.isFinite(Number(suppliedTotal))
-            ? Number(suppliedTotal)
-            : Number(((qty * unitPrice) - discount + tax).toFixed(2)),
-    };
-}
-
-function reviewLinesFromData(payload = {}, data = {}) {
-    const normalized = data?.extraction?.normalized_json || {};
-    const candidates = [
-        payload.lines,
-        payload.line_items,
-        payload.items,
-        payload.products,
-        payload.services,
-        data?.mapped_payload?.lines,
-        data?.mapped_payload?.line_items,
-        normalized.lines,
-        normalized.line_items,
-        normalized.items,
-        normalized.products,
-        normalized.services,
-    ];
-
-    const lines = candidates.find((items) => Array.isArray(items) && items.length > 0) || [];
-    return lines.map(normalizeLineItem);
-}
-
-function buildKnownRows(source = {}, fields = []) {
-    const rows = [];
-
-    fields.forEach((field) => {
-        const value = pickValue(source, [field.key, ...(field.aliases || [])]);
-        const display = cleanExtractionValue(value);
-
-        if (display !== '-') {
-            rows.push({
-                key: field.key,
-                field: field.label,
-                value: display,
-            });
-        }
-    });
-
-    return rows;
-}
-
-function buildObjectRows(source = {}, excluded = []) {
-    const excludedSet = new Set(excluded);
-    const rows = [];
-
-    Object.entries(source || {}).forEach(([key, value]) => {
-        if (excludedSet.has(key)) return;
-        if (isIdLikeKey(key)) return;
-        if (Array.isArray(value)) return;
-        if (value && typeof value === 'object') return;
-
-        const display = cleanExtractionValue(value);
-
-        if (display !== '-') {
-            rows.push({
-                key,
-                field: humanize(key),
-                value: display,
-            });
-        }
-    });
-
-    return rows;
-}
-
-function getLineValue(row, keys = []) {
-    return cleanExtractionValue(pickValue(row, keys));
-}
-
-function optionLabel(row) {
-    return row.display_name
-        || row.name
-        || row.code
-        || row.label
-        || row.title
-        || row.email
-        || row.number
-        || row.reference
-        || row.original_name
-        || row.original_file_name
-        || 'Record';
-}
 
 export default function DocumentUploadIndex() {
     const { token } = theme.useToken();
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.md;
     const { props } = usePage();
     const config = props.config || {};
     const permissions = props.permissions || {};
+    const aiReadiness = config.ai_readiness || {};
 
     const [documents, setDocuments] = useState({ data: [], total: 0 });
+    const [summary, setSummary] = useState(null);
     const [loading, setLoading] = useState(false);
     const [filters, setFilters] = useState({ search: '', status: undefined, document_type: undefined, range: null });
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
+
+    // Per-document scan/poll progress, keyed by public id.
+    const [scanning, setScanning] = useState({});
+    const [polling, setPolling] = useState({});
+
+    // Refs hold the live values the async pollers read, so they never observe
+    // a stale closure and never update state after the page goes away.
+    const mountedRef = useRef(true);
+    const pollersRef = useRef(new Map());
+    const scanningRef = useRef(new Set());
+    const listAbortRef = useRef(null);
+
+    useEffect(() => {
+        mountedRef.current = true;
+
+        return () => {
+            mountedRef.current = false;
+            pollersRef.current.forEach((poller) => window.clearTimeout(poller.timeoutId));
+            pollersRef.current.clear();
+            scanningRef.current.clear();
+            listAbortRef.current?.abort();
+        };
+    }, []);
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -431,21 +140,10 @@ export default function DocumentUploadIndex() {
     const [reviewSaving, setReviewSaving] = useState(false);
     const [converting, setConverting] = useState(false);
     const [reviewForm] = Form.useForm();
+    const documentRows = useMemo(() => asArray(documents.data), [documents.data]);
 
     const transactionTypeOptions = useMemo(() => toOptions(config.transaction_types || []), [config.transaction_types]);
     const documentTypeOptions = useMemo(() => toOptions(config.document_types || []), [config.document_types]);
-
-    const stats = useMemo(() => {
-        const list = documents.data || [];
-
-        return {
-            uploaded: list.filter((doc) => doc.status === 'uploaded').length,
-            processing: list.filter((doc) => ['queued', 'processing'].includes(doc.status)).length,
-            needs_review: list.filter((doc) => doc.status === 'needs_review').length,
-            converted: list.filter((doc) => doc.status === 'converted').length,
-            failed: list.filter((doc) => doc.status === 'failed').length,
-        };
-    }, [documents.data]);
 
     const styles = useMemo(() => ({
         page: { padding: 24, minHeight: '100%', background: token.colorBgLayout },
@@ -495,9 +193,16 @@ export default function DocumentUploadIndex() {
 
         setLoading(true);
 
+        // Supersede any in-flight listing request so a slow earlier response
+        // cannot overwrite the results of a newer filter.
+        listAbortRef.current?.abort();
+        const controller = new AbortController();
+        listAbortRef.current = controller;
+
         try {
             const range = filters.range || [];
             const { data } = await axios.get('/api/document-uploads', {
+                signal: controller.signal,
                 params: {
                     search: filters.search || undefined,
                     status: filters.status || undefined,
@@ -509,18 +214,53 @@ export default function DocumentUploadIndex() {
                 },
             });
 
-            setDocuments(data);
+            if (!mountedRef.current) return;
+
+            setDocuments({
+                ...asObject(data),
+                data: asArray(data?.data ?? data),
+                total: data?.total ?? data?.meta?.total ?? asArray(data?.data ?? data).length,
+                current_page: data?.current_page ?? data?.meta?.current_page ?? nextPage,
+                per_page: data?.per_page ?? data?.meta?.per_page ?? nextPageSize,
+            });
+
+            // Counts cover the whole filtered dataset, not this page.
+            if (data?.summary) {
+                setSummary(data.summary);
+            }
         } catch (e) {
+            if (axios.isCancel?.(e) || e.name === 'CanceledError') return;
+            if (!mountedRef.current) return;
+
             antMessage.error(e.response?.data?.message || 'Failed to load documents');
         } finally {
-            setLoading(false);
+            if (mountedRef.current) {
+                setLoading(false);
+            }
         }
     };
+
+    const rangeKey = (filters.range || [])
+        .map((d) => d?.format?.('YYYY-MM-DD') || '')
+        .join('|');
 
     useEffect(() => {
         fetchDocs();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, pageSize, filters.status, filters.document_type]);
+    }, [page, pageSize, filters.status, filters.document_type, rangeKey]);
+
+    // Resume monitoring for scans that were already in flight when the page
+    // loaded, so a refresh (or leaving and coming back) does not strand them.
+    useEffect(() => {
+        asArray(documents?.data).forEach((doc) => {
+            const key = docKey(doc);
+
+            if (key && ['queued', 'processing'].includes(doc.status)) {
+                startPolling(key);
+            }
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [documents]);
 
     const handleUpload = async () => {
         let values;
@@ -543,12 +283,15 @@ export default function DocumentUploadIndex() {
         if (values.document_type) formData.append('document_type', values.document_type);
         if (values.notes) formData.append('notes', values.notes);
 
+        if (uploading) return;
+
         setUploading(true);
 
         try {
-            await axios.post('/api/document-uploads', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            // No explicit Content-Type: the browser must set it so the
+            // multipart boundary is generated. Hardcoding the header drops the
+            // boundary and the server sees an empty request body.
+            await axios.post('/api/document-uploads', formData);
 
             antMessage.success('Document uploaded.');
             setUploadOpen(false);
@@ -556,7 +299,27 @@ export default function DocumentUploadIndex() {
             setFileList([]);
             fetchDocs();
         } catch (e) {
-            antMessage.error(e.response?.data?.message || 'Upload failed');
+            const status = e.response?.status;
+            const errors = e.response?.data?.errors;
+
+            if (status === 422 && errors) {
+                // Correctable validation problem - surface it on the fields and
+                // keep the chosen file so the user does not reselect it.
+                uploadForm.setFields(
+                    Object.entries(errors).map(([name, messages]) => ({
+                        name,
+                        errors: asArray(messages),
+                    })),
+                );
+            }
+
+            if (status === 413) {
+                antMessage.error(
+                    'The file is larger than the server accepts. Please upload a smaller file.',
+                );
+            } else {
+                antMessage.error(e.response?.data?.message || 'Upload failed');
+            }
         } finally {
             setUploading(false);
         }
@@ -566,34 +329,166 @@ export default function DocumentUploadIndex() {
         const key = docKey(doc);
         if (!key) return;
 
+        // Guard the request itself, not just the button: a second click that
+        // lands before setState flushes would otherwise fire another scan.
+        if (scanningRef.current.has(key)) return;
+        scanningRef.current.add(key);
+        setScanning((prev) => ({ ...prev, [key]: true }));
+
         try {
             const { data } = await axios.post(`/api/document-uploads/${key}/scan-ai`);
             antMessage.success(data.message || 'Scan queued.');
             fetchDocs();
-            pollExtractionStatus(key);
+            startPolling(key);
         } catch (e) {
-            antMessage.error(e.response?.data?.message || 'Scan failed');
+            const code = e.response?.data?.code;
+
+            if (code === 'DOCUMENT_SCAN_IN_PROGRESS') {
+                // Another tab or an earlier click already queued this one.
+                antMessage.info('A scan is already running for this document.');
+                startPolling(key);
+            } else {
+                antMessage.error(e.response?.data?.message || 'Scan failed');
+            }
+        } finally {
+            scanningRef.current.delete(key);
+            setScanning((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
         }
     };
 
-    const pollExtractionStatus = (key, attempt = 0) => {
-        if (!key || attempt > 24) return;
+    /*
+     * Extraction polling.
+     *
+     * The backend may legitimately spend several minutes on a document
+     * (per-attempt timeout plus retries with backoff), so the client must not
+     * give up after a fixed short window - the previous implementation stopped
+     * at 60s and left live scans looking abandoned.
+     *
+     * Intervals widen as the wait grows, one poller exists per document, a
+     * short run of network errors is tolerated, and everything is torn down on
+     * unmount.
+     */
+    const POLL_MAX_MS = 8 * 60 * 1000;
+    const POLL_MAX_CONSECUTIVE_ERRORS = 5;
 
-        window.setTimeout(async () => {
+    const pollDelayFor = (attempt) => {
+        if (attempt < 10) return 2500;
+        if (attempt < 25) return 5000;
+        return 10000;
+    };
+
+    const isTerminalExtraction = (status) => ['completed', 'failed'].includes(status);
+
+    const isTerminalDocument = (status) =>
+        ['needs_review', 'converted', 'failed', 'archived'].includes(status);
+
+    const stopPolling = (key) => {
+        const poller = pollersRef.current.get(key);
+
+        if (poller) {
+            window.clearTimeout(poller.timeoutId);
+            pollersRef.current.delete(key);
+        }
+    };
+
+    const startPolling = (key) => {
+        if (!key || pollersRef.current.has(key)) return;
+
+        const state = {
+            timeoutId: null,
+            attempt: 0,
+            errors: 0,
+            startedAt: Date.now(),
+        };
+
+        pollersRef.current.set(key, state);
+        setPolling((prev) => ({ ...prev, [key]: true }));
+
+        const finish = ({ timedOut = false } = {}) => {
+            stopPolling(key);
+
+            if (!mountedRef.current) return;
+
+            setPolling((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+
+            if (timedOut) {
+                antMessage.warning(
+                    'The scan is still running. You can safely leave this page - use Refresh to check again.',
+                );
+            }
+
+            fetchDocs();
+        };
+
+        const tick = async () => {
+            if (!mountedRef.current) {
+                stopPolling(key);
+                return;
+            }
+
+            if (Date.now() - state.startedAt > POLL_MAX_MS) {
+                finish({ timedOut: true });
+                return;
+            }
+
             try {
                 const { data } = await axios.get(`/api/document-uploads/${key}/extraction`);
-                const status = data?.extraction?.status;
 
-                if (['completed', 'failed'].includes(status)) {
-                    fetchDocs();
+                if (!mountedRef.current) {
+                    stopPolling(key);
                     return;
                 }
 
-                pollExtractionStatus(key, attempt + 1);
-            } catch {
-                if (attempt < 3) pollExtractionStatus(key, attempt + 1);
+                state.errors = 0;
+
+                if (
+                    isTerminalExtraction(data?.extraction?.status) ||
+                    isTerminalDocument(data?.document?.status)
+                ) {
+                    finish();
+                    return;
+                }
+            } catch (e) {
+                if (axios.isCancel?.(e)) {
+                    stopPolling(key);
+                    return;
+                }
+
+                // A deleted document will never reach a terminal state.
+                if (e.response?.status === 404) {
+                    finish();
+                    return;
+                }
+
+                // Permission/auth changes are not going to resolve by waiting.
+                if ([401, 403].includes(e.response?.status)) {
+                    finish();
+                    return;
+                }
+
+                state.errors += 1;
+
+                if (state.errors >= POLL_MAX_CONSECUTIVE_ERRORS) {
+                    finish({ timedOut: true });
+                    return;
+                }
             }
-        }, 2500);
+
+            if (!mountedRef.current || !pollersRef.current.has(key)) return;
+
+            state.attempt += 1;
+            state.timeoutId = window.setTimeout(tick, pollDelayFor(state.attempt));
+        };
+
+        state.timeoutId = window.setTimeout(tick, pollDelayFor(0));
     };
 
     const openExtraction = async (doc) => {
@@ -624,7 +519,7 @@ export default function DocumentUploadIndex() {
 
         try {
             const { data } = await axios.post(`/api/document-uploads/${key}/match-entities`);
-            setMatchData(data.matches || []);
+            setMatchData(asArray(data.matches));
         } catch (e) {
             antMessage.error(e.response?.data?.message || 'Match failed');
         } finally {
@@ -686,6 +581,18 @@ export default function DocumentUploadIndex() {
         });
     };
 
+    /*
+     * Reviewing a document is a focused task, so it gets its own screen with
+     * the source visible beside the extracted values rather than a drawer
+     * stacked over the list. Proposal creation still uses the existing drawer.
+     */
+    const openReviewWorkspace = (doc) => {
+        const key = docKey(doc);
+        if (!key) return;
+
+        router.visit(`/documents/${key}/review`);
+    };
+
     const openReview = async (doc, createNew = false) => {
         setReviewDoc(doc);
         setReviewOpen(true);
@@ -702,7 +609,8 @@ export default function DocumentUploadIndex() {
                 ({ data } = await axios.post(`/api/document-uploads/${key}/proposals`, { transaction_type: type }));
             } else {
                 const proposalsResp = await axios.get(`/api/document-uploads/${key}/proposals`);
-                const proposal = proposalsResp.data.proposals?.find((item) => item.status !== 'converted') || proposalsResp.data.proposals?.[0];
+                const proposals = asArray(proposalsResp.data?.proposals);
+                const proposal = proposals.find((item) => item.status !== 'converted') || proposals[0];
 
                 if (proposal) {
                     ({ data } = await axios.get(`/api/document-uploads/${key}/proposals/${proposal.id}/review`));
@@ -772,7 +680,7 @@ export default function DocumentUploadIndex() {
 
         if (!reviewDoc || !dataForConvert?.proposal) return;
 
-        if (dataForConvert.missing_fields?.length) {
+        if (asArray(dataForConvert.missing_fields).length) {
             antMessage.warning('Fill required fields before creating draft transaction.');
             return;
         }
@@ -813,6 +721,44 @@ export default function DocumentUploadIndex() {
 
     const canUpdate = hasPerm(permissions, 'document_upload.update') || hasPerm(permissions, 'document_upload.edit');
 
+    const primaryAction = (record) => {
+        const busy = Boolean(scanning[docKey(record)] || polling[docKey(record)]);
+        const canScan = hasPerm(permissions, 'document_upload.scan_ai');
+        const canReview = hasPerm(permissions, 'document_upload.extract.view');
+
+        if (['queued', 'processing'].includes(record.status) || busy) {
+            return { label: 'Scanning…', disabled: true, reason: 'The AI extraction job is currently running.' };
+        }
+
+        if (record.status === 'failed' || record.status === 'uploaded') {
+            return {
+                label: record.status === 'failed' ? 'Retry scan' : 'Scan document',
+                icon: <ScanOutlined />,
+                disabled: !canScan || aiReadiness.document_scanning_available === false,
+                reason: !canScan
+                    ? 'You do not have permission to scan documents.'
+                    : aiReadiness.issues?.[0]?.message,
+                onClick: () => scanDoc(record),
+            };
+        }
+
+        if (record.extraction) {
+            return {
+                label: record.status === 'converted' ? 'Open draft' : 'Review & continue',
+                icon: <SwapOutlined />,
+                disabled: !canReview,
+                reason: canReview ? null : 'You do not have permission to review extracted document data.',
+                onClick: () => openReviewWorkspace(record),
+            };
+        }
+
+        return {
+            label: 'Preview',
+            icon: <EyeOutlined />,
+            onClick: () => setPreviewDoc(record),
+        };
+    };
+
     const columns = [
         {
             title: 'Document',
@@ -833,7 +779,7 @@ export default function DocumentUploadIndex() {
             render: (value) => <Tag>{humanize(value || 'unknown')}</Tag>,
         },
         {
-            title: 'Status',
+            title: 'Workflow status',
             dataIndex: 'status',
             width: 150,
             render: (value) => (
@@ -843,10 +789,10 @@ export default function DocumentUploadIndex() {
             ),
         },
         {
-            title: 'AI Status',
+            title: 'AI extraction',
             width: 140,
             render: (_, record) => record.extraction
-                ? <Tag color="blue">{humanize(record.extraction.status)}</Tag>
+                ? <Tag color="blue">{record.extraction.stage?.label || humanize(record.extraction.status)}</Tag>
                 : <Tag>No Scan</Tag>,
         },
         {
@@ -865,23 +811,44 @@ export default function DocumentUploadIndex() {
             title: '',
             key: 'actions',
             fixed: 'right',
-            width: 72,
-            render: (_, record) => (
-                <DocumentActionMenu
-                    doc={record}
-                    permissions={permissions}
-                    canUpdate={canUpdate}
-                    onPreview={() => setPreviewDoc(record)}
-                    onEdit={() => openEdit(record)}
-                    onScan={() => scanDoc(record)}
-                    onExtraction={() => openExtraction(record)}
-                    onMatch={() => openMatch(record)}
-                    onReview={() => openReview(record)}
-                    onCreateProposal={() => openReview(record, true)}
-                    onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
-                    onDelete={() => deleteDoc(record)}
-                />
-            ),
+            width: 220,
+            render: (_, record) => {
+                const next = primaryAction(record);
+
+                return (
+                    <Space size={6}>
+                        <Tooltip title={next.reason}>
+                            <span>
+                                <Button
+                                    size="small"
+                                    type="primary"
+                                    icon={next.icon}
+                                    disabled={next.disabled}
+                                    onClick={next.onClick}
+                                >
+                                    {next.label}
+                                </Button>
+                            </span>
+                        </Tooltip>
+                        <DocumentActionMenu
+                            doc={record}
+                            permissions={permissions}
+                            canUpdate={canUpdate}
+                            onPreview={() => setPreviewDoc(record)}
+                            onEdit={() => openEdit(record)}
+                            onScan={() => scanDoc(record)}
+                            scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
+                            scanUnavailableReason={aiReadiness.document_scanning_available === false ? aiReadiness.issues?.[0]?.message : null}
+                            onExtraction={() => openExtraction(record)}
+                            onMatch={() => openMatch(record)}
+                            onReview={() => openReviewWorkspace(record)}
+                            onCreateProposal={() => openReview(record, true)}
+                            onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
+                            onDelete={() => deleteDoc(record)}
+                        />
+                    </Space>
+                );
+            },
         },
     ];
 
@@ -904,13 +871,6 @@ export default function DocumentUploadIndex() {
                     </div>
 
                     <Space wrap>
-                        <Button
-                            icon={<ScanOutlined />}
-                            onClick={() => documents.data?.[0] && scanDoc(documents.data[0])}
-                            disabled={!documents.data?.[0] || !hasPerm(permissions, 'document_upload.scan_ai')}
-                        >
-                            Run AI Scan
-                        </Button>
                         <Button icon={<ReloadOutlined />} onClick={() => fetchDocs({ page })}>
                             Refresh
                         </Button>
@@ -925,13 +885,18 @@ export default function DocumentUploadIndex() {
                     </Space>
                 </div>
 
-                <div style={styles.statGrid}>
-                    {Object.entries(stats).map(([key, value]) => (
-                        <Card key={key} size="small" style={styles.card}>
-                            <Statistic title={STATUS_LABELS[key]} value={value} />
-                        </Card>
-                    ))}
-                </div>
+                {/* Server-computed counts across the whole filtered dataset.
+                    These replace an earlier grid that counted only the rows on
+                    the current page, which under-reported every total. */}
+                <DocumentSummaryCards
+                    summary={summary}
+                    loading={loading}
+                    activeStatus={filters.status}
+                    onSelect={(status) => {
+                        setFilters((prev) => ({ ...prev, status }));
+                        setPage(1);
+                    }}
+                />
 
                 <Card size="small" style={{ ...styles.card, ...styles.filters }}>
                     <div style={styles.filterInner}>
@@ -1002,25 +967,95 @@ export default function DocumentUploadIndex() {
                 </Card>
 
                 <Card size="small" style={styles.card}>
-                    <Table
-                        size="small"
-                        rowKey="public_id"
-                        loading={loading}
-                        dataSource={documents.data || []}
-                        columns={columns}
-                        scroll={{ x: 1100 }}
-                        pagination={{
-                            current: page,
-                            pageSize,
-                            total: documents.meta?.total || documents.total || 0,
-                            showSizeChanger: true,
-                            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
-                            onChange: (nextPage, nextPageSize) => {
-                                setPage(nextPage);
-                                setPageSize(nextPageSize);
-                            },
-                        }}
-                    />
+                    {isMobile ? (
+                        <>
+                            <List
+                                loading={loading}
+                                dataSource={documentRows}
+                                locale={{ emptyText: 'No documents found.' }}
+                                renderItem={(record) => {
+                                    const next = primaryAction(record);
+                                    return (
+                                        <List.Item style={{ padding: '8px 0' }}>
+                                            <Card size="small" style={{ width: '100%' }}>
+                                                <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                                    <div>
+                                                        <Text strong>{record.label || 'Untitled Document'}</Text>
+                                                        <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{record.original_name || '-'}</Text>
+                                                    </div>
+                                                    <Space wrap size={6}>
+                                                        <Tag color={STATUS_COLORS[record.status] || 'default'}>
+                                                            Workflow: {STATUS_LABELS[record.status] || humanize(record.status)}
+                                                        </Tag>
+                                                        <Tag color={record.extraction ? 'blue' : 'default'}>
+                                                            AI: {record.extraction?.stage?.label || humanize(record.extraction?.status || 'not scanned')}
+                                                        </Tag>
+                                                        <Tag>{humanize(record.document_type || 'unknown')}</Tag>
+                                                    </Space>
+                                                    <Space wrap>
+                                                        <Tooltip title={next.reason}>
+                                                            <span>
+                                                                <Button type="primary" icon={next.icon} disabled={next.disabled} onClick={next.onClick}>
+                                                                    {next.label}
+                                                                </Button>
+                                                            </span>
+                                                        </Tooltip>
+                                                        <DocumentActionMenu
+                                                            doc={record}
+                                                            permissions={permissions}
+                                                            canUpdate={canUpdate}
+                                                            onPreview={() => setPreviewDoc(record)}
+                                                            onEdit={() => openEdit(record)}
+                                                            onScan={() => scanDoc(record)}
+                                                            scanBusy={Boolean(scanning[docKey(record)] || polling[docKey(record)])}
+                                                            scanUnavailableReason={aiReadiness.document_scanning_available === false ? aiReadiness.issues?.[0]?.message : null}
+                                                            onExtraction={() => openExtraction(record)}
+                                                            onMatch={() => openMatch(record)}
+                                                            onReview={() => openReviewWorkspace(record)}
+                                                            onCreateProposal={() => openReview(record, true)}
+                                                            onDownload={() => window.open(`/api/document-uploads/${docKey(record)}/preview`, '_blank')}
+                                                            onDelete={() => deleteDoc(record)}
+                                                        />
+                                                    </Space>
+                                                </Space>
+                                            </Card>
+                                        </List.Item>
+                                    );
+                                }}
+                            />
+                            <Pagination
+                                size="small"
+                                current={page}
+                                pageSize={pageSize}
+                                total={documents.meta?.total || documents.total || 0}
+                                showSizeChanger
+                                onChange={(nextPage, nextPageSize) => {
+                                    setPage(nextPage);
+                                    setPageSize(nextPageSize);
+                                }}
+                                style={{ marginTop: 12 }}
+                            />
+                        </>
+                    ) : (
+                        <Table
+                            size="small"
+                            rowKey="public_id"
+                            loading={loading}
+                            dataSource={documentRows}
+                            columns={columns}
+                            pagination={{
+                                current: page,
+                                pageSize,
+                                total: documents.meta?.total || documents.total || 0,
+                                showSizeChanger: true,
+                                showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+                                onChange: (nextPage, nextPageSize) => {
+                                    setPage(nextPage);
+                                    setPageSize(nextPageSize);
+                                },
+                            }}
+                        />
+                    )}
                 </Card>
 
                 <UploadModal
@@ -1055,7 +1090,6 @@ export default function DocumentUploadIndex() {
 
                 <PreviewModal
                     doc={previewDoc}
-                    styles={styles}
                     onClose={() => setPreviewDoc(null)}
                 />
 
@@ -1145,172 +1179,6 @@ function denormalizeReviewValues(values) {
     return next;
 }
 
-function DocumentActionMenu({
-    doc,
-    permissions,
-    canUpdate,
-    onPreview,
-    onEdit,
-    onScan,
-    onExtraction,
-    onMatch,
-    onReview,
-    onCreateProposal,
-    onDownload,
-    onDelete,
-}) {
-    const canScan = ['uploaded', 'failed', 'needs_review', 'extracted'].includes(doc.status)
-        && hasPerm(permissions, 'document_upload.scan_ai');
-
-    const hasExtraction = !!doc.extraction;
-
-    const items = [
-        { key: 'preview', icon: <EyeOutlined />, label: 'Preview Document', onClick: onPreview },
-        canUpdate && { key: 'edit', icon: <EditOutlined />, label: 'Edit Details', onClick: onEdit },
-        {
-            key: 'scan',
-            icon: <ScanOutlined />,
-            label: doc.status === 'failed' ? 'Retry AI Scan' : 'Run AI Scan',
-            disabled: !canScan,
-            onClick: onScan,
-        },
-        {
-            key: 'extraction',
-            icon: <FileTextOutlined />,
-            label: 'View Extraction',
-            disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.extract.view'),
-            onClick: onExtraction,
-        },
-        {
-            key: 'match',
-            icon: <ToolOutlined />,
-            label: 'Entity Matches',
-            disabled: !hasExtraction || !hasPerm(permissions, 'document_upload.entity_match'),
-            onClick: onMatch,
-        },
-        {
-            key: 'proposal',
-            icon: <PlusOutlined />,
-            label: 'Create Proposal',
-            disabled: !hasExtraction || doc.status === 'converted',
-            onClick: onCreateProposal,
-        },
-        {
-            key: 'review',
-            icon: <SwapOutlined />,
-            label: doc.status === 'converted' ? 'Open Draft Record' : 'Review Transaction',
-            disabled: !hasExtraction,
-            onClick: onReview,
-        },
-        { key: 'download', icon: <DownloadOutlined />, label: 'Download', onClick: onDownload },
-        hasPerm(permissions, 'document_upload.delete') && { type: 'divider' },
-        hasPerm(permissions, 'document_upload.delete') && {
-            key: 'delete',
-            icon: <DeleteOutlined />,
-            label: 'Delete',
-            danger: true,
-            onClick: onDelete,
-        },
-    ].filter(Boolean);
-
-    return (
-        <Dropdown menu={{ items }} trigger={['click']}>
-            <Tooltip title="Actions">
-                <Button icon={<MoreOutlined />} />
-            </Tooltip>
-        </Dropdown>
-    );
-}
-
-function RemoteSelect({ endpoint, value, onChange, placeholder, selectedLabel }) {
-    const [options, setOptions] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [resolvedLabel, setResolvedLabel] = useState(selectedLabel || null);
-
-    const load = async (search = '') => {
-        setLoading(true);
-
-        try {
-            const { data } = await axios.get(endpoint, {
-                params: { search, per_page: 20 },
-            });
-
-            const rows = Array.isArray(data) ? data : data.results || data.data || [];
-
-            setOptions(rows.map((row) => ({
-                value: row.id,
-                label: optionLabel(row),
-            })));
-        } catch {
-            setOptions([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [endpoint]);
-
-    useEffect(() => {
-        setResolvedLabel(selectedLabel || null);
-    }, [selectedLabel, value]);
-
-    useEffect(() => {
-        if (!value || selectedLabel || options.some((item) => String(item.value) === String(value))) {
-            return;
-        }
-
-        let active = true;
-        const loadSelected = async () => {
-            try {
-                const { data } = await axios.get(`${String(endpoint).replace(/\/+$/, '')}/${value}`);
-                const record = data?.result || data?.data || data;
-                const label = record && typeof record === 'object' ? optionLabel(record) : null;
-
-                if (active && label && label !== 'Record') {
-                    setResolvedLabel(label);
-                }
-            } catch {
-                // The list endpoint may not expose a show route. Keep the safe label fallback.
-            }
-        };
-
-        void loadSelected();
-
-        return () => {
-            active = false;
-        };
-    }, [endpoint, options, selectedLabel, value]);
-
-    const displayOptions = useMemo(() => {
-        const next = [...options];
-
-        if (value && !next.some((item) => String(item.value) === String(value))) {
-            next.unshift({
-                value,
-                label: resolvedLabel || (isUuidLike(value) ? 'Linked record' : safeDisplay(value)),
-            });
-        }
-
-        return next;
-    }, [options, resolvedLabel, value]);
-
-    return (
-        <Select
-            showSearch
-            allowClear
-            value={value}
-            onChange={onChange}
-            onSearch={load}
-            loading={loading}
-            filterOption={false}
-            placeholder={placeholder}
-            options={displayOptions}
-        />
-    );
-}
 
 function ReviewField({ schema, form, doc, onFkCreated }) {
     const createRecord = async () => {
@@ -1404,11 +1272,15 @@ function DocumentReviewDrawer({
     onConvert,
     onClose,
 }) {
-    const payload = data?.mapped_payload || {};
-    const normalized = data?.extraction?.normalized_json || {};
+    const payload = asObject(data?.mapped_payload);
+    const normalized = asObject(data?.extraction?.normalized_json);
     const document = data?.document || doc || {};
     const party = getExtractedParty(normalized, payload);
-    const totals = normalized?.totals || normalized;
+    const totals = asObject(normalized?.totals);
+    const totalsSource = Object.keys(totals).length ? totals : normalized;
+    const missingFields = asArray(data?.missing_fields);
+    const warnings = asArray(data?.warnings);
+    const reviewSchema = asArray(data?.review_schema).filter((field) => field && typeof field === 'object' && !Array.isArray(field));
 
     const lineColumns = [
         {
@@ -1544,19 +1416,19 @@ function DocumentReviewDrawer({
                                 </Space>
                             </Card>
 
-                            {data?.missing_fields?.length > 0 && (
+                            {missingFields.length > 0 && (
                                 <Alert
                                     type="warning"
                                     message="Fill required fields before creating draft transaction."
-                                    description={formatList(data.missing_fields)}
+                                    description={formatList(missingFields)}
                                 />
                             )}
 
-                            {data?.warnings?.length > 0 && (
+                            {warnings.length > 0 && (
                                 <Alert
                                     type="info"
                                     message="Review warnings"
-                                    description={formatList(data.warnings)}
+                                    description={formatList(warnings)}
                                 />
                             )}
 
@@ -1594,19 +1466,19 @@ function DocumentReviewDrawer({
                                             : '-'}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Subtotal">
-                                        {money(pickValue(totals, ['subtotal', 'sub_total']))}
+                                        {money(pickValue(totalsSource, ['subtotal', 'sub_total']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Discount">
-                                        {money(pickValue(totals, ['discount_amount', 'discount']))}
+                                        {money(pickValue(totalsSource, ['discount_amount', 'discount']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Tax">
-                                        {money(pickValue(totals, ['tax_amount', 'tax']))}
+                                        {money(pickValue(totalsSource, ['tax_amount', 'tax']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Total">
-                                        {money(pickValue(totals, ['grand_total', 'total', 'total_amount']))}
+                                        {money(pickValue(totalsSource, ['grand_total', 'total', 'total_amount']))}
                                     </Descriptions.Item>
                                     <Descriptions.Item label="Amount Due">
-                                        {money(pickValue(totals, ['amount_due', 'balance_due']))}
+                                        {money(pickValue(totalsSource, ['amount_due', 'balance_due']))}
                                     </Descriptions.Item>
                                 </Descriptions>
                             </Card>
@@ -1636,7 +1508,7 @@ function DocumentReviewDrawer({
 
                             <Card size="small" title="Transaction Details" style={styles.card}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-                                    {(data?.review_schema || []).map((field) => (
+                                    {reviewSchema.map((field) => (
                                         <ReviewField
                                             key={field.field}
                                             schema={field}
@@ -1978,7 +1850,7 @@ function EditModal({
     );
 }
 
-function PreviewModal({ doc, styles, onClose }) {
+function PreviewModal({ doc, onClose }) {
     return (
         <Modal
             title={doc?.label || 'Preview'}
@@ -1988,21 +1860,21 @@ function PreviewModal({ doc, styles, onClose }) {
             onCancel={onClose}
             destroyOnClose
         >
-            {doc && (
-                <iframe
-                    src={`/api/document-uploads/${docKey(doc)}/preview`}
-                    style={styles.iframe}
-                    title={doc.label || 'Document Preview'}
+            {doc && <div style={{ height: '72vh' }}>
+                <DocumentPreview
+                    document={doc}
+                    onDownload={(document) => window.open(`/api/document-uploads/${docKey(document)}/preview`, '_blank')}
                 />
-            )}
+            </div>}
         </Modal>
     );
 }
 
 function ExtractionModal({ doc, data, loading, styles, onClose }) {
-    const normalized = data?.extraction?.normalized_json || {};
-    const payload = data?.document?.mapped_payload || data?.mapped_payload || {};
+    const normalized = asObject(data?.extraction?.normalized_json);
+    const payload = asObject(data?.document?.mapped_payload || data?.mapped_payload);
     const document = data?.document || doc || {};
+    const warnings = asArray(normalized.warnings);
 
     return (
         <Modal
@@ -2033,11 +1905,11 @@ function ExtractionModal({ doc, data, loading, styles, onClose }) {
                         </Descriptions>
                     </Card>
 
-                    {normalized.warnings?.length > 0 && (
+                    {warnings.length > 0 && (
                         <Alert
                             type="warning"
                             message="Warnings"
-                            description={formatList(normalized.warnings)}
+                            description={formatList(warnings)}
                         />
                     )}
 
@@ -2071,7 +1943,7 @@ function MatchModal({ doc, data, loading, onClose }) {
                     size="small"
                     rowKey={(record, index) => record.public_id || index}
                     pagination={false}
-                    dataSource={data || []}
+                    dataSource={asArray(data)}
                     columns={[
                         {
                             title: 'Type',

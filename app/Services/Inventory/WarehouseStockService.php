@@ -9,7 +9,10 @@ use App\Models\Product;
 use App\Models\Warehouse;
 use App\Models\WarehouseTransfer;
 use App\Models\WarehouseItem;
+use App\Exceptions\Accounting\MissingLedgerAccountException;
+use App\Services\ParallelJournalVoucherService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
@@ -143,6 +146,25 @@ class WarehouseStockService
                 'approved' => true,
                 'approved_at' => $lockedAdjustment->approved_at ?: now(),
             ])->saveQuietly();
+
+            // saveQuietly() above suppresses model events, so the observer never
+            // fires and nothing else would ever raise the ledger entry for this
+            // stock movement. Post it here — this is the one choke point every
+            // path (manual approval, invoice, purchase bill, production) goes
+            // through. createJournal() is idempotent, so a later call from
+            // TransactionApprovalService::approve() is a harmless no-op.
+            try {
+                app(ParallelJournalVoucherService::class)->createForApprovedSource($lockedAdjustment->refresh());
+            } catch (MissingLedgerAccountException $exception) {
+                // An incomplete chart of accounts must not make stock unusable.
+                // The adjustment is still recorded, so the journal can be raised
+                // later once the account exists — createJournal() is idempotent.
+                Log::error('Stock moved without a ledger entry: the chart of accounts is missing a required account.', [
+                    'inventory_adjustment_id' => $lockedAdjustment->id,
+                    'adjustment_no' => $lockedAdjustment->adjustment_no,
+                    'missing_account_type' => $exception->accountType,
+                ]);
+            }
 
             return $lockedAdjustment->refresh();
         });

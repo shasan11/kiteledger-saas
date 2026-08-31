@@ -2,8 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\AppSetting;
 use App\Models\ApplicationSetting;
+use App\Models\AppSetting;
+use App\Models\Currency;
+use App\Models\FiscalYear;
 use App\Models\GeneralSetting;
 use Illuminate\Database\Seeder;
 
@@ -15,6 +17,9 @@ class MasterApplicationSettingsSeeder extends Seeder
         $lightLogoPath = null;
         $darkLogoPath = null;
         $faviconPath = null;
+        $defaultCurrencyId = Currency::query()->where('code', 'NPR')->value('id')
+            ?: Currency::query()->where('code', 'USD')->value('id');
+        $currentFiscalYearId = FiscalYear::query()->where('is_current', true)->where('active', true)->value('id');
 
         AppSetting::updateOrCreate(
             ['company_name' => 'Demo Company Pvt. Ltd.'],
@@ -36,6 +41,8 @@ class MasterApplicationSettingsSeeder extends Seeder
                 'state' => 'Bagmati',
                 'postal_code' => null,
                 'country' => 'Nepal',
+                'default_currency_id' => $defaultCurrencyId,
+                'fiscal_year_id' => $currentFiscalYearId,
 
                 'timezone' => 'Asia/Kathmandu',
                 'date_format' => 'DD-MM-YYYY',

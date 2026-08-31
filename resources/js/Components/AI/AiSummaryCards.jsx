@@ -18,7 +18,13 @@ export default function AiSummaryCards({ cards = [] }) {
                         <Statistic
                             title={card.label}
                             value={formatValue(card.value, card.format)}
-                            valueStyle={{ fontSize: 18, lineHeight: 1.2 }}
+                            /* Tabular numerals keep figures aligned across
+                               cards and stop digits shifting as values update. */
+                            valueStyle={{
+                                fontSize: 18,
+                                lineHeight: 1.2,
+                                fontVariantNumeric: 'tabular-nums',
+                            }}
                         />
                     </Card>
                 </Col>

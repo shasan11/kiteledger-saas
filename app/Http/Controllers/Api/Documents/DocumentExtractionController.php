@@ -3,19 +3,29 @@
 namespace App\Http\Controllers\Api\Documents;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\DocumentEntityMatchResource;
 use App\Http\Resources\DocumentExtractionResource;
+use App\Http\Resources\DocumentTransactionProposalResource;
 use App\Http\Resources\DocumentUploadResource;
 use App\Jobs\Documents\ProcessDocumentAiExtractionJob;
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
+use App\Services\AI\AiReadinessService;
+use App\Services\AI\AiSettingsService;
+use App\Services\BranchScopeService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentPermissionService;
-use App\Services\BranchScopeService;
+use App\Services\Documents\Review\DocumentReadinessService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class DocumentExtractionController extends Controller
 {
+    /** Statuses a document may be (re)scanned from. */
+    private const SCANNABLE_STATUSES = ['uploaded', 'failed', 'needs_review', 'extracted'];
+
     public function __construct(
         protected DocumentPermissionService $perms,
         protected DocumentAuditService $audit,
@@ -24,7 +34,7 @@ class DocumentExtractionController extends Controller
 
     public function scan(Request $request, string $publicId)
     {
-        if (! config('documents.ai_scan_enabled', true)) {
+        if (! app(AiSettingsService::class)->documentScanningEnabled()) {
             return response()->json([
                 'ok' => false,
                 'message' => 'AI document scanning is disabled.',
@@ -36,12 +46,20 @@ class DocumentExtractionController extends Controller
         $this->authorize('scanAi', $doc);
         $this->assertDocumentAccess($request, $doc);
 
-        if (!in_array($doc->status, ['uploaded', 'failed', 'needs_review', 'extracted'], true)) {
+        $aiReadiness = app(AiReadinessService::class)->evaluate();
+        if (! ($aiReadiness['document_scanning_available'] ?? false)) {
+            $blockers = collect($aiReadiness['issues'] ?? [])
+                ->filter(fn (array $issue) => str_contains((string) ($issue['code'] ?? ''), 'DOCUMENT')
+                    || str_contains((string) ($issue['code'] ?? ''), 'QUEUE')
+                    || str_contains((string) ($issue['code'] ?? ''), 'PROVIDER'))
+                ->pluck('message')->values()->all();
+
             return response()->json([
                 'ok' => false,
-                'message' => 'Document cannot be scanned in current status: ' . $doc->status,
-                'code' => 'DOCUMENT_STATUS_INVALID',
-            ], 422);
+                'code' => 'DOCUMENT_AI_NOT_READY',
+                'message' => $blockers[0] ?? 'Document scanning is not ready. Ask the platform administrator to check AI readiness.',
+                'blockers' => $blockers,
+            ], 503);
         }
 
         if (! Storage::disk(config('documents.disk', 'local'))->exists($doc->file_path)) {
@@ -52,20 +70,81 @@ class DocumentExtractionController extends Controller
             ], 422);
         }
 
-        $extraction = DocumentExtraction::query()->create([
-            'document_upload_id' => $doc->id,
-            'status' => 'queued',
-            'provider' => null,
-            'model' => null,
-        ]);
+        // The status check and the extraction insert have to happen under the
+        // same row lock. Without it two concurrent scans (double click, two
+        // tabs, retried request) both pass the whitelist and both enqueue a job.
+        $extraction = DB::transaction(function () use ($doc) {
+            $locked = DocumentUpload::query()->whereKey($doc->id)->lockForUpdate()->first();
 
-        $doc->update(['status' => 'queued']);
+            if (! $locked) {
+                return 'missing';
+            }
+
+            $hasActiveAttempt = DocumentExtraction::query()
+                ->where('document_upload_id', $locked->id)
+                ->whereIn('status', ['queued', 'processing', 'retrying'])
+                ->exists();
+
+            if ($hasActiveAttempt) {
+                return 'in_progress';
+            }
+
+            if (! in_array($locked->status, self::SCANNABLE_STATUSES, true)) {
+                return $locked->status;
+            }
+
+            $created = DocumentExtraction::query()->create([
+                'document_upload_id' => $locked->id,
+                'status' => 'queued',
+                'provider' => null,
+                'model' => null,
+                'attempt_number' => (int) DocumentExtraction::query()
+                    ->where('document_upload_id', $locked->id)
+                    ->max('attempt_number') + 1,
+            ]);
+
+            $locked->update(['status' => 'queued']);
+
+            return $created;
+        });
+
+        if (! $extraction instanceof DocumentExtraction) {
+            return response()->json([
+                'ok' => false,
+                'message' => $extraction === 'in_progress'
+                    ? 'A scan is already running for this document.'
+                    : 'Document cannot be scanned in current status: '.$extraction,
+                'code' => $extraction === 'in_progress' ? 'DOCUMENT_SCAN_IN_PROGRESS' : 'DOCUMENT_STATUS_INVALID',
+            ], 409);
+        }
+
         $this->audit->log('scan.queued', [
             'document_upload_id' => $doc->id,
             'document_extraction_id' => $extraction->id,
         ]);
 
-        ProcessDocumentAiExtractionJob::dispatch($doc->id, $extraction->id);
+        try {
+            ProcessDocumentAiExtractionJob::dispatch($doc->id, $extraction->id);
+        } catch (Throwable $e) {
+            report($e);
+
+            DB::transaction(function () use ($doc, $extraction): void {
+                DocumentExtraction::query()->whereKey($extraction->id)->update([
+                    'status' => 'failed',
+                    'stage' => 'failed',
+                    'error_code' => 'DOCUMENT_AI_UNAVAILABLE',
+                    'error_message' => 'Document scanning could not be queued. Ask an administrator to check the queue worker.',
+                    'completed_at' => now(),
+                ]);
+                DocumentUpload::query()->whereKey($doc->id)->update(['status' => 'failed']);
+            });
+
+            return response()->json([
+                'ok' => false,
+                'code' => 'DOCUMENT_QUEUE_UNAVAILABLE',
+                'message' => 'Document scanning could not be queued. Please try again after the queue service is restored.',
+            ], 503);
+        }
 
         return response()->json([
             'ok' => true,
@@ -88,8 +167,12 @@ class DocumentExtractionController extends Controller
             'ok' => true,
             'document' => new DocumentUploadResource($doc),
             'extraction' => $doc->extraction ? new DocumentExtractionResource($doc->extraction->load('documentUpload')) : null,
-            'matches' => $doc->entityMatches,
-            'proposals' => $doc->proposals,
+            'matches' => DocumentEntityMatchResource::collection($doc->entityMatches),
+            'proposals' => DocumentTransactionProposalResource::collection($doc->proposals),
+            // Explains in plain sentences whether a draft can be created, so the
+            // UI never has to grey out an action without saying why.
+            'readiness' => app(DocumentReadinessService::class)->evaluate($doc, $request->user()),
+            'permissions' => $this->perms->summary($request->user()),
         ]);
     }
 

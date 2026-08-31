@@ -15,7 +15,7 @@ export default function Emails(props) {
     { title: 'From', dataIndex: 'sender_email', key: 'sender_email', sorter: true, render: (v) => v || '-' },
     { title: 'To', dataIndex: 'receiver_email', key: 'receiver_email', sorter: true, render: (v) => v || '-' },
     { title: 'Subject', dataIndex: 'subject', key: 'subject', sorter: true, render: (v) => v ? <Tooltip title={v}><span style={{ fontWeight: 500 }}>{v.length>60?v.slice(0,60)+'…':v}</span></Tooltip> : '-' },
-    { title: 'Status', dataIndex: 'email_status', key: 'email_status', sorter: true, width: 100, render: (v) => <Tag color={STATUS_COLORS[v]||'default'}>{v||'—'}</Tag> },
+    { title: 'Status', dataIndex: 'email_status', key: 'email_status', sorter: true, width: 100, render: (v) => <Tag color={STATUS_COLORS[v]||'default'}>{v||'-'}</Tag> },
     { title: 'Branch', key: 'branch', render: (_, r) => r?.branch?.name || '-' },
     { title: 'Sent At', dataIndex: 'created_at', key: 'created_at', sorter: true, width: 110, render: (v) => v ? new Date(v).toLocaleDateString() : '-' },
     { title: 'Active', dataIndex: 'active', key: 'active', width: 70, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Yes' : 'No'}</Tag> },

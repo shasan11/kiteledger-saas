@@ -173,7 +173,7 @@ function OverviewPanel({ globalSettings, gateways }) {
 
     return (
         <div style={{ padding: '20px 24px' }}>
-            <SectionTitle icon={<SettingOutlined />} title="Online Payments — Overview" description="Current status of your payment infrastructure." />
+            <SectionTitle icon={<SettingOutlined />} title="Online Payments - Overview" description="Current status of your payment infrastructure." />
 
             {globalSettings?.enable_online_payment ? (
                 <Alert type="success" showIcon icon={<CheckCircleFilled />}
@@ -340,7 +340,7 @@ function GeneralPanel({ globalSettings, onSaved }) {
                 },
                 {
                     k: 'allow_partial_invoice_payment', label: 'Allow Partial Payments',
-                    desc: 'Customers can pay less than the full balance due — useful for deposit or instalment arrangements.',
+                    desc: 'Customers can pay less than the full balance due - useful for deposit or instalment arrangements.',
                     ctrl: <Switch checked={vals.allow_partial_invoice_payment} onChange={v => set('allow_partial_invoice_payment', v)} />,
                 },
                 {
@@ -694,8 +694,8 @@ function GatewayPanel({ providerKey, gateways, onSaved }) {
                 <SettingRow
                     label="Mode"
                     description={vals.mode === 'live'
-                        ? '⚠ Live mode — real money will be charged to customers.'
-                        : 'Test mode — no real charges. Use test credentials / test cards.'}
+                        ? '⚠ Live mode - real money will be charged to customers.'
+                        : 'Test mode - no real charges. Use test credentials / test cards.'}
                 >
                     <Select
                         style={{ width: 200 }} value={vals.mode} onChange={v => setV('mode', v)}
@@ -754,7 +754,7 @@ function GatewayPanel({ providerKey, gateways, onSaved }) {
                 <Alert
                     type="info" showIcon icon={<LockOutlined />}
                     message="Credentials are encrypted at rest using AES-256."
-                    description="Secrets are never returned to the browser in plain text. Masked values are shown — leave a field blank to keep the existing value unchanged."
+                    description="Secrets are never returned to the browser in plain text. Masked values are shown - leave a field blank to keep the existing value unchanged."
                     style={{ margin: '12px 0 16px', borderRadius: token.borderRadius }}
                 />
 
@@ -768,7 +768,7 @@ function GatewayPanel({ providerKey, gateways, onSaved }) {
                                 {f.isSecret ? (
                                     <Input.Password
                                         style={{ width: 300 }}
-                                        placeholder={isMasked(creds[f.key]) ? '(unchanged — enter new to replace)' : (f.placeholder || '')}
+                                        placeholder={isMasked(creds[f.key]) ? '(unchanged - enter new to replace)' : (f.placeholder || '')}
                                         value={isMasked(creds[f.key]) ? '' : (creds[f.key] ?? '')}
                                         onChange={e => setC(f.key, e.target.value)}
                                         iconRender={v => v ? <EyeTwoTone /> : <EyeInvisibleOutlined />}
@@ -776,7 +776,7 @@ function GatewayPanel({ providerKey, gateways, onSaved }) {
                                 ) : (
                                     <Input
                                         style={{ width: 300 }}
-                                        placeholder={isMasked(creds[f.key]) ? '(unchanged — enter new to replace)' : (f.placeholder || '')}
+                                        placeholder={isMasked(creds[f.key]) ? '(unchanged - enter new to replace)' : (f.placeholder || '')}
                                         value={isMasked(creds[f.key]) ? '' : (creds[f.key] ?? '')}
                                         onChange={e => setC(f.key, e.target.value)}
                                     />
@@ -880,13 +880,13 @@ function TransactionsPanel() {
     const STATUS_COLOR = { succeeded: 'success', failed: 'error', cancelled: 'warning', pending: 'default', processing: 'processing', refunded: 'default' };
 
     const cols = [
-        { title: 'Date',     dataIndex: 'paid_at',    key: 'd', width: 130, render: v => v ? new Date(v).toLocaleDateString() : '—' },
+        { title: 'Date',     dataIndex: 'paid_at',    key: 'd', width: 130, render: v => v ? new Date(v).toLocaleDateString() : '-' },
         {
             title: 'Provider', dataIndex: 'provider', key: 'p', width: 100,
             render: v => { const p = PROVIDERS.find(x => x.key === v); return <Text style={{ color: p?.color }}>{p?.label || v}</Text>; },
         },
-        { title: 'Invoice',  dataIndex: 'invoice',   key: 'i', render: v => v?.invoice_no || '—' },
-        { title: 'Customer', dataIndex: 'customer_name', key: 'c', render: (v, r) => v || r.contact?.name || '—' },
+        { title: 'Invoice',  dataIndex: 'invoice',   key: 'i', render: v => v?.invoice_no || '-' },
+        { title: 'Customer', dataIndex: 'customer_name', key: 'c', render: (v, r) => v || r.contact?.name || '-' },
         { title: 'Amount',   dataIndex: 'amount',    key: 'a', align: 'right', render: (v, r) => `${r.currency_code} ${Number(v).toFixed(2)}` },
         {
             title: 'Status', dataIndex: 'status', key: 's', width: 120,
@@ -894,7 +894,7 @@ function TransactionsPanel() {
         },
         {
             title: 'Ref', dataIndex: 'provider_payment_id', key: 'r',
-            render: v => v ? <Text code style={{ fontSize: 10 }}>{v.substring(0, 18)}…</Text> : '—',
+            render: v => v ? <Text code style={{ fontSize: 10 }}>{v.substring(0, 18)}…</Text> : '-',
         },
     ];
 

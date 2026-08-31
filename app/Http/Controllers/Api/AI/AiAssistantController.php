@@ -7,6 +7,7 @@ use App\Http\Resources\AiMessageResource;
 use App\Models\AiConversation;
 use App\Services\AI\AiPromptBuilder;
 use App\Services\AI\AiProviderException;
+use App\Services\AI\AiReadinessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
@@ -15,6 +16,14 @@ class AiAssistantController extends AiAgentChatController
 {
     public function chat(Request $request): JsonResponse
     {
+        if (! $this->settings->enabled() || ! $this->settings->copilotEnabled()) {
+            return response()->json([
+                'ok' => false,
+                'code' => 'AI_DISABLED',
+                'message' => 'KiteLedger Copilot is disabled for this deployment.',
+            ], 503);
+        }
+
         $data = $request->validate([
             'message' => 'required|string|max:4000',
             'conversation_id' => 'nullable|string',
@@ -30,7 +39,7 @@ class AiAssistantController extends AiAgentChatController
             return response()->json([
                 'ok' => false,
                 'code' => 'AI_REPORTS_ONLY',
-                'message' => 'AI Assistant is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full assistant in AI Settings.',
+                'message' => 'KiteLedger Copilot is currently limited to report questions. Ask it to open, explain, summarize, or analyze a report — or enable the full Copilot in AI Settings.',
             ], 422);
         }
 
@@ -47,22 +56,40 @@ class AiAssistantController extends AiAgentChatController
         // Provider/model/base_url are infrastructure config. Normal users only
         // need to know the assistant is ready — not which vendor powers it.
         $canSeeProvider = $this->permissions->canViewSettings($user);
+        $readiness = app(AiReadinessService::class)->evaluate();
 
-        return response()->json(array_filter([
+        $payload = [
             'ok' => true,
-            'ai_enabled' => $this->settings->enabled(),
-            'provider_configured' => $this->settings->hasApiKey() || $this->settings->provider() === 'ollama',
-            'provider' => $canSeeProvider ? $this->settings->provider() : null,
-            'model' => $canSeeProvider ? $this->settings->model() : null,
-            'stream_enabled' => $this->settings->streamEnabled(),
+            // Compatibility aliases used by older clients.
+            'ai_enabled' => $readiness['master_ai_enabled'],
+            'copilot_enabled' => $readiness['copilot_enabled'],
+            'ready' => $readiness['copilot_ready'],
+            'provider_configured' => $readiness['provider_configured'],
+            ...$readiness,
+            'stream_enabled' => $this->settings->streamEnabled()
+                && $this->settings->copilotV2Enabled()
+                && (bool) config('ai.copilot.streaming_enabled', false),
+            'runtime_timeout_seconds' => $this->settings->timeoutSeconds(),
             'cache_enabled' => $this->settings->cacheEnabled(),
             'fast_mode' => $this->settings->fastMode(),
             'scope' => $this->settings->assistantMode(),
             'assistant_mode' => $this->settings->assistantMode(),
             'write_actions_enabled' => $this->settings->writeActionsEnabled(),
-            'semantic_search_available' => $this->settings->enabled() && $this->settings->supportsEmbeddings(),
+            'action_execution_enabled' => $this->settings->actionExecutionEnabled(),
+            'semantic_search_available' => $readiness['rag_index_ready'],
             'permissions' => $this->permissions->summary($user),
-        ], fn ($v) => $v !== null));
+        ];
+
+        if ($canSeeProvider) {
+            $payload['provider'] = $this->settings->provider();
+            $payload['model'] = $this->settings->model();
+            $payload['queue_connection'] = $readiness['queue_connection'];
+        } else {
+            // Infrastructure identifiers are omitted entirely for normal users.
+            unset($payload['provider'], $payload['model'], $payload['queue_connection']);
+        }
+
+        return response()->json($payload);
     }
 
     public function stream(Request $request): JsonResponse
@@ -159,7 +186,7 @@ class AiAssistantController extends AiAgentChatController
         try {
             $result = $this->provider->chat($messages);
         } catch (AiProviderException $e) {
-            return response()->json($e->toArray() + ['ok' => false], 422);
+            return response()->json($e->toArray() + ['ok' => false], $e->httpStatus());
         }
 
         $parsed = $this->tryParseJson($result['text'] ?? '');
@@ -212,7 +239,7 @@ class AiAssistantController extends AiAgentChatController
         try {
             $result = $this->provider->chat($messages);
         } catch (AiProviderException $e) {
-            return response()->json($e->toArray() + ['ok' => false], 422);
+            return response()->json($e->toArray() + ['ok' => false], $e->httpStatus());
         }
 
         $parsed = $this->tryParseJson($result['text'] ?? '');

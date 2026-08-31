@@ -4,41 +4,146 @@ namespace App\Jobs\Documents;
 
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
+use App\Services\AI\AiProviderException;
+use App\Services\AI\AiSettingsService;
 use App\Services\Documents\DocumentAiExtractionService;
 use App\Services\Documents\DocumentAuditService;
 use App\Services\Documents\DocumentEntityMatcher;
+use App\Services\Documents\Pipeline\DocumentErrorCode;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
+use Throwable;
 
+/**
+ * Runs one AI extraction attempt for one uploaded document.
+ *
+ * Tenancy is supplied by Stancl's QueueTenancyBootstrapper (registered in
+ * config/tenancy.php), which stamps the tenant onto the job payload and
+ * re-initializes it before handle()/failed() run. This job therefore must
+ * never resolve a tenant itself, and must never touch the central connection.
+ */
 class ProcessDocumentAiExtractionJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 240;
-    public int $tries = 1;
+    /**
+     * Provider failures that will never succeed on a retry — bad credentials,
+     * an unusable model, an unsupported file. Re-running these just burns
+     * quota and delays the user's error message.
+     */
+    private const PERMANENT_ERROR_CODES = [
+        'AI_DISABLED',
+        'AI_API_KEY_MISSING',
+        'AI_PROVIDER_AUTH_FAILED',
+        'AI_VISION_UNSUPPORTED',
+        'AI_MODEL_INVALID',
+        'AI_SSL_CERTIFICATE_ERROR',
+        'INVALID_FILE_TYPE',
+        'DOCX_NOT_CONVERTED',
+        'DOCUMENT_TEXT_INVALID',
+    ];
+
+    /** A hard worker timeout must invoke failed() and persist a terminal state. */
+    public bool $failOnTimeout = true;
 
     public function __construct(
         public string $documentUploadId,
         public string $documentExtractionId,
-    ) {}
+    ) {
+        $this->onConnection((string) config('documents.queue_connection', 'central'));
+        $this->onQueue((string) config('documents.queue', 'default'));
+    }
+
+    public function tries(): int
+    {
+        return max(1, (int) config('documents.scan_tries', 3));
+    }
+
+    /** Spaced retries so a rate-limited or overloaded provider can recover. */
+    public function backoff(): array
+    {
+        return [30, 120, 300];
+    }
+
+    /**
+     * Hard ceiling regardless of attempts, sized off the per-attempt timeout so
+     * a document can never sit "processing" indefinitely.
+     */
+    public function retryUntil(): Carbon
+    {
+        $timeout = $this->effectiveProviderTimeout();
+
+        return now()->addSeconds(($timeout + 60) * $this->tries());
+    }
+
+    public function timeout(): int
+    {
+        return $this->effectiveProviderTimeout() + 60;
+    }
 
     public function handle(
         DocumentAiExtractionService $extractor,
         DocumentEntityMatcher $matcher,
         DocumentAuditService $audit,
     ): void {
-        $doc = DocumentUpload::query()->findOrFail($this->documentUploadId);
-        $extraction = DocumentExtraction::query()->findOrFail($this->documentExtractionId);
+        $doc = DocumentUpload::query()->find($this->documentUploadId);
+        $extraction = DocumentExtraction::query()->find($this->documentExtractionId);
+
+        // The document or attempt was deleted, or a newer scan superseded this
+        // one, while the job sat in the queue. Nothing left to do.
+        if (! $doc || ! $extraction) {
+            return;
+        }
+
+        if (! $this->isCurrentAttempt($doc, $extraction)) {
+            $audit->log('scan.superseded', [
+                'document_upload_id' => $doc->id,
+                'document_extraction_id' => $extraction->id,
+            ]);
+
+            return;
+        }
 
         $audit->log('scan.started', [
             'document_upload_id' => $doc->id,
             'document_extraction_id' => $extraction->id,
+            'attempt' => $this->attempts(),
         ]);
 
-        $extraction = $extractor->process($doc, $extraction);
+        try {
+            $extraction = $extractor->process($doc, $extraction);
+        } catch (Throwable $e) {
+            if ($this->isPermanent($e)) {
+                // Skip the remaining attempts and go straight to failed().
+                $this->fail($e);
+
+                return;
+            }
+
+            // The extraction service records the immediate failure details.
+            // While attempts remain, replace that terminal-looking state with
+            // an honest retrying state so users cannot start a competing scan.
+            if ($this->attempts() < $this->tries()) {
+                $publicError = DocumentErrorCode::fromThrowableMessage(
+                    $e->getMessage(),
+                    $e instanceof AiProviderException ? $e->getErrorCode() : '',
+                );
+                $extraction->update([
+                    'status' => 'retrying',
+                    'stage' => 'retrying',
+                    'error_code' => $publicError->value,
+                    'error_message' => 'A temporary AI service problem interrupted this attempt. KiteLedger will retry automatically.',
+                    'completed_at' => null,
+                ]);
+                $doc->update(['status' => 'processing']);
+            }
+
+            throw $e;
+        }
 
         $audit->log('scan.completed', [
             'document_upload_id' => $doc->id,
@@ -54,20 +159,68 @@ class ProcessDocumentAiExtractionJob implements ShouldQueue
         }
     }
 
-    public function failed(\Throwable $e): void
+    public function failed(?Throwable $e): void
     {
-        $message = mb_substr($e->getMessage() ?: 'Document AI scan failed.', 0, 500);
+        $publicError = DocumentErrorCode::fromThrowableMessage(
+            $e?->getMessage(),
+            $e instanceof AiProviderException ? $e->getErrorCode() : '',
+        );
 
-        DocumentExtraction::query()
-            ->where('id', $this->documentExtractionId)
-            ->update([
+        $extraction = DocumentExtraction::query()->find($this->documentExtractionId);
+
+        if (! $extraction) {
+            return;
+        }
+
+        // Only the attempt this job owns may be marked failed, and only if it
+        // has not already reached a terminal state. This stops a late failure
+        // from overwriting a newer attempt that already succeeded.
+        if (in_array($extraction->status, ['queued', 'processing', 'retrying'], true)) {
+            $extraction->update([
                 'status' => 'failed',
-                'error_message' => $message,
+                'stage' => 'failed',
+                'error_code' => $publicError->value,
+                'error_message' => $publicError->message(),
                 'completed_at' => now(),
             ]);
+        }
 
-        DocumentUpload::query()
-            ->where('id', $this->documentUploadId)
-            ->update(['status' => 'failed']);
+        $doc = DocumentUpload::query()->find($this->documentUploadId);
+
+        if ($doc && $this->isCurrentAttempt($doc, $extraction) && in_array($doc->status, ['queued', 'processing'], true)) {
+            $doc->update(['status' => 'failed']);
+        }
+    }
+
+    /**
+     * True when no newer extraction attempt exists for the document.
+     */
+    private function isCurrentAttempt(DocumentUpload $doc, DocumentExtraction $extraction): bool
+    {
+        return ! DocumentExtraction::query()
+            ->where('document_upload_id', $doc->id)
+            ->where('id', '!=', $extraction->id)
+            ->where('created_at', '>=', $extraction->created_at)
+            ->exists();
+    }
+
+    private function isPermanent(Throwable $e): bool
+    {
+        if ($e instanceof AiProviderException) {
+            return in_array($e->getErrorCode(), self::PERMANENT_ERROR_CODES, true);
+        }
+
+        // Structural problems raised by the extraction service (missing file,
+        // unreadable DOCX, unsupported type) are deterministic.
+        return $e instanceof \RuntimeException;
+    }
+
+    private function effectiveProviderTimeout(): int
+    {
+        try {
+            return max(60, (int) config('documents.scan_timeout_seconds', 120), app(AiSettingsService::class)->timeoutSeconds());
+        } catch (Throwable) {
+            return max(60, (int) config('documents.scan_timeout_seconds', 120));
+        }
     }
 }

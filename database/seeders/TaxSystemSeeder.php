@@ -9,7 +9,7 @@ use Illuminate\Database\Seeder;
  * Seeds the tax_systems table with built-in systems for all countries
  * that ship with a preset in config/tax_presets.php.
  *
- * Safe to run multiple times — uses firstOrCreate.
+ * Safe to run multiple times - uses firstOrCreate.
  */
 class TaxSystemSeeder extends Seeder
 {

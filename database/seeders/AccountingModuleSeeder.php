@@ -103,7 +103,7 @@ class AccountingModuleSeeder extends Seeder
             /*
             |--------------------------------------------------------------------------
             | JV-ACC-001 : Opening Balance Entry
-            | Capital injected by owner — bank + cash opening balances
+            | Capital injected by owner - bank + cash opening balances
             |--------------------------------------------------------------------------
             */
 
@@ -115,7 +115,7 @@ class AccountingModuleSeeder extends Seeder
                         'voucher_date'    => $now->toDateString(),
                         'currency_id'     => $currencyId,
                         'reference'       => 'OPEN-BAL-001',
-                        'narration'       => "Opening balance — owner's capital contribution",
+                        'narration'       => "Opening balance - owner's capital contribution",
                         'status'          => 'posted',
                         'active'          => true,
                         'approved'        => true,
@@ -156,7 +156,7 @@ class AccountingModuleSeeder extends Seeder
                         'voucher_date'    => $now->toDateString(),
                         'currency_id'     => $currencyId,
                         'reference'       => 'INV-0001',
-                        'narration'       => 'Sales on credit — goods delivered to customer',
+                        'narration'       => 'Sales on credit - goods delivered to customer',
                         'status'          => 'posted',
                         'active'          => true,
                         'approved'        => true,
@@ -267,7 +267,7 @@ class AccountingModuleSeeder extends Seeder
                         'voucher_date'    => $now->toDateString(),
                         'currency_id'     => $currencyId,
                         'reference'       => 'PAY-0001',
-                        'narration'       => 'Payment to supplier — BILL-0001 settled with 2% early-payment discount',
+                        'narration'       => 'Payment to supplier - BILL-0001 settled with 2% early-payment discount',
                         'status'          => 'posted',
                         'active'          => true,
                         'approved'        => true,
@@ -333,7 +333,7 @@ class AccountingModuleSeeder extends Seeder
 
             /*
             |--------------------------------------------------------------------------
-            | JV-ACC-007 : Foreign Currency Sales — Exchange Rate Gain
+            | JV-ACC-007 : Foreign Currency Sales - Exchange Rate Gain
             |
             | USD 1,000 invoice raised at NPR 132 (NPR 132,000 receivable).
             | Customer pays when rate is NPR 133 → bank receives NPR 133,000.
@@ -372,7 +372,7 @@ class AccountingModuleSeeder extends Seeder
                     ['debit' => 0, 'credit' => 132000]
                 );
 
-                // Step B: Payment received at higher rate — realised gain booked to 4310
+                // Step B: Payment received at higher rate - realised gain booked to 4310
                 $jv8 = JournalVoucher::updateOrCreate(
                     ['voucher_no' => 'JV-ACC-008'],
                     [
@@ -380,7 +380,7 @@ class AccountingModuleSeeder extends Seeder
                         'voucher_date'    => $now->toDateString(),
                         'currency_id'     => $currencyId,
                         'reference'       => 'FX-PMT-0001',
-                        'narration'       => 'USD 1,000 payment received at NPR 133 — realised exchange rate gain NPR 1,000 (4310)',
+                        'narration'       => 'USD 1,000 payment received at NPR 133 - realised exchange rate gain NPR 1,000 (4310)',
                         'status'          => 'posted',
                         'active'          => true,
                         'approved'        => true,
@@ -402,14 +402,14 @@ class AccountingModuleSeeder extends Seeder
                     ['debit' => 0, 'credit' => 132000]
                 );
                 JournalVoucherLine::updateOrCreate(
-                    ['journal_voucher_id' => $jv8->id, 'chart_of_account_id' => $exchangeRateGainCOA->id, 'description' => 'Realised forex gain — rate moved NPR 132 → 133'],
+                    ['journal_voucher_id' => $jv8->id, 'chart_of_account_id' => $exchangeRateGainCOA->id, 'description' => 'Realised forex gain - rate moved NPR 132 → 133'],
                     ['debit' => 0, 'credit' => 1000]
                 );
             }
 
             /*
             |--------------------------------------------------------------------------
-            | JV-ACC-009 : Foreign Currency Purchase — Exchange Rate Loss
+            | JV-ACC-009 : Foreign Currency Purchase - Exchange Rate Loss
             |
             | USD 500 purchase invoice booked at NPR 132 (NPR 66,000 payable).
             | Supplier paid when rate is NPR 134 → bank pays NPR 67,000.
@@ -448,7 +448,7 @@ class AccountingModuleSeeder extends Seeder
                     ['debit' => 0, 'credit' => 66000]
                 );
 
-                // Step B: Payment at higher rate — realised loss booked to 5310
+                // Step B: Payment at higher rate - realised loss booked to 5310
                 $jv10 = JournalVoucher::updateOrCreate(
                     ['voucher_no' => 'JV-ACC-010'],
                     [
@@ -456,7 +456,7 @@ class AccountingModuleSeeder extends Seeder
                         'voucher_date'    => $now->toDateString(),
                         'currency_id'     => $currencyId,
                         'reference'       => 'FX-PAY-0001',
-                        'narration'       => 'USD 500 supplier paid at NPR 134 — realised exchange rate loss NPR 1,000 (5310)',
+                        'narration'       => 'USD 500 supplier paid at NPR 134 - realised exchange rate loss NPR 1,000 (5310)',
                         'status'          => 'posted',
                         'active'          => true,
                         'approved'        => true,
@@ -474,7 +474,7 @@ class AccountingModuleSeeder extends Seeder
                     ['debit' => 66000, 'credit' => 0]
                 );
                 JournalVoucherLine::updateOrCreate(
-                    ['journal_voucher_id' => $jv10->id, 'chart_of_account_id' => $exchangeRateLossCOA->id, 'description' => 'Realised forex loss — rate moved NPR 132 → 134'],
+                    ['journal_voucher_id' => $jv10->id, 'chart_of_account_id' => $exchangeRateLossCOA->id, 'description' => 'Realised forex loss - rate moved NPR 132 → 134'],
                     ['debit' => 1000, 'credit' => 0]
                 );
                 JournalVoucherLine::updateOrCreate(
@@ -526,7 +526,7 @@ class AccountingModuleSeeder extends Seeder
 
             /*
             |--------------------------------------------------------------------------
-            | CT-ACC-001 : Cash Transfer — Bank to Petty Cash (monthly top-up)
+            | CT-ACC-001 : Cash Transfer - Bank to Petty Cash (monthly top-up)
             |--------------------------------------------------------------------------
             */
 

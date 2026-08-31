@@ -2,7 +2,7 @@
 
 namespace App\Contracts\SaaS;
 
-use App\Models\Central\Tenant;
+use App\Models\Tenant;
 
 interface QuotaManager
 {

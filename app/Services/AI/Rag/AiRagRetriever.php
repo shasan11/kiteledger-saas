@@ -16,7 +16,7 @@ class AiRagRetriever
     public function available(): bool
     {
         // Exact and keyword RAG work without an embeddings provider.
-        return $this->settings->enabled();
+        return $this->settings->enabled() && $this->settings->ragEnabled();
     }
 
     public function retrieve(?User $user, string $query, array $filters = []): array

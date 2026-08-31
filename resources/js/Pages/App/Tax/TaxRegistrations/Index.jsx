@@ -53,14 +53,14 @@ export default function TaxRegistrations({ auth }) {
                 dataIndex: 'registration_type',
                 key: 'registration_type',
                 width: 150,
-                render: (v) => <Tag>{REGISTRATION_TYPE_OPTIONS.find((o) => o.value === v)?.label || v || '—'}</Tag>,
+                render: (v) => <Tag>{REGISTRATION_TYPE_OPTIONS.find((o) => o.value === v)?.label || v || '-'}</Tag>,
             },
             {
                 title: 'Effective From',
                 dataIndex: 'effective_from',
                 key: 'effective_from',
                 width: 140,
-                render: (v) => v ? dayjs(v).format('DD MMM YYYY') : '—',
+                render: (v) => v ? dayjs(v).format('DD MMM YYYY') : '-',
             },
             {
                 title: 'Active',

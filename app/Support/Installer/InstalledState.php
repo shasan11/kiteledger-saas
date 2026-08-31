@@ -8,6 +8,10 @@ class InstalledState
 {
     public static function lockPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/app-installed');
+        }
+
         return storage_path('app/installed');
     }
 
@@ -19,12 +23,29 @@ class InstalledState
      */
     public static function froidenLockPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/froiden-installed');
+        }
+
         return storage_path('installed');
     }
 
     public static function recoveryMarkerPath(): string
     {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/recovery-required');
+        }
+
         return storage_path('app/install/recovery-required');
+    }
+
+    public static function installerStatusPath(): string
+    {
+        if (app()->environment('testing')) {
+            return storage_path('framework/testing/install-state/status.json');
+        }
+
+        return storage_path('app/install/status.json');
     }
 
     public static function hasInstallLock(): bool
@@ -63,30 +84,28 @@ class InstalledState
 
             $database = trim((string) ($runtime['database'] ?? ''));
             $username = trim((string) ($runtime['username'] ?? ''));
-            $password = (string) ($runtime['password'] ?? '');
 
             return $database !== ''
                 && strtolower($database) !== 'laravel'
-                && $username !== ''
-                && ! (strtolower($username) === 'root' && $password === '');
+                && $username !== '';
         }
 
         $values = self::environmentValues();
         $database = trim((string) ($values['DB_DATABASE'] ?? ''));
         $username = trim((string) ($values['DB_USERNAME'] ?? ''));
-        $password = (string) ($values['DB_PASSWORD'] ?? '');
         $runtimeDatabase = trim((string) ($runtime['database'] ?? ''));
         $runtimeUsername = trim((string) ($runtime['username'] ?? ''));
-        $runtimePassword = (string) ($runtime['password'] ?? '');
 
+        // A blank password is valid for common localhost MySQL installations
+        // and is already verified by the environment step using a live PDO
+        // connection. Configuration health should reject Laravel placeholders,
+        // not contradict credentials that the installer successfully tested.
         return $database !== ''
             && strtolower($database) !== 'laravel'
             && $username !== ''
-            && ! (strtolower($username) === 'root' && $password === '')
             && $runtimeDatabase !== ''
             && strtolower($runtimeDatabase) !== 'laravel'
-            && $runtimeUsername !== ''
-            && ! (strtolower($runtimeUsername) === 'root' && $runtimePassword === '');
+            && $runtimeUsername !== '';
     }
 
     public static function hasRequiredRuntimeFiles(): bool
@@ -147,6 +166,9 @@ class InstalledState
         }
 
         self::clearRecoveryRequirement();
+        if (is_file(self::installerStatusPath())) {
+            @unlink(self::installerStatusPath());
+        }
     }
 
     private static function writeLock(string $path, string $contents, array &$errors): bool
@@ -179,7 +201,7 @@ class InstalledState
 
     public static function clear(): void
     {
-        foreach ([self::lockPath(), self::froidenLockPath(), storage_path('app/install/status.json'), self::recoveryMarkerPath()] as $path) {
+        foreach ([self::lockPath(), self::froidenLockPath(), self::installerStatusPath(), self::recoveryMarkerPath()] as $path) {
             if (is_file($path)) {
                 @unlink($path);
             }
@@ -193,6 +215,10 @@ class InstalledState
             @unlink(self::recoveryMarkerPath());
         }
 
+        if (app()->environment('testing')) {
+            return;
+        }
+
         $path = base_path('.env');
         $contents = @file_get_contents($path);
         if ($contents === false || ! preg_match('/^INSTALL_RECOVERY_REQUIRED=/m', $contents)) {
@@ -201,6 +227,34 @@ class InstalledState
 
         $updated = (string) preg_replace('/^INSTALL_RECOVERY_REQUIRED=.*$/m', 'INSTALL_RECOVERY_REQUIRED=false', $contents, 1);
         @file_put_contents($path, $updated, LOCK_EX);
+    }
+
+    /** @return array<string, mixed> */
+    public static function installerStatus(): array
+    {
+        $contents = @file_get_contents(self::installerStatusPath());
+        if ($contents === false || trim($contents) === '') {
+            return [];
+        }
+
+        $decoded = json_decode($contents, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** @param array<string, mixed> $values */
+    public static function putInstallerStatus(array $values): void
+    {
+        $status = array_replace(self::installerStatus(), $values);
+        $directory = dirname(self::installerStatusPath());
+
+        if (! is_dir($directory) && ! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
+            throw new RuntimeException("Could not create installer status directory: {$directory}.");
+        }
+
+        if (@file_put_contents(self::installerStatusPath(), json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL, LOCK_EX) === false) {
+            throw new RuntimeException('Could not write installer status. Make storage/app/install writable by the PHP/web-server user.');
+        }
     }
 
     /** @return array<string, string> */

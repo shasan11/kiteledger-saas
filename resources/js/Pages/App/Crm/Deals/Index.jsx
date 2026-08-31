@@ -385,7 +385,7 @@ function LostReasonModal({ open, stageName, onConfirm, onCancel }) {
 
   return (
     <Modal
-      title={`Move to "${stageName}" — Mark Lost`}
+      title={`Move to "${stageName}" - Mark Lost`}
       open={open}
       onOk={() => { if (reason.trim()) onConfirm(reason); }}
       onCancel={() => { setReason(''); onCancel(); }}

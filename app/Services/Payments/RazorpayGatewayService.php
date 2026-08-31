@@ -14,9 +14,9 @@ class RazorpayGatewayService extends AbstractExternalGateway
 
     public function createPayment(TenantInvoice $invoice, array $context = []): array
     {
-        $result = $this->client()->post('https://api.razorpay.com/v1/orders', ['amount' => (int) round($invoice->total * 100), 'currency' => $invoice->currency, 'receipt' => $invoice->invoice_number, 'notes' => ['invoice_id' => (string) $invoice->id]])->throw()->json();
+        $result = $this->client()->post('https://api.razorpay.com/v1/orders', ['amount' => (int) round(($invoice->balance ?: $invoice->total) * 100), 'currency' => $invoice->currency, 'receipt' => $invoice->invoice_number, 'notes' => ['invoice_id' => (string) $invoice->id]])->throw()->json();
 
-        return ['transaction_id' => $result['id'], 'status' => 'pending', 'public_key' => $this->settings->public_key];
+        return ['transaction_id' => $result['id'], 'status' => 'pending', 'public_key' => $this->settings->public_key, 'amount' => $result['amount'], 'currency' => $result['currency']];
     }
 
     public function refund(string $transactionId, float $amount): array

@@ -1,7 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\AccountController;
+use App\Http\Controllers\Api\AI\AiActionApprovalController;
+use App\Http\Controllers\Api\AI\AiAssistantController;
+use App\Http\Controllers\Api\AI\AiSemanticSearchController;
 use App\Http\Controllers\Api\AI\AiSettingsController;
+use App\Http\Controllers\Api\AI\AiUsageLogController;
 use App\Http\Controllers\Api\AlertTypeController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\AppContextController;
@@ -57,6 +61,7 @@ use App\Http\Controllers\Api\EmployeeProfileController;
 use App\Http\Controllers\Api\EmploymentStatusController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FiscalYearController;
+use App\Http\Controllers\Api\FixedAssetController;
 use App\Http\Controllers\Api\GeneralSettingController;
 use App\Http\Controllers\Api\GlobalSearchController;
 use App\Http\Controllers\Api\InventoryAdjustmentController;
@@ -253,6 +258,7 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
 
     Route::post('fiscal-years/{id}/mark-current', [FiscalYearController::class, 'markCurrent']);
     Route::post('fiscal-years/{id}/close', [FiscalYearController::class, 'close']);
+    Route::post('fiscal-years/{id}/reopen', [FiscalYearController::class, 'reopen']);
     Route::apiResource('fiscal-years', FiscalYearController::class);
 
     Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->group(function () {
@@ -359,6 +365,9 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
             ->parameters([
                 'journal-vouchers' => 'journalVoucher',
             ]);
+        Route::post('fixed-assets/{fixedAsset}/depreciate', [FixedAssetController::class, 'depreciate']);
+        Route::post('fixed-assets/{fixedAsset}/dispose', [FixedAssetController::class, 'dispose']);
+        Route::apiResource('fixed-assets', FixedAssetController::class);
 
         /*
         |--------------------------------------------------------------------------
@@ -1179,8 +1188,30 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
         |--------------------------------------------------------------------------
         */
         Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->prefix('ai')->group(function () {
-            // Provider settings retained for report summarization. The general AI
-            // assistant, conversation, semantic-search, and action APIs are add-on code.
+            Route::get('health', [AiAssistantController::class, 'health'])->middleware('throttle:60,1');
+            Route::post('chat', [AiAssistantController::class, 'chat'])->middleware('throttle:30,1');
+            // Copilot V2 progress stream (SSE). Gated by AI_COPILOT_STREAMING_ENABLED.
+            Route::post('chat/stream', [\App\Http\Controllers\Api\AI\CopilotStreamController::class, 'stream'])
+                ->middleware('throttle:30,1')
+                ->name('copilot.stream');
+            Route::post('stream', [AiAssistantController::class, 'stream'])->middleware('throttle:30,1');
+
+            Route::get('conversations', [AiAssistantController::class, 'conversations']);
+            Route::get('conversations/{id}', [AiAssistantController::class, 'showConversation']);
+            Route::delete('conversations/{id}', [AiAssistantController::class, 'deleteConversation']);
+
+            Route::post('semantic-search', AiSemanticSearchController::class)->middleware('throttle:30,1');
+            Route::post('report-summary', [AiAssistantController::class, 'reportSummary'])->middleware('throttle:20,1');
+            Route::post('business-insight', [AiAssistantController::class, 'businessInsight'])->middleware('throttle:20,1');
+
+            Route::get('actions', [AiActionApprovalController::class, 'index']);
+            Route::get('actions/{id}', [AiActionApprovalController::class, 'show']);
+            Route::post('actions/{id}/approve', [AiActionApprovalController::class, 'approve'])->middleware('throttle:20,1');
+            Route::post('actions/{id}/reject', [AiActionApprovalController::class, 'reject'])->middleware('throttle:20,1');
+            Route::post('actions/{id}/execute', [AiActionApprovalController::class, 'execute'])->middleware('throttle:20,1');
+            Route::get('actions/{id}/audit', [AiActionApprovalController::class, 'audit']);
+            Route::get('usage-logs', [AiUsageLogController::class, 'index']);
+
             Route::get('settings', [AiSettingsController::class, 'show']);
             Route::put('settings', [AiSettingsController::class, 'update']);
             // Connection tests hit the upstream provider — throttle to curb abuse / cost.
@@ -1241,6 +1272,7 @@ Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active',
 */
 Route::middleware(['web', 'auth', 'verified', 'tenant.session', 'tenant.active', 'subscription.valid', 'quota.enforce', 'feature.enforce'])->prefix('document-uploads')->name('api.document-uploads.')->group(function () {
     Route::get('/', [DocumentUploadController::class, 'index'])->name('index');
+    Route::get('summary', [DocumentUploadController::class, 'summary'])->name('summary');
     Route::post('/', [DocumentUploadController::class, 'store'])->middleware('throttle:20,1')->name('store');
     Route::get('{publicId}', [DocumentUploadController::class, 'show'])->name('show');
     Route::patch('{publicId}', [DocumentUploadController::class, 'update'])->name('update');

@@ -2,13 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\Documents\ProcessDocumentAiExtractionJob;
 use App\Models\Contact;
-use App\Models\Currency;
+use App\Models\DocumentEntityMatch;
 use App\Models\DocumentExtraction;
 use App\Models\DocumentUpload;
 use App\Models\Permission;
+use App\Models\Product;
 use App\Models\User;
-use App\Jobs\Documents\ProcessDocumentAiExtractionJob;
+use App\Services\AI\AiReadinessService;
 use App\Services\Documents\DocumentPermissionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -39,6 +41,7 @@ class DocumentUploadApiTest extends TestCase
         foreach ($permissions as $p) {
             $user->givePermissionTo($p);
         }
+
         return $user->fresh();
     }
 
@@ -53,6 +56,16 @@ class DocumentUploadApiTest extends TestCase
             'status' => 'uploaded',
             'document_type' => 'unknown',
         ], $overrides));
+    }
+
+    private function allowDocumentScanning(): void
+    {
+        $this->mock(AiReadinessService::class, function ($mock): void {
+            $mock->shouldReceive('evaluate')->andReturn([
+                'document_scanning_available' => true,
+                'issues' => [],
+            ]);
+        });
     }
 
     public function test_unauthorized_user_cannot_upload(): void
@@ -163,6 +176,32 @@ class DocumentUploadApiTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_scan_is_not_queued_when_operational_readiness_is_false(): void
+    {
+        Queue::fake();
+        $this->mock(AiReadinessService::class, function ($mock): void {
+            $mock->shouldReceive('evaluate')->once()->andReturn([
+                'document_scanning_available' => false,
+                'issues' => [[
+                    'code' => 'AI_QUEUE_WORKER_UNHEALTHY',
+                    'message' => 'The queue worker heartbeat is missing or stale.',
+                ]],
+            ]);
+        });
+        $user = $this->userWith(['document_upload.scan_ai']);
+        Storage::disk('local')->put('documents/2026/a.pdf', '%PDF-1.4');
+        $doc = $this->makeDocument();
+
+        $this->actingAs($user)
+            ->postJson("/api/document-uploads/{$doc->public_id}/scan-ai")
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'DOCUMENT_AI_NOT_READY')
+            ->assertJsonPath('message', 'The queue worker heartbeat is missing or stale.');
+
+        $this->assertDatabaseCount('document_extractions', 0);
+        Queue::assertNothingPushed();
+    }
+
     public function test_preview_requires_auth_and_uses_public_id_with_secure_headers(): void
     {
         $user = $this->userWith(['document_upload.view']);
@@ -184,6 +223,7 @@ class DocumentUploadApiTest extends TestCase
     public function test_scan_returns_queued_extraction_resource_without_sensitive_fields(): void
     {
         Queue::fake();
+        $this->allowDocumentScanning();
 
         $user = $this->userWith(['document_upload.scan_ai']);
         Storage::disk('local')->put('documents/2026/a.pdf', '%PDF-1.4');
@@ -193,6 +233,7 @@ class DocumentUploadApiTest extends TestCase
             ->postJson("/api/document-uploads/{$doc->public_id}/scan-ai")
             ->assertOk()
             ->assertJsonPath('extraction.status', 'queued')
+            ->assertJsonPath('extraction.attempt.number', 1)
             ->assertJsonMissingPath('extraction.id')
             ->assertJsonMissingPath('extraction.document_upload_id')
             ->assertJsonMissingPath('extraction.raw_text')
@@ -202,7 +243,71 @@ class DocumentUploadApiTest extends TestCase
 
         $this->assertNotEmpty($response->json('extraction.public_id'));
 
-        Queue::assertPushed(ProcessDocumentAiExtractionJob::class);
+        Queue::assertPushed(ProcessDocumentAiExtractionJob::class, function ($job): bool {
+            return $job->connection === 'central' && $job->queue === 'default';
+        });
+    }
+
+    public function test_duplicate_scan_request_is_idempotently_rejected_as_in_progress(): void
+    {
+        Queue::fake();
+        $this->allowDocumentScanning();
+
+        $user = $this->userWith(['document_upload.scan_ai']);
+        Storage::disk('local')->put('documents/2026/a.pdf', '%PDF-1.4');
+        $doc = $this->makeDocument();
+
+        $this->actingAs($user)
+            ->postJson("/api/document-uploads/{$doc->public_id}/scan-ai")
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->postJson("/api/document-uploads/{$doc->public_id}/scan-ai")
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'DOCUMENT_SCAN_IN_PROGRESS');
+
+        $this->assertDatabaseCount('document_extractions', 1);
+        Queue::assertPushed(ProcessDocumentAiExtractionJob::class, 1);
+    }
+
+    public function test_terminal_job_failure_persists_only_a_safe_public_error(): void
+    {
+        $doc = $this->makeDocument(['status' => 'processing']);
+        $extraction = DocumentExtraction::create([
+            'document_upload_id' => $doc->id,
+            'status' => 'processing',
+            'stage' => 'processing',
+        ]);
+
+        $job = new ProcessDocumentAiExtractionJob($doc->id, $extraction->id);
+        $this->assertTrue($job->failOnTimeout);
+        $job->failed(new \RuntimeException('SQLSTATE table document_uploads internal-id=123 secret stack detail'));
+
+        $extraction->refresh();
+        $doc->refresh();
+
+        $this->assertSame('failed', $extraction->status);
+        $this->assertSame('failed', $doc->status);
+        $this->assertSame('DOCUMENT_PROCESSING_FAILED', $extraction->error_code);
+        $this->assertSame('Something went wrong while processing this document. You can retry the scan.', $extraction->error_message);
+        $this->assertStringNotContainsString('SQLSTATE', $extraction->error_message);
+    }
+
+    public function test_retrying_attempt_becomes_terminal_when_the_job_exhausts_retries(): void
+    {
+        $doc = $this->makeDocument(['status' => 'processing']);
+        $extraction = DocumentExtraction::create([
+            'document_upload_id' => $doc->id,
+            'status' => 'retrying',
+            'stage' => 'retrying',
+        ]);
+
+        $job = new ProcessDocumentAiExtractionJob($doc->id, $extraction->id);
+        $job->failed(new \RuntimeException('provider timed out with internal request 123'));
+
+        $this->assertSame('failed', $extraction->fresh()->status);
+        $this->assertSame('failed', $doc->fresh()->status);
+        $this->assertSame('DOCUMENT_AI_TIMEOUT', $extraction->fresh()->error_code);
     }
 
     public function test_proposal_create_and_convert_to_draft_expense(): void
@@ -241,7 +346,12 @@ class DocumentUploadApiTest extends TestCase
                 'transaction_type' => 'expense',
             ])
             ->assertOk()
-            ->assertJsonPath('ok', true);
+            ->assertJsonPath('ok', true)
+            ->assertJsonMissingPath('proposal.document_upload_id')
+            ->assertJsonMissingPath('proposal.document_extraction_id')
+            ->assertJsonMissingPath('proposal.created_by')
+            ->assertJsonMissingPath('proposal.approved_by')
+            ->assertJsonMissingPath('proposal.error_message');
 
         $proposalId = $resp->json('proposal.id');
         $this->assertNotEmpty($proposalId);
@@ -251,7 +361,9 @@ class DocumentUploadApiTest extends TestCase
             ->postJson("/api/document-uploads/{$doc->public_id}/proposals/{$proposalId}/convert")
             ->assertOk()
             ->assertJsonPath('ok', true)
-            ->assertJsonPath('transaction_type', 'expense');
+            ->assertJsonPath('transaction_type', 'expense')
+            ->assertJsonMissingPath('proposal.created_record_id')
+            ->assertJsonMissingPath('proposal.error_message');
 
         // Draft expense exists, approved=false
         $recordId = $convertResp->json('record_id');
@@ -301,5 +413,47 @@ class DocumentUploadApiTest extends TestCase
         $summary = $svc->summary($user);
         $this->assertTrue($summary['document_upload.view']);
         $this->assertFalse($summary['document_upload.delete']);
+    }
+
+    public function test_entity_match_choice_is_limited_to_current_server_suggestions(): void
+    {
+        $user = $this->userWith(['document_upload.entity_match']);
+        $doc = $this->makeDocument(['status' => 'needs_review']);
+        $suggested = Contact::withoutEvents(fn () => Contact::create(['name' => 'Suggested Supplier', 'contact_type' => 'supplier']));
+        $unrelated = Contact::withoutEvents(fn () => Contact::create(['name' => 'Unrelated Supplier', 'contact_type' => 'supplier']));
+        $match = DocumentEntityMatch::create([
+            'document_upload_id' => $doc->id,
+            'entity_type' => 'supplier',
+            'extracted_name' => 'Supplier One',
+            'matched_model' => Contact::class,
+            'match_status' => 'suggested',
+            'options' => ['suggestions' => [[
+                'id' => $suggested->id,
+                'name' => $suggested->name,
+                'reason' => 'Exact tax number',
+            ]]],
+        ]);
+
+        $this->actingAs($user)
+            ->postJson("/api/document-uploads/matches/{$match->id}/choose", [
+                'matched_id' => $unrelated->id,
+                'matched_model' => Product::class,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('matched_id');
+
+        $this->assertNull($match->fresh()->matched_id);
+
+        $this->actingAs($user)
+            ->postJson("/api/document-uploads/matches/{$match->id}/choose", [
+                'matched_id' => $suggested->id,
+                'matched_model' => Product::class,
+            ])
+            ->assertOk()
+            ->assertJsonPath('match.match_status', 'user_selected');
+
+        $match->refresh();
+        $this->assertSame($suggested->id, $match->matched_id);
+        $this->assertSame(Contact::class, $match->matched_model);
     }
 }

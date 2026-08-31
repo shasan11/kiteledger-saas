@@ -132,6 +132,11 @@ return [
         Str::slug((string) env('APP_NAME', 'laravel')).'-session'
     ),
 
+    'tenant_cookie_prefix' => env(
+        'TENANT_SESSION_COOKIE_PREFIX',
+        Str::slug((string) env('APP_NAME', 'laravel')).'-tenant-session'
+    ),
+
     /*
     |--------------------------------------------------------------------------
     | Session Cookie Path

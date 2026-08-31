@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use App\Services\Documents\DocumentAiClient;
 use Illuminate\Support\Facades\Log;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Exceptions\PrismException;
@@ -108,7 +109,7 @@ class AiProviderManager
      */
     public function embed(array $texts): array
     {
-        $provider = strtolower((string) $this->settings->provider());
+        $provider = strtolower((string) $this->settings->embeddingProvider());
 
         if (! $this->settings->enabled()) {
             $this->throwError('AI_DISABLED', 'AI is disabled in settings.');
@@ -116,8 +117,8 @@ class AiProviderManager
         if (! $this->settings->supportsEmbeddings()) {
             $this->throwError('AI_EMBEDDINGS_UNSUPPORTED', "Provider '{$provider}' does not support embeddings. Use OpenAI, Gemini, Ollama, or OpenRouter.");
         }
-        if ($provider !== 'ollama' && ! $this->settings->hasApiKey()) {
-            $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
+        if ($provider !== 'ollama' && ! $this->settings->embeddingApiKey()) {
+            $this->throwError('AI_EMBEDDING_PROVIDER_NOT_CONFIGURED', 'The embedding provider key is missing. Configure it in central AI Settings.');
         }
 
         $model = $this->settings->embeddingModel();
@@ -134,13 +135,14 @@ class AiProviderManager
             $text = trim((string) $text);
             if ($text === '') {
                 $out[] = [];
+
                 continue;
             }
 
             try {
                 $response = Prism::embeddings()
                     ->using($this->providerEnum($provider), $model)
-                    ->usingProviderConfig($this->providerConfig($provider))
+                    ->usingProviderConfig($this->embeddingProviderConfig($provider))
                     ->withClientOptions($this->clientOptions($timeout, $connectTimeout))
                     ->fromInput($text)
                     ->asEmbeddings();
@@ -169,23 +171,43 @@ class AiProviderManager
                 ['role' => 'user', 'content' => 'Reply with OK'],
             ], ['max_tokens' => 16, 'timeout' => $timeout]);
 
+            app(AiReadinessService::class)->recordProviderVerification(true);
+
+            $documentCapability = null;
+            if ($this->settings->documentScanningEnabled()) {
+                $documentCapability = app(DocumentAiClient::class)->testCapability();
+            }
+
             return [
-                'success' => true,
+                'success' => ($documentCapability['success'] ?? true) === true,
                 'provider' => $this->settings->provider(),
                 'model' => $this->settings->model(),
                 'response' => $res['text'] ?? '',
+                'document_capability' => $documentCapability,
+                'message' => ($documentCapability['success'] ?? true) === true
+                    ? 'Chat and enabled model capabilities were verified.'
+                    : ($documentCapability['message'] ?? 'The document model capability test failed.'),
             ];
         } catch (AiProviderException $e) {
+            app(AiReadinessService::class)->recordProviderVerification(false, $e->getErrorCode());
+
             return [
                 'success' => false,
                 'code' => $e->getErrorCode(),
                 'message' => $e->getMessage(),
             ];
         } catch (Throwable $e) {
+            app(AiReadinessService::class)->recordProviderVerification(false, 'AI_PROVIDER_ERROR');
+            Log::error('AI provider connection test failed unexpectedly.', [
+                'provider' => $this->settings->provider(),
+                'model' => $this->settings->model(),
+                'message' => $e->getMessage(),
+            ]);
+
             return [
                 'success' => false,
                 'code' => 'AI_PROVIDER_ERROR',
-                'message' => $e->getMessage(),
+                'message' => 'The AI provider connection test failed. Check the provider configuration and server logs.',
             ];
         }
     }
@@ -219,12 +241,14 @@ class AiProviderManager
             'force_ip_resolve' => 'v4',
         ];
 
-        $caBundle = trim((string) env('AI_CA_BUNDLE', ''));
+        // Resolved via config so the setting survives `php artisan config:cache`.
+        $caBundle = trim((string) config('ai.ssl.ca_bundle', ''));
         if ($caBundle !== '') {
             $options['verify'] = $caBundle;
         }
 
-        if (filter_var(env('AI_SSL_VERIFY', true), FILTER_VALIDATE_BOOLEAN) === false) {
+        if (app()->environment(['local', 'testing'])
+            && filter_var(config('ai.ssl.verify', true), FILTER_VALIDATE_BOOLEAN) === false) {
             $options['verify'] = false;
         }
 
@@ -246,11 +270,13 @@ class AiProviderManager
 
             if ($role === 'system') {
                 $systemParts[] = $content;
+
                 continue;
             }
 
             if ($role === 'assistant') {
                 $chatMessages[] = new AssistantMessage($content);
+
                 continue;
             }
 
@@ -310,12 +336,36 @@ class AiProviderManager
         };
     }
 
+    private function embeddingProviderConfig(string $provider): array
+    {
+        $url = rtrim($this->settings->embeddingBaseUrl(), '/');
+        if ($provider === 'gemini' && ! str_ends_with($url, '/models')) {
+            $url .= '/models';
+        }
+        $apiKey = $this->settings->embeddingApiKey() ?? '';
+
+        return match ($provider) {
+            'openai' => ['url' => $url, 'api_key' => $apiKey],
+            'gemini' => ['url' => $url, 'api_key' => $apiKey],
+            'openrouter' => [
+                'url' => $url,
+                'api_key' => $apiKey,
+                'site' => [
+                    'http_referer' => config('prism.providers.openrouter.site.http_referer'),
+                    'x_title' => config('prism.providers.openrouter.site.x_title') ?: config('app.name'),
+                ],
+            ],
+            'ollama' => ['url' => $url],
+            default => [],
+        };
+    }
+
     private function normalizedBaseUrl(string $provider): string
     {
         $url = rtrim($this->settings->baseUrl(), '/');
 
-        if ($provider === 'gemini' && !str_ends_with($url, '/models')) {
-            return $url . '/models';
+        if ($provider === 'gemini' && ! str_ends_with($url, '/models')) {
+            return $url.'/models';
         }
 
         return $url;
@@ -325,19 +375,19 @@ class AiProviderManager
     {
         $provider = strtolower((string) $this->settings->provider());
 
-        if (!$this->settings->enabled()) {
+        if (! $this->settings->enabled()) {
             $this->throwError('AI_DISABLED', 'AI report summarizer is disabled in settings.');
         }
 
-        if (!in_array($provider, ['openai', 'groq', 'gemini', 'ollama', 'openrouter'], true)) {
+        if (! in_array($provider, ['openai', 'groq', 'gemini', 'ollama', 'openrouter'], true)) {
             $this->throwError('AI_PROVIDER_UNSUPPORTED', "Unsupported AI provider: {$provider}");
         }
 
-        if (!$this->settings->model()) {
+        if (! $this->settings->model()) {
             $this->throwError('AI_MODEL_MISSING', 'AI model is missing. Please configure it in AI Settings.');
         }
 
-        if ($provider !== 'ollama' && !$this->settings->hasApiKey()) {
+        if ($provider !== 'ollama' && ! $this->settings->hasApiKey()) {
             $this->throwError('AI_API_KEY_MISSING', 'AI provider key is missing. Please configure it in AI Settings.');
         }
     }

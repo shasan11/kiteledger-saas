@@ -15,19 +15,21 @@ class InstallerRuntimeService
             'APP_ENV' => 'production',
             'APP_DEBUG' => 'false',
             'SESSION_DRIVER' => 'database',
+            'SESSION_CONNECTION' => 'central',
             // File cache is available before and after database installation,
             // and lets recovery commands such as cache:clear remain usable
             // even when database configuration needs repair.
             'CACHE_STORE' => 'file',
-            'QUEUE_CONNECTION' => 'database',
+            'QUEUE_CONNECTION' => 'central',
             'CENTRAL_ADMIN_PASSWORD' => '',
         ]);
         config([
             'app.env' => 'production',
             'app.debug' => false,
             'session.driver' => 'database',
+            'session.connection' => 'central',
             'cache.default' => 'file',
-            'queue.default' => 'database',
+            'queue.default' => 'central',
         ]);
 
         Artisan::call('optimize:clear');

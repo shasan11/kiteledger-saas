@@ -181,7 +181,9 @@ class PurchaseBill extends Model
 
         $this->forceFill([
             'paid_total' => round($paidTotal, 2),
-            'balance_due' => round(max($total - $paidTotal, 0), 2),
+            // Not clamped at zero: an overpayment to a supplier is a real
+            // debit balance, and hiding it as zero loses it from AP.
+            'balance_due' => round($total - $paidTotal, 2),
             'status' => $status,
         ])->saveQuietly();
 
@@ -204,7 +206,11 @@ class PurchaseBill extends Model
 
         static::query()
             ->where('contact_id', $contactId)
-            ->get()
-            ->each(fn (self $bill) => $bill->recalculatePaymentTotals());
+            ->where(function ($query): void {
+                $query->whereHas('supplierPaymentLines')->orWhere('paid_total', '>', 0);
+            })
+            ->chunkById(200, function ($bills): void {
+                $bills->each(fn (self $bill) => $bill->recalculatePaymentTotals());
+            });
     }
 }

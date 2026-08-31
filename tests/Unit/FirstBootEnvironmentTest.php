@@ -21,14 +21,14 @@ class FirstBootEnvironmentTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (['.env', '.env.example', 'bootstrap/first-boot.php'] as $file) {
-            $path = $this->directory.DIRECTORY_SEPARATOR.$file;
-            if (is_file($path)) {
-                unlink($path);
-            }
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->directory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+        foreach ($iterator as $item) {
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
-        @rmdir($this->directory.DIRECTORY_SEPARATOR.'bootstrap');
-        @rmdir($this->directory);
+        rmdir($this->directory);
 
         parent::tearDown();
     }
@@ -61,6 +61,16 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
 
         $original = $contents;
+        $previousHost = $_SERVER['HTTP_HOST'] ?? null;
+        $_SERVER['HTTP_HOST'] = 'other-port.test:8017';
+
+        try {
+            $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
+        } finally {
+            $this->restoreServerValue('HTTP_HOST', $previousHost);
+        }
+
+        $this->assertSame($original, file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'));
         $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
         $this->assertSame($original, file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'));
     }
@@ -91,6 +101,28 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString('QUEUE_CONNECTION=sync', $contents);
     }
 
+    public function test_completed_local_install_with_blank_root_password_is_not_marked_for_recovery(): void
+    {
+        mkdir($this->directory.DIRECTORY_SEPARATOR.'storage/app/install', 0777, true);
+        file_put_contents($this->directory.DIRECTORY_SEPARATOR.'storage/installed', 'installed');
+        file_put_contents($this->directory.DIRECTORY_SEPARATOR.'.env', implode(PHP_EOL, [
+            'APP_KEY=base64:'.base64_encode(str_repeat('k', 32)),
+            'DB_CONNECTION=central',
+            'DB_DATABASE=kitedb',
+            'DB_USERNAME=root',
+            'DB_PASSWORD=',
+            'INSTALL_RECOVERY_REQUIRED=false',
+            '',
+        ]));
+
+        $this->assertTrue(require $this->directory.DIRECTORY_SEPARATOR.'bootstrap/first-boot.php');
+        $this->assertFileDoesNotExist($this->directory.DIRECTORY_SEPARATOR.'storage/app/install/recovery-required');
+        $this->assertStringContainsString(
+            'INSTALL_RECOVERY_REQUIRED=false',
+            (string) file_get_contents($this->directory.DIRECTORY_SEPARATOR.'.env'),
+        );
+    }
+
     public function test_artisan_bootstraps_a_missing_marketplace_environment_before_laravel(): void
     {
         $project = dirname(__DIR__, 2);
@@ -104,6 +136,8 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertNotFalse($autoload);
         $this->assertLessThan($autoload, $firstBoot);
         $this->assertStringContainsString("if (! is_file(__DIR__.'/.env')", $artisan);
+        $this->assertStringContainsString('$composerDiscovery', $artisan);
+        $this->assertStringContainsString('($argv[1] ?? null) === \'package:discover\'', $artisan);
     }
 
     public function test_installer_keeps_cache_recovery_independent_from_the_database(): void
@@ -119,7 +153,7 @@ class FirstBootEnvironmentTest extends TestCase
         $this->assertStringContainsString("'CACHE_STORE' => 'file'", $service);
         $this->assertStringContainsString("'cache.default' => 'file'", $service);
         $this->assertStringContainsString("env('CACHE_STORE', 'file')", $cacheConfig);
-        $this->assertStringContainsString("env('DB_CONNECTION', 'mysql')", $databaseConfig);
+        $this->assertStringContainsString("env('DB_CONNECTION', 'central')", $databaseConfig);
     }
 
     private function restoreServerValue(string $key, ?string $value): void

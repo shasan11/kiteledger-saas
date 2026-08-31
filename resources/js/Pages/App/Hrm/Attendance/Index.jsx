@@ -253,7 +253,7 @@ export default function Attendance({ auth }) {
           value={edits[emp.id]?.status || null}
           onChange={(val) => updateEdit(emp.id, 'status', val)}
           options={STATUS_OPTIONS}
-          placeholder="—"
+          placeholder="-"
           style={{ width: '100%' }}
           allowClear
           size="small"
@@ -297,7 +297,7 @@ export default function Attendance({ auth }) {
         const edit = edits[emp.id];
         if (edit?.dirty) return <Tag color="orange">Unsaved</Tag>;
         if (attendanceMap[emp.id]) return <Tag color="green">Saved</Tag>;
-        return <Tag>—</Tag>;
+        return <Tag>-</Tag>;
       },
     },
   ];

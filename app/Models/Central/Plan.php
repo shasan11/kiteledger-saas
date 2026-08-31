@@ -17,4 +17,11 @@ class Plan extends CentralModel
     {
         return $this->hasMany(PlanFeature::class);
     }
+
+    public function plansFeatureRegistry()
+    {
+        return $this->belongsToMany(Feature::class, 'plan_feature')
+            ->withPivot(['enabled', 'limit_value', 'value', 'inherit_default', 'display_on_pricing', 'pricing_label'])
+            ->withTimestamps();
+    }
 }

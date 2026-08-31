@@ -17,6 +17,13 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
+    /**
+     * Authentication uses the isolated tenant guard. Existing tenant RBAC
+     * rows intentionally retain Spatie's historical `web` namespace so a
+     * marketplace upgrade does not orphan every role and permission.
+     */
+    protected string $guard_name = 'web';
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
 

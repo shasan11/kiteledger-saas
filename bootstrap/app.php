@@ -9,8 +9,13 @@ use App\Http\Middleware\EnsureCentralDomain;
 use App\Http\Middleware\EnsureFeatureIsAllowed;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsurePlanLimitNotExceeded;
+use App\Http\Middleware\EnsurePlatformUser;
+use App\Http\Middleware\EnsurePlatformUserCanAccessTenant;
 use App\Http\Middleware\EnsureSubscriptionIsValid;
 use App\Http\Middleware\EnsureTenantIsActive;
+use App\Http\Middleware\EnsureTenancyIsInitialized;
+use App\Http\Middleware\RequireTenantFeature;
+use App\Http\Middleware\EnforceTenantLimit;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetLocale;
 use Froiden\LaravelInstaller\Middleware\canInstall;
@@ -50,7 +55,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'central.domain' => EnsureCentralDomain::class,
             'central.admin' => EnsureCentralAdmin::class,
+            'platform.user' => EnsurePlatformUser::class,
+            'platform.tenant' => EnsurePlatformUserCanAccessTenant::class,
             'tenant.active' => EnsureTenantIsActive::class,
+            'tenant.initialized' => EnsureTenancyIsInitialized::class,
+            'tenant.feature' => RequireTenantFeature::class,
+            'tenant.limit' => EnforceTenantLimit::class,
             'subscription.valid' => EnsureSubscriptionIsValid::class,
             'feature.allowed' => EnsureFeatureIsAllowed::class,
             'plan.within-limit' => EnsurePlanLimitNotExceeded::class,

@@ -87,7 +87,7 @@ class ReportAiSummaryController extends Controller
     {
         [$message, $status] = match ($exception->getErrorCode()) {
             'AI_DISABLED', 'AI_API_KEY_MISSING', 'AI_MODEL_MISSING', 'AI_PROVIDER_UNSUPPORTED' => [
-                'AI provider is not configured. Please configure an AI provider before using report summaries.',
+                'The shared AI provider is not ready. Ask the platform administrator to check AI readiness before using report summaries.',
                 422,
             ],
             'AI_RATE_LIMIT' => ['The AI provider rate limit was reached. Please try again later.', 429],

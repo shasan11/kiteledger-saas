@@ -255,7 +255,7 @@ export default function PosSalesPage() {
             <Head title="POS Sales" />
 
             <div style={{ padding: '18px 24px' }}>
-                {/* Filter controls — outside printable area */}
+                {/* Filter controls - outside printable area */}
                 <Card bordered={false} style={{ marginBottom: 16 }}>
                     <Row gutter={12}>
                         <Col xs={24} md={8}>
@@ -410,7 +410,7 @@ export default function PosSalesPage() {
                             {/* Footer */}
                             <div style={{ marginTop: 24, paddingTop: 10, borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#aaa' }}>
                                 <span>Generated on {dayjs().format('DD MMM YYYY, HH:mm')}</span>
-                                <span>{companyName} — POS Sales Report</span>
+                                <span>{companyName} - POS Sales Report</span>
                             </div>
                         </div>
                     </PrintablePdfEmailWrapper>

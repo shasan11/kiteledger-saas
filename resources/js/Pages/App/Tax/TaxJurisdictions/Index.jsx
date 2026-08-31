@@ -12,9 +12,9 @@ const api = (path) => `${BACKEND_BASE}${path}`;
 const nullIfEmpty = (v) => (v === '' || v == null ? null : v);
 
 const COUNTRY_OPTIONS = [
-    { value: 'NP', label: 'NP — Nepal' },
-    { value: 'IN', label: 'IN — India' },
-    { value: 'US', label: 'US — United States' },
+    { value: 'NP', label: 'NP - Nepal' },
+    { value: 'IN', label: 'IN - India' },
+    { value: 'US', label: 'US - United States' },
 ];
 
 const TAX_SYSTEM_OPTIONS = [
@@ -31,9 +31,9 @@ export default function TaxJurisdictions({ auth }) {
             { title: 'Name',        dataIndex: 'name',         key: 'name',         sorter: true },
             { title: 'Code',        dataIndex: 'code',         key: 'code',         width: 120 },
             { title: 'Country',     dataIndex: 'country_code', key: 'country_code', width: 110,
-                render: (v) => <Tag>{v || '—'}</Tag> },
+                render: (v) => <Tag>{v || '-'}</Tag> },
             { title: 'Tax System',  dataIndex: 'tax_system',   key: 'tax_system',
-                render: (v) => TAX_SYSTEM_OPTIONS.find((o) => o.value === v)?.label || v || '—' },
+                render: (v) => TAX_SYSTEM_OPTIONS.find((o) => o.value === v)?.label || v || '-' },
             { title: 'Active',      dataIndex: 'active',       key: 'active',       width: 90,
                 render: (v) => <Tag color={v !== false ? 'green' : 'red'}>{v !== false ? 'Active' : 'Inactive'}</Tag> },
         ],

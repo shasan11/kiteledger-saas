@@ -1,9 +1,834 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
-import { AppstoreOutlined, BankOutlined, CreditCardOutlined, DashboardOutlined, FileTextOutlined, GlobalOutlined, LogoutOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons';
-import { Button, Layout, Menu, Space, Typography } from 'antd';
+import { Head, router, usePage } from "@inertiajs/react";
+import {
+    AlertOutlined,
+    AppstoreOutlined,
+    AuditOutlined,
+    BankOutlined,
+    BellOutlined,
+    BookOutlined,
+    CloudServerOutlined,
+    CodeSandboxOutlined,
+    CreditCardOutlined,
+    DashboardOutlined,
+    DatabaseOutlined,
+    FileImageOutlined,
+    FileTextOutlined,
+    GlobalOutlined,
+    HeartOutlined,
+    HomeOutlined,
+    LogoutOutlined,
+    MenuFoldOutlined,
+    MenuOutlined,
+    MenuUnfoldOutlined,
+    MessageOutlined,
+    NotificationOutlined,
+    PlusOutlined,
+    QuestionCircleOutlined,
+    RiseOutlined,
+    SafetyCertificateOutlined,
+    SearchOutlined,
+    SettingOutlined,
+    ShopOutlined,
+    TagsOutlined,
+    TeamOutlined,
+    UserOutlined,
+} from "@ant-design/icons";
+import axios from "axios";
+import {
+    Avatar,
+    Badge,
+    Breadcrumb,
+    Button,
+    Drawer,
+    Dropdown,
+    Empty,
+    Input,
+    Layout,
+    Menu,
+    Modal,
+    Popover,
+    Spin,
+    Tag,
+    Typography,
+} from "antd";
+import { memo, useEffect, useMemo, useState } from "react";
+import ApplicationLogo from "@/Components/ApplicationLogo";
+import { humanize, initials } from "@/Components/Central/formatters";
+
 const { Header, Sider, Content } = Layout;
-const nav=[['central.dashboard','Dashboard',<DashboardOutlined/>],['central.tenants.index','Tenants',<TeamOutlined/>],['central.plans.index','Plans',<AppstoreOutlined/>],['central.subscriptions.index','Subscriptions',<CreditCardOutlined/>],['central.invoices.index','Invoices',<FileTextOutlined/>],['central.payments.index','Payments',<BankOutlined/>],['central.website-pages.index','Website CMS',<GlobalOutlined/>],['central.default-templates.index','Templates',<FileTextOutlined/>],['central.tenant-databases.index','Tenant Databases',<BankOutlined/>],['central.platform-settings.index','Settings',<SettingOutlined/>]];
-export default function CentralLayout({title,children}){
- const page=usePage(); const items=nav.map(([routeName,label,icon])=>({key:route(routeName),label,icon,onClick:()=>router.visit(route(routeName))}));
- return <Layout style={{minHeight:'100vh'}}><Head title={title}/><Sider breakpoint="lg" collapsedWidth="0" theme="dark"><div style={{height:64,display:'grid',placeItems:'center',color:'white',fontWeight:800,fontSize:18}}>KiteLedger SaaS</div><Menu theme="dark" mode="inline" selectedKeys={[items.find(i=>page.url.startsWith(new URL(i.key,location.origin).pathname))?.key]} items={items}/></Sider><Layout><Header style={{background:'#fff',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 24px',borderBottom:'1px solid #eee'}}><Typography.Title level={4} style={{margin:0}}>{title}</Typography.Title><Space><Link href={route('central.home')}>View website</Link><Button icon={<LogoutOutlined/>} onClick={()=>router.post(route('central.logout'))}>Logout</Button></Space></Header><Content style={{padding:24}}>{children}</Content></Layout></Layout>;
+const entry = (
+    routeName,
+    label,
+    icon,
+    permission = null,
+    params = undefined,
+) => ({ routeName, label, icon, permission, params });
+const menu = (label, icon, children = []) => ({ label, icon, children });
+const navigation = [
+    entry("central.dashboard", "Home", <HomeOutlined />, "dashboard.view"),
+    menu("Customers", <TeamOutlined />, [
+        entry(
+            "central.tenants.index",
+            "All Customers",
+            <TeamOutlined />,
+            "tenant.view",
+        ),
+        entry(
+            "central.subscriptions.index",
+            "Subscriptions",
+            <CreditCardOutlined />,
+            "subscription.view",
+        ),
+        entry(
+            "central.usage.index",
+            "Usage",
+            <DashboardOutlined />,
+            "tenant.view",
+        ),
+        entry(
+            "central.tenant-feature-overrides.index",
+            "Feature Overrides",
+            <SettingOutlined />,
+            "feature_override.manage",
+        ),
+    ]),
+    entry("central.invoices.index", "Invoices", <FileTextOutlined />, "invoice.view"),
+    entry("central.payments.index", "Payments", <BankOutlined />, "payment.view"),
+    menu("Support", <MessageOutlined />, [
+        entry(
+            "central.support.tickets.index",
+            "Tickets",
+            <MessageOutlined />,
+            "ticket.view",
+        ),
+        entry(
+            "central.support-categories.index",
+            "Support Categories",
+            <TagsOutlined />,
+            "support.manage",
+        ),
+        entry(
+            "central.saved-replies.index",
+            "Saved Replies",
+            <MessageOutlined />,
+            "support.manage",
+        ),
+
+    ]),
+    menu("Communication", <NotificationOutlined />, [
+        entry("central.communication.index", "Campaigns", <NotificationOutlined />, "communication.view", { section: "campaigns" }),
+        entry("central.communication.index", "Delivery Logs", <MessageOutlined />, "communication.view", { section: "deliveries" }),
+        entry("central.communication.index", "Suppression List", <SafetyCertificateOutlined />, "communication.view", { section: "suppressions" }),
+    ]),
+    menu("Infrastructure", <DatabaseOutlined />, [
+        entry(
+            "central.tenant-databases.index",
+            "Customer Databases",
+            <DatabaseOutlined />,
+            "system_health.view",
+        ),
+        entry(
+            "central.provisioning-logs.index",
+            "Provisioning Logs",
+            <CloudServerOutlined />,
+            "system_health.view",
+        ),
+    ]),
+    menu("Products", <AppstoreOutlined />, [
+        entry(
+            "central.plans.index",
+            "Plans",
+            <AppstoreOutlined />,
+            "plan.view",
+        ),
+        entry(
+            "central.features.index",
+            "Features",
+            <AppstoreOutlined />,
+            "feature.view",
+        ),
+        entry(
+            "central.default-templates.index",
+            "Default Templates",
+            <CodeSandboxOutlined />,
+            "settings.view",
+        ),
+    ]),
+    menu("Website", <GlobalOutlined />, [
+        entry(
+            "central.website.overview",
+            "Website Overview",
+            <HomeOutlined />,
+            "cms.view",
+        ),
+        entry("central.settings.index", "Website Settings", <SettingOutlined />, "settings.view", { group: "website" }),
+        entry(
+            "central.website-pages.index",
+            "Pages",
+            <FileTextOutlined />,
+            "cms.view",
+        ),
+        entry(
+            "central.website-sections.index",
+            "Sections",
+            <AppstoreOutlined />,
+            "cms.manage",
+        ),
+        entry(
+            "central.website-menus.index",
+            "Navigation Menus",
+            <GlobalOutlined />,
+            "cms.manage",
+        ),
+        entry(
+            "central.website-leads.index",
+            "Website Leads",
+            <TeamOutlined />,
+            "lead.view",
+        ),
+        entry("central.website-structured.index", "Website Features", <AppstoreOutlined />, "cms.manage", { resource: "features" }),
+        entry("central.website-structured.index", "Resource Articles", <BookOutlined />, "cms.manage", { resource: "resource-articles" }),
+        entry("central.website-structured.index", "Resource Categories", <TagsOutlined />, "cms.manage", { resource: "resource-categories" }),
+        entry("central.website-structured.index", "Contact Locations", <GlobalOutlined />, "cms.manage", { resource: "contact-locations" }),
+        entry("central.website-structured.index", "Social Media", <HeartOutlined />, "cms.manage", { resource: "social-links" }),
+        entry("central.website-structured.index", "Homepage Popups", <NotificationOutlined />, "cms.manage", { resource: "popups" }),
+        entry("central.website-structured.index", "Navbar Notices", <AlertOutlined />, "cms.manage", { resource: "navbar-notifications" }),
+        menu("Content", <BookOutlined />, [
+            entry(
+                "central.blog.index",
+                "Blog Posts",
+                <BookOutlined />,
+                "blog.view",
+            ),
+            entry(
+                "central.blog-categories.index",
+                "Blog Categories",
+                <TagsOutlined />,
+                "blog.manage",
+            ),
+            entry(
+                "central.blog-tags.index",
+                "Blog Tags",
+                <TagsOutlined />,
+                "blog.manage",
+            ),
+            entry(
+                "central.website-faqs.index",
+                "FAQs",
+                <QuestionCircleOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-testimonials.index",
+                "Testimonials",
+                <TeamOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-announcements.index",
+                "Announcements",
+                <NotificationOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-logos.index",
+                "Logo Strip",
+                <FileImageOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-features.index",
+                "Homepage Feature Blocks",
+                <AppstoreOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-metrics.index",
+                "Homepage Metrics",
+                <RiseOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-integrations.index",
+                "Integrations",
+                <AppstoreOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.website-solutions.index",
+                "Solutions",
+                <ShopOutlined />,
+                "cms.manage",
+            ),
+            entry(
+                "central.seo.index",
+                "SEO Settings",
+                <SearchOutlined />,
+                "seo.manage",
+            ),
+            entry(
+                "central.settings.index",
+                "Website Branding",
+                <ShopOutlined />,
+                "website.branding.manage",
+                { group: "branding" },
+            ),
+            entry(
+                "central.media.index",
+                "Media Library",
+                <FileImageOutlined />,
+                "media.manage",
+            ),
+        ]),
+    ]),
+    menu("Settings", <SettingOutlined />, [
+        entry(
+            "central.settings.index",
+            "Platform Settings",
+            <SettingOutlined />,
+            "settings.view",
+        ),
+        entry("central.settings.operations-guide", "Queue & Cron Guide", <BookOutlined />, "settings.view"),
+        entry("central.gateways.index", "Payment Gateways", <CreditCardOutlined />, "gateway.view"),
+        entry("central.invoice-customization.index", "Invoice Customization", <FileTextOutlined />, "invoice.customize"),
+    ]),
+    menu("Administration", <SafetyCertificateOutlined />, [
+        entry(
+            "central.notifications.index",
+            "Notifications",
+            <NotificationOutlined />,
+        ),
+        entry(
+            "central.central-admins.index",
+            "Admin Users",
+            <UserOutlined />,
+            "admin.manage",
+        ),
+        entry(
+            "central.platform-users.index",
+            "Platform Users",
+            <TeamOutlined />,
+            "platform-users.view",
+        ),
+        entry(
+            "central.roles.index",
+            "Roles and Permissions",
+            <SafetyCertificateOutlined />,
+            "role.manage",
+        ),
+        entry(
+            "central.audit-logs.index",
+            "Audit Logs",
+            <AuditOutlined />,
+            "audit.view",
+        ),
+    ]),
+];
+
+const navKey = (parents, label) => [...parents, label].join(">");
+
+const CentralSidebarContent = memo(function CentralSidebarContent({
+    activeKey,
+    activeOpenKeys,
+    isCollapsed,
+    menuItems,
+}) {
+    return (
+        <>
+            <div className="central-sider__brand">
+                <ApplicationLogo
+                    dark
+                    className="central-sider__logo"
+                    alt="KiteLedger"
+                />
+            </div>
+            <div className="central-sider__menu">
+                <Menu
+                    theme="dark"
+                    mode="inline"
+                    inlineCollapsed={isCollapsed}
+                    selectedKeys={activeKey ? [activeKey] : []}
+                    defaultOpenKeys={isCollapsed ? [] : activeOpenKeys}
+                    items={menuItems}
+                />
+            </div>
+        </>
+    );
+});
+
+export default function CentralLayout({
+    title,
+    subtitle,
+    breadcrumbs = [],
+    children,
+}) {
+    const page = usePage();
+    const user = page.props?.auth?.user || page.props?.centralAdmin || {};
+    const permissions = page.props?.auth?.permissions || [];
+    const bypass = page.props?.auth?.canBypassPermissions;
+    const notificationData = page.props?.centralNotifications || {
+        unread: 0,
+        recent: [],
+    };
+    const [collapsed, setCollapsed] = useState(
+        () => localStorage.getItem("central.sidebar.collapsed") === "1",
+    );
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const [searching, setSearching] = useState(false);
+    const [results, setResults] = useState([]);
+    const can = (permission) =>
+        !permission || bypass || permissions.includes(permission);
+    const visibleNavigation = useMemo(() => {
+        const allowed = (item) =>
+            !item.permission || bypass || permissions.includes(item.permission);
+        const filterItems = (items) =>
+            items
+                .map((item) => {
+                    if (item.children) {
+                        const children = filterItems(item.children);
+
+                        return children.length ? { ...item, children } : null;
+                    }
+
+                    return allowed(item) && route().has(item.routeName)
+                        ? item
+                        : null;
+                })
+                .filter(Boolean);
+
+        return filterItems(navigation);
+    }, [permissions, bypass]);
+    const allNav = useMemo(() => {
+        const items = [];
+        const flattenItems = (navItems, parents = []) => {
+            navItems.forEach((item) => {
+                if (item.children) {
+                    flattenItems(item.children, [...parents, item.label]);
+                    return;
+                }
+
+                items.push({
+                    ...item,
+                    parents,
+                    key: navKey(parents, item.label),
+                    url: route(item.routeName, item.params),
+                });
+            });
+        };
+
+        flattenItems(visibleNavigation);
+
+        return items;
+    }, [visibleNavigation]);
+    const currentPath = page.url.split("?")[0];
+    const active = useMemo(() => {
+        return [...allNav]
+            .sort(
+                (a, b) =>
+                    new URL(b.url, location.origin).pathname.length -
+                    new URL(a.url, location.origin).pathname.length,
+            )
+            .find((item) =>
+                currentPath.startsWith(
+                    new URL(item.url, location.origin).pathname,
+                ),
+            );
+    }, [allNav, currentPath]);
+    const activeOpenKeys = useMemo(
+        () =>
+            active?.parents?.map((label, index) =>
+                navKey(active.parents.slice(0, index), label),
+            ) || [],
+        [active],
+    );
+
+    useEffect(() => {
+        localStorage.setItem(
+            "central.sidebar.collapsed",
+            collapsed ? "1" : "0",
+        );
+    }, [collapsed]);
+    useEffect(() => {
+        if (!searchOpen || query.trim().length < 2) {
+            setResults([]);
+            return;
+        }
+        const timer = setTimeout(async () => {
+            setSearching(true);
+            try {
+                const { data } = await axios.get(route("central.search"), {
+                    params: { q: query },
+                });
+                setResults(data.data || []);
+            } finally {
+                setSearching(false);
+            }
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [query, searchOpen]);
+
+    const menuItems = useMemo(() => {
+        const toMenuItems = (items, parents = []) =>
+            items.map((item) => {
+                const key = navKey(parents, item.label);
+
+                if (item.children) {
+                    return {
+                        key,
+                        label: item.label,
+                        icon: item.icon,
+                        children: toMenuItems(item.children, [
+                            ...parents,
+                            item.label,
+                        ]),
+                    };
+                }
+
+                return {
+                    key,
+                    label: item.label,
+                    icon: item.icon,
+                    onClick: () => {
+                        setMobileOpen(false);
+                        router.visit(route(item.routeName, item.params));
+                    },
+                };
+            });
+
+        return toMenuItems(visibleNavigation);
+    }, [visibleNavigation]);
+    const trail = [
+        { title: "Home" },
+        ...(breadcrumbs.length
+            ? breadcrumbs
+            : active && active.label !== title
+              ? [{ title: active.label }]
+              : []),
+        { title },
+    ].filter(
+        (item, index, array) =>
+            item.title &&
+            array.findIndex((x) => x.title === item.title) === index,
+    );
+    const profileItems = [
+        {
+            key: "profile",
+            label: "Profile",
+            icon: <UserOutlined />,
+            onClick: () => router.visit(route("central.profile.edit")),
+        },
+        {
+            key: "activity",
+            label: "Activity",
+            icon: <AuditOutlined />,
+            onClick: () => router.visit(route("central.audit-logs.index")),
+        },
+        { type: "divider" },
+        {
+            key: "site",
+            label: "View public website",
+            icon: <ShopOutlined />,
+            onClick: () => router.visit(route("central.home")),
+        },
+        { type: "divider" },
+        {
+            key: "logout",
+            label: "Logout",
+            danger: true,
+            icon: <LogoutOutlined />,
+            onClick: () => router.post(route("central.logout")),
+        },
+    ];
+    const notifications = (
+        <div style={{ width: 360, maxWidth: "82vw" }}>
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                }}
+            >
+                <Typography.Text strong>Notifications</Typography.Text>
+                {notificationData.unread > 0 && (
+                    <Button
+                        type="link"
+                        size="small"
+                        onClick={() =>
+                            router.post(route("central.notifications.read-all"))
+                        }
+                    >
+                        Mark all read
+                    </Button>
+                )}
+            </div>
+            {notificationData.recent?.length ? (
+                notificationData.recent.map((item) => (
+                    <button
+                        key={item.id}
+                        onClick={() =>
+                            item.action_url && router.visit(item.action_url)
+                        }
+                        style={{
+                            display: "block",
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "10px 4px",
+                            border: 0,
+                            borderBottom: "1px solid #eef2f7",
+                            background: "transparent",
+                            cursor: "pointer",
+                        }}
+                    >
+                        <Tag
+                            color={
+                                item.severity === "critical" ||
+                                item.severity === "error"
+                                    ? "red"
+                                    : item.severity === "warning"
+                                      ? "orange"
+                                      : item.severity === "success"
+                                        ? "green"
+                                        : "blue"
+                            }
+                        >
+                            {humanize(item.severity)}
+                        </Tag>
+                        <Typography.Text strong>{item.title}</Typography.Text>
+                        <Typography.Paragraph
+                            type="secondary"
+                            ellipsis={{ rows: 2 }}
+                            style={{ margin: "5px 0 0" }}
+                        >
+                            {item.message}
+                        </Typography.Paragraph>
+                    </button>
+                ))
+            ) : (
+                <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="No notifications"
+                />
+            )}
+            <Button
+                type="link"
+                block
+                onClick={() =>
+                    router.visit(route("central.notifications.index"))
+                }
+            >
+                View all notifications
+            </Button>
+        </div>
+    );
+
+    return (
+        <Layout className="central-shell">
+            <Head title={title} />
+            <Sider
+                className="central-sider"
+                width={230}
+                collapsedWidth={80}
+                collapsed={collapsed}
+                trigger={null}
+            >
+                <CentralSidebarContent
+                    activeKey={active?.key}
+                    activeOpenKeys={activeOpenKeys}
+                    isCollapsed={collapsed}
+                    menuItems={menuItems}
+                />
+            </Sider>
+            <Drawer
+                open={mobileOpen}
+                onClose={() => setMobileOpen(false)}
+                placement="left"
+                width={290}
+                closable={false}
+                styles={{ body: { padding: 0, background: "#101827" } }}
+            >
+                <div style={{ width: 290, minHeight: "100vh" }}>
+                    <CentralSidebarContent
+                        activeKey={active?.key}
+                        activeOpenKeys={activeOpenKeys}
+                        isCollapsed={false}
+                        menuItems={menuItems}
+                    />
+                </div>
+            </Drawer>
+            <Layout
+                className={`central-main${collapsed ? " central-main--collapsed" : ""}`}
+            >
+                <Header className="central-topbar">
+                    <div className="central-topbar__left">
+                        <Button
+                            className="central-desktop-toggle"
+                            type="text"
+                            icon={
+                                collapsed ? (
+                                    <MenuUnfoldOutlined />
+                                ) : (
+                                    <MenuFoldOutlined />
+                                )
+                            }
+                            onClick={() => setCollapsed((value) => !value)}
+                        />
+                        <Button
+                            className="central-mobile-toggle"
+                            type="text"
+                            icon={<MenuOutlined />}
+                            onClick={() => setMobileOpen(true)}
+                        />
+                        <Breadcrumb
+                            className="central-topbar__crumbs"
+                            items={trail}
+                        />
+                    </div>
+                    <div className="central-topbar__spacer" />
+                    <button
+                        className="central-topbar__search"
+                        onClick={() => setSearchOpen(true)}
+                    >
+                        <SearchOutlined />
+                        <span>
+                            Search customers, invoices, tickets, content...
+                        </span>
+                    </button>
+                    <Button
+                        type="text"
+                        shape="circle"
+                        icon={<HeartOutlined style={{ color: "#059669" }} />}
+                        aria-label="System health"
+                        onClick={() => router.visit(route("central.dashboard"))}
+                    />
+                    <Button
+                        type="text"
+                        shape="circle"
+                        icon={<QuestionCircleOutlined />}
+                        aria-label="Support"
+                        onClick={() =>
+                            router.visit(route("central.support.tickets.index"))
+                        }
+                    />
+                    <Popover
+                        placement="bottomRight"
+                        trigger="click"
+                        content={notifications}
+                    >
+                        <Badge
+                            count={notificationData.unread}
+                            overflowCount={99}
+                        >
+                            <Button
+                                type="text"
+                                shape="circle"
+                                icon={<BellOutlined />}
+                                aria-label="Notifications"
+                            />
+                        </Badge>
+                    </Popover>
+                    <Dropdown
+                        menu={{ items: profileItems }}
+                        trigger={["click"]}
+                        placement="bottomRight"
+                    >
+                        <button className="central-profile">
+                            <Avatar size={34}>
+                                {initials(user.name || user.email)}
+                            </Avatar>
+                            <span className="central-profile__copy">
+                                <strong>{user.name || "Administrator"}</strong>
+                                <span>
+                                    {humanize(user.role || "super admin")}
+                                </span>
+                            </span>
+                        </button>
+                    </Dropdown>
+                </Header>
+                <Content className="central-content">
+                    <div className="central-content__inner">
+                        {subtitle && (
+                            <Typography.Text type="secondary">
+                                {subtitle}
+                            </Typography.Text>
+                        )}
+                        {children}
+                    </div>
+                </Content>
+            </Layout>
+            <Modal
+                open={searchOpen}
+                onCancel={() => {
+                    setSearchOpen(false);
+                    setQuery("");
+                    setResults([]);
+                }}
+                footer={null}
+                title="Search Home"
+                width={680}
+            >
+                <Input
+                    autoFocus
+                    size="large"
+                    prefix={<SearchOutlined />}
+                    placeholder="Search customers, owners, domains, invoices, payments, tickets, posts, pages, and settings"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                />
+                <div
+                    style={{ marginTop: 14, maxHeight: 430, overflowY: "auto" }}
+                >
+                    {searching ? (
+                        <div style={{ padding: 40, textAlign: "center" }}>
+                            <Spin />
+                        </div>
+                    ) : query.length < 2 ? (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="Enter at least two characters"
+                        />
+                    ) : results.length ? (
+                        results.map((item, index) => (
+                            <button
+                                key={`${item.type}-${index}`}
+                                onClick={() => {
+                                    setSearchOpen(false);
+                                    router.visit(item.url);
+                                }}
+                                style={{
+                                    width: "100%",
+                                    display: "flex",
+                                    gap: 12,
+                                    padding: 12,
+                                    border: 0,
+                                    borderBottom: "1px solid #eef2f7",
+                                    background: "transparent",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                }}
+                            >
+                                <Tag>{item.type}</Tag>
+                                <span>
+                                    <strong style={{ display: "block" }}>
+                                        {item.title}
+                                    </strong>
+                                    <Typography.Text type="secondary">
+                                        {item.subtitle}
+                                    </Typography.Text>
+                                </span>
+                            </button>
+                        ))
+                    ) : (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No matching records"
+                        />
+                    )}
+                </div>
+            </Modal>
+            <style>{`.central-mobile-toggle{display:none}@media(max-width:991px){.central-desktop-toggle{display:none}.central-mobile-toggle{display:inline-flex}}`}</style>
+        </Layout>
+    );
 }

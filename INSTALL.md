@@ -31,6 +31,18 @@ a hosted site attempt to load JavaScript from the visitor's localhost port 5173.
 
 ## Browser installer
 
+For local installation with Laravel's PHP development server, disable its
+automatic environment-file reloader:
+
+```bash
+php artisan serve --no-reload
+```
+
+The environment step writes `.env`. Without `--no-reload`, the development
+server may restart the PHP worker before it sends the response, which Firefox
+reports as `NS_ERROR_NET_EMPTY_RESPONSE`. Apache, Nginx, and normal shared
+hosting PHP runtimes are not affected.
+
 Extract the package, point the document root to `public/`, configure wildcard
 DNS plus `CENTRAL_DOMAINS`/`SAAS_BASE_DOMAIN`, and open `/install` on a central host.
 On compatible Apache shared hosting, the root `.htaccess` forwards traffic.

@@ -2,7 +2,7 @@ import { Collapse, Form, Input } from 'antd';
 
 /**
  * Collapsed Description + Remarks fields for transaction add/edit forms.
- * Designed to live inside an existing Ant Design <Form/> — uses Form.Item
+ * Designed to live inside an existing Ant Design <Form/> - uses Form.Item
  * with name props so values flow through the parent form automatically.
  *
  * Props:

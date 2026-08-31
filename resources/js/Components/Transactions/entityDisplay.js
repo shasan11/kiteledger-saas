@@ -1,7 +1,7 @@
 // Shared "never show a UUID to a human" helpers.
 //
 // UUIDs remain valid for API calls, route params, hidden payloads and React
-// keys — but must never be rendered in any user-facing surface. These helpers
+// keys - but must never be rendered in any user-facing surface. These helpers
 // turn entity objects/ids into readable labels and strip ids from detail blobs.
 //
 // NOTE on the matcher: this app issues ordered UUIDv7 ids (e.g.
@@ -104,7 +104,7 @@ export function sanitizeDisplayDetails(details) {
   const out = {};
   for (const [key, value] of Object.entries(details)) {
     // ID-like key: drop it. If a paired entity object exists, it is rendered
-    // when we reach that key — so just skip the raw id here.
+    // when we reach that key - so just skip the raw id here.
     if (isIdKey(key)) {
       continue;
     }

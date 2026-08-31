@@ -22,15 +22,36 @@ class TenantDomainService
 
     public function subdomainHost(string $subdomain): string
     {
-        return $this->normalizeSubdomain($subdomain).'.'.config('saas.base_domain');
+        $baseDomain = Str::lower(rtrim(trim((string) config('saas.tenant_base_domain')), '.'));
+        if ($baseDomain === '') {
+            throw new \RuntimeException('tenant_base_domain_missing');
+        }
+        if (str_contains($baseDomain, '://') || str_contains($baseDomain, '/') || str_contains($baseDomain, ':') || str_contains($baseDomain, '*')) {
+            throw new \RuntimeException('tenant_domain_invalid');
+        }
+
+        return $this->normalizeSubdomain($subdomain).'.'.$baseDomain;
     }
 
     public function attachSubdomain(Tenant $tenant, string $subdomain, bool $primary = true): Domain
     {
-        return $tenant->domains()->create([
-            'domain' => $this->subdomainHost($subdomain), 'type' => 'subdomain', 'status' => 'active',
-            'is_primary' => $primary, 'verified_at' => now(),
-        ]);
+        try {
+            $domain = $this->subdomainHost($subdomain);
+
+            return $tenant->domains()->updateOrCreate(['domain' => $domain], [
+                'type' => 'subdomain',
+                'status' => 'active',
+                'verification_status' => 'verified',
+                'verified_at' => now(),
+                'activated_at' => now(),
+                'disabled_at' => null,
+                'is_primary' => $primary,
+            ]);
+        } catch (ValidationException|\RuntimeException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException('tenant_domain_creation_failed', previous: $exception);
+        }
     }
 
     public function attachCustomDomain(Tenant $tenant, string $host): Domain
@@ -48,7 +69,8 @@ class TenantDomainService
         }
         $ascii = function_exists('idn_to_ascii') ? idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46) : $host;
         $central = array_map(fn ($value) => Str::lower(rtrim($value, '.')), config('tenancy.central_domains', []));
-        if (! is_string($ascii) || ! filter_var('https://'.$ascii, FILTER_VALIDATE_URL) || ! str_contains($ascii, '.') || in_array($ascii, ['localhost', ...$central], true) || str_ends_with($ascii, '.'.config('saas.base_domain'))) {
+        $tenantBaseDomain = Str::lower(rtrim(trim((string) config('saas.tenant_base_domain')), '.'));
+        if (! is_string($ascii) || ! filter_var('https://'.$ascii, FILTER_VALIDATE_URL) || ! str_contains($ascii, '.') || in_array($ascii, ['localhost', ...$central], true) || ($tenantBaseDomain !== '' && str_ends_with($ascii, '.'.$tenantBaseDomain))) {
             throw ValidationException::withMessages(['domain' => 'This hostname is malformed or reserved.']);
         }
 
@@ -61,8 +83,8 @@ class TenantDomainService
         $txt = @dns_get_record('_kiteledger.'.$domain->domain, DNS_TXT) ?: [];
         $cname = @dns_get_record('_kiteledger.'.$domain->domain, DNS_CNAME) ?: [];
         $verified = collect($txt)->contains(fn ($record) => ($record['txt'] ?? '') === 'kiteledger-verification='.$token)
-            || collect($cname)->contains(fn ($record) => rtrim(strtolower($record['target'] ?? ''), '.') === strtolower($token.'.verify.'.config('saas.base_domain')));
-        $domain->forceFill(['verification_attempted_at' => now(), 'status' => $verified ? 'active' : 'pending', 'verified_at' => $verified ? now() : null, 'activated_at' => $verified ? now() : null])->save();
+            || collect($cname)->contains(fn ($record) => rtrim(strtolower($record['target'] ?? ''), '.') === strtolower($token.'.verify.'.config('saas.tenant_base_domain')));
+        $domain->forceFill(['verification_attempted_at' => now(), 'status' => $verified ? 'active' : 'pending', 'verification_status' => $verified ? 'verified' : 'pending', 'verified_at' => $verified ? now() : null, 'activated_at' => $verified ? now() : null])->save();
 
         return $verified;
     }

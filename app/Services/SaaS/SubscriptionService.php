@@ -7,24 +7,31 @@ use App\Enums\SubscriptionStatus;
 use App\Models\Central\Plan;
 use App\Models\Central\Subscription;
 use App\Models\Central\Tenant;
+use App\Models\Central\TenantInvoice;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SubscriptionService implements SubscriptionLifecycle
 {
-    public function start(Tenant $tenant, Plan $plan, string $cycle = 'monthly', ?string $idempotencyKey = null): Subscription
+    public function start(Tenant $tenant, Plan $plan, string $cycle = 'monthly', string $mode = 'auto', mixed $effectiveAt = null, ?string $idempotencyKey = null): Subscription
     {
         if (! in_array($cycle, ['monthly', 'yearly'], true)) {
             throw ValidationException::withMessages(['billing_cycle' => 'Billing cycle must be monthly or yearly.']);
         }
+        if (! in_array($mode, ['auto', 'trial', 'active'], true) || ($mode === 'trial' && (int) $plan->trial_days < 1)) {
+            throw ValidationException::withMessages(['subscription_start_mode' => 'The selected subscription start mode is unavailable.']);
+        }
 
-        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $plan, $cycle, $idempotencyKey): Subscription {
+        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $plan, $cycle, $mode, $effectiveAt, $idempotencyKey): Subscription {
             if ($idempotencyKey && ($existing = Subscription::where('idempotency_key', $idempotencyKey)->first())) {
                 return $existing;
             }
-            $now = now();
-            $trialEnd = $plan->trial_days ? $now->copy()->addDays($plan->trial_days) : null;
-            $subscription = Subscription::query()->create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => $trialEnd ? SubscriptionStatus::Trialing->value : SubscriptionStatus::Active->value, 'billing_cycle' => $cycle, 'starts_at' => $now, 'trial_ends_at' => $trialEnd, 'current_period_starts_at' => $now, 'current_period_ends_at' => $cycle === 'yearly' ? $now->copy()->addYear() : $now->copy()->addMonth(), 'idempotency_key' => $idempotencyKey]);
+            $start = $effectiveAt ? Carbon::parse($effectiveAt) : now();
+            $trial = $mode === 'trial' || ($mode === 'auto' && (int) $plan->trial_days > 0);
+            $trialEnd = $trial ? $start->copy()->addDays($plan->trial_days) : null;
+            $periodEnd = $trialEnd ?: ($cycle === 'yearly' ? $start->copy()->addYear() : $start->copy()->addMonth());
+            $subscription = Subscription::query()->create(['tenant_id' => $tenant->id, 'plan_id' => $plan->id, 'status' => $trial ? SubscriptionStatus::Trialing->value : SubscriptionStatus::Active->value, 'billing_cycle' => $cycle, 'starts_at' => $start, 'trial_ends_at' => $trialEnd, 'current_period_starts_at' => $start, 'current_period_ends_at' => $periodEnd, 'idempotency_key' => $idempotencyKey]);
             $tenant->update(['plan_id' => $plan->id, 'trial_ends_at' => $trialEnd, 'subscription_ends_at' => $subscription->current_period_ends_at]);
             $this->audit($subscription, null, $subscription->status, $idempotencyKey);
 
@@ -86,18 +93,49 @@ class SubscriptionService implements SubscriptionLifecycle
     public function renew(Subscription $subscription): Subscription
     {
         return $this->locked($subscription, function (Subscription $locked): void {
-            if ($locked->scheduled_plan_id) {
-                $locked->plan_id = $locked->scheduled_plan_id;
-                $locked->tenant()->update(['plan_id' => $locked->scheduled_plan_id]);
-                $locked->scheduled_plan_id = null;
-                $locked->scheduled_change_at = null;
-            }
-            $start = $locked->current_period_ends_at?->isFuture() ? $locked->current_period_ends_at->copy() : now();
-            $locked->current_period_starts_at = $start;
-            $locked->current_period_ends_at = $locked->billing_cycle === 'yearly' ? $start->copy()->addYear() : $start->copy()->addMonth();
-            $locked->status = SubscriptionStatus::Active->value;
-            $locked->cancel_at_period_end = false;
+            $this->applyRenewal($locked);
         });
+    }
+
+    public function renewForInvoice(Subscription $subscription, TenantInvoice $invoice): Subscription
+    {
+        if ((int) $invoice->subscription_id !== (int) $subscription->id || $invoice->status !== 'paid') {
+            throw ValidationException::withMessages(['invoice' => 'Only a fully paid invoice for this subscription can renew access.']);
+        }
+
+        return $this->locked($subscription, function (Subscription $locked) use ($invoice): void {
+            $invoicePeriodEnd = $invoice->period_end;
+            if ($invoicePeriodEnd && $locked->current_period_ends_at?->gt($invoicePeriodEnd)) {
+                return;
+            }
+
+            $this->applyRenewal($locked, (int) $invoice->id);
+        });
+    }
+
+    private function applyRenewal(Subscription $locked, ?int $invoiceId = null): void
+    {
+        if ($locked->scheduled_plan_id) {
+            $locked->plan_id = $locked->scheduled_plan_id;
+            $locked->scheduled_plan_id = null;
+            $locked->scheduled_change_at = null;
+        }
+        $start = $locked->current_period_ends_at?->isFuture() ? $locked->current_period_ends_at->copy() : now();
+        $locked->current_period_starts_at = $start;
+        $locked->current_period_ends_at = $locked->billing_cycle === 'yearly' ? $start->copy()->addYear() : $start->copy()->addMonth();
+        $locked->status = SubscriptionStatus::Active->value;
+        $locked->trial_ends_at = null;
+        $locked->grace_ends_at = null;
+        $locked->cancel_at_period_end = false;
+        $locked->metadata = array_merge($locked->metadata ?? [], array_filter([
+            'last_renewed_invoice_id' => $invoiceId,
+            'last_renewed_at' => now()->toIso8601String(),
+        ]));
+        $locked->tenant()->update([
+            'plan_id' => $locked->plan_id,
+            'trial_ends_at' => null,
+            'subscription_ends_at' => $locked->current_period_ends_at,
+        ]);
     }
 
     private function locked(Subscription $subscription, callable $mutation): Subscription

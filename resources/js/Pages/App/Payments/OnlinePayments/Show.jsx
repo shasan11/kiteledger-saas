@@ -75,7 +75,7 @@ export default function OnlinePaymentShow({ id }) {
     };
 
     const webhookColumns = [
-        { title: 'Time', dataIndex: 'received_at', key: 'time', width: 160, render: v => v ? new Date(v).toLocaleString() : '—' },
+        { title: 'Time', dataIndex: 'received_at', key: 'time', width: 160, render: v => v ? new Date(v).toLocaleString() : '-' },
         { title: 'Event', dataIndex: 'event_type', key: 'type' },
         {
             title: 'Verified',
@@ -95,7 +95,7 @@ export default function OnlinePaymentShow({ id }) {
             title: 'Error',
             dataIndex: 'processing_error',
             key: 'error',
-            render: v => v ? <Text type="danger" style={{ fontSize: 12 }}>{v}</Text> : '—',
+            render: v => v ? <Text type="danger" style={{ fontSize: 12 }}>{v}</Text> : '-',
         },
     ];
 
@@ -156,22 +156,22 @@ export default function OnlinePaymentShow({ id }) {
 
                             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
                                 <Descriptions.Item label="Customer">
-                                    {payment.customer_name || payment.contact?.name || '—'}
+                                    {payment.customer_name || payment.contact?.name || '-'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Email">
-                                    {payment.customer_email || '—'}
+                                    {payment.customer_email || '-'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Invoice">
-                                    {payment.invoice?.invoice_no || '—'}
+                                    {payment.invoice?.invoice_no || '-'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Payment Date">
-                                    {payment.paid_at ? new Date(payment.paid_at).toLocaleString() : '—'}
+                                    {payment.paid_at ? new Date(payment.paid_at).toLocaleString() : '-'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Provider Payment ID">
-                                    <Text code style={{ fontSize: 12 }}>{payment.provider_payment_id || '—'}</Text>
+                                    <Text code style={{ fontSize: 12 }}>{payment.provider_payment_id || '-'}</Text>
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Provider Order ID">
-                                    <Text code style={{ fontSize: 12 }}>{payment.provider_order_id || '—'}</Text>
+                                    <Text code style={{ fontSize: 12 }}>{payment.provider_order_id || '-'}</Text>
                                 </Descriptions.Item>
                                 <Descriptions.Item label={exchangeRateLabel(baseCurrency)}>
                                     {payment.exchange_rate || '1'}
@@ -180,7 +180,7 @@ export default function OnlinePaymentShow({ id }) {
                                     {payment.currency_code} {Number(payment.gateway_fee || 0).toFixed(2)}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Verified At">
-                                    {payment.verified_at ? new Date(payment.verified_at).toLocaleString() : '—'}
+                                    {payment.verified_at ? new Date(payment.verified_at).toLocaleString() : '-'}
                                 </Descriptions.Item>
                                 {payment.customer_payment && (
                                     <Descriptions.Item label="Customer Payment">

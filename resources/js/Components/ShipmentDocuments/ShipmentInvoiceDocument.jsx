@@ -1,6 +1,6 @@
 import React from 'react';
 
-const v = (val, fallback = '—') => val ?? fallback;
+const v = (val, fallback = '-') => val ?? fallback;
 
 const pal = {
   primary: '#1a3a5c',
@@ -224,13 +224,13 @@ function InfoCell({ label, value }) {
 }
 
 const formatDate = (d) => {
-  if (!d) return '—';
+  if (!d) return '-';
   try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
   catch { return d; }
 };
 
 const fmtMoney = (amount, symbol) => {
-  if (amount == null) return '—';
+  if (amount == null) return '-';
   const num = Number(amount);
   return `${symbol || ''}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
@@ -402,7 +402,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
             <tr style={{ background: pal.primaryLight }}>
               <td style={st.td} colSpan={5}><strong>Total Revenue</strong></td>
               <td style={{ ...st.tdRight, fontWeight: 'bold', fontSize: '12px' }}>
-                {payment.total_revenue != null ? Number(payment.total_revenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                {payment.total_revenue != null ? Number(payment.total_revenue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
               </td>
               <td style={st.td} colSpan={3}></td>
             </tr>
@@ -471,7 +471,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
             <tr style={{ background: pal.primaryLight }}>
               <td style={st.td} colSpan={5}><strong>Total Cost</strong></td>
               <td style={{ ...st.tdRight, fontWeight: 'bold', fontSize: '12px' }}>
-                {payment.total_cost != null ? Number(payment.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                {payment.total_cost != null ? Number(payment.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
               </td>
               <td style={st.td} colSpan={3}></td>
             </tr>
@@ -497,7 +497,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Total Revenue',
               value: payment.total_revenue != null
                 ? Number(payment.total_revenue).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                : '—',
+                : '-',
               color: null,
               highlight: false,
             },
@@ -505,7 +505,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Total Cost',
               value: payment.total_cost != null
                 ? Number(payment.total_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                : '—',
+                : '-',
               color: null,
               highlight: false,
             },
@@ -513,7 +513,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Gross Profit',
               value: payment.gross_profit != null
                 ? Number(payment.gross_profit).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                : '—',
+                : '-',
               color: profitPositive ? pal.green : pal.red,
               highlight: true,
             },
@@ -521,7 +521,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Gross Profit %',
               value: payment.gross_profit_percent != null
                 ? `${Number(payment.gross_profit_percent).toFixed(2)}%`
-                : '—',
+                : '-',
               color: profitPositive ? pal.green : pal.red,
               highlight: false,
             },
@@ -529,7 +529,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Total Receivables',
               value: payment.total_receivables != null
                 ? Number(payment.total_receivables).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                : '—',
+                : '-',
               color: null,
               highlight: false,
             },
@@ -537,7 +537,7 @@ export default function ShipmentInvoiceDocument({ snapshot }) {
               label: 'Total Payables',
               value: payment.total_payables != null
                 ? Number(payment.total_payables).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                : '—',
+                : '-',
               color: null,
               highlight: false,
             },

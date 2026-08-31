@@ -26,6 +26,8 @@ class AiPendingAction extends Model
         'risk_level',
         'risk_reasons',
         'status',
+        'idempotency_key',
+        'expires_at',
         'approved_by',
         'approved_at',
         'executed_at',
@@ -37,6 +39,7 @@ class AiPendingAction extends Model
         'payload' => 'array',
         'risk_reasons' => 'array',
         'metadata' => 'array',
+        'expires_at' => 'datetime',
         'approved_at' => 'datetime',
         'executed_at' => 'datetime',
     ];

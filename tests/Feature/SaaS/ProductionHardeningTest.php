@@ -3,8 +3,11 @@
 namespace Tests\Feature\SaaS;
 
 use App\Contracts\SaaS\QuotaManager;
+use App\Enums\DomainStatus;
 use App\Enums\TenantStatus;
+use App\Http\Middleware\ConfigureTenantSession;
 use App\Http\Middleware\EnsureSubscriptionIsValid;
+use App\Http\Middleware\EnsureTenantIsActive;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use App\Models\Central\CentralAdmin;
 use App\Models\Central\CentralPermission;
@@ -19,8 +22,10 @@ use App\Services\Payments\StripeGatewayService;
 use App\Services\SaaS\PlanFeatureResolver;
 use App\Services\SaaS\TenantDomainService;
 use App\Services\SaaS\TenantLifecycleService;
+use App\Support\Installer\InstalledState;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -28,14 +33,147 @@ class ProductionHardeningTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function tearDown(): void
+    {
+        InstalledState::clear();
+
+        parent::tearDown();
+    }
+
     public function test_unverified_domain_fails_closed(): void
     {
+        InstalledState::mark();
         $tenant = Tenant::create(['id' => 'tenant-a', 'company_name' => 'A', 'owner_name' => 'A', 'owner_email' => 'a@test.invalid', 'status' => 'active']);
         Domain::create(['tenant_id' => $tenant->id, 'domain' => 'pending.test', 'status' => 'pending']);
         $request = Request::create('https://pending.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
         $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
         $this->assertSame(404, $response->getStatusCode());
         $this->assertNull(tenant());
+    }
+
+    public function test_unknown_domain_fails_closed_after_installation(): void
+    {
+        InstalledState::mark();
+
+        $request = Request::create('https://unknown.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
+    public function test_central_domain_cannot_enter_tenant_routes(): void
+    {
+        InstalledState::mark();
+        config(['tenancy.central_domains' => ['central.test']]);
+
+        $request = Request::create('https://central.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle(
+            $request,
+            fn () => $this->fail('Central domains must not reach tenant routes.'),
+        );
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
+    public function test_localhost_can_initialize_single_active_local_customer(): void
+    {
+        InstalledState::mark();
+        config(['tenancy.central_domains' => ['127.0.0.1', 'localhost']]);
+
+        $tenant = Tenant::create([
+            'id' => 'tenant-localhost',
+            'company_name' => 'Local Customer',
+            'owner_name' => 'Owner',
+            'owner_email' => 'local@test.invalid',
+            'status' => TenantStatus::Active->value,
+            'provisioned_at' => now(),
+        ]);
+
+        $request = Request::create('http://localhost/dashboard', 'GET', server: ['HTTP_ACCEPT' => 'text/html']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('local tenant ready'));
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame($tenant->id, tenant('id'));
+
+        tenancy()->end();
+    }
+
+    public function test_disabled_domain_fails_closed(): void
+    {
+        InstalledState::mark();
+        $tenant = Tenant::create(['id' => 'tenant-disabled-domain', 'company_name' => 'Disabled Domain', 'owner_name' => 'Owner', 'owner_email' => 'disabled-domain@test.invalid', 'status' => 'active']);
+        Domain::create(['tenant_id' => $tenant->id, 'domain' => 'disabled.test', 'status' => DomainStatus::Disabled->value, 'verified_at' => now()]);
+
+        $request = Request::create('https://disabled.test/api/brand', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $response = app(InitializeTenancyByVerifiedDomain::class)->handle($request, fn () => response('unsafe'));
+
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertSame('tenant_not_found', $response->getData(true)['code']);
+        $this->assertNull(tenant());
+    }
+
+    public function test_suspended_tenant_is_locked_after_domain_initialization(): void
+    {
+        $tenant = Tenant::create(['id' => 'tenant-suspended', 'company_name' => 'Suspended', 'owner_name' => 'Owner', 'owner_email' => 'suspended@test.invalid', 'status' => TenantStatus::Suspended->value]);
+        tenancy()->initialize($tenant);
+
+        try {
+            $request = Request::create('/api/products', 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+            $response = app(EnsureTenantIsActive::class)->handle($request, fn () => response('unsafe'));
+
+            $this->assertSame(423, $response->getStatusCode());
+            $this->assertSame('tenant_locked', $response->getData(true)['code']);
+        } finally {
+            tenancy()->end();
+        }
+    }
+
+    public function test_sessions_remain_host_only_for_tenant_isolation(): void
+    {
+        $this->assertNull(config('session.domain'));
+        $this->assertTrue(config('session.http_only'));
+        $this->assertSame('lax', config('session.same_site'));
+    }
+
+    public function test_tenant_session_is_configured_before_web_middleware_and_restored_afterward(): void
+    {
+        $tenant = Tenant::create(['id' => 'tenant-session-a', 'company_name' => 'Session A', 'owner_name' => 'Owner', 'owner_email' => 'session-a@test.invalid', 'status' => 'active']);
+        config([
+            'session.cookie' => 'shared-session',
+            'session.tenant_cookie_prefix' => 'kiteledger-tenant-session',
+            'session.domain' => '.example.test',
+            'session.connection' => 'tenant_template',
+        ]);
+        tenancy()->initialize($tenant);
+
+        try {
+            app(ConfigureTenantSession::class)->handle(Request::create('https://session-a.example.test/login'), function () use ($tenant) {
+                $this->assertSame('kiteledger-tenant-session-'.substr(hash('sha256', $tenant->id), 0, 16), config('session.cookie'));
+                $this->assertNull(config('session.domain'));
+                $this->assertSame(config('tenancy.database.central_connection'), config('session.connection'));
+
+                return response('ok');
+            });
+        } finally {
+            tenancy()->end();
+        }
+
+        $this->assertSame('shared-session', config('session.cookie'));
+        $this->assertSame('.example.test', config('session.domain'));
+        $this->assertSame('tenant_template', config('session.connection'));
+    }
+
+    public function test_routes_are_cacheable_for_shared_host_deployments(): void
+    {
+        try {
+            $this->assertSame(0, Artisan::call('route:cache'));
+        } finally {
+            Artisan::call('route:clear');
+        }
     }
 
     public function test_missing_paid_subscription_returns_payment_required(): void

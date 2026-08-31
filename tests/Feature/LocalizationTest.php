@@ -6,6 +6,7 @@ use App\Models\Language;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\LocalizationService;
+use Database\Seeders\LanguageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,19 +14,23 @@ class LocalizationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_localization_service_exposes_seeded_languages_and_fallback_keys(): void
+    public function test_localization_service_exposes_active_languages_and_fallback_keys(): void
     {
+        $this->seed(LanguageSeeder::class);
+
         $localization = app(LocalizationService::class);
 
         $this->assertContains('en', $localization->supportedCodes());
-        $this->assertContains('ne', $localization->supportedCodes());
         $this->assertContains('ar', $localization->supportedCodes());
+        $this->assertNotContains('ne', $localization->supportedCodes());
         $this->assertSame('Dashboard', $localization->translationsFor('en')['Dashboard']);
         $this->assertSame('rtl', $localization->direction('ar'));
     }
 
     public function test_translation_editor_loads_the_language_pack_and_reports_real_progress(): void
     {
+        $this->seed(LanguageSeeder::class);
+
         $role = Role::query()->create([
             'name' => 'Full Access Admin',
             'guard_name' => 'web',

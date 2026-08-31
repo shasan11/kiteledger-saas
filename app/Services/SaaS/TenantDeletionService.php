@@ -3,7 +3,6 @@
 namespace App\Services\SaaS;
 
 use App\Enums\TenantStatus;
-use App\Models\Central\BackupManifest;
 use App\Models\Central\Tenant;
 use App\Models\Central\TenantDeletionRequest;
 use App\Services\SaaS\DatabaseProvisioning\DatabaseProvisionerManager;
@@ -12,18 +11,21 @@ use Illuminate\Support\Str;
 
 class TenantDeletionService
 {
-    public function __construct(private TenantLifecycleService $lifecycle, private DatabaseProvisionerManager $databases) {}
+    public function __construct(
+        private TenantLifecycleService $lifecycle,
+        private DatabaseProvisionerManager $databases,
+        private TenantFileDeletionService $files,
+    ) {}
 
-    public function request(Tenant $tenant, int $adminId, string $reason, ?BackupManifest $backup, bool $waived): TenantDeletionRequest
+    public function request(Tenant $tenant, int $adminId, string $reason): TenantDeletionRequest
     {
-        if (! $waived && (! $backup || $backup->tenant_id !== $tenant->id || $backup->status !== 'verified')) {
-            throw new \RuntimeException('verified_backup_required');
-        }
-
-        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $adminId, $reason, $backup, $waived) {
+        return DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant, $adminId, $reason) {
             $this->lifecycle->transition($tenant, TenantStatus::DeletionPending, $reason);
 
-            return TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'backup_manifest_id' => $backup?->id, 'backup_waived' => $waived, 'reason' => $reason]);
+            $request = TenantDeletionRequest::create(['id' => (string) Str::uuid(), 'tenant_id' => $tenant->id, 'status' => 'pending', 'requested_by' => $adminId, 'execute_after' => now()->addDays((int) config('saas.deletion_wait_days', 14)), 'reason' => $reason]);
+            app(CentralNotificationService::class)->notifyOnce('deletion_approval_pending', 'tenants', 'critical', 'Tenant deletion approval pending', $tenant->company_name.' has a pending deletion request.', route('central.tenants.show', $tenant), $request, ['tenant_id' => $tenant->id], 1);
+
+            return $request;
         });
     }
 
@@ -31,6 +33,23 @@ class TenantDeletionService
     {
         abort_if($request->execute_after->isFuture(), 409, 'The deletion waiting period has not elapsed.');
         $request->update(['status' => 'approved', 'approved_by' => $adminId]);
+    }
+
+    public function deleteImmediately(Tenant $tenant): void
+    {
+        $this->databases->driver($tenant->database_provisioning_mode)->destroy($tenant);
+        $this->files->delete($tenant);
+
+        DB::connection(config('tenancy.database.central_connection'))->transaction(function () use ($tenant): void {
+            $tenant->domains()->update([
+                'status' => 'disabled',
+                'disabled_at' => now(),
+            ]);
+            $tenant->deletionRequests()
+                ->whereNotIn('status', ['completed', 'cancelled'])
+                ->update(['status' => 'cancelled']);
+            $tenant->delete();
+        });
     }
 
     public function execute(TenantDeletionRequest $request): void
@@ -42,24 +61,10 @@ class TenantDeletionService
             } $locked->update(['status' => 'running']);
         });
         $tenant = Tenant::withTrashed()->findOrFail($request->tenant_id);
-        $this->databases->driver()->destroy($tenant);
-        $this->deleteTenantFiles($tenant);
+        $this->databases->driver($tenant->database_provisioning_mode)->destroy($tenant);
+        $this->files->delete($tenant);
         $tenant->domains()->update(['status' => 'disabled', 'disabled_at' => now()]);
         $tenant->delete();
         $request->update(['status' => 'completed']);
-    }
-
-    private function deleteTenantFiles(Tenant $tenant): void
-    {
-        $path = storage_path('tenant'.$tenant->id);
-        $root = realpath(storage_path());
-        $target = realpath($path);
-        if (! $target || ! $root || ! str_starts_with($target, $root.DIRECTORY_SEPARATOR)) {
-            return;
-        }
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($target, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($iterator as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        } rmdir($target);
     }
 }

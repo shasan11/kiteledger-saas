@@ -56,7 +56,7 @@ class MainBranchSeeder extends Seeder
                 'code' => env('SEED_MAIN_WAREHOUSE_CODE', 'MAIN-WH'),
             ],
             [
-                'name' => env('SEED_MAIN_WAREHOUSE_NAME', $branch->name . ' Warehouse'),
+                'name' => env('SEED_MAIN_WAREHOUSE_NAME', $branch->name.' Warehouse'),
                 'address' => $branch->address,
                 'active' => true,
                 'is_system_generated' => true,
@@ -64,10 +64,9 @@ class MainBranchSeeder extends Seeder
             ]
         );
 
-        Warehouse::query()
-            ->where('branch_id', $branch->id)
-            ->where('is_system_generated', true)
-            ->whereKeyNot($warehouse->id)
-            ->delete();
+        // Keep existing generated warehouses because already-seeded demo
+        // transactions may reference them. Deleting here makes rerunning the
+        // demo seed unsafe for active tenants with inventory adjustments,
+        // transfers, POS records, or other warehouse-linked documents.
     }
 }

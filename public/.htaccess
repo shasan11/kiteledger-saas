@@ -1,4 +1,5 @@
 Options -Indexes
+DirectoryIndex index.php
 
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
@@ -6,6 +7,10 @@ Options -Indexes
     </IfModule>
 
     RewriteEngine On
+
+    # Reject hidden files if one is ever placed in the public directory while
+    # allowing cPanel/AutoSSL validation under .well-known.
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
 
     # Preserve the Authorization header for Laravel and API authentication.
     RewriteCond %{HTTP:Authorization} .

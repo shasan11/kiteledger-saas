@@ -41,6 +41,7 @@ CENTRAL_DOMAINS=yourdomain.com,www.yourdomain.com
 
 # The suffix appended to each tenant subdomain. acme -> acme.yourdomain.com
 SAAS_BASE_DOMAIN=yourdomain.com
+TENANT_BASE_DOMAIN=yourdomain.com
 
 # IMPORTANT: leave this null for wildcard tenancy (see warning below).
 SESSION_DOMAIN=null
@@ -150,6 +151,7 @@ Use a wildcard-DNS test service so you don't have to edit hosts files per tenant
 APP_URL=http://127.0.0.1.nip.io:8000
 CENTRAL_DOMAINS=127.0.0.1.nip.io
 SAAS_BASE_DOMAIN=127.0.0.1.nip.io
+TENANT_BASE_DOMAIN=127.0.0.1.nip.io
 ```
 
 `acme.127.0.0.1.nip.io` resolves to `127.0.0.1` automatically, so tenant
@@ -161,6 +163,6 @@ subdomains work against `php artisan serve`.
 |---------|-------------|
 | Subdomain shows the marketing site | The host is in `CENTRAL_DOMAINS`, or the tenant's domain row is missing. Check the `domains` table. |
 | Every subdomain 404s | Wildcard DNS or `server_name *.yourdomain.com` missing; web server isn't routing subdomains to `public`. |
-| "No tenant found" errors | The subdomain isn't provisioned. Provision the tenant or check `SAAS_BASE_DOMAIN` matches the stored domain suffix. |
+| "No tenant found" errors | The subdomain isn't provisioned. Provision the tenant or check `TENANT_BASE_DOMAIN` matches the stored domain suffix. |
 | Logged into one tenant shows another's data | `SESSION_DOMAIN` is set to a dotted domain — set it back to `null` and clear config. |
 | TLS warning on subdomains | Certificate is single-host; issue a `*.yourdomain.com` wildcard cert (DNS-01). |

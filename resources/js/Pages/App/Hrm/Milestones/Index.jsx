@@ -16,7 +16,7 @@ export default function Milestones(props) {
     { title: 'Milestone', dataIndex: 'name', key: 'name', sorter: true, render: (v) => <strong>{v}</strong> },
     { title: 'Start Date', dataIndex: 'start_date', key: 'start_date', sorter: true, width: 105, render: fmtDate },
     { title: 'End Date', dataIndex: 'end_date', key: 'end_date', sorter: true, width: 105, render: fmtDate },
-    { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={STATUS_COLORS[v] || 'default'}>{v || '—'}</Tag> },
+    { title: 'Status', dataIndex: 'status', key: 'status', width: 120, render: (v) => <Tag color={STATUS_COLORS[v] || 'default'}>{v || '-'}</Tag> },
     { title: 'Active', dataIndex: 'active', key: 'active', width: 70, render: (v) => <Tag color={v ? 'green' : 'red'}>{v ? 'Yes' : 'No'}</Tag> },
   ];
   const fields = [

@@ -72,7 +72,7 @@ export default function PosLayout({ children }) {
                     boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
                 }}
             >
-                {/* Left — logo + brand name */}
+                {/* Left - logo + brand name */}
                 <Space size={10} align="center" style={{ flexShrink: 0 }}>
                     <div
                         style={{
@@ -87,7 +87,7 @@ export default function PosLayout({ children }) {
                     
                 </Space>
 
-                {/* Center — horizontal navigation (desktop) */}
+                {/* Center - horizontal navigation (desktop) */}
                 {!isMobile && (
                     <div
                         style={{
@@ -115,7 +115,7 @@ export default function PosLayout({ children }) {
                     </div>
                 )}
 
-                {/* Right — back button + mobile hamburger */}
+                {/* Right - back button + mobile hamburger */}
                 <Space size={8} style={{ flexShrink: 0 }}>
                     {isMobile && (
                         <Button icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />

@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Contracts\SaaS\BackupManager;
 use App\Contracts\SaaS\FeatureResolver;
 use App\Contracts\SaaS\QuotaManager;
 use App\Contracts\SaaS\SubscriptionLifecycle;
@@ -13,6 +12,14 @@ use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\CashTransfer;
 use App\Models\CashTransferLine;
+use App\Models\Central\BlogPost;
+use App\Models\Central\PaymentGateway;
+use App\Models\Central\CentralUser;
+use App\Models\Central\SupportTicket;
+use App\Models\Central\Tenant as CentralTenant;
+use App\Models\Central\TenantMembership;
+use App\Models\Central\TenantInvoice;
+use App\Models\Central\WebsitePage;
 use App\Models\ChartOfAccount;
 use App\Models\ChequeRegister;
 use App\Models\Contact;
@@ -46,6 +53,7 @@ use App\Models\SalesReturn;
 use App\Models\SupplierPayment;
 use App\Models\SupplierPaymentLine;
 use App\Models\WarehouseTransfer;
+use App\Observers\AiKnowledgeObserver;
 use App\Observers\AssignsDefaultBranchObserver;
 use App\Observers\BankAccountObserver;
 use App\Observers\BranchObserver;
@@ -83,9 +91,17 @@ use App\Observers\SalesReturnObserver;
 use App\Observers\SubsequentJournalVoucherObserver;
 use App\Observers\SupplierPaymentLineObserver;
 use App\Observers\SupplierPaymentObserver;
+use App\Policies\Central\BlogPostPolicy;
+use App\Policies\Central\PaymentGatewayPolicy;
+use App\Policies\Central\SupportTicketPolicy;
+use App\Policies\Central\TenantInvoicePolicy;
+use App\Policies\Central\WebsitePagePolicy;
 use App\Policies\DocumentUploadPolicy;
+use App\Policies\Platform\CentralUserPolicy;
+use App\Policies\Platform\TenantBillingPolicy;
+use App\Policies\Platform\TenantMembershipPolicy;
+use App\Policies\Platform\TenantPolicy as PlatformTenantPolicy;
 use App\Services\SaaS\AtomicQuotaManager;
-use App\Services\SaaS\NativeBackupManager;
 use App\Services\SaaS\PlanFeatureResolver;
 use App\Services\SaaS\SubscriptionService;
 use App\Services\SmsService;
@@ -139,7 +155,6 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(FeatureResolver::class, PlanFeatureResolver::class);
         $this->app->singleton(QuotaManager::class, AtomicQuotaManager::class);
         $this->app->singleton(SubscriptionLifecycle::class, SubscriptionService::class);
-        $this->app->singleton(BackupManager::class, NativeBackupManager::class);
     }
 
     /**
@@ -210,6 +225,20 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(DocumentUpload::class, DocumentUploadPolicy::class);
+        Gate::policy(WebsitePage::class, WebsitePagePolicy::class);
+        Gate::policy(BlogPost::class, BlogPostPolicy::class);
+        Gate::policy(PaymentGateway::class, PaymentGatewayPolicy::class);
+        Gate::policy(TenantInvoice::class, TenantInvoicePolicy::class);
+        Gate::policy(SupportTicket::class, SupportTicketPolicy::class);
+        Gate::policy(CentralTenant::class, PlatformTenantPolicy::class);
+        Gate::policy(TenantMembership::class, TenantMembershipPolicy::class);
+        Gate::policy(CentralUser::class, CentralUserPolicy::class);
+        // Billing stays a separate ability set so `can_manage_billing`,
+        // `can_manage_plan`, `can_view_invoices` and `can_make_payments` remain
+        // independently enforceable from the general tenant abilities.
+        foreach (['manageBilling', 'managePlan', 'viewInvoices', 'makePayment'] as $ability) {
+            Gate::define('tenant-billing.'.$ability, [TenantBillingPolicy::class, $ability]);
+        }
 
         if (! $this->app->runningInConsole() && request()->is('install*')) {
             app()->setLocale('en');
@@ -314,6 +343,23 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(ProductObserver::class);
         Lead::observe(LeadObserver::class);
         Deal::observe(DealObserver::class);
+
+        foreach ([
+            Invoice::class,
+            Quotation::class,
+            SalesOrder::class,
+            PurchaseBill::class,
+            PurchaseOrder::class,
+            Expense::class,
+            CustomerPayment::class,
+            SupplierPayment::class,
+            JournalVoucher::class,
+            Contact::class,
+            Product::class,
+            PosSale::class,
+        ] as $aiSearchableModel) {
+            $aiSearchableModel::observe(AiKnowledgeObserver::class);
+        }
 
         PosShift::observe(PosShiftObserver::class);
         PosSale::observe(PosSaleObserver::class);

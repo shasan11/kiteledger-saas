@@ -2,7 +2,10 @@
 
 Place the generated dump at `database/sql/mysql_install.sql`. When present, the
 MySQL/MariaDB web installer streams this file instead of replaying migrations
-and base seeders. PostgreSQL and SQLite ignore it.
+and base seeders. PostgreSQL and SQLite ignore it. The installer also verifies
+that the dump contains every current central migration. If it is stale, the
+installer safely falls back to migrations and seeders instead of importing an
+incompatible schema.
 
 Generate it from a new disposable MySQL/MariaDB database:
 

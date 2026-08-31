@@ -6,6 +6,7 @@ use App\Models\AiPendingAction;
 use App\Models\Permission;
 use App\Models\User;
 use App\Services\AI\AiPermissionService;
+use App\Services\AI\AiSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,18 +29,24 @@ class AiAgentSafetyTest extends TestCase
         foreach (AiPermissionService::ALL as $permission) {
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
+        foreach (['master.product.view', 'sales.invoice.create'] as $permission) {
+            Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         // Write actions are disabled by default now; this suite exercises the
         // draft pipeline, so opt in explicitly.
-        app(\App\Services\AI\AiSettingsService::class)->setMany(['ai_write_actions_enabled' => true]);
+        app(AiSettingsService::class)->setMany([
+            'ai_write_actions_enabled' => true,
+            'ai_action_execution_enabled' => true,
+        ]);
     }
 
     public function test_execute_endpoint_creates_draft_and_writes_audit_log(): void
     {
         [$branch] = $this->branch();
-        $user = $this->userWith(['ai.chat', 'ai.actions.execute', 'ai.actions.view'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.action.propose', 'ai.actions.execute', 'ai.actions.view', 'sales.invoice.create'], $branch);
         $this->contact('Sachin');
 
         $actionId = $this->actingAs($user)
@@ -64,7 +71,7 @@ class AiAgentSafetyTest extends TestCase
     public function test_high_risk_action_requires_typed_confirmation(): void
     {
         [$branch] = $this->branch();
-        $user = $this->userWith(['ai.actions.approve', 'ai.actions.view'], $branch);
+        $user = $this->userWith(['ai.actions.approve', 'ai.actions.view', 'sales.invoice.create'], $branch);
         $contact = $this->contact('Acme');
         $action = $this->highRiskInvoiceAction($user, $branch, $contact);
 
@@ -108,7 +115,7 @@ class AiAgentSafetyTest extends TestCase
     public function test_action_resource_does_not_leak_internal_fields(): void
     {
         [$branch] = $this->branch();
-        $user = $this->userWith(['ai.chat', 'ai.actions.view'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.action.propose', 'ai.actions.view', 'sales.invoice.create'], $branch);
         $this->contact('Sachin');
 
         $actionId = $this->actingAs($user)
@@ -131,7 +138,7 @@ class AiAgentSafetyTest extends TestCase
     public function test_audit_endpoint_lists_logs_after_execution(): void
     {
         [$branch] = $this->branch();
-        $user = $this->userWith(['ai.chat', 'ai.actions.approve', 'ai.actions.view'], $branch);
+        $user = $this->userWith(['ai.chat', 'ai.action.propose', 'ai.actions.approve', 'ai.actions.view', 'sales.invoice.create'], $branch);
         $this->contact('Sachin');
 
         $actionId = $this->actingAs($user)
@@ -149,7 +156,7 @@ class AiAgentSafetyTest extends TestCase
 
     public function test_query_logs_a_tool_call(): void
     {
-        $user = $this->userWith(['ai.chat']);
+        $user = $this->userWith(['ai.chat', 'master.product.view']);
         $this->insertProduct('iPhone 15 Pro', 185000);
 
         $this->actingAs($user)
@@ -157,6 +164,41 @@ class AiAgentSafetyTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseHas('ai_tool_calls', ['tool_name' => 'product.most_expensive', 'status' => 'completed']);
+    }
+
+    public function test_expired_action_cannot_execute(): void
+    {
+        [$branch] = $this->branch();
+        $user = $this->userWith(['ai.actions.execute', 'ai.actions.view', 'sales.invoice.create'], $branch);
+        $contact = $this->contact('Expired Customer');
+        $action = $this->highRiskInvoiceAction($user, $branch, $contact);
+        $action->forceFill(['expires_at' => now()->subMinute()])->save();
+
+        $this->actingAs($user)
+            ->postJson("/api/ai/actions/{$action->id}/execute", ['confirmation_text' => 'CONFIRM INVOICE'])
+            ->assertStatus(409)
+            ->assertJsonPath('status', 'expired');
+
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
+    public function test_action_is_idempotent_and_cannot_execute_twice(): void
+    {
+        [$branch] = $this->branch();
+        $user = $this->userWith(['ai.actions.execute', 'ai.actions.view', 'sales.invoice.create'], $branch);
+        $contact = $this->contact('Single Execution Customer');
+        $action = $this->highRiskInvoiceAction($user, $branch, $contact);
+
+        $this->actingAs($user)
+            ->postJson("/api/ai/actions/{$action->id}/execute", ['confirmation_text' => 'CONFIRM INVOICE'])
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->postJson("/api/ai/actions/{$action->id}/execute", ['confirmation_text' => 'CONFIRM INVOICE'])
+            ->assertStatus(409)
+            ->assertJsonPath('status', 'executed');
+
+        $this->assertSame(1, DB::table('invoices')->where('contact_id', $contact)->count());
     }
 
     // --- helpers -----------------------------------------------------------
@@ -176,8 +218,8 @@ class AiAgentSafetyTest extends TestCase
         $branchId = (string) Str::uuid();
         DB::table('branches')->insert([
             'id' => $branchId,
-            'code' => $code . '-' . substr($branchId, 0, 4),
-            'name' => $code . ' Branch',
+            'code' => $code.'-'.substr($branchId, 0, 4),
+            'name' => $code.' Branch',
             'active' => true,
             'created_at' => now(),
             'updated_at' => now(),

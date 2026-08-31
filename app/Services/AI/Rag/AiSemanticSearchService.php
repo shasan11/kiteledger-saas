@@ -3,7 +3,9 @@
 namespace App\Services\AI\Rag;
 
 use App\Models\AiEmbedding;
+use App\Neuron\VectorStore\MySqlVectorStore;
 use App\Services\AI\AiProviderManager;
+use App\Services\AI\AiSettingsService;
 
 /**
  * Retrieval side of the RAG slice. Embeds the query, then ranks stored vectors
@@ -13,7 +15,10 @@ use App\Services\AI\AiProviderManager;
  */
 class AiSemanticSearchService
 {
-    public function __construct(private readonly AiProviderManager $provider) {}
+    public function __construct(
+        private readonly AiProviderManager $provider,
+        private readonly AiSettingsService $settings,
+    ) {}
 
     /**
      * @return array<int, array{source_type: string, source_id: string, snippet: string, score: float}>
@@ -44,9 +49,8 @@ class AiSemanticSearchService
 
         $query = AiEmbedding::query()->where('dims', $dims);
 
-        if (! empty($opts['model'])) {
-            $query->where('model', $opts['model']);
-        }
+        $query->where('model', $opts['model'] ?? $this->settings->embeddingModel())
+            ->where('provider', $opts['provider'] ?? $this->settings->embeddingProvider());
 
         if (! empty($opts['source_types'])) {
             $query->whereIn('source_type', (array) $opts['source_types']);
@@ -58,12 +62,22 @@ class AiSemanticSearchService
             });
         }
 
+        if ($fiscalYearId = ($opts['fiscal_year_id'] ?? null)) {
+            $query->where(function ($embeddingQuery) use ($fiscalYearId): void {
+                $embeddingQuery->where('source_type', '!=', 'knowledge')
+                    ->orWhereHas('knowledgeChunk', fn ($chunkQuery) => $chunkQuery
+                        ->where(fn ($scope) => $scope
+                            ->whereNull('fiscal_year_id')
+                            ->orWhere('fiscal_year_id', (string) $fiscalYearId)));
+            });
+        }
+
         $scored = [];
 
         // Bound the PHP cosine pool for ordinary shared hosting. Exact/keyword
         // retrieval supplies the broad corpus; vectors rerank a recent subset.
         $pool = $query->orderByDesc('updated_at')
-            ->limit(max(200, min(2000, (int) ($opts['candidate_pool'] ?? 800))))
+            ->limit(max(50, min($this->settings->ragMaxCandidatePool(), (int) ($opts['candidate_pool'] ?? $this->settings->ragCandidatePool()))))
             ->get();
 
         $pool->chunk(200)->each(function ($rows) use ($vector, &$scored, $minScore) {
@@ -93,27 +107,6 @@ class AiSemanticSearchService
      */
     public static function cosine(array $a, array $b): float
     {
-        $n = min(count($a), count($b));
-        if ($n === 0) {
-            return 0.0;
-        }
-
-        $dot = 0.0;
-        $normA = 0.0;
-        $normB = 0.0;
-
-        for ($i = 0; $i < $n; $i++) {
-            $x = (float) $a[$i];
-            $y = (float) $b[$i];
-            $dot += $x * $y;
-            $normA += $x * $x;
-            $normB += $y * $y;
-        }
-
-        if ($normA <= 0.0 || $normB <= 0.0) {
-            return 0.0;
-        }
-
-        return $dot / (sqrt($normA) * sqrt($normB));
+        return MySqlVectorStore::cosineSimilarity($a, $b);
     }
 }

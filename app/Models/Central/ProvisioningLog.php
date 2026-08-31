@@ -10,4 +10,5 @@ class ProvisioningLog extends CentralModel
     {
         return ['context' => 'array', 'started_at' => 'datetime', 'finished_at' => 'datetime'];
     }
+    public function tenant(){ return $this->belongsTo(Tenant::class); }
 }

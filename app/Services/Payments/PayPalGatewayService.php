@@ -19,7 +19,8 @@ class PayPalGatewayService extends AbstractExternalGateway
 
     public function createPayment(TenantInvoice $invoice, array $context = []): array
     {
-        $result = Http::withToken($this->token())->post($this->base().'/v2/checkout/orders', ['intent' => 'CAPTURE', 'purchase_units' => [['custom_id' => (string) $invoice->id, 'invoice_id' => $invoice->invoice_number, 'amount' => ['currency_code' => $invoice->currency, 'value' => number_format($invoice->total, 2, '.', '')]]], 'application_context' => ['return_url' => $context['success_url'], 'cancel_url' => $context['cancel_url']]])->throw()->json();
+        $amount = $invoice->balance ?: $invoice->total;
+        $result = Http::withToken($this->token())->post($this->base().'/v2/checkout/orders', ['intent' => 'CAPTURE', 'purchase_units' => [['custom_id' => (string) $invoice->id, 'invoice_id' => $invoice->invoice_number, 'amount' => ['currency_code' => $invoice->currency, 'value' => number_format($amount, 2, '.', '')]]], 'application_context' => ['return_url' => $context['success_url'], 'cancel_url' => $context['cancel_url']]])->throw()->json();
         $link = collect($result['links'] ?? [])->firstWhere('rel', 'approve');
         $approve = $link['href'] ?? null;
 
@@ -29,6 +30,11 @@ class PayPalGatewayService extends AbstractExternalGateway
     public function refund(string $transactionId, float $amount): array
     {
         return Http::withToken($this->token())->post($this->base()."/v2/payments/captures/{$transactionId}/refund", ['amount' => ['value' => number_format($amount, 2, '.', ''), 'currency_code' => $this->settings->config['currency'] ?? 'USD']])->throw()->json();
+    }
+
+    public function captureOrder(string $orderId): array
+    {
+        return Http::withToken($this->token())->withBody('{}', 'application/json')->post($this->base()."/v2/checkout/orders/{$orderId}/capture")->throw()->json();
     }
 
     public function verifyWebhook(array $payload, array $headers = []): bool

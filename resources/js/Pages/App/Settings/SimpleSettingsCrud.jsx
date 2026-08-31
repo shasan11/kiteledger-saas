@@ -1070,7 +1070,9 @@ export default function SimpleSettingsCrud({
   drawerTitle,
   canAdd = true,
   canEdit = true,
+  canEditRecord = () => true,
   showActions = true,
+  renderRowActions,
 }) {
   const { token } = theme.useToken();
 
@@ -1137,19 +1139,24 @@ export default function SimpleSettingsCrud({
         ...column,
         render: (value, record) => renderValue(column, value, record),
       })),
-      ...(showActions && canEdit ? [{
+      ...(showActions && (canEdit || renderRowActions) ? [{
         title: '',
         key: 'actions',
-        width: 110,
+        width: renderRowActions ? 280 : 110,
         fixed: 'right',
         render: (_, record) => (
-          <Button size="small" onClick={() => openEdit(record)}>
-            {editButtonText}
-          </Button>
+          <Space wrap>
+            {canEdit && canEditRecord(record) && (
+              <Button size="small" onClick={() => openEdit(record)}>
+                {editButtonText}
+              </Button>
+            )}
+            {renderRowActions?.(record, { reload: load })}
+          </Space>
         ),
       }] : []),
     ],
-    [safeColumns, openEdit, editButtonText, showActions, canEdit]
+    [safeColumns, openEdit, editButtonText, showActions, canEdit, canEditRecord, renderRowActions, load]
   );
 
   const buildPayload = (formValues) => {

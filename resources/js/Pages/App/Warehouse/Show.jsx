@@ -439,7 +439,7 @@ export default function WarehouseShow({ id, ...props }) {
       responsive: ['lg'],
       render: (_, row) => (
         <Text type="secondary" style={{ fontSize: 12 }}>
-          {row.product?.productCategory?.name || '—'}
+          {row.product?.productCategory?.name || '-'}
         </Text>
       ),
     },
@@ -449,7 +449,7 @@ export default function WarehouseShow({ id, ...props }) {
       width: 80,
       align: 'center',
       responsive: ['md'],
-      render: (_, row) => row.product?.productUnit?.name || row.unit_code || '—',
+      render: (_, row) => row.product?.productUnit?.name || row.unit_code || '-',
     },
     {
       title: 'Qty',
@@ -485,7 +485,7 @@ export default function WarehouseShow({ id, ...props }) {
       responsive: ['lg'],
       render: (value, row) => {
         const reorder = Number(value ?? row.product?.reorder_level ?? 0);
-        return reorder > 0 ? fmtQty(reorder) : <Text type="secondary">—</Text>;
+        return reorder > 0 ? fmtQty(reorder) : <Text type="secondary">-</Text>;
       },
     },
     {
@@ -560,7 +560,7 @@ export default function WarehouseShow({ id, ...props }) {
       title: 'Other Warehouse',
       key: 'other',
       ellipsis: true,
-      render: (_, row) => row._other?.name || row._other?.label || '—',
+      render: (_, row) => row._other?.name || row._other?.label || '-',
     },
     {
       title: 'Value',
@@ -568,7 +568,7 @@ export default function WarehouseShow({ id, ...props }) {
       width: 120,
       align: 'right',
       responsive: ['md'],
-      render: (value) => (value ? fmtNum(value) : '—'),
+      render: (value) => (value ? fmtNum(value) : '-'),
     },
     {
       title: 'Status',
@@ -618,7 +618,7 @@ export default function WarehouseShow({ id, ...props }) {
       title: 'Reason',
       dataIndex: 'reason',
       ellipsis: true,
-      render: (value) => value || '—',
+      render: (value) => value || '-',
     },
     {
       title: 'Items',
@@ -679,7 +679,7 @@ export default function WarehouseShow({ id, ...props }) {
       title: 'Finished Product',
       key: 'product',
       ellipsis: true,
-      render: (_, row) => row.finishedProduct?.name || row.finished_product_id || '—',
+      render: (_, row) => row.finishedProduct?.name || row.finished_product_id || '-',
     },
     {
       title: 'Output',
@@ -736,7 +736,7 @@ export default function WarehouseShow({ id, ...props }) {
 
   return (
     <AuthenticatedLayout user={props.auth?.user}>
-      <Head title={`Warehouse — ${warehouse?.name || ''}`} />
+      <Head title={`Warehouse - ${warehouse?.name || ''}`} />
 
       <div
         className="warehouse-shell"
@@ -939,11 +939,11 @@ export default function WarehouseShow({ id, ...props }) {
               >
                 <div className="warehouse-details">
                   <DetailLine label="Code">
-                    {warehouse?.code ? <Tag>{warehouse.code}</Tag> : '—'}
+                    {warehouse?.code ? <Tag>{warehouse.code}</Tag> : '-'}
                   </DetailLine>
 
                   <DetailLine label="Branch">
-                    {warehouse?.branch?.name || warehouse?.branch?.label || '—'}
+                    {warehouse?.branch?.name || warehouse?.branch?.label || '-'}
                   </DetailLine>
 
                   <DetailLine label="Address">

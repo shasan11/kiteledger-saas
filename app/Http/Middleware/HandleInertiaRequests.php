@@ -3,8 +3,12 @@
 namespace App\Http\Middleware;
 
 use App\Models\AppSetting;
+use App\Models\Central\CentralNotification;
+use App\Services\AppContextService;
 use App\Services\BranchScopeService;
 use App\Services\LocalizationService;
+use App\Services\SaaS\TenantAccessService;
+use Database\Seeders\CentralRolesAndPermissionsSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
@@ -33,10 +37,46 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $centralUser = $request->user('central');
+
+        if ($centralUser && ! tenancy()->initialized) {
+            $permissions = $centralUser->role === 'super_admin'
+                ? CentralRolesAndPermissionsSeeder::PERMISSIONS
+                : $centralUser->roles()->with('permissions')->get()->flatMap->permissions->pluck('name')->merge($centralUser->permissions ?? [])->unique()->values()->all();
+
+            return [
+                ...parent::share($request),
+                'flash' => fn () => $this->flash($request),
+                'auth' => ['user' => $centralUser, 'permissions' => $permissions, 'roles' => $centralUser->roles()->pluck('name')->all(), 'canBypassPermissions' => $centralUser->role === 'super_admin'],
+                'centralNotifications' => fn () => $this->centralNotifications($centralUser->id),
+                'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
+                'translations' => [],
+            ];
+        }
+
+        // Resolved only on central requests: the platform guard never applies
+        // inside an initialized tenant context.
+        $platformUser = tenancy()->initialized ? null : ($request->attributes->get('platformUser') ?? $request->user('platform'));
+
+        if ($platformUser) {
+            return [
+                ...parent::share($request),
+                'flash' => fn () => $this->flash($request),
+                'auth' => ['user' => $platformUser->only(['id', 'uuid', 'name', 'first_name', 'last_name', 'email', 'avatar', 'timezone']), 'permissions' => [], 'roles' => []],
+                'platform' => [
+                    'tenants' => fn () => app(TenantAccessService::class)->tenantCards($platformUser),
+                    'activeTenantId' => $request->session()->get('platform_active_tenant_id'),
+                ],
+                'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
+                'translations' => [],
+            ];
+        }
+
         if (! tenancy()->initialized && ! (app()->environment('testing') && config('saas.allow_uninitialized_tenant_models'))) {
             return [
                 ...parent::share($request),
-                'auth' => ['user' => $request->user('central'), 'permissions' => []],
+                'flash' => fn () => $this->flash($request),
+                'auth' => ['user' => null, 'permissions' => []],
                 'locale' => ['current' => App::getLocale(), 'fallback' => LocalizationService::FALLBACK_LOCALE, 'supported' => [], 'dir' => 'ltr'],
                 'translations' => [],
             ];
@@ -50,16 +90,27 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'flash' => fn () => $this->flash($request),
             'auth' => [
                 'user' => $user,
-                'permissions' => fn () => $user?->getAllPermissions()->pluck('name')->values()->all() ?? [],
+                'permissions' => fn () => $user && method_exists($user, 'getAllPermissions')
+                    ? $user->getAllPermissions()->pluck('name')->values()->all()
+                    : [],
                 'roles' => fn () => $user && method_exists($user, 'getRoleNames')
                     ? $user->getRoleNames()->values()->all()
                     : [],
                 'canBypassPermissions' => fn () => $this->canBypassPermissions($user),
                 'currentBranchId' => fn () => $scope->selectedBranchId($request, $user),
             ],
-            'branchContext' => fn () => $scope->resolveContext($request),
+            'branchContext' => fn () => array_merge(
+                $scope->resolveContext($request),
+                $this->fiscalYearContext($request),
+            ),
+            'tenantContext' => fn () => [
+                'companyName' => tenant()?->company_name,
+                'timezone' => tenant()?->timezone ?: config('app.timezone'),
+                'currency' => tenant()?->currency,
+            ],
             'defaultCurrency' => fn () => $this->defaultCurrencyPayload(),
             'locale' => [
                 'current' => $locale,
@@ -69,6 +120,24 @@ class HandleInertiaRequests extends Middleware
             ],
             'translations' => fn () => $localization->translationsFor($locale),
             'impersonation' => fn () => $request->session()->get('impersonation'),
+        ];
+    }
+
+    /**
+     * Session flash messages, so `back()->with('success', ...)` surfaces in the
+     * UI instead of being silently dropped.
+     *
+     * @return array<string, string|null>
+     */
+    protected function flash(Request $request): array
+    {
+        if (! $request->hasSession()) {
+            return ['success' => null, 'error' => null];
+        }
+
+        return [
+            'success' => $request->session()->get('success'),
+            'error' => $request->session()->get('error'),
         ];
     }
 
@@ -146,5 +215,39 @@ class HandleInertiaRequests extends Middleware
             'super-admin',
             'admin',
         ]);
+    }
+
+    protected function fiscalYearContext(Request $request): array
+    {
+        try {
+            $context = app(AppContextService::class)->context($request);
+
+            return [
+                'current_fiscal_year' => $context['current_fiscal_year'] ?? null,
+                'current_fiscal_year_id' => $context['current_fiscal_year_id'] ?? null,
+                'available_fiscal_years' => $context['available_fiscal_years'] ?? [],
+                'fiscal_year_expired' => (bool) ($context['fiscal_year_expired'] ?? false),
+                'fiscal_year_locked' => (bool) ($context['fiscal_year_locked'] ?? false),
+            ];
+        } catch (\Throwable) {
+            return [
+                'current_fiscal_year' => null,
+                'current_fiscal_year_id' => null,
+                'available_fiscal_years' => [],
+                'fiscal_year_expired' => false,
+                'fiscal_year_locked' => false,
+            ];
+        }
+    }
+
+    private function centralNotifications(int $adminId): array
+    {
+        try {
+            $query = CentralNotification::where('admin_id', $adminId)->whereNull('dismissed_at')->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+
+            return ['unread' => (clone $query)->whereNull('read_at')->count(), 'recent' => $query->latest()->limit(6)->get(['id', 'severity', 'title', 'message', 'action_url', 'read_at', 'created_at'])];
+        } catch (\Throwable) {
+            return ['unread' => 0, 'recent' => []];
+        }
     }
 }

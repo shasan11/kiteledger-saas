@@ -15,6 +15,16 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
+        // The primary database is the SaaS control plane. A plain
+        // `migrate:fresh --seed` must therefore produce an immediately usable
+        // central installation. Tenant seeders run inside initialized tenant
+        // contexts (and in the shared in-memory test schema only).
+        $this->call(CentralDatabaseSeeder::class);
+
+        if (! tenancy()->initialized && ! app()->environment('testing')) {
+            return;
+        }
+
         $this->call([
             BranchSeeder::class,
             MasterCurrencySeeder::class,
@@ -31,6 +41,7 @@ class DatabaseSeeder extends Seeder
             MasterProductDataSeeder::class,
             WalkInCustomerSeeder::class,
             FullPermissionUserSeeder::class,
+            DocumentUploadPermissionSeeder::class,
             AiPermissionSeeder::class,
         ]);
     }

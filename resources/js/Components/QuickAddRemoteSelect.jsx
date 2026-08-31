@@ -172,30 +172,30 @@ function QuickAddFormField({ field, value, onChange }) {
 }
 
 /**
- * QuickAddRemoteSelect — remote-search select with inline quick-add modal.
+ * QuickAddRemoteSelect - remote-search select with inline quick-add modal.
  *
  * Form.Item + CompactSelect pattern ensures value/onChange are properly
  * wired so regular dropdown selection updates the form store correctly.
  *
  * Props:
- *  name             — Form.Item field name
- *  label            — displayed label
- *  icon             — optional label icon
- *  required         — adds required validation rule
- *  disabled         — disables both select and quick-add button
- *  placeholder      — select placeholder text
- *  apiUrl           — GET endpoint to load options
- *  params           — extra query params (memoize this at the call site!)
- *  valueKey         — record key used as option value (default 'id')
- *  labelBuilder     — fn(row) => string for option label
- *  quickAddTitle    — title shown in quick-add modal header
- *  quickAddIcon     — icon in quick-add modal header
- *  quickAddFields   — array of field descriptors for the quick-add form
- *  quickAddInitialValues — initial values for the quick-add form
- *  createPayload    — fn(formValues) => payload sent to createUrl
- *  createUrl        — POST endpoint to create the new record (defaults to apiUrl)
- *  afterCreate      — fn(saved, form) called after successful creation
- *  onSelectChange   — fn(value) called when user selects from dropdown
+ *  name - Form.Item field name
+ *  label - displayed label
+ *  icon - optional label icon
+ *  required - adds required validation rule
+ *  disabled - disables both select and quick-add button
+ *  placeholder - select placeholder text
+ *  apiUrl - GET endpoint to load options
+ *  params - extra query params (memoize this at the call site!)
+ *  valueKey - record key used as option value (default 'id')
+ *  labelBuilder - fn(row) => string for option label
+ *  quickAddTitle - title shown in quick-add modal header
+ *  quickAddIcon - icon in quick-add modal header
+ *  quickAddFields - array of field descriptors for the quick-add form
+ *  quickAddInitialValues - initial values for the quick-add form
+ *  createPayload - fn(formValues) => payload sent to createUrl
+ *  createUrl - POST endpoint to create the new record (defaults to apiUrl)
+ *  afterCreate - fn(saved, form) called after successful creation
+ *  onSelectChange - fn(value) called when user selects from dropdown
  */
 export default function QuickAddRemoteSelect({
   name,

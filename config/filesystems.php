@@ -48,6 +48,28 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Product screenshots shipped with the package. They already live under
+         * public/, so the marketing site can show them on a fresh install
+         * without waiting for `php artisan storage:link` — which INSTALL.md
+         * lists as a manual post-install step and which many shared hosts
+         * disallow outright.
+         *
+         * Kept in public/screenshots rather than public/features on purpose: a
+         * directory whose name matches a route shadows that route, because both
+         * public/.htaccess (RewriteCond !-d) and Laravel's serve script hand an
+         * existing directory to the web server instead of to the router. Naming
+         * it "features" would 404 the /features marketing page.
+         */
+        'screenshots' => [
+            'driver' => 'local',
+            'root' => public_path('screenshots'),
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/screenshots',
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

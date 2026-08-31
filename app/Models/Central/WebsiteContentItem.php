@@ -12,4 +12,15 @@ class WebsiteContentItem extends CentralModel
     {
         return ['data' => 'array', 'published_at' => 'datetime'];
     }
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => cache()->forget('website-content:v1'));
+        static::deleted(fn () => cache()->forget('website-content:v1'));
+    }
+
+    public function media()
+    {
+        return $this->belongsTo(Media::class, 'media_id');
+    }
 }

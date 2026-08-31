@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "layer": "deterministic",
+  "description": "Exact document references must route to a live record lookup via Layer B, with no model call and no knowledge retrieval.",
+  "cases": [
+    {
+      "id": "record-lookup-001",
+      "question": "Why is INV-1004 still unpaid?",
+      "expected_intent": "record_lookup",
+      "expected_tools": ["records.find"],
+      "forbidden_tools": ["knowledge.search"],
+      "expected_filters": { "reference": "INV-1004" },
+      "expected_answer_properties": ["requires_live_data"]
+    },
+    {
+      "id": "record-lookup-002",
+      "question": "Show me PB-0007",
+      "expected_intent": "record_lookup",
+      "expected_tools": ["records.find"],
+      "forbidden_tools": ["knowledge.search"],
+      "expected_filters": { "reference": "PB-0007" }
+    },
+    {
+      "id": "record-lookup-003",
+      "question": "open SO-12 please",
+      "expected_intent": "record_lookup",
+      "expected_tools": ["records.find"],
+      "forbidden_tools": ["knowledge.search"],
+      "expected_filters": { "reference": "SO-12" }
+    },
+    {
+      "id": "greeting-001",
+      "question": "Hello",
+      "expected_intent": "greeting",
+      "expected_tools": [],
+      "forbidden_tools": ["knowledge.search", "records.find"]
+    },
+    {
+      "id": "greeting-002",
+      "question": "Good morning",
+      "expected_intent": "greeting",
+      "expected_tools": [],
+      "forbidden_tools": ["knowledge.search"]
+    },
+    {
+      "id": "greeting-003",
+      "question": "thanks",
+      "expected_intent": "greeting",
+      "expected_tools": []
+    }
+  ]
+}

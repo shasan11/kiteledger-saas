@@ -9,6 +9,33 @@ class AiPermissionService
 {
     public const ALL = [
         'reports.ai_summary',
+        'ai.use',
+        'ai.view',
+        'ai.chat',
+        'ai.search',
+        'ai.semantic_search',
+        'ai.records.search',
+        'ai.reports.view',
+        'ai.financial.read',
+        'ai.receivables.read',
+        'ai.payables.read',
+        'ai.inventory.read',
+        'ai.financial_queries',
+        'ai.report_queries',
+        'ai.report_summary',
+        'ai.business_insight',
+        'ai.conversations.view',
+        'ai.conversations.delete',
+        'ai.conversations.manage',
+        'ai.action.propose',
+        'ai.actions.view',
+        'ai.actions.approve',
+        'ai.actions.reject',
+        'ai.actions.execute',
+        'ai.actions.manage',
+        'ai.logs.view',
+        'ai.debug.view',
+        'ai.manage',
         'ai.settings.view',
         'ai.settings.update',
     ];
@@ -105,7 +132,8 @@ class AiPermissionService
             return true;
         }
 
-        return $this->hasDirect($user, 'ai.conversations.manage')
+        return $this->hasDirect($user, 'ai.manage')
+            || $this->hasDirect($user, 'ai.conversations.manage')
             || $this->hasDirect($user, 'ai.actions.manage');
     }
 

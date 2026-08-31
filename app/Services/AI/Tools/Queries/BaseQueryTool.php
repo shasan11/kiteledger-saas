@@ -2,11 +2,13 @@
 
 namespace App\Services\AI\Tools\Queries;
 
+use App\Services\AI\AiDomainAuthorizationService;
 use App\Services\AI\AiPermissionService;
 use App\Services\AI\Tools\AiToolResult;
 use App\Services\AppContextService;
 use App\Services\BranchScopeService;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,13 +19,14 @@ abstract class BaseQueryTool
         protected BranchScopeService $branchScope,
         protected AppContextService $appContext,
         protected AiPermissionService $permissions,
-    ) {
-    }
+        protected ?AiDomainAuthorizationService $domainAuthorization = null,
+    ) {}
 
     protected function authorize(Request $request, string $permission = 'ai.records.search'): void
     {
         $user = $request->user();
         abort_unless($this->permissions->hasAny($user, [$permission, 'ai.use', 'ai.chat', 'ai.manage']), 403, 'You do not have permission to run this AI query tool.');
+        ($this->domainAuthorization ?? app(AiDomainAuthorizationService::class))->assertCanReadQuery($user, static::class);
     }
 
     protected function empty(string $tool, string $title, Request $request, array $filters = [], string $summary = 'No data was found.'): array
@@ -50,18 +53,18 @@ abstract class BaseQueryTool
 
     protected function applyBranch(Builder $query, Request $request, string $table, string $column = 'branch_id'): Builder
     {
-        if (!Schema::hasColumn($table, $column)) {
+        if (! Schema::hasColumn($table, $column)) {
             return $query;
         }
 
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return $query->whereRaw('1 = 0');
         }
 
         $selected = $this->branchScope->selectedBranchId($request, $user);
         if ($selected !== null) {
-            return $query->where($table . '.' . $column, $selected);
+            return $query->where($table.'.'.$column, $selected);
         }
 
         if ($this->branchScope->canViewAllBranches($user)) {
@@ -69,9 +72,10 @@ abstract class BaseQueryTool
         }
 
         $accessible = $this->branchScope->accessibleBranchIds($user);
+
         return empty($accessible)
             ? $query->whereRaw('1 = 0')
-            : $query->whereIn($table . '.' . $column, $accessible);
+            : $query->whereIn($table.'.'.$column, $accessible);
     }
 
     protected function applyFiscalYear(Builder $query, Request $request, string $table, ?string $dateColumn = null): Builder
@@ -80,21 +84,21 @@ abstract class BaseQueryTool
         $to = $request->input('to_date');
 
         if ($dateColumn && $from) {
-            $query->whereDate($table . '.' . $dateColumn, '>=', $from);
+            $query->whereDate($table.'.'.$dateColumn, '>=', $from);
         }
 
         if ($dateColumn && $to) {
-            $query->whereDate($table . '.' . $dateColumn, '<=', $to);
+            $query->whereDate($table.'.'.$dateColumn, '<=', $to);
         }
 
-        if ($from || $to || !Schema::hasColumn($table, 'fiscal_year_id')) {
+        if ($from || $to || ! Schema::hasColumn($table, 'fiscal_year_id')) {
             return $query;
         }
 
         try {
             $fiscalYear = $this->appContext->resolveFiscalYearForRequest($request);
             if ($fiscalYear) {
-                $query->where($table . '.fiscal_year_id', $fiscalYear->id);
+                $query->where($table.'.fiscal_year_id', $fiscalYear->id);
             }
         } catch (\Throwable) {
             //
@@ -107,7 +111,7 @@ abstract class BaseQueryTool
     {
         if (Schema::hasColumn($table, 'active')) {
             $query->where(function ($q) use ($table) {
-                $q->where($table . '.active', true)->orWhereNull($table . '.active');
+                $q->where($table.'.active', true)->orWhereNull($table.'.active');
             });
         }
 
@@ -118,7 +122,7 @@ abstract class BaseQueryTool
     {
         foreach (['approved' => true, 'void' => false, 'active' => true] as $column => $value) {
             if (Schema::hasColumn($table, $column)) {
-                $query->where($table . '.' . $column, $value);
+                $query->where($table.'.'.$column, $value);
             }
         }
 
@@ -133,7 +137,7 @@ abstract class BaseQueryTool
     protected function tableExists(array $tables): bool
     {
         foreach ($tables as $table) {
-            if (!Schema::hasTable($table)) {
+            if (! Schema::hasTable($table)) {
                 return false;
             }
         }
@@ -141,7 +145,7 @@ abstract class BaseQueryTool
         return true;
     }
 
-    protected function accountNameExpression(string $alias = 'accounts'): \Illuminate\Database\Query\Expression
+    protected function accountNameExpression(string $alias = 'accounts'): Expression
     {
         return DB::raw("COALESCE({$alias}.name, {$alias}.code, 'Unnamed account')");
     }

@@ -4,6 +4,7 @@ namespace App\Services\AI\Rag;
 
 use App\Models\AiKnowledgeChunk;
 use App\Models\User;
+use App\Services\AI\Copilot\Knowledge\KnowledgeSourceClass;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use Throwable;
@@ -21,10 +22,14 @@ class AiCandidateGenerator
             foreach ($this->semantic->search($query['original'], [
                 'limit' => 30,
                 'branch_id' => $filters['branch_id'] ?? $user?->branch_id,
+                'fiscal_year_id' => $filters['fiscal_year_id'] ?? null,
                 'model' => $filters['embedding_model'] ?? null,
                 'min_score' => 0.05,
             ]) as $hit) {
-                $candidate = $this->fromVectorHit($hit);
+                $candidate = $this->fromVectorHit($hit, $user, $filters);
+                if (! $candidate) {
+                    continue;
+                }
                 $key = $candidate['source_type'].':'.$candidate['source_id'];
                 if (isset($candidates[$key])) {
                     $candidates[$key]['vector_score'] = max($candidates[$key]['vector_score'], (float) $hit['score']);
@@ -101,11 +106,24 @@ class AiCandidateGenerator
         }
     }
 
+    /**
+     * Fail closed.
+     *
+     * Chunks that carry no permission requirement are public by construction.
+     * But a chunk that DOES require a permission must never be released when
+     * there is no user to check it against — previously a null user was treated
+     * as fully authorized, so any unauthenticated retrieval path saw everything.
+     */
     private function permitted(?User $user, ?string $permission): bool
     {
-        if (! $permission || ! $user) {
+        if (! $permission) {
             return true;
         }
+
+        if (! $user) {
+            return false;
+        }
+
         try {
             return $user->can($permission) || $user->hasPermissionTo($permission);
         } catch (Throwable) {
@@ -135,11 +153,18 @@ class AiCandidateGenerator
         ];
     }
 
-    private function fromVectorHit(array $hit): array
+    private function fromVectorHit(array $hit, ?User $user, array $filters): ?array
     {
         if ($hit['source_type'] === 'knowledge') {
             $chunk = AiKnowledgeChunk::query()->find($hit['source_id']);
             if ($chunk) {
+                $branchId = $filters['branch_id'] ?? $user?->branch_id;
+                $fiscalYearId = $filters['fiscal_year_id'] ?? null;
+                if (! $this->permitted($user, $chunk->permission)
+                    || ($branchId && $chunk->branch_id && (string) $chunk->branch_id !== (string) $branchId)
+                    || ($fiscalYearId && $chunk->fiscal_year_id && (string) $chunk->fiscal_year_id !== (string) $fiscalYearId)) {
+                    return null;
+                }
                 $candidate = $this->fromChunk($chunk, 0, 0);
                 $candidate['vector_score'] = (float) $hit['score'];
 
@@ -147,11 +172,28 @@ class AiCandidateGenerator
             }
         }
 
+        // Business-record vector hits previously came back with permission=null,
+        // which meant the vector path handed back invoices, contacts and
+        // products without any authorization check at all. Resolve the required
+        // permission for the source type and enforce it; an unmapped type is
+        // treated as unauthorized rather than public.
+        $sourceType = (string) $hit['source_type'];
+
+        if (KnowledgeSourceClass::isUnmappedBusinessRecord($sourceType)) {
+            return null;
+        }
+
+        $permission = KnowledgeSourceClass::permissionForBusinessRecord($sourceType);
+
+        if (! $this->permitted($user, $permission)) {
+            return null;
+        }
+
         return [
-            'source_type' => $hit['source_type'], 'source_id' => $hit['source_id'],
-            'source_key' => $hit['source_id'], 'module' => Str::headline($hit['source_type']),
-            'title' => Str::headline($hit['source_type']), 'content' => $hit['snippet'],
-            'route' => null, 'permission' => null, 'metadata' => [],
+            'source_type' => $sourceType, 'source_id' => $hit['source_id'],
+            'source_key' => $hit['source_id'], 'module' => Str::headline($sourceType),
+            'title' => Str::headline($sourceType), 'content' => $hit['snippet'],
+            'route' => null, 'permission' => $permission, 'metadata' => [],
             'branch_id' => null, 'fiscal_year_id' => null, 'created_at' => null,
             'exact_match_score' => 0.0, 'keyword_score' => 0.0,
             'vector_score' => (float) $hit['score'], 'permission_score' => 1.0,

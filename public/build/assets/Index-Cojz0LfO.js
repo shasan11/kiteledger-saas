@@ -1,0 +1,1 @@
+import e from"./Index-B-GiNr0-.js";export{e as default};

@@ -133,17 +133,24 @@ class AiAssistantApiTest extends TestCase
         $this->assertEquals(1, AiUsageLog::where('user_id', $user->id)->where('status', 'error')->count());
     }
 
-    public function test_settings_show_never_returns_raw_api_key(): void
+    public function test_tenant_can_view_read_only_centrally_managed_ai_provider_settings(): void
     {
         $user = $this->userWith(['ai.settings.view']);
 
-        $res = $this->actingAs($user)
-            ->getJson('/api/ai/settings')
-            ->assertOk();
+        // Set the engine explicitly rather than relying on the ambient test
+        // default: the suite now pins AI_COPILOT_ENGINE=legacy so the legacy
+        // path stays deterministic, and this assertion is about the endpoint
+        // echoing the configured engine, not about which default is in force.
+        config(['ai.copilot.engine' => 'neuron']);
 
-        $payload = $res->json();
-        $this->assertArrayNotHasKey('ai_api_key', $payload['settings']);
-        $this->assertArrayHasKey('ai_api_key_masked', $payload['settings']);
+        $this->actingAs($user)
+            ->getJson('/api/ai/settings')
+            ->assertOk()
+            ->assertJsonPath('central_managed', true)
+            ->assertJsonPath('editable', false)
+            ->assertJsonPath('settings.ai_provider', 'openai')
+            ->assertJsonPath('settings.ai_copilot_engine', 'neuron')
+            ->assertJsonMissingPath('settings.ai_api_key');
     }
 
     public function test_settings_update_requires_manage_permission(): void

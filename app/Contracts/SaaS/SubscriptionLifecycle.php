@@ -8,7 +8,14 @@ use App\Models\Central\Tenant;
 
 interface SubscriptionLifecycle
 {
-    public function start(Tenant $tenant, Plan $plan, string $cycle = 'monthly', ?string $idempotencyKey = null): Subscription;
+    public function start(
+        Tenant $tenant,
+        Plan $plan,
+        string $cycle = 'monthly',
+        string $mode = 'auto',
+        mixed $effectiveAt = null,
+        ?string $idempotencyKey = null,
+    ): Subscription;
 
     public function changePlan(Subscription $subscription, Plan $plan, bool $immediate = false): Subscription;
 

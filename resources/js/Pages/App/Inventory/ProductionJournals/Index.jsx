@@ -228,7 +228,7 @@ export default function Index() {
                 fkLabel: (row) => {
                     const code = row?.code?.startsWith?.('#draft') ? 'DRAFT' : (row?.code || '-');
                     const name = row?.finishedProduct?.name || row?.finished_product?.name || '';
-                    return [code, name ? `— ${name}` : ''].filter(Boolean).join(' ');
+                    return [code, name ? `- ` : ''].filter(Boolean).join(' ');
                 },
             },
             {

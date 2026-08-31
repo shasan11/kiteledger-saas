@@ -1,6 +1,6 @@
 import React from 'react';
 
-const v = (val, fallback = '—') => (val !== null && val !== undefined && val !== '') ? val : fallback;
+const v = (val, fallback = '-') => (val !== null && val !== undefined && val !== '') ? val : fallback;
 
 const S = {
   page: {
@@ -146,7 +146,7 @@ export default function AirWaybillDocument({ snapshot = {} }) {
 
       {/* Dangerous goods banner */}
       {add.contain_dangerous_goods && (
-        <div style={S.dangerBar}>⚠ DANGEROUS GOODS — HANDLE WITH CARE ⚠</div>
+        <div style={S.dangerBar}>⚠ DANGEROUS GOODS - HANDLE WITH CARE ⚠</div>
       )}
 
       {/* ── HEADER ─────────────────────────────────────── */}
@@ -334,7 +334,7 @@ export default function AirWaybillDocument({ snapshot = {} }) {
               ? <span style={{ color: '#555', letterSpacing: '2px' }}>NVD</span>
               : awb.is_declared
                 ? v(awb.declared_value_for_carriage)
-                : '—'}
+                : '-'}
             {awb.as_agreed && (
               <span style={{ fontSize: '8px', color: '#777', fontWeight: 'normal', marginLeft: '6px' }}>(As Agreed)</span>
             )}
@@ -347,12 +347,12 @@ export default function AirWaybillDocument({ snapshot = {} }) {
               ? <span style={{ color: '#555', letterSpacing: '2px' }}>NCV</span>
               : awb.is_declared
                 ? v(awb.declared_value_for_customs)
-                : '—'}
+                : '-'}
           </div>
         </Box>
         <Box style={{ flex: 1, borderRight: 'none', borderTop: 'none' }}>
           <Title>Amount of Insurance</Title>
-          <div style={{ fontSize: '12px', paddingTop: '2px' }}>—</div>
+          <div style={{ fontSize: '12px', paddingTop: '2px' }}>-</div>
         </Box>
         <Box style={{ flex: 0.6, borderTop: 'none' }}>
           <Title>SCI</Title>
@@ -395,7 +395,7 @@ export default function AirWaybillDocument({ snapshot = {} }) {
         {(shipment_packages.length > 0 ? shipment_packages : [{}]).map((pkg, ri) => {
           const cells = [
             v(pkg.quantity),
-            pkg.gross_weight != null ? `${pkg.gross_weight}` : '—',
+            pkg.gross_weight != null ? `${pkg.gross_weight}` : '-',
             'K',
             v(awb.rate_class),
             v(awb.chargeable_weight),
@@ -422,10 +422,10 @@ export default function AirWaybillDocument({ snapshot = {} }) {
         {/* Totals */}
         <div style={{ display: 'flex', backgroundColor: '#f0f0f0', borderTop: '1px solid #000' }}>
           <div style={{ flex: colWidths[0], fontSize: '8px', fontWeight: 'bold', padding: '3px 4px', borderRight: '1px solid #bbb' }}>
-            {totalPieces || '—'}
+            {totalPieces || '-'}
           </div>
           <div style={{ flex: colWidths[1], fontSize: '8px', fontWeight: 'bold', padding: '3px 4px', borderRight: '1px solid #bbb' }}>
-            {totalGW ? `${totalGW.toFixed(2)} KG` : '—'}
+            {totalGW ? `${totalGW.toFixed(2)} KG` : '-'}
           </div>
           <div style={{ flex: colWidths[2], padding: '3px 4px', borderRight: '1px solid #bbb' }} />
           <div style={{ flex: colWidths[3], padding: '3px 4px', borderRight: '1px solid #bbb' }} />

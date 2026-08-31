@@ -19,7 +19,7 @@ const userLabel = (user) => {
  * transaction show pages. Designed to be dropped into any of the 17
  * transaction modules without per-module customization.
  *
- * Expected shape (any subset is fine — missing fields render as "-"):
+ * Expected shape (any subset is fine - missing fields render as "-"):
  *   record.branch?.{ name, code }
  *   record.userAdd | creator | created_by_user?.{ name, username, email }
  *   record.approvedBy | approver | approved_by_user?.{ name, username, email }

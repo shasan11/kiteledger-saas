@@ -1,6 +1,6 @@
 import React from 'react';
 
-const v = (val, fallback = '—') => (val !== null && val !== undefined && val !== '') ? val : fallback;
+const v = (val, fallback = '-') => (val !== null && val !== undefined && val !== '') ? val : fallback;
 
 const S = {
   page: {
@@ -180,10 +180,10 @@ export default function BillOfLadingDocument({ snapshot = {} }) {
 
       {/* Warning banners */}
       {add.contain_dangerous_goods && (
-        <div style={S.warningBar('#c00')}>⚠ DANGEROUS GOODS — SPECIAL HANDLING REQUIRED ⚠</div>
+        <div style={S.warningBar('#c00')}>⚠ DANGEROUS GOODS - SPECIAL HANDLING REQUIRED ⚠</div>
       )}
       {add.has_damaged_items && (
-        <div style={S.warningBar('#b45309')}>⚠ DAMAGED ITEMS NOTED — SEE REMARKS ⚠</div>
+        <div style={S.warningBar('#b45309')}>⚠ DAMAGED ITEMS NOTED - SEE REMARKS ⚠</div>
       )}
 
       {/* ── HEADER ─────────────────────────────────────── */}
@@ -320,7 +320,7 @@ export default function BillOfLadingDocument({ snapshot = {} }) {
         <Box style={{ flex: 1, borderTop: 'none' }}>
           <Title>Service Type</Title>
           <div style={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '2px' }}>
-            {service_type ? service_type.toUpperCase() : '—'}
+            {service_type ? service_type.toUpperCase() : '-'}
           </div>
         </Box>
       </div>
@@ -400,9 +400,9 @@ export default function BillOfLadingDocument({ snapshot = {} }) {
               v(c.container_number),
               v(c.seal_number),
               v(c.container_type),
-              '—',
-              c.gross_weight != null ? `${c.gross_weight} KG` : '—',
-              c.net_weight != null ? `${c.net_weight} KG` : '—',
+              '-',
+              c.gross_weight != null ? `${c.gross_weight} KG` : '-',
+              c.net_weight != null ? `${c.net_weight} KG` : '-',
               v(c.status),
             ];
             return (
@@ -446,9 +446,9 @@ export default function BillOfLadingDocument({ snapshot = {} }) {
             v(pkg.marks_and_numbers),
             v(pkg.description),
             v(pkg.quantity),
-            pkg.gross_weight != null ? `${pkg.gross_weight}` : '—',
-            pkg.net_weight != null ? `${pkg.net_weight}` : '—',
-            pkg.volume_cbm != null ? `${pkg.volume_cbm}` : '—',
+            pkg.gross_weight != null ? `${pkg.gross_weight}` : '-',
+            pkg.net_weight != null ? `${pkg.net_weight}` : '-',
+            pkg.volume_cbm != null ? `${pkg.volume_cbm}` : '-',
           ];
           return (
             <div key={ri} style={{ display: 'flex', borderBottom: '1px solid #eee', minHeight: '24px' }}>
@@ -476,14 +476,14 @@ export default function BillOfLadingDocument({ snapshot = {} }) {
           </div>
           <div style={{ flex: pkgColWidths[1], ...S.tdCell, borderRight: '1px solid #ccc' }} />
           <div style={{ flex: pkgColWidths[2], ...S.tdCell, borderRight: '1px solid #ccc', fontWeight: 'bold', fontSize: '8px' }}>
-            {totalPkgPieces || '—'}
+            {totalPkgPieces || '-'}
           </div>
           <div style={{ flex: pkgColWidths[3], ...S.tdCell, borderRight: '1px solid #ccc', fontWeight: 'bold', fontSize: '8px' }}>
-            {totalPkgGW ? `${totalPkgGW.toFixed(2)}` : '—'}
+            {totalPkgGW ? `${totalPkgGW.toFixed(2)}` : '-'}
           </div>
           <div style={{ flex: pkgColWidths[4], ...S.tdCell, borderRight: '1px solid #ccc' }} />
           <div style={{ flex: pkgColWidths[5], ...S.tdCell, fontWeight: 'bold', fontSize: '8px' }}>
-            {totalPkgVol ? `${totalPkgVol.toFixed(3)}` : '—'}
+            {totalPkgVol ? `${totalPkgVol.toFixed(3)}` : '-'}
           </div>
         </div>
       </div>

@@ -94,6 +94,18 @@ class InstallerRecoveryTest extends TestCase
         $this->assertTrue(InstalledState::hasInstallLock());
     }
 
+    public function test_local_mysql_root_with_blank_password_is_a_usable_installer_configuration(): void
+    {
+        config([
+            'database.default' => 'mysql',
+            'database.connections.mysql.database' => 'kiteledger',
+            'database.connections.mysql.username' => 'root',
+            'database.connections.mysql.password' => '',
+        ]);
+
+        $this->assertTrue(InstalledState::hasUsableDatabaseConfig());
+    }
+
     public function test_tenant_domain_middleware_returns_clear_error_when_database_is_unavailable(): void
     {
         InstalledState::mark();
@@ -140,8 +152,11 @@ class InstallerRecoveryTest extends TestCase
             $this->assertMatchesRegularExpression('/^APP_KEY=base64:.+$/m', $contents);
             $this->assertStringContainsString('APP_URL=http://install.customer.test', $contents);
             $this->assertStringContainsString('DB_DATABASE=kiteledger', $contents);
-            foreach (['config.php', 'routes-v7.php', 'packages.php', 'services.php'] as $cacheFile) {
+            foreach (['config.php', 'routes-v7.php'] as $cacheFile) {
                 $this->assertFileDoesNotExist($root.DIRECTORY_SEPARATOR.'bootstrap'.DIRECTORY_SEPARATOR.'cache'.DIRECTORY_SEPARATOR.$cacheFile);
+            }
+            foreach (['packages.php', 'services.php'] as $manifestFile) {
+                $this->assertFileExists($root.DIRECTORY_SEPARATOR.'bootstrap'.DIRECTORY_SEPARATOR.'cache'.DIRECTORY_SEPARATOR.$manifestFile);
             }
         } finally {
             if ($oldHost === null) {

@@ -7,6 +7,8 @@ use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\ChartOfAccount;
 use App\Models\Currency;
+use App\Services\BranchScopeService;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -58,9 +60,18 @@ class AccountingController extends Controller
         return Inertia::render('App/Accounting/QuickReceipts/Index');
     }
 
-    public function fixedAssets(): Response
+    public function fixedAssets(Request $request, BranchScopeService $branches): Response
     {
-        return Inertia::render('App/Accounting/FixedAssets/Index');
+        abort_unless($request->user()?->can('accounting.fixed_asset.view'), 403);
+        $branchQuery = Branch::query()->where('active', true)->orderBy('name');
+        if ($branches->isBranchLimited($request->user())) {
+            $branchQuery->whereIn('id', $branches->accessibleBranchIds($request->user()));
+        }
+
+        return Inertia::render('App/Accounting/FixedAssets/Index', [
+            'branches' => $branchQuery->get(['id', 'name']),
+            'accounts' => Account::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'code']),
+        ]);
     }
 
     public function loanAccounts(): Response

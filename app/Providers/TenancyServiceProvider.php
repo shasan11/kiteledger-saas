@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Http\Middleware\BindSessionToTenant;
+use App\Http\Middleware\ConfigureTenantSession;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\InitializeTenancyByVerifiedDomain;
 use Illuminate\Contracts\Http\Kernel;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Stancl\Tenancy\Events;
 use Stancl\Tenancy\Listeners;
+use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -25,16 +27,23 @@ class TenancyServiceProvider extends ServiceProvider
             if ($this->app->environment('testing')) {
                 // The legacy ERP suite predates host-based tenancy and exercises
                 // tenant routes against localhost. Production never enters this branch.
-                Route::domain('localhost')->middleware('web')->group(base_path('routes/tenant.php'));
-                Route::domain('localhost')->prefix('api')->middleware('api')->group(base_path('routes/api.php'));
+                Route::middleware('web')->group(base_path('routes/tenant.php'));
+                Route::prefix('api')->middleware('api')->group(base_path('routes/api.php'));
 
                 return;
             }
-            Route::middleware([InitializeTenancyByVerifiedDomain::class, 'web', BindSessionToTenant::class])->group(base_path('routes/tenant.php'));
-            Route::prefix('api')->middleware([InitializeTenancyByVerifiedDomain::class, 'api'])->group(base_path('routes/api.php'));
+            $tenantMiddleware = [
+                EnsureInstalled::class,
+                InitializeTenancyByVerifiedDomain::class,
+                'tenant.initialized',
+                'tenant.active',
+                ConfigureTenantSession::class,
+            ];
+            Route::middleware(array_merge($tenantMiddleware, ['web', BindSessionToTenant::class]))->group(base_path('routes/tenant.php'));
+            Route::prefix('api')->middleware(array_merge($tenantMiddleware, ['api']))->group(base_path('routes/api.php'));
         });
 
-        $this->app[Kernel::class]->prependToMiddlewarePriority(InitializeTenancyByVerifiedDomain::class);
+        $this->app[Kernel::class]->prependToMiddlewarePriority(InitializeTenancyByDomain::class);
         // When both middleware are present, installation validation must run
         // before tenant lookup, sessions, or any domains-table query.
         $this->app[Kernel::class]->prependToMiddlewarePriority(EnsureInstalled::class);

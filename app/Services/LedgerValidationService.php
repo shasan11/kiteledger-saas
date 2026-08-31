@@ -10,30 +10,44 @@ class LedgerValidationService
 {
     public function validateBalanced(array|Collection $lines): void
     {
-        $totalDebit = 0;
-        $totalCredit = 0;
+        // Compare in integer cents. Accumulating floats and allowing a 0.01
+        // slack let a genuinely unbalanced voucher through, and made the result
+        // depend on float noise rather than on the numbers.
+        $debitCents = 0;
+        $creditCents = 0;
 
         if ($lines instanceof Collection) {
             $lines = $lines->toArray();
         }
 
         foreach ($lines as $line) {
-            $debit = is_array($line) ? ($line['debit'] ?? 0) : ($line->debit ?? 0);
-            $credit = is_array($line) ? ($line['credit'] ?? 0) : ($line->credit ?? 0);
-
-            $debit = (float) $debit;
-            $credit = (float) $credit;
+            $debit = (float) (is_array($line) ? ($line['debit'] ?? 0) : ($line->debit ?? 0));
+            $credit = (float) (is_array($line) ? ($line['credit'] ?? 0) : ($line->credit ?? 0));
 
             if ($debit > 0 && $credit > 0) {
                 throw new InvalidArgumentException('A journal voucher line cannot have both debit and credit amounts.');
             }
 
-            $totalDebit += $debit;
-            $totalCredit += $credit;
+            // A negative debit is a credit wearing a disguise: two of them
+            // "balance" while representing nothing, and they corrupt every
+            // report that sums the debit and credit columns separately.
+            if ($debit < 0 || $credit < 0) {
+                throw new InvalidArgumentException('A journal voucher line cannot have a negative debit or credit. Post the entry on the opposite side instead.');
+            }
+
+            $debitCents += (int) round($debit * 100);
+            $creditCents += (int) round($credit * 100);
         }
 
-        if (abs($totalDebit - $totalCredit) > 0.01) {
-            throw new InvalidArgumentException("Journal voucher is not balanced. Total Debit: {$totalDebit}, Total Credit: {$totalCredit}");
+        if ($debitCents !== $creditCents) {
+            $debitTotal = number_format($debitCents / 100, 2, '.', '');
+            $creditTotal = number_format($creditCents / 100, 2, '.', '');
+
+            throw new InvalidArgumentException("Journal voucher is not balanced. Total Debit: {$debitTotal}, Total Credit: {$creditTotal}");
+        }
+
+        if ($debitCents === 0) {
+            throw new InvalidArgumentException('A journal voucher must move a non-zero amount.');
         }
     }
 

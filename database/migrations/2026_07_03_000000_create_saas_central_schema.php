@@ -179,7 +179,8 @@ return new class extends Migration
             $table->text('secret_key')->nullable();
             $table->text('webhook_secret')->nullable();
             $table->json('supported_currencies')->nullable();
-            $table->json('config')->nullable();
+            // Laravel's encrypted:array cast persists ciphertext, not JSON.
+            $table->longText('config')->nullable();
             $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
         });
@@ -322,7 +323,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('admin_id')->nullable()->constrained('central_admin_users')->nullOnDelete();
             $table->string('action');
-            $table->nullableMorphs('model');
+            $table->nullableUuidMorphs('model');
             $table->json('old_values')->nullable();
             $table->json('new_values')->nullable();
             $table->ipAddress('ip_address')->nullable();
